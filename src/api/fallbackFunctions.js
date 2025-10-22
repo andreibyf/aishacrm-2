@@ -9,7 +9,7 @@
  *   // Will try Base44 first, then fall back to local
  */
 
-import { checkBackendStatus } from '@/api/functions';
+import { checkBackendStatus as base44HealthCheck } from '@/api/functions';
 import * as cloudFunctions from '@/api/functions';
 import * as localFunctions from '@/functions';
 
@@ -37,7 +37,7 @@ async function isBase44Healthy() {
   healthCheckPromise = (async () => {
     try {
       const result = await Promise.race([
-        checkBackendStatus(),
+        base44HealthCheck(),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Health check timeout')), 5000)
         )
@@ -102,16 +102,61 @@ function createFallbackFunction(cloudFn, localFn, fnName) {
 }
 
 /**
- * Export fallback versions of functions
- * Add your functions here as you create local implementations
+ * Export fallback versions of critical functions
+ * These will automatically use local implementations when Base44 is down
  */
 
-// Example: MCP Server with fallback
-// Uncomment when you create src/functions/mcpServer.js
-// export const mcpServer = createFallbackFunction(
-//   cloudFunctions.mcpServer,
-//   localFunctions.mcpServer,
-//   'mcpServer'
+// System functions
+export const checkBackendStatus = createFallbackFunction(
+  cloudFunctions.checkBackendStatus,
+  localFunctions.checkBackendStatus,
+  'checkBackendStatus'
+);
+
+export const runFullSystemDiagnostics = createFallbackFunction(
+  cloudFunctions.runFullSystemDiagnostics,
+  localFunctions.runFullSystemDiagnostics,
+  'runFullSystemDiagnostics'
+);
+
+// Reports
+export const getDashboardStats = createFallbackFunction(
+  cloudFunctions.getDashboardStats,
+  localFunctions.getDashboardStats,
+  'getDashboardStats'
+);
+
+export const getDashboardBundle = createFallbackFunction(
+  cloudFunctions.getDashboardBundle,
+  localFunctions.getDashboardBundle,
+  'getDashboardBundle'
+);
+
+// Validation
+export const findDuplicates = createFallbackFunction(
+  cloudFunctions.findDuplicates,
+  localFunctions.findDuplicates,
+  'findDuplicates'
+);
+
+export const analyzeDataQuality = createFallbackFunction(
+  cloudFunctions.analyzeDataQuality,
+  localFunctions.analyzeDataQuality,
+  'analyzeDataQuality'
+);
+
+// Database
+export const syncDatabase = createFallbackFunction(
+  cloudFunctions.syncDatabase,
+  localFunctions.syncDatabase,
+  'syncDatabase'
+);
+
+// Add more critical functions as needed
+// export const yourFunction = createFallbackFunction(
+//   cloudFunctions.yourFunction,
+//   localFunctions.yourFunction,
+//   'yourFunction'
 // );
 
 /**

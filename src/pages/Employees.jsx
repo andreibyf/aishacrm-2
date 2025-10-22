@@ -152,12 +152,14 @@ export default function Employees() {
         }
         await loadEmployees();
       } catch (error) {
-        console.log('[DELETE DEBUG] Error object:', error);
-        console.log('[DELETE DEBUG] Error type:', typeof error);
-        console.log('[DELETE DEBUG] Error is null?', error === null);
-        console.log('[DELETE DEBUG] Error is undefined?', error === undefined);
-        console.log('[DELETE DEBUG] Error.response:', error?.response);
-        console.log('[DELETE DEBUG] Error.message:', error?.message);
+        if (import.meta.env.DEV) {
+          console.log('[DELETE DEBUG] Error object:', error);
+          console.log('[DELETE DEBUG] Error type:', typeof error);
+          console.log('[DELETE DEBUG] Error is null?', error === null);
+          console.log('[DELETE DEBUG] Error is undefined?', error === undefined);
+          console.log('[DELETE DEBUG] Error.response:', error?.response);
+          console.log('[DELETE DEBUG] Error.message:', error?.message);
+        }
         
         let errorMessage = "Failed to delete employee";
         
@@ -454,11 +456,13 @@ export default function Employees() {
                                     
                                     loadEmployees();
                                   } catch (err) {
-                                    console.log('[DROPDOWN DELETE DEBUG] Error object:', err);
-                                    console.log('[DROPDOWN DELETE DEBUG] Error type:', typeof err);
-                                    console.log('[DROPDOWN DELETE DEBUG] Error.response:', err?.response);
-                                    console.log('[DROPDOWN DELETE DEBUG] Error.message:', err?.message);
-                                    console.log('[DROPDOWN DELETE DEBUG] Error keys:', err ? Object.keys(err) : 'null/undefined');
+                                    if (import.meta.env.DEV) {
+                                      console.log('[DROPDOWN DELETE DEBUG] Error object:', err);
+                                      console.log('[DROPDOWN DELETE DEBUG] Error type:', typeof err);
+                                      console.log('[DROPDOWN DELETE DEBUG] Error.response:', err?.response);
+                                      console.log('[DROPDOWN DELETE DEBUG] Error.message:', err?.message);
+                                      console.log('[DROPDOWN DELETE DEBUG] Error keys:', err ? Object.keys(err) : 'null/undefined');
+                                    }
                                     
                                     let msg = "Failed to delete employee";
                                     
