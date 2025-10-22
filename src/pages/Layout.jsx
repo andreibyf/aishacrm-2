@@ -612,7 +612,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
   const handleElevenLabsMessage = (event) => {
     try {
-      console.debug('ElevenLabs Message Received:', event.detail);
+      if (import.meta.env.DEV) {
+        console.debug('ElevenLabs Message Received:', event.detail);
+      }
       const message = event.detail;
       // The actual response with actions is inside a stringified JSON in the 'text' field
       if (message.type === 'text' && message.text && message.text.startsWith('{')) {
@@ -621,7 +623,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           parsedText.uiActions.forEach(action => {
             // IMPORTANT: This is where we handle the navigation action
             if (action.action === 'navigate' && action.pageName) {
-              console.debug('Executing navigation:', action.pageName);
+              if (import.meta.env.DEV) {
+                console.debug('Executing navigation:', action.pageName);
+              }
               navigate(createPageUrl(action.pageName));
             }
           });
@@ -629,7 +633,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       }
     } catch (e) {
       // It's normal for some messages (like the agent's greeting) to not be JSON
-      console.debug('Could not parse AI UI action from message:', e.message);
+      if (import.meta.env.DEV) {
+        console.debug('Could not parse AI UI action from message:', e.message);
+      }
     }
   };
 
@@ -666,7 +672,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
       if (!isExtensionError) {
         originalConsoleError.apply(console, args);
-      } else {
+      } else if (import.meta.env.DEV) {
         console.debug('[Browser Extension]', ...args);
       }
     };
@@ -679,7 +685,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
       if (!isExtensionWarning) {
         originalConsoleWarn.apply(console, args);
-      } else {
+      } else if (import.meta.env.DEV) {
         console.debug('[Browser Extension]', ...args);
       }
     };
@@ -711,7 +717,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             })
             .catch(err => {
               // SILENT FAILURE - just log, don't show to user
-              console.debug('AI API key fetch skipped:', err.message);
+              if (import.meta.env.DEV) {
+                console.debug('AI API key fetch skipped:', err.message);
+              }
               // This is non-critical, user can still use the app without it
             });
 
@@ -1145,7 +1153,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     Employee.create = async (data) => {
       const res = await originalEmployeeCreate(data);
       try {
-        console.debug("Employee created, refreshing data.");
+        if (import.meta.env.DEV) {
+          console.debug("Employee created, refreshing data.");
+        }
         if (clearCache) clearCache();
         dispatchEntityModifiedEvent('Employee');
       } catch (e) {
@@ -1157,7 +1167,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     Employee.update = async (id, data) => {
       const res = await originalEmployeeUpdate(id, data);
       try {
-        console.debug("Employee updated, refreshing data.");
+        if (import.meta.env.DEV) {
+          console.debug("Employee updated, refreshing data.");
+        }
         if (clearCache) clearCache();
         dispatchEntityModifiedEvent('Employee');
       } catch (e) {
@@ -1169,7 +1181,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     Employee.delete = async (id) => {
       const res = await originalEmployeeDelete(id);
       try {
-        console.debug("Employee deleted, refreshing data.");
+        if (import.meta.env.DEV) {
+          console.debug("Employee deleted, refreshing data.");
+        }
         if (clearCache) clearCache();
         dispatchEntityModifiedEvent('Employee');
       } catch (e) {
@@ -1705,7 +1719,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             alt={companyName}
             className="h-16 w-auto max-w-[200px] object-contain"
             onError={(e) => {
-              console.debug("Logo failed to load:", logoUrl);
+              if (import.meta.env.DEV) {
+                console.debug("Logo failed to load:", logoUrl);
+              }
               e.target.style.display = 'none';
               if (e.target.nextElementSibling) {
                 e.target.nextElementSibling.style.display = 'flex';
