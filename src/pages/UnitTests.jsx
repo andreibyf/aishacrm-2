@@ -1,0 +1,105 @@
+import React from 'react';
+import TestRunner from '../components/testing/TestRunner';
+import { errorLoggerTests } from '../components/testing/errorLoggerTests';
+import { formValidationTests } from '../components/testing/formValidationTests';
+import { dataIntegrityTests } from '../components/testing/dataIntegrityTests';
+import { utilityFunctionTests } from '../components/testing/utilityFunctionTests';
+import { employeeScopeTests } from '../components/testing/employeeScopeTests';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Info, TestTube } from "lucide-react";
+
+const testSuites = [
+  errorLoggerTests,
+  formValidationTests,
+  dataIntegrityTests,
+  utilityFunctionTests,
+  employeeScopeTests
+];
+
+export default function UnitTestsPage() {
+  return (
+    <div className="min-h-screen bg-slate-900 p-6">
+      <div className="max-w-6xl mx-auto space-y-6">
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-12 h-12 flex items-center justify-center rounded-full bg-blue-900/30 border border-blue-700/50">
+            <TestTube className="w-7 h-7 text-blue-400" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold text-slate-100">Unit Tests</h1>
+            <p className="text-slate-400">Automated testing suite for application components</p>
+          </div>
+        </div>
+
+        <Alert className="bg-blue-900/30 border-blue-700">
+          <Info className="h-4 w-4 text-blue-400" />
+          <AlertTitle className="text-blue-300">Testing Information</AlertTitle>
+          <AlertDescription className="text-blue-400">
+            This test suite validates core functionality including error logging, form validation,
+            data integrity, utility functions, and employee scope filtering. Click "Run All Tests" to execute the full suite.
+          </AlertDescription>
+        </Alert>
+
+        <Card className="bg-slate-800 border-slate-700">
+          <CardHeader>
+            <CardTitle className="text-slate-100">Test Suites ({testSuites.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {testSuites.map((suite) => (
+                <Card key={suite.name} className="bg-slate-700 border-slate-600">
+                  <CardContent className="p-4">
+                    <div className="font-medium text-slate-200 mb-1">{suite.name}</div>
+                    <div className="text-sm text-slate-400">{suite.tests.length} tests</div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <TestRunner testSuites={testSuites} />
+
+        <Card className="bg-slate-800 border-slate-700">
+          <CardHeader>
+            <CardTitle className="text-slate-100">Coverage Areas</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-3 bg-slate-700 rounded-lg">
+                <div className="font-medium text-slate-200 mb-1">Error Logging</div>
+                <div className="text-sm text-slate-400">
+                  Error creation, HTTP status mapping, structured error handling
+                </div>
+              </div>
+              <div className="p-3 bg-slate-700 rounded-lg">
+                <div className="font-medium text-slate-200 mb-1">Form Validation</div>
+                <div className="text-sm text-slate-400">
+                  Required fields, data types, enum values, format validation
+                </div>
+              </div>
+              <div className="p-3 bg-slate-700 rounded-lg">
+                <div className="font-medium text-slate-200 mb-1">Data Integrity</div>
+                <div className="text-sm text-slate-400">
+                  Tenant isolation, entity relationships, referential integrity
+                </div>
+              </div>
+              <div className="p-3 bg-slate-700 rounded-lg">
+                <div className="font-medium text-slate-200 mb-1">Utility Functions</div>
+                <div className="text-sm text-slate-400">
+                  Phone formatting, email validation, filter generation
+                </div>
+              </div>
+              <div className="p-3 bg-slate-700 rounded-lg">
+                <div className="font-medium text-slate-200 mb-1">Employee Scope</div>
+                <div className="text-sm text-slate-400">
+                  Permission checks, record filtering, role-based access
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

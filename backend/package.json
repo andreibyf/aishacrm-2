@@ -1,0 +1,30 @@
+{
+  "name": "aishacrm-backend",
+  "version": "1.0.0",
+  "description": "Independent backend server for Aisha CRM - your own backend infrastructure",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "crm",
+    "backend",
+    "aishacrm",
+    "api"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "pg": "^8.11.3",
+    "dotenv": "^16.3.1",
+    "@base44/sdk": "^0.7.1",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "compression": "^1.7.4"
+  }
+}
