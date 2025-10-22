@@ -29,6 +29,8 @@ export default [
       ...react.configs['jsx-runtime'].rules,
       ...reactHooks.configs.recommended.rules,
       'react/jsx-no-target-blank': 'off',
+      'react/prop-types': 'off', // Disabled - using modern React patterns instead of legacy PropTypes
+      'no-unused-vars': 'warn', // Changed to warning - unused imports don't break functionality
       'react-refresh/only-export-components': [
         'warn',
         { allowConstantExport: true },
