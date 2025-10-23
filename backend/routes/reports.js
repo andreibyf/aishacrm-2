@@ -8,6 +8,13 @@ import express from 'express';
 // Helper: attempt to count rows from a table safely (optionally by tenant)
 async function safeCount(pgPool, table, tenantId) {
   if (!pgPool) return 0;
+
+  // Whitelist of allowed table names
+  const allowedTables = ['contacts', 'accounts', 'leads', 'opportunities', 'activities'];
+  if (!allowedTables.includes(table)) {
+    return 0; // Invalid table name, prevent SQL injection
+  }
+
   try {
     // Try tenant-scoped count first if a tenantId is provided
     if (tenantId) {

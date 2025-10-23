@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import crypto from 'crypto';
 
 export default function createUtilsRoutes(pgPool) {
   const router = express.Router();
