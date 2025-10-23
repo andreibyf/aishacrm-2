@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,10 +44,7 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
   const [previewData, setPreviewData] = useState([]);
   const [showDetailedResults, setShowDetailedResults] = useState(false); // New state for the detailed results dialog
   
-  // NEW: State for batch processing - totalBatches and currentBatch are still used for general tracking,
-  // but importProgress will be used for the detailed overlay.
-  const [totalBatches, setTotalBatches] = useState(0); // Kept for consistency and potential other uses
-  const [currentBatch, setCurrentBatch] = useState(0); // Kept for consistency and potential other uses
+  // NEW: State for batch processing
   const [isBatching, setIsBatching] = useState(false); // Controls the global progress overlay
 
   // NEW: State for batch processing progress details
@@ -114,8 +111,6 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
     setPreviewData([]);
     setShowDetailedResults(false);
     // Reset batching state
-    setTotalBatches(0);
-    setCurrentBatch(0);
     setIsBatching(false);
     setImportProgress({ itemsImported: 0, totalItems: 0, currentBatchNum: 0, totalBatchCount: 0 });
   };
@@ -278,7 +273,7 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
       const dataRows = rows.slice(1);
 
       // Build records from mapping
-      const records = dataRows.map((cols, rowIndex) => {
+      const records = dataRows.map((cols) => {
         const record = {};
         
         headerRow.forEach((header, index) => {
@@ -346,13 +341,11 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
       for (let i = 0; i < validRecords.length; i += BATCH_SIZE) {
         batches.push(validRecords.slice(i, i + BATCH_SIZE));
       }
-      setTotalBatches(batches.length); // Still set for completeness, though not used in new progress UI
       setImportProgress({ itemsImported: 0, totalItems: validRecords.length, currentBatchNum: 0, totalBatchCount: batches.length });
 
       const allResults = { successCount: 0, failCount: 0, errors: [], accountsLinked: 0, accountsNotFound: 0, matchingDetails: [] };
       
       for (let i = 0; i < batches.length; i++) {
-        setCurrentBatch(i + 1); // Still set for completeness, though not used in new progress UI
         setImportProgress(prev => ({ ...prev, currentBatchNum: i + 1 }));
         const batch = batches[i];
         
@@ -508,7 +501,7 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
                   <CheckCircle className="h-4 w-4 text-green-400" />
                   <AlertTitle className="text-green-300">Auto-Linking Enabled</AlertTitle>
                   <AlertDescription className="text-green-400">
-                    Column "<strong>{accountLinkColumn}</strong>" will link contacts to accounts.<br />
+                    Column &quot;<strong>{accountLinkColumn}</strong>&quot; will link contacts to accounts.<br />
                     <span className="text-xs text-green-300 mt-1 block">
                       Matches by: Company Name, Legacy ID (Company ID), or Account ID
                     </span>
@@ -756,7 +749,7 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <p className="text-sm font-medium text-slate-200">
-                              Row {detail.rowNumber}: "{detail.companyValue}"
+                              Row {detail.rowNumber}: &quot;{detail.companyValue}&quot;
                             </p>
                             {detail.matched ? (
                               <p className="text-xs text-green-400 mt-1">

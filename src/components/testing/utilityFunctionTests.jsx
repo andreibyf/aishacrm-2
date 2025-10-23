@@ -59,7 +59,10 @@ export const utilityFunctionTests = {
         assert.equal(formatPhoneNumber(null), null);
         assert.equal(formatPhoneNumber(undefined), undefined);
         assert.equal(formatPhoneNumber(''), '');
-        assert.equal(formatPhoneNumber('abc'), 'abc');
+        // When input has no digits, function returns empty string
+        assert.equal(formatPhoneNumber('abc'), '');
+        // Partially valid numbers that aren't 10 digits are returned as-is
+        assert.equal(formatPhoneNumber('555-123'), '555-123');
       }
     },
     {
