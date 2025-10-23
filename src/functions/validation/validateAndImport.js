@@ -123,14 +123,18 @@ Deno.serve(async (req) => {
       try {
         // Validate required fields based on entity type
         if (entityType === 'Contact') {
-          if (!record.first_name || !record.last_name) {
+          // Require at least one name field, default the other to 'UNK'
+          if (!record.first_name && !record.last_name) {
             results.errors.push({
               row_number: rowNumber,
-              error: 'Missing required fields: first_name and last_name are required'
+              error: 'Missing required fields: at least first_name or last_name is required'
             });
             results.failCount++;
             continue;
           }
+          // Default missing name to 'UNK'
+          if (!record.first_name) record.first_name = 'UNK';
+          if (!record.last_name) record.last_name = 'UNK';
         } else if (entityType === 'BizDevSource') {
           if (!record.company_name) {
             results.errors.push({

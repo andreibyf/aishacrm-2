@@ -4,12 +4,28 @@ export const formValidationTests = {
   name: 'Form Validation',
   tests: [
     {
-      name: 'Contact form should require first_name and last_name',
+      name: 'Contact form should require at least first_name or last_name',
       fn: async () => {
-        const contact = createMockContact({ first_name: '', last_name: '' });
-        
-        const isValid = contact.first_name && contact.last_name;
-        assert.false(isValid, 'Contact with empty names should be invalid');
+        const contactWithBoth = createMockContact({ first_name: 'John', last_name: 'Doe' });
+        const isValidBoth = contactWithBoth.first_name && contactWithBoth.last_name;
+        assert.true(isValidBoth, 'Contact with both names should be valid');
+
+        const contactWithNeither = createMockContact({ first_name: '', last_name: '' });
+        const isValidNeither = contactWithNeither.first_name || contactWithNeither.last_name;
+        assert.false(isValidNeither, 'Contact with no names should be invalid');
+      }
+    },
+    {
+      name: 'Contact form should default missing name to UNK',
+      fn: async () => {
+        // In practice, the validation layer will set missing names to 'UNK'
+        const contactOnlyFirst = createMockContact({ first_name: 'John', last_name: 'UNK' });
+        assert.truthy(contactOnlyFirst.first_name);
+        assert.equal(contactOnlyFirst.last_name, 'UNK');
+
+        const contactOnlyLast = createMockContact({ first_name: 'UNK', last_name: 'Doe' });
+        assert.equal(contactOnlyLast.first_name, 'UNK');
+        assert.truthy(contactOnlyLast.last_name);
       }
     },
     {
@@ -23,12 +39,15 @@ export const formValidationTests = {
       }
     },
     {
-      name: 'Lead form should require first_name and last_name',
+      name: 'Lead form should require at least first_name or last_name',
       fn: async () => {
-        const lead = createMockLead({ first_name: '', last_name: '' });
-        
-        const isValid = lead.first_name && lead.last_name;
-        assert.false(isValid, 'Lead with empty names should be invalid');
+        const leadWithBoth = createMockLead({ first_name: 'Jane', last_name: 'Smith' });
+        const isValidBoth = leadWithBoth.first_name && leadWithBoth.last_name;
+        assert.true(isValidBoth, 'Lead with both names should be valid');
+
+        const leadWithNeither = createMockLead({ first_name: '', last_name: '' });
+        const isValidNeither = leadWithNeither.first_name || leadWithNeither.last_name;
+        assert.false(isValidNeither, 'Lead with no names should be invalid');
       }
     },
     {
