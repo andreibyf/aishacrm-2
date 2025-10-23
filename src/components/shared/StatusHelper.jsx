@@ -1,5 +1,4 @@
 
-import React from 'react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { HelpCircle } from "lucide-react";
 
@@ -62,13 +61,12 @@ export default function StatusHelper({ statusKey, className = "" }) {
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button 
-            type="button"
-            className={`inline-flex items-center justify-center ${className}`}
+          <span 
+            className={`inline-flex items-center justify-center cursor-help ${className}`}
             onClick={(e) => e.stopPropagation()}
           >
             <HelpCircle className="w-4 h-4 text-slate-400 hover:text-slate-300 transition-colors" />
-          </button>
+          </span>
         </TooltipTrigger>
         <TooltipContent 
           side="top" 

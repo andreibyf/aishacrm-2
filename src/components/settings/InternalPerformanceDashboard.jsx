@@ -1,16 +1,17 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, RefreshCw, Server, Cpu, Database, Activity, AlertTriangle, Clock, Users, Building, Star, Target, BrainCircuit, AlertCircle, CheckCircle, ListTodo, History } from 'lucide-react';
-import { Contact, Account, Lead, Opportunity, Activity as ActivityEntity, PerformanceLog } from '@/api/entities';
-import { useApiManager } from '../shared/ApiManager';
+import { Loader2, RefreshCw, Users, Building, Star, Target, Activity, BrainCircuit, History, Clock, AlertCircle, CheckCircle, AlertTriangle, ListTodo } from 'lucide-react';
+import { Contact, Account, Lead, Opportunity, Activity as ActivityEntity } from '@/api/entities';
 import { toast } from "sonner";
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { timeApiCall } from '../utils/apiTimer';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { listPerformanceLogs } from "@/api/functions"; // NEW
+import { listPerformanceLogs } from "@/api/functions";
+import { MetricCard, SystemHealthSummary, PerformanceGuide } from './PerformanceStatusCard';
+import { THRESHOLDS } from './performanceThresholds';
 
 export default function InternalPerformanceDashboard({ user }) {
   const [metrics, setMetrics] = useState({
@@ -111,26 +112,9 @@ export default function InternalPerformanceDashboard({ user }) {
     loadMetrics();
   };
 
-  const getStatusColor = (value, thresholds) => {
-    if (value < thresholds.good) return 'text-green-500';
-    if (value < thresholds.warn) return 'text-orange-500';
-    return 'text-red-500';
-  };
-
-  const getErrorStatusColor = (value, thresholds) => {
-    if (value <= thresholds.good) return 'text-green-500';
-    if (value <= thresholds.warn) return 'text-orange-500';
-    return 'text-red-500';
-  };
-
   const formatNumber = (num, digits = 0) => {
     if (typeof num !== 'number') return num;
     return num.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits });
-  };
-
-  const formatPercentage = (num) => {
-    if (typeof num !== 'number') return '0%';
-    return `${num.toFixed(1)}%`;
   };
 
   if (!user || user.role !== 'admin' && user.role !== 'superadmin') {
@@ -183,32 +167,30 @@ export default function InternalPerformanceDashboard({ user }) {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           {/* Column 1 & 2: Main Metrics */}
           <div className="xl:col-span-2 space-y-6">
-            {/* Performance Metrics Cards */}
+            {/* Overall System Health Summary */}
+            <SystemHealthSummary metrics={metrics} />
+
+            {/* Performance Metrics Cards with Color-Coded Status */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card className="bg-slate-800 border-slate-700">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-slate-400">Avg. API Response</CardTitle>
-                  <Clock className="h-4 w-4 text-slate-500" />
-                </CardHeader>
-                <CardContent>
-                  <div className={`text-2xl font-bold ${getStatusColor(metrics.averageResponseTime, { good: 300, warn: 800 })}`}>
-                    {formatNumber(metrics.averageResponseTime, 0)}ms
-                  </div>
-                  <p className="text-xs text-slate-500">Based on last {metrics.successfulApiCalls} successful calls</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-slate-800 border-slate-700">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-slate-400">API Error Rate</CardTitle>
-                  <AlertCircle className="h-4 w-4 text-slate-500" />
-                </CardHeader>
-                <CardContent>
-                  <div className={`text-2xl font-bold ${getErrorStatusColor(metrics.errorRate, { good: 1, warn: 5 })}`}>
-                    {formatPercentage(metrics.errorRate)}
-                  </div>
-                  <p className="text-xs text-slate-500">{formatNumber(metrics.totalApiCalls - metrics.successfulApiCalls)} errors from {formatNumber(metrics.totalApiCalls)} calls</p>
-                </CardContent>
-              </Card>
+              <MetricCard
+                title="Avg. API Response"
+                value={metrics.averageResponseTime}
+                unit="ms"
+                thresholds={THRESHOLDS.responseTime}
+                icon={Clock}
+                subtitle={`Based on ${formatNumber(metrics.successfulApiCalls)} successful calls`}
+                description="Measures how quickly the API responds to requests. Lower is better."
+              />
+              <MetricCard
+                title="API Error Rate"
+                value={metrics.errorRate}
+                unit="%"
+                thresholds={THRESHOLDS.errorRate}
+                isInverse={true}
+                icon={AlertCircle}
+                subtitle={`${formatNumber(metrics.totalApiCalls - metrics.successfulApiCalls)} errors from ${formatNumber(metrics.totalApiCalls)} calls`}
+                description="Percentage of API requests that failed. Lower is better."
+              />
               <Card className="bg-slate-800 border-slate-700">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium text-slate-400">Total API Calls</CardTitle>
@@ -314,8 +296,12 @@ export default function InternalPerformanceDashboard({ user }) {
             </Card>
           </div>
 
-          {/* Column 3: Live Log Viewer */}
+          {/* Column 3: Performance Guide & Live Log Viewer */}
           <div className="space-y-6">
+            {/* Performance Health Guide */}
+            <PerformanceGuide />
+            
+            {/* Live Performance Log */}
             <Card className="bg-slate-800 border-slate-700">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-slate-100">
