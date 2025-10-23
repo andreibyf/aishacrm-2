@@ -1,13 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect } from 'react'; // Removed unused React and useState
 
 export function MCPManager() {
-  const [isReady, setIsReady] = useState(false);
+  // const [isReady, setIsReady] = useState(false); // UNUSED: isReady state not used
 
   useEffect(() => {
     const initMCP = async () => {
       try {
         if (window.mcpClient) {
-          setIsReady(true);
+          // setIsReady(true); // UNUSED: isReady state not used
           return;
         }
 
@@ -16,7 +16,7 @@ export function MCPManager() {
           ready: true
         };
         
-        setIsReady(true);
+        // setIsReady(true); // UNUSED: isReady state not used
       } catch (error) {
         console.error('MCP initialization failed:', error);
       }

@@ -268,30 +268,30 @@ export default function AIAssistantWidget({ user }) {
     }
   }, []);
 
-  // Request microphone access (kept for manual request, though startVoiceMode handles acquisition)
-  const requestMicrophoneAccess = useCallback(async () => {
-    setPermissionError('');
-    
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach(track => track.stop());
-      await checkMicrophonePermissions();
-      toast.success('🎤 Microphone access granted! Voice mode is ready.');
-      return true;
-    } catch (error) {
-      console.error('Microphone access denied:', error);
-      if (error.name === 'NotAllowedError') {
-        setPermissionError('Microphone access denied. Please enable microphone permissions in your browser settings.');
-        setMicPermissionStatus('denied');
-      } else if (error.name === 'NotFoundError') {
-        setPermissionError('No microphone found. Please connect a microphone and try again.');
-      } else {
-        setPermissionError('Could not access microphone. Please check your device settings.');
-      }
-      toast.error('Microphone access failed. Check permissions and try again.');
-      return false;
-    }
-  }, [checkMicrophonePermissions]);
+  // UNUSED: Request microphone access (kept for manual request, though startVoiceMode handles acquisition)
+  // const requestMicrophoneAccess = useCallback(async () => {
+  //   setPermissionError('');
+  //   
+  //   try {
+  //     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  //     stream.getTracks().forEach(track => track.stop());
+  //     await checkMicrophonePermissions();
+  //     toast.success('🎤 Microphone access granted! Voice mode is ready.');
+  //     return true;
+  //   } catch (error) {
+  //     console.error('Microphone access denied:', error);
+  //     if (error.name === 'NotAllowedError') {
+  //       setPermissionError('Microphone access denied. Please enable microphone permissions in your browser settings.');
+  //       setMicPermissionStatus('denied');
+  //     } else if (error.name === 'NotFoundError') {
+  //       setPermissionError('No microphone found. Please connect a microphone and try again.');
+  //     } else {
+  //       setPermissionError('Could not access microphone. Please check your device settings.');
+  //     }
+  //     toast.error('Microphone access failed. Check permissions and try again.');
+  //     return false;
+  //   }
+  // }, [checkMicrophonePermissions]);
 
   // Separate function to process voice messages
   const processVoiceMessage = useCallback(async (messageText) => {

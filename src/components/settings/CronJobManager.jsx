@@ -182,113 +182,119 @@ export default function CronJobManager({ user }) {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSaving(true);
+  // UNUSED: handleSubmit function - form submission not connected to UI
+  // const handleSubmit = async (e) => {
+  //   e.preventDefault();
+  //   setSaving(true);
 
-    try {
-      const payload = {
-        ...formData,
-        tenant_id: formData.tenant_id === '' ? null : formData.tenant_id
-      };
+  //   try {
+  //     const payload = {
+  //       ...formData,
+  //       tenant_id: formData.tenant_id === '' ? null : formData.tenant_id
+  //     };
 
-      if (editingJob) {
-        await CronJob.update(editingJob.id, payload);
-        toast.success(`Task "${payload.name}" updated successfully.`);
-      } else {
-        const nextExecution = calculateNextExecution(formData.schedule_expression);
-        await CronJob.create({
-          ...payload,
-          next_execution: nextExecution
-        });
-        toast.success(`Task "${payload.name}" created successfully.`);
-      }
+  //     if (editingJob) {
+  //       await CronJob.update(editingJob.id, payload);
+  //       toast.success(`Task "${payload.name}" updated successfully.`);
+  //     } else {
+  //       const nextExecution = calculateNextExecution(formData.schedule_expression);
+  //       await CronJob.create({
+  //         ...payload,
+  //         next_execution: nextExecution
+  //       });
+  //       toast.success(`Task "${payload.name}" created successfully.`);
+  //     }
 
-      setIsCreateDialogOpen(false);
-      setEditingJob(null);
-      setFormData({
-        name: '',
-        tenant_id: '',
-        function_name: '',
-        schedule_expression: '',
-        description: '',
-        is_active: true,
-        max_retries: 3,
-        timeout_seconds: 300
-      });
+  //     setIsCreateDialogOpen(false);
+  //     setEditingJob(null);
+  //     setFormData({
+  //       name: '',
+  //       tenant_id: '',
+  //       function_name: '',
+  //       schedule_expression: '',
+  //       description: '',
+  //       is_active: true,
+  //       max_retries: 3,
+  //       timeout_seconds: 300
+  //     });
 
-      loadCronJobs();
-    } catch (error) {
-      console.error('Error saving cron job:', error);
-      toast.error(`Error saving scheduled task: ${error.message}`);
-    } finally {
-      setSaving(false);
-    }
-  };
+  //     loadCronJobs();
+  //   } catch (error) {
+  //     console.error('Error saving cron job:', error);
+  //     toast.error(`Error saving scheduled task: ${error.message}`);
+  //   } finally {
+  //     setSaving(false);
+  //   }
+  // };
 
-  const handleToggleActive = async (jobId, isActive) => {
-    try {
-      await CronJob.update(jobId, { is_active: isActive });
-      toast.success(`Task status updated to ${isActive ? 'Active' : 'Paused'}.`);
-      loadCronJobs();
-    } catch (error) {
-      console.error('Error toggling job status:', error);
-      toast.error('Failed to toggle task status.');
-    }
-  };
+  // UNUSED: handleToggleActive function - not connected to UI
+  // const handleToggleActive = async (jobId, isActive) => {
+  //   try {
+  //     await CronJob.update(jobId, { is_active: isActive });
+  //     toast.success(`Task status updated to ${isActive ? 'Active' : 'Paused'}.`);
+  //     loadCronJobs();
+  //   } catch (error) {
+  //     console.error('Error toggling job status:', error);
+  //     toast.error('Failed to toggle task status.');
+  //   }
+  // };
 
-  const handleDelete = async (jobId) => {
-    if (!confirm('Are you sure you want to delete this cron job?')) return;
+  // UNUSED: handleDelete function - not connected to UI
+  // const handleDelete = async (jobId) => {
+  //   if (!confirm('Are you sure you want to delete this cron job?')) return;
 
-    try {
-      await CronJob.delete(jobId);
-      toast.success('Scheduled task deleted successfully.');
-      loadCronJobs();
-    } catch (error) {
-      console.error('Error deleting cron job:', error);
-      toast.error('Failed to delete scheduled task.');
-    }
-  };
+  //   try {
+  //     await CronJob.delete(jobId);
+  //     toast.success('Scheduled task deleted successfully.');
+  //     loadCronJobs();
+  //   } catch (error) {
+  //     console.error('Error deleting cron job:', error);
+  //     toast.error('Failed to delete scheduled task.');
+  //   }
+  // };
 
-  const handleEdit = (job) => {
-    setEditingJob(job);
-    setFormData({
-      name: job.name,
-      tenant_id: job.tenant_id || '',
-      function_name: job.function_name,
-      schedule_expression: job.schedule_expression,
-      description: job.description || '',
-      is_active: job.is_active,
-      max_retries: job.max_retries || 3,
-      timeout_seconds: job.timeout_seconds || 300
-    });
-    setIsCreateDialogOpen(true);
-  };
+  // UNUSED: handleEdit function - not connected to UI
+  // const handleEdit = (job) => {
+  //   setEditingJob(job);
+  //   setFormData({
+  //     name: job.name,
+  //     tenant_id: job.tenant_id || '',
+  //     function_name: job.function_name,
+  //     schedule_expression: job.schedule_expression,
+  //     description: job.description || '',
+  //     is_active: job.is_active,
+  //     max_retries: job.max_retries || 3,
+  //     timeout_seconds: job.timeout_seconds || 300
+  //   });
+  //   setIsCreateDialogOpen(true);
+  // };
 
-  const getStatusBadge = (job) => {
-    if (!job.is_active) {
-      return <Badge variant="secondary" className="bg-slate-600 text-slate-300">Paused</Badge>;
-    }
+  // UNUSED: getStatusBadge function - not connected to UI
+  // const getStatusBadge = (job) => {
+  //   if (!job.is_active) {
+  //     return <Badge variant="secondary" className="bg-slate-600 text-slate-300">Paused</Badge>;
+  //   }
 
-    if (job.error_count > 0) {
-      return <Badge variant="destructive" className="bg-red-700 text-red-100">Error ({job.error_count})</Badge>;
-    }
+  //   if (job.error_count > 0) {
+  //     return <Badge variant="destructive" className="bg-red-700 text-red-100">Error ({job.error_count})</Badge>;
+  //   }
 
-    return <Badge variant="default" className="bg-green-600 text-white">Active</Badge>;
-  };
+  //   return <Badge variant="default" className="bg-green-600 text-white">Active</Badge>;
+  // };
 
-  const getNextRunText = (job) => {
-    if (!job.next_execution) return 'Not scheduled';
+  // UNUSED: getNextRunText function - not connected to UI
+  // const getNextRunText = (job) => {
+  //   if (!job.next_execution) return 'Not scheduled';
 
-    const nextRun = new Date(job.next_execution);
-    const now = new Date();
+  //   const nextRun = new Date(job.next_execution);
+  //   const now = new Date();
 
-    if (nextRun < now) {
-      return 'Overdue';
-    }
+  //   if (nextRun < now) {
+  //     return 'Overdue';
+  //   }
 
-    return format(nextRun, 'MMM d, h:mm a');
-  };
+  //   return format(nextRun, 'MMM d, h:mm a');
+  // };
 
   return (
     <div className="space-y-6">

@@ -610,34 +610,35 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const handleElevenLabsMessage = (event) => {
-    try {
-      if (import.meta.env.DEV) {
-        console.debug('ElevenLabs Message Received:', event.detail);
-      }
-      const message = event.detail;
-      // The actual response with actions is inside a stringified JSON in the 'text' field
-      if (message.type === 'text' && message.text && message.text.startsWith('{')) {
-        const parsedText = JSON.parse(message.text);
-        if (parsedText.uiActions && Array.isArray(parsedText.uiActions)) {
-          parsedText.uiActions.forEach(action => {
-            // IMPORTANT: This is where we handle the navigation action
-            if (action.action === 'navigate' && action.pageName) {
-              if (import.meta.env.DEV) {
-                console.debug('Executing navigation:', action.pageName);
-              }
-              navigate(createPageUrl(action.pageName));
-            }
-          });
-        }
-      }
-    } catch (e) {
-      // It's normal for some messages (like the agent's greeting) to not be JSON
-      if (import.meta.env.DEV) {
-        console.debug('Could not parse AI UI action from message:', e.message);
-      }
-    }
-  };
+  // UNUSED: handleElevenLabsMessage - ChatWindow component is commented out
+  // const handleElevenLabsMessage = (event) => {
+  //   try {
+  //     if (import.meta.env.DEV) {
+  //       console.debug('ElevenLabs Message Received:', event.detail);
+  //     }
+  //     const message = event.detail;
+  //     // The actual response with actions is inside a stringified JSON in the 'text' field
+  //     if (message.type === 'text' && message.text && message.text.startsWith('{')) {
+  //       const parsedText = JSON.parse(message.text);
+  //       if (parsedText.uiActions && Array.isArray(parsedText.uiActions)) {
+  //         parsedText.uiActions.forEach(action => {
+  //           // IMPORTANT: This is where we handle the navigation action
+  //           if (action.action === 'navigate' && action.pageName) {
+  //             if (import.meta.env.DEV) {
+  //               console.debug('Executing navigation:', action.pageName);
+  //             }
+  //             navigate(createPageUrl(action.pageName));
+  //           }
+  //         });
+  //       }
+  //     }
+  //   } catch (e) {
+  //     // It's normal for some messages (like the agent's greeting) to not be JSON
+  //     if (import.meta.env.DEV) {
+  //       console.debug('Could not parse AI UI action from message:', e.message);
+  //     }
+  //   }
+  // };
 
   const filteredNavItems = React.useMemo(() => {
     if (!user) return [];
@@ -1200,27 +1201,28 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     };
   }, [user, clearCache]);
 
-  // Create the enhanced widget context
-  const widgetContext = React.useMemo(() => {
-    if (!user || !currentTenantData) return null;
+  // UNUSED: widgetContext - ChatWindow component is commented out
+  // // Create the enhanced widget context
+  // const widgetContext = React.useMemo(() => {
+  //   if (!user || !currentTenantData) return null;
 
-    const tenantId = currentTenantData.id;
+  //   const tenantId = currentTenantData.id;
 
-    return JSON.stringify({
-      tenant_id: tenantId,
-      user_email: user.email,
-      user_role: user.role,
-      // The MCP handler function URL
-      mcp_server_url: `${window.location.origin}/api/functions/mcpHandler`,
-      capabilities: {
-        can_access_activities: true,
-        can_access_contacts: true,
-        can_access_leads: true,
-        can_access_opportunities: true,
-        can_create_activities: true,
-      }
-    });
-  }, [user, currentTenantData]);
+  //   return JSON.stringify({
+  //     tenant_id: tenantId,
+  //     user_email: user.email,
+  //     user_role: user.role,
+  //     // The MCP handler function URL
+  //     mcp_server_url: `${window.location.origin}/api/functions/mcpHandler`,
+  //     capabilities: {
+  //       can_access_activities: true,
+  //       can_access_contacts: true,
+  //       can_access_leads: true,
+  //       can_access_opportunities: true,
+  //       can_create_activities: true,
+  //     }
+  //   });
+  // }, [user, currentTenantData]);
 
   const getBrandingSettings = () => {
     const defaultCompanyName = "Ai-SHA CRM";
@@ -1279,7 +1281,8 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   // Use tenant branding colors with safe fallbacks (remove hardcoded overrides)
   const primaryColor = brandingSettings.primaryColor || "#06b6d4";
   const accentColor = brandingSettings.accentColor || "#6366f1";
-  const elevenlabsAgentId = brandingSettings.elevenlabsAgentId;
+  // UNUSED: elevenlabsAgentId - ChatWindow component is commented out
+  // const elevenlabsAgentId = brandingSettings.elevenlabsAgentId;
 
   // Compute readable text colors for primary/accent backgrounds
   const getContrastText = (hex) => {
@@ -1370,39 +1373,40 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     }
   };
 
-  const handleSafeExport = async () => {
-    if (!user) return;
-    const tenantFilter = getTenantFilter(user, selectedTenantId);
-    const tenantName = (user?.branding_settings?.companyName || selectedTenant?.name || "Ai-SHA CRM");
+  // UNUSED: handleSafeExport - export functionality not connected to UI
+  // const handleSafeExport = async () => {
+  //   if (!user) return;
+  //   const tenantFilter = getTenantFilter(user, selectedTenantId);
+  //   const tenantName = (user?.branding_settings?.companyName || selectedTenant?.name || "Ai-SHA CRM");
 
-    const { data, headers, status } = await exportReportToPDFSafe({
-      reportType: 'ai_insights',
-      tenantFilter,
-      tenantName
-    });
+  //   const { data, headers, status } = await exportReportToPDFSafe({
+  //     reportType: 'ai_insights',
+  //     tenantFilter,
+  //     tenantName
+  //   });
 
-    if (status !== 200) {
-      const errorMsg = typeof data === 'string' ? data : (data?.error || 'Unknown error');
-      alert(`Safe export failed: ${errorMsg}`);
-      return;
-    }
+  //   if (status !== 200) {
+  //     const errorMsg = typeof data === 'string' ? data : (data?.error || 'Unknown error');
+  //     alert(`Safe export failed: ${errorMsg}`);
+  //     return;
+  //   }
 
-    const blob = new Blob([data], { type: headers?.['content-type'] || 'application/pdf' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const cd = headers?.['content-disposition'];
-    const fallback = 'ai_insights_safe_report.pdf';
-    let fileName = fallback;
-    if (cd) {
-      const m = cd.match(/filename="?(.+?)"?$/);
-      if (m && m[1]) fileName = m[1];
-    }
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.remove();
-    window.URL.revokeObjectURL(url);
-  };
+  //   const blob = new Blob([data], { type: headers?.['content-type'] || 'application/pdf' });
+  //   const url = window.URL.createObjectURL(blob);
+  //   const a = document.createElement('a');
+  //   a.href = url;
+  //   const cd = headers?.['content-disposition'];
+  //   const fallback = 'ai_insights_safe_report.pdf';
+  //   let fileName = fallback;
+  //   if (cd) {
+  //     const m = cd.match(/filename="?(.+?)"?$/);
+  //     if (m && m[1]) fileName = m[1];
+  //   }
+  //   a.download = fileName;
+  //   document.body.appendChild(a);
+  //   a.remove();
+  //   window.URL.revokeObjectURL(url);
+  // };
 
   // Determine if current user should see Employee scope filter (aggregate viewers)
   const showEmployeeScope = React.useMemo(() => {
