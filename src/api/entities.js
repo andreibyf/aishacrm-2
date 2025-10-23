@@ -2,40 +2,151 @@ import { base44 } from './base44Client';
 // Import mock data utilities at the top for use throughout
 import { createMockUser, createMockTenant, isLocalDevMode } from './mockData';
 
-// Helper function to wrap entities with a filter method
-const wrapEntityWithFilter = (entity) => {
+// Get backend URL from environment
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+
+// Helper to call independent backend API
+const callBackendAPI = async (entityName, method, data = null, id = null) => {
+  const entityPath = entityName.toLowerCase() + 's'; // e.g., 'leads', 'contacts'
+  let url = `${BACKEND_URL}/api/${entityPath}`;
+  
+  // Get tenant_id from mock user for local dev
+  const mockUser = isLocalDevMode() ? createMockUser() : null;
+  const tenantId = mockUser?.tenant_id || 'local-tenant-001';
+  
+  const options = {
+    method: method,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  };
+
+  if (method === 'GET' && data) {
+    // Convert filter object to query params
+    const params = new URLSearchParams();
+    // Always include tenant_id
+    params.append('tenant_id', tenantId);
+    Object.entries(data).forEach(([key, value]) => {
+      if (key !== 'tenant_id') { // Don't duplicate tenant_id
+        params.append(key, typeof value === 'object' ? JSON.stringify(value) : value);
+      }
+    });
+    url += `?${params.toString()}`;
+  } else if (id) {
+    url += `/${id}`;
+    if (data && method !== 'DELETE') {
+      // Include tenant_id in body
+      options.body = JSON.stringify({ ...data, tenant_id: tenantId });
+    }
+  } else if (data && method !== 'GET') {
+    // Include tenant_id in body
+    options.body = JSON.stringify({ ...data, tenant_id: tenantId });
+  }
+
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Backend API error: ${response.statusText} - ${errorText}`);
+  }
+  
+  const result = await response.json();
+  
+  // Backend returns { status: "success", data: { entityName: [...] } }
+  // Extract the actual data array/object
+  if (result.status === 'success' && result.data) {
+    // For list/filter operations, data contains { entityName: [...] }
+    const entityKey = Object.keys(result.data).find(key => 
+      key !== 'tenant_id' && Array.isArray(result.data[key])
+    );
+    if (entityKey && Array.isArray(result.data[entityKey])) {
+      return result.data[entityKey];
+    }
+    // For single item operations (get, create, update), return the data directly
+    if (!Array.isArray(result.data)) {
+      return result.data;
+    }
+  }
+  
+  return result;
+};
+
+// Helper function to wrap entities with a filter method and backend fallback
+const wrapEntityWithFilter = (entity, entityName) => {
   if (!entity) return entity;
   
   return {
     ...entity,
     // Add filter method as alias for list with better parameter handling
     filter: async (filterObj, sortField, limit) => {
+      // In local dev mode, use independent backend
+      if (isLocalDevMode()) {
+        return callBackendAPI(entityName, 'GET', filterObj);
+      }
       // Base44 list() method signature: list(filter, sort, limit)
       return entity.list(filterObj, sortField, limit);
+    },
+    // List method
+    list: async (filterObj, sortField, limit) => {
+      if (isLocalDevMode()) {
+        return callBackendAPI(entityName, 'GET', filterObj);
+      }
+      return entity.list(filterObj, sortField, limit);
+    },
+    // Get by ID
+    get: async (id) => {
+      if (isLocalDevMode()) {
+        return callBackendAPI(entityName, 'GET', null, id);
+      }
+      return entity.get(id);
+    },
+    // Create
+    create: async (data) => {
+      if (isLocalDevMode()) {
+        return callBackendAPI(entityName, 'POST', data);
+      }
+      return entity.create(data);
+    },
+    // Update
+    update: async (id, data) => {
+      if (isLocalDevMode()) {
+        return callBackendAPI(entityName, 'PUT', data, id);
+      }
+      return entity.update(id, data);
+    },
+    // Delete
+    delete: async (id) => {
+      if (isLocalDevMode()) {
+        return callBackendAPI(entityName, 'DELETE', null, id);
+      }
+      return entity.delete(id);
     },
     // Ensure bulkCreate exists (fallback to multiple create calls if not)
     bulkCreate: entity.bulkCreate || (async (items) => {
       if (!Array.isArray(items)) {
         throw new Error('bulkCreate requires an array of items');
       }
-      return Promise.all(items.map(item => entity.create(item)));
+      return Promise.all(items.map(item => 
+        isLocalDevMode() 
+          ? callBackendAPI(entityName, 'POST', item)
+          : entity.create(item)
+      ));
     })
   };
 };
 
-export const Contact = wrapEntityWithFilter(base44.entities.Contact);
+export const Contact = wrapEntityWithFilter(base44.entities.Contact, 'Contact');
 
-export const Account = wrapEntityWithFilter(base44.entities.Account);
+export const Account = wrapEntityWithFilter(base44.entities.Account, 'Account');
 
-export const Lead = wrapEntityWithFilter(base44.entities.Lead);
+export const Lead = wrapEntityWithFilter(base44.entities.Lead, 'Lead');
 
-export const Opportunity = wrapEntityWithFilter(base44.entities.Opportunity);
+export const Opportunity = wrapEntityWithFilter(base44.entities.Opportunity, 'Opportunity');
 
-export const Activity = wrapEntityWithFilter(base44.entities.Activity);
+export const Activity = wrapEntityWithFilter(base44.entities.Activity, 'Activity');
 
 // Wrap Tenant entity to support local dev mode
 const baseTenant = base44.entities.Tenant;
-const wrappedBaseTenant = wrapEntityWithFilter(baseTenant);
+const wrappedBaseTenant = wrapEntityWithFilter(baseTenant, 'Tenant');
 export const Tenant = {
   ...wrappedBaseTenant,
   get: async (id) => {
@@ -52,85 +163,91 @@ export const Tenant = {
     }
     return baseTenant.list(filters);
   },
+  filter: async (filters) => {
+    if (isLocalDevMode()) {
+      return [createMockTenant()];
+    }
+    return baseTenant.list(filters);
+  },
 };
 
-export const Notification = wrapEntityWithFilter(base44.entities.Notification);
+export const Notification = wrapEntityWithFilter(base44.entities.Notification, 'Notification');
 
-export const FieldCustomization = wrapEntityWithFilter(base44.entities.FieldCustomization);
+export const FieldCustomization = wrapEntityWithFilter(base44.entities.FieldCustomization, 'FieldCustomization');
 
-export const ModuleSettings = wrapEntityWithFilter(base44.entities.ModuleSettings);
+export const ModuleSettings = wrapEntityWithFilter(base44.entities.ModuleSettings, 'ModuleSettings');
 
-export const AuditLog = wrapEntityWithFilter(base44.entities.AuditLog);
+export const AuditLog = wrapEntityWithFilter(base44.entities.AuditLog, 'AuditLog');
 
-export const Note = wrapEntityWithFilter(base44.entities.Note);
+export const Note = wrapEntityWithFilter(base44.entities.Note, 'Note');
 
-export const SubscriptionPlan = wrapEntityWithFilter(base44.entities.SubscriptionPlan);
+export const SubscriptionPlan = wrapEntityWithFilter(base44.entities.SubscriptionPlan, 'SubscriptionPlan');
 
-export const Subscription = wrapEntityWithFilter(base44.entities.Subscription);
+export const Subscription = wrapEntityWithFilter(base44.entities.Subscription, 'Subscription');
 
-export const Webhook = wrapEntityWithFilter(base44.entities.Webhook);
+export const Webhook = wrapEntityWithFilter(base44.entities.Webhook, 'Webhook');
 
-export const TestReport = wrapEntityWithFilter(base44.entities.TestReport);
+export const TestReport = wrapEntityWithFilter(base44.entities.TestReport, 'TestReport');
 
-export const TenantIntegration = wrapEntityWithFilter(base44.entities.TenantIntegration);
+export const TenantIntegration = wrapEntityWithFilter(base44.entities.TenantIntegration, 'TenantIntegration');
 
-export const Announcement = wrapEntityWithFilter(base44.entities.Announcement);
+export const Announcement = wrapEntityWithFilter(base44.entities.Announcement, 'Announcement');
 
-export const DataManagementSettings = wrapEntityWithFilter(base44.entities.DataManagementSettings);
+export const DataManagementSettings = wrapEntityWithFilter(base44.entities.DataManagementSettings, 'DataManagementSettings');
 
-export const Employee = wrapEntityWithFilter(base44.entities.Employee);
+export const Employee = wrapEntityWithFilter(base44.entities.Employee, 'Employee');
 
-export const DocumentationFile = wrapEntityWithFilter(base44.entities.DocumentationFile);
+export const DocumentationFile = wrapEntityWithFilter(base44.entities.DocumentationFile, 'DocumentationFile');
 
-export const UserInvitation = wrapEntityWithFilter(base44.entities.UserInvitation);
+export const UserInvitation = wrapEntityWithFilter(base44.entities.UserInvitation, 'UserInvitation');
 
-export const GuideContent = wrapEntityWithFilter(base44.entities.GuideContent);
+export const GuideContent = wrapEntityWithFilter(base44.entities.GuideContent, 'GuideContent');
 
-export const AICampaign = wrapEntityWithFilter(base44.entities.AICampaign);
+export const AICampaign = wrapEntityWithFilter(base44.entities.AICampaign, 'AICampaign');
 
-export const ApiKey = wrapEntityWithFilter(base44.entities.ApiKey);
+export const ApiKey = wrapEntityWithFilter(base44.entities.ApiKey, 'ApiKey');
 
-export const CashFlow = wrapEntityWithFilter(base44.entities.CashFlow);
+export const CashFlow = wrapEntityWithFilter(base44.entities.CashFlow, 'CashFlow');
 
-export const CronJob = wrapEntityWithFilter(base44.entities.CronJob);
+export const CronJob = wrapEntityWithFilter(base44.entities.CronJob, 'CronJob');
 
-export const PerformanceLog = wrapEntityWithFilter(base44.entities.PerformanceLog);
+export const PerformanceLog = wrapEntityWithFilter(base44.entities.PerformanceLog, 'PerformanceLog');
 
-export const EmailTemplate = wrapEntityWithFilter(base44.entities.EmailTemplate);
+export const EmailTemplate = wrapEntityWithFilter(base44.entities.EmailTemplate, 'EmailTemplate');
 
-export const SystemBranding = wrapEntityWithFilter(base44.entities.SystemBranding);
+export const SystemBranding = wrapEntityWithFilter(base44.entities.SystemBranding, 'SystemBranding');
 
-export const Checkpoint = wrapEntityWithFilter(base44.entities.Checkpoint);
+export const Checkpoint = wrapEntityWithFilter(base44.entities.Checkpoint, 'Checkpoint');
 
-export const SyncHealth = wrapEntityWithFilter(base44.entities.SyncHealth);
+export const SyncHealth = wrapEntityWithFilter(base44.entities.SyncHealth, 'SyncHealth');
 
-export const ContactHistory = wrapEntityWithFilter(base44.entities.ContactHistory);
+export const ContactHistory = wrapEntityWithFilter(base44.entities.ContactHistory, 'ContactHistory');
 
-export const LeadHistory = wrapEntityWithFilter(base44.entities.LeadHistory);
+export const LeadHistory = wrapEntityWithFilter(base44.entities.LeadHistory, 'LeadHistory');
 
-export const OpportunityHistory = wrapEntityWithFilter(base44.entities.OpportunityHistory);
+export const OpportunityHistory = wrapEntityWithFilter(base44.entities.OpportunityHistory, 'OpportunityHistory');
 
-export const DailySalesMetrics = wrapEntityWithFilter(base44.entities.DailySalesMetrics);
+export const DailySalesMetrics = wrapEntityWithFilter(base44.entities.DailySalesMetrics, 'DailySalesMetrics');
 
-export const MonthlyPerformance = wrapEntityWithFilter(base44.entities.MonthlyPerformance);
+export const MonthlyPerformance = wrapEntityWithFilter(base44.entities.MonthlyPerformance, 'MonthlyPerformance');
 
-export const UserPerformanceCache = wrapEntityWithFilter(base44.entities.UserPerformanceCache);
+export const UserPerformanceCache = wrapEntityWithFilter(base44.entities.UserPerformanceCache, 'UserPerformanceCache');
 
-export const ImportLog = wrapEntityWithFilter(base44.entities.ImportLog);
+export const ImportLog = wrapEntityWithFilter(base44.entities.ImportLog, 'ImportLog');
 
-export const BizDevSource = wrapEntityWithFilter(base44.entities.BizDevSource);
+export const BizDevSource = wrapEntityWithFilter(base44.entities.BizDevSource, 'BizDevSource');
 
-export const ArchiveIndex = wrapEntityWithFilter(base44.entities.ArchiveIndex);
+export const ArchiveIndex = wrapEntityWithFilter(base44.entities.ArchiveIndex, 'ArchiveIndex');
 
-export const IndustryMarketData = wrapEntityWithFilter(base44.entities.IndustryMarketData);
+export const IndustryMarketData = wrapEntityWithFilter(base44.entities.IndustryMarketData, 'IndustryMarketData');
 
-export const ClientRequirement = wrapEntityWithFilter(base44.entities.ClientRequirement);
+export const ClientRequirement = wrapEntityWithFilter(base44.entities.ClientRequirement, 'ClientRequirement');
 
-export const SystemLog = wrapEntityWithFilter(base44.entities.SystemLog);
+export const SystemLog = wrapEntityWithFilter(base44.entities.SystemLog, 'SystemLog');
 
-export const Workflow = wrapEntityWithFilter(base44.entities.Workflow);
+export const Workflow = wrapEntityWithFilter(base44.entities.Workflow, 'Workflow');
 
-export const WorkflowExecution = wrapEntityWithFilter(base44.entities.WorkflowExecution);
+export const WorkflowExecution = wrapEntityWithFilter(base44.entities.WorkflowExecution, 'WorkflowExecution');
 
 // auth sdk with local dev mode support:
 const baseUser = base44.auth;
