@@ -150,10 +150,19 @@ export default function BrandingSettings() {
     }
     setUploading(true);
     try {
-      const { file_url } = await UploadFile({ file });
-      setBrandingData((prev) => ({ ...prev, [key]: file_url }));
-      setMessage("Image uploaded successfully.");
-      setTimeout(() => setMessage(""), 2500);
+      const result = await UploadFile({ file });
+      
+      // Check if upload was successful
+      if (result?.file_url) {
+        setBrandingData((prev) => ({ ...prev, [key]: result.file_url }));
+        setMessage("Image uploaded successfully.");
+      } else if (result?.success === false) {
+        // Local dev mode - show helpful message
+        setMessage("File upload not available in local dev mode. Please paste an image URL instead.");
+      } else {
+        setMessage("Upload failed: Unexpected response format");
+      }
+      setTimeout(() => setMessage(""), 3000);
     } catch (e) {
       setMessage(e?.message || "Upload failed");
       setTimeout(() => setMessage(""), 3000);
@@ -172,10 +181,19 @@ export default function BrandingSettings() {
     }
     setUploading(true);
     try {
-      const { file_url } = await UploadFile({ file });
-      setFooterLogoUrl(file_url);
-      setMessage("Footer logo uploaded successfully.");
-      setTimeout(() => setMessage(""), 2500);
+      const result = await UploadFile({ file });
+      
+      // Check if upload was successful
+      if (result?.file_url) {
+        setFooterLogoUrl(result.file_url);
+        setMessage("Footer logo uploaded successfully.");
+      } else if (result?.success === false) {
+        // Local dev mode - show helpful message
+        setMessage("File upload not available in local dev mode. Please paste an image URL instead.");
+      } else {
+        setMessage("Upload failed: Unexpected response format");
+      }
+      setTimeout(() => setMessage(""), 3000);
     } catch (e) {
       setMessage(e?.message || "Global footer logo upload failed");
       setTimeout(() => setMessage(""), 3000);
