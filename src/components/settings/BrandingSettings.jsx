@@ -281,7 +281,7 @@ export default function BrandingSettings() {
           <div className="grid gap-2">
             <Label className="text-slate-200">Company Name</Label>
             <Input
-              value={brandingData.companyName}
+              value={brandingData.companyName || ""}
               onChange={(e) => onChange("companyName", e.target.value)}
               className="bg-slate-700 border-slate-600 text-slate-100 placeholder:text-slate-400"
               placeholder="Company name"
@@ -298,7 +298,7 @@ export default function BrandingSettings() {
               <Label className="text-slate-200">Primary Color</Label>
               <Input
                 type="color"
-                value={brandingData.primaryColor}
+                value={brandingData.primaryColor || "#06b6d4"}
                 onChange={(e) => onChange("primaryColor", e.target.value)}
                 className="h-10 bg-slate-700 border-slate-600"
               />
@@ -307,7 +307,7 @@ export default function BrandingSettings() {
               <Label className="text-slate-200">Accent Color</Label>
               <Input
                 type="color"
-                value={brandingData.accentColor}
+                value={brandingData.accentColor || "#6366f1"}
                 onChange={(e) => onChange("accentColor", e.target.value)}
                 className="h-10 bg-slate-700 border-slate-600"
               />
@@ -339,7 +339,7 @@ export default function BrandingSettings() {
               </div>
               <Input
                 placeholder="Or paste a direct image URL…"
-                value={brandingData.logoUrl}
+                value={brandingData.logoUrl || ""}
                 onChange={(e) => onChange("logoUrl", e.target.value)}
                 className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400"
               />
@@ -369,7 +369,7 @@ export default function BrandingSettings() {
               </div>
               <Input
                 placeholder="Or paste a direct image URL…"
-                value={brandingData.footerLogoUrl}
+                value={brandingData.footerLogoUrl || ""}
                 onChange={(e) => onChange("footerLogoUrl", e.target.value)}
                 className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400"
               />
@@ -444,7 +444,7 @@ export default function BrandingSettings() {
                   {canEdit && (
                   <Input
                     placeholder="Or paste a direct image URL…"
-                    value={footerLogoUrl}
+                    value={footerLogoUrl || ""}
                     onChange={(e) => setFooterLogoUrl(e.target.value)}
                     className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400"
                   />
@@ -454,7 +454,7 @@ export default function BrandingSettings() {
                 <div className="space-y-2">
                   <Label className="text-slate-200">Legal Text (HTML allowed)</Label>
                   <Textarea
-                    value={footerLegalHtml}
+                    value={footerLegalHtml || ""}
                     onChange={(e) => setFooterLegalHtml(e.target.value)}
                     className="min-h-[120px] bg-slate-700 border-slate-600 text-slate-100"
                     placeholder={`<div>Ai‑SHA® is a registered trademark of 4V Data Consulting LLC.</div>\n<div>© ${new Date().getFullYear()} 4V Data Consulting LLC. All rights reserved.</div>`}
