@@ -5,9 +5,33 @@ import { createMockUser, createMockTenant, isLocalDevMode } from './mockData';
 // Get backend URL from environment
 const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
 
+// Helper to properly pluralize entity names for API endpoints
+const pluralize = (entityName) => {
+  const name = entityName.toLowerCase();
+  
+  // Special cases for irregular plurals
+  const irregularPlurals = {
+    'opportunity': 'opportunities',
+    'activity': 'activities',
+    'employee': 'employees',
+    'systemlog': 'system-logs',
+    'auditlog': 'audit-logs',
+    'notification': 'notifications',
+    'cashflow': 'cashflow',
+    'workflow': 'workflows',
+  };
+  
+  if (irregularPlurals[name]) {
+    return irregularPlurals[name];
+  }
+  
+  // Default: just add 's'
+  return name + 's';
+};
+
 // Helper to call independent backend API
 const callBackendAPI = async (entityName, method, data = null, id = null) => {
-  const entityPath = entityName.toLowerCase() + 's'; // e.g., 'leads', 'contacts'
+  const entityPath = pluralize(entityName);
   let url = `${BACKEND_URL}/api/${entityPath}`;
   
   // Get tenant_id from mock user for local dev

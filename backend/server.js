@@ -103,6 +103,10 @@ import createUtilsRoutes from './routes/utils.js';
 import createBizdevRoutes from './routes/bizdev.js';
 import createClientRoutes from './routes/clients.js';
 import createWorkflowRoutes from './routes/workflows.js';
+import createActivityRoutes from './routes/activities.js';
+import createOpportunityRoutes from './routes/opportunities.js';
+import createNotificationRoutes from './routes/notifications.js';
+import createSystemLogRoutes from './routes/system-logs.js';
 
 // Mount routers with database pool
 app.use('/api/database', createDatabaseRoutes(pgPool));
@@ -131,6 +135,10 @@ app.use('/api/utils', createUtilsRoutes(pgPool));
 app.use('/api/bizdev', createBizdevRoutes(pgPool));
 app.use('/api/clients', createClientRoutes(pgPool));
 app.use('/api/workflows', createWorkflowRoutes(pgPool));
+app.use('/api/activities', createActivityRoutes(pgPool));
+app.use('/api/opportunities', createOpportunityRoutes(pgPool));
+app.use('/api/notifications', createNotificationRoutes(pgPool));
+app.use('/api/system-logs', createSystemLogRoutes(pgPool));
 
 // 404 handler
 app.use((req, res) => {
@@ -142,7 +150,7 @@ app.use((req, res) => {
 });
 
 // Error handler
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   console.error('Error:', err);
   res.status(err.status || 500).json({
     status: 'error',
