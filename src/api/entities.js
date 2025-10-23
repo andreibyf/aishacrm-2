@@ -23,6 +23,7 @@ const pluralize = (entityName) => {
     'modulesettings': 'modulesettings', // Already plural
     'tenantintegration': 'tenantintegrations',
     'bizdevsource': 'bizdevsources',
+    'tenant': 'tenants',
   };
   
   if (irregularPlurals[name]) {
