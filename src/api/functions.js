@@ -1,343 +1,364 @@
 import { base44 } from './base44Client';
+import { isLocalDevMode } from './mockData';
 
+// Create a proxy for functions that returns no-op functions in local dev mode
+const createFunctionProxy = (functionName) => {
+  return (...args) => {
+    if (isLocalDevMode()) {
+      console.warn(`[Local Dev Mode] Function '${functionName}' called but not available in local dev mode.`);
+      return Promise.resolve({ success: false, message: 'Function not available in local dev mode' });
+    }
+    return base44.functions?.[functionName]?.(...args);
+  };
+};
 
-export const syncDatabase = base44.functions.syncDatabase;
+// Create a Proxy handler that wraps all function access
+const functionsProxy = new Proxy({}, {
+  get: (target, prop) => {
+    if (isLocalDevMode()) {
+      return createFunctionProxy(prop);
+    }
+    if (base44.functions && base44.functions[prop]) {
+      return base44.functions[prop];
+    }
+    return createFunctionProxy(prop);
+  }
+});
 
-export const n8nCreateLead = base44.functions.n8nCreateLead;
+// Export all functions through the proxy
+export const syncDatabase = functionsProxy.syncDatabase;
+export const n8nCreateLead = functionsProxy.n8nCreateLead;
+export const n8nCreateContact = functionsProxy.n8nCreateContact;
+export const n8nGetData = functionsProxy.n8nGetData;
+export const processChatCommand = functionsProxy.processChatCommand;
 
-export const n8nCreateContact = base44.functions.n8nCreateContact;
+export const makeCall = functionsProxy.makeCall;
 
-export const n8nGetData = base44.functions.n8nGetData;
+export const callStatus = functionsProxy.callStatus;
 
-export const processChatCommand = base44.functions.processChatCommand;
+export const thoughtlyCallResults = functionsProxy.thoughtlyCallResults;
 
-export const makeCall = base44.functions.makeCall;
+export const thoughtlyTranscripts = functionsProxy.thoughtlyTranscripts;
 
-export const callStatus = base44.functions.callStatus;
+export const cleanupUserData = functionsProxy.cleanupUserData;
 
-export const thoughtlyCallResults = base44.functions.thoughtlyCallResults;
+export const updateUserRole = functionsProxy.updateUserRole;
 
-export const thoughtlyTranscripts = base44.functions.thoughtlyTranscripts;
+export const createCheckoutSession = functionsProxy.createCheckoutSession;
 
-export const cleanupUserData = base44.functions.cleanupUserData;
+export const createBillingPortalSession = functionsProxy.createBillingPortalSession;
 
-export const updateUserRole = base44.functions.updateUserRole;
+export const handleStripeWebhook = functionsProxy.handleStripeWebhook;
 
-export const createCheckoutSession = base44.functions.createCheckoutSession;
+export const checkBackendStatus = functionsProxy.checkBackendStatus;
 
-export const createBillingPortalSession = base44.functions.createBillingPortalSession;
+export const dispatchWebhook = functionsProxy.dispatchWebhook;
 
-export const handleStripeWebhook = base44.functions.handleStripeWebhook;
+export const n8nUpdateContact = functionsProxy.n8nUpdateContact;
 
-export const checkBackendStatus = base44.functions.checkBackendStatus;
+export const runComponentTests = functionsProxy.runComponentTests;
 
-export const dispatchWebhook = base44.functions.dispatchWebhook;
+export const tenantGoogleDrive = functionsProxy.tenantGoogleDrive;
 
-export const n8nUpdateContact = base44.functions.n8nUpdateContact;
+export const tenantZapierWebhook = functionsProxy.tenantZapierWebhook;
 
-export const runComponentTests = base44.functions.runComponentTests;
+export const deleteAccount = functionsProxy.deleteAccount;
 
-export const tenantGoogleDrive = base44.functions.tenantGoogleDrive;
+export const checkDataVolume = functionsProxy.checkDataVolume;
 
-export const tenantZapierWebhook = base44.functions.tenantZapierWebhook;
+export const archiveAgedData = functionsProxy.archiveAgedData;
 
-export const deleteAccount = base44.functions.deleteAccount;
+export const cleanupTestRecords = functionsProxy.cleanupTestRecords;
 
-export const checkDataVolume = base44.functions.checkDataVolume;
+export const deleteTenantWithData = functionsProxy.deleteTenantWithData;
 
-export const archiveAgedData = base44.functions.archiveAgedData;
+export const triggerLeadQualifier = functionsProxy.triggerLeadQualifier;
 
-export const cleanupTestRecords = base44.functions.cleanupTestRecords;
+export const activateMyAccount = functionsProxy.activateMyAccount;
 
-export const deleteTenantWithData = base44.functions.deleteTenantWithData;
+export const minioDocumentManager = functionsProxy.minioDocumentManager;
 
-export const triggerLeadQualifier = base44.functions.triggerLeadQualifier;
+export const createTenantWithBucket = functionsProxy.createTenantWithBucket;
 
-export const activateMyAccount = base44.functions.activateMyAccount;
+export const r2DocumentManager = functionsProxy.r2DocumentManager;
 
-export const minioDocumentManager = base44.functions.minioDocumentManager;
+export const createTenantWithR2Bucket = functionsProxy.createTenantWithR2Bucket;
 
-export const createTenantWithBucket = base44.functions.createTenantWithBucket;
+export const cleanupOrphanedData = functionsProxy.cleanupOrphanedData;
 
-export const r2DocumentManager = base44.functions.r2DocumentManager;
+export const inviteUser = functionsProxy.inviteUser;
 
-export const createTenantWithR2Bucket = base44.functions.createTenantWithR2Bucket;
+export const updateLastLogin = functionsProxy.updateLastLogin;
 
-export const cleanupOrphanedData = base44.functions.cleanupOrphanedData;
+export const runFullSystemDiagnostics = functionsProxy.runFullSystemDiagnostics;
 
-export const inviteUser = base44.functions.inviteUser;
+export const checkR2Config = functionsProxy.checkR2Config;
 
-export const updateLastLogin = base44.functions.updateLastLogin;
+export const createSysAdminDocs = functionsProxy.createSysAdminDocs;
 
-export const runFullSystemDiagnostics = base44.functions.runFullSystemDiagnostics;
+export const callFluentWebhookV2 = functionsProxy.callFluentWebhookV2;
 
-export const checkR2Config = base44.functions.checkR2Config;
+export const generateDocumentationPDF = functionsProxy.generateDocumentationPDF;
 
-export const createSysAdminDocs = base44.functions.createSysAdminDocs;
+export const tenantOneDrive = functionsProxy.tenantOneDrive;
 
-export const callFluentWebhookV2 = base44.functions.callFluentWebhookV2;
+export const tenantOutlookEmail = functionsProxy.tenantOutlookEmail;
 
-export const generateDocumentationPDF = base44.functions.generateDocumentationPDF;
+export const tenantOutlookCalendar = functionsProxy.tenantOutlookCalendar;
 
-export const tenantOneDrive = base44.functions.tenantOneDrive;
+export const invokeTenantLLM = functionsProxy.invokeTenantLLM;
 
-export const tenantOutlookEmail = base44.functions.tenantOutlookEmail;
+export const testSystemOpenAI = functionsProxy.testSystemOpenAI;
 
-export const tenantOutlookCalendar = base44.functions.tenantOutlookCalendar;
+export const invokeSystemOpenAI = functionsProxy.invokeSystemOpenAI;
 
-export const invokeTenantLLM = base44.functions.invokeTenantLLM;
+export const generateCRMSummary = functionsProxy.generateCRMSummary;
 
-export const testSystemOpenAI = base44.functions.testSystemOpenAI;
+export const generateAIEmailDraft = functionsProxy.generateAIEmailDraft;
 
-export const invokeSystemOpenAI = base44.functions.invokeSystemOpenAI;
+export const sendAIEmail = functionsProxy.sendAIEmail;
 
-export const generateCRMSummary = base44.functions.generateCRMSummary;
+export const incomingWebhook = functionsProxy.incomingWebhook;
 
-export const generateAIEmailDraft = base44.functions.generateAIEmailDraft;
+export const bulkConvertLeads = functionsProxy.bulkConvertLeads;
 
-export const sendAIEmail = base44.functions.sendAIEmail;
+export const generateUniqueId = functionsProxy.generateUniqueId;
 
-export const incomingWebhook = base44.functions.incomingWebhook;
+export const exportReportToPDF = functionsProxy.exportReportToPDF;
 
-export const bulkConvertLeads = base44.functions.bulkConvertLeads;
+export const exportReportToCSV = functionsProxy.exportReportToCSV;
 
-export const generateUniqueId = base44.functions.generateUniqueId;
+export const testSuites = functionsProxy.testSuites;
 
-export const exportReportToPDF = base44.functions.exportReportToPDF;
+export const updateGuideContent = functionsProxy.updateGuideContent;
 
-export const exportReportToCSV = base44.functions.exportReportToCSV;
+export const createActivityWebhook = functionsProxy.createActivityWebhook;
 
-export const testSuites = base44.functions.testSuites;
+export const generateSignalWireJWT = functionsProxy.generateSignalWireJWT;
 
-export const updateGuideContent = base44.functions.updateGuideContent;
+export const generateTwilioToken = functionsProxy.generateTwilioToken;
 
-export const createActivityWebhook = base44.functions.createActivityWebhook;
+export const checkIntegrationUsage = functionsProxy.checkIntegrationUsage;
 
-export const generateSignalWireJWT = base44.functions.generateSignalWireJWT;
+export const processScheduledAICalls = functionsProxy.processScheduledAICalls;
 
-export const generateTwilioToken = base44.functions.generateTwilioToken;
+export const universalAICall = functionsProxy.universalAICall;
 
-export const checkIntegrationUsage = base44.functions.checkIntegrationUsage;
+export const createAuditLog = functionsProxy.createAuditLog;
 
-export const processScheduledAICalls = base44.functions.processScheduledAICalls;
+export const generateDailyBriefing = functionsProxy.generateDailyBriefing;
 
-export const universalAICall = base44.functions.universalAICall;
+export const generateElevenLabsSpeech = functionsProxy.generateElevenLabsSpeech;
 
-export const createAuditLog = base44.functions.createAuditLog;
+export const elevenLabsCRMWebhook = functionsProxy.elevenLabsCRMWebhook;
 
-export const generateDailyBriefing = base44.functions.generateDailyBriefing;
+export const diagnoseR2Upload = functionsProxy.diagnoseR2Upload;
 
-export const generateElevenLabsSpeech = base44.functions.generateElevenLabsSpeech;
+export const debugUploadPrivateFile = functionsProxy.debugUploadPrivateFile;
 
-export const elevenLabsCRMWebhook = base44.functions.elevenLabsCRMWebhook;
+export const manualTriggerAICalls = functionsProxy.manualTriggerAICalls;
 
-export const diagnoseR2Upload = base44.functions.diagnoseR2Upload;
+export const testConnection = functionsProxy.testConnection;
 
-export const debugUploadPrivateFile = base44.functions.debugUploadPrivateFile;
+export const setCashFlowPermission = functionsProxy.setCashFlowPermission;
 
-export const manualTriggerAICalls = base44.functions.manualTriggerAICalls;
+export const checkMyPermissions = functionsProxy.checkMyPermissions;
 
-export const testConnection = base44.functions.testConnection;
+export const processReceiptForCashFlow = functionsProxy.processReceiptForCashFlow;
 
-export const setCashFlowPermission = base44.functions.setCashFlowPermission;
+export const debugActivityTime = functionsProxy.debugActivityTime;
 
-export const checkMyPermissions = base44.functions.checkMyPermissions;
+export const checkScheduledAICalls = functionsProxy.checkScheduledAICalls;
 
-export const processReceiptForCashFlow = base44.functions.processReceiptForCashFlow;
+export const cronJobRunner = functionsProxy.cronJobRunner;
 
-export const debugActivityTime = base44.functions.debugActivityTime;
+export const createInitialCronJobs = functionsProxy.createInitialCronJobs;
 
-export const checkScheduledAICalls = base44.functions.checkScheduledAICalls;
+export const resetCronSchedules = functionsProxy.resetCronSchedules;
 
-export const cronJobRunner = base44.functions.cronJobRunner;
+export const testStripeConnection = functionsProxy.testStripeConnection;
 
-export const createInitialCronJobs = base44.functions.createInitialCronJobs;
+export const generateDesignDocumentPDF = functionsProxy.generateDesignDocumentPDF;
 
-export const resetCronSchedules = base44.functions.resetCronSchedules;
+export const generateUserGuidePDF = functionsProxy.generateUserGuidePDF;
 
-export const testStripeConnection = base44.functions.testStripeConnection;
+export const generateAdminGuidePDF = functionsProxy.generateAdminGuidePDF;
 
-export const generateDesignDocumentPDF = base44.functions.generateDesignDocumentPDF;
+export const mcpServer = functionsProxy.mcpServer;
 
-export const generateUserGuidePDF = base44.functions.generateUserGuidePDF;
+export const getOrCreateUserApiKey = functionsProxy.getOrCreateUserApiKey;
 
-export const generateAdminGuidePDF = base44.functions.generateAdminGuidePDF;
+export const validateAccountRelationships = functionsProxy.validateAccountRelationships;
 
-export const mcpServer = base44.functions.mcpServer;
+export const cleanupAccountRelationships = functionsProxy.cleanupAccountRelationships;
 
-export const getOrCreateUserApiKey = base44.functions.getOrCreateUserApiKey;
+export const getPerformanceMetrics = functionsProxy.getPerformanceMetrics;
 
-export const validateAccountRelationships = base44.functions.validateAccountRelationships;
+export const generateEntitySummary = functionsProxy.generateEntitySummary;
 
-export const cleanupAccountRelationships = base44.functions.cleanupAccountRelationships;
+export const processScheduledAIEmails = functionsProxy.processScheduledAIEmails;
 
-export const getPerformanceMetrics = base44.functions.getPerformanceMetrics;
+export const mcpHandler = functionsProxy.mcpHandler;
 
-export const generateEntitySummary = base44.functions.generateEntitySummary;
+export const mcpToolFinder = functionsProxy.mcpToolFinder;
 
-export const processScheduledAIEmails = base44.functions.processScheduledAIEmails;
+export const mcpServerSimple = functionsProxy.mcpServerSimple;
 
-export const mcpHandler = base44.functions.mcpHandler;
+export const mcpServerPublic = functionsProxy.mcpServerPublic;
 
-export const mcpToolFinder = base44.functions.mcpToolFinder;
+export const mcpServerDebug = functionsProxy.mcpServerDebug;
 
-export const mcpServerSimple = base44.functions.mcpServerSimple;
+export const aiToken = functionsProxy.aiToken;
 
-export const mcpServerPublic = base44.functions.mcpServerPublic;
+export const aiRun = functionsProxy.aiRun;
 
-export const mcpServerDebug = base44.functions.mcpServerDebug;
+export const diagnoseCronSystem = functionsProxy.diagnoseCronSystem;
 
-export const aiToken = base44.functions.aiToken;
+export const elevenLabsNavigation = functionsProxy.elevenLabsNavigation;
 
-export const aiRun = base44.functions.aiRun;
+export const generateAIPlan = functionsProxy.generateAIPlan;
 
-export const diagnoseCronSystem = base44.functions.diagnoseCronSystem;
+export const executeAIPlan = functionsProxy.executeAIPlan;
 
-export const elevenLabsNavigation = base44.functions.elevenLabsNavigation;
+export const handleVoiceCommand = functionsProxy.handleVoiceCommand;
 
-export const generateAIPlan = base44.functions.generateAIPlan;
+export const voiceCommand = functionsProxy.voiceCommand;
 
-export const executeAIPlan = base44.functions.executeAIPlan;
+export const processAICommand = functionsProxy.processAICommand;
 
-export const handleVoiceCommand = base44.functions.handleVoiceCommand;
+export const exportReportToPDFSafe = functionsProxy.exportReportToPDFSafe;
 
-export const voiceCommand = base44.functions.voiceCommand;
+export const getDashboardBundle = functionsProxy.getDashboardBundle;
 
-export const processAICommand = base44.functions.processAICommand;
+export const getContactHealth = functionsProxy.getContactHealth;
 
-export const exportReportToPDFSafe = base44.functions.exportReportToPDFSafe;
+export const getEmployeeUserData = functionsProxy.getEmployeeUserData;
 
-export const getDashboardBundle = base44.functions.getDashboardBundle;
+export const updateEmployeePermissions = functionsProxy.updateEmployeePermissions;
 
-export const getContactHealth = base44.functions.getContactHealth;
+export const getMyTenantBranding = functionsProxy.getMyTenantBranding;
 
-export const getEmployeeUserData = base44.functions.getEmployeeUserData;
+export const updateEmployeeUserAccess = functionsProxy.updateEmployeeUserAccess;
 
-export const updateEmployeePermissions = base44.functions.updateEmployeePermissions;
+export const requestUserInvite = functionsProxy.requestUserInvite;
 
-export const getMyTenantBranding = base44.functions.getMyTenantBranding;
+export const updateEmployeeSecure = functionsProxy.updateEmployeeSecure;
 
-export const updateEmployeeUserAccess = base44.functions.updateEmployeeUserAccess;
+export const setEmployeeAccess = functionsProxy.setEmployeeAccess;
 
-export const requestUserInvite = base44.functions.requestUserInvite;
+export const transcribeAudio = functionsProxy.transcribeAudio;
 
-export const updateEmployeeSecure = base44.functions.updateEmployeeSecure;
+export const performanceTestSuites = functionsProxy.performanceTestSuites;
 
-export const setEmployeeAccess = base44.functions.setEmployeeAccess;
+export const _tenantUtils = functionsProxy._tenantUtils;
 
-export const transcribeAudio = base44.functions.transcribeAudio;
+export const listPerformanceLogs = functionsProxy.listPerformanceLogs;
 
-export const performanceTestSuites = base44.functions.performanceTestSuites;
+export const bulkDeleteLeads = functionsProxy.bulkDeleteLeads;
 
-export const _tenantUtils = base44.functions._tenantUtils;
+export const setLeadsTenant = functionsProxy.setLeadsTenant;
 
-export const listPerformanceLogs = base44.functions.listPerformanceLogs;
+export const setUserTenant = functionsProxy.setUserTenant;
 
-export const bulkDeleteLeads = base44.functions.bulkDeleteLeads;
+export const fixMyAssignedLeads = functionsProxy.fixMyAssignedLeads;
 
-export const setLeadsTenant = base44.functions.setLeadsTenant;
+export const fixMyAccess = functionsProxy.fixMyAccess;
 
-export const setUserTenant = base44.functions.setUserTenant;
+export const fixTenantDataForTenant = functionsProxy.fixTenantDataForTenant;
 
-export const fixMyAssignedLeads = base44.functions.fixMyAssignedLeads;
+export const sendSms = functionsProxy.sendSms;
 
-export const fixMyAccess = base44.functions.fixMyAccess;
+export const userExistsByEmail = functionsProxy.userExistsByEmail;
 
-export const fixTenantDataForTenant = base44.functions.fixTenantDataForTenant;
+export const findDuplicates = functionsProxy.findDuplicates;
 
-export const sendSms = base44.functions.sendSms;
+export const checkDuplicateBeforeCreate = functionsProxy.checkDuplicateBeforeCreate;
 
-export const userExistsByEmail = base44.functions.userExistsByEmail;
+export const getDashboardStats = functionsProxy.getDashboardStats;
 
-export const findDuplicates = base44.functions.findDuplicates;
+export const bulkDeleteAccounts = functionsProxy.bulkDeleteAccounts;
 
-export const checkDuplicateBeforeCreate = base44.functions.checkDuplicateBeforeCreate;
+export const consolidateDuplicateAccounts = functionsProxy.consolidateDuplicateAccounts;
 
-export const getDashboardStats = base44.functions.getDashboardStats;
+export const backfillUniqueIds = functionsProxy.backfillUniqueIds;
 
-export const bulkDeleteAccounts = base44.functions.bulkDeleteAccounts;
+export const analyzeDataQuality = functionsProxy.analyzeDataQuality;
 
-export const consolidateDuplicateAccounts = base44.functions.consolidateDuplicateAccounts;
+export const validateEntityReferences = functionsProxy.validateEntityReferences;
 
-export const backfillUniqueIds = base44.functions.backfillUniqueIds;
+export const handleCascadeDelete = functionsProxy.handleCascadeDelete;
 
-export const analyzeDataQuality = base44.functions.analyzeDataQuality;
+export const detectOrphanedRecords = functionsProxy.detectOrphanedRecords;
 
-export const validateEntityReferences = base44.functions.validateEntityReferences;
+export const syncDenormalizedFields = functionsProxy.syncDenormalizedFields;
 
-export const handleCascadeDelete = base44.functions.handleCascadeDelete;
+export const cronDenormalizationSync = functionsProxy.cronDenormalizationSync;
 
-export const detectOrphanedRecords = base44.functions.detectOrphanedRecords;
+export const cronOrphanCleanup = functionsProxy.cronOrphanCleanup;
 
-export const syncDenormalizedFields = base44.functions.syncDenormalizedFields;
+export const registerDataMaintenanceJobs = functionsProxy.registerDataMaintenanceJobs;
 
-export const cronDenormalizationSync = base44.functions.cronDenormalizationSync;
+export const trackEntityChange = functionsProxy.trackEntityChange;
 
-export const cronOrphanCleanup = base44.functions.cronOrphanCleanup;
+export const getEntityAtDate = functionsProxy.getEntityAtDate;
 
-export const registerDataMaintenanceJobs = base44.functions.registerDataMaintenanceJobs;
+export const calculateDailyMetrics = functionsProxy.calculateDailyMetrics;
 
-export const trackEntityChange = base44.functions.trackEntityChange;
+export const calculateMonthlyPerformance = functionsProxy.calculateMonthlyPerformance;
 
-export const getEntityAtDate = base44.functions.getEntityAtDate;
+export const archiveOldData = functionsProxy.archiveOldData;
 
-export const calculateDailyMetrics = base44.functions.calculateDailyMetrics;
+export const cronSyncDenormalizedFields = functionsProxy.cronSyncDenormalizedFields;
 
-export const calculateMonthlyPerformance = base44.functions.calculateMonthlyPerformance;
+export const validateAndImport = functionsProxy.validateAndImport;
 
-export const archiveOldData = base44.functions.archiveOldData;
+export const consolidateDuplicateContacts = functionsProxy.consolidateDuplicateContacts;
 
-export const cronSyncDenormalizedFields = base44.functions.cronSyncDenormalizedFields;
+export const listTenantUsers = functionsProxy.listTenantUsers;
 
-export const validateAndImport = base44.functions.validateAndImport;
+export const migrateToNewPermissions = functionsProxy.migrateToNewPermissions;
 
-export const consolidateDuplicateContacts = base44.functions.consolidateDuplicateContacts;
+export const syncContactAssignments = functionsProxy.syncContactAssignments;
 
-export const listTenantUsers = base44.functions.listTenantUsers;
+export const saveEmployee = functionsProxy.saveEmployee;
 
-export const migrateToNewPermissions = base44.functions.migrateToNewPermissions;
+export const linkEmployeeToCRMUser = functionsProxy.linkEmployeeToCRMUser;
 
-export const syncContactAssignments = base44.functions.syncContactAssignments;
+export const syncEmployeeUserPermissions = functionsProxy.syncEmployeeUserPermissions;
 
-export const saveEmployee = base44.functions.saveEmployee;
+export const checkUserRecord = functionsProxy.checkUserRecord;
 
-export const linkEmployeeToCRMUser = base44.functions.linkEmployeeToCRMUser;
+export const diagnoseLeadVisibility = functionsProxy.diagnoseLeadVisibility;
 
-export const syncEmployeeUserPermissions = base44.functions.syncEmployeeUserPermissions;
+export const fixLeadVisibility = functionsProxy.fixLeadVisibility;
 
-export const checkUserRecord = base44.functions.checkUserRecord;
+export const promoteBizDevSourceToAccount = functionsProxy.promoteBizDevSourceToAccount;
 
-export const diagnoseLeadVisibility = base44.functions.diagnoseLeadVisibility;
+export const archiveBizDevSourcesToR2 = functionsProxy.archiveBizDevSourcesToR2;
 
-export const fixLeadVisibility = base44.functions.fixLeadVisibility;
+export const retrieveArchiveFromR2 = functionsProxy.retrieveArchiveFromR2;
 
-export const promoteBizDevSourceToAccount = base44.functions.promoteBizDevSourceToAccount;
+export const bulkDeleteBizDevSources = functionsProxy.bulkDeleteBizDevSources;
 
-export const archiveBizDevSourcesToR2 = base44.functions.archiveBizDevSourcesToR2;
+export const fetchIndustryMarketData = functionsProxy.fetchIndustryMarketData;
 
-export const retrieveArchiveFromR2 = base44.functions.retrieveArchiveFromR2;
+export const agentWebSearch = functionsProxy.agentWebSearch;
 
-export const bulkDeleteBizDevSources = base44.functions.bulkDeleteBizDevSources;
+export const diagnoseUserAccess = functionsProxy.diagnoseUserAccess;
 
-export const fetchIndustryMarketData = base44.functions.fetchIndustryMarketData;
+export const fixManagerAccess = functionsProxy.fixManagerAccess;
 
-export const agentWebSearch = base44.functions.agentWebSearch;
+export const diagnoseDataAccess = functionsProxy.diagnoseDataAccess;
 
-export const diagnoseUserAccess = base44.functions.diagnoseUserAccess;
+export const diagnoseActivityVisibility = functionsProxy.diagnoseActivityVisibility;
 
-export const fixManagerAccess = base44.functions.fixManagerAccess;
+export const seedDocumentation = functionsProxy.seedDocumentation;
 
-export const diagnoseDataAccess = base44.functions.diagnoseDataAccess;
+export const submitClientRequirement = functionsProxy.submitClientRequirement;
 
-export const diagnoseActivityVisibility = base44.functions.diagnoseActivityVisibility;
+export const approveClientRequirement = functionsProxy.approveClientRequirement;
 
-export const seedDocumentation = base44.functions.seedDocumentation;
+export const elevenLabsCRMAccess = functionsProxy.elevenLabsCRMAccess;
 
-export const submitClientRequirement = base44.functions.submitClientRequirement;
-
-export const approveClientRequirement = base44.functions.approveClientRequirement;
-
-export const elevenLabsCRMAccess = base44.functions.elevenLabsCRMAccess;
-
-export const executeWorkflow = base44.functions.executeWorkflow;
+export const executeWorkflow = functionsProxy.executeWorkflow;
 

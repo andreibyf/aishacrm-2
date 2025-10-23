@@ -1,5 +1,6 @@
 import { base44 } from './base44Client';
-
+// Import mock data utilities at the top for use throughout
+import { createMockUser, createMockTenant, isLocalDevMode } from './mockData';
 
 export const Contact = base44.entities.Contact;
 
@@ -11,7 +12,25 @@ export const Opportunity = base44.entities.Opportunity;
 
 export const Activity = base44.entities.Activity;
 
-export const Tenant = base44.entities.Tenant;
+// Wrap Tenant entity to support local dev mode
+const baseTenant = base44.entities.Tenant;
+export const Tenant = {
+  ...baseTenant,
+  get: async (id) => {
+    if (isLocalDevMode()) {
+      console.log('[Local Dev Mode] Using mock tenant');
+      return createMockTenant();
+    }
+    return baseTenant.get(id);
+  },
+  list: async (filters) => {
+    if (isLocalDevMode()) {
+      console.log('[Local Dev Mode] Using mock tenant list');
+      return [createMockTenant()];
+    }
+    return baseTenant.list(filters);
+  },
+};
 
 export const Notification = base44.entities.Notification;
 
@@ -91,7 +110,23 @@ export const Workflow = base44.entities.Workflow;
 
 export const WorkflowExecution = base44.entities.WorkflowExecution;
 
+// auth sdk with local dev mode support:
+const baseUser = base44.auth;
 
-
-// auth sdk:
-export const User = base44.auth;
+// Wrap User.me() to return mock data in local dev mode
+export const User = {
+  ...baseUser,
+  me: async () => {
+    if (isLocalDevMode()) {
+      // Return mock user for local development
+      console.log('[Local Dev Mode] Using mock user');
+      return createMockUser();
+    }
+    // Use real Base44 authentication
+    return baseUser.me();
+  },
+  // Pass through other methods
+  signIn: baseUser.signIn,
+  signOut: baseUser.signOut,
+  signUp: baseUser.signUp,
+};
