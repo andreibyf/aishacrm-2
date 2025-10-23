@@ -28,6 +28,7 @@ dist-ssr
 .env.local
 .env.production
 .env.*.local
+backend/.env
 
 # Lock files (should be committed but listed here for reference)
 # package-lock.json should be committed for security audits
