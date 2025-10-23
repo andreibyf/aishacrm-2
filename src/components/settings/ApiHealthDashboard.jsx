@@ -10,10 +10,21 @@ import { toast } from 'sonner';
 export default function ApiHealthDashboard() {
   const [healthReport, setHealthReport] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const refreshReport = () => {
+    setIsRefreshing(true);
     const report = apiHealthMonitor.getHealthReport();
     setHealthReport(report);
+    
+    // Add visual feedback with a slight delay
+    setTimeout(() => {
+      setIsRefreshing(false);
+      toast.success('Health report refreshed', {
+        description: `${report.totalErrors} total issues tracked`,
+        duration: 2000
+      });
+    }, 300);
   };
 
   const renderErrorList = (errors, title, description, colorClass, showFix = false) => {
@@ -139,8 +150,13 @@ export default function ApiHealthDashboard() {
             <RefreshCw className={`h-4 w-4 mr-2 ${autoRefresh ? 'animate-spin' : ''}`} />
             {autoRefresh ? 'Auto-Refresh On' : 'Auto-Refresh Off'}
           </Button>
-          <Button variant="outline" size="sm" onClick={refreshReport}>
-            <RefreshCw className="h-4 w-4 mr-2" />
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={refreshReport}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
             Refresh Now
           </Button>
           <Button variant="outline" size="sm" onClick={handleClearAll}>
