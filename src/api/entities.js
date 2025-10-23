@@ -1,6 +1,7 @@
 import { base44 } from './base44Client';
 // Import mock data utilities at the top for use throughout
 import { createMockUser, createMockTenant, isLocalDevMode } from './mockData';
+import { apiHealthMonitor } from '../utils/apiHealthMonitor';
 
 // Get backend URL from environment
 const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
@@ -20,6 +21,8 @@ const pluralize = (entityName) => {
     'cashflow': 'cashflow',
     'workflow': 'workflows',
     'modulesettings': 'modulesettings', // Already plural
+    'tenantintegration': 'tenantintegrations',
+    'bizdevsource': 'bizdevsources',
   };
   
   if (irregularPlurals[name]) {
@@ -68,9 +71,43 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     options.body = JSON.stringify({ ...data, tenant_id: tenantId });
   }
 
-  const response = await fetch(url, options);
+  let response;
+  try {
+    response = await fetch(url, options);
+  } catch (error) {
+    // Network errors (connection refused, DNS failure, etc)
+    apiHealthMonitor.reportNetworkError(url, {
+      entityName,
+      method,
+      tenantId,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+    throw new Error(`Network error: ${error.message}`);
+  }
+
   if (!response.ok) {
     const errorText = await response.text();
+    const errorContext = {
+      entityName,
+      method,
+      tenantId,
+      statusCode: response.status,
+      statusText: response.statusText,
+      timestamp: new Date().toISOString()
+    };
+
+    // Report different error types to health monitor
+    if (response.status === 404) {
+      apiHealthMonitor.reportMissingEndpoint(url, errorContext);
+    } else if (response.status === 401 || response.status === 403) {
+      apiHealthMonitor.reportAuthError(url, response.status, errorContext);
+    } else if (response.status === 429) {
+      apiHealthMonitor.reportRateLimitError(url, errorContext);
+    } else if (response.status >= 500 && response.status < 600) {
+      apiHealthMonitor.reportServerError(url, response.status, errorContext);
+    }
+    
     throw new Error(`Backend API error: ${response.statusText} - ${errorText}`);
   }
   

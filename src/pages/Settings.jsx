@@ -77,6 +77,7 @@ import CronJobManager from "../components/settings/CronJobManager";
 import SystemAnnouncements from "../components/settings/SystemAnnouncements";
 import DocumentationSeeder from "../components/settings/DocumentationSeeder"; // NEW: Documentation Seeder
 import SystemLogsViewer from "../components/settings/SystemLogsViewer"; // NEW: System Logs Viewer
+import ApiHealthDashboard from "../components/settings/ApiHealthDashboard"; // NEW: API Health Monitor
 
 // Data Management
 import DataConsistencyManager from "../components/settings/DataConsistencyManager";
@@ -196,6 +197,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
       { id: 'diagnostics', label: 'Diagnostics', icon: TestTube2, color: 'red', roles: ['admin', 'superadmin'] },
       { id: 'unit-tests', label: 'Unit Tests', icon: TestTube2, color: 'blue', roles: ['admin', 'superadmin'] }, // NEW: Unit Tests tab
       { id: 'external-tools', label: 'External Tools', icon: ExternalLink, color: 'orange', roles: ['admin', 'superadmin'] }, // NEW: External Tools tab
+      { id: 'api-health', label: 'API Health', icon: Activity, color: 'red', roles: ['admin', 'superadmin'] }, // NEW: API Health Monitor
     ] : []),
 
     // Superadmin-specific tabs
@@ -791,6 +793,11 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                     </p>
                   </CardContent>
                 </Card>
+              )}
+
+              {/* NEW: API Health Monitor tab content */}
+              {activeTab === 'api-health' && (isAdmin || isSuperadmin) && (
+                <ApiHealthDashboard />
               )}
 
               {/* NEW: External Tools tab content */}

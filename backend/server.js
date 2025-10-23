@@ -108,6 +108,8 @@ import createOpportunityRoutes from './routes/opportunities.js';
 import createNotificationRoutes from './routes/notifications.js';
 import createSystemLogRoutes from './routes/system-logs.js';
 import createModuleSettingsRoutes from './routes/modulesettings.js';
+import createTenantIntegrationRoutes from './routes/tenant-integrations.js';
+import createBizDevSourceRoutes from './routes/bizdevsources.js';
 
 // Mount routers with database pool
 app.use('/api/database', createDatabaseRoutes(pgPool));
@@ -134,6 +136,7 @@ app.use('/api/cron', createCronRoutes(pgPool));
 app.use('/api/metrics', createMetricsRoutes(pgPool));
 app.use('/api/utils', createUtilsRoutes(pgPool));
 app.use('/api/bizdev', createBizdevRoutes(pgPool));
+app.use('/api/bizdevsources', createBizDevSourceRoutes(pgPool));
 app.use('/api/clients', createClientRoutes(pgPool));
 app.use('/api/workflows', createWorkflowRoutes(pgPool));
 app.use('/api/activities', createActivityRoutes(pgPool));
@@ -141,6 +144,7 @@ app.use('/api/opportunities', createOpportunityRoutes(pgPool));
 app.use('/api/notifications', createNotificationRoutes(pgPool));
 app.use('/api/system-logs', createSystemLogRoutes(pgPool));
 app.use('/api/modulesettings', createModuleSettingsRoutes(pgPool));
+app.use('/api/tenantintegrations', createTenantIntegrationRoutes(pgPool));
 
 // 404 handler
 app.use((req, res) => {
