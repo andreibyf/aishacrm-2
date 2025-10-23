@@ -16,27 +16,44 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
-const sqlFile = path.resolve(__dirname, '..', 'migrations', '001_init.sql');
-if (!fs.existsSync(sqlFile)) {
-  console.error('Migration file not found:', sqlFile);
+const migrationsDir = path.resolve(__dirname, '..', 'migrations');
+if (!fs.existsSync(migrationsDir)) {
+  console.error('Migrations directory not found:', migrationsDir);
   process.exit(1);
 }
 
-const sql = fs.readFileSync(sqlFile, 'utf8');
+// Get all .sql files in migrations directory, sorted
+const migrationFiles = fs.readdirSync(migrationsDir)
+  .filter(file => file.endsWith('.sql'))
+  .sort();
+
+if (migrationFiles.length === 0) {
+  console.error('No migration files found in', migrationsDir);
+  process.exit(1);
+}
 
 const pool = new Pool({ connectionString: databaseUrl, max: 5 });
 
 async function run() {
   const client = await pool.connect();
   try {
-    console.log('Applying migrations from', sqlFile);
-    await client.query('BEGIN');
-    await client.query(sql);
-    await client.query('COMMIT');
-    console.log('Migrations applied successfully');
+    console.log(`Found ${migrationFiles.length} migration file(s)`);
+    
+    for (const file of migrationFiles) {
+      const filePath = path.join(migrationsDir, file);
+      const sql = fs.readFileSync(filePath, 'utf8');
+      
+      console.log(`Applying migration: ${file}...`);
+      await client.query('BEGIN');
+      await client.query(sql);
+      await client.query('COMMIT');
+      console.log(`  ✓ ${file} applied successfully`);
+    }
+    
+    console.log('\n✓ All migrations completed successfully');
     process.exit(0);
   } catch (err) {
-    console.error('Migration failed:', err.message || err);
+    console.error('\n✗ Migration failed:', err.message || err);
     try {
       await client.query('ROLLBACK');
     } catch (_err) {
