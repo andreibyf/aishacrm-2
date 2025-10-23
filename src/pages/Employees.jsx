@@ -1,3 +1,4 @@
+import { User } from "@/api/entities";
 import { base44 } from "@/api/base44Client";
 import { useTenant } from "../components/shared/tenantContext";
 import { Button } from "@/components/ui/button";
@@ -45,7 +46,7 @@ export default function Employees() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const user = await base44.auth.me();
+        const user = await User.me();
         console.log('[Employees] Current user loaded:', user);
         setCurrentUser(user);
       } catch (error) {
