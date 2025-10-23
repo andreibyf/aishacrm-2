@@ -4,8 +4,7 @@ set -euo pipefail
 
 APP_USER=aisha
 APP_DIR=/home/$APP_USER/aishacrm
-SERVICE_FILE=/etc/systemd/system/aisha.service
-NGINX_SITE=/etc/nginx/sites-available/aisha
+SERVICE_FILE=/etc/systemd/system/ai-sha-crm.service
 
 echo "Ensure you run this script as root or with sudo"
 
@@ -46,9 +45,8 @@ sudo -u $APP_USER node scripts/run_migrations.js || true
 sudo -u $APP_USER npm run seed || true
 
 # Install systemd service
-cat > $SERVICE_FILE <<EOF
 [Unit]
-Description=Aisha CRM Backend
+Description=ai-sha-crm Backend
 After=network.target
 
 [Service]
@@ -65,7 +63,7 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now aisha.service || true
+systemctl enable --now ai-sha-crm.service || true
 
 # Nginx config
 cat > $NGINX_SITE <<EOF
@@ -83,7 +81,7 @@ server {
   }
 }
 EOF
-ln -sf $NGINX_SITE /etc/nginx/sites-enabled/aisha
+ln -sf $NGINX_SITE /etc/nginx/sites-enabled/ai-sha-crm
 systemctl restart nginx || true
 
 # Firewall
@@ -91,4 +89,4 @@ ufw allow OpenSSH
 ufw allow 'Nginx Full'
 ufw --force enable || true
 
-echo "Deploy complete. Edit $APP_DIR/backend/.env with production DATABASE_URL and secrets, then check systemctl status aisha.service"
+echo "Deploy complete. Edit $APP_DIR/backend/.env with production DATABASE_URL and secrets, then check systemctl status ai-sha-crm.service"

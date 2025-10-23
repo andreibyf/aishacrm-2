@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
             }
         };
 
-        addHeader("Ai-SHA CRM User Guide");
+    addHeader("ai-sha crm User Guide");
         
         const userGuideModules = ['introduction', 'dashboard', 'contacts', 'leads', 'accounts', 'opportunities', 'activities'];
 
@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
 
         return new Response(pdfBytes, {
             status: 200,
-            headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="aisha-crm-user-guide.pdf"' }
+            headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="ai-sha-crm-user-guide.pdf"' }
         });
     } catch (error) {
         console.error('Error generating User Guide PDF:', error);
@@ -87,6 +87,4 @@ Deno.serve(async (req) => {
     }
 });
 
-----------------------------
-
-export default generateUserGuidePDF;
+ 

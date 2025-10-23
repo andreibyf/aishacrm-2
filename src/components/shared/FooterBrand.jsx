@@ -17,7 +17,7 @@ export default function FooterBrand({ showLegal = true, className = "" }) {
 
       {showLegal && (
         <div className="text-xs text-slate-500 leading-relaxed">
-          <div>Ai‑SHA® is a registered trademark of 4V Data Consulting LLC.</div>
+          <div>ai-sha crm® is a registered trademark of 4V Data Consulting LLC.</div>
           <div>© {new Date().getFullYear()} 4V Data Consulting LLC. All rights reserved.</div>
         </div>
       )}

@@ -1,5 +1,5 @@
 #cloud-config
-# Cloud-init to bootstrap an Ubuntu 22.04 server for Aisha CRM backend
+# Cloud-init to bootstrap an Ubuntu 22.04 server for ai-sha-crm backend
 # - Creates a user 'aisha' (change as needed)
 # - Installs Node 22, nginx, git
 # - Clones repo into /home/aisha/aishacrm
@@ -8,7 +8,7 @@
 
 users:
   - name: aisha
-    gecos: Aisha App User
+  gecos: ai-sha crm App User
     sudo: ['ALL=(ALL) NOPASSWD:ALL']
     shell: /bin/bash
     lock_passwd: false
@@ -52,10 +52,8 @@ EOF
   - cd /home/aisha/aishacrm/backend && sudo -u aisha node scripts/run_migrations.js || true
   - cd /home/aisha/aishacrm/backend && sudo -u aisha npm run seed || true
 
-  # Create systemd service
-  - cat > /etc/systemd/system/aisha.service <<'EOF'
 [Unit]
-Description=Aisha CRM Backend
+Description=ai-sha crm Backend
 After=network.target
 
 [Service]
@@ -74,7 +72,7 @@ EOF
   - systemctl enable --now aisha.service || true
 
   # Nginx site (simple reverse proxy)
-  - cat > /etc/nginx/sites-available/aisha <<'EOF'
+  - cat > /etc/nginx/sites-available/ai-sha-crm <<'EOF'
 server {
   listen 80;
   server_name _;
@@ -89,7 +87,7 @@ server {
   }
 }
 EOF
-  - ln -sf /etc/nginx/sites-available/aisha /etc/nginx/sites-enabled/aisha
+  - ln -sf /etc/nginx/sites-available/ai-sha-crm /etc/nginx/sites-enabled/ai-sha-crm
   - systemctl restart nginx || true
 
-final_message: "Aisha backend bootstrap completed. Edit /home/aisha/aishacrm/backend/.env with production DATABASE_URL and secrets."
+final_message: "ai-sha crm backend bootstrap completed. Edit /home/aisha/aishacrm/backend/.env with production DATABASE_URL and secrets."

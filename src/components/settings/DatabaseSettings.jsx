@@ -255,7 +255,7 @@ export default function DatabaseSettings() {
               className="font-mono text-sm mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500"
             />
             <p className="text-xs text-slate-500 mt-1">
-              Example: postgresql://aisha_user:your_password@localhost:5432/aisha_crm
+              Example: postgresql://ai_sha_user:your_password@localhost:5432/ai_sha_crm
             </p>
           </div>
           <div className="flex justify-end">

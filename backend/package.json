@@ -1,7 +1,7 @@
 {
-  "name": "aishacrm-backend",
+  "name": "ai-sha-crm-backend",
   "version": "1.0.0",
-  "description": "Independent backend server for Aisha CRM - your own backend infrastructure",
+  "description": "Independent backend server for ai-sha crm - your own backend infrastructure",
   "main": "server.js",
   "type": "module",
   "scripts": {
@@ -13,7 +13,7 @@
   "keywords": [
     "crm",
     "backend",
-    "aishacrm",
+  "ai-sha-crm",
     "api"
   ],
   "author": "",

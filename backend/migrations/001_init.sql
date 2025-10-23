@@ -1,4 +1,4 @@
--- Initial schema for Aisha CRM (minimal)
+-- Initial schema for ai-sha crm (minimal)
 -- Run once to create basic tables used by the backend
 
 CREATE TABLE IF NOT EXISTS users (

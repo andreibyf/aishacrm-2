@@ -21,7 +21,7 @@ export default function DeploymentGuide() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Cloud className="w-5 h-5" />
-          Ai-SHA CRM Deployment Guide
+          ai-sha crm Deployment Guide
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -515,8 +515,8 @@ app.listen(port, '0.0.0.0', () => {
                     <div className="bg-slate-100 p-4 rounded">
                       <h4 className="font-semibold mb-2">1. Create project structure:</h4>
                       <pre className="text-sm">
-{`mkdir aisha-middleware
-cd aisha-middleware
+{`mkdir ai-sha-middleware
+cd ai-sha-middleware
 mkdir -p gateway/src mcp-server/src`}
                       </pre>
                     </div>

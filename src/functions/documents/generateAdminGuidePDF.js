@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
             }
         };
 
-        addHeader("Ai-SHA CRM System Administrator Guide");
+    addHeader("ai-sha crm System Administrator Guide");
         
         for(const moduleKey in guideContent) {
             const module = guideContent[moduleKey];
@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
 
         return new Response(pdfBytes, {
             status: 200,
-            headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="aisha-crm-admin-guide.pdf"' }
+            headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="ai-sha-crm-admin-guide.pdf"' }
         });
     } catch (error) {
         console.error('Error generating Admin Guide PDF:', error);
@@ -85,6 +85,4 @@ Deno.serve(async (req) => {
     }
 });
 
-----------------------------
-
-export default generateAdminGuidePDF;
+ 

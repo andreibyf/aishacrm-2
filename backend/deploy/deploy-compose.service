@@ -1,0 +1,15 @@
+[Unit]
+Description=Run Docker Compose stack for ai-sha-crm backend
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/aisha/aishacrm/backend
+RemainAfterExit=yes
+ExecStart=/usr/bin/docker compose -f /home/aisha/aishacrm/backend/docker-compose.yml up -d --build
+ExecStop=/usr/bin/docker compose -f /home/aisha/aishacrm/backend/docker-compose.yml down
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target
