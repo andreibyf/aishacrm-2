@@ -227,7 +227,9 @@ export default function TenantsPage() {
       setTenants(tenantsData);
       setCurrentUser(userData);
     } catch (error) {
-      console.error("Error loading tenants:", error);
+      if (import.meta.env.DEV) {
+        console.error("Error loading tenants:", error);
+      }
       toast.error("Failed to load tenants");
     } finally {
       setLoading(false);
@@ -247,7 +249,9 @@ export default function TenantsPage() {
       setShowCreateForm(false);
       loadData();
     } catch (error) {
-      console.error("Error saving tenant:", error);
+      if (import.meta.env.DEV) {
+        console.error("Error saving tenant:", error);
+      }
       toast.error("Failed to save tenant");
     }
   };

@@ -19,7 +19,9 @@ export default function UtilitiesPage() {
         const currentUser = await User.me();
         setUser(currentUser);
       } catch (error) {
-        console.error("Error loading user:", error);
+        if (import.meta.env.DEV) {
+          console.error("Error loading user:", error);
+        }
       } finally {
         setLoading(false);
       }

@@ -57,7 +57,9 @@ export default function ReportsPage() {
         const user = await User.me();
         setCurrentUser(user);
       } catch (error) {
-        console.error('Reports: Failed to load user:', error);
+        if (import.meta.env.DEV) {
+          console.error('Reports: Failed to load user:', error);
+        }
         setCurrentUser(null);
       } finally {
         setLoading(false);

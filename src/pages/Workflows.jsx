@@ -30,7 +30,9 @@ export default function WorkflowsPage() {
       setUser(currentUser);
       setWorkflows(workflowsData || []);
     } catch (error) {
-      console.error('Failed to load workflows:', error);
+      if (import.meta.env.DEV) {
+        console.error('Failed to load workflows:', error);
+      }
       toast.error('Failed to load workflows');
     } finally {
       setLoading(false);
@@ -53,7 +55,9 @@ export default function WorkflowsPage() {
       toast.success(`Workflow ${!workflow.is_active ? 'activated' : 'deactivated'}`);
       loadData();
     } catch (error) {
-      console.error('Failed to toggle workflow:', error);
+      if (import.meta.env.DEV) {
+        console.error('Failed to toggle workflow:', error);
+      }
       toast.error('Failed to update workflow');
     }
   };
@@ -66,7 +70,9 @@ export default function WorkflowsPage() {
       toast.success('Workflow deleted');
       loadData();
     } catch (error) {
-      console.error('Failed to delete workflow:', error);
+      if (import.meta.env.DEV) {
+        console.error('Failed to delete workflow:', error);
+      }
       toast.error('Failed to delete workflow');
     }
   };

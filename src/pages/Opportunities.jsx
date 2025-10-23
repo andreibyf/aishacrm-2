@@ -93,15 +93,19 @@ export default function OpportunitiesPage() {
     const loadUser = async () => {
       try {
         const currentUser = await User.me();
-        console.log('[Opportunities] User loaded:', {
-          email: currentUser.email,
-          role: currentUser.role,
-          employee_role: currentUser.employee_role,
-          tenant_id: currentUser.tenant_id
-        });
+        if (import.meta.env.DEV) {
+          console.log('[Opportunities] User loaded:', {
+            email: currentUser.email,
+            role: currentUser.role,
+            employee_role: currentUser.employee_role,
+            tenant_id: currentUser.tenant_id
+          });
+        }
         setUser(currentUser);
       } catch (error) {
-        console.error("Failed to load user:", error);
+        if (import.meta.env.DEV) {
+          console.error("Failed to load user:", error);
+        }
         toast.error("Failed to load user information");
       }
     };
@@ -151,7 +155,9 @@ export default function OpportunitiesPage() {
       try {
         const tenantFilter = getTenantFilter();
         
-        console.log('[Opportunities] Loading supporting data with tenant filter:', tenantFilter);
+        if (import.meta.env.DEV) {
+          console.log('[Opportunities] Loading supporting data with tenant filter:', tenantFilter);
+        }
 
         // PERFORMANCE OPTIMIZATION: Load all data concurrently using Promise.all()
         // This eliminates artificial delays and leverages ApiOptimizer's batching
@@ -170,10 +176,14 @@ export default function OpportunitiesPage() {
         setUsers(usersData || []);
         setEmployees(employeesData || []);
         
-        console.log('[Opportunities] Supporting data loaded successfully');
+        if (import.meta.env.DEV) {
+          console.log('[Opportunities] Supporting data loaded successfully');
+        }
         supportingDataLoaded.current = true; // Mark as loaded
       } catch (error) {
-        console.error("[pages/Opportunities.js] Failed to load supporting data:", error);
+        if (import.meta.env.DEV) {
+          console.error("[pages/Opportunities.js] Failed to load supporting data:", error);
+        }
         // Don't show error toast - continue with empty arrays
         setEmployees([]);
         setAccounts([]);

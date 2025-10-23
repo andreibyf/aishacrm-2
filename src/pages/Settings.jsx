@@ -114,7 +114,9 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
         setSelectedTenantId(user.tenant_id);
       }
     } catch (error) {
-      console.error("Error loading user:", error);
+      if (import.meta.env.DEV) {
+        console.error("Error loading user:", error);
+      }
     } finally {
       setLoading(false);
     }
@@ -464,10 +466,14 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                           try {
                             const { createInitialCronJobs } = await import('@/api/functions');
                             const response = await createInitialCronJobs();
-                            console.log('Cron jobs initialization result:', response);
+                            if (import.meta.env.DEV) {
+                              console.log('Cron jobs initialization result:', response);
+                            }
                             alert('System cron jobs initialized successfully!');
                           } catch (error) {
-                            console.error('Failed to initialize cron jobs:', error);
+                            if (import.meta.env.DEV) {
+                              console.error('Failed to initialize cron jobs:', error);
+                            }
                             alert('Failed to initialize cron jobs: ' + error.message);
                           }
                         }}
