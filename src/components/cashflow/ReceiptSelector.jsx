@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DocumentationFile } from "@/api/entities";
-import { getTenantFilter, useTenant } from "../shared/tenantContext";
+import { getTenantFilter } from "../shared/tenantUtils";
+import { useTenant } from "../shared/tenantContext";
 import { User } from "@/api/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
-  FileImage, Loader2, CheckCircle, AlertCircle, 
+  FileImage, Loader2, 
   DollarSign, Calendar, Building, Tag, Wand2, ArrowRight
 } from "lucide-react";
 import { format } from "date-fns";
@@ -16,13 +17,11 @@ export default function ReceiptSelector({ onReceiptSelected, onCancel }) {
   const [receipts, setReceipts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
   const { selectedTenantId } = useTenant();
 
   const loadReceiptsAndUser = useCallback(async () => {
     try {
       const user = await User.me();
-      setCurrentUser(user);
 
       const tenantFilter = getTenantFilter(user, selectedTenantId);
       
@@ -112,8 +111,8 @@ export default function ReceiptSelector({ onReceiptSelected, onCancel }) {
           <AlertDescription className="text-blue-300">
             Select a receipt or invoice from your Document Processing uploads to convert into a cash flow transaction.
             <br />
-            <strong>💡 Tip:</strong> For sales invoices you issued to customers, the system will suggest "expense" by default - 
-            remember to change the transaction type to "Income" in the form that appears.
+            <strong>💡 Tip:</strong> For sales invoices you issued to customers, the system will suggest &quot;expense&quot; by default - 
+            remember to change the transaction type to &quot;Income&quot; in the form that appears.
           </AlertDescription>
         </Alert>
 

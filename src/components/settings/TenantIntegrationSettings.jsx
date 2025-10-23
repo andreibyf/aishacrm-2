@@ -1,15 +1,15 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TenantIntegration } from "@/api/entities";
 import { User } from "@/api/entities";
-import { Loader2, Save, Trash2, AlertCircle, CheckCircle, Plus, Edit, Cloud, Bot, Mail, Zap, Key, Link } from 'lucide-react';
+import { Loader2, Save, Trash2, AlertCircle, Plus, Edit, Cloud, Bot, Mail, Zap, Key, Link } from 'lucide-react';
 import { toast } from "sonner";
 import {
   Dialog,
@@ -26,7 +26,8 @@ import {
   SelectValue } from
 "@/components/ui/select";
 import WebhookEmailSettings from './WebhookEmailSettings';
-import { getTenantFilter, useTenant } from "../shared/tenantContext";
+import { getTenantFilter } from "../shared/tenantUtils";
+import { useTenant } from "../shared/tenantContext";
 
 export default function TenantIntegrationSettings() {
   const [integrations, setIntegrations] = useState([]);

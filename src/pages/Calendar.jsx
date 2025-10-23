@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Activity, User } from "@/api/entities";
-import { useTenant, getTenantFilter as getTenantFilterHelper } from "../components/shared/tenantContext";
+import { getTenantFilter as getTenantFilterHelper } from "../components/shared/tenantUtils";
+import { useTenant } from "../components/shared/tenantContext";
 import { useApiManager } from "../components/shared/ApiManager";
 import CalendarToolbar from "../components/calendar/CalendarToolbar";
 import MonthGrid from "../components/calendar/MonthGrid";
@@ -12,7 +13,6 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, addWeeks, addDays } from "date-fns";
 import CalendarQuickActions from "../components/calendar/CalendarQuickActions";
-import { useTimezone } from "../components/shared/TimezoneContext";
 
 export default function CalendarPage() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -23,7 +23,6 @@ export default function CalendarPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const { selectedTenantId } = useTenant();
   const { cachedRequest } = useApiManager();
-  const { selectedTimezone } = useTimezone();
 
   useEffect(() => {
     (async () => {
@@ -70,7 +69,7 @@ export default function CalendarPage() {
     
     console.log('[Calendar] Loaded activities:', normalized.length);
     setActivities(normalized);
-  }, [currentUser, selectedTenantId, cachedRequest, selectedTimezone]);
+  }, [currentUser, selectedTenantId, cachedRequest]);
 
   useEffect(() => {
     loadActivities();

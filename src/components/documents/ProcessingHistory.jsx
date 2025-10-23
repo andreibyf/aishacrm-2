@@ -1,12 +1,12 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { DocumentationFile } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, History, FileText, CheckCircle, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
-import { getTenantFilter } from '../shared/tenantContext';
+import { getTenantFilter } from '../shared/tenantUtils';
 
 export default function ProcessingHistory({ user }) {
   const [history, setHistory] = useState([]);

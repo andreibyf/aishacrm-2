@@ -1,12 +1,10 @@
 
 
-import React, { useMemo, useState, useRef } from "react";
+import React, { useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom"; // Import useNavigate
 import { createPageUrl } from "@/utils";
 import {
-  AlertTriangle,
   BarChart3,
-  Bell,
   Bot,
   Building2,
   Calendar,
@@ -15,7 +13,6 @@ import {
   CreditCard,
   Database,
   DollarSign,
-  FileDigit,
   FileText,
   FolderOpen,
   LayoutDashboard,
@@ -25,18 +22,14 @@ import {
   Menu,
   Monitor,
   Moon,
-  Palette,
   Plug, // NEW: Added for Integrations
   BookOpen, // NEW: Added for Documentation and WorkflowGuide
-  RotateCcw,
-  Search,
   Settings,
   Sun,
   Target, // Changed Leads icon to Target
   TrendingUp, // Changed Opportunities icon to TrendingUp
   Users, // Changed Employees icon to Users
   UserPlus, // NEW: Added for Client Onboarding
-  X,
   Wrench,
   Zap, // NEW: Added for Workflows
 } from "lucide-react";
@@ -49,18 +42,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { User } from "@/api/entities";
 import { Tenant } from "@/api/entities";
 import { ModuleSettings } from "@/api/entities";
-import { Notification } from "@/api/entities";
-import { PerformanceLog } from "@/api/entities";
-import { Lead } from "@/api/entities";
 import { Employee } from "@/api/entities";
 import NotificationPanel from "../components/notifications/NotificationPanel";
 import { TenantProvider, useTenant } from '../components/shared/tenantContext';
+import { isValidId } from '../components/shared/tenantUtils';
 import { ApiProvider, useApiManager } from '../components/shared/ApiManager';
 import { TimezoneProvider } from '../components/shared/TimezoneContext';
 import TenantSwitcher from '../components/shared/TenantSwitcher';
@@ -69,14 +59,12 @@ import Clock from '../components/shared/Clock';
 import RouteGuard from '../components/shared/RouteGuard';
 import { updateLastLogin } from "@/api/functions";
 import { getOrCreateUserApiKey } from "@/api/functions";
-import DataManagementDialog from "../components/shared/DataManagementDialog";
 import { createAuditLog } from "@/api/functions";
 import { MCPManager } from '../components/shared/MCPClient';
 import GlobalDetailViewer from "../components/shared/GlobalDetailViewer";
-import { exportReportToPDFSafe } from "@/api/functions";
 import { getMyTenantBranding } from "@/api/functions";
 import EmployeeScopeFilter from "../components/shared/EmployeeScopeFilter";
-import { EmployeeScopeProvider, useEmployeeScope } from "../components/shared/EmployeeScopeContext";
+import { EmployeeScopeProvider } from "../components/shared/EmployeeScopeContext";
 import FooterBrand from "../components/shared/FooterBrand";
 import { initAgentSdkGuard, resetAgentSdkGuard } from "@/components/ai/agentSdkGuard";
 import ClearChatButton, { clearChat } from "../components/ai/ClearChatButton";
@@ -346,18 +334,6 @@ const SvgDefs = () => (
 );
 
 
-// Helper function to determine the tenant filter for API calls
-const getTenantFilter = (user, selectedTenantId) => {
-  if (!user) return {};
-  if ((user.role === 'admin' || user.role === 'superadmin') && selectedTenantId) {
-    return { tenant_id: selectedTenantId };
-  }
-  if (user.tenant_id) {
-    return { tenant_id: user.tenant_id };
-  }
-  return {};
-};
-
 // Add a global flag to prevent multiple cleanup attempts
 let globalTenantCleanupDone = false;
 
@@ -370,7 +346,6 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   const [moduleSettings, setModuleSettings] = React.useState([]);
   const [currentTenantData, setCurrentTenantData] = React.useState(null);
   const [elevenLabsApiKey, setElevenLabsApiKey] = useState(null);
-  const [unreadCount, setUnreadCount] = useState(0);
   
   // CRITICAL: Access tenant context safely WITHOUT destructuring
   const tenantContext = useTenant();
@@ -449,8 +424,8 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       // Non-admins always use their assigned tenant_id
       nextTenantId = user?.tenant_id;
     }
-    // Basic validation for the ID format
-    return nextTenantId && typeof nextTenantId === 'string' && /^[a-f0-9]{24}$/i.test(nextTenantId) ? nextTenantId : null;
+    // Use shared validation function
+    return nextTenantId && typeof nextTenantId === 'string' && isValidId(nextTenantId) ? nextTenantId : null;
   }, [user?.role, user?.tenant_id, selectedTenantId]);
 
 
@@ -1118,10 +1093,6 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       window.removeEventListener('module-settings-changed', handleModuleSettingsChanged);
     };
   }, [user, cachedRequest, clearCache]);
-
-  React.useEffect(() => {
-    setUnreadCount(0);
-  }, [user]);
 
   // NEW: Clear API cache on real tenant change
   React.useEffect(() => {

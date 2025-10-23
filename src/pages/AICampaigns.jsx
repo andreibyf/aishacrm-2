@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { AICampaign } from "@/api/entities";
 import { User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
@@ -27,9 +27,7 @@ import {
   Loader2,
   Eye,
   HelpCircle,
-  RefreshCw,
-  Upload,
-  Download
+  RefreshCw
 } from "lucide-react";
 import {
   Table,
@@ -49,7 +47,8 @@ import {
 import AICampaignForm from "../components/campaigns/AICampaignForm";
 import AICampaignDetailPanel from "../components/campaigns/AICampaignDetailPanel";
 import Pagination from "../components/shared/Pagination";
-import { getTenantFilter, useTenant } from "../components/shared/tenantContext";
+import { getTenantFilter } from "../components/shared/tenantUtils";
+import { useTenant } from "../components/shared/tenantContext";
 
 const statusColors = {
   draft: "bg-gray-100 text-gray-700",
@@ -144,7 +143,7 @@ export default function AICampaigns() {
     if (currentUser) {
       loadCampaigns();
     }
-  }, [currentUser, currentPage, pageSize]);
+  }, [currentUser, currentPage, pageSize, loadCampaigns]);
 
   useEffect(() => {
     if (currentUser) {
@@ -213,10 +212,6 @@ export default function AICampaigns() {
     ).length || 0;
 
     return Math.round((completedContacts / totalContacts) * 100);
-  };
-
-  const getTotalCalls = (campaign) => {
-    return campaign.performance_metrics?.total_calls || 0;
   };
 
   const getSuccessRate = (campaign) => {

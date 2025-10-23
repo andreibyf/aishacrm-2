@@ -298,7 +298,21 @@ export const UserPerformanceCache = wrapEntityWithFilter(base44.entities.UserPer
 
 export const ImportLog = wrapEntityWithFilter(base44.entities.ImportLog, 'ImportLog');
 
-export const BizDevSource = wrapEntityWithFilter(base44.entities.BizDevSource, 'BizDevSource');
+export const BizDevSource = {
+  ...wrapEntityWithFilter(base44.entities.BizDevSource, 'BizDevSource'),
+  schema: async () => {
+    if (isLocalDevMode()) {
+      return {
+        properties: {
+          name: { type: 'string' },
+          description: { type: 'string' },
+        },
+        required: ['name'],
+      };
+    }
+    return base44.entities.BizDevSource.schema();
+  },
+};
 
 export const ArchiveIndex = wrapEntityWithFilter(base44.entities.ArchiveIndex, 'ArchiveIndex');
 

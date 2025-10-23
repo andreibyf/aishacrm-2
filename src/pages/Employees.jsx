@@ -1,7 +1,4 @@
-
-import React, { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
-import { User } from "@/api/entities";
 import { useTenant } from "../components/shared/tenantContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +20,7 @@ import EmployeeDetailPanel from "../components/employees/EmployeeDetailPanel";
 import EmployeePermissionsDialog from "../components/employees/EmployeePermissionsDialog";
 import EmployeeInviteDialog from "../components/employees/EmployeeInviteDialog";
 import { toast } from "sonner";
+import { useState, useEffect, useCallback } from "react";
 
 export default function Employees() {
   const [employees, setEmployees] = useState([]);
@@ -185,6 +183,11 @@ export default function Employees() {
   };
   
   const getFormTenantId = () => {
+      // Guard: Don't process if user isn't loaded yet
+      if (!currentUser) {
+          return null;
+      }
+      
       if (currentUser?.role === 'superadmin' && selectedTenantId) {
           console.log('[Employees] Using selected tenant for form:', selectedTenantId);
           return selectedTenantId;
@@ -217,21 +220,6 @@ export default function Employees() {
     }
     
     return false;
-  };
-
-  const canInviteDirect = (user) => {
-    if (!user) return false;
-    return user.role === 'admin' || user.role === 'superadmin' || user.tier === 'Tier4';
-  };
-
-  const canRequestInvite = (user) => {
-    if (!user) return false;
-    return user.tier === 'Tier3';
-  };
-
-  const openInvite = (employee) => {
-    setInviteEmployee(employee);
-    setIsInviteOpen(true);
   };
 
   return (

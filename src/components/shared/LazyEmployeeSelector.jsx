@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react"; // React is used for JSX, so it is required.
 import { Employee } from "@/api/entities";
 import { User } from "@/api/entities";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useTenant, getTenantFilter } from "./tenantContext";
+import { useTenant } from "./tenantContext";
+import { getTenantFilter } from "./tenantUtils"; // Updated import to use tenantUtils.js
 
 export default function LazyEmployeeSelector({ 
   value, 

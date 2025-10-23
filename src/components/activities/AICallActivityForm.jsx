@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,17 +13,15 @@ import { format } from "date-fns";
 import {
   CalendarIcon,
   Clock,
-  Phone,
   Bot,
   Target,
-  AlertCircle,
-  PlayCircle,
   Save
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Contact, Lead, Activity } from "@/api/entities"; // Added Activity import
 import { User } from "@/api/entities";
-import { getTenantFilter, useTenant } from "../shared/tenantContext";
+import { getTenantFilter } from "../shared/tenantUtils";
+import { useTenant } from "../shared/tenantContext";
 
 const callObjectives = [
   { value: "follow_up", label: "Follow Up", description: "General follow-up call" },
@@ -47,7 +44,7 @@ const promptTemplates = {
   survey: `Hi {{contact_name}}, I'm calling from {{company_name}} to get your feedback on our recent service. This will only take 2-3 minutes. Would you mind answering a few quick questions about your experience?`
 };
 
-export default function AICallActivityForm({ activity, onSubmit, onCancel, contacts, leads }) {
+export default function AICallActivityForm({ activity, onSubmit, onCancel }) {
   const [formData, setFormData] = useState({
     subject: "",
     description: "",
@@ -208,9 +205,6 @@ export default function AICallActivityForm({ activity, onSubmit, onCancel, conta
     try {
       const userTimezone = currentUser?.timezone || 'America/New_York';
       const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
-
-      // This date object is not used for submission directly, but for conceptual understanding
-      const scheduledDateTime = new Date(`${formData.due_date}T${formData.due_time}`);
 
       const activityData = {
         subject: formData.subject,
@@ -467,7 +461,7 @@ export default function AICallActivityForm({ activity, onSubmit, onCancel, conta
             <Bot className="h-4 w-4" />
             <AlertDescription>
               Using <strong>{formData.ai_call_config.ai_provider === 'callfluent' ? 'CallFluent' : 'Thoughtly'}</strong> for this AI call.
-              The call will be automatically initiated at the scheduled date and time using your tenant's {formData.ai_call_config.ai_provider} configuration.
+              The call will be automatically initiated at the scheduled date and time using your tenant&apos;s {formData.ai_call_config.ai_provider} configuration.
               Make sure the contact information is accurate before saving.
             </AlertDescription>
           </Alert>

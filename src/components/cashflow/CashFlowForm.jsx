@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { CashFlow } from "@/api/entities";
 import { User } from "@/api/entities";
-import { getTenantFilter, useTenant } from "../shared/tenantContext";
-// sanitizeObject and safeGet are not exported from tenantContext - removed import
+import { getTenantFilter } from "../shared/tenantUtils";
+import { useTenant } from "../shared/tenantContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +11,28 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2 } from "lucide-react";
 import { useLogger } from "../shared/Logger";
 
-export default function CashFlowForm({ transaction, accounts, opportunities, onSubmit, onCancel }) {
+// Local utility functions
+const sanitizeObject = (obj) => {
+  if (!obj) return obj;
+  try {
+    return JSON.parse(JSON.stringify(obj));
+  } catch (e) {
+    console.error("Sanitization failed:", e);
+    return null;
+  }
+};
+
+const safeGet = (obj, path, defaultValue = null) => {
+  if (!obj || typeof path !== 'string') return defaultValue;
+  try {
+    const value = path.split('.').reduce((acc, part) => acc?.[part], obj);
+    return value !== undefined ? value : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+};
+
+export default function CashFlowForm({ transaction, onSubmit, onCancel }) {
   const [formData, setFormData] = useState({
     transaction_type: "income",
     category: "",

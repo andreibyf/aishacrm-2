@@ -2,6 +2,7 @@ import React from "react";
 import AgentChat from "../components/agents/AgentChat";
 import { Sparkles, AlertCircle } from "lucide-react";
 import { useTenant } from "../components/shared/tenantContext";
+import { isValidId } from "../components/shared/tenantUtils";
 import { User } from "@/api/entities";
 
 export default function Agent() {
@@ -48,7 +49,7 @@ export default function Agent() {
     } else {
       nextTenantId = user?.tenant_id;
     }
-    return nextTenantId && typeof nextTenantId === 'string' && /^[a-f0-9]{24}$/i.test(nextTenantId) ? nextTenantId : null;
+    return nextTenantId && typeof nextTenantId === 'string' && isValidId(nextTenantId) ? nextTenantId : null;
   }, [user?.role, user?.tenant_id, selectedTenantId]);
 
   const effectiveTenantName = currentTenantData?.name || null;

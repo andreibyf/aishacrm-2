@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge"; // Added import for Badge
 import { EmailTemplate, User } from "@/api/entities";
 import { Loader2, Plus, Edit, Trash2, Save, ArrowLeft, Tag } from "lucide-react";
 import { toast } from "sonner";
-import { useTenant, getTenantFilter } from './tenantContext';
+import { getTenantFilter } from './tenantUtils';
+import { useTenant } from './tenantContext';
 import TagInput from './TagInput';
 
 export default function EmailTemplateManager({ open, onOpenChange, onTemplatesUpdate, initialData = null }) {
@@ -88,7 +89,7 @@ export default function EmailTemplateManager({ open, onOpenChange, onTemplatesUp
       toast.success('Template deleted successfully.');
       loadTemplatesAndTags();
       onTemplatesUpdate(); // Notify parent
-    } catch (error) {
+    } catch {
       toast.error('Failed to delete template.');
     }
   };

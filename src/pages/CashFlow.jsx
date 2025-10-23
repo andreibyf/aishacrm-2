@@ -1,10 +1,9 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { CashFlow } from '@/api/entities';
 import { Account } from '@/api/entities';
 import { Opportunity } from '@/api/entities';
 import { User } from '@/api/entities';
-import { DocumentationFile } from '@/api/entities';
 import CashFlowSummary from '../components/cashflow/CashFlowSummary';
 import CashFlowChart from '../components/cashflow/CashFlowChart';
 import CashFlowForm from '../components/cashflow/CashFlowForm';
@@ -17,7 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getTenantFilter, useTenant } from '../components/shared/tenantContext';
+import { getTenantFilter } from '../components/shared/tenantUtils';
+import { useTenant } from '../components/shared/tenantContext';
 import { Plus, Loader2 } from 'lucide-react';
 import { useLogger } from '../components/shared/Logger';
 

@@ -1,16 +1,16 @@
-
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TenantIntegration } from "@/api/entities";
 import { User } from "@/api/entities";
-import { Loader2, Save, Link, CheckCircle, AlertTriangle, Mail, Info, TestTube, AlertCircle } from 'lucide-react'; // Added Info, TestTube, AlertCircle
+import { Loader2, Save, CheckCircle, AlertTriangle, Mail, Info, TestTube, AlertCircle } from 'lucide-react';
 import { toast } from "sonner";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 // WebhookSetupGuide is removed as per outline
-import { getTenantFilter, useTenant } from "../shared/tenantContext";
+import { getTenantFilter } from "../shared/tenantUtils";
+import { useTenant } from "../shared/tenantContext";
 
 export default function WebhookEmailSettings() {
   const [integration, setIntegration] = useState(null);
@@ -327,7 +327,7 @@ export default function WebhookEmailSettings() {
                                 <Alert className="bg-amber-900/30 border-amber-700/50">
                                     <AlertTriangle className="h-4 w-4 text-amber-400" />
                                     <AlertDescription className="text-yellow-700 text-sm [&_p]:leading-relaxed">
-                                        <strong>Important:</strong> After setting up this webhook, you'll need to configure your Outlook 
+                                        <strong>Important:</strong> After setting up this webhook, you&apos;ll need to configure your Outlook 
                                         email workflow to process the incoming data and send emails accordingly.
                                     </AlertDescription>
                                 </Alert>

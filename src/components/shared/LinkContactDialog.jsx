@@ -1,12 +1,11 @@
-
-import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Link as LinkIcon, User as UserIcon, PlusCircle } from 'lucide-react';
 import { Contact, User } from '@/api/entities';
-import { getTenantFilter, useTenant } from './tenantContext';
+import { getTenantFilter } from './tenantUtils';
+import { useTenant } from './tenantContext';
 import { toast } from 'sonner';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";

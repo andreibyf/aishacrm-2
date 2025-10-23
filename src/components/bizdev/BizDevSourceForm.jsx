@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -92,7 +91,15 @@ export default function BizDevSourceForm({ source, onSubmit, onCancel }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(formData);
+    if (!formData.source) {
+      console.error("Source name is required.");
+      return;
+    }
+    if (currentUser?.tenant_id) {
+      onSubmit({ ...formData, tenant_id: currentUser.tenant_id });
+    } else {
+      console.error("Tenant ID is missing. Cannot submit form.");
+    }
   };
 
   const handleChange = (field, value) => {

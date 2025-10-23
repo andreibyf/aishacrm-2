@@ -1,20 +1,16 @@
-
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"; // Card components are no longer directly used for wrapping, but still imported in case inner elements use them or for completeness.
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Clock, // Still imported but not used for section headers
   Users,
   Bot,
   Target,
-  AlertCircle, // Still imported but not used
   X,
   Save,
   Zap,
@@ -22,7 +18,8 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Contact, Lead } from "@/api/entities";
 import { User } from "@/api/entities";
-import { getTenantFilter, useTenant } from "../shared/tenantContext";
+import { getTenantFilter } from "../shared/tenantUtils";
+import { useTenant } from "../shared/tenantContext";
 
 const callObjectives = [
   { value: "follow_up", label: "Follow Up", description: "General follow-up calls" },
@@ -48,7 +45,7 @@ const promptTemplates = {
   survey: `Hello {{contact_name}}, I'm calling from {{company_name}} to get your valuable feedback on our recent service. This will only take 2-3 minutes of your time. Would you mind sharing your experience with us?`
 };
 
-export default function AICampaignForm({ campaign, onSubmit, onCancel, tenants }) {
+export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
   const [formData, setFormData] = useState({
     name: "",
     description: "",

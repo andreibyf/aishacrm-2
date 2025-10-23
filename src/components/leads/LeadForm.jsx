@@ -1,20 +1,17 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { Lead, User, Account, AuditLog, Note, Contact } from "@/api/entities";
+import { useState, useEffect, useMemo } from "react";
+import { Lead, Account, Contact } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { X, Save, Loader2, Star, AlertCircle } from "lucide-react";
-import { getTenantFilter, useTenant } from "../shared/tenantContext";
+import { getTenantFilter } from "../shared/tenantUtils";
+import { useTenant } from "../shared/tenantContext";
 import PhoneInput from "../shared/PhoneInput";
 import AddressFields from "../shared/AddressFields";
 import { Label } from "@/components/ui/label";
 import { generateUniqueId } from "@/api/functions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { motion } from "framer-motion";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/use-toast";
 import TagInput from "../shared/TagInput";

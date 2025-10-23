@@ -1,11 +1,12 @@
 
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 // import { agentSDK } from "@/agents"; // TODO: Create src/agents file or remove this dependency
 const agentSDK = null; // Temporary stub to fix build
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Send, MessageSquare, ExternalLink, Sparkles, RefreshCw, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { isValidId } from "../shared/tenantUtils";
 
 import { User } from "@/api/entities";
 import { Lead } from "@/api/entities";
@@ -86,7 +87,7 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
   const lastMessageCountRef = useRef(0);
 
   useEffect(() => {
-    if (!tenantId || typeof tenantId !== 'string' || !/^[a-f0-9]{24}$/i.test(tenantId)) {
+    if (!tenantId || typeof tenantId !== 'string' || !isValidId(tenantId)) {
       console.error('[AgentChat] Invalid or missing tenant ID:', tenantId);
     } else {
       console.log('[AgentChat] Active tenant context:', { tenantId, tenantName });
@@ -112,7 +113,7 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
       return;
     }
     
-    if (typeof tenantId !== 'string' || !/^[a-f0-9]{24}$/i.test(tenantId)) {
+    if (typeof tenantId !== 'string' || !isValidId(tenantId)) {
       console.error('[AgentChat] Invalid tenant ID format, blocking context injection:', tenantId);
       return;
     }

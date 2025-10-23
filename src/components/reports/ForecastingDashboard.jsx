@@ -1,12 +1,12 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { TrendingUp, Calendar, DollarSign, Target, Loader2, AlertCircle } from 'lucide-react';
 import { Opportunity, Lead } from '@/api/entities';
 import { User } from '@/api/entities';
-import { getTenantFilter } from '../shared/tenantContext';
+import { getTenantFilter } from '../shared/tenantUtils';
 import { useTenant } from '../shared/tenantContext';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 

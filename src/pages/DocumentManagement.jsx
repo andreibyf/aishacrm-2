@@ -1,17 +1,17 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, FolderOpen, Search, Trash2, Eye, RefreshCw, FileText, Upload, AlertCircle } from "lucide-react";
+import { Loader2, FolderOpen, Search, Trash2, Eye, RefreshCw, FileText, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { DocumentationFile } from "@/api/entities";
 import { User } from "@/api/entities";
-import { getTenantFilter, useTenant } from "@/components/shared/tenantContext";
+import { getTenantFilter } from "@/components/shared/tenantUtils";
+import { useTenant } from "@/components/shared/tenantContext";
 import { CreateFileSignedUrl } from "@/api/integrations";
 import { format } from 'date-fns';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function DocumentManagement() {
@@ -21,8 +21,6 @@ export default function DocumentManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const { selectedTenantId } = useTenant();
-  const [currentUser, setCurrentUser] = useState(null);
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
 
   const categories = [
@@ -42,7 +40,6 @@ export default function DocumentManagement() {
     setError(null);
     try {
       const user = await User.me();
-      setCurrentUser(user);
       
       // Check if user has access to document management
       if (!user) {
@@ -75,7 +72,7 @@ export default function DocumentManagement() {
     }
   };
 
-  const handleDelete = async (docId, fileUri) => {
+  const handleDelete = async (docId) => {
     if (!confirm("Are you sure you want to delete this document? This action cannot be undone.")) {
       return;
     }

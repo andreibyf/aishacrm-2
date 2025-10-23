@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { DocumentationFile } from "@/api/entities";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, FileText, Check } from "lucide-react";
-import { useTenant, getTenantFilter } from './tenantContext';
+import { getTenantFilter } from './tenantUtils';
+import { useTenant } from './tenantContext';
 import { User } from '@/api/entities';
 
 export default function DocumentPicker({ open, onOpenChange, onSelect, selectedDocs = [] }) {

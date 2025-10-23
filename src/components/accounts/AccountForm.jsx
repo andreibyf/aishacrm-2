@@ -1,20 +1,19 @@
-
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
-import { X, Save, Building2, AlertCircle } from "lucide-react";
+import { Save, AlertCircle } from "lucide-react";
+import { useTenant } from "../shared/tenantContext"; // Fixed `useTenant` import
+import { isValidId } from "../shared/tenantUtils"; // Import shared validation
 import PhoneInput from "../shared/PhoneInput";
 import AddressFields from "../shared/AddressFields";
 import EmployeeSelector from "../shared/EmployeeSelector";
-import { User, Account } from "@/api/entities";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { getTenantFilter, useTenant } from "../shared/tenantContext";
+import { User } from "@/api/entities";
 import { generateUniqueId } from "@/api/functions";
-import { useApiManager } from "../shared/ApiManager";
 
 const industries = [
     { value: "aerospace_and_defense", label: "Aerospace & Defense" },
@@ -60,16 +59,11 @@ export default function AccountForm({
   account: propAccount, 
   onSubmit, 
   onCancel, 
-  users: propUsers, 
-  employees: propEmployees 
 }) {
   // CRITICAL: Defensive defaults for ALL props - never undefined/null
   const account = propAccount ?? null;
-  const users = propUsers ?? [];
-  const employees = propEmployees ?? [];
 
   const { selectedTenantId } = useTenant();
-  const { cachedRequest } = useApiManager();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -97,9 +91,6 @@ export default function AccountForm({
   const [loading, setLoading] = useState(true);
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
-
-  // Helper: validate tenant id
-  const isValidObjectId = (id) => typeof id === 'string' && /^[a-f0-9]{24}$/i.test(id);
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -143,7 +134,28 @@ export default function AccountForm({
     };
 
     loadInitialData();
-  }, [account?.id]);
+  }, [
+    account?.id,
+    account?.address_1,
+    account?.address_2,
+    account?.annual_revenue,
+    account?.assigned_to,
+    account?.city,
+    account?.country,
+    account?.description,
+    account?.email,
+    account?.employee_count,
+    account?.industry,
+    account?.is_test_data,
+    account?.name,
+    account?.phone,
+    account?.state,
+    account?.tags,
+    account?.type,
+    account?.website,
+    account?.zip,
+    onSubmit
+  ]);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -205,7 +217,7 @@ export default function AccountForm({
          return;
       }
 
-      if (!isValidObjectId(currentTenantId)) {
+      if (!isValidId(currentTenantId)) {
         alert("Invalid tenant ID format. Please contact your administrator.");
         setIsSubmitting(false);
         return;

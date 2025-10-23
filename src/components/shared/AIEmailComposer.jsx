@@ -7,13 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { generateAIEmailDraft } from "@/api/functions";
 import { sendAIEmail } from "@/api/functions";
-import { Mail, Loader2, Sparkles, Wand2, Send, Paperclip, FileText, Save, FolderOpen } from "lucide-react";
+import { Loader2, Sparkles, Wand2, Send, Paperclip, FileText, Save, FolderOpen } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmailTemplate, User } from "@/api/entities";
-import { getTenantFilter, useTenant } from './tenantContext';
+import { getTenantFilter } from './tenantUtils';
+import { useTenant } from './tenantContext';
 import DocumentPicker from './DocumentPicker';
 import EmailTemplateManager from './EmailTemplateManager';
 
