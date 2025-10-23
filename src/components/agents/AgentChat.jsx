@@ -1,6 +1,7 @@
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { agentSDK } from "@/agents";
+// import { agentSDK } from "@/agents"; // TODO: Create src/agents file or remove this dependency
+const agentSDK = null; // Temporary stub to fix build
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Send, MessageSquare, ExternalLink, Sparkles, RefreshCw, Trash2 } from "lucide-react";

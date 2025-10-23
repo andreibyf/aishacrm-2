@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, Info, Shield, AlertTriangle, ExternalLink } from "lucide-react";
 import { updateEmployeeUserAccess } from "@/api/functions";
-import { updateEmployeeDetails } from "@/api/functions/updateEmployeeDetails"; // Assuming this function exists for updating employee records
+// import { updateEmployeeDetails } from "@/api/functions/updateEmployeeDetails"; // TODO: Create this function
+const updateEmployeeDetails = async () => { throw new Error("updateEmployeeDetails not implemented"); }; // Temporary stub
 import { toast } from "react-hot-toast"; // Assuming react-hot-toast is used for notifications
 import EmployeeInviteDialog from "./EmployeeInviteDialog";
 

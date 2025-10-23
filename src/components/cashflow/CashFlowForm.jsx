@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from "react";
 import { CashFlow } from "@/api/entities";
 import { User } from "@/api/entities";
-import { getTenantFilter, useTenant, sanitizeObject, safeGet } from "../shared/tenantContext";
+import { getTenantFilter, useTenant } from "../shared/tenantContext";
+// sanitizeObject and safeGet are not exported from tenantContext - removed import
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

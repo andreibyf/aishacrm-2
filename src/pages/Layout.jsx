@@ -80,15 +80,15 @@ import { EmployeeScopeProvider, useEmployeeScope } from "../components/shared/Em
 import FooterBrand from "../components/shared/FooterBrand";
 import { initAgentSdkGuard, resetAgentSdkGuard } from "@/components/ai/agentSdkGuard";
 import ClearChatButton, { clearChat } from "../components/ai/ClearChatButton";
-import CronHeartbeat from "./components/shared/CronHeartbeat";
-import GlobalDomPatches from "./components/shared/GlobalDomPatches";
-import PortalRootManager from "./components/shared/PortalRootManager";
-import ModalHost from "./components/shared/ModalHost";
-import { ErrorLogProvider } from './components/shared/ErrorLogger';
+import CronHeartbeat from "../components/shared/CronHeartbeat";
+import GlobalDomPatches from "../components/shared/GlobalDomPatches";
+import PortalRootManager from "../components/shared/PortalRootManager";
+import ModalHost from "../components/shared/ModalHost";
+import { ErrorLogProvider } from '../components/shared/ErrorLogger';
 import { LoggerProvider } from '../components/shared/Logger';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ApiOptimizerProvider } from "./components/shared/ApiOptimizer";
+import { ApiOptimizerProvider } from "../components/shared/ApiOptimizer";
 
 const navItems = [
   { href: "Dashboard", icon: LayoutDashboard, label: "Dashboard" },
