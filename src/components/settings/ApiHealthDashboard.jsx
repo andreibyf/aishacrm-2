@@ -350,92 +350,6 @@ export default function ApiHealthDashboard() {
         false
       )}
 
-      {/* Legacy section - can be removed once renderErrorList is working */}
-      {false && healthReport.missingEndpoints.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Missing Endpoints</CardTitle>
-            <CardDescription>
-              Endpoints that returned 404 errors. Click Copy Fix to get implementation instructions.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {healthReport.missingEndpoints.map((endpoint, index) => {
-                const suggestion = apiHealthMonitor.analyzeEndpoint(endpoint.endpoint);
-                
-                return (
-                  <div
-                    key={index}
-                    className="border rounded-lg p-4 space-y-3 hover:bg-gray-50 transition-colors"
-                  >
-                    {/* Endpoint Info */}
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <code className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">
-                            {endpoint.endpoint}
-                          </code>
-                          <Badge variant="destructive">404</Badge>
-                        </div>
-                        <div className="text-sm text-gray-600 space-y-1">
-                          <div>First seen: {new Date(endpoint.firstSeen).toLocaleString()}</div>
-                          <div>Last seen: {new Date(endpoint.lastSeen).toLocaleString()}</div>
-                          <div>Occurrences: {endpoint.count}</div>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleCopyFix(endpoint)}
-                      >
-                        <Copy className="h-4 w-4 mr-2" />
-                        Copy Fix
-                      </Button>
-                    </div>
-
-                    {/* Auto-Fix Suggestion */}
-                    {suggestion.canAutoFix && (
-                      <div className="bg-blue-50 border border-blue-200 rounded p-3 space-y-2">
-                        <div className="font-medium text-blue-900 text-sm">
-                          Auto-Fix Available
-                        </div>
-                        <div className="text-sm text-blue-800">
-                          <strong>Entity:</strong> {suggestion.entityPath}
-                        </div>
-                        <div className="text-sm text-blue-800">
-                          <strong>Table:</strong> {suggestion.tableName}
-                        </div>
-                        <div className="text-sm text-blue-800 space-y-1">
-                          <strong>Steps:</strong>
-                          <ol className="list-decimal list-inside space-y-1 ml-2">
-                            {suggestion.steps.map((step, i) => (
-                              <li key={i}>{step}</li>
-                            ))}
-                          </ol>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Context */}
-                    {endpoint.context && Object.keys(endpoint.context).length > 0 && (
-                      <details className="text-sm">
-                        <summary className="cursor-pointer text-gray-600 hover:text-gray-900">
-                          View Context
-                        </summary>
-                        <pre className="mt-2 bg-gray-100 p-2 rounded text-xs overflow-auto">
-                          {JSON.stringify(endpoint.context, null, 2)}
-                        </pre>
-                      </details>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* How It Works */}
       <Card>
         <CardHeader>
@@ -446,7 +360,7 @@ export default function ApiHealthDashboard() {
             <h4 className="font-medium mb-2">🔍 Detection</h4>
             <p className="text-sm text-gray-600">
               The monitor intercepts all API calls and tracks 404 errors. When a missing endpoint
-              is detected, it's automatically logged here with context.
+              is detected, it&apos;s automatically logged here with context.
             </p>
           </div>
           
@@ -461,7 +375,7 @@ export default function ApiHealthDashboard() {
           <div>
             <h4 className="font-medium mb-2">📋 Copy & Implement</h4>
             <p className="text-sm text-gray-600">
-              Click "Copy Fix" to get complete implementation instructions. Share with your AI assistant
+              Click &quot;Copy Fix&quot; to get complete implementation instructions. Share with your AI assistant
               or follow the steps manually to implement the missing endpoint.
             </p>
           </div>
@@ -470,7 +384,7 @@ export default function ApiHealthDashboard() {
             <h4 className="font-medium mb-2">🔔 Notifications</h4>
             <p className="text-sm text-gray-600">
               When enabled, the monitor shows toast notifications when missing endpoints are detected.
-              Disable notifications if you're actively testing and expect 404s.
+              Disable notifications if you&apos;re actively testing and expect 404s.
             </p>
           </div>
         </CardContent>

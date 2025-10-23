@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import {
   Cog, // Renamed from Settings to avoid conflict
@@ -12,7 +12,6 @@ import {
   Users,
   Building2,
   Plug,
-  Sliders,
   Activity,
   TestTube2, // Already imported
   Lock,
@@ -40,9 +39,6 @@ import {
   RefreshCw, // for SyncHealthMonitor
   Server, // for MCPServerMonitor
   TrendingUp, // for IntegrationUsageMonitor
-  Bot, // for AIExecutionLogViewer
-  Upload, // for FileUploadDiagnostics
-  Eraser, // for Data Cleanup
 } from "lucide-react";
 import { User as UserEntity } from "@/api/entities";
 
@@ -273,7 +269,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                 <Card className="bg-slate-800 border-slate-700">
                   <CardHeader>
                     <CardTitle className="text-slate-100">Branding & Appearance</CardTitle>
-                    <CardDescription className="text-slate-400">Customize your organization's visual identity</CardDescription>
+                    <CardDescription className="text-slate-400">Customize your organization&apos;s visual identity</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <BrandingSettings user={currentUser} onUpdate={loadUser} />

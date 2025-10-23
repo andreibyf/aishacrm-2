@@ -1,23 +1,22 @@
-import React from 'react';
 import TestRunner from '../components/testing/TestRunner';
 import { errorLoggerTests } from '../components/testing/errorLoggerTests';
 import { formValidationTests } from '../components/testing/formValidationTests';
 import { dataIntegrityTests } from '../components/testing/dataIntegrityTests';
 import { utilityFunctionTests } from '../components/testing/utilityFunctionTests';
 import { employeeScopeTests } from '../components/testing/employeeScopeTests';
+import { apiHealthMonitorTests } from '../components/testing/apiHealthMonitorTests';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Info, TestTube } from "lucide-react";
 
-const testSuites = [
-  errorLoggerTests,
-  formValidationTests,
-  dataIntegrityTests,
-  utilityFunctionTests,
-  employeeScopeTests
-];
-
-export default function UnitTestsPage() {
+  const testSuites = [
+    errorLoggerTests,
+    formValidationTests,
+    dataIntegrityTests,
+    utilityFunctionTests,
+    employeeScopeTests,
+    apiHealthMonitorTests
+  ];export default function UnitTestsPage() {
   return (
     <div className="min-h-screen bg-slate-900 p-6">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -36,7 +35,7 @@ export default function UnitTestsPage() {
           <AlertTitle className="text-blue-300">Testing Information</AlertTitle>
           <AlertDescription className="text-blue-400">
             This test suite validates core functionality including error logging, form validation,
-            data integrity, utility functions, and employee scope filtering. Click "Run All Tests" to execute the full suite.
+            data integrity, utility functions, employee scope filtering, and API health monitoring. Click &quot;Run All Tests&quot; to execute the full suite.
           </AlertDescription>
         </Alert>
 
@@ -93,7 +92,13 @@ export default function UnitTestsPage() {
               <div className="p-3 bg-slate-700 rounded-lg">
                 <div className="font-medium text-slate-200 mb-1">Employee Scope</div>
                 <div className="text-sm text-slate-400">
-                  Permission checks, record filtering, role-based access
+                  Permission checks, record filtering, role-based access control
+                </div>
+              </div>
+              <div className="p-3 bg-slate-700 rounded-lg">
+                <div className="font-medium text-slate-200 mb-1">API Health Monitor</div>
+                <div className="text-sm text-slate-400">
+                  Error tracking (404, 500, 401/403, 429, timeout, network), health reporting
                 </div>
               </div>
             </div>
