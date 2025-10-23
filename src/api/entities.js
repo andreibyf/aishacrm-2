@@ -19,6 +19,7 @@ const pluralize = (entityName) => {
     'notification': 'notifications',
     'cashflow': 'cashflow',
     'workflow': 'workflows',
+    'modulesettings': 'modulesettings', // Already plural
   };
   
   if (irregularPlurals[name]) {
