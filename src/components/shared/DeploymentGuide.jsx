@@ -1,11 +1,9 @@
 
 // Deployment and Setup Documentation
-import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Cloud, 
-  Settings, 
   Database, 
   Shield, 
   Zap,
@@ -562,7 +560,7 @@ client.getContacts().then(console.log);`}
                 <CardContent className="space-y-3 text-sm">
                   <div>
                     <strong>Company Name:</strong>
-                    <p className="text-slate-600">Change from "Ai-SHA CRM" to your company name in Settings → Branding</p>
+                    <p className="text-slate-600">Change from &quot;Ai-SHA CRM&quot; to your company name in Settings → Branding</p>
                   </div>
                   <div>
                     <strong>Logo Upload:</strong>

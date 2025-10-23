@@ -1,5 +1,3 @@
-import React from "react";
-
 export default function FooterBrand({ showLegal = true, className = "" }) {
   // Footer always shows Aisha branding - not customizable per tenant
   const AISHA_LOGO_URL = "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68ad592dcffacef630b477d2/c98adae7b_Ai-SHA-logo-2.png";

@@ -1,3 +1,4 @@
+/* global Deno */
 /**
  * generateAdminGuidePDF
  * Server-side function for your backend

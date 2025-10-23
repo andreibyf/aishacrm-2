@@ -96,7 +96,7 @@ export default function SalesPipeline(props) {
 
     load(); // Execute the async load function
     return () => { mounted = false; }; // Cleanup function for unmounting
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [props?.tenantFilter, props?.showTestData, props?.prefetchedOpportunities, cachedRequest]); // Include all relevant props and cachedRequest in dependencies
 
   return (

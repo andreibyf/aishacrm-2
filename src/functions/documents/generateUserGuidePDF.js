@@ -1,3 +1,4 @@
+/* global Deno */
 /**
  * generateUserGuidePDF
  * Server-side function for your backend

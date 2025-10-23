@@ -229,7 +229,7 @@ export async function notifyAdminOnInvite({
         body: html,
         from_name: "Ai-SHA CRM"
       });
-      // eslint-disable-next-line no-console
+       
       console.log("[NotifyAdminOnInvite] Admin email sent to:", adminEmail);
     } catch (e) {
       console.warn("[NotifyAdminOnInvite] Admin email failed:", e?.message || e);
@@ -242,7 +242,7 @@ export async function notifyAdminOnInvite({
     const sms = `Ai-SHA CRM: Access request for ${cleanName} <${invitedEmail}> by ${requestedByEmail || 'unknown'} [${requestedByTier}]`;
     try {
       await sendSms({ to: adminPhone, message: sms });
-      // eslint-disable-next-line no-console
+       
       console.log("[NotifyAdminOnInvite] Admin SMS sent to:", adminPhone);
     } catch (e) {
       console.warn("[NotifyAdminOnInvite] Admin SMS failed:", e?.message || e);

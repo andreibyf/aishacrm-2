@@ -67,6 +67,28 @@ export default [
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
+  // Functions override: parse Deno-style / ESM worker files and allow Deno global
+  {
+    files: ['src/functions/**'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      globals: {
+        Deno: 'readonly',
+      },
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+    },
+    rules: {
+      // keep general rules but avoid treating Deno globals as undefined errors
+      'no-undef': 'off',
+      // let react rules remain off for these serverless/function files
+      'react/jsx-no-target-blank': 'off',
+      'react/prop-types': 'off',
+      'react-refresh/only-export-components': 'off',
+    },
+  },
   // File-specific override: allow global Deno in middleware utilities
   {
     files: ['src/functions/_middleware.js'],
