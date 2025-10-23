@@ -15,6 +15,7 @@ const createMockBase44Client = () => ({
       create: () => Promise.resolve({ id: 'mock-id' }),
       update: () => Promise.resolve({ id: 'mock-id' }),
       delete: () => Promise.resolve({ success: true }),
+      bulkCreate: (items) => Promise.resolve(items?.map((_, i) => ({ id: `mock-id-${i}` })) || []),
     })
   }),
   functions: new Proxy({}, {

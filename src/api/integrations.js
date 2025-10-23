@@ -2,7 +2,7 @@ import { base44 } from './base44Client';
 import { isLocalDevMode } from './mockData';
 
 // Create mock integration functions for local dev mode
-const createMockIntegration = (name) => (...args) => {
+const createMockIntegration = (name) => () => {
   if (isLocalDevMode()) {
     console.warn(`[Local Dev Mode] Integration '${name}' called but not available in local dev mode.`);
     return Promise.resolve({ success: false, message: 'Integration not available in local dev mode' });

@@ -2,20 +2,42 @@ import { base44 } from './base44Client';
 // Import mock data utilities at the top for use throughout
 import { createMockUser, createMockTenant, isLocalDevMode } from './mockData';
 
-export const Contact = base44.entities.Contact;
+// Helper function to wrap entities with a filter method
+const wrapEntityWithFilter = (entity) => {
+  if (!entity) return entity;
+  
+  return {
+    ...entity,
+    // Add filter method as alias for list with better parameter handling
+    filter: async (filterObj, sortField, limit) => {
+      // Base44 list() method signature: list(filter, sort, limit)
+      return entity.list(filterObj, sortField, limit);
+    },
+    // Ensure bulkCreate exists (fallback to multiple create calls if not)
+    bulkCreate: entity.bulkCreate || (async (items) => {
+      if (!Array.isArray(items)) {
+        throw new Error('bulkCreate requires an array of items');
+      }
+      return Promise.all(items.map(item => entity.create(item)));
+    })
+  };
+};
 
-export const Account = base44.entities.Account;
+export const Contact = wrapEntityWithFilter(base44.entities.Contact);
 
-export const Lead = base44.entities.Lead;
+export const Account = wrapEntityWithFilter(base44.entities.Account);
 
-export const Opportunity = base44.entities.Opportunity;
+export const Lead = wrapEntityWithFilter(base44.entities.Lead);
 
-export const Activity = base44.entities.Activity;
+export const Opportunity = wrapEntityWithFilter(base44.entities.Opportunity);
+
+export const Activity = wrapEntityWithFilter(base44.entities.Activity);
 
 // Wrap Tenant entity to support local dev mode
 const baseTenant = base44.entities.Tenant;
+const wrappedBaseTenant = wrapEntityWithFilter(baseTenant);
 export const Tenant = {
-  ...baseTenant,
+  ...wrappedBaseTenant,
   get: async (id) => {
     if (isLocalDevMode()) {
       console.log('[Local Dev Mode] Using mock tenant');
@@ -32,83 +54,83 @@ export const Tenant = {
   },
 };
 
-export const Notification = base44.entities.Notification;
+export const Notification = wrapEntityWithFilter(base44.entities.Notification);
 
-export const FieldCustomization = base44.entities.FieldCustomization;
+export const FieldCustomization = wrapEntityWithFilter(base44.entities.FieldCustomization);
 
-export const ModuleSettings = base44.entities.ModuleSettings;
+export const ModuleSettings = wrapEntityWithFilter(base44.entities.ModuleSettings);
 
-export const AuditLog = base44.entities.AuditLog;
+export const AuditLog = wrapEntityWithFilter(base44.entities.AuditLog);
 
-export const Note = base44.entities.Note;
+export const Note = wrapEntityWithFilter(base44.entities.Note);
 
-export const SubscriptionPlan = base44.entities.SubscriptionPlan;
+export const SubscriptionPlan = wrapEntityWithFilter(base44.entities.SubscriptionPlan);
 
-export const Subscription = base44.entities.Subscription;
+export const Subscription = wrapEntityWithFilter(base44.entities.Subscription);
 
-export const Webhook = base44.entities.Webhook;
+export const Webhook = wrapEntityWithFilter(base44.entities.Webhook);
 
-export const TestReport = base44.entities.TestReport;
+export const TestReport = wrapEntityWithFilter(base44.entities.TestReport);
 
-export const TenantIntegration = base44.entities.TenantIntegration;
+export const TenantIntegration = wrapEntityWithFilter(base44.entities.TenantIntegration);
 
-export const Announcement = base44.entities.Announcement;
+export const Announcement = wrapEntityWithFilter(base44.entities.Announcement);
 
-export const DataManagementSettings = base44.entities.DataManagementSettings;
+export const DataManagementSettings = wrapEntityWithFilter(base44.entities.DataManagementSettings);
 
-export const Employee = base44.entities.Employee;
+export const Employee = wrapEntityWithFilter(base44.entities.Employee);
 
-export const DocumentationFile = base44.entities.DocumentationFile;
+export const DocumentationFile = wrapEntityWithFilter(base44.entities.DocumentationFile);
 
-export const UserInvitation = base44.entities.UserInvitation;
+export const UserInvitation = wrapEntityWithFilter(base44.entities.UserInvitation);
 
-export const GuideContent = base44.entities.GuideContent;
+export const GuideContent = wrapEntityWithFilter(base44.entities.GuideContent);
 
-export const AICampaign = base44.entities.AICampaign;
+export const AICampaign = wrapEntityWithFilter(base44.entities.AICampaign);
 
-export const ApiKey = base44.entities.ApiKey;
+export const ApiKey = wrapEntityWithFilter(base44.entities.ApiKey);
 
-export const CashFlow = base44.entities.CashFlow;
+export const CashFlow = wrapEntityWithFilter(base44.entities.CashFlow);
 
-export const CronJob = base44.entities.CronJob;
+export const CronJob = wrapEntityWithFilter(base44.entities.CronJob);
 
-export const PerformanceLog = base44.entities.PerformanceLog;
+export const PerformanceLog = wrapEntityWithFilter(base44.entities.PerformanceLog);
 
-export const EmailTemplate = base44.entities.EmailTemplate;
+export const EmailTemplate = wrapEntityWithFilter(base44.entities.EmailTemplate);
 
-export const SystemBranding = base44.entities.SystemBranding;
+export const SystemBranding = wrapEntityWithFilter(base44.entities.SystemBranding);
 
-export const Checkpoint = base44.entities.Checkpoint;
+export const Checkpoint = wrapEntityWithFilter(base44.entities.Checkpoint);
 
-export const SyncHealth = base44.entities.SyncHealth;
+export const SyncHealth = wrapEntityWithFilter(base44.entities.SyncHealth);
 
-export const ContactHistory = base44.entities.ContactHistory;
+export const ContactHistory = wrapEntityWithFilter(base44.entities.ContactHistory);
 
-export const LeadHistory = base44.entities.LeadHistory;
+export const LeadHistory = wrapEntityWithFilter(base44.entities.LeadHistory);
 
-export const OpportunityHistory = base44.entities.OpportunityHistory;
+export const OpportunityHistory = wrapEntityWithFilter(base44.entities.OpportunityHistory);
 
-export const DailySalesMetrics = base44.entities.DailySalesMetrics;
+export const DailySalesMetrics = wrapEntityWithFilter(base44.entities.DailySalesMetrics);
 
-export const MonthlyPerformance = base44.entities.MonthlyPerformance;
+export const MonthlyPerformance = wrapEntityWithFilter(base44.entities.MonthlyPerformance);
 
-export const UserPerformanceCache = base44.entities.UserPerformanceCache;
+export const UserPerformanceCache = wrapEntityWithFilter(base44.entities.UserPerformanceCache);
 
-export const ImportLog = base44.entities.ImportLog;
+export const ImportLog = wrapEntityWithFilter(base44.entities.ImportLog);
 
-export const BizDevSource = base44.entities.BizDevSource;
+export const BizDevSource = wrapEntityWithFilter(base44.entities.BizDevSource);
 
-export const ArchiveIndex = base44.entities.ArchiveIndex;
+export const ArchiveIndex = wrapEntityWithFilter(base44.entities.ArchiveIndex);
 
-export const IndustryMarketData = base44.entities.IndustryMarketData;
+export const IndustryMarketData = wrapEntityWithFilter(base44.entities.IndustryMarketData);
 
-export const ClientRequirement = base44.entities.ClientRequirement;
+export const ClientRequirement = wrapEntityWithFilter(base44.entities.ClientRequirement);
 
-export const SystemLog = base44.entities.SystemLog;
+export const SystemLog = wrapEntityWithFilter(base44.entities.SystemLog);
 
-export const Workflow = base44.entities.Workflow;
+export const Workflow = wrapEntityWithFilter(base44.entities.Workflow);
 
-export const WorkflowExecution = base44.entities.WorkflowExecution;
+export const WorkflowExecution = wrapEntityWithFilter(base44.entities.WorkflowExecution);
 
 // auth sdk with local dev mode support:
 const baseUser = base44.auth;
@@ -124,6 +146,36 @@ export const User = {
     }
     // Use real Base44 authentication
     return baseUser.me();
+  },
+  // Add updateMyUserData as a wrapper for updating current user
+  updateMyUserData: async (updates) => {
+    if (isLocalDevMode()) {
+      console.log('[Local Dev Mode] Mock updating user data', updates);
+      return createMockUser();
+    }
+    // Get current user and update
+    const currentUser = await baseUser.me();
+    if (!currentUser?.id) {
+      throw new Error('No authenticated user found');
+    }
+    // Use the User entity's update method
+    return base44.entities.User.update(currentUser.id, updates);
+  },
+  // Add update method for updating any user (admin function)
+  update: async (userId, updates) => {
+    if (isLocalDevMode()) {
+      console.log('[Local Dev Mode] Mock updating user', userId, updates);
+      return createMockUser();
+    }
+    return base44.entities.User.update(userId, updates);
+  },
+  // Add list method for listing users
+  list: async (filters) => {
+    if (isLocalDevMode()) {
+      console.log('[Local Dev Mode] Mock listing users');
+      return [createMockUser()];
+    }
+    return base44.entities.User.list(filters);
   },
   // Pass through other methods
   signIn: baseUser.signIn,
