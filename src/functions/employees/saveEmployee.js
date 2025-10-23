@@ -79,6 +79,4 @@ Deno.serve(async (req) => {
   }
 });
 
-----------------------------
-
 export default saveEmployee;

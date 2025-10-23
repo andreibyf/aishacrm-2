@@ -221,6 +221,4 @@ Deno.serve(async (req) => {
   }
 });
 
-----------------------------
-
 export default validateAndImport;

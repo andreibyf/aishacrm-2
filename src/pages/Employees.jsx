@@ -48,6 +48,7 @@ export default function Employees() {
     const fetchUser = async () => {
       try {
         const user = await base44.auth.me();
+        console.log('[Employees] Current user loaded:', user);
         setCurrentUser(user);
       } catch (error) {
         console.error("Failed to load current user:", error);
@@ -188,8 +189,18 @@ export default function Employees() {
           console.log('[Employees] Using selected tenant for form:', selectedTenantId);
           return selectedTenantId;
       }
-      console.log('[Employees] Using user tenant for form:', currentUser?.tenant_id);
-      return currentUser?.tenant_id;
+      
+      // Try to get tenant_id from current user
+      const tenantId = currentUser?.tenant_id || currentUser?.tenantId;
+      
+      if (!tenantId) {
+          console.warn('[Employees] No tenant_id found on current user:', currentUser);
+          toast.error('Unable to determine tenant. Please refresh the page.');
+          return null;
+      }
+      
+      console.log('[Employees] Using user tenant for form:', tenantId);
+      return tenantId;
   };
 
   const canManagePermissions = (employee) => {
