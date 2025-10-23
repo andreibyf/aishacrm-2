@@ -677,10 +677,13 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
   React.useEffect(() => {
     const loadUser = async () => {
+      console.log('[Layout] Starting loadUser...');
       setUserLoading(true);
       setUserError(null);
       try {
+        console.log('[Layout] Calling User.me()...');
         const currentUser = await User.me();
+        console.log('[Layout] User.me() returned:', currentUser);
         setUser(currentUser);
 
         if (currentUser) {
@@ -710,13 +713,15 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         }
 
       } catch (error) {
-        console.error('User load failed:', error);
+        console.error('[Layout] User load failed:', error);
         setUserError(error.message);
         setUser(null);
       } finally {
+        console.log('[Layout] Setting userLoading to false');
         setUserLoading(false);
       }
     };
+    console.log('[Layout] Calling loadUser()...');
     loadUser();
   }, []);
 
