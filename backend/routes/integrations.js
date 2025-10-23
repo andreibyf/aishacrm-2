@@ -5,13 +5,13 @@
 
 import express from 'express';
 
-export default function createIntegrationRoutes(pgPool) {
+export default function createIntegrationRoutes(_pgPool) {
   const router = express.Router();
 
   // POST /api/integrations/n8n/trigger - Trigger N8N workflow
   router.post('/n8n/trigger', async (req, res) => {
     try {
-      const { workflow_id, data } = req.body;
+      const { workflow_id, data: _data } = req.body;
 
       res.json({
         status: 'success',

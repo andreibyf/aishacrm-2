@@ -5,13 +5,13 @@
 
 import express from 'express';
 
-export default function createUserRoutes(pgPool) {
+export default function createUserRoutes(_pgPool) {
   const router = express.Router();
 
   // POST /api/users/login - User login
   router.post('/login', async (req, res) => {
     try {
-      const { email, password } = req.body;
+      const { email, password: _password } = req.body;
 
       res.json({
         status: 'success',
@@ -26,7 +26,7 @@ export default function createUserRoutes(pgPool) {
   // POST /api/users/register - User registration
   router.post('/register', async (req, res) => {
     try {
-      const { email, password, first_name, last_name } = req.body;
+      const { email, password: _password, first_name, last_name } = req.body;
 
       res.json({
         status: 'success',

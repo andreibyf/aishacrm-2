@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createAIRoutes(pgPool) {
+export default function createAIRoutes(_pgPool) {
   const router = express.Router();
 
   // POST /api/ai/chat - AI chat completion

@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createCronRoutes(pgPool) {
+export default function createCronRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/cron/jobs - List cron jobs

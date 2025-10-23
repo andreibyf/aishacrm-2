@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createEmployeeRoutes(pgPool) {
+export default function createEmployeeRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/employees - List employees

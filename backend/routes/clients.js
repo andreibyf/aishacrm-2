@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createClientRoutes(pgPool) {
+export default function createClientRoutes(_pgPool) {
   const router = express.Router();
 
   // POST /api/clients/onboard - Onboard new client

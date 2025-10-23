@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createMetricsRoutes(pgPool) {
+export default function createMetricsRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/metrics/performance - Get performance metrics

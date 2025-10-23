@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createContactRoutes(pgPool) {
+export default function createContactRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/contacts - List contacts

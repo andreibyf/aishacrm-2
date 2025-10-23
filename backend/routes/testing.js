@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createTestingRoutes(pgPool) {
+export default function createTestingRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/testing/ping - Simple ping test

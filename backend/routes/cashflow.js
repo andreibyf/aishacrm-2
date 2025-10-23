@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createCashFlowRoutes(pgPool) {
+export default function createCashFlowRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/cashflow/summary - Get cash flow summary

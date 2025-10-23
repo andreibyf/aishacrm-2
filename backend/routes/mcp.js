@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createMCPRoutes(pgPool) {
+export default function createMCPRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/mcp/servers - List available MCP servers

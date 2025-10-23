@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createBizDevRoutes(pgPool) {
+export default function createBizDevRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/bizdev/sources - List bizdev sources

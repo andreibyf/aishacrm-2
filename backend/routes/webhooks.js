@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createWebhookRoutes(pgPool) {
+export default function createWebhookRoutes(_pgPool) {
   const router = express.Router();
 
   // POST /api/webhooks/register - Register webhook

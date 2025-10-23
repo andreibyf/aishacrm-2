@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createPermissionRoutes(pgPool) {
+export default function createPermissionRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/permissions/roles - List roles

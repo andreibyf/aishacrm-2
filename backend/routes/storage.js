@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createStorageRoutes(pgPool) {
+export default function createStorageRoutes(_pgPool) {
   const router = express.Router();
 
   // POST /api/storage/upload - Upload file

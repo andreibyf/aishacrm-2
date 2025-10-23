@@ -6,7 +6,7 @@
 import express from 'express';
 import crypto from 'crypto';
 
-export default function createUtilsRoutes(pgPool) {
+export default function createUtilsRoutes(_pgPool) {
   const router = express.Router();
 
   // POST /api/utils/hash - Hash a string

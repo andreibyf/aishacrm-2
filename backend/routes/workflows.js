@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createWorkflowRoutes(pgPool) {
+export default function createWorkflowRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/workflows - List workflows

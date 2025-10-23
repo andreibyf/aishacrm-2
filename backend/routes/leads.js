@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createLeadRoutes(pgPool) {
+export default function createLeadRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/leads - List leads

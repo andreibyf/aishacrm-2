@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createDocumentRoutes(pgPool) {
+export default function createDocumentRoutes(_pgPool) {
   const router = express.Router();
 
   // POST /api/documents/process - Process document

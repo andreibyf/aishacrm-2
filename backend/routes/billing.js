@@ -5,13 +5,13 @@
 
 import express from 'express';
 
-export default function createBillingRoutes(pgPool) {
+export default function createBillingRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/billing/invoices - List invoices
   router.get('/invoices', async (req, res) => {
     try {
-      const { tenant_id, status } = req.query;
+      const { tenant_id: _tenant_id, status } = req.query;
 
       res.json({
         status: 'success',

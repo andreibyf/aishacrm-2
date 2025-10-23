@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createAccountRoutes(pgPool) {
+export default function createAccountRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/accounts - List accounts

@@ -5,13 +5,13 @@
 
 import express from 'express';
 
-export default function createTelephonyRoutes(pgPool) {
+export default function createTelephonyRoutes(_pgPool) {
   const router = express.Router();
 
   // POST /api/telephony/log-call - Log phone call
   router.post('/log-call', async (req, res) => {
     try {
-      const { tenant_id, contact_id, direction, duration, recording_url } = req.body;
+      const { tenant_id, contact_id, direction, duration, recording_url: _recording_url } = req.body;
 
       res.json({
         status: 'success',
@@ -41,7 +41,7 @@ export default function createTelephonyRoutes(pgPool) {
   // POST /api/telephony/analyze-sentiment - Analyze call sentiment
   router.post('/analyze-sentiment', async (req, res) => {
     try {
-      const { call_id, transcript } = req.body;
+      const { call_id: _call_id, transcript: _transcript } = req.body;
 
       res.json({
         status: 'success',
