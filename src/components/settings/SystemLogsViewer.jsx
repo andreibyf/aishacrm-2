@@ -8,9 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Loader2, RefreshCw, Trash2, Search, Filter } from "lucide-react";
 import { toast } from "sonner";
 
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+
 export default function SystemLogsViewer() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
   const [filterLevel, setFilterLevel] = useState('all');
   const [filterSource, setFilterSource] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -19,7 +22,21 @@ export default function SystemLogsViewer() {
   const loadLogs = async () => {
     setLoading(true);
     try {
-      let allLogs = await SystemLog.list('-created_date', 200);
+      // Try backend first (for local dev with Supabase Cloud)
+      const response = await fetch(`${BACKEND_URL}/api/system/logs?tenant_id=test-tenant&limit=200`);
+      
+      if (!response.ok) {
+        throw new Error('Backend not available, trying Base44...');
+      }
+      
+      const data = await response.json();
+      let allLogs = data.data || data;
+      
+      // If backend returns empty, try Base44 as fallback
+      if (!allLogs || allLogs.length === 0) {
+        console.log('No logs from backend, trying Base44...');
+        allLogs = await SystemLog.list('-created_date', 200);
+      }
       
       // Extract unique sources
       const sources = [...new Set(allLogs.map(log => log.source).filter(Boolean))];
@@ -61,6 +78,7 @@ export default function SystemLogsViewer() {
       return;
     }
 
+    setClearing(true);
     try {
       // Delete all logs (you might want to add a backend function for this)
       for (const log of logs) {
@@ -71,6 +89,8 @@ export default function SystemLogsViewer() {
     } catch (error) {
       console.error('Failed to clear logs:', error);
       toast.error('Failed to clear logs');
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -146,11 +166,20 @@ export default function SystemLogsViewer() {
             <Button
               variant="destructive"
               onClick={handleClearLogs}
-              disabled={loading || logs.length === 0}
+              disabled={loading || clearing || logs.length === 0}
               className="bg-red-600 hover:bg-red-700"
             >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Clear All
+              {clearing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Clearing...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Clear All
+                </>
+              )}
             </Button>
           </div>
         </CardContent>

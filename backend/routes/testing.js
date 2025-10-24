@@ -20,6 +20,28 @@ export default function createTestingRoutes(_pgPool) {
     }
   });
 
+  // GET /api/testing/suites - Get available test suites
+  router.get('/suites', async (req, res) => {
+    try {
+      res.json({
+        status: 'success',
+        data: {
+          suites: [
+            { id: 'crud', name: 'CRUD Operations', description: 'Test create/read/update/delete operations' },
+            { id: 'auth', name: 'Authentication Tests', description: 'Test user authentication flows' },
+            { id: 'api', name: 'API Integration', description: 'Test external API integrations' },
+            { id: 'validation', name: 'Data Validation', description: 'Test input validation and constraints' },
+            { id: 'permissions', name: 'Permissions', description: 'Test role-based access control' },
+            { id: 'performance', name: 'Performance Tests', description: 'Test response times and load handling' },
+            { id: 'database', name: 'Database Operations', description: 'Test database queries and transactions' }
+          ]
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // POST /api/testing/mock-data - Generate mock data
   router.post('/mock-data', async (req, res) => {
     try {

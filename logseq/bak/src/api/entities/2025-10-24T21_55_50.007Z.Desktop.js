@@ -1,6 +1,6 @@
 import { base44 } from './base44Client';
 // Import mock data utilities at the top for use throughout
-import { createMockUser, isLocalDevMode } from './mockData';
+import { createMockUser, createMockTenant, isLocalDevMode } from './mockData';
 import { apiHealthMonitor } from '../utils/apiHealthMonitor';
 
 // Get backend URL from environment
@@ -208,8 +208,32 @@ export const Opportunity = wrapEntityWithFilter(base44.entities.Opportunity, 'Op
 
 export const Activity = wrapEntityWithFilter(base44.entities.Activity, 'Activity');
 
-// Wrap Tenant entity - uses backend API in local dev mode
-export const Tenant = wrapEntityWithFilter(base44.entities.Tenant, 'Tenant');
+// Wrap Tenant entity to support local dev mode
+const baseTenant = base44.entities.Tenant;
+const wrappedBaseTenant = wrapEntityWithFilter(baseTenant, 'Tenant');
+export const Tenant = {
+  ...wrappedBaseTenant,
+  get: async (id) => {
+    if (isLocalDevMode()) {
+      console.log('[Local Dev Mode] Using mock tenant');
+      return createMockTenant();
+    }
+    return baseTenant.get(id);
+  },
+  list: async (filters) => {
+    if (isLocalDevMode()) {
+      console.log('[Local Dev Mode] Using mock tenant list');
+      return [createMockTenant()];
+    }
+    return baseTenant.list(filters);
+  },
+  filter: async (filters) => {
+    if (isLocalDevMode()) {
+      return [createMockTenant()];
+    }
+    return baseTenant.list(filters);
+  },
+};
 
 export const Notification = wrapEntityWithFilter(base44.entities.Notification, 'Notification');
 

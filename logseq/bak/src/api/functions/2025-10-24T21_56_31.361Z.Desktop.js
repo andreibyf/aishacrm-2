@@ -237,37 +237,7 @@ const createFunctionProxy = (functionName) => {
       // ========================================
       
       if (functionName === 'listPerformanceLogs') {
-        try {
-          const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-          const response = await fetch(`${BACKEND_URL}/api/metrics/performance`);
-          if (response.ok) {
-            const result = await response.json();
-            // Convert backend metrics format to expected log format
-            const metrics = result.data;
-            const logs = [
-              { 
-                timestamp: new Date().toISOString(), 
-                operation: 'system_check', 
-                duration: Math.round(metrics.uptime * 1000), 
-                status: 'success',
-                details: {
-                  memory: metrics.memory,
-                  cpu: metrics.cpu
-                }
-              }
-            ];
-            return {
-              data: {
-                logs,
-                count: logs.length,
-                metrics
-              }
-            };
-          }
-        } catch (error) {
-          console.error('[Backend API] Error fetching performance logs:', error);
-        }
-        // Fallback to mock data
+        console.log('[Local Dev Mode] listPerformanceLogs: returning mock performance data');
         return {
           data: {
             logs: [

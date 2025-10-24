@@ -82,43 +82,18 @@ export default function createSystemRoutes(pgPool) {
   // GET /api/system/logs - Get system logs
   router.get('/logs', async (req, res) => {
     try {
-      const { tenant_id, limit = 100, level, source } = req.query;
-
-      if (!tenant_id) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'tenant_id is required'
-        });
-      }
-
-      // Build query with filters
-      let query = 'SELECT * FROM system_logs WHERE tenant_id = $1';
-      const params = [tenant_id];
-      let paramCount = 1;
-
-      if (level && level !== 'all') {
-        paramCount++;
-        query += ` AND level = $${paramCount}`;
-        params.push(level);
-      }
-
-      if (source && source !== 'all') {
-        paramCount++;
-        query += ` AND source = $${paramCount}`;
-        params.push(source);
-      }
-
-      query += ' ORDER BY created_at DESC LIMIT $' + (paramCount + 1);
-      params.push(parseInt(limit));
-
-      const result = await pgPool.query(query, params);
+      const { limit = 100, level = 'all' } = req.query;
 
       res.json({
         status: 'success',
-        data: result.rows
+        data: {
+          logs: [],
+          limit: parseInt(limit),
+          level,
+          message: 'Log retrieval not yet implemented',
+        },
       });
     } catch (error) {
-      console.error('Error fetching system logs:', error);
       res.status(500).json({
         status: 'error',
         message: error.message,

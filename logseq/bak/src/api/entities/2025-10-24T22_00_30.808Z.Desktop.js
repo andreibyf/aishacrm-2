@@ -1,6 +1,6 @@
 import { base44 } from './base44Client';
 // Import mock data utilities at the top for use throughout
-import { createMockUser, isLocalDevMode } from './mockData';
+import { createMockUser, createMockTenant, isLocalDevMode } from './mockData';
 import { apiHealthMonitor } from '../utils/apiHealthMonitor';
 
 // Get backend URL from environment
@@ -208,8 +208,54 @@ export const Opportunity = wrapEntityWithFilter(base44.entities.Opportunity, 'Op
 
 export const Activity = wrapEntityWithFilter(base44.entities.Activity, 'Activity');
 
-// Wrap Tenant entity - uses backend API in local dev mode
-export const Tenant = wrapEntityWithFilter(base44.entities.Tenant, 'Tenant');
+// Wrap Tenant entity to support local dev mode
+const baseTenant = base44.entities.Tenant;
+const wrappedBaseTenant = wrapEntityWithFilter(baseTenant, 'Tenant');
+export const Tenant = {
+  ...wrappedBaseTenant,
+  get: async (id) => {
+    if (isLocalDevMode()) {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/tenants/${id}`);
+        if (response.ok) {
+          const result = await response.json();
+          return result.data?.tenant || null;
+        }
+      } catch (error) {
+        console.error('[Backend API] Error fetching tenant:', error);
+      }
+      return createMockTenant();
+    }
+    return baseTenant.get(id);
+  },
+  list: async (filters) => {
+    if (isLocalDevMode()) {
+      try {
+        const params = new URLSearchParams();
+        if (filters?.tenant_id) params.append('tenant_id', filters.tenant_id);
+        if (filters?.status) params.append('status', filters.status);
+        if (filters?.limit) params.append('limit', filters.limit);
+        if (filters?.offset) params.append('offset', filters.offset);
+        
+        const response = await fetch(`${BACKEND_URL}/api/tenants?${params}`);
+        if (response.ok) {
+          const result = await response.json();
+          return result.data?.tenants || [];
+        }
+      } catch (error) {
+        console.error('[Backend API] Error fetching tenants:', error);
+      }
+      return [createMockTenant()];
+    }
+    return baseTenant.list(filters);
+  },
+  filter: async (filters) => {
+    if (isLocalDevMode()) {
+      return Tenant.list(filters);
+    }
+    return baseTenant.list(filters);
+  },
+};
 
 export const Notification = wrapEntityWithFilter(base44.entities.Notification, 'Notification');
 

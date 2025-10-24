@@ -1,6 +1,6 @@
 import { base44 } from './base44Client';
 // Import mock data utilities at the top for use throughout
-import { createMockUser, isLocalDevMode } from './mockData';
+import { createMockUser, createMockTenant, isLocalDevMode } from './mockData';
 import { apiHealthMonitor } from '../utils/apiHealthMonitor';
 
 // Get backend URL from environment

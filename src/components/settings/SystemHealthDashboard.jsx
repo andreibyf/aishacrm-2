@@ -14,7 +14,8 @@ import {
   Database
 } from "lucide-react";
 import { useErrorLog } from "../shared/ErrorLogger";
-import { checkBackendStatus } from "@/api/functions";
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
 export default function SystemHealthDashboard() {
   const { errors, getRecentErrors, getCriticalErrors, clearErrors } = useErrorLog();
@@ -24,10 +25,16 @@ export default function SystemHealthDashboard() {
   const checkHealth = async () => {
     setBackendStatus('checking');
     try {
-      await checkBackendStatus({});
-      setBackendStatus('healthy');
+      const response = await fetch(`${BACKEND_URL}/health`);
+      if (response.ok) {
+        const data = await response.json();
+        setBackendStatus(data.status === 'ok' ? 'healthy' : 'unhealthy');
+      } else {
+        setBackendStatus('unhealthy');
+      }
       setLastCheck(new Date());
     } catch (error) {
+      console.error('Backend health check failed:', error);
       setBackendStatus('unhealthy');
       setLastCheck(new Date());
     }
@@ -58,9 +65,15 @@ export default function SystemHealthDashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-slate-100">System Health</h2>
-        <Button onClick={checkHealth} variant="outline" size="sm" className="bg-slate-700 border-slate-600 text-slate-200">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
+        <Button 
+          onClick={checkHealth} 
+          variant="outline" 
+          size="sm" 
+          className="bg-slate-700 border-slate-600 text-slate-200"
+          disabled={backendStatus === 'checking'}
+        >
+          <RefreshCw className={`w-4 h-4 mr-2 ${backendStatus === 'checking' ? 'animate-spin' : ''}`} />
+          {backendStatus === 'checking' ? 'Checking...' : 'Refresh'}
         </Button>
       </div>
 
