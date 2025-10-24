@@ -8,27 +8,9 @@ const callMCPServerDirect = async (payload) => {
   if (!MCP_SERVER_URL) {
     throw new Error('MCP server URL not configured (VITE_MCP_SERVER_URL)');
   }
-  // Support optional API key from env or per-tenant local storage for authenticated MCP servers
-  const headers = { 'Content-Type': 'application/json' };
-  const envApiKey = import.meta.env.VITE_MCP_SERVER_API_KEY || null;
-  if (envApiKey) {
-    headers['x-api-key'] = envApiKey;
-  } else {
-    try {
-      // Try to infer tenant_id from payload.params or payload.context
-      const tenantId = payload?.params?.tenant_id || payload?.params?.tenantId || payload?.context?.tenant_id || 'local-tenant-001';
-      const storageKey = `local_user_api_key_${tenantId}`;
-      const stored = localStorage.getItem(storageKey);
-      if (stored) headers['x-api-key'] = stored;
-    } catch (err) {
-      // ignore localStorage read errors
-      void err;
-    }
-  }
-
   const response = await fetch(MCP_SERVER_URL, {
     method: 'POST',
-    headers,
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
   if (!response.ok) {

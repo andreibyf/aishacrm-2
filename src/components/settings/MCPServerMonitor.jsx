@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import {
   Server,
   Activity,
@@ -13,7 +13,6 @@ import {
   RefreshCw,
   Zap,
   Database,
-  Users,
   Eye,
   Loader2, // New icon for loading state
   CheckCircle2 // New icon for healthy state
@@ -23,11 +22,13 @@ import { mcpServerPublic } from "@/api/functions";
 // mcpToolFinder has been removed as it was a diagnostic tool and is no longer needed.
 
 export default function MCPServerMonitor() {
-  const [mcpStatus, setMcpStatus] = useState('unknown'); // Overall MCP connection status, used internally
-  const [recentCalls, setRecentCalls] = useState([]); // Not used in this component currently
+  const MCP_URL = import.meta.env.VITE_MCP_SERVER_URL || null;
+  const localDev = import.meta.env.VITE_USE_BASE44_AUTH !== 'true';
+  const usingRealMCP = !!MCP_URL; // If an MCP URL is configured we'll call it directly
   const [isTesting, setIsTesting] = useState(false);
   const [testResults, setTestResults] = useState(null);
   const [logs, setLogs] = useState([]);
+  const logIdCounter = React.useRef(0); // Counter to ensure unique IDs
 
   // New state variables for the 'MCP Server Status' card
   const [serverOverallStatus, setServerOverallStatus] = useState('unknown'); // 'healthy', 'offline', 'unknown'
@@ -35,8 +36,9 @@ export default function MCPServerMonitor() {
   const [lastChecked, setLastChecked] = useState(null); // Timestamp for when the server was last checked
 
   const addLog = useCallback((level, message, data = null) => {
+    logIdCounter.current += 1; // Increment counter for unique ID
     const newLog = {
-      id: Date.now(),
+      id: `log-${Date.now()}-${logIdCounter.current}`, // Unique ID combining timestamp and counter
       timestamp: new Date(),
       level,
       message,
@@ -53,6 +55,13 @@ export default function MCPServerMonitor() {
 
     let handlerToolsFound = 0;
     let newServerOverallStatus = 'offline'; // Assume offline until proven healthy
+
+    // Log if using local mock vs real MCP server
+    if (!MCP_URL) {
+      addLog('info', 'No MCP URL configured - using local mock implementation for testing.');
+    } else {
+      addLog('info', `Testing real MCP server at: ${MCP_URL}`);
+    }
 
     try {
       // Test 1: Initialize
@@ -109,7 +118,6 @@ export default function MCPServerMonitor() {
         toolsCount: handlerToolsFound,
         error: isSuccess ? null : 'No tools returned from public MCP'
       });
-      setMcpStatus(isSuccess ? 'connected' : 'error'); // Update internal mcpStatus
       newServerOverallStatus = isSuccess ? 'healthy' : 'offline'; // Update for the new card
 
     } catch (error) {
@@ -119,14 +127,13 @@ export default function MCPServerMonitor() {
         error: error.message,
         toolsCount: handlerToolsFound // Ensure count is available even on error
       });
-      setMcpStatus('error'); // Update internal mcpStatus
       newServerOverallStatus = 'offline'; // Set to offline on error
     } finally {
       setIsTesting(false);
       setServerStatusLoading(false); // End loading for the new status card
       setServerOverallStatus(newServerOverallStatus); // Set final status for the new card
     }
-  }, [addLog]); // testMCPConnection depends on addLog
+  }, [addLog, MCP_URL]); // testMCPConnection depends on addLog and MCP_URL
 
   const clearLogs = () => {
     setLogs([]);
@@ -149,15 +156,25 @@ export default function MCPServerMonitor() {
 
       {/* New MCP Server Status Card */}
       <Card className="bg-slate-800 border-slate-700">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-slate-100">
-            <Server className="w-5 h-5 text-purple-400" />
-            MCP Server Status
-          </CardTitle>
-          <CardDescription className="text-slate-400">
-            Real-time health check of the MCP server
-          </CardDescription>
-        </CardHeader>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-slate-100">
+              <Server className="w-5 h-5 text-purple-400" />
+              <div className="flex items-center gap-2">
+                <span>MCP Server Status</span>
+                {usingRealMCP ? (
+                  <Badge className="bg-green-600 text-white">Real MCP</Badge>
+                ) : (
+                  <Badge className="bg-yellow-600 text-black">Mock MCP</Badge>
+                )}
+              </div>
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              Real-time health check of the MCP server
+              {localDev && !usingRealMCP && (
+                <span className="ml-2 text-xs text-yellow-300">(Local mock active)</span>
+              )}
+            </CardDescription>
+          </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between p-4 bg-slate-900 rounded-lg border border-slate-700">
             <div>

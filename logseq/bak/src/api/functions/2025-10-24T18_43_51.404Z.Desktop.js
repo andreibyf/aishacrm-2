@@ -8,27 +8,9 @@ const callMCPServerDirect = async (payload) => {
   if (!MCP_SERVER_URL) {
     throw new Error('MCP server URL not configured (VITE_MCP_SERVER_URL)');
   }
-  // Support optional API key from env or per-tenant local storage for authenticated MCP servers
-  const headers = { 'Content-Type': 'application/json' };
-  const envApiKey = import.meta.env.VITE_MCP_SERVER_API_KEY || null;
-  if (envApiKey) {
-    headers['x-api-key'] = envApiKey;
-  } else {
-    try {
-      // Try to infer tenant_id from payload.params or payload.context
-      const tenantId = payload?.params?.tenant_id || payload?.params?.tenantId || payload?.context?.tenant_id || 'local-tenant-001';
-      const storageKey = `local_user_api_key_${tenantId}`;
-      const stored = localStorage.getItem(storageKey);
-      if (stored) headers['x-api-key'] = stored;
-    } catch (err) {
-      // ignore localStorage read errors
-      void err;
-    }
-  }
-
   const response = await fetch(MCP_SERVER_URL, {
     method: 'POST',
-    headers,
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
   if (!response.ok) {
@@ -403,24 +385,6 @@ const createFunctionProxy = (functionName) => {
         };
       }
 
-      if (functionName === 'getOrCreateUserApiKey') {
-        try {
-          const mockTenant = args[0]?.tenantId || 'local-tenant-001';
-          const storageKey = `local_user_api_key_${mockTenant}`;
-          let existing = localStorage.getItem(storageKey);
-          if (existing) {
-            return { data: { success: true, apiKey: existing } };
-          }
-          // generate a key similar to the app format
-          const generated = `aisha_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-          localStorage.setItem(storageKey, generated);
-          return { data: { success: true, apiKey: generated } };
-        } catch (err) {
-          console.warn(`[Local Dev Mode] getOrCreateUserApiKey fallback failed: ${err?.message || err}`);
-          return { data: { success: false, error: err?.message || String(err) } };
-        }
-      }
-
       // ========================================
       // Billing
       // ========================================
@@ -475,23 +439,7 @@ const createFunctionProxy = (functionName) => {
 // Create a Proxy handler that wraps all function access
 const functionsProxy = new Proxy({}, {
   get: (target, prop) => {
-    // If a direct MCP server URL is configured, allow direct JSON-RPC calls
-    // for MCP-related function names (mcpServer*, mcpHandler, mcpTool*) even in local-dev.
-    if (MCP_SERVER_URL && (String(prop).startsWith('mcpServer') || String(prop).startsWith('mcpHandler') || String(prop).startsWith('mcpTool') || String(prop).startsWith('mcpToolFinder'))) {
-      return async (...args) => {
-        try {
-          const payload = args[0] || {};
-          const result = await callMCPServerDirect(payload);
-          // Return in the codebase's expected shape: { data: <json-rpc-response> }
-          return { data: result };
-        } catch (err) {
-          console.error(`[MCP Direct] Error calling MCP server for ${String(prop)}:`, err);
-          throw err;
-        }
-      };
-    }
-
-    // Local dev mode: use function proxy (mock/no-op implementations)
+    // Local dev mode: always use function proxy (mock/no-op implementations)
     if (isLocalDevMode()) {
       return createFunctionProxy(prop);
     }
@@ -499,6 +447,23 @@ const functionsProxy = new Proxy({}, {
     // If Base44 provides the function, use it
     if (base44.functions && base44.functions[prop]) {
       return base44.functions[prop];
+    }
+
+    // If a direct MCP server URL is configured, allow direct JSON-RPC calls
+    // for MCP-related function names (mcpServer*, mcpHandler, etc.)
+    if (MCP_SERVER_URL && (String(prop).startsWith('mcpServer') || String(prop).startsWith('mcpHandler') || String(prop).startsWith('mcpTool'))) {
+      return async (...args) => {
+        try {
+          const payload = args[0] || {};
+          const result = await callMCPServerDirect(payload);
+          // Return in the codebase's expected shape: { data: <json-rpc-response> }
+          return { data: result };
+        } catch (err) {
+          // Mirror behavior of other functions on error
+          console.error(`[MCP Direct] Error calling MCP server for ${String(prop)}:`, err);
+          throw err;
+        }
+      };
     }
 
     // Fallback: return the local dev proxy (no-op) if function not present

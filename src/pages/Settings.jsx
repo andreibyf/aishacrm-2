@@ -38,7 +38,6 @@ import {
   Bug, // for TestDataManager
   RefreshCw, // for SyncHealthMonitor
   Server, // for MCPServerMonitor
-  TrendingUp, // for IntegrationUsageMonitor
 } from "lucide-react";
 import { User as UserEntity } from "@/api/entities";
 
@@ -85,7 +84,6 @@ import TestDataManager from "../components/settings/TestDataManager";
 import InternalPerformanceDashboard from "../components/settings/InternalPerformanceDashboard";
 import SyncHealthMonitor from "../components/settings/SyncHealthMonitor";
 import MCPServerMonitor from "../components/settings/MCPServerMonitor";
-import IntegrationUsageMonitor from "../components/settings/IntegrationUsageMonitor";
 import PerformanceMonitor from '../components/settings/PerformanceMonitor';
 import SystemHealthDashboard from "../components/settings/SystemHealthDashboard"; // NEW: SystemHealthDashboard
 
@@ -185,7 +183,6 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
       { id: 'realtime-performance', label: 'Realtime Performance', icon: Activity, color: 'emerald', roles: ['admin', 'superadmin'] }, // New tab for PerformanceMonitor
       { id: 'sync-health', label: 'Sync Health', icon: RefreshCw, color: 'emerald', roles: ['admin', 'superadmin'] },
       { id: 'mcp-monitor', label: 'MCP Monitor', icon: Server, color: 'emerald', roles: ['admin', 'superadmin'] },
-      { id: 'integration-usage', label: 'Integration Usage', icon: TrendingUp, color: 'emerald', roles: ['admin', 'superadmin'] },
       { id: 'system-health', label: 'System Health', icon: Activity, color: 'emerald', roles: ['admin', 'superadmin'] }, // NEW: System Health Dashboard
       { id: 'system-logs', label: 'System Logs', icon: FileText, color: 'slate', roles: ['admin', 'superadmin'] }, // NEW: System Logs
 
@@ -591,7 +588,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                     <CardDescription className="text-slate-400">Live tracking of application resource usage</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <PerformanceMonitor />
+                    <PerformanceMonitor user={currentUser} />
                   </CardContent>
                 </Card>
               )}
@@ -616,18 +613,6 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                   </CardHeader>
                   <CardContent>
                     <MCPServerMonitor />
-                  </CardContent>
-                </Card>
-              )}
-
-              {activeTab === 'integration-usage' && isAdmin && ( // New tab content
-                <Card className="bg-slate-800 border-slate-700">
-                  <CardHeader>
-                    <CardTitle className="text-slate-100">Integration Usage</CardTitle>
-                    <CardDescription className="text-slate-400">Track API call volume and integration health</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <IntegrationUsageMonitor />
                   </CardContent>
                 </Card>
               )}

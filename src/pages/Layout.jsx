@@ -350,7 +350,10 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   // CRITICAL: Access tenant context safely WITHOUT destructuring
   const tenantContext = useTenant();
   const selectedTenantId = tenantContext?.selectedTenantId || null;
-  const setSelectedTenantId = tenantContext?.setSelectedTenantId || (() => {});
+  const setSelectedTenantId = React.useMemo(
+    () => tenantContext?.setSelectedTenantId || (() => {}),
+    [tenantContext?.setSelectedTenantId]
+  );
 
   const navigate = useNavigate();
   const [globalDetailRecord, setGlobalDetailRecord] = useState(null);
@@ -426,7 +429,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     }
     // Use shared validation function
     return nextTenantId && typeof nextTenantId === 'string' && isValidId(nextTenantId) ? nextTenantId : null;
-  }, [user?.role, user?.tenant_id, selectedTenantId]);
+  }, [user, selectedTenantId]);
 
 
   // NEW: One-time cleanup of stale tenant IDs on app initialization
@@ -823,7 +826,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             setSelectedTenantId(null);
             try {
               localStorage.removeItem('selected_tenant_id');
-            } catch (e) {
+            } catch {
               console.warn('Storage access failed');
             }
           }
@@ -858,7 +861,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             setSelectedTenantId(null);
             try {
               localStorage.removeItem('selected_tenant_id');
-            } catch (e) {
+            } catch {
               console.warn('Storage access failed');
             }
           }
@@ -896,7 +899,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 setSelectedTenantId(null);
               }
             }
-          } catch (e) {
+          } catch {
             console.warn('Storage cleanup failed');
           }
         }
@@ -909,7 +912,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       loadCurrentTenant();
     }
   // DEPS: run only when the effective tenant truly changes or page context changes
-  }, [effectiveTenantId, currentPageName, cachedRequest, setSelectedTenantId, user]);
+  }, [effectiveTenantId, currentPageName, cachedRequest, setSelectedTenantId, user, selectedTenantId]);
 
   // NEW: Listen for tenant updates and refresh tenant data
   React.useEffect(() => {
@@ -1046,7 +1049,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
   // Listen for module settings changes and reload navigation
   React.useEffect(() => {
-    const handleModuleSettingsChanged = (event) => {
+    const handleModuleSettingsChanged = () => {
 
       const reloadSettings = async () => {
         try {
@@ -1452,7 +1455,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     const interval = setInterval(purgeAll, 1200);
 
     return () => {
-      try { mo.disconnect(); } catch {}
+      try { mo.disconnect(); } catch { /* ignore */ }
       clearInterval(interval);
     };
   }, []);
@@ -1613,7 +1616,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             ensureInDocumentBody(el);
 
             // Always try to bring the phone above everything and to the left of avatar
-            try { el.style.zIndex = String(MAX_Z); } catch {}
+            try { el.style.zIndex = String(MAX_Z); } catch { /* ignore */ }
             placeLeftOfAvatar(el);
           });
         });
@@ -1633,7 +1636,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
     return () => {
       clearTimeout(t);
-      try { mo.disconnect(); } catch {}
+      try { mo.disconnect(); } catch { /* ignore */ }
       window.removeEventListener('resize', adjustAll);
     };
   }, []);
@@ -2484,28 +2487,28 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       {/* Global Alert Background Lightening Styles */}
       <style>{`
         /* Lighten green alert backgrounds for better text readability */
-        .bg-green-900\/20,
-        .bg-green-900\/30 {
+        .bg-green-900\\/20,
+        .bg-green-900\\/30 {
           background-color: rgb(240 253 244) !important; /* green-50 */
         }
         
         /* Lighten blue alert backgrounds for better text readability */
-        .bg-blue-900\/20,
-        .bg-blue-900\/30 {
+        .bg-blue-900\\/20,
+        .bg-blue-900\\/30 {
           background-color: rgb(239 246 255) !important; /* blue-50 */
         }
         
         /* Lighten yellow/amber alert backgrounds */
-        .bg-yellow-900\/20,
-        .bg-yellow-900\/30,
-        .bg-amber-900\/20,
-        .bg-amber-900\/30 {
+        .bg-yellow-900\\/20,
+        .bg-yellow-900\\/30,
+        .bg-amber-900\\/20,
+        .bg-amber-900\\/30 {
           background-color: rgb(254 252 232) !important; /* yellow-50 */
         }
         
         /* Lighten red alert backgrounds */
-        .bg-red-900\/20,
-        .bg-red-900\/30 {
+        .bg-red-900\\/20,
+        .bg-red-900\\/30 {
           background-color: rgb(254 242 242) !important; /* red-50 */
         }
         
@@ -2678,7 +2681,7 @@ export default function LayoutWrapper({ children, currentPageName }) {
               <TimezoneProvider>
                 <EmployeeScopeProvider>
                   <LoggerProvider>
-                    <Layout children={children} currentPageName={currentPageName} />
+                    <Layout currentPageName={currentPageName}>{children}</Layout>
                   </LoggerProvider>
                 </EmployeeScopeProvider>
               </TimezoneProvider>

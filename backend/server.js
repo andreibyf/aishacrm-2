@@ -111,6 +111,8 @@ import createModuleSettingsRoutes from './routes/modulesettings.js';
 import createTenantIntegrationRoutes from './routes/tenant-integrations.js';
 import createBizDevSourceRoutes from './routes/bizdevsources.js';
 import createTenantRoutes from './routes/tenants.js';
+import createAnnouncementRoutes from './routes/announcements.js';
+import createApikeyRoutes from './routes/apikeys.js';
 
 // Mount routers with database pool
 app.use('/api/database', createDatabaseRoutes(pgPool));
@@ -147,6 +149,8 @@ app.use('/api/system-logs', createSystemLogRoutes(pgPool));
 app.use('/api/modulesettings', createModuleSettingsRoutes(pgPool));
 app.use('/api/tenantintegrations', createTenantIntegrationRoutes(pgPool));
 app.use('/api/tenants', createTenantRoutes(pgPool));
+app.use('/api/announcements', createAnnouncementRoutes(pgPool));
+app.use('/api/apikeys', createApikeyRoutes(pgPool));
 
 // 404 handler
 app.use((req, res) => {

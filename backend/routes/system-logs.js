@@ -88,5 +88,79 @@ export default function createSystemLogRoutes(pgPool) {
     }
   });
 
+  // DELETE /api/system-logs/:id - Delete a specific system log
+  router.delete('/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const query = 'DELETE FROM system_logs WHERE id = $1 RETURNING *';
+      const result = await pgPool.query(query, [id]);
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'System log not found'
+        });
+      }
+      
+      res.json({
+        status: 'success',
+        message: 'System log deleted',
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Error deleting system log:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  });
+
+  // DELETE /api/system-logs - Clear all system logs (with optional filters)
+  router.delete('/', async (req, res) => {
+    try {
+      const { tenant_id, level, older_than_days } = req.query;
+
+      let query = 'DELETE FROM system_logs WHERE 1=1';
+      const values = [];
+      let valueIndex = 1;
+
+      if (tenant_id) {
+        query += ` AND tenant_id = $${valueIndex}`;
+        values.push(tenant_id);
+        valueIndex++;
+      }
+
+      if (level) {
+        query += ` AND level = $${valueIndex}`;
+        values.push(level);
+        valueIndex++;
+      }
+
+      if (older_than_days) {
+        query += ` AND created_date < NOW() - INTERVAL '${parseInt(older_than_days)} days'`;
+      }
+
+      query += ' RETURNING *';
+      
+      const result = await pgPool.query(query, values);
+      
+      res.json({
+        status: 'success',
+        message: `Deleted ${result.rows.length} system log(s)`,
+        data: {
+          deleted_count: result.rows.length
+        }
+      });
+    } catch (error) {
+      console.error('Error clearing system logs:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  });
+
   return router;
 }

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Clock, Zap, Database, AlertCircle, Activity } from 'lucide-react';
@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { listPerformanceLogs } from '@/api/functions';
 
-export default function PerformanceMonitor() {
+export default function PerformanceMonitor({ user }) {
   const [metrics, setMetrics] = useState({
     avgResponseTime: 0,
     functionExecutionTime: 0,
@@ -24,8 +24,11 @@ export default function PerformanceMonitor() {
     try {
       setLoading(true);
       
+      // Get tenant_id from user context
+      const tenantId = user?.tenant_id || 'local-tenant-001';
+      
       // Load actual performance logs from the database
-      const response = await listPerformanceLogs({ limit: 500 });
+      const response = await listPerformanceLogs({ limit: 500, tenant_id: tenantId });
       const logs = Array.isArray(response?.data?.logs) ? response.data.logs : [];
       
       if (logs.length === 0) {
@@ -121,7 +124,7 @@ export default function PerformanceMonitor() {
     } finally {
       setLoading(false);
     }
-  }, [timeRange]); // Dependency on timeRange
+  }, [timeRange, user]); // Dependencies: timeRange and user
 
   useEffect(() => {
     loadRealPerformanceData();

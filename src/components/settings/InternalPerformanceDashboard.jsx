@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, RefreshCw, Users, Building, Star, Target, Activity, BrainCircuit, History, Clock, AlertCircle, CheckCircle, AlertTriangle, ListTodo } from 'lucide-react';
@@ -32,13 +32,12 @@ export default function InternalPerformanceDashboard({ user }) {
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(null);
 
-  useEffect(() => {
-    loadMetrics();
-  }, []);
-
-  const loadMetrics = async () => {
+  const loadMetrics = useCallback(async () => {
     setLoading(true);
     try {
+      // Get tenant_id from user context
+      const tenantId = user?.tenant_id || 'local-tenant-001';
+      
       const [
         perfLogsResp, // Changed from perfLogs to perfLogsResp to handle object structure
         contactsData,
@@ -48,12 +47,12 @@ export default function InternalPerformanceDashboard({ user }) {
         activitiesData
       ] = await timeApiCall('dashboard.loadAllMetrics', () => Promise.all([
         // Use backend function instead of direct entity call to avoid Network Error
-        listPerformanceLogs({ limit: 500 }),
-        Contact.list(),
-        Account.list(),
-        Lead.list(),
-        Opportunity.list(),
-        ActivityEntity.list()
+        listPerformanceLogs({ limit: 500, tenant_id: tenantId }),
+        Contact.list({ tenant_id: tenantId }),
+        Account.list({ tenant_id: tenantId }),
+        Lead.list({ tenant_id: tenantId }),
+        Opportunity.list({ tenant_id: tenantId }),
+        ActivityEntity.list({ tenant_id: tenantId })
       ]));
 
       const perfLogs = Array.isArray(perfLogsResp?.data?.logs) ? perfLogsResp.data.logs : [];
@@ -105,7 +104,11 @@ export default function InternalPerformanceDashboard({ user }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]); // Add user as dependency since we use user.tenant_id
+
+  useEffect(() => {
+    loadMetrics();
+  }, [loadMetrics]);
 
   const handleForceRecalculate = () => {
     toast.info("Recalculating performance metrics...");

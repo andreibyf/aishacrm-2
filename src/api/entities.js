@@ -18,6 +18,7 @@ const pluralize = (entityName) => {
     'systemlog': 'system-logs',
     'auditlog': 'audit-logs',
     'notification': 'notifications',
+    'apikey': 'apikeys',
     'cashflow': 'cashflow',
     'workflow': 'workflows',
     'modulesettings': 'modulesettings', // Already plural
@@ -320,7 +321,20 @@ export const IndustryMarketData = wrapEntityWithFilter(base44.entities.IndustryM
 
 export const ClientRequirement = wrapEntityWithFilter(base44.entities.ClientRequirement, 'ClientRequirement');
 
-export const SystemLog = wrapEntityWithFilter(base44.entities.SystemLog, 'SystemLog');
+// SystemLog with safe fallback to suppress connection errors in local dev when backend is down
+const baseSystemLog = wrapEntityWithFilter(base44.entities.SystemLog, 'SystemLog');
+export const SystemLog = {
+  ...baseSystemLog,
+  create: async (data) => {
+    if (isLocalDevMode()) {
+      // Silent fallback: don't try to POST to backend if it's not running
+      // Just log to console and return success
+      console.log('[Local Dev Mode] SystemLog.create (not persisted):', data);
+      return { id: `local-log-${Date.now()}`, ...data, created_at: new Date().toISOString() };
+    }
+    return baseSystemLog.create(data);
+  },
+};
 
 export const Workflow = wrapEntityWithFilter(base44.entities.Workflow, 'Workflow');
 
