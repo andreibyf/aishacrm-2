@@ -1,4 +1,3 @@
-import React from 'react';
 import SystemLogsViewer from '../components/settings/SystemLogsViewer';
 
 export default function SystemLogsPage() {
