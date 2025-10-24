@@ -80,7 +80,7 @@ export default function EmployeeDetailPanel({
       let msg = "Failed to link to CRM user";
       try {
         if (error?.message) msg = error.message;
-      } catch (e) {}
+      } catch (e) { void e; }
       console.error("Link error:", msg);
       toast.error(msg);
     } finally {
@@ -109,7 +109,7 @@ export default function EmployeeDetailPanel({
       let msg = "Failed to sync permissions";
       try {
         if (error?.message) msg = error.message;
-      } catch (e) {}
+      } catch (e) { void e; }
       console.error("Sync error:", msg);
       toast.error(msg);
     } finally {

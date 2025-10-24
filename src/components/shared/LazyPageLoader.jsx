@@ -28,11 +28,16 @@ export const withLazyLoading = (importFn, pageName) => {
     });
   });
 
-  return React.forwardRef((props, ref) => (
+  const LazyWrapped = React.forwardRef((props, ref) => (
     <Suspense fallback={<PageLoadingFallback pageName={pageName} />}>
       <LazyComponent {...props} ref={ref} />
     </Suspense>
   ));
+
+  // Friendly display name for debugging / dev tools and to satisfy lint rules
+  LazyWrapped.displayName = `Lazy(${pageName || 'Component'})`;
+
+  return LazyWrapped;
 };
 
 // Preload page on hover (optional optimization)

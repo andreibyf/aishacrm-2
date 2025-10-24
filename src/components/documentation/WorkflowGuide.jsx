@@ -10,6 +10,7 @@ import {
   Target,
   Calendar,
   CheckCircle,
+  AlertCircle,
   ArrowRight,
   Lightbulb,
   Award,

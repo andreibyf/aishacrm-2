@@ -455,15 +455,15 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
     return () => {
       mounted = false;
       if (unsubRef.current) {
-        try { unsubRef.current(); } catch {}
+  try { unsubRef.current(); } catch (e) { void e; }
       }
       // Clean up any playing audio when component unmounts
       if (audioRef.current) {
-        try { audioRef.current.pause(); } catch {}
+  try { audioRef.current.pause(); } catch (e) { void e; }
         audioRef.current = null;
       }
       if (urlRef.current) {
-        try { URL.revokeObjectURL(urlRef.current); } catch {}
+  try { URL.revokeObjectURL(urlRef.current); } catch (e) { void e; }
         urlRef.current = null;
       }
     };
@@ -579,7 +579,7 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
             ))
           ) : (
             <div className="text-slate-400 text-sm">
-              Say "What opportunities do I have open?" or "Create a lead for Jane Doe at Acme, title Marketing Manager"
+              Say &quot;What opportunities do I have open?&quot; or &quot;Create a lead for Jane Doe at Acme, title Marketing Manager&quot;
             </div>
           )}
         </div>

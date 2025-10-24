@@ -156,7 +156,7 @@ export default function MicButton({ onResult, onSilence, className = "" }) {
       clearTimeout(silenceTimerId);
       window.removeEventListener('chat:lock-open', handleLockOpen);
       window.removeEventListener('chat:unlock-open', handleUnlockOpen);
-      try { recog.stop(); } catch {}
+  try { recog.stop(); } catch (e) { void e; }
       recognitionRef.current = null;
       isStartingRef.current = false;
     };

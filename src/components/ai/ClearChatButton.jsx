@@ -41,7 +41,7 @@ export function clearChat({ reload = true, confirmFirst = false } = {}) {
   }
   try {
     window.dispatchEvent(new CustomEvent("chat:reset"));
-  } catch {}
+  } catch (e) { void e; }
   wipeChatStorage();
   if (reload) {
     setTimeout(() => window.location.reload(), 50);
