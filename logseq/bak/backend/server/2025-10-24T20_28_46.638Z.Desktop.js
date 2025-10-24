@@ -14,58 +14,20 @@ import pkg from 'pg';
 const { Pool } = pkg;
 
 // Load environment variables
-// Try .env.local first (for local development), then fall back to .env
-dotenv.config({ path: '.env.local' });
-dotenv.config(); // Fallback to .env if .env.local doesn't exist
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Database connection pool with Supabase support
+// Database connection pool
 let pgPool = null;
-let dbConnectionType = 'none';
-
-if (process.env.USE_SUPABASE_PROD === 'true') {
-  // Connect to Supabase Production
-  const supabaseConfig = {
-    host: process.env.SUPABASE_DB_HOST,
-    port: parseInt(process.env.SUPABASE_DB_PORT || '5432'),
-    database: process.env.SUPABASE_DB_NAME || 'postgres',
-    user: process.env.SUPABASE_DB_USER || 'postgres',
-    password: process.env.SUPABASE_DB_PASSWORD,
-    ssl: {
-      rejectUnauthorized: false // Required for Supabase
-    },
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
-  };
-  
-  pgPool = new Pool(supabaseConfig);
-  dbConnectionType = 'Supabase Production';
-  console.log('✓ PostgreSQL connection pool initialized (Supabase Production)');
-} else if (process.env.DATABASE_URL) {
-  // Connect using DATABASE_URL (supports local Docker or Supabase Cloud)
-  const isSupabaseCloud = process.env.DATABASE_URL.includes('supabase.co');
-  
-  const poolConfig = {
+if (process.env.DATABASE_URL) {
+  pgPool = new Pool({
     connectionString: process.env.DATABASE_URL,
-  };
-  
-  // Add SSL for Supabase Cloud connections
-  if (isSupabaseCloud || process.env.DB_SSL === 'true') {
-    poolConfig.ssl = {
-      rejectUnauthorized: false
-    };
-    dbConnectionType = 'Supabase Cloud DEV/QA';
-  } else {
-    dbConnectionType = 'Local Docker';
-  }
-  
-  pgPool = new Pool(poolConfig);
-  console.log(`✓ PostgreSQL connection pool initialized (${dbConnectionType})`);
+  });
+  console.log('✓ PostgreSQL connection pool initialized');
 } else {
-  console.warn('⚠ No database configured - set DATABASE_URL or USE_SUPABASE_PROD=true');
+  console.warn('⚠ DATABASE_URL not set - database functions will not work');
 }
 
 // Middleware
@@ -245,26 +207,4 @@ server.listen(PORT, () => {
   `);
 });
 
-// Handle server errors (port already in use, etc.)
-server.on('error', (error) => {
-  console.error('Server error:', error);
-  if (error.code === 'EADDRINUSE') {
-    console.error(`Port ${PORT} is already in use`);
-    process.exit(1);
-  }
-});
-
-// Handle unhandled rejections and exceptions to prevent silent crashes
-process.on('unhandledRejection', (err) => {
-  console.error('[unhandledRejection]', err);
-});
-
-process.on('uncaughtException', (err) => {
-  console.error('[uncaughtException]', err);
-  // Don't exit on uncaught exceptions in development
-  if (process.env.NODE_ENV === 'production') {
-    process.exit(1);
-  }
-});
-
-export { app, pgPool, server };
+export { app, pgPool };

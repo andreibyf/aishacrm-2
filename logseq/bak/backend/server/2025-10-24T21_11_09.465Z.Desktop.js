@@ -245,7 +245,7 @@ server.listen(PORT, () => {
   `);
 });
 
-// Handle server errors (port already in use, etc.)
+// Keep server alive by handling errors and preventing exit
 server.on('error', (error) => {
   console.error('Server error:', error);
   if (error.code === 'EADDRINUSE') {
@@ -254,17 +254,4 @@ server.on('error', (error) => {
   }
 });
 
-// Handle unhandled rejections and exceptions to prevent silent crashes
-process.on('unhandledRejection', (err) => {
-  console.error('[unhandledRejection]', err);
-});
-
-process.on('uncaughtException', (err) => {
-  console.error('[uncaughtException]', err);
-  // Don't exit on uncaught exceptions in development
-  if (process.env.NODE_ENV === 'production') {
-    process.exit(1);
-  }
-});
-
-export { app, pgPool, server };
+export { app, pgPool };

@@ -180,6 +180,43 @@ export default function createAccountRoutes(pgPool) {
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
+        data: { id, tenant_id },
+      });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // PUT /api/accounts/:id - Update account
+  router.put('/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+
+      res.json({
+        status: 'success',
+        message: 'Account updated',
+        data: { id, ...updates },
+      });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // DELETE /api/accounts/:id - Delete account
+  router.delete('/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      res.json({
+        status: 'success',
+        message: 'Account deleted',
+        data: { id },
+      });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
 
   return router;
 }

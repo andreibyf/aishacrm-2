@@ -5,6 +5,7 @@ import { dataIntegrityTests } from '../components/testing/dataIntegrityTests';
 import { utilityFunctionTests } from '../components/testing/utilityFunctionTests';
 import { employeeScopeTests } from '../components/testing/employeeScopeTests';
 import { apiHealthMonitorTests } from '../components/testing/apiHealthMonitorTests';
+import { crudTests } from '../components/testing/crudTests';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Info, TestTube } from "lucide-react";
@@ -15,7 +16,8 @@ import { Info, TestTube } from "lucide-react";
     dataIntegrityTests,
     utilityFunctionTests,
     employeeScopeTests,
-    apiHealthMonitorTests
+    apiHealthMonitorTests,
+    crudTests
   ];export default function UnitTestsPage() {
   return (
     <div className="min-h-screen bg-slate-900 p-6">
@@ -34,8 +36,18 @@ import { Info, TestTube } from "lucide-react";
           <Info className="h-4 w-4 text-blue-400" />
           <AlertTitle className="text-blue-300">Testing Information</AlertTitle>
           <AlertDescription className="text-blue-400">
-            This test suite validates core functionality including error logging, form validation,
+            This test suite validates core functionality including CRUD operations, error logging, form validation,
             data integrity, utility functions, employee scope filtering, and API health monitoring. Click &quot;Run All Tests&quot; to execute the full suite.
+          </AlertDescription>
+        </Alert>
+
+        <Alert className="bg-yellow-900/30 border-yellow-700">
+          <Info className="h-4 w-4 text-yellow-400" />
+          <AlertTitle className="text-yellow-300">⚠️ CRUD Tests - Backend Implementation Required</AlertTitle>
+          <AlertDescription className="text-yellow-400">
+            CRUD tests are currently disabled in local-dev mode because backend routes (contacts, leads, accounts, opportunities) 
+            return stub data instead of actual database operations. To enable: implement SQL queries in backend routes 
+            or set VITE_USE_BASE44_AUTH=true to test against Base44 cloud.
           </AlertDescription>
         </Alert>
 
@@ -65,6 +77,15 @@ import { Info, TestTube } from "lucide-react";
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-3 bg-slate-700 rounded-lg">
+                <div className="font-medium text-slate-200 mb-1 flex items-center gap-2">
+                  🔧 CRUD Operations
+                  <span className="text-xs px-2 py-0.5 bg-yellow-900/50 text-yellow-300 rounded">Needs Backend DB</span>
+                </div>
+                <div className="text-sm text-slate-400">
+                  Infrastructure checks for Create, Read, Update, Delete operations. Full tests available when backend implements database queries.
+                </div>
+              </div>
               <div className="p-3 bg-slate-700 rounded-lg">
                 <div className="font-medium text-slate-200 mb-1">Error Logging</div>
                 <div className="text-sm text-slate-400">
