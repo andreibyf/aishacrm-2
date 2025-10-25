@@ -128,7 +128,7 @@ export default function createTenantRoutes(pgPool) {
     }
   });
 
-  // GET /api/tenants/:id - Get single tenant (by tenant_id, not UUID)
+  // GET /api/tenants/:id - Get single tenant
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
@@ -140,12 +140,7 @@ export default function createTenantRoutes(pgPool) {
         });
       }
 
-      // Check if id is a UUID format (for backward compatibility) or tenant_id string
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-      const query = isUUID 
-        ? 'SELECT * FROM tenant WHERE id = $1'
-        : 'SELECT * FROM tenant WHERE tenant_id = $1';
-      
+      const query = 'SELECT * FROM tenant WHERE id = $1';
       const result = await pgPool.query(query, [id]);
 
       if (result.rows.length === 0) {

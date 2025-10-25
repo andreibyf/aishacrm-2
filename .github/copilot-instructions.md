@@ -30,7 +30,7 @@
 - Performance: Use `performanceCache` from `src/components/shared/PerformanceCache.jsx`.
 
 ## Integration Points
-- **Database:** Supabase PostgreSQL; configure via `DATABASE_URL` or Supabase prod settings.
+- **Database:** Supabase PostgreSQL; configure via `DATABASE_URL` or Supabase prod settings; see `backend/DATABASE_UUID_vs_TENANT_ID.md` for critical UUID vs tenant_id distinction.
 - **External API:** Base44 SDK for migration/sync; local backend for independence.
 - **AI Features:** Custom assistants in `src/components/ai/`; MCP server example in `src/functions/mcpServer.js`.
 - **Security:** Helmet.js, CORS, rate limiting in backend; never commit `.env`.

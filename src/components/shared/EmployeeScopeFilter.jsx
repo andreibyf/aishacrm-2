@@ -40,18 +40,19 @@ export default function EmployeeScopeFilter({ user, selectedTenantId }) {
 
         console.log('[EmployeeScopeFilter] Loading employees with filter:', filter);
 
-        // Load all active employees for this tenant
-        const employeeList = await Employee.filter({ 
-          ...filter,
-          is_active: true 
+        // Load all active employees for this tenant using list() with tenant_id
+        const employeeList = await Employee.list({ 
+          tenant_id: filter.tenant_id,
+          // Note: is_active filtering may need to be done client-side if not supported by backend
         });
 
         console.log('[EmployeeScopeFilter] Loaded employees:', employeeList?.length || 0);
 
-        // Filter to only employees with CRM access
+        // Filter to only employees with CRM access and active status
         const crmEmployees = (employeeList || []).filter(emp => {
-          // Only show employees who have CRM access
-          return emp.has_crm_access === true && emp.user_email;
+          // Only show employees who have CRM access and are active
+          const isActive = emp.is_active !== false && emp.status !== 'inactive';
+          return isActive && emp.has_crm_access === true && emp.user_email;
         });
 
         console.log('[EmployeeScopeFilter] CRM-enabled employees:', crmEmployees.length);

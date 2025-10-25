@@ -57,7 +57,11 @@ export default function LeadAgeReport(props) {
           if (Array.isArray(props?.employeesData)) {
             setEmployees(props.employeesData);
           } else {
-            const employeesData = await cachedRequest('Employee', 'list', {}, function () { return Employee.list(); });
+            // Pass tenant_id when fetching employees
+            const employeeFilter = tenantFilter?.tenant_id ? { tenant_id: tenantFilter.tenant_id } : {};
+            const employeesData = await cachedRequest('Employee', 'list', employeeFilter, function () { 
+              return Employee.list(employeeFilter); 
+            });
             setEmployees(employeesData);
           }
           setLoading(false);
@@ -76,7 +80,9 @@ export default function LeadAgeReport(props) {
           cachedRequest('Lead', 'filter', { filter: effectiveFilter }, function () { return Lead.filter(effectiveFilter); }),
           Array.isArray(props?.employeesData)
             ? Promise.resolve(props.employeesData)
-            : cachedRequest('Employee', 'list', {}, function () { return Employee.list(); })
+            : cachedRequest('Employee', 'list', { tenant_id: tenantFilter?.tenant_id }, function () { 
+                return Employee.list({ tenant_id: tenantFilter?.tenant_id }); 
+              })
         ]);
         
         console.log('LeadAgeReport: Found active leads:', (activeLeads || []).length);
