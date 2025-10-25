@@ -5,7 +5,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default [
-  { ignores: ['dist', 'logseq/**', 'scripts/**', 'backend/node_modules/**', 'src/functions/**', 'node_modules/**', '.DS_Store', '*.local', '.env.*', '*.env', 'logseq/bak/**'] },
+  { ignores: ['dist', 'logseq/**', 'scripts/**', 'backend/node_modules/**', 'src/functions/**', 'node_modules/**', '.DS_Store', '*.local', '.env.*', '*.env', 'logseq/bak/**', 'playwright-report/**', 'test-results/**'] },
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {
@@ -45,7 +45,7 @@ export default [
   },
   // Backend (Node.js) override: allow Node globals like `process`, disable React rules
   {
-    files: ['backend/**/*.js', 'vite.config.js', 'tailwind.config.js', 'postcss.config.js'],
+    files: ['backend/**/*.js', 'vite.config.js', 'tailwind.config.js', 'postcss.config.js', 'playwright.config.js'],
     languageOptions: {
       ecmaVersion: 2020,
       globals: {
@@ -70,6 +70,30 @@ export default [
       'react/prop-types': 'off',
       'react-refresh/only-export-components': 'off',
       // Keep unused vars as warnings, ignore underscored args/vars
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
+  // Tests override: Playwright tests run in Node; allow process and test globals
+  {
+    files: ['tests/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      globals: {
+        ...globals.node,
+      },
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      // tests aren't React components
+      'react/jsx-no-target-blank': 'off',
+      'react/prop-types': 'off',
+      'react-refresh/only-export-components': 'off',
+      // Allow dev-oriented patterns
+      'no-undef': 'off',
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },

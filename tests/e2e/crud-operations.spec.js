@@ -77,7 +77,6 @@ test.describe('CRUD Operations - End-to-End', () => {
       // Verify activity appears (check for the subject text anywhere on page)
       await expect(page.locator(`text=${testSubject}`).first()).toBeVisible({ timeout: 10000 });
     });
-  });
 
     test('should edit an existing activity', async ({ page }) => {
       // Navigate to Activities

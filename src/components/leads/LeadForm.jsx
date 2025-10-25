@@ -20,6 +20,32 @@ import CreateAccountDialog from "../accounts/CreateAccountDialog";
 import { useApiManager } from "../shared/ApiManager";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
+// Utility: Normalize date to yyyy-MM-dd format for HTML5 date inputs
+const formatDateForInput = (dateValue) => {
+  if (!dateValue) return '';
+  
+  try {
+    // Handle various date formats
+    const date = new Date(dateValue);
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.warn('Invalid date value:', dateValue);
+      return '';
+    }
+    
+    // Format as yyyy-MM-dd (HTML5 date input format)
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    
+    return `${year}-${month}-${day}`;
+  } catch (error) {
+    console.error('Error formatting date:', error, dateValue);
+    return '';
+  }
+};
+
 const sourceOptions = [
   { value: "website", label: "Website" },
   { value: "referral", label: "Referral" },
@@ -329,6 +355,21 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
       }
 
       submissionData.score = parseInt(submissionData.score) || 50;
+
+      // Normalize any date fields to yyyy-MM-dd format for HTML5 compatibility
+      // This prevents browser-specific date format issues
+      Object.keys(submissionData).forEach(key => {
+        // Check if field name suggests it's a date field
+        if (key.includes('_date') || key.includes('date_') || key === 'date') {
+          const value = submissionData[key];
+          if (value && typeof value === 'string' && value.trim() !== '') {
+            const normalizedDate = formatDateForInput(value);
+            if (normalizedDate) {
+              submissionData[key] = normalizedDate;
+            }
+          }
+        }
+      });
 
       Object.keys(submissionData).forEach(key => {
         // Only set to null if it's an empty string and not an array (like tags)
