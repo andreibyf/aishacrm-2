@@ -58,12 +58,17 @@ export default function DashboardPage() {
   const logger = useLogger();
 
   const initialLoadDone = useRef(false);
+  const userLoadAttempted = useRef(false);
 
-  // Load user
+  // Load user (only once) - Use cache to prevent race with Layout
   useEffect(() => {
+    if (userLoadAttempted.current) return;
+    userLoadAttempted.current = true;
+
     const loadUser = async () => {
       try {
-        const currentUser = await User.me();
+        // Use cachedRequest - Layout already called User.me(), so this will be cached
+        const currentUser = await cachedRequest('User', 'me', {}, () => User.me());
         setUser(currentUser);
         logger.info('User loaded successfully for Dashboard', 'Dashboard', { userId: currentUser?.email });
       } catch (error) {
@@ -72,26 +77,29 @@ export default function DashboardPage() {
         setUser(null);
       }
     };
-    loadUser();
-  }, [logger]);
+    
+    // Small delay to let Layout's User.me() populate cache first
+    const timer = setTimeout(loadUser, 50);
+    return () => clearTimeout(timer);
+  }, [cachedRequest, logger]);
 
-  // Load widget preferences
+  // Load widget preferences (only after user is loaded)
   useEffect(() => {
+    if (!user) return; // Guard: wait for user
+
     const loadUserPreferences = async () => {
       try {
-        if (user) {
-          const savedPrefs = user.permissions?.dashboard_widgets;
-          if (savedPrefs) {
-            setWidgetPreferences(savedPrefs);
-            logger.info('Loaded user widget preferences', 'Dashboard', { userId: user.email, preferences: savedPrefs });
-          } else {
-            const defaultPrefs = ALL_WIDGETS.reduce((acc, widget) => {
-              acc[widget.id] = widget.defaultVisibility;
-              return acc;
-            }, {});
-            setWidgetPreferences(defaultPrefs);
-            logger.info('Set default widget preferences for user', 'Dashboard', { userId: user.email, defaultPrefs });
-          }
+        const savedPrefs = user.permissions?.dashboard_widgets;
+        if (savedPrefs) {
+          setWidgetPreferences(savedPrefs);
+          logger.info('Loaded user widget preferences', 'Dashboard', { userId: user.email, preferences: savedPrefs });
+        } else {
+          const defaultPrefs = ALL_WIDGETS.reduce((acc, widget) => {
+            acc[widget.id] = widget.defaultVisibility;
+            return acc;
+          }, {});
+          setWidgetPreferences(defaultPrefs);
+          logger.info('Set default widget preferences for user', 'Dashboard', { userId: user.email, defaultPrefs });
         }
       } catch (error) {
         logger.error("Failed to load user preferences", 'Dashboard', { error: error.message, stack: error.stack, userId: user?.email });
@@ -135,32 +143,63 @@ export default function DashboardPage() {
     return filter;
   }, [user, selectedTenantId, showTestData, selectedEmail]);
 
-  // Load dashboard stats
+  // Load dashboard stats (only after user AND tenant are ready)
   useEffect(() => {
+    // Guard: wait for user to load first
+    if (!user) {
+      setLoading(true);
+      return;
+    }
+
     const loadStats = async () => {
-      if (!user) return;
-      
       setLoading(true);
       try {
+        // Inline tenant filter logic to avoid dependency issues
+        let tenantFilter = {};
+        
+        // Tenant filtering
+        if (user.role === 'superadmin' || user.role === 'admin') {
+          if (selectedTenantId) {
+            tenantFilter.tenant_id = selectedTenantId;
+          }
+        } else if (user.tenant_id) {
+          tenantFilter.tenant_id = user.tenant_id;
+        }
+        
+        // Employee scope filtering from context
+        if (selectedEmail && selectedEmail !== 'all') {
+          if (selectedEmail === 'unassigned') {
+            tenantFilter.$or = [{ assigned_to: null }, { assigned_to: '' }];
+          } else {
+            tenantFilter.assigned_to = selectedEmail;
+          }
+        } else if (user.employee_role === 'employee' && user.role !== 'admin' && user.role !== 'superadmin') {
+          // Regular employees only see their own data when no filter is selected
+          tenantFilter.assigned_to = user.email;
+        }
+        
+        // Test data filtering
+        if (!showTestData) {
+          tenantFilter.is_test_data = { $ne: true };
+        }
+
+        // Guard: ensure we have a valid tenant_id before loading data
+        if (!tenantFilter || !tenantFilter.tenant_id) {
+          logger.warning('Waiting for tenant context before loading dashboard data', 'Dashboard', {
+            userId: user.email,
+            selectedTenantId,
+            tenantFilter
+          });
+          setLoading(false);
+          return;
+        }
+
         logger.info('Loading dashboard data', 'Dashboard', {
           userId: user.email,
           selectedTenantId,
           selectedEmployeeEmail: selectedEmail,
           showTestData
         });
-
-        const tenantFilter = getTenantFilter();
-
-        if (!tenantFilter || !tenantFilter.tenant_id) {
-          logger.warning('No tenant context or invalid tenant filter for dashboard data load', 'Dashboard', {
-            userId: user.email,
-            selectedTenantId,
-            tenantFilter
-          });
-          setLoading(false);
-          // Potentially set an error state or message to the user
-          return;
-        }
         
         const [leads, contacts, opportunities, activities] = await Promise.all([
           cachedRequest('Lead', 'filter', { filter: tenantFilter }, () => Lead.filter(tenantFilter)),
@@ -229,7 +268,8 @@ export default function DashboardPage() {
     };
 
     loadStats();
-  }, [user, selectedTenantId, showTestData, selectedEmail, getTenantFilter, cachedRequest, logger]);
+  }, [user, selectedTenantId, showTestData, selectedEmail, cachedRequest, logger]);
+  // Removed getTenantFilter from dependencies - it's called inside the effect instead
 
   const handleRefresh = () => {
     logger.info('Dashboard refresh initiated', 'Dashboard', { userId: user?.email });

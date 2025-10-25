@@ -83,33 +83,49 @@ export const TenantProvider = ({ children }) => {
   const [selectedTenantId, setSelectedTenantIdState] = useState(null);
   const [lastSyncedTenantId, setLastSyncedTenantId] = useState(null);
   const persistenceAttempted = useRef(false);
+  const isSettingTenant = useRef(false); // Guard against rapid changes
 
   const setSelectedTenantId = useCallback((newTenantId) => {
-    const sanitized = newTenantId === null || newTenantId === undefined || newTenantId === '' 
-      ? null 
-      : String(newTenantId);
-
-    if (sanitized === selectedTenantId) {
+    // Guard against re-entrant calls
+    if (isSettingTenant.current) {
+      console.log('[TenantContext] Blocked re-entrant tenant change attempt');
       return;
     }
-
-    logTenantEvent('INFO', 'Tenant selection changed', {
-      from: selectedTenantId,
-      to: sanitized
-    });
-
-    setSelectedTenantIdState(sanitized);
-
+    
+    isSettingTenant.current = true;
+    
     try {
-      if (sanitized === null) {
-        localStorage.removeItem('selected_tenant_id');
-      } else {
-        localStorage.setItem('selected_tenant_id', sanitized);
+      const sanitized = newTenantId === null || newTenantId === undefined || newTenantId === '' 
+        ? null 
+        : String(newTenantId);
+
+      if (sanitized === selectedTenantId) {
+        return;
       }
-    } catch (error) {
-      logTenantEvent('ERROR', 'Failed to persist tenant selection', {
-        error: error.message
+
+      logTenantEvent('INFO', 'Tenant selection changed', {
+        from: selectedTenantId,
+        to: sanitized
       });
+
+      setSelectedTenantIdState(sanitized);
+
+      try {
+        if (sanitized === null) {
+          localStorage.removeItem('selected_tenant_id');
+        } else {
+          localStorage.setItem('selected_tenant_id', sanitized);
+        }
+      } catch (error) {
+        logTenantEvent('ERROR', 'Failed to persist tenant selection', {
+          error: error.message
+        });
+      }
+    } finally {
+      // Release guard after a short delay
+      setTimeout(() => {
+        isSettingTenant.current = false;
+      }, 50);
     }
   }, [selectedTenantId]); // Dependency on selectedTenantId ensures we compare against the *current* state
 
@@ -131,14 +147,22 @@ export const TenantProvider = ({ children }) => {
           logTenantEvent('WARNING', 'Invalid tenant ID format in localStorage', {
             savedValue: saved
           });
-          // Reset to a default tenant ID
-          const defaultTenantId = '68f84f58558dd2a4d4bdd545';
+          // Reset to local development tenant ID
+          const defaultTenantId = 'local-tenant-001';
           setSelectedTenantIdState(defaultTenantId);
           localStorage.setItem('selected_tenant_id', defaultTenantId);
-          logTenantEvent('INFO', 'Reset tenant ID to default', {
+          logTenantEvent('INFO', 'Reset tenant ID to local development default', {
             tenantId: defaultTenantId
           });
         }
+      } else {
+        // No tenant in localStorage - set local development default
+        const defaultTenantId = 'local-tenant-001';
+        setSelectedTenantIdState(defaultTenantId);
+        localStorage.setItem('selected_tenant_id', defaultTenantId);
+        logTenantEvent('INFO', 'Initialized tenant to local development default', {
+          tenantId: defaultTenantId
+        });
       }
     } catch (error) {
       logTenantEvent('ERROR', 'Failed to load tenant from storage', {
