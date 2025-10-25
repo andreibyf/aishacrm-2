@@ -1,19 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { SystemLog } from '@/api/entities';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useTenant } from '@/components/shared/tenantContext';
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Loader2, RefreshCw, Trash2, Search, Filter } from "lucide-react";
+import { Loader2, RefreshCw, Trash2, Search, PlusCircle } from "lucide-react";
 import { toast } from "sonner";
 
 const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
 
 export default function SystemLogsViewer() {
+  const { selectedTenantId } = useTenant();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [filterLevel, setFilterLevel] = useState('all');
   const [filterSource, setFilterSource] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -23,14 +26,27 @@ export default function SystemLogsViewer() {
     setLoading(true);
     try {
       // Try backend first (for local dev with Supabase Cloud)
-      const response = await fetch(`${BACKEND_URL}/api/system/logs?tenant_id=test-tenant&limit=200`);
-      
+      // Note: backend mounts this router at /api/system-logs (dash), not /api/system/logs
+      const tenantId = selectedTenantId || 'local-tenant-001';
+      const response = await fetch(`${BACKEND_URL}/api/system-logs?tenant_id=${encodeURIComponent(tenantId)}&limit=200`);
+
       if (!response.ok) {
         throw new Error('Backend not available, trying Base44...');
       }
-      
+
       const data = await response.json();
-      let allLogs = data.data || data;
+      // Backend returns { status: 'success', data: { 'system-logs': [...] } }
+      // Normalize to an array of logs for the UI.
+      let allLogs = [];
+      if (data && data.status === 'success' && data.data) {
+        if (Array.isArray(data.data['system-logs'])) {
+          allLogs = data.data['system-logs'];
+        } else if (Array.isArray(data.data)) {
+          allLogs = data.data;
+        }
+      } else if (Array.isArray(data)) {
+        allLogs = data;
+      }
       
       // If backend returns empty, try Base44 as fallback
       if (!allLogs || allLogs.length === 0) {
@@ -67,7 +83,7 @@ export default function SystemLogsViewer() {
     } finally {
       setLoading(false);
     }
-  }, [filterLevel, filterSource, searchTerm]);
+  }, [filterLevel, filterSource, searchTerm, selectedTenantId]);
 
   useEffect(() => {
     loadLogs();
@@ -80,17 +96,55 @@ export default function SystemLogsViewer() {
 
     setClearing(true);
     try {
-      // Delete all logs (you might want to add a backend function for this)
-      for (const log of logs) {
-        await SystemLog.delete(log.id);
+      // Prefer backend bulk delete for speed
+      const tenantId = selectedTenantId || 'local-tenant-001';
+      const levelQuery = filterLevel !== 'all' ? `&level=${encodeURIComponent(filterLevel)}` : '';
+      const resp = await fetch(`${BACKEND_URL}/api/system-logs?tenant_id=${encodeURIComponent(tenantId)}${levelQuery}` , {
+        method: 'DELETE'
+      });
+      if (!resp.ok) {
+        // Fallback: per-item delete via entity wrapper
+        for (const log of logs) {
+          await SystemLog.delete(log.id);
+        }
       }
-      toast.success('All logs cleared');
-      loadLogs();
+      toast.success('Logs cleared');
+      await loadLogs();
     } catch (error) {
       console.error('Failed to clear logs:', error);
       toast.error('Failed to clear logs');
     } finally {
       setClearing(false);
+    }
+  };
+
+  const handleAddTestLog = async () => {
+    const tenantId = selectedTenantId || 'local-tenant-001';
+    setCreating(true);
+    try {
+      const payload = {
+        tenant_id: tenantId,
+        level: filterLevel !== 'all' ? filterLevel : 'INFO',
+        source: filterSource !== 'all' ? filterSource : 'SystemLogsViewer',
+        message: `Test log created at ${new Date().toISOString()}`,
+        user_email: 'admin@test.com',
+        metadata: { ui: 'SystemLogsViewer', filterLevel, filterSource }
+      };
+      const resp = await fetch(`${BACKEND_URL}/api/system-logs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!resp.ok) {
+        throw new Error(`Failed to create test log: ${resp.status} ${resp.statusText}`);
+      }
+      toast.success('Test log added');
+      await loadLogs();
+    } catch (error) {
+      console.error('Failed to add test log:', error);
+      toast.error('Failed to add test log');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -161,6 +215,24 @@ export default function SystemLogsViewer() {
               className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            </Button>
+
+            <Button
+              onClick={handleAddTestLog}
+              disabled={creating || loading}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {creating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                <>
+                  <PlusCircle className="w-4 h-4 mr-2" />
+                  Add Test Log
+                </>
+              )}
             </Button>
 
             <Button

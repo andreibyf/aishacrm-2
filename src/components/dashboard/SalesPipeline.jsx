@@ -1,9 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Target, TrendingUp, AlertTriangle, Loader2 } from "lucide-react";
+import React, { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Target, AlertTriangle, Loader2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from "recharts";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useApiManager } from "@/components/shared/ApiManager";
 import { Opportunity } from "@/api/entities";
 import { Link } from "react-router-dom"; // Added import
@@ -33,7 +32,9 @@ export default function SalesPipeline(props) {
       (opps || []).forEach(opp => { // Ensure opps is an array
         if (stages[opp.stage]) {
           stages[opp.stage].count++;
-          stages[opp.stage].value += opp.amount || 0;
+          // Parse amount as float to handle string values from database
+          const amount = parseFloat(opp.amount) || 0;
+          stages[opp.stage].value += amount;
         }
       });
 

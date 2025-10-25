@@ -107,20 +107,33 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
       });
     }
 
-    // FIXED: Use the now-fixed imported utcToLocal function
+    // FIXED: Use the now-fixed imported utcToLocal function with safe parsing
     if (activity?.due_date && activity?.due_time) {
-      const datePart = activity.due_date.split('T')[0]; // Ensure only date part is used
-      const utcString = `${datePart}T${activity.due_time}:00.000Z`;
-      
-      const localDate = utcToLocal(utcString, offsetMinutes);
-      
-      initialData.due_date = localDate.toISOString().split('T')[0];
-      // A more reliable way to get HH:mm format
-      initialData.due_time = `${localDate.getHours().toString().padStart(2, '0')}:${localDate.getMinutes().toString().padStart(2, '0')}`;
-    } else if (activity?.due_date) {
-      initialData.due_date = activity.due_date.split('T')[0]; // Ensure only date part is used
+      try {
+        const datePart = activity.due_date.split('T')[0]; // Ensure only date part is used
+        const timePart = activity.due_time.includes(':') ? activity.due_time : `${activity.due_time}:00`;
+        const utcString = `${datePart}T${timePart}:00.000Z`;
+        
+        const localDate = utcToLocal(utcString, offsetMinutes);
+        
+        // Validate the date is valid
+        if (!isNaN(localDate.getTime())) {
+          initialData.due_date = localDate.toISOString().split('T')[0];
+          // A more reliable way to get HH:mm format
+          initialData.due_time = `${localDate.getHours().toString().padStart(2, '0')}:${localDate.getMinutes().toString().padStart(2, '0')}`;
+        }
+      } catch (error) {
+        console.warn('ActivityForm: Failed to parse due_date/due_time, using defaults:', error);
+        // Fall through to next conditions
+      }
+    }
+    
+    if (activity?.due_date && !initialData.due_date) {
+      // Fallback: extract date part safely
+      const dateStr = activity.due_date.includes('T') ? activity.due_date.split('T')[0] : activity.due_date;
+      initialData.due_date = dateStr;
       initialData.due_time = '';
-    } else if (!activity) {
+    } else if (!activity && !initialData.due_date) {
       initialData.due_date = new Date().toISOString().split('T')[0];
     }
     return initialData;
@@ -471,6 +484,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
         tenant_id: tenantId,
         due_date: processedData.due_date,
         due_time: processedData.due_time,
+        created_by: user?.email || user?.id || 'unknown'
       };
 
       if (processedData.type === 'scheduled_ai_call') {

@@ -1,9 +1,7 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
-  BarChart3, Bell, Book, Bot, Building2, Calendar, CheckSquare, CreditCard,
-  Database, DollarSign, FileDigit, FileSpreadsheet, FileText, FolderOpen,
-  Loader2, LogOut, Menu, Monitor, Moon, Palette, Puzzle, RotateCcw, Search,
-  Settings, Sun, Target, TrendingUp, Users, X, Brain, Briefcase, Wrench,
+  BarChart3, Building2, CheckSquare, Database, DollarSign,
+  FileDigit, FileSpreadsheet, Loader2, Target, TrendingUp, Brain,
   Download, ChevronDown
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -25,7 +23,6 @@ import { useTenant } from "../components/shared/tenantContext";
 import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
 import { useApiManager } from "../components/shared/ApiManager";
 import { toast } from "react-hot-toast";
-import { base44 } from "@/api/base44Client";
 
 import OverviewStats from "../components/reports/OverviewStats";
 import SalesAnalytics from "../components/reports/SalesAnalytics";

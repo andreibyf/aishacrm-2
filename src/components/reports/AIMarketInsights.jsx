@@ -21,7 +21,7 @@ import {
   CheckCircle,
   XCircle
 } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { InvokeLLM } from "@/api/integrations";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const INDUSTRY_LABELS = {
@@ -181,7 +181,7 @@ export default function AIMarketInsights({ tenant }) {
 
 Ensure the output is specific to ${locationContext} and the ${industryLabel} industry. Format perfectly as JSON according to the schema.`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
+  const response = await InvokeLLM({
         prompt,
         add_context_from_internet: true,
         response_json_schema: {
@@ -253,8 +253,10 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
       console.log('LLM Response:', response);
 
       // InvokeLLM returns data directly when response_json_schema is provided
-      if (response && typeof response === 'object') {
-        setInsights(response);
+      if (response && (response.data || typeof response === 'object')) {
+        // functions proxy returns { data: <payload> } in some cases; handle both shapes
+        const payload = response.data || response;
+        setInsights(payload);
       } else {
         setError("Failed to generate insights. Please try again.");
       }

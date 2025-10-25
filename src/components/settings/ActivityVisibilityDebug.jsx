@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Search, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { diagnoseActivityVisibility } from '@/api/functions';
 import { toast } from 'sonner';
 
 export default function ActivityVisibilityDebug() {
@@ -23,11 +23,8 @@ export default function ActivityVisibilityDebug() {
     setResult(null);
 
     try {
-      const response = await base44.functions.invoke('diagnoseActivityVisibility', {
-        activity_id: activityId.trim()
-      });
-
-      setResult(response.data);
+      const response = await diagnoseActivityVisibility({ activity_id: activityId.trim() });
+      setResult(response.data || response);
     } catch (error) {
       console.error('Diagnosis failed:', error);
       toast.error('Failed to diagnose: ' + error.message);

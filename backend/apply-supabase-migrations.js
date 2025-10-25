@@ -33,12 +33,11 @@ const client = new Client({
   }
 });
 
-const migrations = [
-  '001_init.sql',
-  '007_crud_enhancements.sql',
-  '003_create_apikey.sql',
-  '008_rls_policies.sql'
-];
+// Discover all .sql migrations and apply in lexical order
+const migrationsDir = path.join(__dirname, 'migrations');
+let migrations = fs.readdirSync(migrationsDir)
+  .filter(f => f.endsWith('.sql'))
+  .sort((a, b) => a.localeCompare(b));
 
 async function applyMigrations() {
   try {

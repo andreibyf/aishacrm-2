@@ -1,5 +1,4 @@
-import { User } from "@/api/entities";
-import { base44 } from "@/api/base44Client";
+import { User, Employee } from "@/api/entities";
 import { useTenant } from "../components/shared/tenantContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -89,9 +88,9 @@ export default function Employees() {
       
       let allEmployees;
       if (canSeeAll) {
-        allEmployees = await base44.entities.Employee.filter(filter, "-created_date");
+        allEmployees = await Employee.filter(filter, "-created_date");
       } else {
-        allEmployees = await base44.entities.Employee.filter({
+        allEmployees = await Employee.filter({
           ...filter,
           $or: [
             { created_by: currentUser.email },
@@ -144,7 +143,7 @@ export default function Employees() {
   const handleDeleteFromPanel = async (id) => {
     if (confirm("Are you sure you want to delete this employee?")) {
       try {
-        await base44.entities.Employee.delete(id);
+        await Employee.delete(id);
         toast.success("Employee deleted successfully.");
         if (selectedEmployee && selectedEmployee.id === id) {
           setIsDetailPanelOpen(false);
@@ -240,7 +239,7 @@ export default function Employees() {
       </Dialog>
       
       <CsvImportDialog
-        entity={base44.entities.Employee}
+        entity={Employee}
         schema={{
           name: "Employee",
           type: "object",
@@ -298,7 +297,7 @@ export default function Employees() {
         onDone={async (res) => {
           if (res?.mode === 'direct_invite' && inviteEmployee?.id && inviteEmployee?.email) {
             try {
-              await base44.entities.Employee.update(inviteEmployee.id, { user_email: inviteEmployee.email });
+              await Employee.update(inviteEmployee.id, { user_email: inviteEmployee.email });
               await loadEmployees();
             } catch (e) {
               console.warn('Could not link user_email after inviting:', e?.message);
@@ -445,8 +444,8 @@ export default function Employees() {
                                     return;
                                   }
                                   
-                                  try {
-                                    await base44.entities.Employee.delete(employee.id);
+                                      try {
+                                        await Employee.delete(employee.id);
                                     toast.success('Employee deleted');
                                     
                                     if (selectedEmployee?.id === employee.id) {
@@ -479,7 +478,7 @@ export default function Employees() {
                                     console.error("Final dropdown delete error:", msg);
                                     toast.error(msg);
                                   }
-                                }}
+                                    }}
                                 className="text-red-400 hover:bg-slate-700 focus:bg-slate-700 focus:text-red-400"
                               >
                                 <Trash2 className="w-4 h-4 mr-2" />

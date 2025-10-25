@@ -12,6 +12,7 @@ import {
   DollarSign, Calendar, Building, Tag, Wand2, ArrowRight
 } from "lucide-react";
 import { format } from "date-fns";
+import { processReceiptForCashFlow } from "@/api/functions";
 
 export default function ReceiptSelector({ onReceiptSelected, onCancel }) {
   const [receipts, setReceipts] = useState([]);
@@ -50,12 +51,9 @@ export default function ReceiptSelector({ onReceiptSelected, onCancel }) {
     setProcessing(receipt.id);
     
     try {
-      const { base44 } = await import('@/api/base44Client');
-      const response = await base44.functions.invoke('processReceiptForCashFlow', { 
-        receipt_id: receipt.id 
-      });
+      const response = await processReceiptForCashFlow({ receipt_id: receipt.id });
       
-      if (response.data && response.data.success && response.data.transaction_data) {
+      if (response?.data && response.data.success && response.data.transaction_data) {
         const rawData = response.data.transaction_data;
         
         // CRITICAL: Serialize and deserialize to strip prototype chain

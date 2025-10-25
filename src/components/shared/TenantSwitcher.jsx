@@ -33,7 +33,10 @@ export default function TenantSwitcher({ user }) {
       
       // CRITICAL: Validate current selectedTenantId is in the list
       if (selectedTenantId && validTenantsData.length > 0) {
-        const tenantExists = validTenantsData.find(t => t.id === selectedTenantId);
+        // Check both UUID id and TEXT tenant_id fields
+        const tenantExists = validTenantsData.find(t => 
+          t.id === selectedTenantId || t.tenant_id === selectedTenantId
+        );
         if (!tenantExists) {
           console.warn('TenantSwitcher: Current selected tenant not in list, clearing selection:', selectedTenantId);
           setSelectedTenantId(null);
@@ -73,7 +76,10 @@ export default function TenantSwitcher({ user }) {
       if (tenantId && tenantId !== 'null') {
         // Ensure tenants is an array before using find
         const tenantsArray = Array.isArray(tenants) ? tenants : [];
-        const tenantExists = tenantsArray.find(t => t?.id === tenantId);
+        // Check both UUID id and TEXT tenant_id fields
+        const tenantExists = tenantsArray.find(t => 
+          t?.id === tenantId || t?.tenant_id === tenantId
+        );
         if (!tenantExists) {
           console.error('TenantSwitcher: Attempted to switch to non-existent tenant:', tenantId);
           toast.error('Selected client does not exist.');

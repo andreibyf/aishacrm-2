@@ -1,6 +1,7 @@
 
-import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { useState, useEffect } from "react";
+import { ClientRequirement } from "@/api/entities";
+import { approveClientRequirement } from "@/api/functions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +33,8 @@ export default function ClientRequirements() {
   const loadRequirements = async () => {
     setLoading(true);
     try {
-      const reqs = await base44.entities.ClientRequirement.list('-created_date');
+  // Use ClientRequirement wrapper which falls back to local backend in dev mode
+  const reqs = await ClientRequirement.list(null, '-created_date');
       setRequirements(reqs || []);
     } catch (error) {
       console.error('Failed to load requirements:', error);
@@ -47,8 +49,8 @@ export default function ClientRequirements() {
     
     setIsApproving(true);
     try {
-      // USE BASE44 SDK INSTEAD OF RAW FETCH
-      const result = await base44.functions.invoke('approveClientRequirement', {
+      // Call the function proxy which will use local fallback in dev mode
+      const result = await approveClientRequirement({
         requirement_id: selectedRequirement.id,
         admin_notes: adminNotes
       });
@@ -85,7 +87,7 @@ export default function ClientRequirements() {
     if (!selectedRequirement) return;
     
     try {
-      await base44.entities.ClientRequirement.update(selectedRequirement.id, {
+      await ClientRequirement.update(selectedRequirement.id, {
         status: 'rejected',
         admin_notes: adminNotes
       });
@@ -241,7 +243,7 @@ export default function ClientRequirements() {
                 <h3 className="text-sm font-medium text-slate-400 mb-2">Selected Modules</h3>
                 <div className="flex flex-wrap gap-2">
                   {Object.entries(selectedRequirement.selected_modules || {})
-                    .filter(([_, value]) => value === true)
+                    .filter(([, value]) => value === true)
                     .map(([key]) => (
                       <Badge key={key} className="bg-blue-900/20 text-blue-300">
                         {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}

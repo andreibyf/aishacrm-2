@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<config>
+    <source_groups>
+        <source_group_78d35ed9-db69-4f0f-b84b-26a1a7b8faa8>
+            <custom_command>%{SOURCE_FILE_PATH}</custom_command>
+            <name>Custom Command Source Group</name>
+            <run_in_parallel>0</run_in_parallel>
+            <source_paths>
+                <source_path>src/functions</source_path>
+                <source_path>src/entities</source_path>
+                <source_path>src/components</source_path>
+            </source_paths>
+            <status>enabled</status>
+            <type>Custom Command Source Group</type>
+        </source_group_78d35ed9-db69-4f0f-b84b-26a1a7b8faa8>
+    </source_groups>
+    <version>8</version>
+</config>

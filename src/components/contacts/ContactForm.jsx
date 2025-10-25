@@ -284,10 +284,10 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
     const loadExistingTags = async () => {
       console.log('[ContactForm] Starting to load tags...');
       try {
-        console.log('[ContactForm] Fetching contacts and leads for tags...');
+        console.log('[ContactForm] Fetching contacts and leads for tags with tenant:', selectedTenantId);
         const [contactsData, leadsData] = await Promise.all([
-          cachedRequest('Contact', 'list', { limit: 100 }, () => Contact.list()),
-          cachedRequest('Lead', 'list', { limit: 100 }, () => Lead?.list() || []),
+          cachedRequest('Contact', 'list', { limit: 100, tenant_id: selectedTenantId }, () => Contact.list({ tenant_id: selectedTenantId }, null, 100)),
+          cachedRequest('Lead', 'list', { limit: 100, tenant_id: selectedTenantId }, () => Lead?.list({ tenant_id: selectedTenantId }, null, 100) || []),
         ]);
 
         console.log('[ContactForm] Contacts fetched:', contactsData?.length);
@@ -325,7 +325,7 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
     } else {
       console.log('[ContactForm] Waiting for user to load tags...');
     }
-  }, [user, cachedRequest, logError]);
+  }, [user, selectedTenantId, cachedRequest, logError]);
 
   const handleChange = (field, value) => {
     console.log('[ContactForm] Field changed:', field, value);
