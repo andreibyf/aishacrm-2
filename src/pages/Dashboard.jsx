@@ -213,7 +213,10 @@ export default function DashboardPage() {
           o.stage !== 'closed_won' && o.stage !== 'closed_lost'
         ) || [];
         
-        const pipelineValue = activeOpps.reduce((sum, opp) => sum + (opp.amount || 0), 0);
+        const pipelineValue = activeOpps.reduce((sum, opp) => {
+          const amount = parseFloat(opp.amount) || 0;
+          return sum + amount;
+        }, 0);
 
         // Get new leads from last 30 days
         const thirtyDaysAgo = new Date();

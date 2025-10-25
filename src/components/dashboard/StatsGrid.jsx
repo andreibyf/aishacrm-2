@@ -34,7 +34,9 @@ export default function StatsGrid({ stats }) {
     },
     {
       title: "Pipeline Value",
-      value: stats?.pipelineValue ? `$${(stats.pipelineValue / 1000).toFixed(0)}K` : "$0",
+      value: typeof stats?.pipelineValue === 'number' 
+        ? `$${(stats.pipelineValue / 1000).toFixed(0)}K` 
+        : "$0",
       icon: DollarSign,
       color: "emerald",
       ringColor: "ring-emerald-500",
