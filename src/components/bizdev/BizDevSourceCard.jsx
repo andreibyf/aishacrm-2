@@ -1,4 +1,3 @@
-import React from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +11,7 @@ import {
   Pencil,
 } from "lucide-react";
 
-export default function BizDevSourceCard({ source, onEdit, onDelete, onViewDetails, onClick, isSelected, onSelect }) {
+export default function BizDevSourceCard({ source, onEdit, onClick, isSelected, onSelect }) {
   const getStatusColor = (status) => {
     switch (status) {
       case "Active":

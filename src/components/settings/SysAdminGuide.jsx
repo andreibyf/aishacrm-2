@@ -1,4 +1,3 @@
-import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Book, Cog, Shield, Users, Database, Lock } from "lucide-react";
@@ -46,7 +45,7 @@ export default function SysAdminGuide() {
                   </ul>
                   <div className="bg-yellow-900/20 border border-yellow-700/50 rounded p-2 mt-2">
                     <p className="text-yellow-300 text-xs">
-                      <strong>Important:</strong> The Base44 platform role cannot be "Power User" or "Superadmin" - these do not exist in Base44. Only <code>admin</code> and <code>user</code> are valid.
+                                            <strong>Important:</strong> The Base44 platform role cannot be &quot;Power User&quot; or &quot;Superadmin&quot; - these do not exist in Base44. Only <code>admin</code> and <code>user</code> are valid roles.
                     </p>
                   </div>
                 </div>
@@ -106,10 +105,10 @@ export default function SysAdminGuide() {
             </p>
             <ol className="list-decimal list-inside space-y-2">
               <li>Navigate to <strong>Settings &gt; User Management</strong></li>
-              <li>Click <strong>"Invite User"</strong></li>
+              <li>Click <strong>&quot;Invite User&quot;</strong></li>
               <li>Fill in:
                 <ul className="list-disc list-inside ml-6 mt-1">
-                  <li><strong>Email:</strong> The user's work email (used for login)</li>
+                  <li><strong>Email:</strong> The user&apos;s work email (used for login)</li>
                   <li><strong>Full Name:</strong> Display name</li>
                   <li><strong>Client:</strong> Assign them to a tenant organization</li>
                   <li><strong>Employee Role:</strong> Choose <code>Manager</code> or <code>Employee</code></li>
@@ -125,7 +124,7 @@ export default function SysAdminGuide() {
 
             <h3 className="text-slate-200 text-lg font-medium mt-6">2.2 Editing User Permissions</h3>
             <p>
-              To modify an existing user's access:
+              To modify an existing user&apos;s access:
             </p>
             <ol className="list-decimal list-inside space-y-2">
               <li>Go to <strong>Settings &gt; User Management</strong></li>
@@ -143,11 +142,11 @@ export default function SysAdminGuide() {
 
             <h3 className="text-slate-200 text-lg font-medium mt-6">2.3 Deactivating Users</h3>
             <p>
-              To temporarily disable a user's access without deleting their account:
+              To temporarily disable a user&apos;s access without deleting their account:
             </p>
             <ol className="list-decimal list-inside space-y-2">
               <li>Edit the user in <strong>User Management</strong></li>
-              <li>Toggle <strong>"Active"</strong> to OFF</li>
+              <li>Toggle <strong>&quot;Active&quot;</strong> to OFF</li>
               <li>The user will no longer be able to log in, but their data and history remain intact</li>
             </ol>
 
@@ -162,7 +161,7 @@ export default function SysAdminGuide() {
             </p>
             <ol className="list-decimal list-inside space-y-2">
               <li>Navigate to <strong>Settings &gt; Client Management</strong> (admins only)</li>
-              <li>Click <strong>"Add Client"</strong></li>
+              <li>Click <strong>&quot;Add Client&quot;</strong></li>
               <li>Provide:
                 <ul className="list-disc list-inside ml-6 mt-1">
                   <li>Client Name</li>
@@ -190,10 +189,10 @@ export default function SysAdminGuide() {
             
             <ul className="list-disc list-inside space-y-2">
               <li><strong>Principle of Least Privilege:</strong> Assign users the minimum role needed for their job. Most users should be <code>employee</code>, not <code>manager</code>.</li>
-              <li><strong>Regular Access Reviews:</strong> Periodically review user permissions in Settings &gt; User Management to ensure they're still appropriate.</li>
+              <li><strong>Regular Access Reviews:</strong> Periodically review user permissions in Settings &gt; User Management to ensure they&apos;re still appropriate.</li>
               <li><strong>Audit Logging:</strong> Check Settings &gt; Diagnostics &gt; QA Test Runner and monitor the Audit Log for unusual activity.</li>
               <li><strong>Tenant Isolation:</strong> Never assign users to multiple tenants unless they genuinely need cross-client access (rare).</li>
-              <li><strong>Deactivate, Don't Delete:</strong> When users leave, deactivate their accounts instead of deleting them to preserve data integrity and audit trails.</li>
+              <li><strong>Deactivate, Don&apos;t Delete:</strong> When users leave, deactivate their accounts instead of deleting them to preserve data integrity and audit trails.</li>
             </ul>
 
             <h2 className="text-slate-100 text-xl font-semibold mt-8">5. Common Administrative Tasks</h2>

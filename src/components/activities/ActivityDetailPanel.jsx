@@ -1,18 +1,16 @@
 
-import React, { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { AlertCircle, Calendar, Clock, User, MapPin, Phone, ChevronDown, ChevronUp, Edit, Trash2 } from 'lucide-react';
+import { AlertCircle, Calendar, User, MapPin, Phone, ChevronDown, ChevronUp, Edit, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { utcToLocal, getCurrentTimezoneOffset, getTimezoneDisplayName, formatActivityDateTime } from '../shared/timezoneUtils';
+import { getCurrentTimezoneOffset, getTimezoneDisplayName, formatActivityDateTime } from '../shared/timezoneUtils';
 import { useTimezone } from '../shared/TimezoneContext';
 
-const ActivityDetailPanel = ({ activity, assignedUserName, relatedRecordInfo, open, onOpenChange, onEdit, onDelete, user, onStatusChange, onAddNote }) => {
+const ActivityDetailPanel = ({ activity, assignedUserName, relatedRecordInfo, open, onOpenChange, onEdit, onDelete, onAddNote }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [newNote, setNewNote] = useState('');
   const { selectedTimezone } = useTimezone();

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,6 @@ import {
   Upload, Camera, FileImage, Loader2, CheckCircle, AlertCircle, 
   DollarSign, Calendar, Building, Tag, Wand2 
 } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { UploadFile } from "@/api/integrations";
 import { ExtractDataFromUploadedFile } from "@/api/integrations";
@@ -221,7 +220,7 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
           <Alert className="bg-blue-50 border-blue-200">
             <Wand2 className="w-4 h-4 text-blue-600" />
             <AlertDescription className="text-blue-800">
-              <strong>AI Suggestion:</strong> Categorized as "{aiSuggestions?.category?.replace(/_/g, ' ')}" 
+              <strong>AI Suggestion:</strong> Categorized as &quot;{aiSuggestions?.category?.replace(/_/g, ' ')}&quot; 
               with {Math.round(aiSuggestions?.confidence || 0)}% confidence. {aiSuggestions?.reasoning}
             </AlertDescription>
           </Alert>

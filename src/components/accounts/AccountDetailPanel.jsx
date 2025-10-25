@@ -1,4 +1,3 @@
-import React from "react";
 import UniversalDetailPanel from "../shared/UniversalDetailPanel";
 
 export default function AccountDetailPanel({
@@ -8,7 +7,6 @@ export default function AccountDetailPanel({
   onOpenChange,
   onEdit,
   onDelete,
-  onRefresh,
   user
 }) {
   if (!account) {

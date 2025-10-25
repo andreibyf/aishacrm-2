@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import { useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,6 @@ import {
   Pause,
   Bot,
   Users,
-  Phone,
   CheckCircle,
   XCircle,
   Clock,
@@ -39,8 +38,7 @@ export default function AICampaignDetailPanel({
   onOpenChange, 
   onEdit, 
   onDelete, 
-  onStatusChange,
-  user 
+  onStatusChange
 }) {
   const [activeTab, setActiveTab] = useState("overview");
 

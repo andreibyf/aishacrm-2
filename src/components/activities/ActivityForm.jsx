@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Activity } from '@/api/entities';
 import { Contact, Account, Lead, Opportunity, User } from '@/api/entities';
 import { Note } from "@/api/entities"; // NEW: Import Note entity
@@ -11,14 +11,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
-import { Calendar as CalendarIcon, Bot, Mail, Phone, Clock, BrainCircuit, X, Save, Loader2, FileText } from "lucide-react"; // NEW: Add FileText icon
+import { Calendar as CalendarIcon, Mail, Phone, Loader2, FileText } from "lucide-react"; // NEW: Add FileText icon
 import { toast } from "sonner";
-
-import { motion } from 'framer-motion';
 
 // Helper to generate time options with 15-minute increments
 const generateTimeOptions = () => {
@@ -44,11 +40,9 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
   const [leads, setLeads] = useState([]);
   const [opportunities, setOpportunities] = useState([]);
   const [relatedRecords, setRelatedRecords] = useState([]);
-  const [selectedRelatedRecord, setSelectedRelatedRecord] = useState(null);
 
   // NEW: User state and loading for admin check
   const [user, setUser] = useState(null);
-  const [loadingUser, setLoadingUser] = useState(true); // Renamed to avoid conflict with loadingNotes
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
   // NEW: State for notes section

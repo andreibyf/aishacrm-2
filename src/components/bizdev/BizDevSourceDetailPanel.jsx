@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,14 +14,10 @@ import {
   FileText,
   TrendingUp,
   AlertCircle,
-  CheckCircle2,
-  Clock,
   Pencil,
   Archive,
   Loader2,
   ExternalLink,
-  Plus,
-  Calendar,
   Target,
   Users,
   CheckCircle,
@@ -38,11 +34,8 @@ import { Lead } from "@/api/entities";
 
 export default function BizDevSourceDetailPanel({ 
   bizDevSource, 
-  accounts, 
   onClose, 
   onEdit, 
-  onDelete,
-  onArchive, 
   onPromote, 
   onUpdate, 
   onRefresh 
@@ -185,7 +178,6 @@ export default function BizDevSourceDetailPanel({
   const isPromoted = currentSource.status === 'Promoted';
   const isArchived = currentSource.status === 'Archived';
   const canPromote = !isPromoted && !isArchived;
-  const hasAccountLinked = Boolean(currentSource.account_id);
 
 
   const handleCreateOpportunity = async () => {

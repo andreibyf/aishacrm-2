@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { cronJobRunner } from '@/api/functions';
 import { User } from '@/api/entities';
 import { useErrorLog, handleApiError, createError } from './ErrorLogger';

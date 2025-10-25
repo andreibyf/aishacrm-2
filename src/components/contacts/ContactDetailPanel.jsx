@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import { useState } from 'react';
 import UniversalDetailPanel from "../shared/UniversalDetailPanel";
 import { Star, Phone, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,6 @@ export default function ContactDetailPanel({
       toast.error("No phone number available for this contact");
       return;
     }
-    const phone = contact.phone || contact.mobile;
     setCallPrompt(`Call ${contact.first_name} ${contact.last_name} from ${accountName || contact.account_name || 'their company'} for a follow-up conversation.`);
     setShowCallDialog(true);
   };

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Clock, TrendingDown, AlertTriangle, User, Calendar as CalendarIcon } from "lucide-react";
+import { Clock, TrendingDown, AlertTriangle, User } from "lucide-react";
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "react-router-dom";
@@ -105,7 +105,7 @@ export default function LeadAgeReport(props) {
 
     load();
     return () => { mounted = false; };
-  }, [props?.tenantFilter, props?.leadsData, props?.employeesData, cachedRequest]);
+  }, [props, cachedRequest]);
 
   // Calculate age distribution
   useEffect(() => {

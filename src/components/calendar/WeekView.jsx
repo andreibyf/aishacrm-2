@@ -1,5 +1,4 @@
 
-import React from "react";
 import { format, startOfWeek, addDays, isToday } from "date-fns";
 
 // Matching the stat card colors - semi-transparent backgrounds

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ArchiveIndex } from "@/api/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,6 @@ import {
 import {
   Archive,
   Search,
-  Download,
   RotateCcw,
   Loader2,
   X,
@@ -44,11 +43,7 @@ export default function ArchiveIndexViewer({ tenantId, onClose, onRetrieved }) {
   const [batchFilter, setBatchFilter] = useState("all");
   const [formatFilter, setFormatFilter] = useState("all");
 
-  useEffect(() => {
-    loadArchives();
-  }, [tenantId]);
-
-  const loadArchives = async () => {
+  const loadArchives = useCallback(async () => {
     if (!tenantId) return;
 
     setLoading(true);
@@ -66,7 +61,11 @@ export default function ArchiveIndexViewer({ tenantId, onClose, onRetrieved }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [tenantId]);
+
+  useEffect(() => {
+    loadArchives();
+  }, [loadArchives]);
 
   const handleRetrieveClick = (archive) => {
     setSelectedArchive(archive);

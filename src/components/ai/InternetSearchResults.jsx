@@ -1,5 +1,4 @@
 
-import React from "react";
 import { Globe, ExternalLink, Building2, User, Link as LinkIcon, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 

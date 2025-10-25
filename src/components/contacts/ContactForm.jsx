@@ -1,12 +1,11 @@
 
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { X, Save, AlertCircle, AlertTriangle, Loader2 } from "lucide-react";
-import { motion } from "framer-motion";
 import PhoneInput from "../shared/PhoneInput";
 import AddressFields from "../shared/AddressFields";
 import { User, Contact, Lead } from "@/api/entities";
@@ -125,7 +124,6 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [submitProgress, setSubmitProgress] = useState("");
-  const [loading, setLoading] = useState(false); // This seems unused, consider removing
   const { selectedTenantId } = useTenant();
   const [allTags, setAllTags] = useState([]);
   const [showCreateAccount, setShowCreateAccount] = useState(false);

@@ -1,9 +1,8 @@
 
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Brain, MessageSquare, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import CommandPalette from './CommandPalette';
 import { User } from "@/api/entities";
 import { Tenant } from "@/api/entities";
 import { useTenant } from "../shared/tenantContext";
@@ -16,7 +15,7 @@ export default function FloatingAIWidget() {
   const [logoUrl, setLogoUrl] = useState(null);
   const [status, setStatus] = useState("checking");
 
-  React.useEffect(() => {
+  useEffect(() => {
     let mounted = true;
     const fallbackLogo = "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68ad592dcffacef630b477d2/bc12c2284_Ai-SHA-logo-3.png";
 

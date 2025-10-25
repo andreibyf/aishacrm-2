@@ -1,12 +1,11 @@
-import React from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Phone, Mail, Edit, Trash2, Briefcase, Building2, MapPin, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Mail, Phone, Building2, Edit, Trash2, MapPin, Briefcase, Eye } from "lucide-react";
 import PhoneDisplay from "../shared/PhoneDisplay";
 import StatusHelper from "../shared/StatusHelper";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // Matching the stat card colors - semi-transparent backgrounds
 const statusColors = {

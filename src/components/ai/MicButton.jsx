@@ -2,7 +2,7 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Mic, MicOff } from "lucide-react";
 
-export default function MicButton({ onResult, onSilence, className = "" }) {
+export default function MicButton({ className = "" }) {
   const [supported, setSupported] = React.useState(false);
   const [listening, setListening] = React.useState(false);
 

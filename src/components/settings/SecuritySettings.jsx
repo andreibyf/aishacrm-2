@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Shield, CheckCircle2, AlertCircle, Lock } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function SecuritySettings() {
-  const [endpoints, setEndpoints] = useState([
+  const [endpoints] = useState([
     { path: '/api/entities', method: 'ALL', protected: true, auth: 'Row-Level Security' },
     { path: '/api/functions', method: 'POST', protected: true, auth: 'User Token' },
     { path: '/api/webhooks', method: 'POST', protected: true, auth: 'API Key Header' },
@@ -16,7 +16,7 @@ export default function SecuritySettings() {
       <Alert className="bg-blue-900/30 border-blue-700/50">
         <Shield className="h-4 w-4 text-blue-400" />
         <AlertDescription className="text-blue-300">
-          All API endpoints are protected by Base44's built-in authentication and RLS (Row-Level Security) policies.
+          All API endpoints are protected by Base44&apos;s built-in authentication and RLS (Row-Level Security) policies.
         </AlertDescription>
       </Alert>
 

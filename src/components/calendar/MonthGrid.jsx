@@ -1,5 +1,4 @@
 
-import React from "react";
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, isSameMonth, isToday } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 

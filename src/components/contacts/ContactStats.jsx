@@ -1,6 +1,4 @@
-import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Users, UserCheck, UserX, TrendingUp } from "lucide-react";
 import StatusHelper from "../shared/StatusHelper";
 
 export default function ContactStats({ stats }) {

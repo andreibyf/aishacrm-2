@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -102,7 +102,7 @@ export default function BulkDeleteDialog({ sources, onClose, onComplete }) {
               <p className="font-semibold mb-1">Permanent Deletion</p>
               <p className="text-sm">
                 This action cannot be undone. All selected records will be permanently deleted from the database.
-                Consider using "Archive" instead if you want to preserve the data.
+                Consider using &quot;Archive&quot; instead if you want to preserve the data.
               </p>
             </AlertDescription>
           </Alert>

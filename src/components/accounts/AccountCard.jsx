@@ -1,4 +1,3 @@
-import React from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,7 +5,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Mail,
   Phone,
-  Building2,
   Edit,
   Trash2,
   MapPin,

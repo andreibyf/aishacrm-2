@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useRef, useCallback } from 'react';
+import { createContext, useContext, useRef, useCallback } from 'react';
 
 const ApiOptimizerContext = createContext(null);
 
@@ -6,6 +6,29 @@ export const ApiOptimizerProvider = ({ children }) => {
   const requestQueueRef = useRef([]);
   const processingRef = useRef(false);
   const batchTimeoutRef = useRef(null);
+
+  const processQueue = useCallback(async () => {
+    if (processingRef.current || requestQueueRef.current.length === 0) {
+      return;
+    }
+
+    processingRef.current = true;
+    const batch = requestQueueRef.current.splice(0, 5); // Process up to 5 requests at a time
+    
+    const processItem = async (item) => {
+      try {
+        const { request, resolve } = item;
+        const result = await request();
+        resolve(result);
+      } catch (error) {
+        item.reject(error);
+      }
+    };
+
+    await Promise.all(batch.map(processItem));
+
+    processingRef.current = false;
+  }, []);
 
   const queueRequest = useCallback((request) => {
     return new Promise((resolve, reject) => {
@@ -19,43 +42,11 @@ export const ApiOptimizerProvider = ({ children }) => {
         processQueue();
       }, 50);
     });
-  }, []);
-
-  const processQueue = useCallback(async () => {
-    if (processingRef.current || requestQueueRef.current.length === 0) {
-      return;
-    }
-
-    processingRef.current = true;
-    const batch = requestQueueRef.current.splice(0, 5);
-
-    for (const { request, resolve, reject } of batch) {
-      try {
-        const result = await request();
-        resolve(result);
-      } catch (error) {
-        reject(error);
-      }
-    }
-
-    processingRef.current = false;
-
-    if (requestQueueRef.current.length > 0) {
-      setTimeout(processQueue, 100);
-    }
-  }, []);
+  }, [processQueue]);
 
   return (
     <ApiOptimizerContext.Provider value={{ queueRequest }}>
       {children}
     </ApiOptimizerContext.Provider>
   );
-};
-
-export const useApiOptimizer = () => {
-  const context = useContext(ApiOptimizerContext);
-  if (!context) {
-    return { queueRequest: (req) => req() };
-  }
-  return context;
 };
