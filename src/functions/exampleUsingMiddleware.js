@@ -1,6 +1,7 @@
 /**
  * exampleUsingMiddleware
  * Server-side function for your backend
+ * UPDATED: Now uses backend adapter instead of Base44 SDK
  */
 
 /**
@@ -8,7 +9,6 @@
  * This is a working example you can copy and modify
  */
 
-import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
 import {
   authenticateUser,
   requireRole,
@@ -20,7 +20,7 @@ import {
 Deno.serve(async (req) => {
   try {
     // Step 1: Authenticate the user
-    const { user, base44, error: authError } = await authenticateUser(req);
+    const { user, client, error: authError } = await authenticateUser(req);
     if (authError) return authError;
 
     // Step 2: Check if user has required role (optional)
@@ -31,8 +31,8 @@ Deno.serve(async (req) => {
     const { data, error: parseError } = await parseJsonBody(req);
     if (parseError) return parseError;
 
-    // Step 4: Your business logic here
-    const leads = await base44.entities.Lead.filter({
+    // Step 4: Your business logic here - using backend adapter client
+    const leads = await client.entities.Lead.filter({
       tenant_id: user.tenant_id,
       status: data.status || 'new',
     });
@@ -48,7 +48,5 @@ Deno.serve(async (req) => {
     return errorResponse('Internal server error', 500, error.message);
   }
 });
-
-----------------------------
 
 export default exampleUsingMiddleware;
