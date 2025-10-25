@@ -29,6 +29,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import BulkActionsMenu from "../components/leads/BulkActionsMenu";
 import StatusHelper from "../components/shared/StatusHelper";
 import { loadUsersSafely } from "../components/shared/userLoader";
+import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 
 // Helper function for delays
 const delay = (ms) => new Promise(res => setTimeout(res, ms));
@@ -54,6 +55,7 @@ export default function LeadsPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
   const [convertingLead, setConvertingLead] = useState(null);
+  const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
   const [isConversionDialogOpen, setIsConversionDialogOpen] = useState(false);
   const [showTestData, setShowTestData] = useState(false);
 
@@ -425,25 +427,48 @@ export default function LeadsPage() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this lead?")) return;
+    const confirmed = await confirm({
+      title: "Delete lead?",
+      description: "This action cannot be undone.",
+      variant: "destructive",
+      confirmText: "Delete",
+      cancelText: "Cancel"
+    });
+    if (!confirmed) return;
 
     try {
       await Lead.delete(id);
+      // Optimistically update UI
+      setLeads(prev => prev.filter(l => l.id !== id));
+      setTotalItems(prev => (prev > 0 ? prev - 1 : 0));
+      toast.success("Lead deleted successfully");
+      
+      // Small delay to let optimistic update settle
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       clearCache('Lead');
       await Promise.all([
         loadLeads(currentPage, pageSize),
         loadTotalStats()
       ]);
-      toast.success("Lead deleted successfully");
     } catch (error) {
       console.error("Failed to delete lead:", error);
       toast.error("Failed to delete lead");
+      // Reload on error to ensure consistency
+      await loadLeads(currentPage, pageSize);
     }
   };
 
   const handleBulkDelete = async () => {
     if (selectAllMode) {
-      if (!window.confirm(`Delete ALL ${totalItems} lead(s) matching current filters? This cannot be undone! `)) return;
+      const confirmed = await confirm({
+        title: "Delete all leads?",
+        description: `Delete ALL ${totalItems} lead(s) matching current filters? This cannot be undone!`,
+        variant: "destructive",
+        confirmText: "Delete All",
+        cancelText: "Cancel"
+      });
+      if (!confirmed) return;
 
       try {
         let currentFilter = getTenantFilter();
@@ -510,7 +535,14 @@ export default function LeadsPage() {
         return;
       }
 
-      if (!window.confirm(`Delete ${selectedLeads.size} lead(s)?`)) return;
+      const confirmed = await confirm({
+        title: "Delete selected leads?",
+        description: `Delete ${selectedLeads.size} lead(s)?`,
+        variant: "destructive",
+        confirmText: "Delete",
+        cancelText: "Cancel"
+      });
+      if (!confirmed) return;
 
       try {
         await Promise.all([...selectedLeads].map(id => Lead.delete(id)));
@@ -530,7 +562,14 @@ export default function LeadsPage() {
 
   const handleBulkStatusChange = async (newStatus) => {
     if (selectAllMode) {
-      if (!window.confirm(`Update status for ALL ${totalItems} lead(s) matching current filters to ${newStatus}?`)) return;
+      const confirmed = await confirm({
+        title: "Update all leads?",
+        description: `Update status for ALL ${totalItems} lead(s) matching current filters to ${newStatus}?`,
+        variant: "default",
+        confirmText: "Update All",
+        cancelText: "Cancel"
+      });
+      if (!confirmed) return;
 
       try {
         let currentFilter = getTenantFilter();
@@ -619,7 +658,14 @@ export default function LeadsPage() {
 
   const handleBulkAssign = async (assignedTo) => {
     if (selectAllMode) {
-      if (!window.confirm(`Assign ALL ${totalItems} lead(s) matching current filters?`)) return;
+      const confirmed = await confirm({
+        title: "Assign all leads?",
+        description: `Assign ALL ${totalItems} lead(s) matching current filters?`,
+        variant: "default",
+        confirmText: "Assign All",
+        cancelText: "Cancel"
+      });
+      if (!confirmed) return;
 
       try {
         let currentFilter = getTenantFilter();
@@ -1424,6 +1470,7 @@ export default function LeadsPage() {
           </>
         )}
       </div>
+      <ConfirmDialogPortal />
     </TooltipProvider>
   );
 }

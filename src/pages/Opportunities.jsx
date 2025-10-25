@@ -32,6 +32,7 @@ import { format } from "date-fns";
 import SimpleModal from "../components/shared/SimpleModal";
 import StatusHelper from "../components/shared/StatusHelper";
 import { loadUsersSafely } from "../components/shared/userLoader";
+import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 
 const stageColors = {
   prospecting: "bg-blue-900/20 text-blue-300 border-blue-700",
@@ -64,6 +65,8 @@ export default function OpportunitiesPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
   const [showTestData, setShowTestData] = useState(false); // Added showTestData state
+  
+  const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
 
   // Stats for ALL opportunities (not just current page)
   const [totalStats, setTotalStats] = useState({
@@ -363,25 +366,48 @@ export default function OpportunitiesPage() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this opportunity?")) return;
+    const confirmed = await confirm({
+      title: "Delete opportunity?",
+      description: "This action cannot be undone.",
+      variant: "destructive",
+      confirmText: "Delete",
+      cancelText: "Cancel"
+    });
+    if (!confirmed) return;
 
     try {
       await Opportunity.delete(id);
+      // Optimistically update UI
+      setOpportunities(prev => prev.filter(o => o.id !== id));
+      setTotalItems(prev => (prev > 0 ? prev - 1 : 0));
+      toast.success("Opportunity deleted successfully");
+      
+      // Small delay to let optimistic update settle
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       clearCache('Opportunity');
       await Promise.all([
         loadOpportunities(currentPage, pageSize),
         loadTotalStats()
       ]);
-      toast.success("Opportunity deleted successfully");
     } catch (error) {
       console.error("Failed to delete opportunity:", error);
       toast.error("Failed to delete opportunity");
+      // Reload on error to ensure consistency
+      await loadOpportunities(currentPage, pageSize);
     }
   };
 
   const handleBulkDelete = async () => {
     if (selectAllMode) {
-      if (!window.confirm(`Delete ALL ${totalItems} opportunity/opportunities matching current filters? This cannot be undone!`)) return;
+      const confirmed = await confirm({
+        title: "Delete all opportunities?",
+        description: `Delete ALL ${totalItems} opportunity/opportunities matching current filters? This cannot be undone!`,
+        variant: "destructive",
+        confirmText: "Delete All",
+        cancelText: "Cancel"
+      });
+      if (!confirmed) return;
 
       try {
         let effectiveFilter = getTenantFilter();
@@ -435,7 +461,14 @@ export default function OpportunitiesPage() {
         return;
       }
 
-      if (!window.confirm(`Delete ${selectedOpportunities.size} opportunity/opportunities?`)) return;
+      const confirmed = await confirm({
+        title: "Delete selected opportunities?",
+        description: `Delete ${selectedOpportunities.size} opportunity/opportunities? This cannot be undone.`,
+        variant: "destructive",
+        confirmText: "Delete",
+        cancelText: "Cancel"
+      });
+      if (!confirmed) return;
 
       try {
         await Promise.all([...selectedOpportunities].map(id => Opportunity.delete(id)));
@@ -455,7 +488,14 @@ export default function OpportunitiesPage() {
 
   const handleBulkStageChange = async (newStage) => {
     if (selectAllMode) {
-      if (!window.confirm(`Update stage for ALL ${totalItems} opportunity/opportunities matching current filters to ${newStage.replace(/_/g, ' ')}?`)) return;
+      const confirmed = await confirm({
+        title: "Update all opportunities?",
+        description: `Update stage for ALL ${totalItems} opportunity/opportunities matching current filters to ${newStage.replace(/_/g, ' ')}?`,
+        variant: "default",
+        confirmText: "Update All",
+        cancelText: "Cancel"
+      });
+      if (!confirmed) return;
 
       try {
         let effectiveFilter = getTenantFilter();
@@ -531,7 +571,14 @@ export default function OpportunitiesPage() {
 
   const handleBulkAssign = async (assignedTo) => {
     if (selectAllMode) {
-      if (!window.confirm(`Assign ALL ${totalItems} opportunity/opportunities matching current filters?`)) return;
+      const confirmed = await confirm({
+        title: "Assign all opportunities?",
+        description: `Assign ALL ${totalItems} opportunity/opportunities matching current filters?`,
+        variant: "default",
+        confirmText: "Assign All",
+        cancelText: "Cancel"
+      });
+      if (!confirmed) return;
 
       try {
         let effectiveFilter = getTenantFilter();
@@ -1255,6 +1302,8 @@ export default function OpportunitiesPage() {
           </>
         )}
       </div>
+      
+      <ConfirmDialogPortal />
     </TooltipProvider>
   );
 }

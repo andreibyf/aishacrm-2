@@ -368,30 +368,15 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
       return;
     }
 
-    if (!user?.tenant_id) {
-      console.log('[ContactForm] ERROR: User tenant_id is missing');
-      if (logError) {
-        logError(createError('Contact Form', 'Tenant not configured', {
-          severity: 'critical',
-          actionable: 'User account missing tenant assignment. Contact system administrator.'
-        }));
-      }
-      toast({
-        title: "Tenant Not Configured",
-        description: "Cannot save contact: No client assigned to your account. Please contact an administrator.",
-        variant: "destructive",
-      });
-      setSubmitError("Cannot save contact: No client assigned to your account. Please contact an administrator.");
-      return;
-    }
-
-    if (!contact && duplicateWarning && duplicateWarning.length > 0) {
+    // Skip duplicate check for test data or if no duplicates found
+    if (!contact && duplicateWarning && duplicateWarning.length > 0 && !formData.is_test_data) {
       console.log('[ContactForm] Duplicate warning present, prompting user...');
-      const proceed = confirm(
+      const proceed = window.confirm(
         `Warning: ${duplicateWarning.length} potential duplicate(s) found. Do you want to proceed anyway?`
       );
       if (!proceed) {
         console.log('[ContactForm] User cancelled submission due to duplicates');
+        setIsSubmitting(false);
         return;
       }
     }
@@ -413,9 +398,11 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
       
       console.log('[ContactForm] Enriching contact data...');
       setSubmitProgress("Enriching contact data...");
+      // Use tenant_id from user context, selectedTenantId, or null (backend will handle)
+      const tenantId = user?.tenant_id || selectedTenantId || null;
       const enrichedData = await DenormalizationHelper.enrichContact(
         submissionData,
-        user.tenant_id
+        tenantId
       );
       console.log('[ContactForm] Data enriched successfully');
       
@@ -872,7 +859,7 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting || (!user?.tenant_id && !selectedTenantId && user?.role !== 'superadmin') || checkingDuplicates}
+              disabled={isSubmitting || checkingDuplicates}
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
               {isSubmitting ? (

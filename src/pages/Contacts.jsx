@@ -30,6 +30,7 @@ import PhoneDisplay from "../components/shared/PhoneDisplay";
 import BulkActionsMenu from "../components/contacts/BulkActionsMenu";
 import StatusHelper from "../components/shared/StatusHelper";
 import { useLogger } from '../components/shared/Logger';
+import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -61,6 +62,7 @@ export default function ContactsPage() {
   const [selectedTags, setSelectedTags] = useState([]);
   // Added showTestData state to support the new getTenantFilter logic from the outline
   const [showTestData, setShowTestData] = useState(false);
+  const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
 
   const [totalStats, setTotalStats] = useState({
     total: 0,
@@ -354,7 +356,15 @@ export default function ContactsPage() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this contact?")) {
+    const confirmed = await confirm({
+      title: "Delete contact?",
+      description: "This action cannot be undone.",
+      variant: "destructive",
+      confirmText: "Delete",
+      cancelText: "Cancel"
+    });
+    
+    if (!confirmed) {
       logger.warning('Contact deletion cancelled by user', 'ContactsPage', { contactId: id, userId: user?.id || user?.email });
       return;
     }
@@ -362,7 +372,14 @@ export default function ContactsPage() {
     logger.info('Attempting to delete contact', 'ContactsPage', { contactId: id, userId: user?.id || user?.email });
     try {
       await Contact.delete(id);
+      // Optimistically update UI
+      setContacts(prev => prev.filter(c => c.id !== id));
+      setTotalItems(prev => (prev > 0 ? prev - 1 : 0));
       toast.success("Contact deleted successfully");
+      
+      // Small delay to let optimistic update settle
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       clearCacheByKey('Contact');
       loadContacts();
       loadTotalStats();
@@ -371,6 +388,8 @@ export default function ContactsPage() {
       console.error("Error deleting contact:", error);
       toast.error("Failed to delete contact");
       logger.error('Error deleting contact', 'ContactsPage', { error: error.message, stack: error.stack, contactId: id, userId: user?.id || user?.email });
+      // Reload on error to ensure consistency
+      loadContacts();
     }
   };
 
@@ -991,6 +1010,9 @@ export default function ContactsPage() {
         }} />
 
       }
+      
+      <ConfirmDialogPortal />
     </div>);
+
 
 }

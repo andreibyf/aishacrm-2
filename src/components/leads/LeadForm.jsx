@@ -417,8 +417,7 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
   // For admins/superadmins, check if they have selectedTenantId
   // For regular users, check if they have tenant_id
   const isFormValid = formData.first_name?.trim() && 
-                      formData.last_name?.trim() && 
-                      (user?.tenant_id || selectedTenantId);
+                      formData.last_name?.trim();
 
   return (
     <Dialog open={true} onOpenChange={onCancel}>
