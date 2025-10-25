@@ -360,6 +360,61 @@ export default function createWorkflowRoutes(pgPool) {
               log.output = { payload: triggerPayload };
               break;
             }
+                case 'send_email': {
+                  // Queue an email by creating an activity with type 'email'
+                  // Supports variable replacement for to/subject/body
+                  const toRaw = cfg.to || '{{email}}';
+                  const subjectRaw = cfg.subject || 'Workflow Email';
+                  const bodyRaw = cfg.body || '';
+
+                  const toValue = Array.isArray(toRaw)
+                    ? toRaw.map(t => replaceVariables(t))
+                    : String(replaceVariables(toRaw)).replace(/^['"]|['"]$/g, '').trim();
+                  const subject = String(replaceVariables(subjectRaw));
+                  const body = String(replaceVariables(bodyRaw));
+
+                  // Relate email to found lead/contact if present
+                  const lead = context.variables.found_lead;
+                  const contact = context.variables.found_contact;
+                  const related_to = lead ? 'lead' : (contact ? 'contact' : null);
+                  const related_id = lead ? lead.id : (contact ? contact.id : null);
+
+                  const emailMeta = {
+                    created_by_workflow: workflow.id,
+                    email: {
+                      to: toValue,
+                      subject,
+                      cc: cfg.cc ? replaceVariables(cfg.cc) : undefined,
+                      bcc: cfg.bcc ? replaceVariables(cfg.bcc) : undefined,
+                      from: cfg.from ? replaceVariables(cfg.from) : undefined
+                    }
+                  };
+
+                  const q = `
+                    INSERT INTO activities (
+                      tenant_id, type, subject, body, status, related_id,
+                      created_by, location, priority, due_date, due_time,
+                      assigned_to, related_to, metadata, created_date, updated_date
+                    ) VALUES (
+                      $1, $2, $3, $4, $5, $6,
+                      NULL, NULL, NULL, NULL, NULL,
+                      NULL, $7, $8, NOW(), NOW()
+                    ) RETURNING *
+                  `;
+                  const vals = [
+                    workflow.tenant_id,
+                    'email',
+                    subject || null,
+                    body || null,
+                    'queued',
+                    related_id,
+                    related_to,
+                    JSON.stringify(emailMeta)
+                  ];
+                  const r = await pgPool.query(q, vals);
+                  log.output = { email_queued: true, to: toValue, subject, activity_id: r.rows[0]?.id };
+                  break;
+                }
             case 'find_lead': {
               const field = cfg.search_field || 'email';
               let value = replaceVariables(cfg.search_value || '{{email}}');
@@ -559,6 +614,25 @@ export default function createWorkflowRoutes(pgPool) {
         }
       }
       return res.status(500).json({ status: 'error', message: error.message, data: { execution_log: executionLog } });
+    }
+  });
+
+  // POST /api/workflows/:id/test - Convenience endpoint to execute a workflow by ID with payload
+  router.post('/:id/test', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const payload = req.body?.payload ?? req.body ?? {};
+      // Forward to the executor
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const response = await fetch(`${baseUrl}/api/workflows/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workflow_id: id, payload })
+      });
+      const json = await response.json();
+      return res.status(response.status).json(json);
+    } catch (error) {
+      return res.status(500).json({ status: 'error', message: error.message });
     }
   });
 

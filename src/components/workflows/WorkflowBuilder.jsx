@@ -1,13 +1,12 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Workflow } from '@/api/entities';
 import { User } from '@/api/entities';
-import { Webhook, Search, Edit, Save, Play, Plus, X, Copy, Check, RefreshCw } from 'lucide-react';
+import { Webhook, Search, Save, Plus, X, Copy, Check, RefreshCw } from 'lucide-react';
 import WorkflowCanvas from './WorkflowCanvas';
 import NodeLibrary from './NodeLibrary';
 import { toast } from 'sonner';
@@ -31,6 +30,8 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   const [recentExecutions, setRecentExecutions] = useState([]);
   const [showExecutions, setShowExecutions] = useState(false);
   const [loadingExecutions, setLoadingExecutions] = useState(false);
+  const [executionLimit, setExecutionLimit] = useState(10);
+  const [executionOffset, setExecutionOffset] = useState(0);
 
   useEffect(() => {
     User.me().then(setUser);
@@ -200,11 +201,12 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     setLoadingExecutions(true);
     setShowPayload(false); // Hide current payload when loading history
     try {
-      const executions = await WorkflowExecution.filter(
-        { workflow_id: workflow.id },
-        '-created_date', // Order by created_date descending
-        10 // Limit to 10
-      );
+      const executions = await WorkflowExecution.filter({
+        workflow_id: workflow.id,
+        limit: executionLimit,
+        offset: executionOffset,
+        order: '-created_date'
+      });
       setRecentExecutions(executions || []);
       setShowExecutions(true); // Show the executions list
       if (executions && executions.length > 0) {
@@ -218,6 +220,22 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     } finally {
       setLoadingExecutions(false);
     }
+  };
+
+  const handleNextExecutionsPage = async () => {
+    if (recentExecutions.length < executionLimit) {
+      toast.info('You are on the last page');
+      return;
+    }
+    setExecutionOffset(executionOffset + executionLimit);
+    setTimeout(loadRecentExecutions, 0);
+  };
+
+  const handlePrevExecutionsPage = async () => {
+    if (executionOffset === 0) return;
+    const newOffset = Math.max(0, executionOffset - executionLimit);
+    setExecutionOffset(newOffset);
+    setTimeout(loadRecentExecutions, 0);
   };
 
   // New function: handleUseExecutionPayload (from outline)
@@ -330,16 +348,37 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
             {/* Recent Executions List */}
             {showExecutions && (
               <div className="border border-slate-700 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-3 gap-3">
                   <Label className="text-slate-200">Recent Webhook Executions</Label>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowExecutions(false)}
-                    className="text-slate-400 hover:text-slate-200"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500">Rows per page</span>
+                    <Select
+                      value={String(executionLimit)}
+                      onValueChange={(v) => {
+                        const next = parseInt(v, 10);
+                        setExecutionLimit(next);
+                        setExecutionOffset(0);
+                        setTimeout(loadRecentExecutions, 0);
+                      }}
+                    >
+                      <SelectTrigger className="h-8 w-18 bg-slate-800 border-slate-700 text-slate-200">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-800 border-slate-700">
+                        <SelectItem value="5">5</SelectItem>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="25">25</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowExecutions(false)}
+                      className="text-slate-400 hover:text-slate-200"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
                 
                 <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
@@ -382,6 +421,32 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                       </div>
                     ))
                   )}
+                </div>
+                <div className="flex items-center justify-between mt-3">
+                  <span className="text-xs text-slate-500">
+                    {executionOffset + 1}
+                    {recentExecutions.length > 0 ? `–${executionOffset + recentExecutions.length}` : ''}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handlePrevExecutionsPage}
+                      disabled={loadingExecutions || executionOffset === 0}
+                      className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
+                    >
+                      Prev
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleNextExecutionsPage}
+                      disabled={loadingExecutions || recentExecutions.length < executionLimit}
+                      className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
@@ -659,6 +724,51 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           </div>
         );
 
+      case 'send_email':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">To</Label>
+              <Input
+                value={node.config?.to || '{{email}}'}
+                onChange={(e) => {
+                  updateNodeConfig(node.id, { ...node.config, to: e.target.value });
+                }}
+                placeholder="{{email}} or user@example.com"
+                className="bg-slate-800 border-slate-700 text-slate-200"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Use {'{{field_name}}'} to reference webhook data
+              </p>
+            </div>
+            <div>
+              <Label className="text-slate-200">Subject</Label>
+              <Input
+                value={node.config?.subject || 'Hello from Workflow'}
+                onChange={(e) => {
+                  updateNodeConfig(node.id, { ...node.config, subject: e.target.value });
+                }}
+                placeholder="Subject"
+                className="bg-slate-800 border-slate-700 text-slate-200"
+              />
+            </div>
+            <div>
+              <Label className="text-slate-200">Body</Label>
+              <textarea
+                value={node.config?.body || ''}
+                onChange={(e) => {
+                  updateNodeConfig(node.id, { ...node.config, body: e.target.value });
+                }}
+                placeholder="Email body (supports {{field}} replacements)"
+                className="w-full min-h-[120px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
+              />
+            </div>
+            <p className="text-xs text-slate-500">
+              This queues an email as an Activity with type &quot;email&quot;. Delivery handling can be wired later.
+            </p>
+          </div>
+        );
+
       case 'condition':
         return (
           <div className="space-y-4">
@@ -691,7 +801,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 </SelectContent>
               </Select>
               <p className="text-xs text-slate-500 mt-1">
-                This checks the field from the previous node's output
+                This checks the field from the previous node&#39;s output
               </p>
             </div>
 
