@@ -1,0 +1,313 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - img
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - generic [ref=e7]:
+            - generic [ref=e9]: L
+            - generic [ref=e10]: Local Development Tenant
+          - paragraph [ref=e11]: "Managing Client: Local Development Tenant"
+        - generic [ref=e13]:
+          - paragraph [ref=e14]: AI-Powered Business Growth Platform
+          - paragraph [ref=e15]: Oct 25, 2025
+          - paragraph [ref=e16]: 12:11:31 PM
+        - paragraph [ref=e17]: Navigation
+        - navigation [ref=e18]:
+          - list [ref=e19]:
+            - listitem [ref=e20]:
+              - link "Dashboard" [ref=e21] [cursor=pointer]:
+                - /url: /dashboard
+                - img [ref=e22]
+                - generic [ref=e27]: Dashboard
+            - listitem [ref=e28]:
+              - link "Contacts" [ref=e29] [cursor=pointer]:
+                - /url: /contacts
+                - img [ref=e30]
+                - generic [ref=e35]: Contacts
+            - listitem [ref=e36]:
+              - link "Accounts" [ref=e37] [cursor=pointer]:
+                - /url: /accounts
+                - img [ref=e38]
+                - generic [ref=e46]: Accounts
+            - listitem [ref=e47]:
+              - link "Leads" [ref=e48] [cursor=pointer]:
+                - /url: /leads
+                - img [ref=e49]
+                - generic [ref=e53]: Leads
+            - listitem [ref=e54]:
+              - link "Opportunities" [ref=e55] [cursor=pointer]:
+                - /url: /opportunities
+                - img [ref=e56]
+                - generic [ref=e59]: Opportunities
+            - listitem [ref=e60]:
+              - link "Activities" [ref=e61] [cursor=pointer]:
+                - /url: /activities
+                - img [ref=e62]
+                - generic [ref=e65]: Activities
+            - listitem [ref=e66]:
+              - link "Calendar" [ref=e67] [cursor=pointer]:
+                - /url: /calendar
+                - img [ref=e68]
+                - generic [ref=e73]: Calendar
+            - listitem [ref=e74]:
+              - link "BizDev Sources" [ref=e75] [cursor=pointer]:
+                - /url: /bizdevsources
+                - img [ref=e76]
+                - generic [ref=e80]: BizDev Sources
+            - listitem [ref=e81]:
+              - link "Cash Flow" [ref=e82] [cursor=pointer]:
+                - /url: /cashflow
+                - img [ref=e83]
+                - generic [ref=e86]: Cash Flow
+            - listitem [ref=e87]:
+              - link "Document Processing" [ref=e88] [cursor=pointer]:
+                - /url: /documentprocessing
+                - img [ref=e89]
+                - generic [ref=e95]: Document Processing
+            - listitem [ref=e96]:
+              - link "Document Management" [ref=e97] [cursor=pointer]:
+                - /url: /documentmanagement
+                - img [ref=e98]
+                - generic [ref=e100]: Document Management
+            - listitem [ref=e101]:
+              - link "AI Campaigns" [ref=e102] [cursor=pointer]:
+                - /url: /aicampaigns
+                - img [ref=e103]
+                - generic [ref=e106]: AI Campaigns
+            - listitem [ref=e107]:
+              - link "Employees" [ref=e108] [cursor=pointer]:
+                - /url: /employees
+                - img [ref=e109]
+                - generic [ref=e114]: Employees
+            - listitem [ref=e115]:
+              - link "Reports" [ref=e116] [cursor=pointer]:
+                - /url: /reports
+                - img [ref=e117]
+                - generic [ref=e122]: Reports
+            - listitem [ref=e123]:
+              - link "Integrations" [ref=e124] [cursor=pointer]:
+                - /url: /integrations
+                - img [ref=e125]
+                - generic [ref=e130]: Integrations
+            - listitem [ref=e131]:
+              - link "Workflows" [ref=e132] [cursor=pointer]:
+                - /url: /workflows
+                - img [ref=e133]
+                - generic [ref=e135]: Workflows
+            - listitem [ref=e136]:
+              - link "Payment Portal" [ref=e137] [cursor=pointer]:
+                - /url: /paymentportal
+                - img [ref=e138]
+                - generic [ref=e141]: Payment Portal
+            - listitem [ref=e142]:
+              - link "Utilities" [ref=e143] [cursor=pointer]:
+                - /url: /utilities
+                - img [ref=e144]
+                - generic [ref=e146]: Utilities
+            - listitem [ref=e147]:
+              - link "Client Onboarding" [ref=e148] [cursor=pointer]:
+                - /url: /clientonboarding
+                - img [ref=e149]
+                - generic [ref=e154]: Client Onboarding
+        - list [ref=e156]:
+          - listitem [ref=e157]:
+            - link "Workflow Guide" [ref=e158] [cursor=pointer]:
+              - /url: /workflowguide
+              - img [ref=e159]
+              - generic [ref=e162]: Workflow Guide
+          - listitem [ref=e163]:
+            - link "Documentation" [ref=e164] [cursor=pointer]:
+              - /url: /documentation
+              - img [ref=e165]
+              - generic [ref=e168]: Documentation
+          - listitem [ref=e169]:
+            - link "AI Assistant" [ref=e170] [cursor=pointer]:
+              - /url: /agent
+              - img "AI Assistant" [ref=e172]
+          - listitem [ref=e173]:
+            - link "Client Requirements" [ref=e174] [cursor=pointer]:
+              - /url: /clientrequirements
+              - img [ref=e175]
+              - generic [ref=e179]: Client Requirements
+    - generic [ref=e180]:
+      - banner [ref=e181]:
+        - button "Switch to dark mode" [ref=e182] [cursor=pointer]:
+          - img
+        - button "Clear chat" [ref=e183] [cursor=pointer]:
+          - img
+        - generic [ref=e184]:
+          - generic [ref=e185]:
+            - generic [ref=e186]:
+              - img [ref=e187]
+              - combobox [ref=e195] [cursor=pointer]:
+                - img [ref=e196]
+            - generic [ref=e199]: "Managing Client: Unknown Client"
+          - generic [ref=e200]:
+            - img [ref=e201]
+            - generic [ref=e206]: No employees with CRM access
+          - button [ref=e207] [cursor=pointer]:
+            - img
+          - button "D Dev" [ref=e209] [cursor=pointer]:
+            - generic [ref=e211]: D
+            - generic [ref=e212]: Dev
+      - main [ref=e213]:
+        - generic [ref=e215]:
+          - generic [ref=e216]:
+            - generic [ref=e217]:
+              - heading "Activities" [level=1] [ref=e218]
+              - paragraph [ref=e219]: Track and manage your team's activities and tasks
+            - generic [ref=e220]:
+              - button [ref=e221] [cursor=pointer]:
+                - img
+              - button [ref=e222] [cursor=pointer]:
+                - img
+              - button "Import" [ref=e223] [cursor=pointer]:
+                - img
+                - text: Import
+              - button "Export" [ref=e224] [cursor=pointer]:
+                - img
+                - text: Export
+              - button "Add Activity" [ref=e225] [cursor=pointer]:
+                - img
+                - text: Add Activity
+          - generic [ref=e226]:
+            - generic [ref=e227] [cursor=pointer]:
+              - generic [ref=e228]:
+                - paragraph [ref=e229]: Total Activities
+                - img [ref=e231]
+              - paragraph [ref=e235]: "3"
+            - generic [ref=e236] [cursor=pointer]:
+              - generic [ref=e237]:
+                - paragraph [ref=e238]: Scheduled
+                - img [ref=e240]
+              - paragraph [ref=e244]: "0"
+            - generic [ref=e245] [cursor=pointer]:
+              - generic [ref=e246]:
+                - paragraph [ref=e247]: In Progress
+                - img [ref=e249]
+              - paragraph [ref=e253]: "0"
+            - generic [ref=e254] [cursor=pointer]:
+              - generic [ref=e255]:
+                - paragraph [ref=e256]: Overdue
+                - img [ref=e258]
+              - paragraph [ref=e262]: "0"
+            - generic [ref=e263] [cursor=pointer]:
+              - generic [ref=e264]:
+                - paragraph [ref=e265]: Completed
+                - img [ref=e267]
+              - paragraph [ref=e271]: "0"
+            - generic [ref=e272] [cursor=pointer]:
+              - generic [ref=e273]:
+                - paragraph [ref=e274]: Cancelled
+                - img [ref=e276]
+              - paragraph [ref=e280]: "0"
+          - generic [ref=e281]:
+            - generic [ref=e282]:
+              - img [ref=e283]
+              - textbox "Search activities by subject, description, or related entity..." [ref=e286]
+            - button "Tags" [ref=e289] [cursor=pointer]:
+              - img
+              - text: Tags
+          - table [ref=e293]:
+            - rowgroup [ref=e294]:
+              - row "Activity Type Status Due Date Related To Assigned To Actions" [ref=e295]:
+                - cell [ref=e296]:
+                  - checkbox [ref=e297] [cursor=pointer]
+                - cell "Activity" [ref=e298]
+                - cell "Type" [ref=e299]
+                - cell "Status" [ref=e300]
+                - cell "Due Date" [ref=e301]
+                - cell "Related To" [ref=e302]
+                - cell "Assigned To" [ref=e303]
+                - cell "Actions" [ref=e304]
+            - rowgroup [ref=e305]:
+              - row "Follow-up email to Bob Wilson Sent proposal and pricing information email — — Unassigned" [ref=e306]:
+                - cell [ref=e307]:
+                  - checkbox [ref=e308] [cursor=pointer]
+                - cell "Follow-up email to Bob Wilson Sent proposal and pricing information" [ref=e309] [cursor=pointer]:
+                  - generic [ref=e310]: Follow-up email to Bob Wilson
+                  - generic [ref=e311]: Sent proposal and pricing information
+                - cell "email" [ref=e312] [cursor=pointer]:
+                  - generic [ref=e313]: email
+                - cell [ref=e314] [cursor=pointer]
+                - cell "—" [ref=e316] [cursor=pointer]
+                - cell "—" [ref=e317] [cursor=pointer]
+                - cell "Unassigned" [ref=e318] [cursor=pointer]
+                - cell [ref=e319]:
+                  - generic [ref=e320]:
+                    - button [ref=e321] [cursor=pointer]:
+                      - img
+                    - button [ref=e322] [cursor=pointer]:
+                      - img
+                    - button [ref=e323] [cursor=pointer]:
+                      - img
+              - row "Demo scheduled with Jane Doe Product demo for TechCo team meeting — — Unassigned" [ref=e324]:
+                - cell [ref=e325]:
+                  - checkbox [ref=e326] [cursor=pointer]
+                - cell "Demo scheduled with Jane Doe Product demo for TechCo team" [ref=e327] [cursor=pointer]:
+                  - generic [ref=e328]: Demo scheduled with Jane Doe
+                  - generic [ref=e329]: Product demo for TechCo team
+                - cell "meeting" [ref=e330] [cursor=pointer]:
+                  - generic [ref=e331]: meeting
+                - cell [ref=e332] [cursor=pointer]
+                - cell "—" [ref=e334] [cursor=pointer]
+                - cell "—" [ref=e335] [cursor=pointer]
+                - cell "Unassigned" [ref=e336] [cursor=pointer]
+                - cell [ref=e337]:
+                  - generic [ref=e338]:
+                    - button [ref=e339] [cursor=pointer]:
+                      - img
+                    - button [ref=e340] [cursor=pointer]:
+                      - img
+                    - button [ref=e341] [cursor=pointer]:
+                      - img
+              - row "Initial call with John Smith Discussed product requirements and timeline call — — Unassigned" [ref=e342]:
+                - cell [ref=e343]:
+                  - checkbox [ref=e344] [cursor=pointer]
+                - cell "Initial call with John Smith Discussed product requirements and timeline" [ref=e345] [cursor=pointer]:
+                  - generic [ref=e346]: Initial call with John Smith
+                  - generic [ref=e347]: Discussed product requirements and timeline
+                - cell "call" [ref=e348] [cursor=pointer]:
+                  - generic [ref=e349]: call
+                - cell [ref=e350] [cursor=pointer]
+                - cell "—" [ref=e352] [cursor=pointer]
+                - cell "—" [ref=e353] [cursor=pointer]
+                - cell "Unassigned" [ref=e354] [cursor=pointer]
+                - cell [ref=e355]:
+                  - generic [ref=e356]:
+                    - button [ref=e357] [cursor=pointer]:
+                      - img
+                    - button [ref=e358] [cursor=pointer]:
+                      - img
+                    - button [ref=e359] [cursor=pointer]:
+                      - img
+          - generic [ref=e360]:
+            - generic [ref=e361]:
+              - generic [ref=e362]: Showing 1 to 3 of 3 results
+              - generic [ref=e363]:
+                - generic [ref=e364]: "Show:"
+                - combobox [ref=e365] [cursor=pointer]:
+                  - generic: "25"
+                  - img [ref=e366]
+            - generic [ref=e368]:
+              - button [disabled]:
+                - img
+              - button [disabled]:
+                - img
+              - button "1" [ref=e370] [cursor=pointer]
+              - button [disabled]:
+                - img
+              - button [disabled]:
+                - img
+      - contentinfo [ref=e371]:
+        - generic [ref=e374]:
+          - img "Ai‑SHA" [ref=e375]
+          - generic [ref=e376]:
+            - generic [ref=e377]: ai-sha crm® is a registered trademark of 4V Data Consulting LLC.
+            - generic [ref=e378]: © 2025 4V Data Consulting LLC. All rights reserved.
+  - generic [ref=e381]: $75,000
+```

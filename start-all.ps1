@@ -1,9 +1,17 @@
 #!/usr/bin/env pwsh
 # AI-SHA CRM Complete Startup Script
-# Starts Docker containers, backend, and frontend
+# Starts backend and frontend using Supabase Cloud database.
+# Docker is optional (for local dev/testing only) and OFF by default.
+
+[CmdletBinding()]
+param(
+    [switch]$UseDocker,       # Opt-in: start local Docker services (DB/Supabase) for testing
+    [switch]$SkipDbCheck      # Skip DB connectivity check
+)
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  AI-SHA CRM - Full Stack Startup" -ForegroundColor Cyan
+Write-Host "  Database: Supabase Cloud (remote)" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -24,35 +32,45 @@ function Test-Docker {
     }
 }
 
-# Step 1: Check Docker
-Write-Host "Step 1: Checking Docker..." -ForegroundColor Yellow
-if (-not (Test-Docker)) {
-    Write-Host "  ❌ Docker is not running. Please start Docker Desktop first." -ForegroundColor Red
-    exit 1
-}
-Write-Host "  ✓ Docker is running" -ForegroundColor Green
-
-# Step 2: Start Docker containers
-Write-Host "`nStep 2: Checking Docker containers..." -ForegroundColor Yellow
-$postgresContainer = docker ps --filter "name=ai-sha-crm-copy-c872be53-db-1" --format "{{.Names}}"
-$supabaseContainer = docker ps --filter "name=ai-sha-crm-copy-c872be53-supabase-1" --format "{{.Names}}"
-
-if (-not $postgresContainer -or -not $supabaseContainer) {
-    Write-Host "  Starting Docker containers..." -ForegroundColor Cyan
-    docker-compose up -d
-    Start-Sleep -Seconds 5
-    Write-Host "  ✓ Docker containers started" -ForegroundColor Green
+# Step 1: Docker (optional)
+Write-Host "Step 1: Docker (optional)" -ForegroundColor Yellow
+if ($UseDocker) {
+    if (-not (Test-Docker)) {
+        Write-Host "  ❌ Docker is not running. Start Docker Desktop or omit -UseDocker." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "  ✓ Docker is running" -ForegroundColor Green
 } else {
-    Write-Host "  ✓ Docker containers already running" -ForegroundColor Green
+    Write-Host "  ⏭ Skipping Docker (not requested)." -ForegroundColor Yellow
 }
 
-# Step 3: Check PostgreSQL connection
+# Step 2: Start Docker containers (only if requested)
+if ($UseDocker) {
+    Write-Host "`nStep 2: Checking Docker containers..." -ForegroundColor Yellow
+    $postgresContainer = docker ps --filter "name=ai-sha-crm-copy-c872be53-db-1" --format "{{.Names}}"
+    $supabaseContainer = docker ps --filter "name=ai-sha-crm-copy-c872be53-supabase-1" --format "{{.Names}}"
+
+    if (-not $postgresContainer -or -not $supabaseContainer) {
+        Write-Host "  Starting Docker containers..." -ForegroundColor Cyan
+        docker-compose up -d
+        Start-Sleep -Seconds 5
+        Write-Host "  ✓ Docker containers started" -ForegroundColor Green
+    } else {
+        Write-Host "  ✓ Docker containers already running" -ForegroundColor Green
+    }
+}
+
+# Step 3: Check PostgreSQL connection (basic, can be skipped)
 Write-Host "`nStep 3: Checking PostgreSQL..." -ForegroundColor Yellow
-if (Test-Port -Port 5432) {
-    Write-Host "  ✓ PostgreSQL is accessible on port 5432" -ForegroundColor Green
+if ($SkipDbCheck) {
+    Write-Host "  ⏭ Skipping DB connectivity check." -ForegroundColor Yellow
 } else {
-    Write-Host "  ❌ PostgreSQL is not accessible" -ForegroundColor Red
-    exit 1
+    # Try default local port first; backend will use DATABASE_URL if different
+    if (Test-Port -Port 5432) {
+        Write-Host "  ✓ PostgreSQL is accessible on port 5432 (or using cloud DB)" -ForegroundColor Green
+    } else {
+        Write-Host "  ⚠ PostgreSQL not accessible on localhost:5432. If you're using a cloud DB (e.g., Supabase), this is OK." -ForegroundColor Yellow
+    }
 }
 
 # Step 4: Start Backend
@@ -118,8 +136,12 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Frontend:  http://localhost:5173" -ForegroundColor White
 Write-Host "  Backend:   http://localhost:3001" -ForegroundColor White
-Write-Host "  Database:  localhost:5432" -ForegroundColor White
-Write-Host "  Supabase:  http://localhost:8000" -ForegroundColor White
+if ($UseDocker) {
+    Write-Host "  Database:  localhost:5432" -ForegroundColor White
+    Write-Host "  Supabase:  http://localhost:8000" -ForegroundColor White
+} else {
+    Write-Host "  Database:  Using configured DATABASE_URL (no Docker)" -ForegroundColor White
+}
 Write-Host ""
 Write-Host "  Press Ctrl+C in terminal windows to stop services" -ForegroundColor Yellow
 Write-Host ""

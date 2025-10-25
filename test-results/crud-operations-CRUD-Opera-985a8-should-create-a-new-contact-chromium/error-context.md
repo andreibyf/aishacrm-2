@@ -1,0 +1,587 @@
+# Page snapshot
+
+```yaml
+- generic:
+  - generic:
+    - generic:
+      - complementary:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic: L
+              - generic: Local Development Tenant
+            - paragraph: "Managing Client: Local Development Tenant"
+          - generic:
+            - generic:
+              - paragraph: AI-Powered Business Growth Platform
+              - paragraph: Oct 25, 2025
+              - paragraph: 12:15:28 PM
+          - paragraph: Navigation
+          - navigation:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /dashboard
+                  - img
+                  - generic: Dashboard
+              - listitem:
+                - link:
+                  - /url: /contacts
+                  - img
+                  - generic: Contacts
+              - listitem:
+                - link:
+                  - /url: /accounts
+                  - img
+                  - generic: Accounts
+              - listitem:
+                - link:
+                  - /url: /leads
+                  - img
+                  - generic: Leads
+              - listitem:
+                - link:
+                  - /url: /opportunities
+                  - img
+                  - generic: Opportunities
+              - listitem:
+                - link:
+                  - /url: /activities
+                  - img
+                  - generic: Activities
+              - listitem:
+                - link:
+                  - /url: /calendar
+                  - img
+                  - generic: Calendar
+              - listitem:
+                - link:
+                  - /url: /bizdevsources
+                  - img
+                  - generic: BizDev Sources
+              - listitem:
+                - link:
+                  - /url: /cashflow
+                  - img
+                  - generic: Cash Flow
+              - listitem:
+                - link:
+                  - /url: /documentprocessing
+                  - img
+                  - generic: Document Processing
+              - listitem:
+                - link:
+                  - /url: /documentmanagement
+                  - img
+                  - generic: Document Management
+              - listitem:
+                - link:
+                  - /url: /aicampaigns
+                  - img
+                  - generic: AI Campaigns
+              - listitem:
+                - link:
+                  - /url: /employees
+                  - img
+                  - generic: Employees
+              - listitem:
+                - link:
+                  - /url: /reports
+                  - img
+                  - generic: Reports
+              - listitem:
+                - link:
+                  - /url: /integrations
+                  - img
+                  - generic: Integrations
+              - listitem:
+                - link:
+                  - /url: /workflows
+                  - img
+                  - generic: Workflows
+              - listitem:
+                - link:
+                  - /url: /paymentportal
+                  - img
+                  - generic: Payment Portal
+              - listitem:
+                - link:
+                  - /url: /utilities
+                  - img
+                  - generic: Utilities
+              - listitem:
+                - link:
+                  - /url: /clientonboarding
+                  - img
+                  - generic: Client Onboarding
+          - generic:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /workflowguide
+                  - img
+                  - generic: Workflow Guide
+              - listitem:
+                - link:
+                  - /url: /documentation
+                  - img
+                  - generic: Documentation
+              - listitem:
+                - link:
+                  - /url: /agent
+                  - generic:
+                    - img
+              - listitem:
+                - link:
+                  - /url: /clientrequirements
+                  - img
+                  - generic: Client Requirements
+      - generic:
+        - banner:
+          - button:
+            - img
+          - button:
+            - img
+          - generic:
+            - generic:
+              - generic:
+                - img
+                - combobox:
+                  - img
+              - generic:
+                - generic: "Managing Client: Unknown Client"
+            - generic:
+              - img
+              - generic: No employees with CRM access
+            - button:
+              - img
+            - button:
+              - generic:
+                - generic: D
+              - generic: Dev
+        - main:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - heading [level=1]: Contacts
+                  - paragraph: Track and manage your sales contacts and prospects.
+                - generic:
+                  - button:
+                    - img
+                  - button:
+                    - img
+                  - button:
+                    - img
+                    - text: Export
+                  - button:
+                    - img
+                    - text: Import
+                  - button:
+                    - img
+                    - text: Add Contact
+              - generic:
+                - button:
+                  - generic:
+                    - generic: Total Contacts
+                    - generic:
+                      - img
+                  - paragraph: "9"
+                - button:
+                  - generic:
+                    - generic: Active
+                    - generic:
+                      - img
+                  - paragraph: "9"
+                - button:
+                  - generic:
+                    - generic: Prospects
+                    - generic:
+                      - img
+                  - paragraph: "0"
+                - button:
+                  - generic:
+                    - generic: Customers
+                    - generic:
+                      - img
+                  - paragraph: "0"
+                - button:
+                  - generic:
+                    - generic: Inactive
+                    - generic:
+                      - img
+                  - paragraph: "0"
+              - generic:
+                - generic:
+                  - img
+                  - textbox:
+                    - /placeholder: Search contacts by name, email, phone, company, or job title...
+                - generic:
+                  - button:
+                    - img
+                    - text: Tags
+              - generic:
+                - generic:
+                  - table:
+                    - rowgroup:
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell: Name
+                        - cell: Email
+                        - cell: Phone
+                        - cell: Company
+                        - cell: Job Title
+                        - cell: Assigned To
+                        - cell: Status
+                        - cell: Actions
+                    - rowgroup:
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell:
+                          - generic: Bob Wilson
+                        - cell: bob.wilson@innovate.io
+                        - cell:
+                          - link:
+                            - /url: tel:+1-555-0103
+                            - text: +15 550103
+                        - cell: "-"
+                        - cell: "-"
+                        - cell: "-"
+                        - cell:
+                          - generic: active
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell:
+                          - generic: Jane Doe
+                        - cell: jane.doe@techco.com
+                        - cell:
+                          - link:
+                            - /url: tel:+1-555-0102
+                            - text: +15 550102
+                        - cell: "-"
+                        - cell: "-"
+                        - cell: "-"
+                        - cell:
+                          - generic: active
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell:
+                          - generic: John Smith
+                        - cell: john.smith@example.com
+                        - cell:
+                          - link:
+                            - /url: tel:+1-555-0101
+                            - text: +15 550101
+                        - cell: "-"
+                        - cell: "-"
+                        - cell: "-"
+                        - cell:
+                          - generic: active
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell:
+                          - generic: Bob Wilson
+                        - cell: bob.wilson@innovate.io
+                        - cell:
+                          - link:
+                            - /url: tel:+1-555-0103
+                            - text: +15 550103
+                        - cell: "-"
+                        - cell: "-"
+                        - cell: "-"
+                        - cell:
+                          - generic: active
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell:
+                          - generic: Jane Doe
+                        - cell: jane.doe@techco.com
+                        - cell:
+                          - link:
+                            - /url: tel:+1-555-0102
+                            - text: +15 550102
+                        - cell: "-"
+                        - cell: "-"
+                        - cell: "-"
+                        - cell:
+                          - generic: active
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell:
+                          - generic: John Smith
+                        - cell: john.smith@example.com
+                        - cell:
+                          - link:
+                            - /url: tel:+1-555-0101
+                            - text: +15 550101
+                        - cell: "-"
+                        - cell: "-"
+                        - cell: "-"
+                        - cell:
+                          - generic: active
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell:
+                          - generic: Bob Wilson
+                        - cell: bob.wilson@innovate.io
+                        - cell:
+                          - link:
+                            - /url: tel:+1-555-0103
+                            - text: +15 550103
+                        - cell: "-"
+                        - cell: "-"
+                        - cell: "-"
+                        - cell:
+                          - generic: active
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell:
+                          - generic: Jane Doe
+                        - cell: jane.doe@techco.com
+                        - cell:
+                          - link:
+                            - /url: tel:+1-555-0102
+                            - text: +15 550102
+                        - cell: "-"
+                        - cell: "-"
+                        - cell: "-"
+                        - cell:
+                          - generic: active
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell:
+                          - generic: John Smith
+                        - cell: john.smith@example.com
+                        - cell:
+                          - link:
+                            - /url: tel:+1-555-0101
+                            - text: +15 550101
+                        - cell: "-"
+                        - cell: "-"
+                        - cell: "-"
+                        - cell:
+                          - generic: active
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+        - contentinfo:
+          - generic:
+            - generic:
+              - generic:
+                - img
+                - generic:
+                  - generic: ai-sha crm® is a registered trademark of 4V Data Consulting LLC.
+                  - generic: © 2025 4V Data Consulting LLC. All rights reserved.
+  - generic: $75,000
+  - dialog "Create New Contact" [ref=e2]:
+    - heading "Create New Contact" [level=2] [ref=e4]
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - heading "New Contact" [level=2] [ref=e7]
+        - button [active] [ref=e8] [cursor=pointer]:
+          - img
+      - generic [ref=e9]:
+        - heading "Basic Information" [level=3] [ref=e10]
+        - generic [ref=e11]:
+          - generic [ref=e12]:
+            - text: First Name *
+            - textbox "First Name *" [ref=e13]
+          - generic [ref=e14]:
+            - text: Last Name *
+            - textbox "Last Name *" [ref=e15]
+        - generic [ref=e16]:
+          - generic [ref=e17]:
+            - text: Email (Optional)
+            - textbox "Email (Optional)" [ref=e18]:
+              - /placeholder: Leave blank if no email available
+            - paragraph [ref=e19]: Email is optional - unique ID will be generated for tracking
+          - generic [ref=e20]:
+            - text: Phone
+            - generic [ref=e21]:
+              - combobox [ref=e22] [cursor=pointer]:
+                - generic [ref=e23]:
+                  - generic [ref=e24]: 🇺🇸
+                  - generic [ref=e25]: "+1"
+                - img [ref=e26]
+              - combobox [ref=e28]
+              - textbox "Phone" [ref=e29]:
+                - /placeholder: (555) 123-4567
+        - generic [ref=e30]:
+          - generic [ref=e31]:
+            - text: Mobile (Optional)
+            - generic [ref=e32]:
+              - combobox [ref=e33] [cursor=pointer]:
+                - generic [ref=e34]:
+                  - generic [ref=e35]: 🇺🇸
+                  - generic [ref=e36]: "+1"
+                - img [ref=e37]
+              - combobox [ref=e39]
+              - textbox "Mobile (Optional)" [ref=e40]:
+                - /placeholder: Mobile number
+          - generic [ref=e41]:
+            - text: Job Title
+            - textbox "Job Title" [ref=e42]
+        - generic [ref=e43]:
+          - heading "Company Information" [level=3] [ref=e44]
+          - generic [ref=e45]:
+            - generic [ref=e46]:
+              - text: Associated Account
+              - combobox [ref=e47] [cursor=pointer]:
+                - generic: Link to an existing account...
+                - img [ref=e48]
+              - combobox [ref=e50]
+            - generic [ref=e51]:
+              - text: Department
+              - textbox "Department" [ref=e52]
+        - generic [ref=e53]:
+          - heading "Lead & Assignment" [level=3] [ref=e54]
+          - generic [ref=e55]:
+            - generic [ref=e56]:
+              - text: Lead Source
+              - combobox [ref=e57] [cursor=pointer]:
+                - generic: Website
+                - img [ref=e58]
+              - combobox [ref=e60]
+            - generic [ref=e61]:
+              - text: Assigned To
+              - combobox [ref=e62] [cursor=pointer]:
+                - generic: dev@localhost
+                - img [ref=e63]
+              - combobox [ref=e65]
+        - generic [ref=e66]:
+          - heading "Status" [level=3] [ref=e67]
+          - generic [ref=e68]:
+            - text: Status
+            - combobox [ref=e69] [cursor=pointer]:
+              - generic: Prospect
+              - img [ref=e70]
+            - combobox [ref=e72]
+        - generic [ref=e73]:
+          - heading "Address Information" [level=4] [ref=e74]
+          - generic [ref=e75]:
+            - generic [ref=e76]:
+              - text: Address Line 1
+              - textbox "Address Line 1" [ref=e77]:
+                - /placeholder: Street address
+            - generic [ref=e78]:
+              - text: Address Line 2
+              - textbox "Address Line 2" [ref=e79]:
+                - /placeholder: Apt, suite, floor (optional)
+            - generic [ref=e80]:
+              - text: City
+              - textbox "City" [ref=e81]
+            - generic [ref=e82]:
+              - text: State/Province
+              - combobox [ref=e83] [cursor=pointer]:
+                - generic: Select state...
+                - img [ref=e84]
+              - combobox [ref=e86]
+            - generic [ref=e87]:
+              - text: ZIP/Postal Code
+              - textbox "ZIP/Postal Code" [ref=e88]
+            - generic [ref=e89]:
+              - text: Country
+              - combobox [ref=e90] [cursor=pointer]:
+                - generic: United States
+                - img [ref=e91]
+              - combobox [ref=e93]
+        - generic [ref=e94]:
+          - heading "Tags" [level=3] [ref=e95]
+          - generic [ref=e96]:
+            - generic [ref=e97]: Tags
+            - button "Add or search for tags..." [ref=e98] [cursor=pointer]:
+              - generic [ref=e99]: Add or search for tags...
+        - generic [ref=e100]:
+          - switch "Mark as Test Data" [ref=e101] [cursor=pointer]
+          - checkbox
+          - generic [ref=e102]: Mark as Test Data
+          - generic [ref=e103]: (For admin cleanup purposes)
+        - generic [ref=e104]:
+          - button "Cancel" [ref=e105] [cursor=pointer]
+          - button "Create Contact" [ref=e106] [cursor=pointer]:
+            - img
+            - text: Create Contact
+    - button "Close" [ref=e107] [cursor=pointer]:
+      - img [ref=e108]
+      - generic [ref=e111]: Close
+```

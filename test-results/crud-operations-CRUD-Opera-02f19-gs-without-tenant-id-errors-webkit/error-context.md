@@ -1,0 +1,429 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - img
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - generic [ref=e7]:
+            - generic [ref=e9]: L
+            - generic [ref=e10]: Local Development Tenant
+          - paragraph [ref=e11]: "Managing Client: Local Development Tenant"
+        - generic [ref=e13]:
+          - paragraph [ref=e14]: AI-Powered Business Growth Platform
+          - paragraph [ref=e15]: Oct 25, 2025
+          - paragraph [ref=e16]: 12:16:34 PM
+        - paragraph [ref=e17]: Navigation
+        - navigation [ref=e18]:
+          - list [ref=e19]:
+            - listitem [ref=e20]:
+              - link "Dashboard" [ref=e21]:
+                - /url: /dashboard
+                - img [ref=e22]
+                - generic [ref=e27]: Dashboard
+            - listitem [ref=e28]:
+              - link "Contacts" [ref=e29]:
+                - /url: /contacts
+                - img [ref=e30]
+                - generic [ref=e35]: Contacts
+            - listitem [ref=e36]:
+              - link "Accounts" [ref=e37]:
+                - /url: /accounts
+                - img [ref=e38]
+                - generic [ref=e42]: Accounts
+            - listitem [ref=e43]:
+              - link "Leads" [ref=e44]:
+                - /url: /leads
+                - img [ref=e45]
+                - generic [ref=e49]: Leads
+            - listitem [ref=e50]:
+              - link "Opportunities" [ref=e51]:
+                - /url: /opportunities
+                - img [ref=e52]
+                - generic [ref=e55]: Opportunities
+            - listitem [ref=e56]:
+              - link "Activities" [ref=e57]:
+                - /url: /activities
+                - img [ref=e58]
+                - generic [ref=e61]: Activities
+            - listitem [ref=e62]:
+              - link "Calendar" [ref=e63]:
+                - /url: /calendar
+                - img [ref=e64]
+                - generic [ref=e66]: Calendar
+            - listitem [ref=e67]:
+              - link "BizDev Sources" [ref=e68]:
+                - /url: /bizdevsources
+                - img [ref=e69]
+                - generic [ref=e73]: BizDev Sources
+            - listitem [ref=e74]:
+              - link "Cash Flow" [ref=e75]:
+                - /url: /cashflow
+                - img [ref=e76]
+                - generic [ref=e78]: Cash Flow
+            - listitem [ref=e79]:
+              - link "Document Processing" [ref=e80]:
+                - /url: /documentprocessing
+                - img [ref=e81]
+                - generic [ref=e84]: Document Processing
+            - listitem [ref=e85]:
+              - link "Document Management" [ref=e86]:
+                - /url: /documentmanagement
+                - img [ref=e87]
+                - generic [ref=e89]: Document Management
+            - listitem [ref=e90]:
+              - link "AI Campaigns" [ref=e91]:
+                - /url: /aicampaigns
+                - img [ref=e92]
+                - generic [ref=e95]: AI Campaigns
+            - listitem [ref=e96]:
+              - link "Employees" [ref=e97]:
+                - /url: /employees
+                - img [ref=e98]
+                - generic [ref=e103]: Employees
+            - listitem [ref=e104]:
+              - link "Reports" [ref=e105]:
+                - /url: /reports
+                - img [ref=e106]
+                - generic [ref=e108]: Reports
+            - listitem [ref=e109]:
+              - link "Integrations" [ref=e110]:
+                - /url: /integrations
+                - img [ref=e111]
+                - generic [ref=e113]: Integrations
+            - listitem [ref=e114]:
+              - link "Workflows" [ref=e115]:
+                - /url: /workflows
+                - img [ref=e116]
+                - generic [ref=e118]: Workflows
+            - listitem [ref=e119]:
+              - link "Payment Portal" [ref=e120]:
+                - /url: /paymentportal
+                - img [ref=e121]
+                - generic [ref=e123]: Payment Portal
+            - listitem [ref=e124]:
+              - link "Utilities" [ref=e125]:
+                - /url: /utilities
+                - img [ref=e126]
+                - generic [ref=e128]: Utilities
+            - listitem [ref=e129]:
+              - link "Client Onboarding" [ref=e130]:
+                - /url: /clientonboarding
+                - img [ref=e131]
+                - generic [ref=e134]: Client Onboarding
+        - list [ref=e136]:
+          - listitem [ref=e137]:
+            - link "Workflow Guide" [ref=e138]:
+              - /url: /workflowguide
+              - img [ref=e139]
+              - generic [ref=e141]: Workflow Guide
+          - listitem [ref=e142]:
+            - link "Documentation" [ref=e143]:
+              - /url: /documentation
+              - img [ref=e144]
+              - generic [ref=e146]: Documentation
+          - listitem [ref=e147]:
+            - link "AI Assistant" [ref=e148]:
+              - /url: /agent
+              - img "AI Assistant" [ref=e150]
+          - listitem [ref=e151]:
+            - link "Client Requirements" [ref=e152]:
+              - /url: /clientrequirements
+              - img [ref=e153]
+              - generic [ref=e157]: Client Requirements
+    - generic [ref=e158]:
+      - banner [ref=e159]:
+        - button "Switch to dark mode" [ref=e160] [cursor=pointer]:
+          - img
+        - button "Clear chat" [ref=e161] [cursor=pointer]:
+          - img
+        - generic [ref=e162]:
+          - generic [ref=e163]:
+            - generic [ref=e164]:
+              - img [ref=e165]
+              - combobox [ref=e169] [cursor=pointer]:
+                - img [ref=e170]
+            - generic [ref=e173]: "Managing Client: Unknown Client"
+          - generic [ref=e174]:
+            - img [ref=e175]
+            - generic [ref=e180]: No employees with CRM access
+          - button [ref=e181] [cursor=pointer]:
+            - img
+          - button "D Dev" [ref=e183] [cursor=pointer]:
+            - generic [ref=e185]: D
+            - generic [ref=e186]: Dev
+      - main [ref=e187]:
+        - generic [ref=e189]:
+          - generic [ref=e190]:
+            - generic [ref=e191]:
+              - heading "Contacts" [level=1] [ref=e192]
+              - paragraph [ref=e193]: Track and manage your sales contacts and prospects.
+            - generic [ref=e194]:
+              - button [ref=e195] [cursor=pointer]:
+                - img
+              - button [ref=e196] [cursor=pointer]:
+                - img
+              - button "Export" [ref=e197] [cursor=pointer]:
+                - img
+                - text: Export
+              - button "Import" [ref=e198] [cursor=pointer]:
+                - img
+                - text: Import
+              - button "Add Contact" [ref=e199] [cursor=pointer]:
+                - img
+                - text: Add Contact
+          - generic [ref=e200]:
+            - button "Total Contacts 9" [ref=e201] [cursor=pointer]:
+              - generic [ref=e202]:
+                - generic [ref=e203]: Total Contacts
+                - img [ref=e205]
+              - paragraph [ref=e208]: "9"
+            - button "Active 9" [ref=e209] [cursor=pointer]:
+              - generic [ref=e210]:
+                - generic [ref=e211]: Active
+                - img [ref=e213]
+              - paragraph [ref=e216]: "9"
+            - button "Prospects 0" [ref=e217] [cursor=pointer]:
+              - generic [ref=e218]:
+                - generic [ref=e219]: Prospects
+                - img [ref=e221]
+              - paragraph [ref=e224]: "0"
+            - button "Customers 0" [ref=e225] [cursor=pointer]:
+              - generic [ref=e226]:
+                - generic [ref=e227]: Customers
+                - img [ref=e229]
+              - paragraph [ref=e232]: "0"
+            - button "Inactive 0" [ref=e233] [cursor=pointer]:
+              - generic [ref=e234]:
+                - generic [ref=e235]: Inactive
+                - img [ref=e237]
+              - paragraph [ref=e240]: "0"
+          - generic [ref=e241]:
+            - generic [ref=e242]:
+              - img [ref=e243]
+              - textbox "Search contacts by name, email, phone, company, or job title..." [ref=e246]
+            - button "Tags" [ref=e248] [cursor=pointer]:
+              - img
+              - text: Tags
+          - table [ref=e251]:
+            - rowgroup [ref=e252]:
+              - row "Name Email Phone Company Job Title Assigned To Status Actions" [ref=e253]:
+                - cell [ref=e254]:
+                  - checkbox [ref=e255] [cursor=pointer]
+                - cell "Name" [ref=e256]
+                - cell "Email" [ref=e257]
+                - cell "Phone" [ref=e258]
+                - cell "Company" [ref=e259]
+                - cell "Job Title" [ref=e260]
+                - cell "Assigned To" [ref=e261]
+                - cell "Status" [ref=e262]
+                - cell "Actions" [ref=e263]
+            - rowgroup [ref=e264]:
+              - row "Bob Wilson bob.wilson@innovate.io +15 550103 - - - active" [ref=e265]:
+                - cell [ref=e266]:
+                  - checkbox [ref=e267] [cursor=pointer]
+                - cell "Bob Wilson" [ref=e268]:
+                  - generic [ref=e269]: Bob Wilson
+                - cell "bob.wilson@innovate.io" [ref=e270]
+                - cell "+15 550103" [ref=e271]:
+                  - link "+15 550103" [ref=e272]:
+                    - /url: tel:+1-555-0103
+                - cell "-" [ref=e273]
+                - cell "-" [ref=e274]
+                - cell "-" [ref=e275]
+                - cell "active" [ref=e276]:
+                  - generic [ref=e277]: active
+                - cell [ref=e278]:
+                  - generic [ref=e279]:
+                    - button [ref=e280] [cursor=pointer]:
+                      - img
+                    - button [ref=e281] [cursor=pointer]:
+                      - img
+                    - button [ref=e282] [cursor=pointer]:
+                      - img
+              - row "Jane Doe jane.doe@techco.com +15 550102 - - - active" [ref=e283]:
+                - cell [ref=e284]:
+                  - checkbox [ref=e285] [cursor=pointer]
+                - cell "Jane Doe" [ref=e286]:
+                  - generic [ref=e287]: Jane Doe
+                - cell "jane.doe@techco.com" [ref=e288]
+                - cell "+15 550102" [ref=e289]:
+                  - link "+15 550102" [ref=e290]:
+                    - /url: tel:+1-555-0102
+                - cell "-" [ref=e291]
+                - cell "-" [ref=e292]
+                - cell "-" [ref=e293]
+                - cell "active" [ref=e294]:
+                  - generic [ref=e295]: active
+                - cell [ref=e296]:
+                  - generic [ref=e297]:
+                    - button [ref=e298] [cursor=pointer]:
+                      - img
+                    - button [ref=e299] [cursor=pointer]:
+                      - img
+                    - button [ref=e300] [cursor=pointer]:
+                      - img
+              - row "John Smith john.smith@example.com +15 550101 - - - active" [ref=e301]:
+                - cell [ref=e302]:
+                  - checkbox [ref=e303] [cursor=pointer]
+                - cell "John Smith" [ref=e304]:
+                  - generic [ref=e305]: John Smith
+                - cell "john.smith@example.com" [ref=e306]
+                - cell "+15 550101" [ref=e307]:
+                  - link "+15 550101" [ref=e308]:
+                    - /url: tel:+1-555-0101
+                - cell "-" [ref=e309]
+                - cell "-" [ref=e310]
+                - cell "-" [ref=e311]
+                - cell "active" [ref=e312]:
+                  - generic [ref=e313]: active
+                - cell [ref=e314]:
+                  - generic [ref=e315]:
+                    - button [ref=e316] [cursor=pointer]:
+                      - img
+                    - button [ref=e317] [cursor=pointer]:
+                      - img
+                    - button [ref=e318] [cursor=pointer]:
+                      - img
+              - row "Bob Wilson bob.wilson@innovate.io +15 550103 - - - active" [ref=e319]:
+                - cell [ref=e320]:
+                  - checkbox [ref=e321] [cursor=pointer]
+                - cell "Bob Wilson" [ref=e322]:
+                  - generic [ref=e323]: Bob Wilson
+                - cell "bob.wilson@innovate.io" [ref=e324]
+                - cell "+15 550103" [ref=e325]:
+                  - link "+15 550103" [ref=e326]:
+                    - /url: tel:+1-555-0103
+                - cell "-" [ref=e327]
+                - cell "-" [ref=e328]
+                - cell "-" [ref=e329]
+                - cell "active" [ref=e330]:
+                  - generic [ref=e331]: active
+                - cell [ref=e332]:
+                  - generic [ref=e333]:
+                    - button [ref=e334] [cursor=pointer]:
+                      - img
+                    - button [ref=e335] [cursor=pointer]:
+                      - img
+                    - button [ref=e336] [cursor=pointer]:
+                      - img
+              - row "Jane Doe jane.doe@techco.com +15 550102 - - - active" [ref=e337]:
+                - cell [ref=e338]:
+                  - checkbox [ref=e339] [cursor=pointer]
+                - cell "Jane Doe" [ref=e340]:
+                  - generic [ref=e341]: Jane Doe
+                - cell "jane.doe@techco.com" [ref=e342]
+                - cell "+15 550102" [ref=e343]:
+                  - link "+15 550102" [ref=e344]:
+                    - /url: tel:+1-555-0102
+                - cell "-" [ref=e345]
+                - cell "-" [ref=e346]
+                - cell "-" [ref=e347]
+                - cell "active" [ref=e348]:
+                  - generic [ref=e349]: active
+                - cell [ref=e350]:
+                  - generic [ref=e351]:
+                    - button [ref=e352] [cursor=pointer]:
+                      - img
+                    - button [ref=e353] [cursor=pointer]:
+                      - img
+                    - button [ref=e354] [cursor=pointer]:
+                      - img
+              - row "John Smith john.smith@example.com +15 550101 - - - active" [ref=e355]:
+                - cell [ref=e356]:
+                  - checkbox [ref=e357] [cursor=pointer]
+                - cell "John Smith" [ref=e358]:
+                  - generic [ref=e359]: John Smith
+                - cell "john.smith@example.com" [ref=e360]
+                - cell "+15 550101" [ref=e361]:
+                  - link "+15 550101" [ref=e362]:
+                    - /url: tel:+1-555-0101
+                - cell "-" [ref=e363]
+                - cell "-" [ref=e364]
+                - cell "-" [ref=e365]
+                - cell "active" [ref=e366]:
+                  - generic [ref=e367]: active
+                - cell [ref=e368]:
+                  - generic [ref=e369]:
+                    - button [ref=e370] [cursor=pointer]:
+                      - img
+                    - button [ref=e371] [cursor=pointer]:
+                      - img
+                    - button [ref=e372] [cursor=pointer]:
+                      - img
+              - row "Bob Wilson bob.wilson@innovate.io +15 550103 - - - active" [ref=e373]:
+                - cell [ref=e374]:
+                  - checkbox [ref=e375] [cursor=pointer]
+                - cell "Bob Wilson" [ref=e376]:
+                  - generic [ref=e377]: Bob Wilson
+                - cell "bob.wilson@innovate.io" [ref=e378]
+                - cell "+15 550103" [ref=e379]:
+                  - link "+15 550103" [ref=e380]:
+                    - /url: tel:+1-555-0103
+                - cell "-" [ref=e381]
+                - cell "-" [ref=e382]
+                - cell "-" [ref=e383]
+                - cell "active" [ref=e384]:
+                  - generic [ref=e385]: active
+                - cell [ref=e386]:
+                  - generic [ref=e387]:
+                    - button [ref=e388] [cursor=pointer]:
+                      - img
+                    - button [ref=e389] [cursor=pointer]:
+                      - img
+                    - button [ref=e390] [cursor=pointer]:
+                      - img
+              - row "Jane Doe jane.doe@techco.com +15 550102 - - - active" [ref=e391]:
+                - cell [ref=e392]:
+                  - checkbox [ref=e393] [cursor=pointer]
+                - cell "Jane Doe" [ref=e394]:
+                  - generic [ref=e395]: Jane Doe
+                - cell "jane.doe@techco.com" [ref=e396]
+                - cell "+15 550102" [ref=e397]:
+                  - link "+15 550102" [ref=e398]:
+                    - /url: tel:+1-555-0102
+                - cell "-" [ref=e399]
+                - cell "-" [ref=e400]
+                - cell "-" [ref=e401]
+                - cell "active" [ref=e402]:
+                  - generic [ref=e403]: active
+                - cell [ref=e404]:
+                  - generic [ref=e405]:
+                    - button [ref=e406] [cursor=pointer]:
+                      - img
+                    - button [ref=e407] [cursor=pointer]:
+                      - img
+                    - button [ref=e408] [cursor=pointer]:
+                      - img
+              - row "John Smith john.smith@example.com +15 550101 - - - active" [ref=e409]:
+                - cell [ref=e410]:
+                  - checkbox [ref=e411] [cursor=pointer]
+                - cell "John Smith" [ref=e412]:
+                  - generic [ref=e413]: John Smith
+                - cell "john.smith@example.com" [ref=e414]
+                - cell "+15 550101" [ref=e415]:
+                  - link "+15 550101" [ref=e416]:
+                    - /url: tel:+1-555-0101
+                - cell "-" [ref=e417]
+                - cell "-" [ref=e418]
+                - cell "-" [ref=e419]
+                - cell "active" [ref=e420]:
+                  - generic [ref=e421]: active
+                - cell [ref=e422]:
+                  - generic [ref=e423]:
+                    - button [ref=e424] [cursor=pointer]:
+                      - img
+                    - button [ref=e425] [cursor=pointer]:
+                      - img
+                    - button [ref=e426] [cursor=pointer]:
+                      - img
+      - contentinfo [ref=e427]:
+        - generic [ref=e430]:
+          - img "Ai‑SHA" [ref=e431]
+          - generic [ref=e432]:
+            - generic [ref=e433]: ai-sha crm® is a registered trademark of 4V Data Consulting LLC.
+            - generic [ref=e434]: © 2025 4V Data Consulting LLC. All rights reserved.
+  - generic [ref=e437]: $75,000
+```

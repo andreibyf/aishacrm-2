@@ -1,0 +1,400 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - img
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - generic [ref=e7]:
+            - generic [ref=e9]: L
+            - generic [ref=e10]: Local Development Tenant
+          - paragraph [ref=e11]: ⚠️ No Client Selected
+        - generic [ref=e13]:
+          - paragraph [ref=e14]: AI-Powered Business Growth Platform
+          - paragraph [ref=e15]: Oct 25, 2025
+          - paragraph [ref=e16]: 12:12:34 PM
+        - paragraph [ref=e17]: Navigation
+        - navigation [ref=e18]:
+          - list [ref=e19]:
+            - listitem [ref=e20]:
+              - link "Dashboard" [ref=e21] [cursor=pointer]:
+                - /url: /dashboard
+                - img [ref=e22]
+                - generic [ref=e27]: Dashboard
+            - listitem [ref=e28]:
+              - link "Contacts" [ref=e29] [cursor=pointer]:
+                - /url: /contacts
+                - img [ref=e30]
+                - generic [ref=e35]: Contacts
+            - listitem [ref=e36]:
+              - link "Accounts" [ref=e37] [cursor=pointer]:
+                - /url: /accounts
+                - img [ref=e38]
+                - generic [ref=e46]: Accounts
+            - listitem [ref=e47]:
+              - link "Leads" [ref=e48] [cursor=pointer]:
+                - /url: /leads
+                - img [ref=e49]
+                - generic [ref=e53]: Leads
+            - listitem [ref=e54]:
+              - link "Opportunities" [ref=e55] [cursor=pointer]:
+                - /url: /opportunities
+                - img [ref=e56]
+                - generic [ref=e59]: Opportunities
+            - listitem [ref=e60]:
+              - link "Activities" [ref=e61] [cursor=pointer]:
+                - /url: /activities
+                - img [ref=e62]
+                - generic [ref=e65]: Activities
+            - listitem [ref=e66]:
+              - link "Calendar" [ref=e67] [cursor=pointer]:
+                - /url: /calendar
+                - img [ref=e68]
+                - generic [ref=e73]: Calendar
+            - listitem [ref=e74]:
+              - link "BizDev Sources" [ref=e75] [cursor=pointer]:
+                - /url: /bizdevsources
+                - img [ref=e76]
+                - generic [ref=e80]: BizDev Sources
+            - listitem [ref=e81]:
+              - link "Cash Flow" [ref=e82] [cursor=pointer]:
+                - /url: /cashflow
+                - img [ref=e83]
+                - generic [ref=e86]: Cash Flow
+            - listitem [ref=e87]:
+              - link "Document Processing" [ref=e88] [cursor=pointer]:
+                - /url: /documentprocessing
+                - img [ref=e89]
+                - generic [ref=e95]: Document Processing
+            - listitem [ref=e96]:
+              - link "Document Management" [ref=e97] [cursor=pointer]:
+                - /url: /documentmanagement
+                - img [ref=e98]
+                - generic [ref=e100]: Document Management
+            - listitem [ref=e101]:
+              - link "AI Campaigns" [ref=e102] [cursor=pointer]:
+                - /url: /aicampaigns
+                - img [ref=e103]
+                - generic [ref=e106]: AI Campaigns
+            - listitem [ref=e107]:
+              - link "Employees" [ref=e108] [cursor=pointer]:
+                - /url: /employees
+                - img [ref=e109]
+                - generic [ref=e114]: Employees
+            - listitem [ref=e115]:
+              - link "Reports" [ref=e116] [cursor=pointer]:
+                - /url: /reports
+                - img [ref=e117]
+                - generic [ref=e122]: Reports
+            - listitem [ref=e123]:
+              - link "Integrations" [ref=e124] [cursor=pointer]:
+                - /url: /integrations
+                - img [ref=e125]
+                - generic [ref=e130]: Integrations
+            - listitem [ref=e131]:
+              - link "Workflows" [ref=e132] [cursor=pointer]:
+                - /url: /workflows
+                - img [ref=e133]
+                - generic [ref=e135]: Workflows
+            - listitem [ref=e136]:
+              - link "Payment Portal" [ref=e137] [cursor=pointer]:
+                - /url: /paymentportal
+                - img [ref=e138]
+                - generic [ref=e141]: Payment Portal
+            - listitem [ref=e142]:
+              - link "Utilities" [ref=e143] [cursor=pointer]:
+                - /url: /utilities
+                - img [ref=e144]
+                - generic [ref=e146]: Utilities
+            - listitem [ref=e147]:
+              - link "Client Onboarding" [ref=e148] [cursor=pointer]:
+                - /url: /clientonboarding
+                - img [ref=e149]
+                - generic [ref=e154]: Client Onboarding
+        - list [ref=e156]:
+          - listitem [ref=e157]:
+            - link "Workflow Guide" [ref=e158] [cursor=pointer]:
+              - /url: /workflowguide
+              - img [ref=e159]
+              - generic [ref=e162]: Workflow Guide
+          - listitem [ref=e163]:
+            - link "Documentation" [ref=e164] [cursor=pointer]:
+              - /url: /documentation
+              - img [ref=e165]
+              - generic [ref=e168]: Documentation
+          - listitem [ref=e169]:
+            - link "AI Assistant" [ref=e170] [cursor=pointer]:
+              - /url: /agent
+              - img "AI Assistant" [ref=e172]
+          - listitem [ref=e173]:
+            - link "Client Requirements" [ref=e174] [cursor=pointer]:
+              - /url: /clientrequirements
+              - img [ref=e175]
+              - generic [ref=e179]: Client Requirements
+    - generic [ref=e180]:
+      - banner [ref=e181]:
+        - button "Switch to dark mode" [ref=e182] [cursor=pointer]:
+          - img
+        - button "Clear chat" [ref=e183] [cursor=pointer]:
+          - img
+        - generic [ref=e184]:
+          - generic [ref=e185]:
+            - generic [ref=e186]:
+              - img [ref=e187]
+              - combobox [ref=e195] [cursor=pointer]:
+                - generic:
+                  - generic:
+                    - img
+                    - generic: All Clients (Global View)
+                - img [ref=e196]
+            - generic [ref=e199]: "Managing Client: All Clients"
+          - generic [ref=e200]:
+            - img [ref=e201]
+            - generic [ref=e206]: No employees with CRM access
+          - button [ref=e207] [cursor=pointer]:
+            - img
+          - button "D Dev" [ref=e209] [cursor=pointer]:
+            - generic [ref=e211]: D
+            - generic [ref=e212]: Dev
+      - main [ref=e213]:
+        - generic [ref=e215]:
+          - generic [ref=e218]:
+            - generic [ref=e219]:
+              - heading "Add New Activity" [level=2] [ref=e220]
+              - button "Close" [ref=e221] [cursor=pointer]: ×
+            - generic [ref=e224]:
+              - generic [ref=e225]:
+                - generic [ref=e226]:
+                  - text: Activity Type *
+                  - combobox [ref=e227] [cursor=pointer]:
+                    - generic: Task
+                    - img [ref=e228]
+                  - combobox [ref=e230]
+                - generic [ref=e231]:
+                  - text: Priority
+                  - combobox [ref=e232] [cursor=pointer]:
+                    - generic: Normal Priority
+                    - img [ref=e233]
+                  - combobox [ref=e235]
+              - generic [ref=e236]:
+                - text: Subject *
+                - textbox "Subject *" [ref=e237]:
+                  - /placeholder: Enter activity subject
+              - generic [ref=e238]:
+                - generic [ref=e239]:
+                  - text: Due Date
+                  - textbox "Due Date" [ref=e240]: 2025-10-25
+                - generic [ref=e241]:
+                  - text: Time
+                  - combobox [ref=e242] [cursor=pointer]:
+                    - generic: Select time...
+                    - img [ref=e243]
+                  - combobox [ref=e245]
+              - generic [ref=e246]:
+                - generic [ref=e247]:
+                  - text: Duration (minutes)
+                  - spinbutton "Duration (minutes)" [ref=e248]
+                - generic [ref=e249]:
+                  - text: Status
+                  - combobox [ref=e250] [cursor=pointer]:
+                    - generic: Scheduled
+                    - img [ref=e251]
+                  - combobox [ref=e253]
+              - generic [ref=e254]:
+                - generic [ref=e255]:
+                  - text: Related To
+                  - combobox [ref=e256] [cursor=pointer]:
+                    - generic: None
+                    - img [ref=e257]
+                  - combobox [ref=e259]
+                - generic [ref=e260]:
+                  - text: Related Record
+                  - combobox [disabled] [ref=e261]:
+                    - generic: None
+                    - img [ref=e262]
+                  - combobox [disabled] [ref=e264]
+              - generic [ref=e265]:
+                - text: Assigned To
+                - combobox [ref=e266] [cursor=pointer]:
+                  - generic: Assign to employee...
+                  - img [ref=e267]
+                - combobox [ref=e269]
+              - generic [ref=e270]:
+                - text: Location
+                - textbox "Location" [ref=e271]:
+                  - /placeholder: Meeting location or call details
+              - generic [ref=e272]:
+                - text: Description
+                - textbox "Description" [ref=e273]:
+                  - /placeholder: Activity details and notes...
+              - generic [ref=e274]:
+                - text: Outcome/Result
+                - textbox "Outcome/Result" [ref=e275]:
+                  - /placeholder: Activity outcome or result...
+              - generic [ref=e276]:
+                - switch "Mark as Test Data" [ref=e277] [cursor=pointer]
+                - checkbox
+                - generic [ref=e278]: Mark as Test Data
+                - generic [ref=e279]: (For admin cleanup purposes)
+              - generic [ref=e280]:
+                - button "Cancel" [ref=e281] [cursor=pointer]
+                - button "Create Activity" [ref=e282] [cursor=pointer]:
+                  - img
+                  - text: Create Activity
+          - generic [ref=e283]:
+            - generic [ref=e284]:
+              - heading "Activities" [level=1] [ref=e285]
+              - paragraph [ref=e286]: Track and manage your team's activities and tasks
+            - generic [ref=e287]:
+              - button [ref=e288] [cursor=pointer]:
+                - img
+              - button [ref=e289] [cursor=pointer]:
+                - img
+              - button "Import" [ref=e290] [cursor=pointer]:
+                - img
+                - text: Import
+              - button "Export" [ref=e291] [cursor=pointer]:
+                - img
+                - text: Export
+              - button "Add Activity" [active] [ref=e292] [cursor=pointer]:
+                - img
+                - text: Add Activity
+          - generic [ref=e293]:
+            - generic [ref=e294] [cursor=pointer]:
+              - generic [ref=e295]:
+                - paragraph [ref=e296]: Total Activities
+                - img [ref=e298]
+              - paragraph [ref=e302]: "3"
+            - generic [ref=e303] [cursor=pointer]:
+              - generic [ref=e304]:
+                - paragraph [ref=e305]: Scheduled
+                - img [ref=e307]
+              - paragraph [ref=e311]: "0"
+            - generic [ref=e312] [cursor=pointer]:
+              - generic [ref=e313]:
+                - paragraph [ref=e314]: In Progress
+                - img [ref=e316]
+              - paragraph [ref=e320]: "0"
+            - generic [ref=e321] [cursor=pointer]:
+              - generic [ref=e322]:
+                - paragraph [ref=e323]: Overdue
+                - img [ref=e325]
+              - paragraph [ref=e329]: "0"
+            - generic [ref=e330] [cursor=pointer]:
+              - generic [ref=e331]:
+                - paragraph [ref=e332]: Completed
+                - img [ref=e334]
+              - paragraph [ref=e338]: "0"
+            - generic [ref=e339] [cursor=pointer]:
+              - generic [ref=e340]:
+                - paragraph [ref=e341]: Cancelled
+                - img [ref=e343]
+              - paragraph [ref=e347]: "0"
+          - generic [ref=e348]:
+            - generic [ref=e349]:
+              - img [ref=e350]
+              - textbox "Search activities by subject, description, or related entity..." [ref=e353]
+            - button "Tags" [ref=e356] [cursor=pointer]:
+              - img
+              - text: Tags
+          - table [ref=e360]:
+            - rowgroup [ref=e361]:
+              - row "Activity Type Status Due Date Related To Assigned To Actions" [ref=e362]:
+                - cell [ref=e363]:
+                  - checkbox [ref=e364] [cursor=pointer]
+                - cell "Activity" [ref=e365]
+                - cell "Type" [ref=e366]
+                - cell "Status" [ref=e367]
+                - cell "Due Date" [ref=e368]
+                - cell "Related To" [ref=e369]
+                - cell "Assigned To" [ref=e370]
+                - cell "Actions" [ref=e371]
+            - rowgroup [ref=e372]:
+              - row "Follow-up email to Bob Wilson Sent proposal and pricing information email — — Unassigned" [ref=e373]:
+                - cell [ref=e374]:
+                  - checkbox [ref=e375] [cursor=pointer]
+                - cell "Follow-up email to Bob Wilson Sent proposal and pricing information" [ref=e376] [cursor=pointer]:
+                  - generic [ref=e377]: Follow-up email to Bob Wilson
+                  - generic [ref=e378]: Sent proposal and pricing information
+                - cell "email" [ref=e379] [cursor=pointer]:
+                  - generic [ref=e380]: email
+                - cell [ref=e381] [cursor=pointer]
+                - cell "—" [ref=e383] [cursor=pointer]
+                - cell "—" [ref=e384] [cursor=pointer]
+                - cell "Unassigned" [ref=e385] [cursor=pointer]
+                - cell [ref=e386]:
+                  - generic [ref=e387]:
+                    - button [ref=e388] [cursor=pointer]:
+                      - img
+                    - button [ref=e389] [cursor=pointer]:
+                      - img
+                    - button [ref=e390] [cursor=pointer]:
+                      - img
+              - row "Demo scheduled with Jane Doe Product demo for TechCo team meeting — — Unassigned" [ref=e391]:
+                - cell [ref=e392]:
+                  - checkbox [ref=e393] [cursor=pointer]
+                - cell "Demo scheduled with Jane Doe Product demo for TechCo team" [ref=e394] [cursor=pointer]:
+                  - generic [ref=e395]: Demo scheduled with Jane Doe
+                  - generic [ref=e396]: Product demo for TechCo team
+                - cell "meeting" [ref=e397] [cursor=pointer]:
+                  - generic [ref=e398]: meeting
+                - cell [ref=e399] [cursor=pointer]
+                - cell "—" [ref=e401] [cursor=pointer]
+                - cell "—" [ref=e402] [cursor=pointer]
+                - cell "Unassigned" [ref=e403] [cursor=pointer]
+                - cell [ref=e404]:
+                  - generic [ref=e405]:
+                    - button [ref=e406] [cursor=pointer]:
+                      - img
+                    - button [ref=e407] [cursor=pointer]:
+                      - img
+                    - button [ref=e408] [cursor=pointer]:
+                      - img
+              - row "Initial call with John Smith Discussed product requirements and timeline call — — Unassigned" [ref=e409]:
+                - cell [ref=e410]:
+                  - checkbox [ref=e411] [cursor=pointer]
+                - cell "Initial call with John Smith Discussed product requirements and timeline" [ref=e412] [cursor=pointer]:
+                  - generic [ref=e413]: Initial call with John Smith
+                  - generic [ref=e414]: Discussed product requirements and timeline
+                - cell "call" [ref=e415] [cursor=pointer]:
+                  - generic [ref=e416]: call
+                - cell [ref=e417] [cursor=pointer]
+                - cell "—" [ref=e419] [cursor=pointer]
+                - cell "—" [ref=e420] [cursor=pointer]
+                - cell "Unassigned" [ref=e421] [cursor=pointer]
+                - cell [ref=e422]:
+                  - generic [ref=e423]:
+                    - button [ref=e424] [cursor=pointer]:
+                      - img
+                    - button [ref=e425] [cursor=pointer]:
+                      - img
+                    - button [ref=e426] [cursor=pointer]:
+                      - img
+          - generic [ref=e427]:
+            - generic [ref=e428]:
+              - generic [ref=e429]: Showing 1 to 3 of 3 results
+              - generic [ref=e430]:
+                - generic [ref=e431]: "Show:"
+                - combobox [ref=e432] [cursor=pointer]:
+                  - generic: "25"
+                  - img [ref=e433]
+            - generic [ref=e435]:
+              - button [disabled]:
+                - img
+              - button [disabled]:
+                - img
+              - button "1" [ref=e437] [cursor=pointer]
+              - button [disabled]:
+                - img
+              - button [disabled]:
+                - img
+      - contentinfo [ref=e438]:
+        - generic [ref=e441]:
+          - img "Ai‑SHA" [ref=e442]
+          - generic [ref=e443]:
+            - generic [ref=e444]: ai-sha crm® is a registered trademark of 4V Data Consulting LLC.
+            - generic [ref=e445]: © 2025 4V Data Consulting LLC. All rights reserved.
+  - generic [ref=e448]: $75,000
+```

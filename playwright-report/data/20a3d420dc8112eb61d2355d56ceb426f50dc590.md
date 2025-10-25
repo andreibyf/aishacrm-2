@@ -1,0 +1,536 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - img
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - generic [ref=e7]:
+            - generic [ref=e9]: L
+            - generic [ref=e10]: Local Development Tenant
+          - paragraph [ref=e11]: ⚠️ No Client Selected
+        - generic [ref=e13]:
+          - paragraph [ref=e14]: AI-Powered Business Growth Platform
+          - paragraph [ref=e15]: Oct 25, 2025
+          - paragraph [ref=e16]: 12:17:43 PM
+        - paragraph [ref=e17]: Navigation
+        - navigation [ref=e18]:
+          - list [ref=e19]:
+            - listitem [ref=e20]:
+              - link "Dashboard" [ref=e21] [cursor=pointer]:
+                - /url: /dashboard
+                - img [ref=e22]
+                - generic [ref=e27]: Dashboard
+            - listitem [ref=e28]:
+              - link "Contacts" [ref=e29] [cursor=pointer]:
+                - /url: /contacts
+                - img [ref=e30]
+                - generic [ref=e35]: Contacts
+            - listitem [ref=e36]:
+              - link "Accounts" [ref=e37] [cursor=pointer]:
+                - /url: /accounts
+                - img [ref=e38]
+                - generic [ref=e46]: Accounts
+            - listitem [ref=e47]:
+              - link "Leads" [ref=e48] [cursor=pointer]:
+                - /url: /leads
+                - img [ref=e49]
+                - generic [ref=e53]: Leads
+            - listitem [ref=e54]:
+              - link "Opportunities" [ref=e55] [cursor=pointer]:
+                - /url: /opportunities
+                - img [ref=e56]
+                - generic [ref=e59]: Opportunities
+            - listitem [ref=e60]:
+              - link "Activities" [ref=e61] [cursor=pointer]:
+                - /url: /activities
+                - img [ref=e62]
+                - generic [ref=e65]: Activities
+            - listitem [ref=e66]:
+              - link "Calendar" [ref=e67] [cursor=pointer]:
+                - /url: /calendar
+                - img [ref=e68]
+                - generic [ref=e73]: Calendar
+            - listitem [ref=e74]:
+              - link "BizDev Sources" [ref=e75] [cursor=pointer]:
+                - /url: /bizdevsources
+                - img [ref=e76]
+                - generic [ref=e80]: BizDev Sources
+            - listitem [ref=e81]:
+              - link "Cash Flow" [ref=e82] [cursor=pointer]:
+                - /url: /cashflow
+                - img [ref=e83]
+                - generic [ref=e86]: Cash Flow
+            - listitem [ref=e87]:
+              - link "Document Processing" [ref=e88] [cursor=pointer]:
+                - /url: /documentprocessing
+                - img [ref=e89]
+                - generic [ref=e95]: Document Processing
+            - listitem [ref=e96]:
+              - link "Document Management" [ref=e97] [cursor=pointer]:
+                - /url: /documentmanagement
+                - img [ref=e98]
+                - generic [ref=e100]: Document Management
+            - listitem [ref=e101]:
+              - link "AI Campaigns" [ref=e102] [cursor=pointer]:
+                - /url: /aicampaigns
+                - img [ref=e103]
+                - generic [ref=e106]: AI Campaigns
+            - listitem [ref=e107]:
+              - link "Employees" [ref=e108] [cursor=pointer]:
+                - /url: /employees
+                - img [ref=e109]
+                - generic [ref=e114]: Employees
+            - listitem [ref=e115]:
+              - link "Reports" [ref=e116] [cursor=pointer]:
+                - /url: /reports
+                - img [ref=e117]
+                - generic [ref=e122]: Reports
+            - listitem [ref=e123]:
+              - link "Integrations" [ref=e124] [cursor=pointer]:
+                - /url: /integrations
+                - img [ref=e125]
+                - generic [ref=e130]: Integrations
+            - listitem [ref=e131]:
+              - link "Workflows" [ref=e132] [cursor=pointer]:
+                - /url: /workflows
+                - img [ref=e133]
+                - generic [ref=e135]: Workflows
+            - listitem [ref=e136]:
+              - link "Payment Portal" [ref=e137] [cursor=pointer]:
+                - /url: /paymentportal
+                - img [ref=e138]
+                - generic [ref=e141]: Payment Portal
+            - listitem [ref=e142]:
+              - link "Utilities" [ref=e143] [cursor=pointer]:
+                - /url: /utilities
+                - img [ref=e144]
+                - generic [ref=e146]: Utilities
+            - listitem [ref=e147]:
+              - link "Client Onboarding" [ref=e148] [cursor=pointer]:
+                - /url: /clientonboarding
+                - img [ref=e149]
+                - generic [ref=e154]: Client Onboarding
+        - list [ref=e156]:
+          - listitem [ref=e157]:
+            - link "Workflow Guide" [ref=e158] [cursor=pointer]:
+              - /url: /workflowguide
+              - img [ref=e159]
+              - generic [ref=e162]: Workflow Guide
+          - listitem [ref=e163]:
+            - link "Documentation" [ref=e164] [cursor=pointer]:
+              - /url: /documentation
+              - img [ref=e165]
+              - generic [ref=e168]: Documentation
+          - listitem [ref=e169]:
+            - link "AI Assistant" [ref=e170] [cursor=pointer]:
+              - /url: /agent
+              - img "AI Assistant" [ref=e172]
+          - listitem [ref=e173]:
+            - link "Client Requirements" [ref=e174] [cursor=pointer]:
+              - /url: /clientrequirements
+              - img [ref=e175]
+              - generic [ref=e179]: Client Requirements
+    - generic [ref=e180]:
+      - banner [ref=e181]:
+        - button "Switch to dark mode" [ref=e182] [cursor=pointer]:
+          - img
+        - button "Clear chat" [ref=e183] [cursor=pointer]:
+          - img
+        - generic [ref=e184]:
+          - generic [ref=e185]:
+            - generic [ref=e186]:
+              - img [ref=e187]
+              - combobox [ref=e195] [cursor=pointer]:
+                - generic:
+                  - generic:
+                    - img
+                    - generic: All Clients (Global View)
+                - img [ref=e196]
+            - generic [ref=e199]: "Managing Client: All Clients"
+          - generic [ref=e200]:
+            - img [ref=e201]
+            - generic [ref=e206]: No employees with CRM access
+          - button [ref=e207] [cursor=pointer]:
+            - img
+          - button "D Dev" [ref=e209] [cursor=pointer]:
+            - generic [ref=e211]: D
+            - generic [ref=e212]: Dev
+      - main [ref=e213]:
+        - generic [ref=e215]:
+          - generic [ref=e218]:
+            - generic [ref=e219]:
+              - heading "Add New Opportunity" [level=2] [ref=e220]
+              - button "Close" [ref=e221] [cursor=pointer]: ×
+            - generic [ref=e224]:
+              - generic [ref=e226]:
+                - generic [ref=e227]: Opportunity Name *
+                - textbox "Opportunity Name *" [ref=e228]:
+                  - /placeholder: Enter opportunity name
+                  - text: E2E Opportunity 1761409011291
+              - generic [ref=e229]:
+                - generic [ref=e230]:
+                  - generic [ref=e231]: Amount *
+                  - spinbutton "Amount *" [active] [ref=e232]: "50000"
+                - generic [ref=e233]:
+                  - generic [ref=e234]: Expected Close Date *
+                  - textbox "Expected Close Date *" [ref=e235]
+              - generic [ref=e236]:
+                - generic [ref=e237]:
+                  - text: Stage
+                  - combobox "Stage" [ref=e238] [cursor=pointer]:
+                    - generic: Prospecting
+                    - img [ref=e239]
+                  - combobox [ref=e241]
+                - generic [ref=e242]:
+                  - text: Type
+                  - combobox "Type" [ref=e243] [cursor=pointer]:
+                    - generic: New Business
+                    - img [ref=e244]
+                  - combobox [ref=e246]
+              - generic [ref=e247]:
+                - generic [ref=e248]:
+                  - generic [ref=e249]: Account
+                  - button "Create New" [ref=e250] [cursor=pointer]:
+                    - img
+                    - text: Create New
+                - combobox [ref=e251] [cursor=pointer]:
+                  - generic [ref=e252]: Search for account (optional)
+                  - generic [ref=e253]:
+                    - img
+              - generic [ref=e254]:
+                - generic [ref=e256]: Contact
+                - combobox [ref=e257] [cursor=pointer]:
+                  - generic [ref=e258]: Search for contact (optional)
+                  - generic [ref=e259]:
+                    - img
+              - generic [ref=e260]:
+                - text: Related Lead
+                - combobox "Related Lead" [ref=e261] [cursor=pointer]:
+                  - generic: Select lead (optional)
+                  - img [ref=e262]
+                - combobox [ref=e264]
+              - generic [ref=e265]:
+                - text: Assigned To
+                - combobox "Assigned To" [ref=e266] [cursor=pointer]:
+                  - generic: Select user
+                  - img [ref=e267]
+                - combobox [ref=e269]
+              - generic [ref=e270]:
+                - text: Lead Source
+                - combobox "Lead Source" [ref=e271] [cursor=pointer]:
+                  - generic: Website
+                  - img [ref=e272]
+                - combobox [ref=e274]
+              - generic [ref=e275]:
+                - text: Description
+                - textbox "Description" [ref=e276]:
+                  - /placeholder: Describe the opportunity...
+              - generic [ref=e277]:
+                - text: Next Step
+                - textbox "Next Step" [ref=e278]:
+                  - /placeholder: What's the next action?
+              - generic [ref=e279]:
+                - text: Competitor
+                - textbox "Competitor" [ref=e280]:
+                  - /placeholder: Who are you competing against?
+              - generic [ref=e281]:
+                - text: Tags
+                - button "Add tags..." [ref=e282] [cursor=pointer]:
+                  - generic [ref=e283]: Add tags...
+              - generic [ref=e284]:
+                - switch "Mark as Test Data" [ref=e285] [cursor=pointer]
+                - checkbox
+                - generic [ref=e286]: Mark as Test Data
+                - generic [ref=e287]: (For admin cleanup purposes)
+              - generic [ref=e288]:
+                - button "Cancel" [ref=e289] [cursor=pointer]
+                - button "Create Opportunity" [ref=e290] [cursor=pointer]
+          - generic [ref=e291]:
+            - generic [ref=e292]:
+              - heading "Opportunities" [level=1] [ref=e293]
+              - paragraph [ref=e294]: Track and manage your sales opportunities and pipeline.
+            - generic [ref=e295]:
+              - button [ref=e296] [cursor=pointer]:
+                - img
+              - button [ref=e297] [cursor=pointer]:
+                - img
+              - button "Import" [ref=e298] [cursor=pointer]:
+                - img
+                - text: Import
+              - button "Export" [ref=e299] [cursor=pointer]:
+                - img
+                - text: Export
+              - button "Add Opportunity" [ref=e300] [cursor=pointer]:
+                - img
+                - text: Add Opportunity
+          - generic [ref=e301]:
+            - generic [ref=e302] [cursor=pointer]:
+              - generic [ref=e303]:
+                - paragraph [ref=e304]: Total Pipeline
+                - img [ref=e306]
+              - paragraph [ref=e310]: "9"
+            - generic [ref=e311] [cursor=pointer]:
+              - generic [ref=e312]:
+                - paragraph [ref=e313]: Prospecting
+                - img [ref=e315]
+              - paragraph [ref=e319]: "0"
+            - generic [ref=e320] [cursor=pointer]:
+              - generic [ref=e321]:
+                - paragraph [ref=e322]: Qualification
+                - img [ref=e324]
+              - paragraph [ref=e328]: "3"
+            - generic [ref=e329] [cursor=pointer]:
+              - generic [ref=e330]:
+                - paragraph [ref=e331]: Proposal
+                - img [ref=e333]
+              - paragraph [ref=e337]: "3"
+            - generic [ref=e338] [cursor=pointer]:
+              - generic [ref=e339]:
+                - paragraph [ref=e340]: Negotiation
+                - img [ref=e342]
+              - paragraph [ref=e346]: "3"
+            - generic [ref=e347] [cursor=pointer]:
+              - generic [ref=e348]:
+                - paragraph [ref=e349]: Closed Won
+                - img [ref=e351]
+              - paragraph [ref=e355]: "0"
+            - generic [ref=e356] [cursor=pointer]:
+              - generic [ref=e357]:
+                - paragraph [ref=e358]: Closed Lost
+                - img [ref=e360]
+              - paragraph [ref=e364]: "0"
+          - generic [ref=e365]:
+            - generic [ref=e366]:
+              - img [ref=e367]
+              - textbox "Search opportunities by name, account, contact, or description..." [ref=e370]
+            - button "Tags" [ref=e373] [cursor=pointer]:
+              - img
+              - text: Tags
+          - table [ref=e377]:
+            - rowgroup [ref=e378]:
+              - row "Opportunity Stage Amount Probability Close Date Assigned To Actions" [ref=e379]:
+                - cell [ref=e380]:
+                  - checkbox [ref=e381] [cursor=pointer]
+                - cell "Opportunity" [ref=e382]
+                - cell "Stage" [ref=e383]
+                - cell "Amount" [ref=e384]
+                - cell "Probability" [ref=e385]
+                - cell "Close Date" [ref=e386]
+                - cell "Assigned To" [ref=e387]
+                - cell "Actions" [ref=e388]
+            - rowgroup [ref=e389]:
+              - row "Innovate Solutions - Consulting qualification $15000.00 40% Dec 24, 2025 Unassigned" [ref=e390]:
+                - cell [ref=e391]:
+                  - checkbox [ref=e392] [cursor=pointer]
+                - cell "Innovate Solutions - Consulting" [ref=e393] [cursor=pointer]:
+                  - generic [ref=e394]: Innovate Solutions - Consulting
+                - cell "qualification" [ref=e395] [cursor=pointer]:
+                  - generic [ref=e396]: qualification
+                - cell "$15000.00" [ref=e397] [cursor=pointer]:
+                  - generic [ref=e398]: $15000.00
+                - cell "40%" [ref=e399] [cursor=pointer]
+                - cell "Dec 24, 2025" [ref=e400] [cursor=pointer]
+                - cell "Unassigned" [ref=e401] [cursor=pointer]
+                - cell [ref=e402]:
+                  - generic [ref=e403]:
+                    - button [ref=e404] [cursor=pointer]:
+                      - img
+                    - button [ref=e405] [cursor=pointer]:
+                      - img
+                    - button [ref=e406] [cursor=pointer]:
+                      - img
+              - row "TechCo - Annual Subscription TechCo Inc negotiation $25000.00 60% Dec 9, 2025 Unassigned" [ref=e407]:
+                - cell [ref=e408]:
+                  - checkbox [ref=e409] [cursor=pointer]
+                - cell "TechCo - Annual Subscription TechCo Inc" [ref=e410] [cursor=pointer]:
+                  - generic [ref=e411]: TechCo - Annual Subscription
+                  - generic [ref=e412]: TechCo Inc
+                - cell "negotiation" [ref=e413] [cursor=pointer]:
+                  - generic [ref=e414]: negotiation
+                - cell "$25000.00" [ref=e415] [cursor=pointer]:
+                  - generic [ref=e416]: $25000.00
+                - cell "60%" [ref=e417] [cursor=pointer]
+                - cell "Dec 9, 2025" [ref=e418] [cursor=pointer]
+                - cell "Unassigned" [ref=e419] [cursor=pointer]
+                - cell [ref=e420]:
+                  - generic [ref=e421]:
+                    - button [ref=e422] [cursor=pointer]:
+                      - img
+                    - button [ref=e423] [cursor=pointer]:
+                      - img
+                    - button [ref=e424] [cursor=pointer]:
+                      - img
+              - row "Acme Corp - Enterprise License Acme Corp proposal $50000.00 75% Nov 24, 2025 Unassigned" [ref=e425]:
+                - cell [ref=e426]:
+                  - checkbox [ref=e427] [cursor=pointer]
+                - cell "Acme Corp - Enterprise License Acme Corp" [ref=e428] [cursor=pointer]:
+                  - generic [ref=e429]: Acme Corp - Enterprise License
+                  - generic [ref=e430]: Acme Corp
+                - cell "proposal" [ref=e431] [cursor=pointer]:
+                  - generic [ref=e432]: proposal
+                - cell "$50000.00" [ref=e433] [cursor=pointer]:
+                  - generic [ref=e434]: $50000.00
+                - cell "75%" [ref=e435] [cursor=pointer]
+                - cell "Nov 24, 2025" [ref=e436] [cursor=pointer]
+                - cell "Unassigned" [ref=e437] [cursor=pointer]
+                - cell [ref=e438]:
+                  - generic [ref=e439]:
+                    - button [ref=e440] [cursor=pointer]:
+                      - img
+                    - button [ref=e441] [cursor=pointer]:
+                      - img
+                    - button [ref=e442] [cursor=pointer]:
+                      - img
+              - row "Innovate Solutions - Consulting qualification $15000.00 40% Dec 24, 2025 Unassigned" [ref=e443]:
+                - cell [ref=e444]:
+                  - checkbox [ref=e445] [cursor=pointer]
+                - cell "Innovate Solutions - Consulting" [ref=e446] [cursor=pointer]:
+                  - generic [ref=e447]: Innovate Solutions - Consulting
+                - cell "qualification" [ref=e448] [cursor=pointer]:
+                  - generic [ref=e449]: qualification
+                - cell "$15000.00" [ref=e450] [cursor=pointer]:
+                  - generic [ref=e451]: $15000.00
+                - cell "40%" [ref=e452] [cursor=pointer]
+                - cell "Dec 24, 2025" [ref=e453] [cursor=pointer]
+                - cell "Unassigned" [ref=e454] [cursor=pointer]
+                - cell [ref=e455]:
+                  - generic [ref=e456]:
+                    - button [ref=e457] [cursor=pointer]:
+                      - img
+                    - button [ref=e458] [cursor=pointer]:
+                      - img
+                    - button [ref=e459] [cursor=pointer]:
+                      - img
+              - row "TechCo - Annual Subscription TechCo Inc negotiation $25000.00 60% Dec 9, 2025 Unassigned" [ref=e460]:
+                - cell [ref=e461]:
+                  - checkbox [ref=e462] [cursor=pointer]
+                - cell "TechCo - Annual Subscription TechCo Inc" [ref=e463] [cursor=pointer]:
+                  - generic [ref=e464]: TechCo - Annual Subscription
+                  - generic [ref=e465]: TechCo Inc
+                - cell "negotiation" [ref=e466] [cursor=pointer]:
+                  - generic [ref=e467]: negotiation
+                - cell "$25000.00" [ref=e468] [cursor=pointer]:
+                  - generic [ref=e469]: $25000.00
+                - cell "60%" [ref=e470] [cursor=pointer]
+                - cell "Dec 9, 2025" [ref=e471] [cursor=pointer]
+                - cell "Unassigned" [ref=e472] [cursor=pointer]
+                - cell [ref=e473]:
+                  - generic [ref=e474]:
+                    - button [ref=e475] [cursor=pointer]:
+                      - img
+                    - button [ref=e476] [cursor=pointer]:
+                      - img
+                    - button [ref=e477] [cursor=pointer]:
+                      - img
+              - row "Acme Corp - Enterprise License Acme Corp proposal $50000.00 75% Nov 24, 2025 Unassigned" [ref=e478]:
+                - cell [ref=e479]:
+                  - checkbox [ref=e480] [cursor=pointer]
+                - cell "Acme Corp - Enterprise License Acme Corp" [ref=e481] [cursor=pointer]:
+                  - generic [ref=e482]: Acme Corp - Enterprise License
+                  - generic [ref=e483]: Acme Corp
+                - cell "proposal" [ref=e484] [cursor=pointer]:
+                  - generic [ref=e485]: proposal
+                - cell "$50000.00" [ref=e486] [cursor=pointer]:
+                  - generic [ref=e487]: $50000.00
+                - cell "75%" [ref=e488] [cursor=pointer]
+                - cell "Nov 24, 2025" [ref=e489] [cursor=pointer]
+                - cell "Unassigned" [ref=e490] [cursor=pointer]
+                - cell [ref=e491]:
+                  - generic [ref=e492]:
+                    - button [ref=e493] [cursor=pointer]:
+                      - img
+                    - button [ref=e494] [cursor=pointer]:
+                      - img
+                    - button [ref=e495] [cursor=pointer]:
+                      - img
+              - row "Innovate Solutions - Consulting qualification $15000.00 40% Dec 24, 2025 Unassigned" [ref=e496]:
+                - cell [ref=e497]:
+                  - checkbox [ref=e498] [cursor=pointer]
+                - cell "Innovate Solutions - Consulting" [ref=e499] [cursor=pointer]:
+                  - generic [ref=e500]: Innovate Solutions - Consulting
+                - cell "qualification" [ref=e501] [cursor=pointer]:
+                  - generic [ref=e502]: qualification
+                - cell "$15000.00" [ref=e503] [cursor=pointer]:
+                  - generic [ref=e504]: $15000.00
+                - cell "40%" [ref=e505] [cursor=pointer]
+                - cell "Dec 24, 2025" [ref=e506] [cursor=pointer]
+                - cell "Unassigned" [ref=e507] [cursor=pointer]
+                - cell [ref=e508]:
+                  - generic [ref=e509]:
+                    - button [ref=e510] [cursor=pointer]:
+                      - img
+                    - button [ref=e511] [cursor=pointer]:
+                      - img
+                    - button [ref=e512] [cursor=pointer]:
+                      - img
+              - row "TechCo - Annual Subscription TechCo Inc negotiation $25000.00 60% Dec 9, 2025 Unassigned" [ref=e513]:
+                - cell [ref=e514]:
+                  - checkbox [ref=e515] [cursor=pointer]
+                - cell "TechCo - Annual Subscription TechCo Inc" [ref=e516] [cursor=pointer]:
+                  - generic [ref=e517]: TechCo - Annual Subscription
+                  - generic [ref=e518]: TechCo Inc
+                - cell "negotiation" [ref=e519] [cursor=pointer]:
+                  - generic [ref=e520]: negotiation
+                - cell "$25000.00" [ref=e521] [cursor=pointer]:
+                  - generic [ref=e522]: $25000.00
+                - cell "60%" [ref=e523] [cursor=pointer]
+                - cell "Dec 9, 2025" [ref=e524] [cursor=pointer]
+                - cell "Unassigned" [ref=e525] [cursor=pointer]
+                - cell [ref=e526]:
+                  - generic [ref=e527]:
+                    - button [ref=e528] [cursor=pointer]:
+                      - img
+                    - button [ref=e529] [cursor=pointer]:
+                      - img
+                    - button [ref=e530] [cursor=pointer]:
+                      - img
+              - row "Acme Corp - Enterprise License Acme Corp proposal $50000.00 75% Nov 24, 2025 Unassigned" [ref=e531]:
+                - cell [ref=e532]:
+                  - checkbox [ref=e533] [cursor=pointer]
+                - cell "Acme Corp - Enterprise License Acme Corp" [ref=e534] [cursor=pointer]:
+                  - generic [ref=e535]: Acme Corp - Enterprise License
+                  - generic [ref=e536]: Acme Corp
+                - cell "proposal" [ref=e537] [cursor=pointer]:
+                  - generic [ref=e538]: proposal
+                - cell "$50000.00" [ref=e539] [cursor=pointer]:
+                  - generic [ref=e540]: $50000.00
+                - cell "75%" [ref=e541] [cursor=pointer]
+                - cell "Nov 24, 2025" [ref=e542] [cursor=pointer]
+                - cell "Unassigned" [ref=e543] [cursor=pointer]
+                - cell [ref=e544]:
+                  - generic [ref=e545]:
+                    - button [ref=e546] [cursor=pointer]:
+                      - img
+                    - button [ref=e547] [cursor=pointer]:
+                      - img
+                    - button [ref=e548] [cursor=pointer]:
+                      - img
+          - generic [ref=e549]:
+            - generic [ref=e550]:
+              - generic [ref=e551]: Showing 1 to 9 of 9 results
+              - generic [ref=e552]:
+                - generic [ref=e553]: "Show:"
+                - combobox [ref=e554] [cursor=pointer]:
+                  - generic: "25"
+                  - img [ref=e555]
+            - generic [ref=e557]:
+              - button [disabled]:
+                - img
+              - button [disabled]:
+                - img
+              - button "1" [ref=e559] [cursor=pointer]
+              - button [disabled]:
+                - img
+              - button [disabled]:
+                - img
+      - contentinfo [ref=e560]:
+        - generic [ref=e563]:
+          - img "Ai‑SHA" [ref=e564]
+          - generic [ref=e565]:
+            - generic [ref=e566]: ai-sha crm® is a registered trademark of 4V Data Consulting LLC.
+            - generic [ref=e567]: © 2025 4V Data Consulting LLC. All rights reserved.
+  - generic [ref=e570]: $75,000
+```

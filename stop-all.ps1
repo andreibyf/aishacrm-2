@@ -17,18 +17,6 @@ if ($nodeProcesses) {
     Write-Host "  ⚠ No Node.js processes running" -ForegroundColor Yellow
 }
 
-# Ask about Docker containers
-Write-Host "`nStop Docker containers? (y/N): " -ForegroundColor Yellow -NoNewline
-$stopDocker = Read-Host
-
-if ($stopDocker -eq 'y') {
-    Write-Host "Stopping Docker containers..." -ForegroundColor Yellow
-    docker-compose down
-    Write-Host "  ✓ Docker containers stopped" -ForegroundColor Green
-} else {
-    Write-Host "  ⚠ Keeping Docker containers running" -ForegroundColor Yellow
-}
-
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "  ✓ Shutdown complete" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Cyan

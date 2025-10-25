@@ -1,0 +1,478 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - img
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - generic [ref=e7]:
+            - generic [ref=e9]: L
+            - generic [ref=e10]: Local Development Tenant
+          - paragraph [ref=e11]: ⚠️ No Client Selected
+        - generic [ref=e13]:
+          - paragraph [ref=e14]: AI-Powered Business Growth Platform
+          - paragraph [ref=e15]: Oct 25, 2025
+          - paragraph [ref=e16]: 12:14:27 PM
+        - paragraph [ref=e17]: Navigation
+        - navigation [ref=e18]:
+          - list [ref=e19]:
+            - listitem [ref=e20]:
+              - link "Dashboard" [ref=e21] [cursor=pointer]:
+                - /url: /dashboard
+                - img [ref=e22]
+                - generic [ref=e27]: Dashboard
+            - listitem [ref=e28]:
+              - link "Contacts" [ref=e29] [cursor=pointer]:
+                - /url: /contacts
+                - img [ref=e30]
+                - generic [ref=e35]: Contacts
+            - listitem [ref=e36]:
+              - link "Accounts" [ref=e37] [cursor=pointer]:
+                - /url: /accounts
+                - img [ref=e38]
+                - generic [ref=e42]: Accounts
+            - listitem [ref=e43]:
+              - link "Leads" [ref=e44] [cursor=pointer]:
+                - /url: /leads
+                - img [ref=e45]
+                - generic [ref=e49]: Leads
+            - listitem [ref=e50]:
+              - link "Opportunities" [ref=e51] [cursor=pointer]:
+                - /url: /opportunities
+                - img [ref=e52]
+                - generic [ref=e55]: Opportunities
+            - listitem [ref=e56]:
+              - link "Activities" [ref=e57] [cursor=pointer]:
+                - /url: /activities
+                - img [ref=e58]
+                - generic [ref=e61]: Activities
+            - listitem [ref=e62]:
+              - link "Calendar" [ref=e63] [cursor=pointer]:
+                - /url: /calendar
+                - img [ref=e64]
+                - generic [ref=e66]: Calendar
+            - listitem [ref=e67]:
+              - link "BizDev Sources" [ref=e68] [cursor=pointer]:
+                - /url: /bizdevsources
+                - img [ref=e69]
+                - generic [ref=e73]: BizDev Sources
+            - listitem [ref=e74]:
+              - link "Cash Flow" [ref=e75] [cursor=pointer]:
+                - /url: /cashflow
+                - img [ref=e76]
+                - generic [ref=e78]: Cash Flow
+            - listitem [ref=e79]:
+              - link "Document Processing" [ref=e80] [cursor=pointer]:
+                - /url: /documentprocessing
+                - img [ref=e81]
+                - generic [ref=e84]: Document Processing
+            - listitem [ref=e85]:
+              - link "Document Management" [ref=e86] [cursor=pointer]:
+                - /url: /documentmanagement
+                - img [ref=e87]
+                - generic [ref=e89]: Document Management
+            - listitem [ref=e90]:
+              - link "AI Campaigns" [ref=e91] [cursor=pointer]:
+                - /url: /aicampaigns
+                - img [ref=e92]
+                - generic [ref=e95]: AI Campaigns
+            - listitem [ref=e96]:
+              - link "Employees" [ref=e97] [cursor=pointer]:
+                - /url: /employees
+                - img [ref=e98]
+                - generic [ref=e103]: Employees
+            - listitem [ref=e104]:
+              - link "Reports" [ref=e105] [cursor=pointer]:
+                - /url: /reports
+                - img [ref=e106]
+                - generic [ref=e108]: Reports
+            - listitem [ref=e109]:
+              - link "Integrations" [ref=e110] [cursor=pointer]:
+                - /url: /integrations
+                - img [ref=e111]
+                - generic [ref=e113]: Integrations
+            - listitem [ref=e114]:
+              - link "Workflows" [ref=e115] [cursor=pointer]:
+                - /url: /workflows
+                - img [ref=e116]
+                - generic [ref=e118]: Workflows
+            - listitem [ref=e119]:
+              - link "Payment Portal" [ref=e120] [cursor=pointer]:
+                - /url: /paymentportal
+                - img [ref=e121]
+                - generic [ref=e123]: Payment Portal
+            - listitem [ref=e124]:
+              - link "Utilities" [ref=e125] [cursor=pointer]:
+                - /url: /utilities
+                - img [ref=e126]
+                - generic [ref=e128]: Utilities
+            - listitem [ref=e129]:
+              - link "Client Onboarding" [ref=e130] [cursor=pointer]:
+                - /url: /clientonboarding
+                - img [ref=e131]
+                - generic [ref=e134]: Client Onboarding
+        - list [ref=e136]:
+          - listitem [ref=e137]:
+            - link "Workflow Guide" [ref=e138] [cursor=pointer]:
+              - /url: /workflowguide
+              - img [ref=e139]
+              - generic [ref=e141]: Workflow Guide
+          - listitem [ref=e142]:
+            - link "Documentation" [ref=e143] [cursor=pointer]:
+              - /url: /documentation
+              - img [ref=e144]
+              - generic [ref=e146]: Documentation
+          - listitem [ref=e147]:
+            - link "AI Assistant" [ref=e148] [cursor=pointer]:
+              - /url: /agent
+              - img "AI Assistant" [ref=e150]
+          - listitem [ref=e151]:
+            - link "Client Requirements" [ref=e152] [cursor=pointer]:
+              - /url: /clientrequirements
+              - img [ref=e153]
+              - generic [ref=e157]: Client Requirements
+    - generic [ref=e158]:
+      - banner [ref=e159]:
+        - button "Switch to dark mode" [ref=e160] [cursor=pointer]:
+          - img
+        - button "Clear chat" [ref=e161] [cursor=pointer]:
+          - img
+        - generic [ref=e162]:
+          - generic [ref=e163]:
+            - generic [ref=e164]:
+              - img [ref=e165]
+              - combobox [ref=e169] [cursor=pointer]:
+                - generic:
+                  - generic:
+                    - img
+                    - generic: All Clients (Global View)
+                - img [ref=e170]
+            - generic [ref=e173]: "Managing Client: All Clients"
+          - generic [ref=e174]:
+            - img [ref=e175]
+            - generic [ref=e180]: No employees with CRM access
+          - button [ref=e181] [cursor=pointer]:
+            - img
+          - button "D Dev" [ref=e183] [cursor=pointer]:
+            - generic [ref=e185]: D
+            - generic [ref=e186]: Dev
+      - main [ref=e187]:
+        - generic [ref=e189]:
+          - generic [ref=e190]:
+            - generic [ref=e191]:
+              - heading "Leads" [level=1] [ref=e192]
+              - paragraph [ref=e193]: Track and manage your sales leads and prospects.
+            - generic [ref=e194]:
+              - button "Show Test Data" [ref=e195] [cursor=pointer]:
+                - img
+                - text: Show Test Data
+              - button [ref=e196] [cursor=pointer]:
+                - img
+              - button [ref=e197] [cursor=pointer]:
+                - img
+              - button "Import" [ref=e198] [cursor=pointer]:
+                - img
+                - text: Import
+              - button "Export" [ref=e199] [cursor=pointer]:
+                - img
+                - text: Export
+              - button "Add Lead" [ref=e200] [cursor=pointer]:
+                - img
+                - text: Add Lead
+          - generic [ref=e201]:
+            - generic [ref=e202] [cursor=pointer]:
+              - generic [ref=e203]:
+                - paragraph [ref=e204]: Total Leads
+                - img [ref=e206]
+              - paragraph [ref=e209]: "9"
+            - generic [ref=e210] [cursor=pointer]:
+              - generic [ref=e211]:
+                - paragraph [ref=e212]: New
+                - img [ref=e214]
+              - paragraph [ref=e217]: "3"
+            - generic [ref=e218] [cursor=pointer]:
+              - generic [ref=e219]:
+                - paragraph [ref=e220]: Contacted
+                - img [ref=e222]
+              - paragraph [ref=e225]: "3"
+            - generic [ref=e226] [cursor=pointer]:
+              - generic [ref=e227]:
+                - paragraph [ref=e228]: Qualified
+                - img [ref=e230]
+              - paragraph [ref=e233]: "3"
+            - generic [ref=e234] [cursor=pointer]:
+              - generic [ref=e235]:
+                - paragraph [ref=e236]: Unqualified
+                - img [ref=e238]
+              - paragraph [ref=e241]: "0"
+            - generic [ref=e242] [cursor=pointer]:
+              - generic [ref=e243]:
+                - paragraph [ref=e244]: Converted
+                - img [ref=e246]
+              - paragraph [ref=e249]: "0"
+            - generic [ref=e250] [cursor=pointer]:
+              - generic [ref=e251]:
+                - paragraph [ref=e252]: Lost
+                - img [ref=e254]
+              - paragraph [ref=e257]: "0"
+          - generic [ref=e258]:
+            - generic [ref=e259]:
+              - img [ref=e260]
+              - textbox "Search leads by name, email, phone, company, or job title..." [ref=e263]
+            - generic [ref=e264]:
+              - combobox [ref=e265] [cursor=pointer]:
+                - generic: All Ages
+                - img [ref=e266]
+              - button "Tags" [ref=e269] [cursor=pointer]:
+                - img
+                - text: Tags
+          - table [ref=e272]:
+            - rowgroup [ref=e273]:
+              - row "Name Email Phone Company Job Title Age (Days) Assigned To Status Actions" [ref=e274]:
+                - cell [ref=e275]:
+                  - checkbox [ref=e276] [cursor=pointer]
+                - cell "Name" [ref=e277]
+                - cell "Email" [ref=e278]
+                - cell "Phone" [ref=e279]
+                - cell "Company" [ref=e280]
+                - cell "Job Title" [ref=e281]
+                - cell "Age (Days)" [ref=e282]
+                - cell "Assigned To" [ref=e283]
+                - cell "Status" [ref=e284]
+                - cell "Actions" [ref=e285]
+            - rowgroup [ref=e286]:
+              - row "Emily Davis emily.davis@enterprise.com +1-555-0203 Enterprise Corp — 0 days Unassigned contacted" [ref=e287]:
+                - cell [ref=e288]:
+                  - checkbox [ref=e289] [cursor=pointer]
+                - cell "Emily Davis" [ref=e290]
+                - cell "emily.davis@enterprise.com" [ref=e291]
+                - cell "+1-555-0203" [ref=e292]:
+                  - generic [ref=e294]: +1-555-0203
+                - cell "Enterprise Corp" [ref=e295]
+                - cell "—" [ref=e296]
+                - cell "0 days" [ref=e297]
+                - cell "Unassigned" [ref=e298]
+                - cell "contacted" [ref=e299] [cursor=pointer]:
+                  - generic [ref=e300]: contacted
+                - cell [ref=e301]:
+                  - generic [ref=e302]:
+                    - button [ref=e303] [cursor=pointer]:
+                      - img
+                    - button [ref=e304] [cursor=pointer]:
+                      - img
+                    - button [ref=e305] [cursor=pointer]:
+                      - img
+                    - button [ref=e306] [cursor=pointer]:
+                      - img
+              - row "Mike Brown mike.brown@startup.io +1-555-0202 Startup.io — 0 days Unassigned qualified" [ref=e307]:
+                - cell [ref=e308]:
+                  - checkbox [ref=e309] [cursor=pointer]
+                - cell "Mike Brown" [ref=e310]
+                - cell "mike.brown@startup.io" [ref=e311]
+                - cell "+1-555-0202" [ref=e312]:
+                  - generic [ref=e314]: +1-555-0202
+                - cell "Startup.io" [ref=e315]
+                - cell "—" [ref=e316]
+                - cell "0 days" [ref=e317]
+                - cell "Unassigned" [ref=e318]
+                - cell "qualified" [ref=e319] [cursor=pointer]:
+                  - generic [ref=e320]: qualified
+                - cell [ref=e321]:
+                  - generic [ref=e322]:
+                    - button [ref=e323] [cursor=pointer]:
+                      - img
+                    - button [ref=e324] [cursor=pointer]:
+                      - img
+                    - button [ref=e325] [cursor=pointer]:
+                      - img
+                    - button [ref=e326] [cursor=pointer]:
+                      - img
+              - row "Sarah Johnson sarah.johnson@newcompany.com +1-555-0201 New Company LLC — 0 days Unassigned new" [ref=e327]:
+                - cell [ref=e328]:
+                  - checkbox [ref=e329] [cursor=pointer]
+                - cell "Sarah Johnson" [ref=e330]
+                - cell "sarah.johnson@newcompany.com" [ref=e331]
+                - cell "+1-555-0201" [ref=e332]:
+                  - generic [ref=e334]: +1-555-0201
+                - cell "New Company LLC" [ref=e335]
+                - cell "—" [ref=e336]
+                - cell "0 days" [ref=e337]
+                - cell "Unassigned" [ref=e338]
+                - cell "new" [ref=e339] [cursor=pointer]:
+                  - generic [ref=e340]: new
+                - cell [ref=e341]:
+                  - generic [ref=e342]:
+                    - button [ref=e343] [cursor=pointer]:
+                      - img
+                    - button [ref=e344] [cursor=pointer]:
+                      - img
+                    - button [ref=e345] [cursor=pointer]:
+                      - img
+                    - button [ref=e346] [cursor=pointer]:
+                      - img
+              - row "Emily Davis emily.davis@enterprise.com +1-555-0203 Enterprise Corp — 0 days Unassigned contacted" [ref=e347]:
+                - cell [ref=e348]:
+                  - checkbox [ref=e349] [cursor=pointer]
+                - cell "Emily Davis" [ref=e350]
+                - cell "emily.davis@enterprise.com" [ref=e351]
+                - cell "+1-555-0203" [ref=e352]:
+                  - generic [ref=e354]: +1-555-0203
+                - cell "Enterprise Corp" [ref=e355]
+                - cell "—" [ref=e356]
+                - cell "0 days" [ref=e357]
+                - cell "Unassigned" [ref=e358]
+                - cell "contacted" [ref=e359] [cursor=pointer]:
+                  - generic [ref=e360]: contacted
+                - cell [ref=e361]:
+                  - generic [ref=e362]:
+                    - button [ref=e363] [cursor=pointer]:
+                      - img
+                    - button [ref=e364] [cursor=pointer]:
+                      - img
+                    - button [ref=e365] [cursor=pointer]:
+                      - img
+                    - button [ref=e366] [cursor=pointer]:
+                      - img
+              - row "Mike Brown mike.brown@startup.io +1-555-0202 Startup.io — 0 days Unassigned qualified" [ref=e367]:
+                - cell [ref=e368]:
+                  - checkbox [ref=e369] [cursor=pointer]
+                - cell "Mike Brown" [ref=e370]
+                - cell "mike.brown@startup.io" [ref=e371]
+                - cell "+1-555-0202" [ref=e372]:
+                  - generic [ref=e374]: +1-555-0202
+                - cell "Startup.io" [ref=e375]
+                - cell "—" [ref=e376]
+                - cell "0 days" [ref=e377]
+                - cell "Unassigned" [ref=e378]
+                - cell "qualified" [ref=e379] [cursor=pointer]:
+                  - generic [ref=e380]: qualified
+                - cell [ref=e381]:
+                  - generic [ref=e382]:
+                    - button [ref=e383] [cursor=pointer]:
+                      - img
+                    - button [ref=e384] [cursor=pointer]:
+                      - img
+                    - button [ref=e385] [cursor=pointer]:
+                      - img
+                    - button [ref=e386] [cursor=pointer]:
+                      - img
+              - row "Sarah Johnson sarah.johnson@newcompany.com +1-555-0201 New Company LLC — 0 days Unassigned new" [ref=e387]:
+                - cell [ref=e388]:
+                  - checkbox [ref=e389] [cursor=pointer]
+                - cell "Sarah Johnson" [ref=e390]
+                - cell "sarah.johnson@newcompany.com" [ref=e391]
+                - cell "+1-555-0201" [ref=e392]:
+                  - generic [ref=e394]: +1-555-0201
+                - cell "New Company LLC" [ref=e395]
+                - cell "—" [ref=e396]
+                - cell "0 days" [ref=e397]
+                - cell "Unassigned" [ref=e398]
+                - cell "new" [ref=e399] [cursor=pointer]:
+                  - generic [ref=e400]: new
+                - cell [ref=e401]:
+                  - generic [ref=e402]:
+                    - button [ref=e403] [cursor=pointer]:
+                      - img
+                    - button [ref=e404] [cursor=pointer]:
+                      - img
+                    - button [ref=e405] [cursor=pointer]:
+                      - img
+                    - button [ref=e406] [cursor=pointer]:
+                      - img
+              - row "Emily Davis emily.davis@enterprise.com +1-555-0203 Enterprise Corp — 0 days Unassigned contacted" [ref=e407]:
+                - cell [ref=e408]:
+                  - checkbox [ref=e409] [cursor=pointer]
+                - cell "Emily Davis" [ref=e410]
+                - cell "emily.davis@enterprise.com" [ref=e411]
+                - cell "+1-555-0203" [ref=e412]:
+                  - generic [ref=e414]: +1-555-0203
+                - cell "Enterprise Corp" [ref=e415]
+                - cell "—" [ref=e416]
+                - cell "0 days" [ref=e417]
+                - cell "Unassigned" [ref=e418]
+                - cell "contacted" [ref=e419] [cursor=pointer]:
+                  - generic [ref=e420]: contacted
+                - cell [ref=e421]:
+                  - generic [ref=e422]:
+                    - button [ref=e423] [cursor=pointer]:
+                      - img
+                    - button [ref=e424] [cursor=pointer]:
+                      - img
+                    - button [ref=e425] [cursor=pointer]:
+                      - img
+                    - button [ref=e426] [cursor=pointer]:
+                      - img
+              - row "Mike Brown mike.brown@startup.io +1-555-0202 Startup.io — 0 days Unassigned qualified" [ref=e427]:
+                - cell [ref=e428]:
+                  - checkbox [ref=e429] [cursor=pointer]
+                - cell "Mike Brown" [ref=e430]
+                - cell "mike.brown@startup.io" [ref=e431]
+                - cell "+1-555-0202" [ref=e432]:
+                  - generic [ref=e434]: +1-555-0202
+                - cell "Startup.io" [ref=e435]
+                - cell "—" [ref=e436]
+                - cell "0 days" [ref=e437]
+                - cell "Unassigned" [ref=e438]
+                - cell "qualified" [ref=e439] [cursor=pointer]:
+                  - generic [ref=e440]: qualified
+                - cell [ref=e441]:
+                  - generic [ref=e442]:
+                    - button [ref=e443] [cursor=pointer]:
+                      - img
+                    - button [ref=e444] [cursor=pointer]:
+                      - img
+                    - button [ref=e445] [cursor=pointer]:
+                      - img
+                    - button [ref=e446] [cursor=pointer]:
+                      - img
+              - row "Sarah Johnson sarah.johnson@newcompany.com +1-555-0201 New Company LLC — 0 days Unassigned new" [ref=e447]:
+                - cell [ref=e448]:
+                  - checkbox [ref=e449] [cursor=pointer]
+                - cell "Sarah Johnson" [ref=e450]
+                - cell "sarah.johnson@newcompany.com" [ref=e451]
+                - cell "+1-555-0201" [ref=e452]:
+                  - generic [ref=e454]: +1-555-0201
+                - cell "New Company LLC" [ref=e455]
+                - cell "—" [ref=e456]
+                - cell "0 days" [ref=e457]
+                - cell "Unassigned" [ref=e458]
+                - cell "new" [ref=e459] [cursor=pointer]:
+                  - generic [ref=e460]: new
+                - cell [ref=e461]:
+                  - generic [ref=e462]:
+                    - button [ref=e463] [cursor=pointer]:
+                      - img
+                    - button [ref=e464] [cursor=pointer]:
+                      - img
+                    - button [ref=e465] [cursor=pointer]:
+                      - img
+                    - button [ref=e466] [cursor=pointer]:
+                      - img
+          - generic [ref=e467]:
+            - generic [ref=e468]:
+              - generic [ref=e469]: Showing 1 to 9 of 9 results
+              - generic [ref=e470]:
+                - generic [ref=e471]: "Show:"
+                - combobox [ref=e472] [cursor=pointer]:
+                  - generic: "25"
+                  - img [ref=e473]
+            - generic [ref=e475]:
+              - button [disabled]:
+                - img
+              - button [disabled]:
+                - img
+              - button "1" [ref=e477] [cursor=pointer]
+              - button [disabled]:
+                - img
+              - button [disabled]:
+                - img
+      - contentinfo [ref=e478]:
+        - generic [ref=e481]:
+          - img "Ai‑SHA" [ref=e482]
+          - generic [ref=e483]:
+            - generic [ref=e484]: ai-sha crm® is a registered trademark of 4V Data Consulting LLC.
+            - generic [ref=e485]: © 2025 4V Data Consulting LLC. All rights reserved.
+  - generic [ref=e488]: $75,000
+```

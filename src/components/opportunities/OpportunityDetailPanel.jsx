@@ -63,11 +63,11 @@ export default function OpportunityDetailPanel({
   // Load related activities
   useEffect(() => {
     const loadActivities = async () => {
-      if (!localOpportunity?.id) return;
+      if (!localOpportunity?.id || !localOpportunity?.tenant_id) return;
 
       setLoadingActivities(true);
       try {
-        const allActivities = await Activity.list();
+        const allActivities = await Activity.filter({ tenant_id: localOpportunity.tenant_id });
         const filtered = allActivities.filter(
           (a) => a.related_to === "opportunity" && a.related_id === localOpportunity.id
         );
@@ -93,7 +93,7 @@ export default function OpportunityDetailPanel({
       }
     };
     loadActivities();
-  }, [localOpportunity?.id]);
+  }, [localOpportunity?.id, localOpportunity?.tenant_id]);
 
   // Helper function to get Account Name
   const getAccountName = () =>
@@ -184,7 +184,7 @@ export default function OpportunityDetailPanel({
       toast.success("Activity created successfully!");
 
       // Reload activities
-      const allActivities = await Activity.list();
+      const allActivities = await Activity.filter({ tenant_id: localOpportunity.tenant_id });
       const filtered = allActivities.filter(
         (a) => a.related_to === "opportunity" && a.related_id === localOpportunity.id
       );

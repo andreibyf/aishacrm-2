@@ -1,0 +1,647 @@
+# Page snapshot
+
+```yaml
+- generic:
+  - generic:
+    - generic:
+      - complementary:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic: L
+              - generic: Local Development Tenant
+            - paragraph: ⚠️ No Client Selected
+          - generic:
+            - generic:
+              - paragraph: AI-Powered Business Growth Platform
+              - paragraph: Oct 25, 2025
+              - paragraph: 12:13:25 PM
+          - paragraph: Navigation
+          - navigation:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /dashboard
+                  - img
+                  - generic: Dashboard
+              - listitem:
+                - link:
+                  - /url: /contacts
+                  - img
+                  - generic: Contacts
+              - listitem:
+                - link:
+                  - /url: /accounts
+                  - img
+                  - generic: Accounts
+              - listitem:
+                - link:
+                  - /url: /leads
+                  - img
+                  - generic: Leads
+              - listitem:
+                - link:
+                  - /url: /opportunities
+                  - img
+                  - generic: Opportunities
+              - listitem:
+                - link:
+                  - /url: /activities
+                  - img
+                  - generic: Activities
+              - listitem:
+                - link:
+                  - /url: /calendar
+                  - img
+                  - generic: Calendar
+              - listitem:
+                - link:
+                  - /url: /bizdevsources
+                  - img
+                  - generic: BizDev Sources
+              - listitem:
+                - link:
+                  - /url: /cashflow
+                  - img
+                  - generic: Cash Flow
+              - listitem:
+                - link:
+                  - /url: /documentprocessing
+                  - img
+                  - generic: Document Processing
+              - listitem:
+                - link:
+                  - /url: /documentmanagement
+                  - img
+                  - generic: Document Management
+              - listitem:
+                - link:
+                  - /url: /aicampaigns
+                  - img
+                  - generic: AI Campaigns
+              - listitem:
+                - link:
+                  - /url: /employees
+                  - img
+                  - generic: Employees
+              - listitem:
+                - link:
+                  - /url: /reports
+                  - img
+                  - generic: Reports
+              - listitem:
+                - link:
+                  - /url: /integrations
+                  - img
+                  - generic: Integrations
+              - listitem:
+                - link:
+                  - /url: /workflows
+                  - img
+                  - generic: Workflows
+              - listitem:
+                - link:
+                  - /url: /paymentportal
+                  - img
+                  - generic: Payment Portal
+              - listitem:
+                - link:
+                  - /url: /utilities
+                  - img
+                  - generic: Utilities
+              - listitem:
+                - link:
+                  - /url: /clientonboarding
+                  - img
+                  - generic: Client Onboarding
+          - generic:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /workflowguide
+                  - img
+                  - generic: Workflow Guide
+              - listitem:
+                - link:
+                  - /url: /documentation
+                  - img
+                  - generic: Documentation
+              - listitem:
+                - link:
+                  - /url: /agent
+                  - generic:
+                    - img
+              - listitem:
+                - link:
+                  - /url: /clientrequirements
+                  - img
+                  - generic: Client Requirements
+      - generic:
+        - banner:
+          - button:
+            - img
+          - button:
+            - img
+          - generic:
+            - generic:
+              - generic:
+                - img
+                - combobox:
+                  - generic:
+                    - generic:
+                      - img
+                      - generic: All Clients (Global View)
+                  - img
+              - generic:
+                - generic: "Managing Client: All Clients"
+            - generic:
+              - img
+              - generic: No employees with CRM access
+            - button:
+              - img
+            - button:
+              - generic:
+                - generic: D
+              - generic: Dev
+        - main:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - heading [level=1]: Leads
+                  - paragraph: Track and manage your sales leads and prospects.
+                - generic:
+                  - button:
+                    - img
+                    - text: Show Test Data
+                  - button:
+                    - img
+                  - button:
+                    - img
+                  - button:
+                    - img
+                    - text: Import
+                  - button:
+                    - img
+                    - text: Export
+                  - button:
+                    - img
+                    - text: Add Lead
+              - generic:
+                - generic:
+                  - generic:
+                    - paragraph: Total Leads
+                    - generic:
+                      - img
+                  - paragraph: "9"
+                - generic:
+                  - generic:
+                    - paragraph: New
+                    - generic:
+                      - img
+                  - paragraph: "3"
+                - generic:
+                  - generic:
+                    - paragraph: Contacted
+                    - generic:
+                      - img
+                  - paragraph: "3"
+                - generic:
+                  - generic:
+                    - paragraph: Qualified
+                    - generic:
+                      - img
+                  - paragraph: "3"
+                - generic:
+                  - generic:
+                    - paragraph: Unqualified
+                    - generic:
+                      - img
+                  - paragraph: "0"
+                - generic:
+                  - generic:
+                    - paragraph: Converted
+                    - generic:
+                      - img
+                  - paragraph: "0"
+                - generic:
+                  - generic:
+                    - paragraph: Lost
+                    - generic:
+                      - img
+                  - paragraph: "0"
+              - generic:
+                - generic:
+                  - img
+                  - textbox:
+                    - /placeholder: Search leads by name, email, phone, company, or job title...
+                - generic:
+                  - combobox:
+                    - generic: All Ages
+                    - img
+                  - generic:
+                    - button:
+                      - img
+                      - text: Tags
+              - generic:
+                - generic:
+                  - table:
+                    - rowgroup:
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell: Name
+                        - cell: Email
+                        - cell: Phone
+                        - cell: Company
+                        - cell: Job Title
+                        - cell: Age (Days)
+                        - cell: Assigned To
+                        - cell: Status
+                        - cell: Actions
+                    - rowgroup:
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell: Emily Davis
+                        - cell: emily.davis@enterprise.com
+                        - cell:
+                          - generic:
+                            - generic: +1-555-0203
+                        - cell: Enterprise Corp
+                        - cell: —
+                        - cell: 0 days
+                        - cell: Unassigned
+                        - cell:
+                          - generic: contacted
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell: Mike Brown
+                        - cell: mike.brown@startup.io
+                        - cell:
+                          - generic:
+                            - generic: +1-555-0202
+                        - cell: Startup.io
+                        - cell: —
+                        - cell: 0 days
+                        - cell: Unassigned
+                        - cell:
+                          - generic: qualified
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell: Sarah Johnson
+                        - cell: sarah.johnson@newcompany.com
+                        - cell:
+                          - generic:
+                            - generic: +1-555-0201
+                        - cell: New Company LLC
+                        - cell: —
+                        - cell: 0 days
+                        - cell: Unassigned
+                        - cell:
+                          - generic: new
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell: Emily Davis
+                        - cell: emily.davis@enterprise.com
+                        - cell:
+                          - generic:
+                            - generic: +1-555-0203
+                        - cell: Enterprise Corp
+                        - cell: —
+                        - cell: 0 days
+                        - cell: Unassigned
+                        - cell:
+                          - generic: contacted
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell: Mike Brown
+                        - cell: mike.brown@startup.io
+                        - cell:
+                          - generic:
+                            - generic: +1-555-0202
+                        - cell: Startup.io
+                        - cell: —
+                        - cell: 0 days
+                        - cell: Unassigned
+                        - cell:
+                          - generic: qualified
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell: Sarah Johnson
+                        - cell: sarah.johnson@newcompany.com
+                        - cell:
+                          - generic:
+                            - generic: +1-555-0201
+                        - cell: New Company LLC
+                        - cell: —
+                        - cell: 0 days
+                        - cell: Unassigned
+                        - cell:
+                          - generic: new
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell: Emily Davis
+                        - cell: emily.davis@enterprise.com
+                        - cell:
+                          - generic:
+                            - generic: +1-555-0203
+                        - cell: Enterprise Corp
+                        - cell: —
+                        - cell: 0 days
+                        - cell: Unassigned
+                        - cell:
+                          - generic: contacted
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell: Mike Brown
+                        - cell: mike.brown@startup.io
+                        - cell:
+                          - generic:
+                            - generic: +1-555-0202
+                        - cell: Startup.io
+                        - cell: —
+                        - cell: 0 days
+                        - cell: Unassigned
+                        - cell:
+                          - generic: qualified
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                      - row:
+                        - cell:
+                          - checkbox
+                        - cell: Sarah Johnson
+                        - cell: sarah.johnson@newcompany.com
+                        - cell:
+                          - generic:
+                            - generic: +1-555-0201
+                        - cell: New Company LLC
+                        - cell: —
+                        - cell: 0 days
+                        - cell: Unassigned
+                        - cell:
+                          - generic: new
+                        - cell:
+                          - generic:
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+                            - button:
+                              - img
+              - generic:
+                - generic:
+                  - generic: Showing 1 to 9 of 9 results
+                  - generic:
+                    - generic: "Show:"
+                    - combobox:
+                      - generic: "25"
+                      - img
+                - generic:
+                  - button [disabled]:
+                    - img
+                  - button [disabled]:
+                    - img
+                  - generic:
+                    - button: "1"
+                  - button [disabled]:
+                    - img
+                  - button [disabled]:
+                    - img
+        - contentinfo:
+          - generic:
+            - generic:
+              - generic:
+                - img
+                - generic:
+                  - generic: ai-sha crm® is a registered trademark of 4V Data Consulting LLC.
+                  - generic: © 2025 4V Data Consulting LLC. All rights reserved.
+  - generic: $75,000
+  - dialog:
+    - generic:
+      - heading [level=2]: Add New Lead
+    - button:
+      - img
+      - generic: Close
+  - dialog "Add New Lead Create a new potential customer" [ref=e3]:
+    - heading "Add New Lead Create a new potential customer" [level=2] [ref=e5]:
+      - generic [ref=e6]:
+        - img [ref=e8]
+        - generic [ref=e10]:
+          - heading "Add New Lead" [level=3] [ref=e11]
+          - paragraph [ref=e12]: Create a new potential customer
+      - button [active] [ref=e13] [cursor=pointer]:
+        - img
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - text: First Name *
+          - textbox "First Name *" [ref=e18]
+        - generic [ref=e19]:
+          - text: Last Name *
+          - textbox "Last Name *" [ref=e20]
+      - generic [ref=e21]:
+        - generic [ref=e22]:
+          - text: Email (Optional)
+          - textbox "Email (Optional)" [ref=e23]:
+            - /placeholder: Leave blank if no email available
+          - paragraph [ref=e24]: Email is optional - unique ID will be generated for tracking
+        - generic [ref=e25]:
+          - text: Phone
+          - generic [ref=e26]:
+            - combobox [ref=e27] [cursor=pointer]:
+              - generic [ref=e28]:
+                - generic [ref=e29]: 🇺🇸
+                - generic [ref=e30]: "+1"
+              - img [ref=e31]
+            - combobox [ref=e33]
+            - textbox "Phone" [ref=e34]:
+              - /placeholder: (555) 123-4567
+      - generic [ref=e35]:
+        - generic [ref=e36]:
+          - switch "Do Not Call (DNC)" [ref=e37] [cursor=pointer]
+          - checkbox
+          - generic [ref=e38] [cursor=pointer]: Do Not Call (DNC)
+        - generic [ref=e39]:
+          - switch "Do Not Text (DNT)" [ref=e40] [cursor=pointer]
+          - checkbox
+          - generic [ref=e41] [cursor=pointer]: Do Not Text (DNT)
+      - generic [ref=e42]:
+        - generic [ref=e43]:
+          - text: Company
+          - textbox "Company" [ref=e44]
+        - generic [ref=e45]:
+          - text: Associated Account
+          - combobox [ref=e46] [cursor=pointer]:
+            - generic: Select account...
+            - img [ref=e47]
+          - combobox [ref=e49]
+      - generic [ref=e50]:
+        - generic [ref=e51]:
+          - text: Job Title
+          - textbox "Job Title" [ref=e52]
+        - generic [ref=e53]:
+          - text: Lead Source
+          - combobox [ref=e54] [cursor=pointer]:
+            - generic: Website
+            - img [ref=e55]
+          - combobox [ref=e57]
+      - generic [ref=e58]:
+        - generic [ref=e59]:
+          - text: Status
+          - combobox [ref=e60] [cursor=pointer]:
+            - generic: New
+            - img [ref=e61]
+          - combobox [ref=e63]
+        - generic [ref=e64]:
+          - text: Assigned To
+          - combobox [ref=e65] [cursor=pointer]:
+            - generic: Unassigned
+            - img [ref=e66]
+          - combobox [ref=e68]
+      - generic [ref=e69]:
+        - generic [ref=e70]:
+          - text: Lead Score (0-100)
+          - spinbutton "Lead Score (0-100)" [ref=e71]: "50"
+        - generic [ref=e72]:
+          - text: Estimated Value ($)
+          - spinbutton "Estimated Value ($)" [ref=e73]
+      - generic [ref=e74]:
+        - text: Score Reason
+        - textbox "Score Reason" [ref=e75]:
+          - /placeholder: Why did you give this score?
+      - generic [ref=e76]:
+        - heading "Address Information" [level=4] [ref=e77]
+        - generic [ref=e78]:
+          - generic [ref=e79]:
+            - text: Address Line 1
+            - textbox "Address Line 1" [ref=e80]:
+              - /placeholder: Street address
+          - generic [ref=e81]:
+            - text: Address Line 2
+            - textbox "Address Line 2" [ref=e82]:
+              - /placeholder: Apt, suite, floor (optional)
+          - generic [ref=e83]:
+            - text: City
+            - textbox "City" [ref=e84]
+          - generic [ref=e85]:
+            - text: State/Province
+            - combobox [ref=e86] [cursor=pointer]:
+              - generic: Select state...
+              - img [ref=e87]
+            - combobox [ref=e89]
+          - generic [ref=e90]:
+            - text: ZIP/Postal Code
+            - textbox "ZIP/Postal Code" [ref=e91]
+          - generic [ref=e92]:
+            - text: Country
+            - combobox [ref=e93] [cursor=pointer]:
+              - generic: United States
+              - img [ref=e94]
+            - combobox [ref=e96]
+      - generic [ref=e97]:
+        - generic [ref=e98]: Tags
+        - button "Add or search for tags..." [ref=e99] [cursor=pointer]:
+          - generic [ref=e100]: Add or search for tags...
+      - generic [ref=e101]:
+        - switch "Mark as Test Data" [ref=e102] [cursor=pointer]
+        - checkbox
+        - generic [ref=e103]: Mark as Test Data
+        - generic [ref=e104]: (For admin cleanup purposes)
+      - generic [ref=e105]:
+        - button "Cancel" [ref=e106] [cursor=pointer]
+        - button "Create Lead" [disabled]:
+          - img
+          - text: Create Lead
+    - button "Close" [ref=e107] [cursor=pointer]:
+      - img [ref=e108]
+      - generic [ref=e111]: Close
+```

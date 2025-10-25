@@ -38,6 +38,59 @@ function scheduleFlush() {
   flushTimeout = setTimeout(flushLogs, FLUSH_INTERVAL);
 }
 
+// Raw logger that does not depend on React context/hooks.
+// Used by non-React modules (e.g., TenantContext) via dynamic import.
+async function rawLog(level, message, source, metadata = {}) {
+  try {
+    const user = await User.me().catch(() => null);
+
+    const logEntry = {
+      level,
+      message: String(message),
+      source,
+      user_email: user?.email || 'anonymous',
+      tenant_id: user?.tenant_id || null,
+      metadata: metadata || {},
+      user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+      url: typeof window !== 'undefined' ? window.location.href : 'unknown',
+      stack_trace: level === 'ERROR' && metadata?.error ? metadata.error.stack : null
+    };
+
+    // Buffer and schedule flush
+    logBuffer.push(logEntry);
+    if (logBuffer.length >= MAX_BUFFER_SIZE) {
+      await flushLogs();
+    } else {
+      scheduleFlush();
+    }
+
+    // Console echo in dev
+    const consoleMethodMap = { DEBUG: 'debug', INFO: 'info', WARNING: 'warn', ERROR: 'error' };
+    const methodName = consoleMethodMap[level] || 'log';
+    const consoleMethod = console[methodName];
+    if (typeof consoleMethod === 'function') {
+      consoleMethod.call(console, `[${level}] [${source}]`, message, metadata);
+    } else {
+      console.log(`[${level}] [${source}]`, message, metadata);
+    }
+  } catch (e) {
+    // As a last resort, try to store a single log entry without buffering
+    try {
+      await SystemLog.create({
+        level,
+        message: String(message),
+        source,
+        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+        url: typeof window !== 'undefined' ? window.location.href : 'unknown',
+        stack_trace: level === 'ERROR' && metadata?.error ? metadata.error.stack : null
+      });
+    } catch {
+      // Secondary persistence failed; nothing else to do.
+      void 0;
+    }
+  }
+}
+
 export const LoggerProvider = ({ children }) => {
   const log = useCallback(async (level, message, source, metadata = {}) => {
     try {
@@ -111,6 +164,7 @@ export const LoggerProvider = ({ children }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useLogger = () => {
   const context = useContext(LoggerContext);
   if (!context) {
@@ -124,6 +178,15 @@ export const useLogger = () => {
     };
   }
   return context;
+};
+
+// Export a non-hook facade for non-React consumers
+// eslint-disable-next-line react-refresh/only-export-components
+export const loggerFacade = {
+  debug: (message, source = 'App', metadata) => rawLog(LOG_LEVELS.DEBUG, message, source, metadata),
+  info: (message, source = 'App', metadata) => rawLog(LOG_LEVELS.INFO, message, source, metadata),
+  warn: (message, source = 'App', metadata) => rawLog(LOG_LEVELS.WARNING, message, source, metadata),
+  error: (message, source = 'App', metadata) => rawLog(LOG_LEVELS.ERROR, message, source, metadata)
 };
 
 // Auto-capture console errors and warnings

@@ -36,15 +36,19 @@ function logTenantEvent(level, message, metadata) {
   if (!loggerInstance) {
     // Lazy load logger to avoid circular deps
     import('./Logger').then(module => {
-      // Assuming module.useLogger is the actual logger instance/object
-      // that has info, warn, error methods.
-      if (module && typeof module.useLogger === 'object' &&
-          typeof module.useLogger.info === 'function' &&
-          typeof module.useLogger.warn === 'function' &&
-          typeof module.useLogger.error === 'function') {
+      // Prefer non-hook facade for non-React consumers
+      if (module && module.loggerFacade &&
+          typeof module.loggerFacade.info === 'function' &&
+          typeof module.loggerFacade.warn === 'function' &&
+          typeof module.loggerFacade.error === 'function' &&
+          typeof module.loggerFacade.debug === 'function') {
+        loggerInstance = module.loggerFacade;
+      } else if (module && typeof module.useLogger === 'object') {
+        // Backward compat if an object was exported under useLogger
         loggerInstance = module.useLogger;
       } else {
-        console.warn('[TenantContext] Logger module did not export expected methods via `useLogger`. Falling back to console only.');
+        // Quiet fallback: keep console only without noisy warnings
+        // console.info('[TenantContext] Logger facade unavailable; using console only');
       }
     }).catch(e => {
       console.error('[TenantContext] Failed to load logger module:', e);
@@ -72,10 +76,18 @@ function logTenantEvent(level, message, metadata) {
 
   // If external logger methods are loaded and available, use them too.
   // Note: This might not run on the very first log if loggerInstance is still loading.
-  if (loggerInstance && typeof loggerInstance[level.toLowerCase()] === 'function') {
-    // Ensure metadata is stringifiable if the logger expects it.
-    const logMetadata = sanitizeObject(metadata); 
-    loggerInstance[level.toLowerCase()](`[TenantContext] ${message}`, logMetadata);
+  if (loggerInstance) {
+    const loggerMethodMap = {
+      'INFO': 'info',
+      'WARNING': 'warn',
+      'ERROR': 'error',
+      'DEBUG': 'debug'
+    };
+    const method = loggerMethodMap[level] || 'info';
+    if (typeof loggerInstance[method] === 'function') {
+      const logMetadata = sanitizeObject(metadata);
+      loggerInstance[method](`[TenantContext] ${message}`, 'TenantContext', logMetadata);
+    }
   }
 }
 
@@ -194,6 +206,7 @@ export const TenantProvider = ({ children }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useTenant = () => {
   const context = useContext(TenantContext);
   if (!context) {

@@ -107,6 +107,7 @@ export default function UniversalDetailPanel({
       const relatedTo = entityType.toLowerCase();
       // Assuming Activity.filter supports ordering and related_to/related_id, limit to 10
       const activitiesData = await Activity.filter({ 
+        tenant_id: user?.tenant_id || entity.tenant_id,
         related_to: relatedTo, 
         related_id: entity.id 
       }, '-created_date', 10);
@@ -115,7 +116,7 @@ export default function UniversalDetailPanel({
       console.error("Failed to load activities:", error);
       toast.error("Failed to load activities");
     }
-  }, [entity, entityType]);
+  }, [entity, entityType, user?.tenant_id]);
 
   // Load notes and activities when panel opens or entity changes
   useEffect(() => {

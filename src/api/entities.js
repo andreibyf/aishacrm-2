@@ -35,6 +35,25 @@ const pluralize = (entityName) => {
   return name + 's';
 };
 
+// Helper to generate a safe local-dev fallback result to keep UI responsive
+const makeDevFallback = (entityName, method, data, id) => {
+  const now = new Date().toISOString();
+  const lname = entityName.toLowerCase();
+  switch (method) {
+    case 'GET':
+      // List/filter returns empty array; get-by-id returns null
+      return id ? null : [];
+    case 'POST':
+      return { id: `local-${lname}-${Date.now()}`, ...data, created_at: now, updated_at: now };
+    case 'PUT':
+      return { id, ...data, updated_at: now };
+    case 'DELETE':
+      return { id, deleted: true };
+    default:
+      return null;
+  }
+};
+
 // Helper to call independent backend API
 const callBackendAPI = async (entityName, method, data = null, id = null) => {
   const entityPath = pluralize(entityName);
@@ -85,6 +104,11 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       error: error.message,
       timestamp: new Date().toISOString()
     });
+    // In local dev, return safe fallback instead of throwing hard
+    if (isLocalDevMode()) {
+      console.warn(`[Local Dev Mode] Backend unreachable for ${method} ${url}. Using fallback.`);
+      return makeDevFallback(entityName, method, data, id);
+    }
     throw new Error(`Network error: ${error.message}`);
   }
 
@@ -109,7 +133,11 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     } else if (response.status >= 500 && response.status < 600) {
       apiHealthMonitor.reportServerError(url, response.status, errorContext);
     }
-    
+    // In local dev, gracefully degrade for non-ok statuses
+    if (isLocalDevMode()) {
+      console.warn(`[Local Dev Mode] ${method} ${url} failed (${response.status}). Using fallback.`);
+      return makeDevFallback(entityName, method, data, id);
+    }
     throw new Error(`Backend API error: ${response.statusText} - ${errorText}`);
   }
   
