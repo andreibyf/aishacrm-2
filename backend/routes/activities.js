@@ -17,7 +17,7 @@ export default function createActivityRoutes(pgPool) {
   // GET /api/activities - List activities with filtering
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, limit = 50, offset = 0 } = req.query;
+      const { tenant_id } = req.query;
 
       if (!tenant_id) {
         return res.status(400).json({
@@ -26,25 +26,131 @@ export default function createActivityRoutes(pgPool) {
         });
       }
 
-      const query = `
-        SELECT * FROM activities 
-        WHERE tenant_id = $1 
-        ORDER BY created_date DESC 
-        LIMIT $2 OFFSET $3
-      `;
-      
-  const result = await pgPool.query(query, [tenant_id, parseInt(limit), parseInt(offset)]);
-      
-      const countQuery = 'SELECT COUNT(*) FROM activities WHERE tenant_id = $1';
-      const countResult = await pgPool.query(countQuery, [tenant_id]);
-      
+      // Parse limit/offset if provided; default to generous limits for local dev
+      const limit = req.query.limit ? parseInt(req.query.limit) : 1000;
+      const offset = req.query.offset ? parseInt(req.query.offset) : 0;
+
+      // Helper: try JSON.parse for values that may be JSON-encoded
+      const parseMaybeJson = (val) => {
+        if (val == null) return val;
+        if (typeof val !== 'string') return val;
+        const s = val.trim();
+        if ((s.startsWith('{') && s.endsWith('}')) || (s.startsWith('[') && s.endsWith(']'))) {
+          try { return JSON.parse(s); } catch { return val; }
+        }
+        return val;
+      };
+
+      // Build dynamic WHERE clause safely
+      const where = ['tenant_id = $1'];
+      const params = [tenant_id];
+
+      // Map simple equals filters on top-level columns
+      const simpleEq = [
+        { key: 'status', column: 'status' },
+        { key: 'type', column: 'type' },
+      ];
+      for (const { key, column } of simpleEq) {
+        if (req.query[key]) {
+          params.push(req.query[key]);
+          where.push(`${column} = $${params.length}`);
+        }
+      }
+
+      // assigned_to lives in metadata
+      if (req.query.assigned_to) {
+        const v = parseMaybeJson(req.query.assigned_to);
+        if (typeof v === 'string') {
+          params.push(v);
+          where.push(`metadata->>'assigned_to' = $${params.length}`);
+        }
+      }
+
+      // is_test_data filter (support {$ne: true})
+      if (req.query.is_test_data) {
+        const v = parseMaybeJson(req.query.is_test_data);
+        if (v && typeof v === 'object' && v.$ne === true) {
+          // keep rows where is_test_data is not true
+          where.push(`COALESCE((metadata->>'is_test_data')::boolean, false) = false`);
+        } else if (v === true || v === 'true') {
+          where.push(`COALESCE((metadata->>'is_test_data')::boolean, false) = true`);
+        }
+      }
+
+      // Tags: support { $all: [..] }
+      if (req.query.tags) {
+        const v = parseMaybeJson(req.query.tags);
+        if (v && typeof v === 'object' && Array.isArray(v.$all)) {
+          params.push(JSON.stringify(v.$all));
+          where.push(`(metadata->'tags')::jsonb @> $${params.length}::jsonb`);
+        }
+      }
+
+      // Due date range: due_date stored in metadata as YYYY-MM-DD
+      if (req.query.due_date) {
+        const v = parseMaybeJson(req.query.due_date);
+        if (v && typeof v === 'object') {
+          if (v.$gte) {
+            params.push(v.$gte);
+            where.push(`to_date(metadata->>'due_date','YYYY-MM-DD') >= to_date($${params.length},'YYYY-MM-DD')`);
+          }
+          if (v.$lte) {
+            params.push(v.$lte);
+            where.push(`to_date(metadata->>'due_date','YYYY-MM-DD') <= to_date($${params.length},'YYYY-MM-DD')`);
+          }
+        }
+      }
+
+      // Global $or: e.g. subject/description/related_name regex, unassigned filter, etc.
+      if (req.query['$or']) {
+        const v = parseMaybeJson(req.query['$or']);
+        if (Array.isArray(v) && v.length > 0) {
+          const orClauses = [];
+          for (const cond of v) {
+            const [field, expr] = Object.entries(cond)[0] || [];
+            if (!field) continue;
+            if (field === 'subject' && expr && typeof expr === 'object' && expr.$regex) {
+              params.push(`%${expr.$regex}%`);
+              orClauses.push(`subject ILIKE $${params.length}`);
+            } else if (field === 'description' && expr && typeof expr === 'object' && expr.$regex) {
+              params.push(`%${expr.$regex}%`);
+              // description maps to body or metadata.description
+              orClauses.push(`(COALESCE(body, metadata->>'description')) ILIKE $${params.length}`);
+            } else if (field === 'related_name' && expr && typeof expr === 'object' && expr.$regex) {
+              params.push(`%${expr.$regex}%`);
+              orClauses.push(`(metadata->>'related_name') ILIKE $${params.length}`);
+            } else if (field === 'assigned_to') {
+              if (expr === null) {
+                orClauses.push(`(metadata->>'assigned_to') IS NULL`);
+              } else if (expr === '') {
+                orClauses.push(`(metadata->>'assigned_to') = ''`);
+              } else if (typeof expr === 'string') {
+                params.push(expr);
+                orClauses.push(`(metadata->>'assigned_to') = $${params.length}`);
+              }
+            }
+          }
+          if (orClauses.length > 0) {
+            where.push(`(${orClauses.join(' OR ')})`);
+          }
+        }
+      }
+
+      // Build final SQL
+      const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+      const sql = `SELECT * FROM activities ${whereSql} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      const countSql = `SELECT COUNT(*) FROM activities ${whereSql}`;
+
+      const result = await pgPool.query(sql, [...params, limit, offset]);
+      const countResult = await pgPool.query(countSql, params);
+
       res.json({
         status: 'success',
         data: {
           activities: result.rows.map(normalizeActivity),
           total: parseInt(countResult.rows[0].count),
-          limit: parseInt(limit),
-          offset: parseInt(offset)
+          limit,
+          offset,
         }
       });
     } catch (error) {
@@ -94,36 +200,25 @@ export default function createActivityRoutes(pgPool) {
         });
       }
 
-      // Map to schema + new columns; keep remaining fields in metadata for forward compatibility
+      // Map to schema + keep remaining fields in metadata for forward compatibility
       const bodyText = activity.description ?? activity.body ?? null;
       const {
         tenant_id,
         type,
         subject,
-        status,
         related_id,
-        created_by,
-        location,
-        priority,
-        due_date,
-        due_time,
-        assigned_to,
-        related_to,
         // everything else to metadata
         ...rest
       } = activity || {};
 
       const meta = { ...rest, description: bodyText };
 
+      // Insert only columns that exist in initial schema; put extras into metadata
       const query = `
         INSERT INTO activities (
-          tenant_id, type, subject, body, status, related_id,
-          created_by, location, priority, due_date, due_time,
-          assigned_to, related_to, metadata, created_date, updated_date
+          tenant_id, type, subject, body, related_id, metadata
         ) VALUES (
-          $1, $2, $3, $4, $5, $6,
-          $7, $8, $9, $10, $11,
-          $12, $13, $14, NOW(), NOW()
+          $1, $2, $3, $4, $5, $6
         ) RETURNING *
       `;
 
@@ -132,15 +227,7 @@ export default function createActivityRoutes(pgPool) {
         (type || 'task'),
         subject || null,
         bodyText,
-        (status || 'pending'),
         related_id || null,
-        created_by || null,
-        location || null,
-        priority || null,
-        due_date || null,
-        due_time || null,
-        assigned_to || null,
-        related_to || null,
         JSON.stringify(meta)
       ];
       
@@ -171,17 +258,9 @@ export default function createActivityRoutes(pgPool) {
         type: payload.type,
         subject: payload.subject,
         body: bodyText,
-        status: payload.status,
         related_id: payload.related_id ?? null,
-        created_by: payload.created_by ?? null,
-        location: payload.location ?? null,
-        priority: payload.priority ?? null,
-        due_date: payload.due_date ?? null,
-        due_time: payload.due_time ?? null,
-        assigned_to: payload.assigned_to ?? null,
-        related_to: payload.related_to ?? null,
       };
-      const { type, subject, body, status, related_id, created_by, location, priority, due_date, due_time, assigned_to, related_to } = known;
+      const { type, subject, body, related_id } = known;
 
       // Merge metadata: load current row's metadata and shallow-merge with incoming extras
       const current = await pgPool.query('SELECT metadata FROM activities WHERE id = $1', [id]);
@@ -194,18 +273,9 @@ export default function createActivityRoutes(pgPool) {
           type = COALESCE($1, type),
           subject = COALESCE($2, subject),
           body = COALESCE($3, body),
-          status = COALESCE($4, status),
-          related_id = COALESCE($5, related_id),
-          created_by = COALESCE($6, created_by),
-          location = COALESCE($7, location),
-          priority = COALESCE($8, priority),
-          due_date = COALESCE($9, due_date),
-          due_time = COALESCE($10, due_time),
-          assigned_to = COALESCE($11, assigned_to),
-          related_to = COALESCE($12, related_to),
-          metadata = COALESCE($13, metadata),
-          updated_date = NOW()
-        WHERE id = $14
+          related_id = COALESCE($4, related_id),
+          metadata = COALESCE($5, metadata)
+        WHERE id = $6
         RETURNING *
       `;
 
@@ -213,15 +283,7 @@ export default function createActivityRoutes(pgPool) {
         type,
         subject,
         body,
-        status,
         related_id,
-        created_by,
-        location,
-        priority,
-        due_date,
-        due_time,
-        assigned_to,
-        related_to,
         JSON.stringify(newMeta),
         id
       ];

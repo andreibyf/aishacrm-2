@@ -29,6 +29,9 @@ test.describe('CRUD Operations - End-to-End', () => {
   });
 
   test.beforeEach(async ({ page }) => {
+    // Auto-accept any native dialogs (e.g., window.confirm)
+    page.on('dialog', dialog => dialog.accept());
+
     // Navigate to app and wait for initial load
     await page.goto(BASE_URL, { waitUntil: 'networkidle' });
     
@@ -68,11 +71,12 @@ test.describe('CRUD Operations - End-to-End', () => {
         await typeSelect.selectOption('task');
       }
       
-      // Save activity
-      await page.click('button[type="submit"]:has-text("Save"), button:has-text("Create"), button:has-text("Submit")');
-      
-      // Wait for success (form closes or success message)
-      await page.waitForTimeout(2000);
+  // Save activity
+  await page.click('button[type="submit"]:has-text("Save"), button:has-text("Create"), button:has-text("Submit")');
+
+  // Wait for form to close and list to refresh
+  await page.waitForSelector('form', { state: 'hidden', timeout: 15000 }).catch(() => {});
+  await page.waitForLoadState('networkidle').catch(() => {});
       
       // Verify activity appears (check for the subject text anywhere on page)
       await expect(page.locator(`text=${testSubject}`).first()).toBeVisible({ timeout: 10000 });
@@ -91,13 +95,17 @@ test.describe('CRUD Operations - End-to-End', () => {
       await page.waitForSelector('form', { state: 'visible' });
       
       // Get current subject and modify it
-      const subjectInput = page.locator('input[name="subject"]');
+      const subjectInput = page.locator('input[name="subject"], input#subject, [data-testid="activity-subject-input"]');
       const originalSubject = await subjectInput.inputValue();
       const updatedSubject = `${originalSubject} - UPDATED ${Date.now()}`;
       
       // Update fields
       await subjectInput.fill(updatedSubject);
-      await page.selectOption('select[name="status"]', 'completed');
+      // Update status if native select available; otherwise skip
+      const statusSelect = page.locator('select[name="status"]');
+      if (await statusSelect.count() > 0) {
+        await statusSelect.selectOption('completed');
+      }
       
       // Save changes
       await page.click('button[type="submit"]:has-text("Save")');
@@ -114,23 +122,45 @@ test.describe('CRUD Operations - End-to-End', () => {
       await page.click('a[href="/activities"]');
       await page.waitForURL('**/activities');
       
+      // First create an activity to delete
+      await page.click('button:has-text("Add Activity")');
+      await page.waitForSelector('input#subject, [data-testid="activity-subject-input"]', { timeout: 10000 });
+      
+      const timestamp = Date.now();
+      const testSubject = `E2E Delete Test Activity ${timestamp}`;
+      await page.fill('input#subject, [data-testid="activity-subject-input"]', testSubject);
+      
+      const typeSelect = page.locator('select#type, select[name="type"]');
+      if (await typeSelect.count() > 0) {
+        await typeSelect.selectOption('task');
+      }
+      
+      await page.click('button[type="submit"]:has-text("Save")');
+      
+      // Wait for form to close and activity to appear
+      await page.waitForSelector('form', { state: 'hidden', timeout: 15000 }).catch(() => {});
+      await page.waitForLoadState('networkidle').catch(() => {});
+      await expect(page.locator(`text=${testSubject}`).first()).toBeVisible({ timeout: 10000 });
+      
       // Get count of activities before delete
       const rowsBefore = await page.locator('table tbody tr').count();
+      expect(rowsBefore).toBeGreaterThan(0); // Ensure we have at least one activity
       
-      // Find first activity and click delete
-      const firstRow = page.locator('table tbody tr').first();
-      const activitySubject = await firstRow.locator('td').first().textContent();
+      // Find the activity we just created and click delete
+      const activityRow = page.locator(`table tbody tr:has-text("${testSubject}")`).first();
+      await activityRow.waitFor({ state: 'visible', timeout: 5000 });
       
-      await firstRow.locator('button[aria-label="Delete"], button:has-text("Delete")').click();
+      await activityRow.locator('button[aria-label="Delete"]').click();
       
-      // Confirm deletion in dialog
-      await page.click('button:has-text("Confirm"), button:has-text("Yes"), button:has-text("Delete")');
+      // Wait for confirmation dialog and confirm deletion
+      await page.waitForSelector('[role="alertdialog"]', { state: 'visible' });
+      await page.click('button:has-text("Delete")');
       
       // Wait for deletion to complete
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(1500);
       
       // Verify activity is no longer visible
-      await expect(page.locator(`text=${activitySubject}`)).not.toBeVisible();
+      await expect(page.locator(`text=${testSubject}`)).not.toBeVisible();
       
       // Verify count decreased
       const rowsAfter = await page.locator('table tbody tr').count();

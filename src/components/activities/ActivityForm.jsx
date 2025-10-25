@@ -30,7 +30,7 @@ const generateTimeOptions = () => {
 
 const timeOptions = generateTimeOptions();
 
-export default function ActivityForm({ activity, relatedTo, relatedId, onSave, onCancel, tenantId }) {
+export default function ActivityForm({ activity, relatedTo, relatedId, onSave, onCancel, tenantId, user: propsUser }) {
   const { selectedTimezone } = useTimezone();
   const offsetMinutes = getCurrentTimezoneOffset(selectedTimezone);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -44,7 +44,8 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
 
   // NEW: User state and loading for admin check
   const [user, setUser] = useState(null);
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  const effectiveUser = propsUser || user;
+  const isAdmin = effectiveUser?.role === 'admin' || effectiveUser?.role === 'superadmin';
 
   // NEW: State for notes section
   const [notes, setNotes] = useState([]);
@@ -145,7 +146,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
     setFormData(getInitialFormData());
   }, [activity, relatedTo, relatedId, getInitialFormData]);
 
-  // NEW: Load user for admin check
+  // NEW: Load user for admin check (only if not provided via props)
   useEffect(() => {
     const loadUser = async () => {
       try {
@@ -158,10 +159,10 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
         setLoadingUser(false);
       }
     };
-    if (!user && tenantId) { // Only load if user not already set and tenantId is available
+    if (!propsUser && !user && tenantId) { // Only load if not provided via props and tenantId is available
       loadUser();
     }
-  }, [user, tenantId]);
+  }, [propsUser, user, tenantId]);
 
 
   // Load related data
@@ -441,7 +442,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
         }
       }
 
-      let processedData = { ...formData };
+  let processedData = { ...formData };
 
       if (processedData.due_date && processedData.due_time) {
 
@@ -468,6 +469,15 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
         processedData.due_time = null;
       }
 
+      const effectiveUser = propsUser || user;
+      const isAdminLocal = effectiveUser?.role === 'admin' || effectiveUser?.role === 'superadmin';
+      const createdBy = effectiveUser?.email || effectiveUser?.id || 'unknown';
+
+      // Default assignment: if user is not admin and no assignee chosen, assign to self
+      if (!processedData.assigned_to && !isAdminLocal && createdBy && createdBy !== 'unknown') {
+        processedData.assigned_to = createdBy;
+      }
+
       let activityData = {
         type: processedData.type,
         subject: processedData.subject,
@@ -484,7 +494,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
         tenant_id: tenantId,
         due_date: processedData.due_date,
         due_time: processedData.due_time,
-        created_by: user?.email || user?.id || 'unknown'
+        created_by: createdBy
       };
 
       if (processedData.type === 'scheduled_ai_call') {
@@ -497,10 +507,10 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
       let result;
       if (activity?.id) {
         result = await Activity.update(activity.id, activityData);
-        toast.success('Activity updated successfully!');
+        toast.success(`Updated: ${activityData.subject}`);
       } else {
         result = await Activity.create(activityData);
-        toast.success('Activity created successfully!');
+        toast.success(`Created: ${activityData.subject}`);
       }
 
       if (onSave) {
@@ -582,6 +592,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
             <Label htmlFor="subject" className="text-slate-200">Subject *</Label>
             <Input
               id="subject"
+          name="subject"
               value={formData.subject}
               onChange={(e) => handleChange('subject', e.target.value)}
               required
@@ -956,7 +967,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
               ) : (
                 <>
                   <CalendarIcon className="w-4 h-4 mr-2" />
-                  {activity ? 'Update Activity' : 'Create Activity'}
+                  Save
                 </>
               )}
             </Button>

@@ -1,0 +1,368 @@
+# Page snapshot
+
+```yaml
+- generic:
+  - generic:
+    - generic:
+      - complementary:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic: L
+              - generic: Local Development Tenant
+            - paragraph: ⚠️ No Client Selected
+          - generic:
+            - generic:
+              - paragraph: AI-Powered Business Growth Platform
+              - paragraph: Oct 25, 2025
+              - paragraph: 01:50:28 PM
+          - paragraph: Navigation
+          - navigation:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /dashboard
+                  - img
+                  - generic: Dashboard
+              - listitem:
+                - link:
+                  - /url: /contacts
+                  - img
+                  - generic: Contacts
+              - listitem:
+                - link:
+                  - /url: /accounts
+                  - img
+                  - generic: Accounts
+              - listitem:
+                - link:
+                  - /url: /leads
+                  - img
+                  - generic: Leads
+              - listitem:
+                - link:
+                  - /url: /opportunities
+                  - img
+                  - generic: Opportunities
+              - listitem:
+                - link:
+                  - /url: /activities
+                  - img
+                  - generic: Activities
+              - listitem:
+                - link:
+                  - /url: /calendar
+                  - img
+                  - generic: Calendar
+              - listitem:
+                - link:
+                  - /url: /bizdevsources
+                  - img
+                  - generic: BizDev Sources
+              - listitem:
+                - link:
+                  - /url: /cashflow
+                  - img
+                  - generic: Cash Flow
+              - listitem:
+                - link:
+                  - /url: /documentprocessing
+                  - img
+                  - generic: Document Processing
+              - listitem:
+                - link:
+                  - /url: /documentmanagement
+                  - img
+                  - generic: Document Management
+              - listitem:
+                - link:
+                  - /url: /aicampaigns
+                  - img
+                  - generic: AI Campaigns
+              - listitem:
+                - link:
+                  - /url: /employees
+                  - img
+                  - generic: Employees
+              - listitem:
+                - link:
+                  - /url: /reports
+                  - img
+                  - generic: Reports
+              - listitem:
+                - link:
+                  - /url: /integrations
+                  - img
+                  - generic: Integrations
+              - listitem:
+                - link:
+                  - /url: /workflows
+                  - img
+                  - generic: Workflows
+              - listitem:
+                - link:
+                  - /url: /paymentportal
+                  - img
+                  - generic: Payment Portal
+              - listitem:
+                - link:
+                  - /url: /utilities
+                  - img
+                  - generic: Utilities
+              - listitem:
+                - link:
+                  - /url: /clientonboarding
+                  - img
+                  - generic: Client Onboarding
+          - generic:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /workflowguide
+                  - img
+                  - generic: Workflow Guide
+              - listitem:
+                - link:
+                  - /url: /documentation
+                  - img
+                  - generic: Documentation
+              - listitem:
+                - link:
+                  - /url: /agent
+                  - generic:
+                    - img
+              - listitem:
+                - link:
+                  - /url: /clientrequirements
+                  - img
+                  - generic: Client Requirements
+      - generic:
+        - banner:
+          - button:
+            - img
+          - button:
+            - img
+          - generic:
+            - generic:
+              - generic:
+                - img
+                - combobox:
+                  - generic:
+                    - generic:
+                      - img
+                      - generic: All Clients (Global View)
+                  - img
+              - generic:
+                - generic: "Managing Client: All Clients"
+            - generic:
+              - img
+              - generic: No employees with CRM access
+            - button:
+              - img
+            - button:
+              - generic:
+                - generic: D
+              - generic: Dev
+        - main:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - heading [level=1]: Activities
+                  - paragraph: Track and manage your team's activities and tasks
+                - generic:
+                  - button:
+                    - img
+                  - button:
+                    - img
+                  - button:
+                    - img
+                    - text: Import
+                  - button:
+                    - img
+                    - text: Export
+                  - button:
+                    - img
+                    - text: Add Activity
+              - generic:
+                - generic:
+                  - generic:
+                    - paragraph: Total Activities
+                    - generic:
+                      - img
+                  - paragraph: "4"
+                - generic:
+                  - generic:
+                    - paragraph: Scheduled
+                    - generic:
+                      - img
+                  - paragraph: "0"
+                - generic:
+                  - generic:
+                    - paragraph: In Progress
+                    - generic:
+                      - img
+                  - paragraph: "0"
+                - generic:
+                  - generic:
+                    - paragraph: Overdue
+                    - generic:
+                      - img
+                  - paragraph: "3"
+                - generic:
+                  - generic:
+                    - paragraph: Completed
+                    - generic:
+                      - img
+                  - paragraph: "0"
+                - generic:
+                  - generic:
+                    - paragraph: Cancelled
+                    - generic:
+                      - img
+                  - paragraph: "0"
+              - generic:
+                - generic:
+                  - img
+                  - textbox:
+                    - /placeholder: Search activities by subject, description, or related entity...
+                - generic:
+                  - generic:
+                    - button:
+                      - img
+                      - text: Tags
+              - generic:
+                - generic:
+                  - generic:
+                    - table:
+                      - rowgroup:
+                        - row:
+                          - cell: Activity
+                          - cell:
+                            - checkbox
+                          - cell: Type
+                          - cell: Status
+                          - cell: Due Date
+                          - cell: Related To
+                          - cell: Assigned To
+                          - cell: Actions
+                      - rowgroup:
+                        - row:
+                          - cell:
+                            - generic: E2E Test Activity 1761414608985 - UPDATED 1761414610802 - UPDATED 1761414616154
+                          - cell:
+                            - checkbox
+                          - cell:
+                            - generic: task
+                          - cell:
+                            - generic: scheduled
+                          - cell: Oct 25, 2025
+                          - cell: —
+                          - cell: Unassigned
+                          - cell:
+                            - generic:
+                              - button:
+                                - img
+                              - button:
+                                - img
+                              - button:
+                                - img
+                        - row:
+                          - cell:
+                            - generic: E2E Test Activity 1761414605649
+                          - cell:
+                            - checkbox
+                          - cell:
+                            - generic: task
+                          - cell:
+                            - generic: scheduled
+                          - cell: Oct 25, 2025
+                          - cell: —
+                          - cell: Unassigned
+                          - cell:
+                            - generic:
+                              - button:
+                                - img
+                              - button:
+                                - img
+                              - button:
+                                - img
+                        - row:
+                          - cell:
+                            - generic: E2E Test Activity 1761414604194
+                          - cell:
+                            - checkbox
+                          - cell:
+                            - generic: task
+                          - cell:
+                            - generic: scheduled
+                          - cell: Oct 25, 2025
+                          - cell: —
+                          - cell: Unassigned
+                          - cell:
+                            - generic:
+                              - button:
+                                - img
+                              - button:
+                                - img
+                              - button:
+                                - img
+                        - row:
+                          - cell:
+                            - generic: Initial call with John Smith
+                            - generic: Discussed product requirements and timeline
+                          - cell:
+                            - checkbox
+                          - cell:
+                            - generic: call
+                          - cell
+                          - cell: —
+                          - cell: —
+                          - cell: Unassigned
+                          - cell:
+                            - generic:
+                              - button:
+                                - img
+                              - button:
+                                - img
+                              - button:
+                                - img
+              - generic:
+                - generic:
+                  - generic: Showing 1 to 4 of 4 results
+                  - generic:
+                    - generic: "Show:"
+                    - combobox:
+                      - generic: "25"
+                      - img
+                - generic:
+                  - button [disabled]:
+                    - img
+                  - button [disabled]:
+                    - img
+                  - generic:
+                    - button: "1"
+                  - button [disabled]:
+                    - img
+                  - button [disabled]:
+                    - img
+        - contentinfo:
+          - generic:
+            - generic:
+              - generic:
+                - img
+                - generic:
+                  - generic: ai-sha crm® is a registered trademark of 4V Data Consulting LLC.
+                  - generic: © 2025 4V Data Consulting LLC. All rights reserved.
+  - generic: $75,000
+  - alertdialog "Delete activity?" [ref=e2]:
+    - generic [ref=e3]:
+      - heading "Delete activity?" [level=2] [ref=e4]:
+        - img [ref=e5]
+        - text: Delete activity?
+      - paragraph [ref=e9]: This action cannot be undone.
+    - generic [ref=e10]:
+      - button "Cancel" [active] [ref=e11] [cursor=pointer]
+      - button "Delete" [ref=e12] [cursor=pointer]
+```

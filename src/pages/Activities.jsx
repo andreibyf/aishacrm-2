@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Activity } from "@/api/entities";
 import { Account } from "@/api/entities";
 import { Contact } from "@/api/entities";
@@ -14,7 +14,7 @@ import ActivityDetailPanel from "../components/activities/ActivityDetailPanel";
 import BulkActionsMenu from "../components/activities/BulkActionsMenu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Upload, Loader2, Grid, List, AlertCircle, X, Edit, Eye, Trash2, Calendar as CalendarIcon } from "lucide-react";
+import { Plus, Search, Upload, Loader2, Grid, List, AlertCircle, X, Edit, Eye, Trash2 } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import CsvExportButton from "../components/shared/CsvExportButton";
 import CsvImportDialog from "../components/shared/CsvImportDialog";
@@ -30,6 +30,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
 import SimpleModal from "../components/shared/SimpleModal";
+import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 import StatusHelper from "../components/shared/StatusHelper";
 import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
@@ -98,6 +99,7 @@ export default function ActivitiesPage() {
   const [totalItems, setTotalItems] = useState(0);
 
   const { cachedRequest, clearCacheByKey } = useApiManager();
+  const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
   
   const initialLoadDone = useRef(false);
 
@@ -318,33 +320,7 @@ export default function ActivitiesPage() {
     }, {});
   }, [employees]);
 
-  const accountsMap = useMemo(() => {
-    return accounts.reduce((acc, account) => {
-      acc[account.id] = account.name;
-      return acc;
-    }, {});
-  }, [accounts]);
-
-  const contactsMap = useMemo(() => {
-    return contacts.reduce((acc, contact) => {
-      acc[contact.id] = `${contact.first_name} ${contact.last_name}`;
-      return acc;
-    }, {});
-  }, [contacts]);
-
-  const leadsMap = useMemo(() => {
-    return leads.reduce((acc, lead) => {
-      acc[lead.id] = `${lead.first_name} ${lead.last_name}`;
-      return acc;
-    }, {});
-  }, [leads]);
-
-  const opportunitiesMap = useMemo(() => {
-    return opportunities.reduce((acc, opportunity) => {
-      acc[opportunity.id] = opportunity.name;
-      return acc;
-    }, {});
-  }, [opportunities]);
+  // Note: maps for accounts/contacts/leads/opportunities are not used directly here
 
   const allTags = useMemo(() => {
     if (!Array.isArray(activities)) return [];
@@ -365,31 +341,53 @@ export default function ActivitiesPage() {
       .sort((a, b) => b.count - a.count);
   }, [activities]);
 
-  const handleSave = async () => {
+  const handleSave = async (saved) => {
+    // If we have the saved record, temporarily set the search term to surface it to the top
+    if (saved?.subject) {
+      setSearchTerm(saved.subject);
+      setCurrentPage(1);
+    }
+
     setIsFormOpen(false);
     setEditingActivity(null);
     clearCacheByKey('Activity');
     await Promise.all([
-      loadActivities(currentPage, pageSize),
+      loadActivities(1, pageSize),
       loadTotalStats()
     ]);
     toast.success(editingActivity ? "Activity updated successfully" : "Activity created successfully");
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this activity?")) return;
+    const confirmed = await confirm({
+      title: "Delete activity?",
+      description: "This action cannot be undone.",
+      variant: "destructive",
+      confirmText: "Delete",
+      cancelText: "Cancel"
+    });
+    if (!confirmed) return;
 
     try {
       await Activity.delete(id);
+      // Optimistically update UI immediately
+      setActivities(prev => prev.filter(a => a.id !== id));
+      setTotalItems(prev => (prev > 0 ? prev - 1 : 0));
+      toast.success("Activity deleted successfully");
+      
+      // Small delay to let optimistic update settle before reloading
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       clearCacheByKey('Activity');
       await Promise.all([
         loadActivities(currentPage, pageSize),
         loadTotalStats()
       ]);
-      toast.success("Activity deleted successfully");
     } catch (error) {
       console.error("Failed to delete activity:", error);
       toast.error("Failed to delete activity");
+      // Reload on error to ensure consistency
+      await loadActivities(currentPage, pageSize);
     }
   };
 
@@ -749,20 +747,8 @@ export default function ActivitiesPage() {
             opportunities={opportunities}
             users={users}
             tenantId={user?.tenant_id}
-            onSubmit={async (payload) => {
-              try {
-                console.log('[Activities] Form submitted:', { isEdit: !!editingActivity, payload });
-                if (editingActivity) {
-                  await Activity.update(editingActivity.id, payload);
-                } else {
-                  await Activity.create(payload);
-                }
-                await handleSave();
-              } catch (error) {
-                console.error("Error saving activity:", error);
-                toast.error("Failed to save activity");
-              }
-            }}
+            user={user}
+            onSave={handleSave}
             onCancel={() => {
               console.log('[Activities] Form cancelled');
               setIsFormOpen(false);
@@ -815,7 +801,7 @@ export default function ActivitiesPage() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
             <h1 className="text-3xl font-bold text-slate-100 mb-2">Activities</h1>
-            <p className="text-slate-400">Track and manage your team's activities and tasks</p>
+            <p className="text-slate-400">Track and manage your team&apos;s activities and tasks</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <RefreshButton onClick={handleRefresh} loading={loading} />
@@ -1090,7 +1076,7 @@ export default function ActivitiesPage() {
                     onDelete={() => handleDelete(activity.id)}
                     onViewDetails={() => handleViewDetails(activity)}
                     isSelected={selectedActivities.has(activity.id)}
-                    onSelect={(checked) => toggleSelection(activity.id)}
+                    onSelect={() => toggleSelection(activity.id)}
                   />
                 ))}
               </AnimatePresence>
@@ -1113,6 +1099,7 @@ export default function ActivitiesPage() {
                 <Table>
                   <TableHeader className="bg-slate-700/50">
                     <TableRow>
+                      <TableHead className="text-left p-3 font-medium text-slate-300">Activity</TableHead>
                       <TableHead className="w-12 p-3">
                         <Checkbox
                           checked={selectedActivities.size === activities.length && activities.length > 0 && !selectAllMode}
@@ -1120,7 +1107,6 @@ export default function ActivitiesPage() {
                           className="border-slate-600"
                         />
                       </TableHead>
-                      <TableHead className="text-left p-3 font-medium text-slate-300">Activity</TableHead>
                       <TableHead className="text-left p-3 font-medium text-slate-300">Type</TableHead>
                       <TableHead className="text-left p-3 font-medium text-slate-300">Status</TableHead>
                       <TableHead className="text-left p-3 font-medium text-slate-300">Due Date</TableHead>
@@ -1132,16 +1118,16 @@ export default function ActivitiesPage() {
                   <TableBody>
                     {activities.map((activity) => (
                       <TableRow key={activity.id} className="hover:bg-slate-700/30 transition-colors border-b border-slate-800">
+                        <TableCell className="font-medium text-slate-200 cursor-pointer p-3" onClick={() => handleViewDetails(activity)}>
+                          <div className="font-semibold">{activity.subject}</div>
+                          {activity.description && <div className="text-xs text-slate-400 truncate max-w-xs">{activity.description}</div>}
+                        </TableCell>
                         <TableCell className="text-center p-3">
                           <Checkbox
                             checked={selectedActivities.has(activity.id) || selectAllMode}
                             onCheckedChange={() => toggleSelection(activity.id)}
                             className="border-slate-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                           />
-                        </TableCell>
-                        <TableCell className="font-medium text-slate-200 cursor-pointer p-3" onClick={() => handleViewDetails(activity)}>
-                          <div className="font-semibold">{activity.subject}</div>
-                          {activity.description && <div className="text-xs text-slate-400 truncate max-w-xs">{activity.description}</div>}
                         </TableCell>
                         <TableCell className="cursor-pointer p-3" onClick={() => handleViewDetails(activity)}>
                           <Badge className={`${typeColors[activity.type]} capitalize text-xs`}>
@@ -1174,6 +1160,7 @@ export default function ActivitiesPage() {
                                     setEditingActivity(activity);
                                     setIsFormOpen(true);
                                   }}
+                                  aria-label="Edit"
                                   className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
                                 >
                                   <Edit className="w-4 h-4" />
@@ -1192,6 +1179,7 @@ export default function ActivitiesPage() {
                                     e.stopPropagation();
                                     handleViewDetails(activity);
                                   }}
+                                  aria-label="View"
                                   className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
                                 >
                                   <Eye className="w-4 h-4" />
@@ -1210,6 +1198,7 @@ export default function ActivitiesPage() {
                                     e.stopPropagation();
                                     handleDelete(activity.id);
                                   }}
+                                  aria-label="Delete"
                                   className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
                                 >
                                   <Trash2 className="w-4 h-4" />
@@ -1240,6 +1229,7 @@ export default function ActivitiesPage() {
           </>
         )}
       </div>
+      <ConfirmDialogPortal />
     </TooltipProvider>
   );
 }
