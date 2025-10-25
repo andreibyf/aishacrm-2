@@ -1,9 +1,8 @@
-
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { MessageCircle, X, Mic, MicOff, Volume2, VolumeX, Loader2 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { generateDailyBriefing } from "@/api/functions";
@@ -18,12 +17,12 @@ export default function AIAssistantWidget({ user }) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [speechRecognition, setSpeechRecognition] = useState(null);
-  const [briefingEnabled, setBriefingEnabled] = useState(true);
+  const [briefingEnabled] = useState(true);
   const [hasBriefedToday, setHasBriefingToday] = useState(false);
   const [currentAudio, setCurrentAudio] = useState(null);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [timeRemaining, setTimeRemaining] = useState(0);
-  const [micPermissionStatus, setMicPermissionStatus] = useState('unknown');
+  const [micPermissionStatus] = useState('unknown');
   const [permissionError, setPermissionError] = useState('');
   const [isDetectingVoice, setIsDetectingVoice] = useState(false);
   const [currentTranscript, setCurrentTranscript] = useState('');
@@ -239,34 +238,34 @@ export default function AIAssistantWidget({ user }) {
   }, [isLoading, speakText]);
 
   // Check microphone permissions (kept for permission indicator, though startVoiceMode handles acquisition)
-  const checkMicrophonePermissions = useCallback(async () => {
-    if (!navigator.permissions || !navigator.mediaDevices) {
-      console.warn('Permissions API or MediaDevices not supported');
-      setMicPermissionStatus('unknown');
-      return 'unknown';
-    }
+  // const checkMicrophonePermissions = useCallback(async () => {
+  //   if (!navigator.permissions || !navigator.mediaDevices) {
+  //     console.warn('Permissions API or MediaDevices not supported');
+  //     setMicPermissionStatus('unknown');
+  //     return 'unknown';
+  //   }
 
-    try {
-      // Check current permission status
-      const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
-      setMicPermissionStatus(permissionStatus.state);
+  //   try {
+  //     // Check current permission status
+  //     const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
+  //     setMicPermissionStatus(permissionStatus.state);
       
-      // Listen for permission changes
-      permissionStatus.onchange = () => {
-        setMicPermissionStatus(permissionStatus.state);
-        if (permissionStatus.state === 'denied' && isListeningRef.current) { // Use ref here
-          stopVoiceModeRef.current(); // Use ref here
-          setPermissionError('Microphone access was revoked. Voice mode has been disabled.');
-        }
-      };
+  //     // Listen for permission changes
+  //     permissionStatus.onchange = () => {
+  //       setMicPermissionStatus(permissionStatus.state);
+  //       if (permissionStatus.state === 'denied' && isListeningRef.current) { // Use ref here
+  //         stopVoiceModeRef.current(); // Use ref here
+  //         setPermissionError('Microphone access was revoked. Voice mode has been disabled.');
+  //       }
+  //     };
 
-      return permissionStatus.state;
-    } catch (error) {
-      console.warn('Could not check microphone permissions:', error);
-      setMicPermissionStatus('unknown');
-      return 'unknown';
-    }
-  }, []);
+  //     return permissionStatus.state;
+  //   } catch (error) {
+  //     console.warn('Could not check microphone permissions:', error);
+  //     setMicPermissionStatus('unknown');
+  //     return 'unknown';
+  //   }
+  // }, []);
 
   // UNUSED: Request microphone access (kept for manual request, though startVoiceMode handles acquisition)
   // const requestMicrophoneAccess = useCallback(async () => {
@@ -610,8 +609,8 @@ export default function AIAssistantWidget({ user }) {
             try {
                 recognitionRef.current.stop();
                 console.log('🎤 Recognition manually stopped via onend (not listening)');
-            } catch(e) {
-                console.warn('Error stopping recognition onend cleanup:', e);
+            } catch {
+                console.warn('Error stopping recognition onend cleanup');
             }
         }
       };
@@ -643,7 +642,7 @@ export default function AIAssistantWidget({ user }) {
       if (recognitionRef.current) {
         try {
           recognitionRef.current.abort(); // Use abort for immediate cleanup on unmount
-        } catch(e) {
+        } catch {
           // Ignore errors during cleanup
         }
       }
@@ -812,7 +811,7 @@ export default function AIAssistantWidget({ user }) {
               </div>
               {currentTranscript && (
                 <div className="mt-2 text-sm bg-white/20 rounded p-2">
-                  "{currentTranscript}"
+                  &quot;{currentTranscript}&quot;
                 </div>
               )}
               <Button 
@@ -838,7 +837,7 @@ export default function AIAssistantWidget({ user }) {
                     <p>{permissionError}</p>
                     {micPermissionStatus === 'denied' && (
                       <p className="mt-2">
-                        <strong>Fix:</strong> Click the <span className="font-bold">🔒</span> or <span className="font-bold">🎤</span> icon in your browser's address bar → Allow microphone access → Refresh page
+                        <strong>Fix:</strong> Click the <span className="font-bold">🔒</span> or <span className="font-bold">🎤</span> icon in your browser&apos;s address bar → Allow microphone access → Refresh page
                       </p>
                     )}
                   </div>
@@ -849,7 +848,7 @@ export default function AIAssistantWidget({ user }) {
             {messages.length === 0 && !permissionError ? (
               <div className="text-center text-gray-500 mt-8">
                 <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p>Hello! I'm Ai-SHA, your CRM assistant.</p>
+                <p>Hello! I&apos;m Ai-SHA, your CRM assistant.</p>
                 <p className="text-sm">Ask me about contacts, leads, or use voice mode!</p>
                 <ul className="text-xs mt-2 space-y-1">
                   <li>🎤 <strong>Toggle voice mode</strong> for 2 minutes</li>

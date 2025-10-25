@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Sheet,
   SheetContent,
@@ -86,13 +85,45 @@ export default function UniversalDetailPanel({
   const [relatedContacts, setRelatedContacts] = useState([]);
   const [relatedDataLoading, setRelatedDataLoading] = useState(false);
 
+  const loadNotes = useCallback(async () => {
+    if (!entity) return;
+    try {
+      const relatedTo = entityType.toLowerCase();
+      // Assuming Note.filter supports ordering and related_to/related_id
+      const notesData = await Note.filter({ 
+        related_to: relatedTo, 
+        related_id: entity.id 
+      }, '-created_date'); // Assuming '-created_date' sorts descending
+      setNotes(notesData || []);
+    } catch (error) {
+      console.error("Failed to load notes:", error);
+      toast.error("Failed to load notes");
+    }
+  }, [entity, entityType]);
+
+  const loadActivities = useCallback(async () => {
+    if (!entity) return;
+    try {
+      const relatedTo = entityType.toLowerCase();
+      // Assuming Activity.filter supports ordering and related_to/related_id, limit to 10
+      const activitiesData = await Activity.filter({ 
+        related_to: relatedTo, 
+        related_id: entity.id 
+      }, '-created_date', 10);
+      setActivities(activitiesData || []);
+    } catch (error) {
+      console.error("Failed to load activities:", error);
+      toast.error("Failed to load activities");
+    }
+  }, [entity, entityType]);
+
   // Load notes and activities when panel opens or entity changes
   useEffect(() => {
     if (open && entity) {
       loadNotes();
       loadActivities();
     }
-  }, [open, entity, entityType]);
+  }, [open, entity, loadNotes, loadActivities]);
 
   // Effect to load related contacts for accounts
   useEffect(() => {
@@ -125,38 +156,6 @@ export default function UniversalDetailPanel({
   }, [entity?.id, entityType, open]);
 
   if (!entity) return null;
-
-  const loadNotes = async () => {
-    if (!entity) return;
-    try {
-      const relatedTo = entityType.toLowerCase();
-      // Assuming Note.filter supports ordering and related_to/related_id
-      const notesData = await Note.filter({ 
-        related_to: relatedTo, 
-        related_id: entity.id 
-      }, '-created_date'); // Assuming '-created_date' sorts descending
-      setNotes(notesData || []);
-    } catch (error) {
-      console.error("Failed to load notes:", error);
-      toast.error("Failed to load notes");
-    }
-  };
-
-  const loadActivities = async () => {
-    if (!entity) return;
-    try {
-      const relatedTo = entityType.toLowerCase();
-      // Assuming Activity.filter supports ordering and related_to/related_id, limit to 10
-      const activitiesData = await Activity.filter({ 
-        related_to: relatedTo, 
-        related_id: entity.id 
-      }, '-created_date', 10);
-      setActivities(activitiesData || []);
-    } catch (error) {
-      console.error("Failed to load activities:", error);
-      toast.error("Failed to load activities");
-    }
-  };
 
   const getEntityName = (entity) => {
     if (entity.first_name && entity.last_name) {
@@ -907,7 +906,7 @@ export default function UniversalDetailPanel({
                         <div className="flex items-center gap-2">
                           {getNoteTypeIcon(note.type)}
                           <span className="font-medium text-slate-200">{note.title}</span>
-                          <Badge variant="secondary" className="text-xs bg-slate-700 text-slate-300">
+                          <Badge variant="secondary" className="text-xs bg-slate-700 text-slate-300 border-slate-600">
                             {note.type.replace(/_/g, ' ')}
                           </Badge>
                         </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { SystemLog } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ export default function SystemLogsViewer() {
   const [searchTerm, setSearchTerm] = useState('');
   const [uniqueSources, setUniqueSources] = useState([]);
 
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async () => {
     setLoading(true);
     try {
       // Try backend first (for local dev with Supabase Cloud)
@@ -67,11 +67,11 @@ export default function SystemLogsViewer() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterLevel, filterSource, searchTerm]);
 
   useEffect(() => {
     loadLogs();
-  }, [filterLevel, filterSource, searchTerm]);
+  }, [loadLogs]);
 
   const handleClearLogs = async () => {
     if (!confirm('Are you sure you want to delete all logs? This action cannot be undone.')) {

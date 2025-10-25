@@ -121,7 +121,7 @@ export default function RecentActivities(props) {
     } finally {
       setLoading(false);
     }
-  }, [memoTenantFilter, memoShowTestData, cachedRequest, props?.prefetchedActivities, tenantFilterProp]);
+  }, [memoTenantFilter, memoShowTestData, cachedRequest, props.prefetchedActivities]);
 
   useEffect(() => {
     fetchActivities();
@@ -160,7 +160,7 @@ export default function RecentActivities(props) {
     });
     
     return filtered;
-  }, [scopedActivities, cutoffMs, timeframeWeeks, timeframeDays]);
+  }, [scopedActivities, cutoffMs]);
 
   const summaryData = React.useMemo(() => {
     const order = ["scheduled", "overdue", "in-progress", "completed", "cancelled", "failed"];

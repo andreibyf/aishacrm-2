@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { Activity } from '@/api/entities';
 import { Contact, Account, Lead, Opportunity, User } from '@/api/entities';
@@ -40,6 +39,8 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
   const [leads, setLeads] = useState([]);
   const [opportunities, setOpportunities] = useState([]);
   const [relatedRecords, setRelatedRecords] = useState([]);
+  const [, setLoadingUser] = useState(false);
+  const [, setSelectedRelatedRecord] = useState(null);
 
   // NEW: User state and loading for admin check
   const [user, setUser] = useState(null);

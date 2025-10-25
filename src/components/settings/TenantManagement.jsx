@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Tenant } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -107,14 +106,14 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
   const [saving, setSaving] = useState(false);
 
   // Filter countries based on geographic focus
-  const availableCountries = formData.geographic_focus === 'global'
+  const availableCountries = useMemo(() => formData.geographic_focus === 'global'
     ? []
-    : COUNTRIES_BY_REGION[formData.geographic_focus] || [];
+    : COUNTRIES_BY_REGION[formData.geographic_focus] || [], [formData.geographic_focus]);
 
   // Filter cities based on selected country
-  const availableCities = formData.country
+  const availableCities = useMemo(() => formData.country
     ? MAJOR_CITIES_BY_COUNTRY[formData.country] || []
-    : [];
+    : [], [formData.country]);
 
   // Reset country and city when geographic focus changes
   useEffect(() => {
@@ -126,7 +125,7 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
     else if (formData.country && !availableCountries.includes(formData.country)) {
       setFormData(prev => ({ ...prev, country: '', major_city: '' }));
     }
-  }, [formData.geographic_focus, availableCountries]); // Added availableCountries to dependency array
+  }, [formData.geographic_focus, formData.country, availableCountries]);
 
   // Reset city when country changes
   useEffect(() => {
@@ -134,7 +133,7 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
     if (formData.major_city && !availableCities.includes(formData.major_city)) {
       setFormData(prev => ({ ...prev, major_city: '' }));
     }
-  }, [formData.country, availableCities]); // Added availableCities to dependency array
+  }, [formData.country, formData.major_city, availableCities]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

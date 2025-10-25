@@ -1,4 +1,3 @@
-
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Volume2, VolumeX, Loader2 } from "lucide-react";
@@ -16,8 +15,8 @@ export default function AudioPlayerButton(props) {
         window.__AI_CONTEXT.disable_inline_audio = false;
         console.log('[AudioPlayerButton] Cleared global disable_inline_audio flag from window.__AI_CONTEXT');
       }
-    } catch (e) {
-      console.warn('[AudioPlayerButton] Could not clear disable flags:', e);
+    } catch (error) {
+      console.warn('[AudioPlayerButton] Could not clear disable flags:', error);
     }
   }, []);
 
@@ -36,14 +35,14 @@ export default function AudioPlayerButton(props) {
 
   const cleanup = () => {
     if (audioRef.current) {
-      try { audioRef.current.pause(); } catch (e) { /* ignore */ }
+      try { audioRef.current.pause(); } catch { /* ignore */ }
       audioRef.current.onended = null;
       audioRef.current.onpause = null;
       audioRef.current.onerror = null;
       audioRef.current = null;
     }
     if (urlRef.current) {
-      try { URL.revokeObjectURL(urlRef.current); } catch (e) { /* ignore */ }
+      try { URL.revokeObjectURL(urlRef.current); } catch { /* ignore */ }
       urlRef.current = null;
     }
     setPlaying(false);
@@ -51,6 +50,7 @@ export default function AudioPlayerButton(props) {
 
   React.useEffect(() => () => cleanup(), []);
 
+  // If disabled, render nothing (hooks already called
   // If disabled, render nothing (hooks already called above to satisfy rules)
   if (disabled) {
     return null;
@@ -132,7 +132,7 @@ export default function AudioPlayerButton(props) {
 
     // Toggle pause if already playing
     if (playing) {
-      try { audioRef.current?.pause(); } catch (e) { /* ignore */ }
+      try { audioRef.current.pause(); } catch { /* ignore */ }
       setPlaying(false);
       window.dispatchEvent(new CustomEvent("chat:unlock-open"));
       return;
@@ -145,7 +145,7 @@ export default function AudioPlayerButton(props) {
       window.dispatchEvent(new CustomEvent("chat:lock-open"));
       await audio.play();
       setPlaying(true);
-    } catch (e) {
+    } catch {
       // If autoplay/gesture blocks, unlock and stop
       window.dispatchEvent(new CustomEvent("chat:unlock-open"));
       setPlaying(false);

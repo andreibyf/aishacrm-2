@@ -50,7 +50,7 @@ export default function Agent() {
       nextTenantId = user?.tenant_id;
     }
     return nextTenantId && typeof nextTenantId === 'string' && isValidId(nextTenantId) ? nextTenantId : null;
-  }, [user?.role, user?.tenant_id, selectedTenantId]);
+  }, [user, selectedTenantId]);
 
   const effectiveTenantName = currentTenantData?.name || null;
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ export default function DataQualityReport({ tenantFilter }) {
   const [qualityData, setQualityData] = useState(null);
   const [error, setError] = useState(null);
 
-  const loadQualityData = async () => {
+  const loadQualityData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -205,11 +205,11 @@ export default function DataQualityReport({ tenantFilter }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [tenantFilter]);
 
   useEffect(() => {
     loadQualityData();
-  }, [tenantFilter]);
+  }, [loadQualityData]);
 
   if (loading) {
     return (

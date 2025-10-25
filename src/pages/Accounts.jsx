@@ -231,7 +231,7 @@ export default function AccountsPage() {
     } catch (error) {
       console.error('[Accounts] Failed to load stats:', error);
     }
-  }, [user, selectedTenantId, cachedRequest, getTenantFilter]);
+  }, [user, cachedRequest, getTenantFilter]);
 
   // Load accounts with pagination
   const loadAccounts = useCallback(async () => {
@@ -292,7 +292,7 @@ export default function AccountsPage() {
         initialLoadDone.current = true;
       }
     }
-  }, [user, selectedTenantId, searchTerm, typeFilter, selectedTags, currentPage, pageSize, cachedRequest, getTenantFilter]);
+  }, [user, searchTerm, typeFilter, selectedTags, currentPage, pageSize, cachedRequest, getTenantFilter]);
 
   // Load accounts when dependencies change
   useEffect(() => {
