@@ -1,0 +1,350 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - img
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - generic [ref=e7]:
+            - generic [ref=e9]: L
+            - generic [ref=e10]: Local Development Tenant
+          - paragraph [ref=e11]: "Managing Client: Local Development Tenant"
+        - generic [ref=e13]:
+          - paragraph [ref=e14]: AI-Powered Business Growth Platform
+          - paragraph [ref=e15]: Oct 25, 2025
+          - paragraph [ref=e16]: 07:41:45 PM
+        - paragraph [ref=e17]: Navigation
+        - navigation [ref=e18]:
+          - list [ref=e19]:
+            - listitem [ref=e20]:
+              - link "Dashboard" [ref=e21]:
+                - /url: /dashboard
+                - img [ref=e22]
+                - generic [ref=e27]: Dashboard
+            - listitem [ref=e28]:
+              - link "Contacts" [ref=e29]:
+                - /url: /contacts
+                - img [ref=e30]
+                - generic [ref=e35]: Contacts
+            - listitem [ref=e36]:
+              - link "Accounts" [ref=e37]:
+                - /url: /accounts
+                - img [ref=e38]
+                - generic [ref=e42]: Accounts
+            - listitem [ref=e43]:
+              - link "Leads" [ref=e44]:
+                - /url: /leads
+                - img [ref=e45]
+                - generic [ref=e49]: Leads
+            - listitem [ref=e50]:
+              - link "Opportunities" [ref=e51]:
+                - /url: /opportunities
+                - img [ref=e52]
+                - generic [ref=e55]: Opportunities
+            - listitem [ref=e56]:
+              - link "Activities" [ref=e57]:
+                - /url: /activities
+                - img [ref=e58]
+                - generic [ref=e61]: Activities
+            - listitem [ref=e62]:
+              - link "Calendar" [ref=e63]:
+                - /url: /calendar
+                - img [ref=e64]
+                - generic [ref=e66]: Calendar
+            - listitem [ref=e67]:
+              - link "BizDev Sources" [ref=e68]:
+                - /url: /bizdevsources
+                - img [ref=e69]
+                - generic [ref=e73]: BizDev Sources
+            - listitem [ref=e74]:
+              - link "Cash Flow" [ref=e75]:
+                - /url: /cashflow
+                - img [ref=e76]
+                - generic [ref=e78]: Cash Flow
+            - listitem [ref=e79]:
+              - link "Document Processing" [ref=e80]:
+                - /url: /documentprocessing
+                - img [ref=e81]
+                - generic [ref=e84]: Document Processing
+            - listitem [ref=e85]:
+              - link "Document Management" [ref=e86]:
+                - /url: /documentmanagement
+                - img [ref=e87]
+                - generic [ref=e89]: Document Management
+            - listitem [ref=e90]:
+              - link "AI Campaigns" [ref=e91]:
+                - /url: /aicampaigns
+                - img [ref=e92]
+                - generic [ref=e95]: AI Campaigns
+            - listitem [ref=e96]:
+              - link "Employees" [ref=e97]:
+                - /url: /employees
+                - img [ref=e98]
+                - generic [ref=e103]: Employees
+            - listitem [ref=e104]:
+              - link "Reports" [ref=e105]:
+                - /url: /reports
+                - img [ref=e106]
+                - generic [ref=e108]: Reports
+            - listitem [ref=e109]:
+              - link "Integrations" [ref=e110]:
+                - /url: /integrations
+                - img [ref=e111]
+                - generic [ref=e113]: Integrations
+            - listitem [ref=e114]:
+              - link "Workflows" [ref=e115]:
+                - /url: /workflows
+                - img [ref=e116]
+                - generic [ref=e118]: Workflows
+            - listitem [ref=e119]:
+              - link "Payment Portal" [ref=e120]:
+                - /url: /paymentportal
+                - img [ref=e121]
+                - generic [ref=e123]: Payment Portal
+            - listitem [ref=e124]:
+              - link "Utilities" [ref=e125]:
+                - /url: /utilities
+                - img [ref=e126]
+                - generic [ref=e128]: Utilities
+            - listitem [ref=e129]:
+              - link "Client Onboarding" [ref=e130]:
+                - /url: /clientonboarding
+                - img [ref=e131]
+                - generic [ref=e134]: Client Onboarding
+        - list [ref=e136]:
+          - listitem [ref=e137]:
+            - link "Workflow Guide" [ref=e138]:
+              - /url: /workflowguide
+              - img [ref=e139]
+              - generic [ref=e141]: Workflow Guide
+          - listitem [ref=e142]:
+            - link "Documentation" [ref=e143]:
+              - /url: /documentation
+              - img [ref=e144]
+              - generic [ref=e146]: Documentation
+          - listitem [ref=e147]:
+            - link "AI Assistant" [ref=e148]:
+              - /url: /agent
+              - img "AI Assistant" [ref=e150]
+          - listitem [ref=e151]:
+            - link "Client Requirements" [ref=e152]:
+              - /url: /clientrequirements
+              - img [ref=e153]
+              - generic [ref=e157]: Client Requirements
+    - generic [ref=e158]:
+      - banner [ref=e159]:
+        - button "Switch to dark mode" [ref=e160] [cursor=pointer]:
+          - img
+        - button "Clear chat" [ref=e161] [cursor=pointer]:
+          - img
+        - generic [ref=e162]:
+          - generic [ref=e163]:
+            - generic [ref=e164]:
+              - img [ref=e165]
+              - combobox [ref=e169] [cursor=pointer]:
+                - img [ref=e170]
+            - generic [ref=e173]: "Managing Client: Unknown Client"
+          - generic [ref=e174]:
+            - img [ref=e175]
+            - generic [ref=e180]: No employees with CRM access
+          - button "D Dev" [ref=e182] [cursor=pointer]:
+            - generic [ref=e184]: D
+            - generic [ref=e185]: Dev
+      - main [ref=e186]:
+        - generic [ref=e188]:
+          - generic [ref=e189]:
+            - generic [ref=e190]:
+              - heading "Activities" [level=1] [ref=e191]
+              - paragraph [ref=e192]: Track and manage your team's activities and tasks
+            - generic [ref=e193]:
+              - button [ref=e194] [cursor=pointer]:
+                - img
+              - button [ref=e195] [cursor=pointer]:
+                - img
+              - button "Import" [ref=e196] [cursor=pointer]:
+                - img
+                - text: Import
+              - button "Export" [ref=e197] [cursor=pointer]:
+                - img
+                - text: Export
+              - button "Add Activity" [ref=e198] [cursor=pointer]:
+                - img
+                - text: Add Activity
+          - generic [ref=e199]:
+            - generic [ref=e200] [cursor=pointer]:
+              - generic [ref=e201]:
+                - paragraph [ref=e202]: Total Activities
+                - img [ref=e204]
+              - paragraph [ref=e207]: "16"
+            - generic [ref=e208] [cursor=pointer]:
+              - generic [ref=e209]:
+                - paragraph [ref=e210]: Scheduled
+                - img [ref=e212]
+              - paragraph [ref=e215]: "0"
+            - generic [ref=e216] [cursor=pointer]:
+              - generic [ref=e217]:
+                - paragraph [ref=e218]: In Progress
+                - img [ref=e220]
+              - paragraph [ref=e223]: "0"
+            - generic [ref=e224] [cursor=pointer]:
+              - generic [ref=e225]:
+                - paragraph [ref=e226]: Overdue
+                - img [ref=e228]
+              - paragraph [ref=e231]: "16"
+            - generic [ref=e232] [cursor=pointer]:
+              - generic [ref=e233]:
+                - paragraph [ref=e234]: Completed
+                - img [ref=e236]
+              - paragraph [ref=e239]: "0"
+            - generic [ref=e240] [cursor=pointer]:
+              - generic [ref=e241]:
+                - paragraph [ref=e242]: Cancelled
+                - img [ref=e244]
+              - paragraph [ref=e247]: "0"
+          - generic [ref=e248]:
+            - generic [ref=e249]:
+              - img [ref=e250]
+              - textbox "Search activities by subject, description, or related entity..." [ref=e253]: Priority Test
+            - generic [ref=e254]:
+              - button "Tags" [ref=e256] [cursor=pointer]:
+                - img
+                - text: Tags
+              - button "Clear" [ref=e257] [cursor=pointer]:
+                - img
+                - text: Clear
+          - table [ref=e261]:
+            - rowgroup [ref=e262]:
+              - row "Activity Type Status Due Date Related To Assigned To Actions" [ref=e263]:
+                - cell "Activity" [ref=e264]
+                - cell [ref=e265]:
+                  - checkbox [ref=e266] [cursor=pointer]
+                - cell "Type" [ref=e267]
+                - cell "Status" [ref=e268]
+                - cell "Due Date" [ref=e269]
+                - cell "Related To" [ref=e270]
+                - cell "Assigned To" [ref=e271]
+                - cell "Actions" [ref=e272]
+            - rowgroup [ref=e273]:
+              - row "Priority Test task scheduled Oct 25, 2025 — Unassigned Edit View Delete" [ref=e274]:
+                - cell "Priority Test" [ref=e275] [cursor=pointer]:
+                  - generic [ref=e276]: Priority Test
+                - cell [ref=e277]:
+                  - checkbox [ref=e278] [cursor=pointer]
+                - cell "task" [ref=e279] [cursor=pointer]:
+                  - generic [ref=e280]: task
+                - cell "scheduled" [ref=e281] [cursor=pointer]:
+                  - generic [ref=e282]: scheduled
+                - cell "Oct 25, 2025" [ref=e283] [cursor=pointer]
+                - cell "—" [ref=e284] [cursor=pointer]
+                - cell "Unassigned" [ref=e285] [cursor=pointer]
+                - cell "Edit View Delete" [ref=e286]:
+                  - generic [ref=e287]:
+                    - button "Edit" [ref=e288] [cursor=pointer]:
+                      - img
+                    - button "View" [ref=e289] [cursor=pointer]:
+                      - img
+                    - button "Delete" [ref=e290] [cursor=pointer]:
+                      - img
+              - row "Priority Test task scheduled Oct 25, 2025 — Unassigned Edit View Delete" [ref=e291]:
+                - cell "Priority Test" [ref=e292] [cursor=pointer]:
+                  - generic [ref=e293]: Priority Test
+                - cell [ref=e294]:
+                  - checkbox [ref=e295] [cursor=pointer]
+                - cell "task" [ref=e296] [cursor=pointer]:
+                  - generic [ref=e297]: task
+                - cell "scheduled" [ref=e298] [cursor=pointer]:
+                  - generic [ref=e299]: scheduled
+                - cell "Oct 25, 2025" [ref=e300] [cursor=pointer]
+                - cell "—" [ref=e301] [cursor=pointer]
+                - cell "Unassigned" [ref=e302] [cursor=pointer]
+                - cell "Edit View Delete" [ref=e303]:
+                  - generic [ref=e304]:
+                    - button "Edit" [ref=e305] [cursor=pointer]:
+                      - img
+                    - button "View" [ref=e306] [cursor=pointer]:
+                      - img
+                    - button "Delete" [ref=e307] [cursor=pointer]:
+                      - img
+              - row "Priority Test task scheduled Oct 25, 2025 — Unassigned Edit View Delete" [ref=e308]:
+                - cell "Priority Test" [ref=e309] [cursor=pointer]:
+                  - generic [ref=e310]: Priority Test
+                - cell [ref=e311]:
+                  - checkbox [ref=e312] [cursor=pointer]
+                - cell "task" [ref=e313] [cursor=pointer]:
+                  - generic [ref=e314]: task
+                - cell "scheduled" [ref=e315] [cursor=pointer]:
+                  - generic [ref=e316]: scheduled
+                - cell "Oct 25, 2025" [ref=e317] [cursor=pointer]
+                - cell "—" [ref=e318] [cursor=pointer]
+                - cell "Unassigned" [ref=e319] [cursor=pointer]
+                - cell "Edit View Delete" [ref=e320]:
+                  - generic [ref=e321]:
+                    - button "Edit" [ref=e322] [cursor=pointer]:
+                      - img
+                    - button "View" [ref=e323] [cursor=pointer]:
+                      - img
+                    - button "Delete" [ref=e324] [cursor=pointer]:
+                      - img
+              - row "Priority Test task scheduled Oct 25, 2025 — Unassigned Edit View Delete" [ref=e325]:
+                - cell "Priority Test" [ref=e326] [cursor=pointer]:
+                  - generic [ref=e327]: Priority Test
+                - cell [ref=e328]:
+                  - checkbox [ref=e329] [cursor=pointer]
+                - cell "task" [ref=e330] [cursor=pointer]:
+                  - generic [ref=e331]: task
+                - cell "scheduled" [ref=e332] [cursor=pointer]:
+                  - generic [ref=e333]: scheduled
+                - cell "Oct 25, 2025" [ref=e334] [cursor=pointer]
+                - cell "—" [ref=e335] [cursor=pointer]
+                - cell "Unassigned" [ref=e336] [cursor=pointer]
+                - cell "Edit View Delete" [ref=e337]:
+                  - generic [ref=e338]:
+                    - button "Edit" [ref=e339] [cursor=pointer]:
+                      - img
+                    - button "View" [ref=e340] [cursor=pointer]:
+                      - img
+                    - button "Delete" [ref=e341] [cursor=pointer]:
+                      - img
+              - row "Priority Test task scheduled Oct 25, 2025 — Unassigned Edit View Delete" [ref=e342]:
+                - cell "Priority Test" [ref=e343] [cursor=pointer]:
+                  - generic [ref=e344]: Priority Test
+                - cell [ref=e345]:
+                  - checkbox [ref=e346] [cursor=pointer]
+                - cell "task" [ref=e347] [cursor=pointer]:
+                  - generic [ref=e348]: task
+                - cell "scheduled" [ref=e349] [cursor=pointer]:
+                  - generic [ref=e350]: scheduled
+                - cell "Oct 25, 2025" [ref=e351] [cursor=pointer]
+                - cell "—" [ref=e352] [cursor=pointer]
+                - cell "Unassigned" [ref=e353] [cursor=pointer]
+                - cell "Edit View Delete" [ref=e354]:
+                  - generic [ref=e355]:
+                    - button "Edit" [ref=e356] [cursor=pointer]:
+                      - img
+                    - button "View" [ref=e357] [cursor=pointer]:
+                      - img
+                    - button "Delete" [ref=e358] [cursor=pointer]:
+                      - img
+          - generic [ref=e359]:
+            - generic [ref=e360]:
+              - generic [ref=e361]: Showing 1 to 5 of 5 results
+              - generic [ref=e362]:
+                - generic [ref=e363]: "Show:"
+                - combobox [ref=e364] [cursor=pointer]:
+                  - generic: "25"
+                  - img [ref=e365]
+            - generic [ref=e367]:
+              - button [disabled]:
+                - img
+              - button [disabled]:
+                - img
+              - button "1" [ref=e369] [cursor=pointer]
+              - button [disabled]:
+                - img
+              - button [disabled]:
+                - img
+      - contentinfo [ref=e370]
+  - generic [ref=e374]: $75,000
+```

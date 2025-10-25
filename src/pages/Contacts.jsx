@@ -76,7 +76,7 @@ export default function ContactsPage() {
   const [pageSize, setPageSize] = useState(25);
   const [totalItems, setTotalItems] = useState(0);
 
-  const { cachedRequest, clearCacheByKey } = useApiManager();
+  const { cachedRequest, clearCache } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
   const logger = useLogger();
 
@@ -326,7 +326,8 @@ export default function ContactsPage() {
       toast.success("Contact created successfully");
       setIsFormOpen(false);
       setEditingContact(null);
-      clearCacheByKey('Contact');
+      setCurrentPage(1); // Reset to page 1 to show the newly created contact
+      clearCache('Contact');
       loadContacts();
       loadTotalStats();
       logger.info('Contact created successfully', 'ContactsPage', { contactId: newContact.id, contactName: `${newContact.first_name} ${newContact.last_name}`, userId: user?.id || user?.email, tenantId: tenantIdentifier });
@@ -344,7 +345,7 @@ export default function ContactsPage() {
       toast.success("Contact updated successfully");
       setIsFormOpen(false);
       setEditingContact(null);
-      clearCacheByKey('Contact');
+      clearCache('Contact');
       loadContacts();
       loadTotalStats();
       logger.info('Contact updated successfully', 'ContactsPage', { contactId: editingContact.id, contactName: `${contactData.first_name} ${contactData.last_name}`, userId: user?.id || user?.email });
@@ -380,7 +381,7 @@ export default function ContactsPage() {
       // Small delay to let optimistic update settle
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      clearCacheByKey('Contact');
+      clearCache('Contact');
       loadContacts();
       loadTotalStats();
       logger.info('Contact deleted successfully', 'ContactsPage', { contactId: id, userId: user?.id || user?.email });
@@ -395,9 +396,9 @@ export default function ContactsPage() {
 
   const handleRefresh = () => {
     logger.info('Refreshing all contacts data', 'ContactsPage', { userId: user?.id || user?.email, tenantId: selectedTenantId });
-    clearCacheByKey('Contact');
-    clearCacheByKey('Account');
-    clearCacheByKey('Employee');
+    clearCache('Contact');
+    clearCache('Account');
+    clearCache('Employee');
     loadContacts();
     loadTotalStats();
   };
@@ -952,7 +953,7 @@ export default function ContactsPage() {
             users={users}
             employees={employees}
             user={user}
-            onSubmit={editingContact ? handleUpdate : handleCreate}
+            onSuccess={editingContact ? handleUpdate : handleCreate}
             onCancel={() => {
               setIsFormOpen(false);
               setEditingContact(null);
@@ -991,7 +992,7 @@ export default function ContactsPage() {
         open={isImportOpen}
         onOpenChange={setIsImportOpen}
         onImportComplete={() => {
-          clearCacheByKey('Contact');
+          clearCache('Contact');
           loadContacts();
           loadTotalStats();
           logger.info('CSV import complete, refreshing contacts', 'ContactsPage', { userId: user?.id || user?.email, tenantId: selectedTenantId });

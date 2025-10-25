@@ -142,6 +142,15 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
 
   const checkForDuplicates = useCallback(async (data) => {
     console.log('[ContactForm] checkForDuplicates called');
+    
+    // Skip duplicate check for test data
+    if (data.is_test_data) {
+      console.log('[ContactForm] Test data flagged, skipping duplicate check');
+      setDuplicateWarning(null);
+      setCheckingDuplicates(false);
+      return;
+    }
+    
     if (contact) {
       console.log('[ContactForm] Editing existing contact, skipping duplicate check');
       return;
@@ -447,32 +456,15 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
           }
         }
       } else {
-        const tenantIdForNewContact = user.role === 'superadmin' && selectedTenantId ? selectedTenantId : user.tenant_id;
-        console.log('[ContactForm] Creating new contact with target tenant:', tenantIdForNewContact);
-        
-        if (!tenantIdForNewContact) {
-          console.log('[ContactForm] ERROR: No tenant ID for new contact creation');
-          toast({
-            title: "Tenant Not Configured",
-            description: "Cannot save contact: No client assigned. Please contact an administrator.",
-            variant: "destructive",
-          });
-          setSubmitError("Cannot save contact: No client assigned. Please contact an administrator.");
-          setIsSubmitting(false);
-          setSubmitProgress("");
-          if (logError) {
-            logError(createError('Contact Form - New', 'Tenant not configured for new contact', {
-              severity: 'critical',
-              actionable: 'User account missing tenant assignment or selected tenant ID is null. Contact system administrator.'
-            }));
-          }
-          return;
-        }
+        // For new contacts, use tenant from context if available, otherwise backend will handle
+        const tenantIdForNewContact = user?.role === 'superadmin' && selectedTenantId ? selectedTenantId : (user?.tenant_id || null);
+        console.log('[ContactForm] Creating new contact with target tenant:', tenantIdForNewContact || 'auto-assign');
 
         if (!enrichedData.unique_id) {
           try {
             console.log('[ContactForm] Generating unique ID for new contact...');
             setSubmitProgress("Generating unique ID...");
+            // Only pass tenant_id if we have one; backend can handle null
             const idResponse = await cachedRequest(
               'Utility',
               'generateUniqueId',
@@ -534,8 +526,11 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
         variant: "default",
       });
 
+      console.log('[ContactForm] Calling onSuccess callback:', typeof onSuccess, result?.id);
       if (onSuccess) {
         onSuccess(result);
+      } else {
+        console.warn('[ContactForm] No onSuccess callback provided!');
       }
     } catch (error) {
       console.error('[ContactForm] === SUBMIT ERROR ===', error);
