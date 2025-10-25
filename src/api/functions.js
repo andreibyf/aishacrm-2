@@ -45,6 +45,31 @@ const createFunctionProxy = (functionName) => {
   return async (...args) => {
     if (isLocalDevMode()) {
       // ========================================
+      // Workflows (Local Backend)
+      // ========================================
+
+      if (functionName === 'executeWorkflow') {
+        try {
+          const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+          const { workflow_id, payload, input_data } = args[0] || {};
+          const body = { workflow_id, payload: payload ?? input_data };
+          const response = await fetch(`${BACKEND_URL}/api/workflows/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          const json = await response.json();
+          if (!response.ok) {
+            return { data: { status: 'error', error: json?.message || response.statusText } };
+          }
+          return { data: json };
+        } catch (err) {
+          console.warn(`[Local Dev Mode] executeWorkflow backend call failed: ${err?.message || err}`);
+          return { data: { status: 'error', error: err?.message || String(err) } };
+        }
+      }
+
+      // ========================================
       // CRUD Operations
       // ========================================
       

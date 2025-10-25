@@ -91,7 +91,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   };
 
   const handleCopyWebhookUrl = () => {
-    const webhookUrl = workflow?.webhook_url || `https://base44.app/api/apps/${user?.app_id}/functions/executeWorkflow?workflow_id=PENDING`;
+    const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+    const localWebhook = `${BACKEND_URL}/api/workflows/execute?workflow_id=${workflow?.id || 'PENDING'}`;
+    const webhookUrl = workflow?.webhook_url || localWebhook;
     navigator.clipboard.writeText(webhookUrl);
     setCopied(true);
     toast.success('Webhook URL copied to clipboard');
@@ -772,6 +774,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
     setSaving(true);
     try {
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
       const workflowData = {
         tenant_id: user.tenant_id,
         name,
@@ -783,7 +786,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         },
         nodes,
         connections,
-        webhook_url: workflow?.webhook_url || `https://base44.app/api/apps/${user.app_id}/functions/executeWorkflow?workflow_id=PENDING`
+        webhook_url: workflow?.webhook_url || `${BACKEND_URL}/api/workflows/execute?workflow_id=PENDING`
       };
 
       let savedWorkflow;
@@ -792,7 +795,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
       } else {
         savedWorkflow = await Workflow.create(workflowData);
         await Workflow.update(savedWorkflow.id, {
-          webhook_url: `https://base44.app/api/apps/${user.app_id}/functions/executeWorkflow?workflow_id=${savedWorkflow.id}`
+          webhook_url: `${BACKEND_URL}/api/workflows/execute?workflow_id=${savedWorkflow.id}`
         });
       }
 
