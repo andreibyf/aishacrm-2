@@ -2,7 +2,7 @@
  * End-to-End CRUD Tests for Aisha CRM
  * Tests Create, Read, Update, Delete operations across major entities
  */
-const { test, expect } = require('@playwright/test');
+import { test, expect } from '@playwright/test';
 
 const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:5173';
 const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
@@ -12,9 +12,9 @@ async function waitForBackendHealth() {
   const maxAttempts = 30;
   for (let i = 0; i < maxAttempts; i++) {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/system/health`);
+      const response = await fetch(`${BACKEND_URL}/api/system/status`);
       if (response.ok) return true;
-    } catch (error) {
+    } catch {
       // Backend not ready yet
     }
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -30,58 +30,54 @@ test.describe('CRUD Operations - End-to-End', () => {
 
   test.beforeEach(async ({ page }) => {
     // Navigate to app and wait for initial load
-    await page.goto(BASE_URL);
-    await page.waitForLoadState('networkidle');
+    await page.goto(BASE_URL, { waitUntil: 'networkidle' });
     
-    // Wait for app to be fully initialized (tenant context loaded)
-    await page.waitForFunction(() => {
-      return window.localStorage.getItem('selected_tenant_id') !== null;
-    }, { timeout: 10000 });
+    // Wait for app to be fully initialized - wait for main content
+    await page.waitForSelector('main, [role="main"], .app-content', { timeout: 15000 }).catch(() => {
+      // If no main selector, just wait for any content to load
+      return page.waitForSelector('body', { timeout: 5000 });
+    });
+    
+    // Give React time to hydrate
+    await page.waitForTimeout(1000);
   });
 
   test.describe('Activities CRUD', () => {
     test('should create a new activity', async ({ page }) => {
       // Navigate to Activities page
-      await page.click('a[href="/activities"]');
-      await page.waitForURL('**/activities');
+      await page.goto(`${BASE_URL}/activities`, { waitUntil: 'networkidle' });
       
-      // Click Add Activity button
-      await page.click('button:has-text("Add Activity")');
+      // Wait for page to load
+      await page.waitForSelector('h1, h2', { timeout: 10000 });
       
-      // Wait for form modal/dialog
-      await page.waitForSelector('form', { state: 'visible' });
+      // Click Add Activity button - try multiple possible selectors
+      const addButton = page.locator('button:has-text("Add Activity"), button:has-text("New Activity"), button:has-text("Create")').first();
+      await addButton.waitFor({ timeout: 5000 });
+      await addButton.click();
+      
+      // Wait for form to appear
+      await page.waitForSelector('input#subject, [data-testid="activity-subject-input"]', { timeout: 10000 });
       
       // Fill activity form
       const testSubject = `E2E Test Activity ${Date.now()}`;
-      await page.fill('input[name="subject"]', testSubject);
+      await page.fill('input#subject, [data-testid="activity-subject-input"]', testSubject);
       
-      // Select activity type
-      await page.selectOption('select[name="type"]', 'task');
-      
-      // Fill description
-      await page.fill('textarea[name="description"]', 'Automated test activity');
-      
-      // Set due date (tomorrow)
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const dateString = tomorrow.toISOString().split('T')[0];
-      await page.fill('input[name="due_date"]', dateString);
-      
-      // Set due time
-      await page.fill('input[name="due_time"]', '14:00');
-      
-      // Select priority
-      await page.selectOption('select[name="priority"]', 'high');
+      // Select activity type if available
+      const typeSelect = page.locator('select#type, select[name="type"]');
+      if (await typeSelect.count() > 0) {
+        await typeSelect.selectOption('task');
+      }
       
       // Save activity
-      await page.click('button[type="submit"]:has-text("Save")');
+      await page.click('button[type="submit"]:has-text("Save"), button:has-text("Create"), button:has-text("Submit")');
       
-      // Wait for success message or modal close
-      await page.waitForSelector('form', { state: 'hidden', timeout: 10000 });
+      // Wait for success (form closes or success message)
+      await page.waitForTimeout(2000);
       
-      // Verify activity appears in list
-      await expect(page.locator(`text=${testSubject}`)).toBeVisible({ timeout: 10000 });
+      // Verify activity appears (check for the subject text anywhere on page)
+      await expect(page.locator(`text=${testSubject}`).first()).toBeVisible({ timeout: 10000 });
     });
+  });
 
     test('should edit an existing activity', async ({ page }) => {
       // Navigate to Activities

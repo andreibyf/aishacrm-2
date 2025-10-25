@@ -26,14 +26,14 @@ ALTER TABLE activities
 UPDATE activities
 SET due_time = NULL
 WHERE due_time IS NOT NULL 
-  AND due_time !~ '^\d{2}:\d{2}(:\d{2})?$';
+  AND due_time::text !~ '^\d{2}:\d{2}(:\d{2})?$';
 
 -- Convert to TIME type
 ALTER TABLE activities
   ALTER COLUMN due_time TYPE TIME USING 
     CASE 
       WHEN due_time IS NULL THEN NULL
-      WHEN due_time ~ '^\d{2}:\d{2}$' THEN (due_time || ':00')::TIME
+      WHEN due_time::text ~ '^\d{2}:\d{2}$' THEN (due_time::text || ':00')::TIME
       ELSE due_time::TIME
     END;
 

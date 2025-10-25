@@ -13,10 +13,10 @@ import {
   Trash2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { base44 } from "@/api/base44Client";
 import { User } from "@/api/entities";
 import { Tenant } from "@/api/entities";
 import { UploadFile } from "@/api/integrations";
+import * as conversations from "@/api/conversations";
 import MicButton from "./MicButton";
 import MessageBubble from "./MessageBubble";
 
@@ -129,7 +129,7 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
   const loadConversation = useCallback(async () => {
     if (!conversationId) return;
     try {
-      const conv = await base44.agents.getConversation(conversationId);
+      const conv = await conversations.getConversation(conversationId);
       if (conv?.messages) {
         setMessages(conv.messages.map(wrapMessage));
       }
@@ -147,7 +147,7 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
     let mounted = true;
     (async () => {
       try {
-        const conv = await base44.agents.createConversation({
+        const conv = await conversations.createConversation({
           agent_name: "crm_assistant",
           metadata: { name: "Chat Session", description: "User chat session" }
         });
@@ -164,7 +164,7 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
   useEffect(() => {
     if (!conversationId) return;
     loadConversation();
-    const unsub = base44.agents.subscribeToConversation(conversationId, (data) => {
+    const unsub = conversations.subscribeToConversation(conversationId, (data) => {
       if (data?.messages) {
         setMessages(data.messages.map(wrapMessage));
         setIsLoading(false);
@@ -181,14 +181,14 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
     setIsLoading(true);
 
     try {
-      const conv = await base44.agents.getConversation(conversationId);
+      const conv = await conversations.getConversation(conversationId);
       
       // Add industry context to the message if it exists
       const enhancedMessage = industryContext 
         ? `${industryContext}\n\nUser Question: ${userMessage}`
         : userMessage;
       
-      await base44.agents.addMessage(conv, {
+      await conversations.addMessage(conv, {
         role: "user",
         content: enhancedMessage
       });
@@ -206,7 +206,7 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
   const handleClearChat = async () => {
     if (!conversationId) return;
     try {
-      const newConv = await base44.agents.createConversation({
+      const newConv = await conversations.createConversation({
         agent_name: "crm_assistant",
         metadata: { name: "Chat Session", description: "User chat session" }
       });
@@ -237,14 +237,14 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
 
     try {
       const { file_url } = await UploadFile({ file });
-      const conv = await base44.agents.getConversation(conversationId);
+      const conv = await conversations.getConversation(conversationId);
       
       // Add industry context even for file uploads
       const fileMessage = industryContext
         ? `${industryContext}\n\nUser uploaded a file for analysis.`
         : `User uploaded a file: ${file.name}`;
       
-      await base44.agents.addMessage(conv, {
+      await conversations.addMessage(conv, {
         role: "user",
         content: fileMessage,
         file_urls: [file_url]
