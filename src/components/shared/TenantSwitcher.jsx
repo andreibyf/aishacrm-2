@@ -108,7 +108,8 @@ export default function TenantSwitcher({ user }) {
   const getCurrentTenantName = () => {
     if (!selectedTenantId) return 'All Clients';
     const tenantsArray = Array.isArray(tenants) ? tenants : [];
-    const tenant = tenantsArray.find((t) => t?.id === selectedTenantId);
+    // Match by either UUID id or TEXT tenant_id
+    const tenant = tenantsArray.find((t) => t?.id === selectedTenantId || t?.tenant_id === selectedTenantId);
     return tenant?.name || 'Unknown Client';
   };
 
@@ -144,7 +145,7 @@ export default function TenantSwitcher({ user }) {
               </div>
             </SelectItem>
             {tenantsArray.map((tenant) => (
-              <SelectItem key={tenant.id} value={tenant.id} className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">
+              <SelectItem key={tenant.id} value={tenant.tenant_id || tenant.id} className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">
                 <div className="flex items-center gap-2">
                   <div
                     className="h-3 w-3 rounded-full"
@@ -170,7 +171,7 @@ export default function TenantSwitcher({ user }) {
           <SelectContent className="bg-slate-800 border-slate-700">
             <SelectItem value={null} className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">All Clients (Global View)</SelectItem>
             {tenantsArray.map((tenant) => (
-              <SelectItem key={tenant.id} value={tenant.id} className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">
+              <SelectItem key={tenant.id} value={tenant.tenant_id || tenant.id} className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">
                 {tenant.name}
               </SelectItem>
             ))}

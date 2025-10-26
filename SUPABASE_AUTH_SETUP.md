@@ -1,0 +1,68 @@
+# Supabase Auth Setup - Phase 2
+
+## Step 1: Get Your Supabase Anon Key
+
+1. Go to [Supabase Dashboard](https://supabase.com/dashboard)
+2. Select your project: **ehjlenywplgyiahgxkfj**
+3. Go to **Settings** → **API**
+4. Copy the **anon public** key (starts with `eyJ...`)
+5. Add it to your `.env` file
+
+## Step 2: Update Your .env File
+
+Create or update `.env` in the root directory:
+
+```bash
+# Aisha CRM Configuration
+
+# Base44 Integration (for data sync/migration only - can be removed later)
+VITE_BASE44_APP_ID=your_app_id_here
+
+# Your Independent Backend Server
+VITE_AISHACRM_BACKEND_URL=http://localhost:3001
+
+# Supabase Authentication & Database
+VITE_SUPABASE_URL=https://ehjlenywplgyiahgxkfj.supabase.co
+VITE_SUPABASE_ANON_KEY=<PASTE_YOUR_ANON_KEY_HERE>
+```
+
+## Step 3: What I'm Implementing
+
+### Files Being Created/Modified:
+1. ✅ `src/lib/supabase.js` - Supabase client initialization
+2. ✅ `src/api/entities.js` - Update User.me(), User.signIn(), User.signOut()
+3. ✅ `.env.example` - Updated with Supabase variables
+
+### What Will Work:
+- Email/password authentication
+- User sessions (persistent across page refreshes)
+- User.me() - Get current logged-in user
+- User.signIn(email, password) - Login
+- User.signOut() - Logout
+- Automatic token refresh
+
+### MFA (Available After Basic Auth Works):
+To enable MFA later:
+1. Supabase Dashboard → Authentication → Providers
+2. Enable "Phone Auth" or "Email OTP"
+3. Users can enroll in Settings
+
+---
+
+## Quick Test After Setup
+
+```javascript
+// Test login
+await User.signIn('your-email@example.com', 'your-password');
+
+// Get current user
+const user = await User.me();
+console.log(user);
+
+// Logout
+await User.signOut();
+```
+
+---
+
+**Next:** After you add your Supabase anon key to `.env`, I'll create the Supabase client and update the User entity.

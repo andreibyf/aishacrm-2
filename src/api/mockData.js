@@ -68,5 +68,14 @@ export const createMockTenant = () => ({
 });
 
 export const isLocalDevMode = () => {
-  return import.meta.env.VITE_USE_BASE44_AUTH !== 'true';
+  // Use local dev mode (mock users) if:
+  // 1. Base44 auth is disabled AND
+  // 2. Supabase is not configured
+  const useBase44 = import.meta.env.VITE_USE_BASE44_AUTH === 'true';
+  const hasSupabase = !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
+  
+  // If Supabase is configured, use it (not local dev mode)
+  // If Base44 is enabled, use it (not local dev mode)
+  // Otherwise, use local dev mode with mock users
+  return !useBase44 && !hasSupabase;
 };

@@ -8,15 +8,17 @@ import express from 'express';
 export default function createStorageRoutes(_pgPool) {
   const router = express.Router();
 
-  // POST /api/storage/upload - Upload file
+  // POST /api/storage/upload - Upload file (simplified - no actual upload yet)
   router.post('/upload', async (req, res) => {
     try {
-      const { tenant_id, filename, mimetype } = req.body;
-
+      // For now, just return a placeholder URL
+      // You can paste direct URLs or use /assets/filename.png format
       res.json({
         status: 'success',
-        message: 'File upload not yet implemented',
-        data: { tenant_id, filename, mimetype },
+        message: 'File upload endpoint ready (paste direct URL in Logo URL field for now)',
+        data: {
+          file_url: '/assets/Ai-SHA-logo-2.png', // Placeholder
+        },
       });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });

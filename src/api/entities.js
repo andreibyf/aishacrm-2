@@ -2,6 +2,7 @@ import { base44 } from './base44Client';
 // Import mock data utilities at the top for use throughout
 import { createMockUser, isLocalDevMode } from './mockData';
 import { apiHealthMonitor } from '../utils/apiHealthMonitor';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 // Get backend URL from environment
 const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
@@ -25,6 +26,7 @@ const pluralize = (entityName) => {
     'tenantintegration': 'tenantintegrations',
     'bizdevsource': 'bizdevsources',
     'tenant': 'tenants',
+    'systembranding': 'systembrandings',
   };
   
   if (irregularPlurals[name]) {
@@ -344,53 +346,310 @@ export const Workflow = wrapEntityWithFilter(base44.entities.Workflow, 'Workflow
 
 export const WorkflowExecution = wrapEntityWithFilter(base44.entities.WorkflowExecution, 'WorkflowExecution');
 
-// auth sdk with local dev mode support:
-const baseUser = base44.auth;
+// ============================================
+// SUPABASE AUTHENTICATION
+// ============================================
+// Using Supabase Auth instead of Base44 for independent authentication
 
-// Wrap User.me() to return mock data in local dev mode
 export const User = {
-  ...baseUser,
+  /**
+   * Get current authenticated user
+   * Uses Supabase Auth with local dev fallback
+   */
   me: async () => {
+    // Local dev mode: return mock user
     if (isLocalDevMode()) {
-      // Return mock user for local development
       console.log('[Local Dev Mode] Using mock user');
       return createMockUser();
     }
-    // Use real Base44 authentication
-    return baseUser.me();
+
+    // Production: Use Supabase Auth
+    if (isSupabaseConfigured()) {
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        
+        if (error) {
+          console.error('[Supabase Auth] Error getting user:', error);
+          return null;
+        }
+
+        if (!user) {
+          console.log('[Supabase Auth] No authenticated user');
+          return null;
+        }
+
+        // Fetch employee record from database to get permissions and tenant_id
+        let employeeData = null;
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/employees?email=${encodeURIComponent(user.email)}`);
+          if (response.ok) {
+            const result = await response.json();
+            // Backend returns {status: 'success', data: [...]}
+            const employees = result.data || result;
+            if (employees && employees.length > 0) {
+              employeeData = employees[0]; // Get first matching employee
+              console.log('[Supabase Auth] Employee data loaded:', employeeData.role, employeeData.metadata?.access_level);
+            } else {
+              console.warn('[Supabase Auth] No employee record found for:', user.email);
+            }
+          } else {
+            console.error('[Supabase Auth] Failed to fetch employee data:', response.status, response.statusText);
+          }
+        } catch (err) {
+          console.error('[Supabase Auth] Error fetching employee data:', err.message);
+        }
+
+        // Map Supabase user to our User format with employee data
+        return {
+          id: user.id,
+          email: user.email,
+          user_metadata: user.user_metadata,
+          tenant_id: employeeData?.tenant_id || user.user_metadata?.tenant_id || null,
+          created_at: user.created_at,
+          updated_at: user.updated_at,
+          // Include employee data if available
+          ...(employeeData && {
+            employee_id: employeeData.id,
+            first_name: employeeData.first_name,
+            last_name: employeeData.last_name,
+            role: (employeeData.role || '').toLowerCase(), // Normalize role to lowercase
+            status: employeeData.status,
+            permissions: employeeData.metadata?.permissions || [],
+            access_level: employeeData.metadata?.access_level,
+            is_superadmin: employeeData.metadata?.is_superadmin || false,
+            can_manage_users: employeeData.metadata?.can_manage_users || false,
+            can_manage_settings: employeeData.metadata?.can_manage_settings || false,
+            crm_access: true, // Grant CRM access to authenticated users with employee records
+          }),
+          // Include any custom fields from user_metadata
+          ...user.user_metadata,
+        };
+      } catch (err) {
+        console.error('[Supabase Auth] Exception in me():', err);
+        return null;
+      }
+    }
+
+    // Fallback: Use Base44 if Supabase not configured
+    console.warn('[Auth] Supabase not configured, falling back to Base44');
+    return base44.auth.me();
   },
-  // Add updateMyUserData as a wrapper for updating current user
+
+  /**
+   * Sign in with email and password
+   * @param {string} email - User email
+   * @param {string} password - User password
+   */
+  signIn: async (email, password) => {
+    // Local dev mode: return mock user
+    if (isLocalDevMode()) {
+      console.log('[Local Dev Mode] Mock sign in for:', email);
+      return createMockUser();
+    }
+
+    // Production: Use Supabase Auth
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) {
+          console.error('[Supabase Auth] Sign in error:', error);
+          throw new Error(error.message);
+        }
+
+        console.log('[Supabase Auth] Sign in successful:', data.user?.email);
+        
+        // Return mapped user object
+        return {
+          id: data.user.id,
+          email: data.user.email,
+          user_metadata: data.user.user_metadata,
+          tenant_id: data.user.user_metadata?.tenant_id || null,
+          session: data.session,
+          ...data.user.user_metadata,
+        };
+      } catch (err) {
+        console.error('[Supabase Auth] Exception in signIn():', err);
+        throw err;
+      }
+    }
+
+    // Fallback: Use Base44 if Supabase not configured
+    console.warn('[Auth] Supabase not configured, falling back to Base44');
+    return base44.auth.signIn(email, password);
+  },
+
+  /**
+   * Sign out current user
+   */
+  signOut: async () => {
+    // Local dev mode: just clear state
+    if (isLocalDevMode()) {
+      console.log('[Local Dev Mode] Mock sign out');
+      return true;
+    }
+
+    // Production: Use Supabase Auth
+    if (isSupabaseConfigured()) {
+      try {
+        const { error } = await supabase.auth.signOut();
+
+        if (error) {
+          console.error('[Supabase Auth] Sign out error:', error);
+          throw new Error(error.message);
+        }
+
+        console.log('[Supabase Auth] Sign out successful');
+        return true;
+      } catch (err) {
+        console.error('[Supabase Auth] Exception in signOut():', err);
+        throw err;
+      }
+    }
+
+    // Fallback: Use Base44 if Supabase not configured
+    console.warn('[Auth] Supabase not configured, falling back to Base44');
+    return base44.auth.signOut();
+  },
+
+  /**
+   * Sign up new user
+   * @param {string} email - User email
+   * @param {string} password - User password
+   * @param {object} metadata - Additional user metadata (tenant_id, name, etc.)
+   */
+  signUp: async (email, password, metadata = {}) => {
+    // Local dev mode: return mock user
+    if (isLocalDevMode()) {
+      console.log('[Local Dev Mode] Mock sign up for:', email);
+      return createMockUser();
+    }
+
+    // Production: Use Supabase Auth
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: metadata, // Store tenant_id and other metadata
+          },
+        });
+
+        if (error) {
+          console.error('[Supabase Auth] Sign up error:', error);
+          throw new Error(error.message);
+        }
+
+        console.log('[Supabase Auth] Sign up successful:', data.user?.email);
+        
+        return {
+          id: data.user?.id,
+          email: data.user?.email,
+          user_metadata: data.user?.user_metadata,
+          tenant_id: metadata.tenant_id,
+          session: data.session,
+          ...metadata,
+        };
+      } catch (err) {
+        console.error('[Supabase Auth] Exception in signUp():', err);
+        throw err;
+      }
+    }
+
+    // Fallback: Use Base44 if Supabase not configured
+    console.warn('[Auth] Supabase not configured, falling back to Base44');
+    return base44.auth.signUp(email, password, metadata);
+  },
+
+  /**
+   * Update current user's metadata
+   * @param {object} updates - User metadata to update
+   */
   updateMyUserData: async (updates) => {
+    // Local dev mode: return mock user
     if (isLocalDevMode()) {
       console.log('[Local Dev Mode] Mock updating user data', updates);
       return createMockUser();
     }
-    // Get current user and update
-    const currentUser = await baseUser.me();
+
+    // Production: Use Supabase Auth
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase.auth.updateUser({
+          data: updates, // Update user_metadata
+        });
+
+        if (error) {
+          console.error('[Supabase Auth] Update user error:', error);
+          throw new Error(error.message);
+        }
+
+        console.log('[Supabase Auth] User updated successfully');
+        
+        return {
+          id: data.user.id,
+          email: data.user.email,
+          user_metadata: data.user.user_metadata,
+          tenant_id: data.user.user_metadata?.tenant_id || null,
+          ...data.user.user_metadata,
+        };
+      } catch (err) {
+        console.error('[Supabase Auth] Exception in updateMyUserData():', err);
+        throw err;
+      }
+    }
+
+    // Fallback: Use Base44 SDK
+    console.warn('[Auth] Supabase not configured, falling back to Base44');
+    const currentUser = await base44.auth.me();
     if (!currentUser?.id) {
       throw new Error('No authenticated user found');
     }
-    // Use the User entity's update method
     return base44.entities.User.update(currentUser.id, updates);
   },
-  // Add update method for updating any user (admin function)
-  update: async (userId, updates) => {
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Mock updating user', userId, updates);
-      return createMockUser();
-    }
-    return base44.entities.User.update(userId, updates);
-  },
-  // Add list method for listing users
+
+  /**
+   * List all users (admin function - uses backend API)
+   */
   list: async (filters) => {
     if (isLocalDevMode()) {
       console.log('[Local Dev Mode] Mock listing users');
       return [createMockUser()];
     }
-    return base44.entities.User.list(filters);
+    
+    // Use backend API for listing users (not Supabase Auth)
+    // This calls your Express backend's /api/users endpoint
+    return callBackendAPI('user', 'GET', filters);
   },
-  // Pass through other methods
-  signIn: baseUser.signIn,
-  signOut: baseUser.signOut,
-  signUp: baseUser.signUp,
+
+  /**
+   * Update any user by ID (admin function - uses backend API)
+   */
+  update: async (userId, updates) => {
+    if (isLocalDevMode()) {
+      console.log('[Local Dev Mode] Mock updating user', userId, updates);
+      return createMockUser();
+    }
+    
+    // Use backend API for admin user updates
+    return callBackendAPI('user', 'PUT', updates, userId);
+  },
+
+  /**
+   * Alias for signIn() - for backwards compatibility
+   */
+  login: async (email, password) => {
+    return User.signIn(email, password);
+  },
+
+  /**
+   * Alias for signOut() - for backwards compatibility
+   */
+  logout: async () => {
+    return User.signOut();
+  },
 };

@@ -99,7 +99,7 @@ export default function AvatarWidget({
         }}
       >
         <img
-          src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68ad592dcffacef630b477d2/1fee90417_aisha_new_nobg.png"
+          src="/assets/Ai-SHA-logo-2.png"
           alt="AI Assistant"
           style={{
             width: '100%',

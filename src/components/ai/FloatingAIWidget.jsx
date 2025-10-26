@@ -17,7 +17,7 @@ export default function FloatingAIWidget() {
 
   useEffect(() => {
     let mounted = true;
-    const fallbackLogo = "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68ad592dcffacef630b477d2/bc12c2284_Ai-SHA-logo-3.png";
+    const fallbackLogo = "/assets/Ai-SHA-logo-2.png";
 
     const loadBranding = async () => {
       try {

@@ -11,10 +11,24 @@ export default function createEmployeeRoutes(pgPool) {
   // GET /api/employees - List employees
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, limit = 50, offset = 0 } = req.query;
+      const { tenant_id, email, limit = 50, offset = 0 } = req.query;
 
+      // Allow lookup by email without tenant_id (for auth user lookup)
+      if (email) {
+        const result = await pgPool.query(
+          'SELECT * FROM employees WHERE email = $1 ORDER BY created_at DESC LIMIT 1',
+          [email]
+        );
+        
+        return res.json({
+          status: 'success',
+          data: result.rows,
+        });
+      }
+
+      // Normal listing requires tenant_id
       if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+        return res.status(400).json({ status: 'error', message: 'tenant_id or email is required' });
       }
 
       const result = await pgPool.query(

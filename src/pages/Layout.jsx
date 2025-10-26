@@ -104,12 +104,38 @@ const navItems = [
 const secondaryNavItems = [
   { href: "WorkflowGuide", icon: BookOpen, label: "Workflow Guide" }, // Changed icon to BookOpen
   { href: "Documentation", icon: BookOpen, label: "Documentation" }, // Changed icon to BookOpen
-  { href: "Agent", icon: Bot, label: "AI Agent", isAvatar: true, avatarUrl: "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68ad592dcffacef630b477d2/56c46ae8a_aisha_new_nobg.png" },
+  { href: "Agent", icon: Bot, label: "AI Agent", isAvatar: true, avatarUrl: "/assets/Ai-SHA-logo-2.png" },
   { href: "ClientRequirements", icon: ClipboardCheck, label: "Client Requirements" } // NEW: Added Client Requirements
 ];
 
+/**
+ * Helper: Check if user is a superadmin (god mode)
+ */
+function isSuperAdmin(user) {
+  if (!user) return false;
+  return user.is_superadmin === true || 
+         user.access_level === 'superadmin' || 
+         user.role === 'superadmin';
+}
+
+/**
+ * Helper: Check if user is admin or superadmin
+ */
+function isAdminOrSuperAdmin(user) {
+  if (!user) return false;
+  return user.role === 'admin' || 
+         user.role === 'superadmin' || 
+         user.is_superadmin === true;
+}
+
 function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
   if (!user) return false;
+
+  // GOD MODE: SuperAdmins bypass ALL restrictions
+  if (isSuperAdmin(user)) {
+    console.log('[God Mode] SuperAdmin has access to:', pageName);
+    return true;
+  }
 
   // CRM access gating: if CRM access is disabled, restrict all CRM pages
   const pagesAllowedWithoutCRM = new Set(['Documentation', 'Agent', 'Settings', 'AuditLog', 'UnitTests', 'WorkflowGuide', 'ClientRequirements', 'Workflows']); // Added Workflows
@@ -272,7 +298,8 @@ const UserNav = ({ user, handleLogout, createPageUrl }) => {
   };
 
   const displayName = getUserDisplayName();
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  // Check if user is admin-like (admin or superadmin)
+  const isAdmin = isAdminOrSuperAdmin(user);
 
   return (
     <DropdownMenu>
@@ -418,18 +445,34 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   // Derive the effective tenant once, memoized (admin/superadmin can override via selectedTenantId)
   const effectiveTenantId = React.useMemo(() => {
     if (!user) return null;
-    const isAdminLike = (user?.role === 'admin' || user?.role === 'superadmin');
+    const superAdmin = isSuperAdmin(user);
+    const isAdminLike = isAdminOrSuperAdmin(user);
     let nextTenantId = null;
 
     if (isAdminLike) {
-      // Admin/superadmin can pick a tenant via selectedTenantId, otherwise defaults to their own tenant_id
-      nextTenantId = selectedTenantId || user?.tenant_id;
+      // SuperAdmins/Admins: null selectedTenantId = global access to ALL tenants
+      if (selectedTenantId === null || selectedTenantId === undefined) {
+        if (superAdmin) {
+          console.log('[Layout] SuperAdmin global access - viewing ALL tenants');
+          return null; // null = "all tenants" for superadmins
+        }
+        // Regular admins default to their own tenant if no selection
+        nextTenantId = user?.tenant_id;
+      } else {
+        // Specific tenant selected
+        nextTenantId = selectedTenantId;
+      }
     } else {
       // Non-admins always use their assigned tenant_id
       nextTenantId = user?.tenant_id;
     }
+    
     // Use shared validation function
-    return nextTenantId && typeof nextTenantId === 'string' && isValidId(nextTenantId) ? nextTenantId : null;
+    const validTenantId = nextTenantId && typeof nextTenantId === 'string' && isValidId(nextTenantId) ? nextTenantId : null;
+    if (validTenantId) {
+      console.log('[Layout] Filtering data for tenant:', validTenantId);
+    }
+    return validTenantId;
   }, [user, selectedTenantId]);
 
 
@@ -467,10 +510,8 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   // NEW: Preconnect/dns-prefetch hints for performance-critical origins
   React.useEffect(() => {
     const origins = [
-      "https://base44.app",
-      "https://app.base44.com",
-      "https://m.stripe.com",
-      "https://qtrypzzcjebvfcihiynt.supabase.co"
+      "https://m.stripe.com"
+      // Note: Removed Base44 and external Supabase URLs - using local assets now
     ];
     const ensureLink = (rel, href, crossOrigin) => {
       const id = `hint-${rel}-${btoa(href).replace(/=/g, "")}`;
@@ -762,7 +803,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   // NEW: Respect manual selection for admins; only set default if none. Non-admins always follow their own tenant.
   React.useEffect(() => {
     const currTenantId = user?.tenant_id || null;
-    const isAdminLike = user?.role === 'admin' || user?.role === 'superadmin';
+    const isAdminLike = isAdminOrSuperAdmin(user);
     const hasManualSelection =
       selectedTenantId !== null &&
       selectedTenantId !== undefined &&
@@ -947,7 +988,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   // NEW: Fetch tenant branding for non-admin users via backend (bypasses Tenant RLS safely)
   React.useEffect(() => {
     if (!user) return;
-    const isAdminLike = user.role === 'admin' || user.role === 'superadmin';
+    const isAdminLike = isAdminOrSuperAdmin(user);
     if (isAdminLike) return; // This effect is only for non-admins
     if (!user.tenant_id) return;
 
@@ -1674,16 +1715,71 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 max-w-md text-center">
-          <h2 className="lg:text-lg font-semibold text-yellow-800 mb-2">Authentication Required</h2>
-          <p className="text-yellow-600 mb-4">Please log in to access the application.</p>
-          <button
-            onClick={() => User.login()}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-
-            Log In
-          </button>
+      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-violet-600 to-indigo-700 flex items-center justify-center">
+        <div className="bg-white border border-purple-200 rounded-lg p-8 max-w-md w-full shadow-2xl">
+          <div className="text-center mb-6">
+            <img src="/assets/Ai-SHA-logo-2.png" alt="AI-SHA CRM" className="h-16 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">Welcome to AI-SHA CRM</h2>
+            <p className="text-slate-600">Sign in to access your account</p>
+          </div>
+          
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            const email = e.target.email.value;
+            const password = e.target.password.value;
+            
+            try {
+              console.log('[Login] Attempting sign in with:', email);
+              await User.signIn(email, password);
+              console.log('[Login] Sign in successful, reloading...');
+              window.location.reload(); // Reload to update app state
+            } catch (error) {
+              console.error('[Login] Sign in failed:', error);
+              alert('Login failed: ' + error.message);
+            }
+          }}>
+            <div className="mb-4">
+              <label className="block text-slate-800 text-sm font-semibold mb-2" htmlFor="email">
+                Email
+              </label>
+              <input
+                type="email"
+                id="email"
+                name="email"
+                required
+                autoComplete="email"
+                autoFocus
+                className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-slate-900"
+                placeholder="your-email@example.com"
+              />
+            </div>
+            
+            <div className="mb-6">
+              <label className="block text-slate-800 text-sm font-semibold mb-2" htmlFor="password">
+                Password
+              </label>
+              <input
+                type="password"
+                id="password"
+                name="password"
+                required
+                autoComplete="current-password"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-slate-900"
+                placeholder="Enter your password"
+              />
+            </div>
+            
+            <button
+              type="submit"
+              className="w-full bg-gradient-to-r from-purple-600 to-violet-600 text-white px-4 py-2 rounded-md hover:from-purple-700 hover:to-violet-700 transition-all font-semibold shadow-lg">
+              Sign In
+            </button>
+          </form>
+          
+          <div className="mt-6 text-center text-sm text-slate-500">
+            <p>Demo: test@aishacrm.com / TestPassword123!</p>
+            <p className="text-xs mt-1">Create users in Supabase Dashboard → Authentication</p>
+          </div>
         </div>
       </div>);
 

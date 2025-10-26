@@ -1,8 +1,24 @@
 import React from 'react';
 import { AlertTriangle } from 'lucide-react';
 
+/**
+ * Helper: Check if user is a superadmin (god mode)
+ */
+function isSuperAdmin(user) {
+  if (!user) return false;
+  return user.is_superadmin === true || 
+         user.access_level === 'superadmin' || 
+         user.role === 'superadmin';
+}
+
 function hasPageAccess(user, pageName) {
   if (!user) return false;
+
+  // GOD MODE: SuperAdmins bypass ALL restrictions
+  if (isSuperAdmin(user)) {
+    console.log('[RouteGuard God Mode] SuperAdmin has access to:', pageName);
+    return true;
+  }
 
   // CRM access gating
   const pagesAllowedWithoutCRM = new Set(['Documentation', 'Agent', 'Settings', 'AuditLog', 'UnitTests', 'WorkflowGuide', 'ClientRequirements']);
@@ -58,6 +74,16 @@ function hasPageAccess(user, pageName) {
 }
 
 export default function RouteGuard({ user, pageName, children }) {
+  // Debug logging
+  console.log('[RouteGuard] Checking access for:', {
+    pageName,
+    userEmail: user?.email,
+    userRole: user?.role,
+    isSuperadmin: user?.is_superadmin,
+    accessLevel: user?.access_level,
+    crmAccess: user?.crm_access,
+  });
+
   if (!user) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
