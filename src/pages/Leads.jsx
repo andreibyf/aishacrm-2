@@ -1288,6 +1288,7 @@ export default function LeadsPage() {
                       return (
                         <tr
                           key={lead.id}
+                          data-testid={`lead-row-${lead.email}`}
                           className="hover:bg-slate-700/30 transition-colors"
                         >
                           <td className="px-4 py-3">
@@ -1300,7 +1301,7 @@ export default function LeadsPage() {
                           <td className="px-4 py-3 text-sm text-slate-300">
                             {lead.first_name} {lead.last_name}
                           </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
+                          <td className="px-4 py-3 text-sm text-slate-300" data-testid="lead-email">
                             {lead.email || <span className="text-slate-500">—</span>}
                           </td>
                           <td className="px-4 py-3 text-sm">
@@ -1323,7 +1324,7 @@ export default function LeadsPage() {
                           <td className="px-4 py-3 text-sm text-slate-300">
                             {lead.company || <span className="text-slate-500">—</span>}
                           </td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
+                          <td className="px-4 py-3 text-sm text-slate-300" data-testid="lead-job-title">
                             {lead.job_title || <span className="text-slate-500">—</span>}
                           </td>
                           <td className="px-4 py-3 text-sm">

@@ -248,8 +248,8 @@ test.describe('CRUD Operations - End-to-End', () => {
       await expect(page.locator(`text=${testEmail}`)).toBeVisible({ timeout: 10000 });
       await page.waitForTimeout(500); // Small delay for data to settle
       
-      // Now find and edit this lead
-      const leadRow = page.locator(`table tbody tr:has-text("${testEmail}")`).first();
+      // Now find and edit this lead using data-testid
+      const leadRow = page.locator(`[data-testid="lead-row-${testEmail}"]`);
       await expect(leadRow).toBeVisible({ timeout: 5000 });
       await leadRow.locator('td:last-child button').nth(1).click(); // Click Edit button (2nd button)
       
@@ -260,14 +260,30 @@ test.describe('CRUD Operations - End-to-End', () => {
       await page.fill('#job_title', newJobTitle);
       
       // Save - button text is "Update Lead" for editing
-      // Use force:true to click through any toast notifications that might be blocking
+      // Wait for the network request to complete
+      const updatePromise = page.waitForResponse(response => 
+        response.url().includes('/api/leads/') && response.request().method() === 'PUT'
+      );
+      
       await page.click('button[type="submit"]:has-text("Update")', { force: true });
       
-      // Should save without date format errors
+      // Wait for the API response
+      await updatePromise;
+      
+      // Wait for dialog to close
       await page.waitForSelector('form', { state: 'hidden', timeout: 10000 });
       
-      // Verify update
-      await expect(page.locator(`text=${newJobTitle}`)).toBeVisible({ timeout: 10000 });
+      // Wait a moment for the table to refresh
+      await page.waitForTimeout(500);
+      
+      // Re-query the lead row after update (in case DOM refreshed)
+      const updatedLeadRow = page.locator(`[data-testid="lead-row-${testEmail}"]`);
+      
+      // Verify we're looking at the right lead by checking email
+      await expect(updatedLeadRow.locator('[data-testid="lead-email"]')).toHaveText(testEmail);
+      
+      // Verify update - find the job title within the specific lead row
+      await expect(updatedLeadRow.locator('[data-testid="lead-job-title"]')).toHaveText(newJobTitle, { timeout: 10000 });
     });
   });
 

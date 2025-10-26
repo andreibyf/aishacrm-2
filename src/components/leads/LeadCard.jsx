@@ -26,6 +26,7 @@ export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClic
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.2 }}
+      data-testid={`lead-card-${lead.email}`}
     >
       <Card 
         className={`hover:shadow-lg transition-all duration-200 cursor-pointer bg-slate-800 border-slate-700 ${
@@ -46,6 +47,11 @@ export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClic
                 <h3 className="font-semibold text-lg text-slate-100">
                   {lead.first_name} {lead.last_name}
                 </h3>
+                {lead.job_title && (
+                  <p className="text-sm text-slate-300 mt-1" data-testid="lead-job-title">
+                    {lead.job_title}
+                  </p>
+                )}
                 {lead.company && (
                   <p className="text-sm text-slate-400 flex items-center gap-1 mt-1">
                     <Building2 className="w-3 h-3" />

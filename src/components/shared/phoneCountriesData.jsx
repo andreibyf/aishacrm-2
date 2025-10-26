@@ -71,7 +71,7 @@ export const phoneCountries = [
   { code: 'RU', name: 'Russia', prefix: '+7', flag: '🇷🇺' },
   { code: 'UA', name: 'Ukraine', prefix: '+380', flag: '🇺🇦' },
   { code: 'BY', name: 'Belarus', prefix: '+375', flag: '🇧🇾' },
-  { code: 'KZ', name: 'Kazakhstan', prefix: '+7', flag: '🇰🇿' },
+  { code: 'KZ', name: 'Kazakhstan', prefix: '+77', flag: '🇰🇿' },
   { code: 'UZ', name: 'Uzbekistan', prefix: '+998', flag: '🇺🇿' },
   { code: 'KG', name: 'Kyrgyzstan', prefix: '+996', flag: '🇰🇬' },
   { code: 'TJ', name: 'Tajikistan', prefix: '+992', flag: '🇹🇯' },
