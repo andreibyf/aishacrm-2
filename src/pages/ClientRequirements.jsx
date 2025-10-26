@@ -67,15 +67,15 @@ export default function ClientRequirements() {
         setSelectedRequirement(null);
         setAdminNotes("");
         loadRequirements();
-      } else {
-        // base44.functions.invoke will throw an error for non-2xx responses or if the function's own return
+        } else {
+        // The functions.invoke call will throw an error for non-2xx responses or if the function's own return
         // indicates an error, so `result.data.error` will be the error message from the backend.
         toast.error(result.data.error || 'Approval failed');
       }
     } catch (error) {
       console.error('Approval error:', error);
-      // The error object from base44.functions.invoke will contain the error details
-      // It might be error.response.data.error or just error.message
+  // The error object from the functions.invoke call will contain the error details
+  // It might be error.response.data.error or just error.message
       const errorMessage = error.response?.data?.error || error.message || 'Unknown error during approval';
       toast.error(`Failed to approve requirement: ${errorMessage}`);
     } finally {

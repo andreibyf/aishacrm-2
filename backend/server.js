@@ -1,6 +1,6 @@
 /**
  * Independent Backend Server for Aisha CRM
- * Provides fallback API endpoints when Base44 is down
+ * Provides fallback API endpoints when Ai-SHA is down
  */
 
 import express from 'express';

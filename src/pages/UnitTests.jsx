@@ -47,7 +47,7 @@ import { Info, TestTube } from "lucide-react";
           <AlertDescription className="text-yellow-400">
             CRUD tests are currently disabled in local-dev mode because backend routes (contacts, leads, accounts, opportunities) 
             return stub data instead of actual database operations. To enable: implement SQL queries in backend routes 
-            or set VITE_USE_BASE44_AUTH=true to test against Base44 cloud.
+            or set VITE_USE_BASE44_AUTH=true to test against Ai-SHA cloud.
           </AlertDescription>
         </Alert>
 

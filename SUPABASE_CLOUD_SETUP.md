@@ -192,8 +192,8 @@ Update your frontend `.env.local`:
 # Use backend which connects to Supabase Cloud
 VITE_AISHACRM_BACKEND_URL=http://localhost:3001
 
-# Keep local-dev mode to use backend instead of Base44
-VITE_USE_BASE44_AUTH=false
+ # Keep local-dev mode to use backend instead of Ai-SHA
+ VITE_USE_BASE44_AUTH=false
 
 # Optional: Direct Supabase connection (for future features)
 VITE_SUPABASE_URL=https://[YOUR_PROJECT_REF].supabase.co

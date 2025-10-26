@@ -43,7 +43,7 @@ export default function SysAdminGuide() {
                   <ul className="list-disc list-inside space-y-1 text-sm mt-2">
                     <li>React + Vite application</li>
                     <li>Domain-organized components (accounts, activities, ai, contacts, leads, opportunities)</li>
-                    <li>API clients with automatic Base44 → local backend failover</li>
+                    <li>API clients with automatic Ai-SHA → local backend failover</li>
                     <li>Browser-side functions in <code>src/functions/</code> for offline capability</li>
                   </ul>
                 </div>
@@ -349,7 +349,7 @@ export default function SysAdminGuide() {
 
             <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4 mt-8">
               <p className="text-blue-300 text-sm">
-                <strong>Need Help?</strong> Check <code>README.md</code> and <code>backend/README.md</code> for detailed setup instructions. For legacy Base44 issues, contact app@base44.com.
+                <strong>Need Help?</strong> Check <code>README.md</code> and <code>backend/README.md</code> for detailed setup instructions. For legacy Ai-SHA issues, contact app@base44.com.
               </p>
             </div>
           </div>

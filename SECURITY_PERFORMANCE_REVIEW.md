@@ -108,7 +108,7 @@
 - XSS vulnerabilities reviewed
 
 ### Recommendations
-1. **API Key Rotation**: Regularly rotate the Base44 API key
+1. **API Key Rotation**: Regularly rotate the Ai-SHA API key
 2. **Content Security Policy**: Consider adding CSP headers
 3. **Rate Limiting**: Monitor API usage for abuse
 4. **Audit Logs**: Leverage existing `createAuditLog` function for sensitive operations

@@ -62,7 +62,7 @@ export const mcpServer = createFallbackFunction(
 // Without fallback (local only)
 import { mcpServer } from '@/functions';
 
-// With automatic Base44 → local fallback
+// With automatic Ai-SHA → local fallback
 import { mcpServer } from '@/api/fallbackFunctions';
 ```
 
@@ -70,7 +70,7 @@ import { mcpServer } from '@/api/fallbackFunctions';
 
 Based on your `src/api/functions.js`, here are likely candidates for local implementations:
 
-### Critical (Base44 down = app broken)
+### Critical (Ai-SHA down = app broken)
 - `getDashboardStats` - Dashboard data
 - `getContactHealth` - Contact scoring
 - `findDuplicates` - Duplicate detection
@@ -102,7 +102,7 @@ They **can**:
 - ✅ Make HTTP requests (fetch, axios)
 - ✅ Use browser APIs (localStorage, IndexedDB)
 - ✅ Process data and run algorithms
-- ✅ Call other Base44 functions via the SDK
+- ✅ Call other Ai-SHA functions via the SDK
 
 ## If You Need Server-Side Functions
 
@@ -131,11 +131,11 @@ console.log(result);
 ```js
 import { checkHealth } from '@/api/fallbackFunctions';
 
-// Check if Base44 is up
+// Check if Ai-SHA is up
 const isHealthy = await checkHealth();
-console.log('Base44 status:', isHealthy);
+console.log('Ai-SHA status:', isHealthy);
 
-// This will auto-fallback if Base44 is down
+// This will auto-fallback if Ai-SHA is down
 import { myFunction } from '@/api/fallbackFunctions';
 const result = await myFunction({ test: true });
 ```
@@ -150,7 +150,7 @@ For each function you want to recreate:
 - [ ] Add export to `index.js`
 - [ ] (Optional) Add fallback wrapper
 - [ ] Update components to import from new location
-- [ ] Test with Base44 down (simulate network failure)
+- [ ] Test with Ai-SHA down (simulate network failure)
 
 ## Need Help?
 
@@ -164,7 +164,7 @@ Common issues:
 - You're using Node.js code in browser
 - Move to backend service or use browser alternatives
 
-**"Function works locally but not on Base44"**
+**"Function works locally but not on Ai-SHA"**
 - You're mixing local and cloud implementations
 - Use `fallbackFunctions.js` to handle both
 
@@ -175,7 +175,7 @@ Common issues:
 
 ## Next Steps
 
-1. **Identify Priority**: Which functions break your app when Base44 is down?
+1. **Identify Priority**: Which functions break your app when Ai-SHA is down?
 2. **Start Small**: Pick 1-2 critical functions first
 3. **Test Thoroughly**: Ensure they work in browser
 4. **Add Fallbacks**: Wire up the auto-failover

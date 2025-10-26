@@ -1,7 +1,7 @@
 /**
  * _middleware
  * Centralized middleware utilities for backend functions
- * MIGRATED: Removed Base44 SDK dependency, now uses backend API or service-role client
+ * MIGRATED: Removed Ai-SHA SDK dependency, now uses backend API or service-role client
  */
 
 // Detect environment (Deno vs Node.js)

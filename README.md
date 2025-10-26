@@ -2,7 +2,7 @@
 
 **Your Independent CRM System** - Built with React + Vite frontend and Node.js backend.
 
-Originally powered by Base44, now transitioning to your own independent infrastructure for complete control and zero vendor dependency.
+Originally powered by Ai-SHA, now transitioning to your own independent infrastructure for complete control and zero vendor dependency.
 
 ## Getting Started
 
@@ -55,7 +55,7 @@ npm run build
 ## Project Structure
 
 ### Frontend
-- `src/api/` - API clients with automatic Base44 → Your Backend fallback
+- `src/api/` - API clients with automatic Ai-SHA → Your Backend fallback
 - `src/functions/` - 197 business functions organized in 26 categories
 - `src/entities/` - 47 data entity schemas
 - `src/components/` - Reusable React components organized by domain
@@ -70,7 +70,7 @@ npm run build
 
 ## 🎯 Why Your Own Backend?
 
-**The Problem:** When Base44 went down, your entire app was inaccessible.
+**The Problem:** When Ai-SHA went down, your entire app was inaccessible.
 
 **The Solution:** Your own independent backend server that:
 - ✅ Hosts all 197 functions locally
@@ -89,4 +89,4 @@ See `SECURITY_PERFORMANCE_REVIEW.md` for detailed security and performance guide
 
 ## Support
 
-For more information and support, please contact Base44 support at app@base44.com.
+For more information and support, please contact Ai-SHA support at app@base44.com.

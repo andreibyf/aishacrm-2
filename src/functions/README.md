@@ -43,7 +43,7 @@ For server-only logic, consider creating a separate middleware service.
 
 ## Failover Pattern
 
-To use these functions as fallbacks when Base44 is down:
+To use these functions as fallbacks when Ai-SHA is down:
 
 ```js
 import { mcpServer as cloudMcpServer } from '@/api/functions';
@@ -53,7 +53,7 @@ async function mcpServerWithFallback(args) {
   try {
     return await cloudMcpServer(args);
   } catch (error) {
-    console.log('Base44 unavailable, using local fallback');
+    console.log('Ai-SHA unavailable, using local fallback');
     return await localMcpServer(args);
   }
 }
