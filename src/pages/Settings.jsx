@@ -1,7 +1,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import {
   Cog, // Renamed from Settings to avoid conflict
@@ -178,8 +178,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
       { id: 'test-data', label: 'Test Data', icon: Bug, color: 'cyan', roles: ['admin', 'superadmin'] },
 
-      { id: 'performance', label: 'Performance', icon: Activity, color: 'emerald', roles: ['admin', 'superadmin'] }, // This maps to InternalPerformanceDashboard as per outline
-      { id: 'realtime-performance', label: 'Realtime Performance', icon: Activity, color: 'emerald', roles: ['admin', 'superadmin'] }, // New tab for PerformanceMonitor
+      { id: 'performance', label: 'Performance', icon: Activity, color: 'emerald', roles: ['admin', 'superadmin'] }, // Combined Performance Dashboard
       { id: 'sync-health', label: 'Sync Health', icon: RefreshCw, color: 'emerald', roles: ['admin', 'superadmin'] },
       { id: 'mcp-monitor', label: 'MCP Monitor', icon: Server, color: 'emerald', roles: ['admin', 'superadmin'] },
       { id: 'system-health', label: 'System Health', icon: Activity, color: 'emerald', roles: ['admin', 'superadmin'] }, // NEW: System Health Dashboard
@@ -568,28 +567,33 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               )}
 
               {/* Monitoring & Health */}
-              {activeTab === 'performance' && isAdmin && ( // This maps to InternalPerformanceDashboard as per outline
-                <Card className="bg-slate-800 border-slate-700">
-                  <CardHeader>
-                    <CardTitle className="text-slate-100">Performance Dashboard</CardTitle>
-                    <CardDescription className="text-slate-400">Monitor API response times, error rates, and system health</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <InternalPerformanceDashboard user={currentUser} />
-                  </CardContent>
-                </Card>
-              )}
-
-              {activeTab === 'realtime-performance' && isAdmin && ( // New tab content
-                <Card className="bg-slate-800 border-slate-700">
-                  <CardHeader>
-                    <CardTitle className="text-slate-100">Real-Time Performance Monitor</CardTitle>
-                    <CardDescription className="text-slate-400">Live tracking of application resource usage</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <PerformanceMonitor user={currentUser} />
-                  </CardContent>
-                </Card>
+              {activeTab === 'performance' && isAdmin && (
+                <div className="space-y-6">
+                  <Card className="bg-slate-800 border-slate-700">
+                    <CardHeader>
+                      <CardTitle className="text-slate-100">Performance Dashboard</CardTitle>
+                      <CardDescription className="text-slate-400">Monitor API response times, error rates, and system health</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Tabs defaultValue="overview" className="w-full">
+                        <TabsList className="grid w-full grid-cols-2 bg-slate-900">
+                          <TabsTrigger value="overview" className="data-[state=active]:bg-slate-700">
+                            Overview & Metrics
+                          </TabsTrigger>
+                          <TabsTrigger value="realtime" className="data-[state=active]:bg-slate-700">
+                            Real-Time Charts
+                          </TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="overview" className="mt-6">
+                          <InternalPerformanceDashboard user={currentUser} />
+                        </TabsContent>
+                        <TabsContent value="realtime" className="mt-6">
+                          <PerformanceMonitor user={currentUser} />
+                        </TabsContent>
+                      </Tabs>
+                    </CardContent>
+                  </Card>
+                </div>
               )}
 
               {activeTab === 'sync-health' && isAdmin && ( // New tab content
