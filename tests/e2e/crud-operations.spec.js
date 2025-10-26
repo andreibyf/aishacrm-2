@@ -431,26 +431,35 @@ test.describe('CRUD Operations - End-to-End', () => {
       await expect(systemLogsLink).toBeVisible({ timeout: 10000 });
       await systemLogsLink.click();
       
+      // Wait for page to load
+      await page.waitForLoadState('networkidle');
+      
+      // Get initial log count from the "X logs found" text
+      const initialCountText = await page.locator('text=/\\d+ logs? found/').textContent();
+      const initialLogCount = parseInt(initialCountText.match(/\d+/)[0]);
+      
       // Click Add Test Log
       await page.click('button:has-text("Add Test Log")');
       
       // Wait for log to appear
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(1500);
       
       // Verify log count increased
-      const logRows = await page.locator('table tbody tr').count();
-      expect(logRows).toBeGreaterThan(0);
+      const newCountText = await page.locator('text=/\\d+ logs? found/').textContent();
+      const newLogCount = parseInt(newCountText.match(/\d+/)[0]);
+      expect(newLogCount).toBeGreaterThan(initialLogCount);
       
       // Clear all logs
       await page.click('button:has-text("Clear All")');
-      await page.click('button:has-text("Confirm"), button:has-text("Yes")');
+      
+      // Click the confirm button in the dialog
+      await page.click('button:has-text("Delete All")');
       
       // Wait for logs to clear
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(1500);
       
-      // Verify logs cleared
-      const rowsAfterClear = await page.locator('table tbody tr').count();
-      expect(rowsAfterClear).toBe(0);
+      // Verify logs cleared - should show "No logs found" message
+      await expect(page.locator('text="No logs found"')).toBeVisible({ timeout: 5000 });
     });
   });
 

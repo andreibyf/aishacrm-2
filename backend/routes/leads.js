@@ -51,15 +51,15 @@ export default function createLeadRoutes(pgPool) {
   // POST /api/leads - Create lead
   router.post('/', async (req, res) => {
     try {
-      const { tenant_id, first_name, last_name, email, phone, company, status = 'new', source } = req.body;
+      const { tenant_id, first_name, last_name, email, phone, company, job_title, status = 'new', source } = req.body;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
       const query = `
-        INSERT INTO leads (tenant_id, first_name, last_name, email, phone, company, status, source, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+        INSERT INTO leads (tenant_id, first_name, last_name, email, phone, company, job_title, status, source, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
         RETURNING *
       `;
       
@@ -70,6 +70,7 @@ export default function createLeadRoutes(pgPool) {
         email,
         phone,
         company,
+        job_title,
         status,
         source
       ]);
@@ -110,7 +111,7 @@ export default function createLeadRoutes(pgPool) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { first_name, last_name, email, phone, company, status, source } = req.body;
+      const { first_name, last_name, email, phone, company, job_title, status, source } = req.body;
 
       const updates = [];
       const values = [];
@@ -135,6 +136,10 @@ export default function createLeadRoutes(pgPool) {
       if (company !== undefined) {
         updates.push(`company = $${paramCount++}`);
         values.push(company);
+      }
+      if (job_title !== undefined) {
+        updates.push(`job_title = $${paramCount++}`);
+        values.push(job_title);
       }
       if (status !== undefined) {
         updates.push(`status = $${paramCount++}`);
@@ -202,22 +207,6 @@ export default function createLeadRoutes(pgPool) {
         status: 'success',
         message: 'Lead converted',
         data: { lead_id: id, create_opportunity, create_account },
-      });
-    } catch (error) {
-      res.status(500).json({ status: 'error', message: error.message });
-    }
-  });
-
-  // PUT /api/leads/:id - Update lead
-  router.put('/:id', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const updates = req.body;
-
-      res.json({
-        status: 'success',
-        message: 'Lead updated',
-        data: { id, ...updates },
       });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });

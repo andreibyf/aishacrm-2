@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { SystemLog } from '@/api/entities';
 import { useTenant } from '@/components/shared/tenantContext';
+import { useConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,7 @@ const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localho
 
 export default function SystemLogsViewer() {
   const { selectedTenantId } = useTenant();
+  const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
@@ -90,9 +92,14 @@ export default function SystemLogsViewer() {
   }, [loadLogs]);
 
   const handleClearLogs = async () => {
-    if (!confirm('Are you sure you want to delete all logs? This action cannot be undone.')) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: "Delete all logs?",
+      description: "Are you sure you want to delete all logs? This action cannot be undone.",
+      variant: "destructive",
+      confirmText: "Delete All",
+      cancelText: "Cancel"
+    });
+    if (!confirmed) return;
 
     setClearing(true);
     try {
@@ -349,6 +356,7 @@ export default function SystemLogsViewer() {
           ))
         )}
       </div>
+      <ConfirmDialogPortal />
     </div>
   );
 }
