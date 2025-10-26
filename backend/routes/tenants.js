@@ -60,10 +60,19 @@ export default function createTenantRoutes(pgPool) {
       const countResult = await pgPool.query(countQuery, countParams);
       const total = parseInt(countResult.rows[0].count);
 
+      // Normalize tenant rows to expose common branding fields from settings/metadata
+      const tenants = result.rows.map(r => ({
+        ...r,
+        logo_url: r.settings?.logo_url || r.metadata?.logo_url || null,
+        primary_color: r.settings?.primary_color || r.metadata?.primary_color || null,
+        accent_color: r.settings?.accent_color || r.metadata?.accent_color || null,
+        branding_settings: r.settings?.branding_settings || r.metadata?.branding_settings || {}
+      }));
+
       res.json({
         status: 'success',
         data: { 
-          tenants: result.rows, 
+          tenants, 
           total, 
           limit: parseInt(limit), 
           offset: parseInt(offset) 
@@ -155,9 +164,18 @@ export default function createTenantRoutes(pgPool) {
         });
       }
 
+      const row = result.rows[0];
+      const normalized = {
+        ...row,
+        logo_url: row.settings?.logo_url || row.metadata?.logo_url || null,
+        primary_color: row.settings?.primary_color || row.metadata?.primary_color || null,
+        accent_color: row.settings?.accent_color || row.metadata?.accent_color || null,
+        branding_settings: row.settings?.branding_settings || row.metadata?.branding_settings || {}
+      };
+
       res.json({
         status: 'success',
-        data: result.rows[0],
+        data: normalized,
       });
     } catch (error) {
       console.error('Error getting tenant:', error);
@@ -168,8 +186,8 @@ export default function createTenantRoutes(pgPool) {
   // PUT /api/tenants/:id - Update tenant
   router.put('/:id', async (req, res) => {
     try {
-      const { id } = req.params;
-      const { name, settings, status, metadata } = req.body;
+  const { id } = req.params;
+  const { name, settings, status, metadata, logo_url, primary_color, accent_color, branding_settings } = req.body;
 
       if (!pgPool) {
         return res.status(503).json({ 
@@ -206,6 +224,24 @@ export default function createTenantRoutes(pgPool) {
         paramCount++;
       }
 
+      // If branding fields provided, merge them into settings
+      if ((logo_url !== undefined) || (primary_color !== undefined) || (accent_color !== undefined) || (branding_settings !== undefined)) {
+        // Fetch existing tenant settings
+        const cur = await pgPool.query('SELECT settings FROM tenant WHERE id = $1', [id]);
+        const existingSettings = cur.rows[0]?.settings || {};
+        const merged = {
+          ...existingSettings,
+          ...(settings || {}),
+          ...(logo_url !== undefined ? { logo_url } : {}),
+          ...(primary_color !== undefined ? { primary_color } : {}),
+          ...(accent_color !== undefined ? { accent_color } : {}),
+          ...(branding_settings !== undefined ? { branding_settings } : {})
+        };
+        updates.push(`settings = $${paramCount}`);
+        params.push(merged);
+        paramCount++;
+      }
+
       if (updates.length === 0) {
         return res.status(400).json({
           status: 'error',
@@ -230,10 +266,19 @@ export default function createTenantRoutes(pgPool) {
         });
       }
 
+      const row = result.rows[0];
+      const normalized = {
+        ...row,
+        logo_url: row.settings?.logo_url || row.metadata?.logo_url || null,
+        primary_color: row.settings?.primary_color || row.metadata?.primary_color || null,
+        accent_color: row.settings?.accent_color || row.metadata?.accent_color || null,
+        branding_settings: row.settings?.branding_settings || row.metadata?.branding_settings || {}
+      };
+
       res.json({
         status: 'success',
         message: 'Tenant updated',
-        data: result.rows[0],
+        data: normalized,
       });
     } catch (error) {
       console.error('Error updating tenant:', error);
