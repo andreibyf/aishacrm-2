@@ -88,7 +88,6 @@ import PerformanceMonitor from '../components/settings/PerformanceMonitor';
 import SystemHealthDashboard from "../components/settings/SystemHealthDashboard"; // NEW: SystemHealthDashboard
 
 // Testing & Diagnostics
-import QATestRunner from "../components/settings/QATestRunner";
 import AIExecutionLogViewer from "../components/settings/AIExecutionLogViewer";
 import FileUploadDiagnostics from "../components/settings/FileUploadDiagnostics";
 import SysAdminGuide from "../components/settings/SysAdminGuide";
@@ -651,17 +650,6 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               {/* NEW: Consolidated Diagnostics Tab */}
               {activeTab === 'diagnostics' && isAdmin && (
                 <div className="space-y-6">
-                  {/* QA Test Runner */}
-                  <Card className="bg-slate-800 border-slate-700">
-                    <CardHeader>
-                      <CardTitle className="text-slate-100">QA Test Runner</CardTitle>
-                      <CardDescription className="text-slate-400">Run automated tests to validate system components</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <QATestRunner />
-                    </CardContent>
-                  </Card>
-
                   {/* AI Execution Logs */}
                   <Card className="bg-slate-800 border-slate-700">
                     <CardHeader>
