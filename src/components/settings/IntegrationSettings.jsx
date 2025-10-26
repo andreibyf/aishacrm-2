@@ -116,12 +116,16 @@ export default function IntegrationSettings() {
           await checkBackendStatus();
           setBackendEnabled(true);
         } catch (functionError) {
-          console.warn("Backend status check unavailable, assuming backend is enabled:", functionError);
+          if (import.meta.env.DEV) {
+            console.warn("Backend status check unavailable, assuming backend is enabled:", functionError);
+          }
           setBackendEnabled(true);
         }
 
       } catch (error) {
-        console.warn("Could not load user or check backend status:", error);
+        if (import.meta.env.DEV) {
+          console.warn("Could not load user or check backend status:", error);
+        }
         setBackendEnabled(false);
       } finally {
         setIsChecking(false);

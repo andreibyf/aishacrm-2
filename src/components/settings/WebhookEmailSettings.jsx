@@ -46,7 +46,9 @@ export default function WebhookEmailSettings() {
       // Use getTenantFilter for proper tenant isolation
       const tenantFilter = getTenantFilter(user, selectedTenantId);
 
-      console.log('Loading webhook email integration with filter:', tenantFilter);
+      if (import.meta.env.DEV) {
+        console.log('Loading webhook email integration with filter:', tenantFilter);
+      }
 
       if (tenantFilter.tenant_id && tenantFilter.tenant_id !== 'NO_TENANT_SELECTED_SAFETY_FILTER' && tenantFilter.tenant_id !== 'NO_TENANT_ASSIGNED_SAFETY_FILTER') {
         const existingIntegrations = await TenantIntegration.filter({
@@ -55,34 +57,22 @@ export default function WebhookEmailSettings() {
         });
 
         if (existingIntegrations.length > 0) {
-          const currentIntegration = existingIntegrations[0];
-          setIntegration(currentIntegration);
-          setWebhookUrl(currentIntegration.configuration?.webhook_url || '');
-          // Load event settings from configuration, merging with defaults
-          if (currentIntegration.configuration?.event_settings) {
-            setEventSettings((prev) => ({ ...prev, ...currentIntegration.configuration.event_settings }));
-          } else {
-            // If no event settings found, ensure defaults are set
-            setEventSettings({
-              contact_created: true, contact_updated: true, contact_deleted: true,
-              opportunity_created: true, opportunity_updated: true, opportunity_deleted: true,
-              lead_created: true, lead_updated: true, lead_deleted: true
-            });
+          const webhookIntegration = existingIntegrations[0];
+          setIntegration(webhookIntegration);
+          setWebhookUrl(webhookIntegration.config?.webhook_url || '');
+          setEventSettings(webhookIntegration.config?.event_settings || eventSettings);
+          if (import.meta.env.DEV) {
+            console.log('Loaded webhook email integration for tenant:', tenantFilter.tenant_id);
           }
-          console.log('Loaded webhook email integration for tenant:', tenantFilter.tenant_id);
         } else {
-          console.log('No webhook email integration found for tenant:', tenantFilter.tenant_id);
-          setIntegration(null);
-          setWebhookUrl('');
-          // Reset event settings to default if no integration found
-          setEventSettings({
-            contact_created: true, contact_updated: true, contact_deleted: true,
-            opportunity_created: true, opportunity_updated: true, opportunity_deleted: true,
-            lead_created: true, lead_updated: true, lead_deleted: true
-          });
+          if (import.meta.env.DEV) {
+            console.log('No webhook email integration found for tenant:', tenantFilter.tenant_id);
+          }
         }
       } else {
-        console.log('No valid tenant filter for webhook email');
+        if (import.meta.env.DEV) {
+          console.log('No valid tenant filter for webhook email');
+        }
         setIntegration(null);
         setWebhookUrl('');
         setEventSettings({ // Reset if no valid tenant selected
@@ -92,7 +82,9 @@ export default function WebhookEmailSettings() {
         });
       }
     } catch (error) {
-      console.error("Failed to load webhook settings:", error);
+      if (import.meta.env.DEV) {
+        console.error("Failed to load webhook settings:", error);
+      }
       toast.error("Failed to load webhook email settings.");
     } finally {
       setLoading(false);
@@ -143,7 +135,9 @@ export default function WebhookEmailSettings() {
         }
       };
 
-      console.log('Saving webhook email integration for tenant:', effectiveTenantId, data);
+      if (import.meta.env.DEV) {
+        console.log('Saving webhook email integration for tenant:', effectiveTenantId, data);
+      }
 
       if (integration) {
         // Update existing integration
@@ -157,7 +151,9 @@ export default function WebhookEmailSettings() {
       toast.success("Outlook Email Webhook configuration saved successfully!");
       setTestResult(null); // Clear test result after successful save
     } catch (error) {
-      console.error("Failed to save webhook settings:", error);
+      if (import.meta.env.DEV) {
+        console.error("Failed to save webhook settings:", error);
+      }
       toast.error("Failed to save settings. Please try again.");
     } finally {
       setSaving(false);
@@ -223,7 +219,9 @@ export default function WebhookEmailSettings() {
         toast.error("Test webhook failed.");
       }
     } catch (error) {
-      console.error("Error during webhook test:", error);
+      if (import.meta.env.DEV) {
+        console.error("Error during webhook test:", error);
+      }
       setTestResult({
         success: false,
         message: `Could not connect to webhook URL: ${error.message}. Please check the URL and your network.`,

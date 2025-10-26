@@ -41,11 +41,16 @@ function scheduleFlush() {
 // Raw logger that does not depend on React context/hooks.
 // Used by non-React modules (e.g., TenantContext) via dynamic import.
 async function rawLog(level, message, source, metadata = {}) {
+  // Validate level parameter - ensure it's a valid log level
+  const validLevels = ['DEBUG', 'INFO', 'WARNING', 'ERROR'];
+  const normalizedLevel = typeof level === 'string' ? level.toUpperCase() : 'INFO';
+  const safeLevel = validLevels.includes(normalizedLevel) ? normalizedLevel : 'INFO';
+  
   try {
     const user = await User.me().catch(() => null);
 
     const logEntry = {
-      level,
+      level: safeLevel,
       message: String(message),
       source,
       user_email: user?.email || 'anonymous',
@@ -53,7 +58,7 @@ async function rawLog(level, message, source, metadata = {}) {
       metadata: metadata || {},
       user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
       url: typeof window !== 'undefined' ? window.location.href : 'unknown',
-      stack_trace: level === 'ERROR' && metadata?.error ? metadata.error.stack : null
+      stack_trace: safeLevel === 'ERROR' && metadata?.error ? metadata.error.stack : null
     };
 
     // Buffer and schedule flush
@@ -65,24 +70,33 @@ async function rawLog(level, message, source, metadata = {}) {
     }
 
     // Console echo in dev
-    const consoleMethodMap = { DEBUG: 'debug', INFO: 'info', WARNING: 'warn', ERROR: 'error' };
-    const methodName = consoleMethodMap[level] || 'log';
-    const consoleMethod = console[methodName];
-    if (typeof consoleMethod === 'function') {
-      consoleMethod.call(console, `[${level}] [${source}]`, message, metadata);
-    } else {
-      console.log(`[${level}] [${source}]`, message, metadata);
+    try {
+      const consoleMethodMap = { DEBUG: 'debug', INFO: 'info', WARNING: 'warn', ERROR: 'error' };
+      const methodName = consoleMethodMap[safeLevel] || 'log';
+      const consoleMethod = console[methodName];
+      if (typeof consoleMethod === 'function') {
+        consoleMethod.call(console, `[${safeLevel}] [${source}]`, message, metadata);
+      } else {
+        console.log(`[${safeLevel}] [${source}]`, message, metadata);
+      }
+    } catch {
+      // Fallback to basic console.log if anything goes wrong
+      try {
+        console.log(`[${safeLevel}] [${source}]`, message, metadata);
+      } catch {
+        // Even console.log failed, silently ignore
+      }
     }
-  } catch (e) {
+  } catch {
     // As a last resort, try to store a single log entry without buffering
     try {
       await SystemLog.create({
-        level,
+        level: safeLevel,
         message: String(message),
         source,
         user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
         url: typeof window !== 'undefined' ? window.location.href : 'unknown',
-        stack_trace: level === 'ERROR' && metadata?.error ? metadata.error.stack : null
+        stack_trace: safeLevel === 'ERROR' && metadata?.error ? metadata.error.stack : null
       });
     } catch {
       // Secondary persistence failed; nothing else to do.
@@ -93,11 +107,16 @@ async function rawLog(level, message, source, metadata = {}) {
 
 export const LoggerProvider = ({ children }) => {
   const log = useCallback(async (level, message, source, metadata = {}) => {
+    // Validate level parameter
+    const validLevels = ['DEBUG', 'INFO', 'WARNING', 'ERROR'];
+    const normalizedLevel = typeof level === 'string' ? level.toUpperCase() : 'INFO';
+    const safeLevel = validLevels.includes(normalizedLevel) ? normalizedLevel : 'INFO';
+    
     try {
       const user = await User.me().catch(() => null);
       
       const logEntry = {
-        level,
+        level: safeLevel,
         message: String(message),
         source,
         user_email: user?.email || 'anonymous',
@@ -105,29 +124,33 @@ export const LoggerProvider = ({ children }) => {
         metadata: metadata || {},
         user_agent: navigator.userAgent,
         url: window.location.href,
-        stack_trace: level === 'ERROR' && metadata?.error ? metadata.error.stack : null
+        stack_trace: safeLevel === 'ERROR' && metadata?.error ? metadata.error.stack : null
       };
 
       // Add to buffer
       logBuffer.push(logEntry);
 
       // Also log to console in development - FIX: ensure method exists
-      const consoleMethodMap = {
-        DEBUG: 'debug',
-        INFO: 'info',
-        WARNING: 'warn',
-        ERROR: 'error'
-      };
-      
-      const methodName = consoleMethodMap[level] || 'log';
-      const consoleMethod = console[methodName];
-      
-      // Only call if the method exists and is a function
-      if (typeof consoleMethod === 'function') {
-        consoleMethod.call(console, `[${level}] [${source}]`, message, metadata);
-      } else {
-        // Fallback to console.log
-        console.log(`[${level}] [${source}]`, message, metadata);
+      try {
+        const consoleMethodMap = {
+          DEBUG: 'debug',
+          INFO: 'info',
+          WARNING: 'warn',
+          ERROR: 'error'
+        };
+        
+        const methodName = consoleMethodMap[safeLevel] || 'log';
+        const consoleMethod = console[methodName];
+        
+        // Only call if the method exists and is a function
+        if (typeof consoleMethod === 'function') {
+          consoleMethod.call(console, `[${safeLevel}] [${source}]`, message, metadata);
+        } else {
+          // Fallback to console.log
+          console.log(`[${safeLevel}] [${source}]`, message, metadata);
+        }
+      } catch {
+        // Silently ignore console errors
       }
 
       // Flush if buffer is full

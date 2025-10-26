@@ -104,7 +104,10 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
     setIsFormOpen(true);
   };
 
-  const totalAmount = localOpportunities.reduce((sum, opp) => sum + (opp.amount || 0), 0);
+  const totalAmount = localOpportunities.reduce((sum, opp) => {
+    const amount = parseFloat(opp.amount) || 0;
+    return sum + amount;
+  }, 0);
 
   return (
     <div>
