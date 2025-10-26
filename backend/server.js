@@ -89,6 +89,13 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Performance logging middleware (must be after body parsers, before routes)
+import { performanceLogger } from './middleware/performanceLogger.js';
+if (pgPool) {
+  app.use(performanceLogger(pgPool));
+  console.log('✓ Performance logging middleware enabled');
+}
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({

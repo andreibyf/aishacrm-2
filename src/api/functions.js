@@ -264,42 +264,39 @@ const createFunctionProxy = (functionName) => {
       if (functionName === 'listPerformanceLogs') {
         try {
           const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-          const response = await fetch(`${BACKEND_URL}/api/metrics/performance`);
+          const params = new URLSearchParams();
+          
+          if (args[0]?.tenant_id) params.append('tenant_id', args[0].tenant_id);
+          if (args[0]?.limit) params.append('limit', args[0].limit);
+          if (args[0]?.hours) params.append('hours', args[0].hours);
+          
+          const response = await fetch(`${BACKEND_URL}/api/metrics/performance?${params}`);
+          
           if (response.ok) {
             const result = await response.json();
-            // Convert backend metrics format to expected log format
-            const metrics = result.data;
-            const logs = [
-              { 
-                timestamp: new Date().toISOString(), 
-                operation: 'system_check', 
-                duration: Math.round(metrics.uptime * 1000), 
-                status: 'success',
-                details: {
-                  memory: metrics.memory,
-                  cpu: metrics.cpu
-                }
-              }
-            ];
             return {
               data: {
-                logs,
-                count: logs.length,
-                metrics
+                logs: result.data.logs || [],
+                count: result.data.count || 0,
+                metrics: result.data.metrics
               }
             };
           }
         } catch (error) {
           console.error('[Backend API] Error fetching performance logs:', error);
         }
-        // Fallback to mock data
+        
+        // Fallback to empty data if backend is down
         return {
           data: {
-            logs: [
-              { timestamp: new Date().toISOString(), operation: 'query', duration: 45, status: 'success' },
-              { timestamp: new Date(Date.now() - 60000).toISOString(), operation: 'mutation', duration: 120, status: 'success' },
-            ],
-            count: 2
+            logs: [],
+            count: 0,
+            metrics: {
+              totalCalls: 0,
+              avgResponseTime: 0,
+              errorRate: 0,
+              uptime: 0
+            }
           }
         };
       }

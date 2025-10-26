@@ -28,8 +28,14 @@ export default function PerformanceMonitor({ user }) {
       const tenantId = user?.tenant_id || 'local-tenant-001';
       
       // Load actual performance logs from the database
-      const response = await listPerformanceLogs({ limit: 500, tenant_id: tenantId });
+      const response = await listPerformanceLogs({ 
+        limit: 500, 
+        tenant_id: tenantId,
+        hours: parseInt(timeRange) * 24 
+      });
+      
       const logs = Array.isArray(response?.data?.logs) ? response.data.logs : [];
+      const metricsData = response?.data?.metrics || {};
       
       if (logs.length === 0) {
         setMetrics({
@@ -44,30 +50,28 @@ export default function PerformanceMonitor({ user }) {
         return;
       }
 
-      // Calculate real metrics from actual API calls
-      const totalCalls = logs.length;
-      const successfulCalls = logs.filter(log => log.status === 'success');
-      const failedCalls = logs.filter(log => log.status === 'error');
-      
-      const avgResponseTime = successfulCalls.length > 0
-        ? successfulCalls.reduce((sum, log) => sum + (Number(log.response_time_ms) || 0), 0) / successfulCalls.length
-        : 0;
-
-      const errorRate = totalCalls > 0 ? (failedCalls.length / totalCalls) * 100 : 0;
+      // Use backend-calculated metrics
+      setMetrics({
+        avgResponseTime: metricsData.avgResponseTime || 0,
+        functionExecutionTime: Math.round((metricsData.avgResponseTime || 0) * 0.7),
+        databaseQueryTime: Math.round((metricsData.avgResponseTime || 0) * 0.3),
+        errorRate: metricsData.errorRate || 0,
+        totalCalls: metricsData.totalCalls || logs.length
+      });
 
       // Group by time buckets for chart
       const now = new Date();
       const cutoffTime = new Date(now.getTime() - (parseInt(timeRange) * 24 * 60 * 60 * 1000));
       
       const recentLogs = logs.filter(log => {
-        const logDate = new Date(log.created_date);
+        const logDate = new Date(log.created_at);
         return logDate >= cutoffTime;
       });
 
       // Group logs by hour
       const hourlyData = {};
       recentLogs.forEach(log => {
-        const logDate = new Date(log.created_date);
+        const logDate = new Date(log.created_at);
         const hourKey = `${logDate.getMonth() + 1}/${logDate.getDate()} ${logDate.getHours()}:00`;
         
         if (!hourlyData[hourKey]) {
@@ -80,8 +84,8 @@ export default function PerformanceMonitor({ user }) {
         }
         
         hourlyData[hourKey].calls++;
-        hourlyData[hourKey].totalTime += Number(log.response_time_ms) || 0;
-        if (log.status === 'error') {
+        hourlyData[hourKey].totalTime += Number(log.duration_ms) || 0;
+        if (log.status_code >= 400) {
           hourlyData[hourKey].errors++;
         }
       });
@@ -107,14 +111,6 @@ export default function PerformanceMonitor({ user }) {
           return hourA - hourB;
         })
         .slice(-24);
-
-      setMetrics({
-        avgResponseTime: Math.round(avgResponseTime),
-        functionExecutionTime: Math.round(avgResponseTime * 0.7),
-        databaseQueryTime: Math.round(avgResponseTime * 0.3),
-        errorRate: Math.round(errorRate * 10) / 10,
-        totalCalls
-      });
 
       setChartData(chartDataArray);
       setLastUpdate(new Date());
