@@ -202,6 +202,45 @@ const TenantFormModal = ({ tenant, onSave, onCancel }) => {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="logo-url" className="text-slate-200">Company Logo URL</Label>
+            <Input
+              id="logo-url"
+              type="url"
+              value={formData.logo_url}
+              onChange={(e) => setFormData(prev => ({ ...prev, logo_url: e.target.value }))}
+              placeholder="https://example.com/logo.png or /assets/logo.png"
+              className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500"
+            />
+            <p className="text-sm text-slate-400">
+              Paste an image URL (e.g., https://your-site.com/logo.png or /assets/your-logo.png)
+            </p>
+            {formData.logo_url && (
+              <div className="flex items-center gap-2 mt-2">
+                <img
+                  src={formData.logo_url}
+                  alt="Logo Preview"
+                  className="w-16 h-16 object-contain border rounded bg-white"
+                  onError={(e) => { 
+                    console.warn("Logo failed to load:", formData.logo_url);
+                    e.target.style.display = 'none'; 
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFormData(prev => ({ ...prev, logo_url: '' }))}
+                  className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
+                >
+                  Clear
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* File upload temporarily disabled - use URL input above */}
+          {false && (
+          <div className="space-y-2">
             <Label htmlFor="logo-upload" className="text-slate-200">Company Logo</Label>
             <div className="flex items-center gap-4">
               {formData.logo_url && (
@@ -241,6 +280,7 @@ const TenantFormModal = ({ tenant, onSave, onCancel }) => {
               </div>
             </div>
           </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
