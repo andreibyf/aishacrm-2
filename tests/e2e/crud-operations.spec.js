@@ -250,7 +250,8 @@ test.describe('CRUD Operations - End-to-End', () => {
       
       // Now find and edit this lead
       const leadRow = page.locator(`table tbody tr:has-text("${testEmail}")`).first();
-      await leadRow.locator('button[aria-label="Edit"], button:has-text("Edit")').click();
+      await expect(leadRow).toBeVisible({ timeout: 5000 });
+      await leadRow.locator('td:last-child button').nth(1).click(); // Click Edit button (2nd button)
       
       await page.waitForSelector('form', { state: 'visible' });
       
@@ -406,9 +407,21 @@ test.describe('CRUD Operations - End-to-End', () => {
   test.describe('System Logs CRUD', () => {
     test('should create test log and clear all', async ({ page }) => {
       // Navigate to Settings > System Logs
-      await page.click('a[href="/settings"]');
-      await page.waitForURL('**/settings');
-      await page.click('a[href="/settings/system-logs"], button:has-text("System Logs")');
+      // Wait for page to be fully loaded and stable
+      await page.waitForLoadState('networkidle');
+      
+      // Try multiple selectors for Settings link
+      const settingsLink = page.locator('a[href="/settings"], a:has-text("Settings"), [data-testid="settings-link"]').first();
+      await expect(settingsLink).toBeVisible({ timeout: 10000 });
+      await settingsLink.click();
+      
+      await page.waitForURL('**/settings', { timeout: 10000 });
+      await page.waitForLoadState('networkidle');
+      
+      // Click on System Logs
+      const systemLogsLink = page.locator('a[href="/settings/system-logs"], button:has-text("System Logs"), a:has-text("System Logs")').first();
+      await expect(systemLogsLink).toBeVisible({ timeout: 10000 });
+      await systemLogsLink.click();
       
       // Click Add Test Log
       await page.click('button:has-text("Add Test Log")');
@@ -454,8 +467,8 @@ test.describe('CRUD Operations - End-to-End', () => {
       await page.click('button[type="submit"]:has-text("Save")');
       await page.waitForSelector('form', { state: 'hidden', timeout: 10000 });
       
-      // Verify activity appears
-      await expect(page.locator('text=Priority Test')).toBeVisible({ timeout: 10000 });
+      // Verify activity appears - use more specific selector to avoid multiple matches
+      await expect(page.locator('table tbody tr').filter({ hasText: 'Priority Test' }).first()).toBeVisible({ timeout: 10000 });
       
       // Open another activity form to verify priority options
       await page.click('button:has-text("Add Activity")');

@@ -404,6 +404,11 @@ export default function LeadsPage() {
       // Close form and clear editing state
       setIsFormOpen(false);
       setEditingLead(null);
+      
+      // Reset to page 1 to show the newly created/updated lead
+      if (!editingLead) {
+        setCurrentPage(1);
+      }
 
       // Clear cache
       clearCache('Lead');
@@ -411,7 +416,7 @@ export default function LeadsPage() {
       // Reload leads and stats
       console.log('[Leads.handleSave] Reloading data...');
       await Promise.all([
-        loadLeads(currentPage, pageSize),
+        loadLeads(editingLead ? currentPage : 1, pageSize), // Load page 1 for new leads
         loadTotalStats()
       ]);
       console.log('[Leads.handleSave] Data reloaded successfully');

@@ -85,25 +85,23 @@ export default function createOpportunityRoutes(pgPool) {
 
       const query = `
         INSERT INTO opportunities (
-          tenant_id, name, account_id, amount, stage, 
-          probability, close_date, description, assigned_to, 
-          created_by, created_date
+          tenant_id, name, account_id, contact_id, amount, stage, 
+          probability, close_date, metadata, created_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()
         ) RETURNING *
       `;
       
       const values = [
         opp.tenant_id,
         opp.name,
-        opp.account_id,
+        opp.account_id || null,
+        opp.contact_id || null,
         opp.amount || 0,
         opp.stage || 'prospecting',
         opp.probability || 0,
-        opp.close_date,
-        opp.description,
-        opp.assigned_to,
-        opp.created_by
+        opp.close_date || null,
+        opp.metadata || {}
       ];
       
       const result = await pgPool.query(query, values);

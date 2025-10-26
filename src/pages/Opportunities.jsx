@@ -355,11 +355,18 @@ export default function OpportunitiesPage() {
   }, [accounts]);
 
   const handleSave = async () => {
+    const wasCreating = !editingOpportunity;
     setIsFormOpen(false);
     setEditingOpportunity(null);
+    
+    // Reset to page 1 for new opportunities to show them
+    if (wasCreating) {
+      setCurrentPage(1);
+    }
+    
     clearCache('Opportunity');
     await Promise.all([
-      loadOpportunities(currentPage, pageSize),
+      loadOpportunities(wasCreating ? 1 : currentPage, pageSize),
       loadTotalStats()
     ]);
     toast.success(editingOpportunity ? "Opportunity updated successfully" : "Opportunity created successfully");
