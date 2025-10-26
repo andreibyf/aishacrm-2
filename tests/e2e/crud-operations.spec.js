@@ -260,7 +260,8 @@ test.describe('CRUD Operations - End-to-End', () => {
       await page.fill('#job_title', newJobTitle);
       
       // Save - button text is "Update Lead" for editing
-      await page.click('button[type="submit"]:has-text("Update")');
+      // Use force:true to click through any toast notifications that might be blocking
+      await page.click('button[type="submit"]:has-text("Update")', { force: true });
       
       // Should save without date format errors
       await page.waitForSelector('form', { state: 'hidden', timeout: 10000 });
@@ -410,8 +411,15 @@ test.describe('CRUD Operations - End-to-End', () => {
       // Wait for page to be fully loaded and stable
       await page.waitForLoadState('networkidle');
       
-      // Try multiple selectors for Settings link
-      const settingsLink = page.locator('a[href="/settings"], a:has-text("Settings"), [data-testid="settings-link"]').first();
+      // Settings is in a dropdown menu - click user menu to open it
+      // User menu button contains the user's initial in a circle - get the last one (in header)
+      const userMenuButton = page.locator('button:has(div.bg-slate-200.rounded-full)').last();
+      await userMenuButton.waitFor({ state: 'visible', timeout: 10000 });
+      await userMenuButton.click();
+      await page.waitForTimeout(500); // Wait for dropdown to open
+      
+      // Click Settings link in the dropdown
+      const settingsLink = page.locator('a[href*="/settings"]:has-text("Settings")');
       await expect(settingsLink).toBeVisible({ timeout: 10000 });
       await settingsLink.click();
       

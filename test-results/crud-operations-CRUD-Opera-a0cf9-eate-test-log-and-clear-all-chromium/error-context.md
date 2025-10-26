@@ -1,0 +1,305 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - img
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - generic [ref=e7]:
+            - generic [ref=e9]: L
+            - generic [ref=e10]: Local Development Tenant
+          - paragraph [ref=e11]: "Managing Client: Local Development Tenant"
+        - generic [ref=e13]:
+          - paragraph [ref=e14]: AI-Powered Business Growth Platform
+          - paragraph [ref=e15]: Oct 25, 2025
+          - paragraph [ref=e16]: 09:29:48 PM
+        - paragraph [ref=e17]: Navigation
+        - navigation [ref=e18]:
+          - list [ref=e19]:
+            - listitem [ref=e20]:
+              - link "Dashboard" [ref=e21] [cursor=pointer]:
+                - /url: /dashboard
+                - img [ref=e22]
+                - generic [ref=e27]: Dashboard
+            - listitem [ref=e28]:
+              - link "Contacts" [ref=e29] [cursor=pointer]:
+                - /url: /contacts
+                - img [ref=e30]
+                - generic [ref=e35]: Contacts
+            - listitem [ref=e36]:
+              - link "Accounts" [ref=e37] [cursor=pointer]:
+                - /url: /accounts
+                - img [ref=e38]
+                - generic [ref=e42]: Accounts
+            - listitem [ref=e43]:
+              - link "Leads" [ref=e44] [cursor=pointer]:
+                - /url: /leads
+                - img [ref=e45]
+                - generic [ref=e49]: Leads
+            - listitem [ref=e50]:
+              - link "Opportunities" [ref=e51] [cursor=pointer]:
+                - /url: /opportunities
+                - img [ref=e52]
+                - generic [ref=e55]: Opportunities
+            - listitem [ref=e56]:
+              - link "Activities" [ref=e57] [cursor=pointer]:
+                - /url: /activities
+                - img [ref=e58]
+                - generic [ref=e61]: Activities
+            - listitem [ref=e62]:
+              - link "Calendar" [ref=e63] [cursor=pointer]:
+                - /url: /calendar
+                - img [ref=e64]
+                - generic [ref=e66]: Calendar
+            - listitem [ref=e67]:
+              - link "BizDev Sources" [ref=e68] [cursor=pointer]:
+                - /url: /bizdevsources
+                - img [ref=e69]
+                - generic [ref=e73]: BizDev Sources
+            - listitem [ref=e74]:
+              - link "Cash Flow" [ref=e75] [cursor=pointer]:
+                - /url: /cashflow
+                - img [ref=e76]
+                - generic [ref=e78]: Cash Flow
+            - listitem [ref=e79]:
+              - link "Document Processing" [ref=e80] [cursor=pointer]:
+                - /url: /documentprocessing
+                - img [ref=e81]
+                - generic [ref=e84]: Document Processing
+            - listitem [ref=e85]:
+              - link "Document Management" [ref=e86] [cursor=pointer]:
+                - /url: /documentmanagement
+                - img [ref=e87]
+                - generic [ref=e89]: Document Management
+            - listitem [ref=e90]:
+              - link "AI Campaigns" [ref=e91] [cursor=pointer]:
+                - /url: /aicampaigns
+                - img [ref=e92]
+                - generic [ref=e95]: AI Campaigns
+            - listitem [ref=e96]:
+              - link "Employees" [ref=e97] [cursor=pointer]:
+                - /url: /employees
+                - img [ref=e98]
+                - generic [ref=e103]: Employees
+            - listitem [ref=e104]:
+              - link "Reports" [ref=e105] [cursor=pointer]:
+                - /url: /reports
+                - img [ref=e106]
+                - generic [ref=e108]: Reports
+            - listitem [ref=e109]:
+              - link "Integrations" [ref=e110] [cursor=pointer]:
+                - /url: /integrations
+                - img [ref=e111]
+                - generic [ref=e113]: Integrations
+            - listitem [ref=e114]:
+              - link "Workflows" [ref=e115] [cursor=pointer]:
+                - /url: /workflows
+                - img [ref=e116]
+                - generic [ref=e118]: Workflows
+            - listitem [ref=e119]:
+              - link "Payment Portal" [ref=e120] [cursor=pointer]:
+                - /url: /paymentportal
+                - img [ref=e121]
+                - generic [ref=e123]: Payment Portal
+            - listitem [ref=e124]:
+              - link "Utilities" [ref=e125] [cursor=pointer]:
+                - /url: /utilities
+                - img [ref=e126]
+                - generic [ref=e128]: Utilities
+            - listitem [ref=e129]:
+              - link "Client Onboarding" [ref=e130] [cursor=pointer]:
+                - /url: /clientonboarding
+                - img [ref=e131]
+                - generic [ref=e134]: Client Onboarding
+        - list [ref=e136]:
+          - listitem [ref=e137]:
+            - link "Workflow Guide" [ref=e138] [cursor=pointer]:
+              - /url: /workflowguide
+              - img [ref=e139]
+              - generic [ref=e141]: Workflow Guide
+          - listitem [ref=e142]:
+            - link "Documentation" [ref=e143] [cursor=pointer]:
+              - /url: /documentation
+              - img [ref=e144]
+              - generic [ref=e146]: Documentation
+          - listitem [ref=e147]:
+            - link "AI Assistant" [ref=e148] [cursor=pointer]:
+              - /url: /agent
+              - img "AI Assistant" [ref=e150]
+          - listitem [ref=e151]:
+            - link "Client Requirements" [ref=e152] [cursor=pointer]:
+              - /url: /clientrequirements
+              - img [ref=e153]
+              - generic [ref=e157]: Client Requirements
+    - generic [ref=e158]:
+      - banner [ref=e159]:
+        - button "Switch to dark mode" [ref=e160] [cursor=pointer]:
+          - img
+        - button "Clear chat" [ref=e161] [cursor=pointer]:
+          - img
+        - generic [ref=e162]:
+          - generic [ref=e163]:
+            - generic [ref=e164]:
+              - img [ref=e165]
+              - combobox [ref=e169] [cursor=pointer]:
+                - img [ref=e170]
+            - generic [ref=e173]: "Managing Client: Unknown Client"
+          - generic [ref=e174]:
+            - img [ref=e175]
+            - generic [ref=e180]: No employees with CRM access
+          - button "D Dev" [ref=e182] [cursor=pointer]:
+            - generic [ref=e184]: D
+            - generic [ref=e185]: Dev
+      - main [ref=e186]:
+        - generic [ref=e189]:
+          - generic [ref=e190]:
+            - heading "Settings & Administration" [level=1] [ref=e191]:
+              - img [ref=e193]
+              - text: Settings & Administration
+            - paragraph [ref=e204]: Configure your account, manage users, monitor system health, and optimize performance.
+          - generic [ref=e206]:
+            - tablist [ref=e207]:
+              - tab "My Profile" [ref=e208] [cursor=pointer]:
+                - img [ref=e209]
+                - generic [ref=e212]: My Profile
+              - tab "Branding" [ref=e213] [cursor=pointer]:
+                - img [ref=e214]
+                - generic [ref=e220]: Branding
+              - tab "Regional" [ref=e221] [cursor=pointer]:
+                - img [ref=e222]
+                - generic [ref=e225]: Regional
+              - tab "Billing" [ref=e226] [cursor=pointer]:
+                - img [ref=e227]
+                - generic [ref=e229]: Billing
+              - tab "Global Integrations" [ref=e230] [cursor=pointer]:
+                - img [ref=e231]
+                - generic [ref=e233]: Global Integrations
+              - tab "Tenant Integrations" [ref=e234] [cursor=pointer]:
+                - img [ref=e235]
+                - generic [ref=e237]: Tenant Integrations
+              - tab "Webhooks" [ref=e238] [cursor=pointer]:
+                - img [ref=e239]
+                - generic [ref=e243]: Webhooks
+              - tab "Data Consistency" [ref=e244] [cursor=pointer]:
+                - img [ref=e245]
+                - generic [ref=e249]: Data Consistency
+              - tab "Denormalization" [ref=e250] [cursor=pointer]:
+                - img [ref=e251]
+                - generic [ref=e257]: Denormalization
+              - tab "Data Optimization" [ref=e258] [cursor=pointer]:
+                - img [ref=e259]
+                - generic [ref=e260]: Data Optimization
+              - tab "User Management" [ref=e261] [cursor=pointer]:
+                - img [ref=e262]
+                - generic [ref=e267]: User Management
+              - tab "Client Management" [ref=e268] [cursor=pointer]:
+                - img [ref=e269]
+                - generic [ref=e273]: Client Management
+              - tab "Module Settings" [ref=e274] [cursor=pointer]:
+                - img [ref=e275]
+                - generic [ref=e280]: Module Settings
+              - tab "User Permissions" [ref=e281] [cursor=pointer]:
+                - img [ref=e282]
+                - generic [ref=e284]: User Permissions
+              - tab "Navigation Permissions" [ref=e285] [cursor=pointer]:
+                - img [ref=e286]
+                - generic [ref=e287]: Navigation Permissions
+              - tab "Cron Jobs" [ref=e288] [cursor=pointer]:
+                - img [ref=e289]
+                - generic [ref=e292]: Cron Jobs
+              - tab "Security" [ref=e293] [cursor=pointer]:
+                - img [ref=e294]
+                - generic [ref=e297]: Security
+              - tab "API Keys" [ref=e298] [cursor=pointer]:
+                - img [ref=e299]
+                - generic [ref=e303]: API Keys
+              - tab "Advanced" [ref=e304] [cursor=pointer]:
+                - img [ref=e305]
+                - generic [ref=e316]: Advanced
+              - tab "Announcements" [ref=e317] [cursor=pointer]:
+                - img [ref=e318]
+                - generic [ref=e321]: Announcements
+              - tab "Test Data" [ref=e322] [cursor=pointer]:
+                - img [ref=e323]
+                - generic [ref=e332]: Test Data
+              - tab "Performance" [ref=e333] [cursor=pointer]:
+                - img [ref=e334]
+                - generic [ref=e336]: Performance
+              - tab "Realtime Performance" [ref=e337] [cursor=pointer]:
+                - img [ref=e338]
+                - generic [ref=e340]: Realtime Performance
+              - tab "Sync Health" [ref=e341] [cursor=pointer]:
+                - img [ref=e342]
+                - generic [ref=e347]: Sync Health
+              - tab "MCP Monitor" [ref=e348] [cursor=pointer]:
+                - img [ref=e349]
+                - generic [ref=e352]: MCP Monitor
+              - tab "System Health" [ref=e353] [cursor=pointer]:
+                - img [ref=e354]
+                - generic [ref=e356]: System Health
+              - tab "System Logs" [selected] [ref=e357] [cursor=pointer]:
+                - img [ref=e358]
+                - generic [ref=e361]: System Logs
+              - tab "Diagnostics" [ref=e362] [cursor=pointer]:
+                - img [ref=e363]
+                - generic [ref=e366]: Diagnostics
+              - tab "Unit Tests" [ref=e367] [cursor=pointer]:
+                - img [ref=e368]
+                - generic [ref=e371]: Unit Tests
+              - tab "External Tools" [ref=e372] [cursor=pointer]:
+                - img [ref=e373]
+                - generic [ref=e377]: External Tools
+              - tab "API Health" [ref=e378] [cursor=pointer]:
+                - img [ref=e379]
+                - generic [ref=e381]: API Health
+              - tab "Client Offboarding" [ref=e382] [cursor=pointer]:
+                - img [ref=e383]
+                - generic [ref=e386]: Client Offboarding
+            - generic [ref=e388]:
+              - generic [ref=e389]:
+                - generic [ref=e390]:
+                  - img [ref=e391]
+                  - text: System Logs
+                - generic [ref=e394]: View and manage application logs (INFO, WARNING, ERROR, DEBUG)
+              - generic [ref=e396]:
+                - generic [ref=e399]:
+                  - generic [ref=e400]:
+                    - generic [ref=e401]: Search
+                    - generic [ref=e402]:
+                      - img [ref=e403]
+                      - textbox "Search logs..." [ref=e406]
+                  - generic [ref=e407]:
+                    - generic [ref=e408]: Level
+                    - combobox [ref=e409] [cursor=pointer]:
+                      - generic: All Levels
+                      - img [ref=e410]
+                  - generic [ref=e412]:
+                    - generic [ref=e413]: Source
+                    - combobox [ref=e414] [cursor=pointer]:
+                      - generic: All Sources
+                      - img [ref=e415]
+                  - button [ref=e417] [cursor=pointer]:
+                    - img
+                  - button "Add Test Log" [ref=e418] [cursor=pointer]:
+                    - img
+                    - text: Add Test Log
+                  - button "Clear All" [ref=e419] [cursor=pointer]:
+                    - img
+                    - text: Clear All
+                - generic [ref=e421]: 1 log found
+                - generic [ref=e426]:
+                  - generic [ref=e427]:
+                    - generic [ref=e428]: INFO
+                    - generic [ref=e429]: SystemLogsViewer
+                    - generic [ref=e430]: 10/25/2025, 9:29:47 PM
+                  - paragraph [ref=e431]: Test log created at 2025-10-26T01:29:47.212Z
+                  - generic [ref=e432]:
+                    - generic [ref=e433]: "User: admin@test.com"
+                    - generic [ref=e434]: "Tenant: local-te..."
+                  - group [ref=e435]:
+                    - generic "Show metadata" [ref=e436] [cursor=pointer]
+      - contentinfo [ref=e437]
+  - generic [ref=e441]: $0
+```
