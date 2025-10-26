@@ -15,7 +15,7 @@
           - generic [ref=e13]:
             - paragraph [ref=e14]: AI-Powered Business Growth Platform
             - paragraph [ref=e15]: Oct 25, 2025
-            - paragraph [ref=e16]: 11:06:54 PM
+            - paragraph [ref=e16]: 11:12:13 PM
           - paragraph [ref=e17]: Navigation
           - navigation [ref=e18]:
             - list [ref=e19]:
@@ -240,11 +240,11 @@
                   - cell "Status" [ref=e317]
                   - cell "Actions" [ref=e318]
               - rowgroup [ref=e319]:
-                - row "Update Test update-lead-1761447962115@example.com — Test Co Original Title 0 days Unassigned new" [ref=e320]:
+                - row "Update Test update-lead-1761448281303@example.com — Test Co Original Title 0 days Unassigned new" [ref=e320]:
                   - cell [ref=e321]:
                     - checkbox [ref=e322] [cursor=pointer]
                   - cell "Update Test" [ref=e323]
-                  - cell "update-lead-1761447962115@example.com" [ref=e324]
+                  - cell "update-lead-1761448281303@example.com" [ref=e324]
                   - cell "—" [ref=e325]:
                     - generic [ref=e327]: —
                   - cell "Test Co" [ref=e328]
@@ -263,11 +263,11 @@
                         - img
                       - button [ref=e339] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761447895383@example.com — Test Co Original Title 0 days Unassigned new" [ref=e340]:
+                - row "Update Test update-lead-1761448216196@example.com — Test Co Original Title 0 days Unassigned new" [ref=e340]:
                   - cell [ref=e341]:
                     - checkbox [ref=e342] [cursor=pointer]
                   - cell "Update Test" [ref=e343]
-                  - cell "update-lead-1761447895383@example.com" [ref=e344]
+                  - cell "update-lead-1761448216196@example.com" [ref=e344]
                   - cell "—" [ref=e345]:
                     - generic [ref=e347]: —
                   - cell "Test Co" [ref=e348]
@@ -286,15 +286,15 @@
                         - img
                       - button [ref=e359] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761447179575@example.com — Test Co Updated Title 0 days Unassigned new" [ref=e360]:
+                - row "Update Test update-lead-1761448021740@example.com — Test Co Original Title 0 days Unassigned new" [ref=e360]:
                   - cell [ref=e361]:
                     - checkbox [ref=e362] [cursor=pointer]
                   - cell "Update Test" [ref=e363]
-                  - cell "update-lead-1761447179575@example.com" [ref=e364]
+                  - cell "update-lead-1761448021740@example.com" [ref=e364]
                   - cell "—" [ref=e365]:
                     - generic [ref=e367]: —
                   - cell "Test Co" [ref=e368]
-                  - cell "Updated Title" [ref=e369]
+                  - cell "Original Title" [ref=e369]
                   - cell "0 days" [ref=e370]
                   - cell "Unassigned" [ref=e371]
                   - cell "new" [ref=e372] [cursor=pointer]:
@@ -309,11 +309,11 @@
                         - img
                       - button [ref=e379] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761447159043@example.com — Test Co Original Title 0 days Unassigned new" [ref=e380]:
+                - row "Update Test update-lead-1761447962115@example.com — Test Co Original Title 0 days Unassigned new" [ref=e380]:
                   - cell [ref=e381]:
                     - checkbox [ref=e382] [cursor=pointer]
                   - cell "Update Test" [ref=e383]
-                  - cell "update-lead-1761447159043@example.com" [ref=e384]
+                  - cell "update-lead-1761447962115@example.com" [ref=e384]
                   - cell "—" [ref=e385]:
                     - generic [ref=e387]: —
                   - cell "Test Co" [ref=e388]
@@ -332,11 +332,11 @@
                         - img
                       - button [ref=e399] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761447136500@example.com — Test Co Original Title 0 days Unassigned new" [ref=e400]:
+                - row "Update Test update-lead-1761447895383@example.com — Test Co Original Title 0 days Unassigned new" [ref=e400]:
                   - cell [ref=e401]:
                     - checkbox [ref=e402] [cursor=pointer]
                   - cell "Update Test" [ref=e403]
-                  - cell "update-lead-1761447136500@example.com" [ref=e404]
+                  - cell "update-lead-1761447895383@example.com" [ref=e404]
                   - cell "—" [ref=e405]:
                     - generic [ref=e407]: —
                   - cell "Test Co" [ref=e408]
@@ -355,15 +355,15 @@
                         - img
                       - button [ref=e419] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761447071867@example.com — Test Co Original Title 0 days Unassigned new" [ref=e420]:
+                - row "Update Test update-lead-1761447179575@example.com — Test Co Updated Title 0 days Unassigned new" [ref=e420]:
                   - cell [ref=e421]:
                     - checkbox [ref=e422] [cursor=pointer]
                   - cell "Update Test" [ref=e423]
-                  - cell "update-lead-1761447071867@example.com" [ref=e424]
+                  - cell "update-lead-1761447179575@example.com" [ref=e424]
                   - cell "—" [ref=e425]:
                     - generic [ref=e427]: —
                   - cell "Test Co" [ref=e428]
-                  - cell "Original Title" [ref=e429]
+                  - cell "Updated Title" [ref=e429]
                   - cell "0 days" [ref=e430]
                   - cell "Unassigned" [ref=e431]
                   - cell "new" [ref=e432] [cursor=pointer]:
@@ -378,11 +378,11 @@
                         - img
                       - button [ref=e439] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761447052571@example.com — Test Co Original Title 0 days Unassigned new" [ref=e440]:
+                - row "Update Test update-lead-1761447159043@example.com — Test Co Original Title 0 days Unassigned new" [ref=e440]:
                   - cell [ref=e441]:
                     - checkbox [ref=e442] [cursor=pointer]
                   - cell "Update Test" [ref=e443]
-                  - cell "update-lead-1761447052571@example.com" [ref=e444]
+                  - cell "update-lead-1761447159043@example.com" [ref=e444]
                   - cell "—" [ref=e445]:
                     - generic [ref=e447]: —
                   - cell "Test Co" [ref=e448]
@@ -401,11 +401,11 @@
                         - img
                       - button [ref=e459] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761447030211@example.com — Test Co Original Title 0 days Unassigned new" [ref=e460]:
+                - row "Update Test update-lead-1761447136500@example.com — Test Co Original Title 0 days Unassigned new" [ref=e460]:
                   - cell [ref=e461]:
                     - checkbox [ref=e462] [cursor=pointer]
                   - cell "Update Test" [ref=e463]
-                  - cell "update-lead-1761447030211@example.com" [ref=e464]
+                  - cell "update-lead-1761447136500@example.com" [ref=e464]
                   - cell "—" [ref=e465]:
                     - generic [ref=e467]: —
                   - cell "Test Co" [ref=e468]
@@ -424,11 +424,11 @@
                         - img
                       - button [ref=e479] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761446570541@example.com — Test Co Original Title 0 days Unassigned new" [ref=e480]:
+                - row "Update Test update-lead-1761447071867@example.com — Test Co Original Title 0 days Unassigned new" [ref=e480]:
                   - cell [ref=e481]:
                     - checkbox [ref=e482] [cursor=pointer]
                   - cell "Update Test" [ref=e483]
-                  - cell "update-lead-1761446570541@example.com" [ref=e484]
+                  - cell "update-lead-1761447071867@example.com" [ref=e484]
                   - cell "—" [ref=e485]:
                     - generic [ref=e487]: —
                   - cell "Test Co" [ref=e488]
@@ -447,11 +447,11 @@
                         - img
                       - button [ref=e499] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761446549315@example.com — Test Co Original Title 0 days Unassigned new" [ref=e500]:
+                - row "Update Test update-lead-1761447052571@example.com — Test Co Original Title 0 days Unassigned new" [ref=e500]:
                   - cell [ref=e501]:
                     - checkbox [ref=e502] [cursor=pointer]
                   - cell "Update Test" [ref=e503]
-                  - cell "update-lead-1761446549315@example.com" [ref=e504]
+                  - cell "update-lead-1761447052571@example.com" [ref=e504]
                   - cell "—" [ref=e505]:
                     - generic [ref=e507]: —
                   - cell "Test Co" [ref=e508]
@@ -470,11 +470,11 @@
                         - img
                       - button [ref=e519] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761446424481@example.com — Test Co Original Title 0 days Unassigned new" [ref=e520]:
+                - row "Update Test update-lead-1761447030211@example.com — Test Co Original Title 0 days Unassigned new" [ref=e520]:
                   - cell [ref=e521]:
                     - checkbox [ref=e522] [cursor=pointer]
                   - cell "Update Test" [ref=e523]
-                  - cell "update-lead-1761446424481@example.com" [ref=e524]
+                  - cell "update-lead-1761447030211@example.com" [ref=e524]
                   - cell "—" [ref=e525]:
                     - generic [ref=e527]: —
                   - cell "Test Co" [ref=e528]
@@ -493,11 +493,11 @@
                         - img
                       - button [ref=e539] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761446405246@example.com — Test Co Original Title 0 days Unassigned new" [ref=e540]:
+                - row "Update Test update-lead-1761446570541@example.com — Test Co Original Title 0 days Unassigned new" [ref=e540]:
                   - cell [ref=e541]:
                     - checkbox [ref=e542] [cursor=pointer]
                   - cell "Update Test" [ref=e543]
-                  - cell "update-lead-1761446405246@example.com" [ref=e544]
+                  - cell "update-lead-1761446570541@example.com" [ref=e544]
                   - cell "—" [ref=e545]:
                     - generic [ref=e547]: —
                   - cell "Test Co" [ref=e548]
@@ -516,11 +516,11 @@
                         - img
                       - button [ref=e559] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761446383518@example.com — Test Co Original Title 0 days Unassigned new" [ref=e560]:
+                - row "Update Test update-lead-1761446549315@example.com — Test Co Original Title 0 days Unassigned new" [ref=e560]:
                   - cell [ref=e561]:
                     - checkbox [ref=e562] [cursor=pointer]
                   - cell "Update Test" [ref=e563]
-                  - cell "update-lead-1761446383518@example.com" [ref=e564]
+                  - cell "update-lead-1761446549315@example.com" [ref=e564]
                   - cell "—" [ref=e565]:
                     - generic [ref=e567]: —
                   - cell "Test Co" [ref=e568]
@@ -539,15 +539,15 @@
                         - img
                       - button [ref=e579] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761445948114@example.com — Test Co Updated Title 0 days Unassigned new" [ref=e580]:
+                - row "Update Test update-lead-1761446424481@example.com — Test Co Original Title 0 days Unassigned new" [ref=e580]:
                   - cell [ref=e581]:
                     - checkbox [ref=e582] [cursor=pointer]
                   - cell "Update Test" [ref=e583]
-                  - cell "update-lead-1761445948114@example.com" [ref=e584]
+                  - cell "update-lead-1761446424481@example.com" [ref=e584]
                   - cell "—" [ref=e585]:
                     - generic [ref=e587]: —
                   - cell "Test Co" [ref=e588]
-                  - cell "Updated Title" [ref=e589]
+                  - cell "Original Title" [ref=e589]
                   - cell "0 days" [ref=e590]
                   - cell "Unassigned" [ref=e591]
                   - cell "new" [ref=e592] [cursor=pointer]:
@@ -562,11 +562,11 @@
                         - img
                       - button [ref=e599] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761445928458@example.com — Test Co Original Title 0 days Unassigned new" [ref=e600]:
+                - row "Update Test update-lead-1761446405246@example.com — Test Co Original Title 0 days Unassigned new" [ref=e600]:
                   - cell [ref=e601]:
                     - checkbox [ref=e602] [cursor=pointer]
                   - cell "Update Test" [ref=e603]
-                  - cell "update-lead-1761445928458@example.com" [ref=e604]
+                  - cell "update-lead-1761446405246@example.com" [ref=e604]
                   - cell "—" [ref=e605]:
                     - generic [ref=e607]: —
                   - cell "Test Co" [ref=e608]
@@ -585,11 +585,11 @@
                         - img
                       - button [ref=e619] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761445907092@example.com — Test Co Original Title 0 days Unassigned new" [ref=e620]:
+                - row "Update Test update-lead-1761446383518@example.com — Test Co Original Title 0 days Unassigned new" [ref=e620]:
                   - cell [ref=e621]:
                     - checkbox [ref=e622] [cursor=pointer]
                   - cell "Update Test" [ref=e623]
-                  - cell "update-lead-1761445907092@example.com" [ref=e624]
+                  - cell "update-lead-1761446383518@example.com" [ref=e624]
                   - cell "—" [ref=e625]:
                     - generic [ref=e627]: —
                   - cell "Test Co" [ref=e628]
@@ -608,15 +608,15 @@
                         - img
                       - button [ref=e639] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761445725973@example.com — Test Co Original Title 0 days Unassigned new" [ref=e640]:
+                - row "Update Test update-lead-1761445948114@example.com — Test Co Updated Title 0 days Unassigned new" [ref=e640]:
                   - cell [ref=e641]:
                     - checkbox [ref=e642] [cursor=pointer]
                   - cell "Update Test" [ref=e643]
-                  - cell "update-lead-1761445725973@example.com" [ref=e644]
+                  - cell "update-lead-1761445948114@example.com" [ref=e644]
                   - cell "—" [ref=e645]:
                     - generic [ref=e647]: —
                   - cell "Test Co" [ref=e648]
-                  - cell "Original Title" [ref=e649]
+                  - cell "Updated Title" [ref=e649]
                   - cell "0 days" [ref=e650]
                   - cell "Unassigned" [ref=e651]
                   - cell "new" [ref=e652] [cursor=pointer]:
@@ -631,11 +631,11 @@
                         - img
                       - button [ref=e659] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761445706720@example.com — Test Co Original Title 0 days Unassigned new" [ref=e660]:
+                - row "Update Test update-lead-1761445928458@example.com — Test Co Original Title 0 days Unassigned new" [ref=e660]:
                   - cell [ref=e661]:
                     - checkbox [ref=e662] [cursor=pointer]
                   - cell "Update Test" [ref=e663]
-                  - cell "update-lead-1761445706720@example.com" [ref=e664]
+                  - cell "update-lead-1761445928458@example.com" [ref=e664]
                   - cell "—" [ref=e665]:
                     - generic [ref=e667]: —
                   - cell "Test Co" [ref=e668]
@@ -654,11 +654,11 @@
                         - img
                       - button [ref=e679] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761445685374@example.com — Test Co Original Title 0 days Unassigned new" [ref=e680]:
+                - row "Update Test update-lead-1761445907092@example.com — Test Co Original Title 0 days Unassigned new" [ref=e680]:
                   - cell [ref=e681]:
                     - checkbox [ref=e682] [cursor=pointer]
                   - cell "Update Test" [ref=e683]
-                  - cell "update-lead-1761445685374@example.com" [ref=e684]
+                  - cell "update-lead-1761445907092@example.com" [ref=e684]
                   - cell "—" [ref=e685]:
                     - generic [ref=e687]: —
                   - cell "Test Co" [ref=e688]
@@ -677,15 +677,15 @@
                         - img
                       - button [ref=e699] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761444877913@example.com — Test Co Updated Title One 0 days Unassigned new" [ref=e700]:
+                - row "Update Test update-lead-1761445725973@example.com — Test Co Original Title 0 days Unassigned new" [ref=e700]:
                   - cell [ref=e701]:
                     - checkbox [ref=e702] [cursor=pointer]
                   - cell "Update Test" [ref=e703]
-                  - cell "update-lead-1761444877913@example.com" [ref=e704]
+                  - cell "update-lead-1761445725973@example.com" [ref=e704]
                   - cell "—" [ref=e705]:
                     - generic [ref=e707]: —
                   - cell "Test Co" [ref=e708]
-                  - cell "Updated Title One" [ref=e709]
+                  - cell "Original Title" [ref=e709]
                   - cell "0 days" [ref=e710]
                   - cell "Unassigned" [ref=e711]
                   - cell "new" [ref=e712] [cursor=pointer]:
@@ -700,11 +700,11 @@
                         - img
                       - button [ref=e719] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761444867483@example.com — Test Co Original Title 0 days Unassigned new" [ref=e720]:
+                - row "Update Test update-lead-1761445706720@example.com — Test Co Original Title 0 days Unassigned new" [ref=e720]:
                   - cell [ref=e721]:
                     - checkbox [ref=e722] [cursor=pointer]
                   - cell "Update Test" [ref=e723]
-                  - cell "update-lead-1761444867483@example.com" [ref=e724]
+                  - cell "update-lead-1761445706720@example.com" [ref=e724]
                   - cell "—" [ref=e725]:
                     - generic [ref=e727]: —
                   - cell "Test Co" [ref=e728]
@@ -723,15 +723,15 @@
                         - img
                       - button [ref=e739] [cursor=pointer]:
                         - img
-                - row "Test Lead test-1761444867184@example.com — Test Company Test Manager 0 days Unassigned new" [ref=e740]:
+                - row "Update Test update-lead-1761445685374@example.com — Test Co Original Title 0 days Unassigned new" [ref=e740]:
                   - cell [ref=e741]:
                     - checkbox [ref=e742] [cursor=pointer]
-                  - cell "Test Lead" [ref=e743]
-                  - cell "test-1761444867184@example.com" [ref=e744]
+                  - cell "Update Test" [ref=e743]
+                  - cell "update-lead-1761445685374@example.com" [ref=e744]
                   - cell "—" [ref=e745]:
                     - generic [ref=e747]: —
-                  - cell "Test Company" [ref=e748]
-                  - cell "Test Manager" [ref=e749]
+                  - cell "Test Co" [ref=e748]
+                  - cell "Original Title" [ref=e749]
                   - cell "0 days" [ref=e750]
                   - cell "Unassigned" [ref=e751]
                   - cell "new" [ref=e752] [cursor=pointer]:
@@ -746,15 +746,15 @@
                         - img
                       - button [ref=e759] [cursor=pointer]:
                         - img
-                - row "Test Lead test-1761444859748@example.com — Test Company Test Manager 0 days Unassigned new" [ref=e760]:
+                - row "Update Test update-lead-1761444877913@example.com — Test Co Updated Title One 0 days Unassigned new" [ref=e760]:
                   - cell [ref=e761]:
                     - checkbox [ref=e762] [cursor=pointer]
-                  - cell "Test Lead" [ref=e763]
-                  - cell "test-1761444859748@example.com" [ref=e764]
+                  - cell "Update Test" [ref=e763]
+                  - cell "update-lead-1761444877913@example.com" [ref=e764]
                   - cell "—" [ref=e765]:
                     - generic [ref=e767]: —
-                  - cell "Test Company" [ref=e768]
-                  - cell "Test Manager" [ref=e769]
+                  - cell "Test Co" [ref=e768]
+                  - cell "Updated Title One" [ref=e769]
                   - cell "0 days" [ref=e770]
                   - cell "Unassigned" [ref=e771]
                   - cell "new" [ref=e772] [cursor=pointer]:
@@ -769,11 +769,11 @@
                         - img
                       - button [ref=e779] [cursor=pointer]:
                         - img
-                - row "Update Test update-lead-1761444851031@example.com — Test Co Original Title 0 days Unassigned new" [ref=e780]:
+                - row "Update Test update-lead-1761444867483@example.com — Test Co Original Title 0 days Unassigned new" [ref=e780]:
                   - cell [ref=e781]:
                     - checkbox [ref=e782] [cursor=pointer]
                   - cell "Update Test" [ref=e783]
-                  - cell "update-lead-1761444851031@example.com" [ref=e784]
+                  - cell "update-lead-1761444867483@example.com" [ref=e784]
                   - cell "—" [ref=e785]:
                     - generic [ref=e787]: —
                   - cell "Test Co" [ref=e788]
@@ -792,11 +792,11 @@
                         - img
                       - button [ref=e799] [cursor=pointer]:
                         - img
-                - row "Test Lead test-1761444840970@example.com — Test Company Test Manager 0 days Unassigned new" [ref=e800]:
+                - row "Test Lead test-1761444867184@example.com — Test Company Test Manager 0 days Unassigned new" [ref=e800]:
                   - cell [ref=e801]:
                     - checkbox [ref=e802] [cursor=pointer]
                   - cell "Test Lead" [ref=e803]
-                  - cell "test-1761444840970@example.com" [ref=e804]
+                  - cell "test-1761444867184@example.com" [ref=e804]
                   - cell "—" [ref=e805]:
                     - generic [ref=e807]: —
                   - cell "Test Company" [ref=e808]
