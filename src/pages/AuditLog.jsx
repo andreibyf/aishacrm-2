@@ -8,9 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Calendar, Filter, Download, Shield } from 'lucide-react';
+import { Search, Calendar, Shield, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import ConfirmDialog from '@/components/shared/ConfirmDialog';
 
 export default function AuditLogPage() {
   const [auditLogs, setAuditLogs] = useState([]);
@@ -20,6 +21,7 @@ export default function AuditLogPage() {
   const [actionFilter, setActionFilter] = useState('all');
   const [entityFilter, setEntityFilter] = useState('all');
   const [currentUser, setCurrentUser] = useState(null);
+  const [showClearDialog, setShowClearDialog] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -31,14 +33,14 @@ export default function AuditLogPage() {
 
     if (searchTerm) {
       filtered = filtered.filter(log => 
-        log.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        log.user_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        log.entity_type?.toLowerCase().includes(searchTerm.toLowerCase())
+        log.user_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        log.entity_type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        log.action?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
     if (actionFilter && actionFilter !== 'all') {
-      filtered = filtered.filter(log => log.action_type === actionFilter);
+      filtered = filtered.filter(log => log.action === actionFilter);
     }
 
     if (entityFilter && entityFilter !== 'all') {
@@ -53,16 +55,69 @@ export default function AuditLogPage() {
     try {
       const [user, logs] = await Promise.all([
         User.me(),
-        AuditLog.list('-created_date', 100) // Get last 100 entries
+        AuditLog.list({}, '-created_at', 100) // Get last 100 entries, sorted by created_at descending
       ]);
       
       setCurrentUser(user);
-      setAuditLogs(logs);
+      setAuditLogs(Array.isArray(logs) ? logs : []);
     } catch (error) {
       console.error('Error loading audit logs:', error);
       toast.error('Failed to load audit logs');
+      setAuditLogs([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleClearLogs = async () => {
+    try {
+      const user = await User.me();
+      const tenantId = user?.tenant_id || 'local-tenant-001';
+      
+      if (import.meta.env.DEV) {
+        console.log('Clearing audit logs for tenant:', tenantId);
+      }
+      
+      // Call the backend DELETE endpoint
+      const url = `${import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001'}/api/audit-logs?tenant_id=${tenantId}`;
+      
+      if (import.meta.env.DEV) {
+        console.log('DELETE URL:', url);
+      }
+      
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (import.meta.env.DEV) {
+        console.log('Response status:', response.status);
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        if (import.meta.env.DEV) {
+          console.error('Error response:', errorText);
+        }
+        throw new Error(`Failed to clear audit logs: ${response.status} ${errorText}`);
+      }
+
+      const result = await response.json();
+      
+      if (import.meta.env.DEV) {
+        console.log('Clear result:', result);
+      }
+      
+      const deletedCount = result.data?.deleted_count || 0;
+      toast.success(`Cleared ${deletedCount} audit log(s)`);
+      
+      // Reload the data
+      await loadData();
+    } catch (error) {
+      console.error('Error clearing audit logs:', error);
+      toast.error(`Failed to clear audit logs: ${error.message}`);
     }
   };
 
@@ -75,11 +130,6 @@ export default function AuditLogPage() {
       case 'logout': return 'bg-gray-700 text-gray-100';
       default: return 'bg-slate-700 text-slate-100';
     }
-  };
-
-  const getRoleDisplay = (log) => {
-    // Use display role if available, otherwise fall back to the base role
-    return log.user_display_role || log.user_role;
   };
 
   if (loading) {
@@ -105,10 +155,26 @@ export default function AuditLogPage() {
             Track all system changes and user activities
           </p>
         </div>
-        <Button variant="outline" onClick={loadData} className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
-          <Calendar className="w-4 h-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={loadData} className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
+            <Calendar className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
+          <Button 
+            variant="destructive" 
+            onClick={() => {
+              if (import.meta.env.DEV) {
+                console.log('Clear All Logs button clicked');
+              }
+              setShowClearDialog(true);
+            }} 
+            className="bg-red-900/20 border-red-700 text-red-300 hover:bg-red-900/40"
+            disabled={auditLogs.length === 0}
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Clear All Logs
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -123,7 +189,7 @@ export default function AuditLogPage() {
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder="Search descriptions, users, entities..."
+                  placeholder="Search users, actions, entities..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500"
@@ -198,19 +264,21 @@ export default function AuditLogPage() {
                   {filteredLogs.map((log) => (
                     <TableRow key={log.id} className="border-b border-slate-800 hover:bg-slate-700/50">
                       <TableCell className="font-mono text-sm text-slate-200">
-                        {format(new Date(log.created_date), 'MMM d, yyyy HH:mm:ss')}
+                        {log.created_at ? format(new Date(log.created_at), 'MMM d, yyyy HH:mm:ss') : 'N/A'}
                       </TableCell>
                       <TableCell>
                         <div>
                           <div className="font-medium text-slate-200">{log.user_email}</div>
-                          <Badge variant="outline" className="text-xs border-slate-600 text-slate-300">
-                            {getRoleDisplay(log)}
-                          </Badge>
+                          {log.user_role && (
+                            <Badge variant="outline" className="text-xs border-slate-600 text-slate-300">
+                              {log.user_role}
+                            </Badge>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge className={`${getActionBadgeColor(log.action_type)} border-slate-600`}>
-                          {log.action_type}
+                        <Badge className={`${getActionBadgeColor(log.action)} border-slate-600`}>
+                          {log.action}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -224,33 +292,21 @@ export default function AuditLogPage() {
                         </div>
                       </TableCell>
                       <TableCell className="max-w-md">
-                        <div className="truncate text-slate-300" title={log.description}>
-                          {log.description}
+                        <div className="text-slate-300">
+                          {log.action} {log.entity_type || 'record'}
+                          {log.entity_id && ` (${log.entity_id.substring(0, 8)}...)`}
                         </div>
                       </TableCell>
                       <TableCell>
-                        {(log.old_values || log.new_values) && (
+                        {log.changes && Object.keys(log.changes).length > 0 && (
                           <details className="cursor-pointer">
                             <summary className="text-blue-400 hover:text-blue-300 text-sm">
                               View Changes
                             </summary>
-                            <div className="mt-2 p-2 bg-slate-700 rounded text-xs space-y-1 border border-slate-600">
-                              {log.old_values && (
-                                <div>
-                                  <strong className="text-slate-200">Before:</strong>
-                                  <pre className="whitespace-pre-wrap text-slate-300">
-                                    {JSON.stringify(log.old_values, null, 2)}
-                                  </pre>
-                                </div>
-                              )}
-                              {log.new_values && (
-                                <div>
-                                  <strong className="text-slate-200">After:</strong>
-                                  <pre className="whitespace-pre-wrap text-slate-300">
-                                    {JSON.stringify(log.new_values, null, 2)}
-                                  </pre>
-                                </div>
-                              )}
+                            <div className="mt-2 p-2 bg-slate-700 rounded text-xs border border-slate-600">
+                              <pre className="whitespace-pre-wrap text-slate-300">
+                                {JSON.stringify(log.changes, null, 2)}
+                              </pre>
                             </div>
                           </details>
                         )}
@@ -263,6 +319,22 @@ export default function AuditLogPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Clear Logs Confirmation Dialog */}
+      {import.meta.env.DEV && console.log('showClearDialog:', showClearDialog)}
+      <ConfirmDialog
+        open={showClearDialog}
+        onCancel={() => setShowClearDialog(false)}
+        onConfirm={() => {
+          setShowClearDialog(false);
+          handleClearLogs();
+        }}
+        title="Clear All Audit Logs"
+        description={`Are you sure you want to delete all ${auditLogs.length} audit log entries? This action cannot be undone.`}
+        confirmText="Clear All Logs"
+        cancelText="Cancel"
+        variant="destructive"
+      />
     </div>
   );
 }
