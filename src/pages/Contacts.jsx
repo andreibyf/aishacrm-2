@@ -468,8 +468,8 @@ export default function ContactsPage() {
   // Badge colors for table view - matching stat cards
   const statusBadgeColors = {
     active: 'bg-green-900/20 text-green-300 border-green-700',
-    prospect: 'bg-cyan-900/20 text-cyan-300 border-cyan-700',
-    customer: 'bg-purple-900/20 text-purple-300 border-purple-700',
+    prospect: 'bg-blue-900/20 text-blue-300 border-blue-700',
+    customer: 'bg-emerald-900/20 text-emerald-300 border-emerald-700',
     inactive: 'bg-slate-900/20 text-slate-300 border-slate-700',
     default: 'bg-slate-900/20 text-slate-300 border-slate-700' // Fallback for undefined statuses
   };
@@ -545,97 +545,87 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      {/* Stats Cards - Matching Accounts styling with solid backgrounds */}
+      {/* Stats Cards - Matching other pages with semi-transparent backgrounds */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-        <button
+        <div
           onClick={() => {
             setStatusFilter("all");
             logger.debug('Status filter set to All', 'ContactsPage', { userId: user?.id || user?.email });
           }}
-          className={`relative rounded-xl p-5 transition-all ${
-            statusFilter === "all" 
-              ? "bg-blue-100 border-2 border-blue-600" 
-              : "bg-blue-50 border-2 border-blue-300 hover:bg-blue-100"
+          className={`bg-slate-800 border-slate-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+            statusFilter === "all" ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900' : ''
           }`}
         >
-          <div className="flex items-start justify-between mb-3">
-            <span className="text-sm font-medium text-slate-700">Total Contacts</span>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-sm text-slate-400">Total Contacts</p>
             <StatusHelper statusKey="total_all" />
           </div>
-          <p className="text-slate-900 text-3xl font-bold">{formatNumber(totalStats.total)}</p>
-        </button>
+          <p className="text-2xl font-bold text-slate-100">{formatNumber(totalStats.total)}</p>
+        </div>
 
-        <button
+        <div
           onClick={() => {
             setStatusFilter("active");
             logger.debug('Status filter set to Active', 'ContactsPage', { userId: user?.id || user?.email });
           }}
-          className={`relative rounded-xl p-5 transition-all ${
-            statusFilter === "active"
-              ? "bg-green-100 border-2 border-green-600"
-              : "bg-green-50 border-2 border-green-300 hover:bg-green-100"
+          className={`bg-green-900/20 border-green-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+            statusFilter === "active" ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900' : ''
           }`}
         >
-          <div className="flex items-start justify-between mb-3">
-            <span className="text-sm font-medium text-slate-700">Active</span>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-sm text-slate-400">Active</p>
             <StatusHelper statusKey="contact_active" />
           </div>
-          <p className="text-slate-900 text-3xl font-bold">{formatNumber(totalStats.active)}</p>
-        </button>
+          <p className="text-2xl font-bold text-slate-100">{formatNumber(totalStats.active)}</p>
+        </div>
 
-        <button
+        <div
           onClick={() => {
             setStatusFilter("prospect");
             logger.debug('Status filter set to Prospect', 'ContactsPage', { userId: user?.id || user?.email });
           }}
-          className={`relative rounded-xl p-5 transition-all ${
-            statusFilter === "prospect"
-              ? "bg-cyan-100 border-2 border-cyan-600"
-              : "bg-cyan-50 border-2 border-cyan-300 hover:bg-cyan-100"
+          className={`bg-blue-900/20 border-blue-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+            statusFilter === "prospect" ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900' : ''
           }`}
         >
-          <div className="flex items-start justify-between mb-3">
-            <span className="text-sm font-medium text-slate-700">Prospects</span>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-sm text-slate-400">Prospects</p>
             <StatusHelper statusKey="contact_prospect" />
           </div>
-          <p className="text-slate-900 text-3xl font-bold">{formatNumber(totalStats.prospect)}</p>
-        </button>
+          <p className="text-2xl font-bold text-slate-100">{formatNumber(totalStats.prospect)}</p>
+        </div>
 
-        <button
+        <div
           onClick={() => {
             setStatusFilter("customer");
             logger.debug('Status filter set to Customer', 'ContactsPage', { userId: user?.id || user?.email });
           }}
-          className={`relative rounded-xl p-5 transition-all ${
-            statusFilter === "customer"
-              ? "bg-purple-100 border-2 border-purple-600"
-              : "bg-purple-50 border-2 border-purple-300 hover:bg-purple-100"
+          className={`bg-emerald-900/20 border-emerald-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+            statusFilter === "customer" ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900' : ''
           }`}
         >
-          <div className="flex items-start justify-between mb-3">
-            <span className="text-sm font-medium text-slate-700">Customers</span>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-sm text-slate-400">Customers</p>
             <StatusHelper statusKey="contact_customer" />
           </div>
-          <p className="text-slate-900 text-3xl font-bold">{formatNumber(totalStats.customer)}</p>
-        </button>
+          <p className="text-2xl font-bold text-slate-100">{formatNumber(totalStats.customer)}</p>
+        </div>
 
-        <button
+        <div
           onClick={() => {
             setStatusFilter("inactive");
             logger.debug('Status filter set to Inactive', 'ContactsPage', { userId: user?.id || user?.email });
           }}
-          className={`relative rounded-xl p-5 transition-all ${
-            statusFilter === "inactive"
-              ? "bg-slate-200 border-2 border-slate-600"
-              : "bg-slate-100 border-2 border-slate-400 hover:bg-slate-200"
+          className={`bg-slate-900/20 border-slate-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+            statusFilter === "inactive" ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900' : ''
           }`}
         >
-          <div className="flex items-start justify-between mb-3">
-            <span className="text-sm font-medium text-slate-700">Inactive</span>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-sm text-slate-400">Inactive</p>
             <StatusHelper statusKey="contact_inactive" />
           </div>
-          <p className="text-slate-900 text-3xl font-bold">{formatNumber(totalStats.inactive)}</p>
-        </button>
+          <p className="text-2xl font-bold text-slate-100">{formatNumber(totalStats.inactive)}</p>
+        </div>
       </div>
 
       {/* Search and Tag Filter */}

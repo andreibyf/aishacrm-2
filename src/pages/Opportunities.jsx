@@ -1215,7 +1215,11 @@ export default function OpportunitiesPage() {
                           {opp.account_id && <div className="text-xs text-slate-400">{accountsMap[opp.account_id] || opp.account_name}</div>}
                         </TableCell>
                         <TableCell className="text-center cursor-pointer p-3" onClick={() => handleViewDetails(opp)}>
-                          <Badge className={`${stageColors[opp.stage]} capitalize text-xs font-semibold whitespace-nowrap border`}>
+                          <Badge 
+                            className={`${stageColors[opp.stage]} contrast-badge capitalize text-xs font-semibold whitespace-nowrap border`}
+                            data-variant="status"
+                            data-status={opp.stage}
+                          >
                             {opp.stage?.replace(/_/g, ' ')}
                           </Badge>
                         </TableCell>

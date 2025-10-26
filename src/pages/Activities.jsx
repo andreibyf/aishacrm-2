@@ -1135,7 +1135,11 @@ export default function ActivitiesPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="cursor-pointer p-3" onClick={() => handleViewDetails(activity)}>
-                          <Badge className={`${statusColors[activity.status]} capitalize text-xs`}>
+                          <Badge 
+                            className={`${statusColors[activity.status]} contrast-badge capitalize text-xs`}
+                            data-variant="status"
+                            data-status={activity.status}
+                          >
                             {activity.status?.replace(/_/g, ' ')}
                           </Badge>
                         </TableCell>

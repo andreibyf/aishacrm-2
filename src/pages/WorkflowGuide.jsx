@@ -19,14 +19,56 @@ import {
 } from "lucide-react";
 
 const WorkflowStage = ({ icon: Icon, title, description, onClick, color = "blue", className = "" }) => {
+  // Map color prop to full Tailwind classes (JIT compiler needs complete class names)
+  const colorClasses = {
+    cyan: {
+      bg: "bg-cyan-600/20",
+      text: "text-cyan-500",
+      hoverBorder: "hover:border-cyan-500",
+      hoverShadow: "hover:shadow-cyan-500/20"
+    },
+    blue: {
+      bg: "bg-blue-600/20",
+      text: "text-blue-500",
+      hoverBorder: "hover:border-blue-500",
+      hoverShadow: "hover:shadow-blue-500/20"
+    },
+    purple: {
+      bg: "bg-purple-600/20",
+      text: "text-purple-500",
+      hoverBorder: "hover:border-purple-500",
+      hoverShadow: "hover:shadow-purple-500/20"
+    },
+    indigo: {
+      bg: "bg-indigo-600/20",
+      text: "text-indigo-500",
+      hoverBorder: "hover:border-indigo-500",
+      hoverShadow: "hover:shadow-indigo-500/20"
+    },
+    emerald: {
+      bg: "bg-emerald-600/20",
+      text: "text-emerald-500",
+      hoverBorder: "hover:border-emerald-500",
+      hoverShadow: "hover:shadow-emerald-500/20"
+    },
+    teal: {
+      bg: "bg-teal-600/20",
+      text: "text-teal-500",
+      hoverBorder: "hover:border-teal-500",
+      hoverShadow: "hover:shadow-teal-500/20"
+    }
+  };
+
+  const colors = colorClasses[color] || colorClasses.blue;
+
   return (
     <Card
-      className={`bg-slate-800 border-slate-700 hover:border-${color}-500 hover:shadow-lg hover:shadow-${color}-500/20 transition-all duration-300 cursor-pointer ${className}`}
+      className={`bg-slate-800 border-slate-700 ${colors.hoverBorder} hover:shadow-lg ${colors.hoverShadow} transition-all duration-300 cursor-pointer ${className}`}
       onClick={onClick}
     >
       <CardContent className="p-6 text-center">
-        <div className={`inline-flex items-center justify-center w-16 h-16 rounded-lg bg-${color}-600/20 mb-4`}>
-          <Icon className={`w-8 h-8 text-${color}-500`} />
+        <div className={`inline-flex items-center justify-center w-16 h-16 rounded-lg ${colors.bg} mb-4`}>
+          <Icon className={`w-8 h-8 ${colors.text}`} />
         </div>
         <h3 className="text-xl font-bold text-slate-100 mb-2">{title}</h3>
         <p className="text-sm text-slate-400">{description}</p>
@@ -45,10 +87,30 @@ const WorkflowArrow = ({ direction = "down", className = "" }) => {
 };
 
 const DecisionDiamond = ({ title, onClick, color = "green" }) => {
+  // Map color prop to full Tailwind classes
+  const colorClasses = {
+    green: {
+      bg: "bg-green-600/20",
+      border: "border-green-500",
+      hoverBorder: "hover:border-green-400",
+      hoverShadow: "hover:shadow-green-500/30",
+      text: "text-green-500"
+    },
+    yellow: {
+      bg: "bg-yellow-600/20",
+      border: "border-yellow-500",
+      hoverBorder: "hover:border-yellow-400",
+      hoverShadow: "hover:shadow-yellow-500/30",
+      text: "text-yellow-500"
+    }
+  };
+
+  const colors = colorClasses[color] || colorClasses.green;
+
   return (
     <div className="flex items-center justify-center">
       <div
-        className={`relative w-32 h-32 bg-${color}-600/20 border-2 border-${color}-500 hover:border-${color}-400 hover:shadow-lg hover:shadow-${color}-500/30 transition-all duration-300 cursor-pointer`}
+        className={`relative w-32 h-32 ${colors.bg} border-2 ${colors.border} ${colors.hoverBorder} hover:shadow-lg ${colors.hoverShadow} transition-all duration-300 cursor-pointer`}
         style={{ transform: "rotate(45deg)" }}
         onClick={onClick}
       >
@@ -57,7 +119,7 @@ const DecisionDiamond = ({ title, onClick, color = "green" }) => {
           style={{ transform: "rotate(-45deg)" }}
         >
           <div className="text-center">
-            <Trophy className={`w-8 h-8 text-${color}-500 mx-auto mb-1`} />
+            <Trophy className={`w-8 h-8 ${colors.text} mx-auto mb-1`} />
             <span className="text-sm font-bold text-slate-100">{title}</span>
           </div>
         </div>

@@ -58,7 +58,11 @@ export default function OpportunityCard({
             />
             <div className="flex-1 min-w-0">
               {/* Stage Badge - Prominent at top with matching colors */}
-              <Badge className={`${stageColors[opportunity.stage]} capitalize text-xs font-semibold mb-2 border`}>
+              <Badge 
+                className={`${stageColors[opportunity.stage]} contrast-badge capitalize text-xs font-semibold mb-2 border`}
+                data-variant="status"
+                data-status={opportunity.stage}
+              >
                 {stageLabels[opportunity.stage] || opportunity.stage?.replace(/_/g, ' ')}
               </Badge>
               

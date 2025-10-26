@@ -421,63 +421,59 @@ export default function BizDevSourcesPage() {
         </div>
       </div>
 
+      {/* Stats Cards - Matching other pages with semi-transparent backgrounds */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Card className="bg-slate-800 border-slate-700">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <p className="text-sm text-slate-400">Total Sources</p>
-                  <StatusHelper statusKey="bizdev_total" />
-                </div>
-                <p className="text-2xl font-bold text-slate-100">{stats.total}</p>
+        <div className="bg-slate-800 border-slate-700 border rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <p className="text-sm text-slate-400">Total Sources</p>
+                <StatusHelper statusKey="bizdev_total" />
               </div>
-              <Building2 className="w-8 h-8 text-blue-400" />
+              <p className="text-2xl font-bold text-slate-100">{stats.total}</p>
             </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-slate-800 border-slate-700">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <p className="text-sm text-slate-400">Active</p>
-                  <StatusHelper statusKey="bizdev_active" />
-                </div>
-                <p className="text-2xl font-bold text-green-400">{stats.active}</p>
+            <Building2 className="w-8 h-8 text-blue-400" />
+          </div>
+        </div>
+        
+        <div className="bg-green-900/20 border-green-700 border rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <p className="text-sm text-slate-400">Active</p>
+                <StatusHelper statusKey="bizdev_active" />
               </div>
-              <TrendingUp className="w-8 h-8 text-green-400" />
+              <p className="text-2xl font-bold text-slate-100">{stats.active}</p>
             </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-slate-800 border-slate-700">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <p className="text-sm text-slate-400">Promoted</p>
-                  <StatusHelper statusKey="bizdev_promoted" />
-                </div>
-                <p className="text-2xl font-bold text-blue-400">{stats.promoted}</p>
+            <TrendingUp className="w-8 h-8 text-green-400" />
+          </div>
+        </div>
+        
+        <div className="bg-blue-900/20 border-blue-700 border rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <p className="text-sm text-slate-400">Promoted</p>
+                <StatusHelper statusKey="bizdev_promoted" />
               </div>
-              <TrendingUp className="w-8 h-8 text-blue-400" />
+              <p className="text-2xl font-bold text-slate-100">{stats.promoted}</p>
             </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-slate-800 border-slate-700">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <p className="text-sm text-slate-400">Archived</p>
-                  <StatusHelper statusKey="bizdev_archived" />
-                </div>
-                <p className="text-2xl font-bold text-slate-400">{stats.archived}</p>
+            <TrendingUp className="w-8 h-8 text-blue-400" />
+          </div>
+        </div>
+        
+        <div className="bg-slate-900/20 border-slate-700 border rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <p className="text-sm text-slate-400">Archived</p>
+                <StatusHelper statusKey="bizdev_archived" />
               </div>
-              <Archive className="w-8 h-8 text-slate-400" />
+              <p className="text-2xl font-bold text-slate-100">{stats.archived}</p>
             </div>
-          </CardContent>
-        </Card>
+            <Archive className="w-8 h-8 text-slate-400" />
+          </div>
+        </div>
       </div>
 
       <Card className="bg-slate-800 border-slate-700 mb-6">

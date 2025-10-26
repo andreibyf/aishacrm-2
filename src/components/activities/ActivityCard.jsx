@@ -102,7 +102,12 @@ export default function ActivityCard({
       <CardContent className="space-y-3">
         <div className="flex flex-wrap gap-2">
           <div className="flex items-center gap-1">
-            <Badge variant="outline" className={statusColors[activity.status.replace(/-/g, '_')] || statusColors.scheduled}>
+            <Badge 
+              variant="outline" 
+              className={`${statusColors[activity.status.replace(/-/g, '_')] || statusColors.scheduled} contrast-badge`}
+              data-variant="status"
+              data-status={activity.status.replace(/-/g, '_')}
+            >
               {activity.status?.replace(/_/g, ' ')}
             </Badge>
           </div>
@@ -112,7 +117,11 @@ export default function ActivityCard({
             {activity.type}
           </Badge>
           
-          <Badge className={priorityColors[activity.priority] || priorityColors.normal}>
+          <Badge 
+            className={`${priorityColors[activity.priority] || priorityColors.normal} contrast-badge`}
+            data-variant="priority"
+            data-priority={activity.priority}
+          >
             {activity.priority}
           </Badge>
         </div>

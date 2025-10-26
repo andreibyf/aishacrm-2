@@ -2098,6 +2098,15 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           .theme-light [class*="bg-slate-700/"] { background-color: rgba(241,245,249,0.6) !important; }
           .theme-light .border-slate-800 { border-color: #e2e8f0 !important; }
           .theme-light .border-slate-700 { border-color: #e5e7eb !important; }
+          .theme-light .border-green-700 { border-color: #86efac !important; } /* green-300 */
+          .theme-light .border-blue-700 { border-color: #93c5fd !important; } /* blue-300 */
+          .theme-light .border-emerald-700 { border-color: #6ee7b7 !important; } /* emerald-300 */
+          
+          /* Stat card backgrounds - keep semi-transparent appearance but adjust for light theme */
+          .theme-light .bg-green-900\\/20 { background-color: #d1fae5 !important; } /* green-200 */
+          .theme-light .bg-blue-900\\/20 { background-color: #dbeafe !important; } /* blue-200 */
+          .theme-light .bg-emerald-900\\/20 { background-color: #d1fae5 !important; } /* emerald-200 */
+          .theme-light .bg-slate-900\\/20 { background-color: #e2e8f0 !important; } /* slate-200 */
 
           /* Ensure strong contrast for text across themes */
           .theme-light .text-slate-100,
@@ -2148,46 +2157,46 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             -moz-osx-font-smoothing: grayscale;
           }
           
-          /* AGGRESSIVE: Force dark text on ALL light-background badges */
-          .theme-light .bg-blue-900\\/20,
-          .theme-light .bg-blue-300,
-          .theme-light .bg-indigo-900\\/20,
-          .theme-light .bg-indigo-300,
-          .theme-light .bg-purple-900\\/20,
-          .theme-light .bg-purple-300,
-          .theme-light [class*="bg-blue"],
-          .theme-light [class*="bg-indigo"],
-          .theme-light [class*="bg-purple"] {
+          /* AGGRESSIVE: Force dark text on light-background badges ONLY (not stat cards) */
+          .theme-light .badge.bg-blue-900\\/20,
+          .theme-light .badge.bg-blue-300,
+          .theme-light .badge.bg-indigo-900\\/20,
+          .theme-light .badge.bg-indigo-300,
+          .theme-light .badge.bg-purple-900\\/20,
+          .theme-light .badge.bg-purple-300,
+          .theme-light .badge[class*="bg-blue"],
+          .theme-light .badge[class*="bg-indigo"],
+          .theme-light .badge[class*="bg-purple"] {
             color: #1e40af !important; /* blue-800 - dark enough to read on light backgrounds */
           }
           
-          .theme-light .bg-green-900\\/20,
-          .theme-light .bg-green-300,
-          .theme-light .bg-emerald-900\\/20,
-          .theme-light .bg-emerald-300,
-          .theme-light [class*="bg-green"],
-          .theme-light [class*="bg-emerald"] {
+          .theme-light .badge.bg-green-900\\/20,
+          .theme-light .badge.bg-green-300,
+          .theme-light .badge.bg-emerald-900\\/20,
+          .theme-light .badge.bg-emerald-300,
+          .theme-light .badge[class*="bg-green"],
+          .theme-light .badge[class*="bg-emerald"] {
             color: #065f46 !important; /* green-800 */
           }
           
-          .theme-light .bg-yellow-900\\/20,
-          .theme-light .bg-yellow-300,
-          .theme-light .bg-amber-900\\/20,
-          .theme-light .bg-amber-300,
-          .theme-light [class*="bg-yellow"],
-          .theme-light [class*="bg-amber"] {
+          .theme-light .badge.bg-yellow-900\\/20,
+          .theme-light .badge.bg-yellow-300,
+          .theme-light .badge.bg-amber-900\\/20,
+          .theme-light .badge.bg-amber-300,
+          .theme-light .badge[class*="bg-yellow"],
+          .theme-light .badge[class*="bg-amber"] {
             color: #92400e !important; /* amber-800 */
           }
           
-          .theme-light .bg-red-900\\/20,
-          .theme-light .bg-red-300,
-          .theme-light [class*="bg-red"] {
+          .theme-light .badge.bg-red-900\\/20,
+          .theme-light .badge.bg-red-300,
+          .theme-light .badge[class*="bg-red"] {
             color: #991b1b !important; /* red-800 */
           }
           
-          .theme-light .bg-slate-900\\/20,
-          .theme-light .bg-slate-300,
-          .theme-light [class*="bg-slate"] {
+          .theme-light .badge.bg-slate-900\\/20,
+          .theme-light .badge.bg-slate-300,
+          .theme-light .badge[class*="bg-slate"] {
             color: #1e293b !important; /* slate-800 */
           }
 
@@ -2301,6 +2310,45 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             background-color: #7dd3fc !important; /* sky-300 */
             color: #0284c7 !important;            /* sky-600 - bright sky */
             border-color: #38bdf8 !important;     /* sky-400 */
+          }
+
+          /* Account types - bright colors */
+          .theme-light .contrast-badge[data-variant="status"][data-status="prospect"] {
+            background-color: #bfdbfe !important; /* blue-300 */
+            color: #2563eb !important;            /* blue-600 */
+            border-color: #60a5fa !important;     /* blue-400 */
+          }
+          .theme-light .contrast-badge[data-variant="status"][data-status="customer"] {
+            background-color: #a7f3d0 !important; /* green-300 */
+            color: #059669 !important;            /* green-600 */
+            border-color: #34d399 !important;     /* green-400 */
+          }
+          .theme-light .contrast-badge[data-variant="status"][data-status="partner"] {
+            background-color: #e9d5ff !important; /* purple-300 */
+            color: #9333ea !important;            /* purple-600 */
+            border-color: #c084fc !important;     /* purple-400 */
+          }
+          .theme-light .contrast-badge[data-variant="status"][data-status="competitor"] {
+            background-color: #fca5a5 !important; /* red-300 */
+            color: #dc2626 !important;            /* red-600 */
+            border-color: #f87171 !important;     /* red-400 */
+          }
+          .theme-light .contrast-badge[data-variant="status"][data-status="vendor"] {
+            background-color: #fde68a !important; /* amber-300 */
+            color: #d97706 !important;            /* amber-600 */
+            border-color: #fbbf24 !important;     /* amber-400 */
+          }
+          .theme-light .contrast-badge[data-variant="status"][data-status="inactive"] {
+            background-color: #e2e8f0 !important; /* slate-300 */
+            color: #475569 !important;            /* slate-600 */
+            border-color: #cbd5e1 !important;     /* slate-400 */
+          }
+
+          /* Contact statuses - bright colors */
+          .theme-light .contrast-badge[data-variant="status"][data-status="active"] {
+            background-color: #a7f3d0 !important; /* green-300 */
+            color: #059669 !important;            /* green-600 */
+            border-color: #34d399 !important;     /* green-400 */
           }
 
           /* Activities Scheduled badge theme-specific colors */
@@ -2485,53 +2533,53 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           }
         }
       `}</style>
-      {/* Global Alert Background Lightening Styles */}
+      {/* Light Theme Alert Background Lightening Styles */}
       <style>{`
-        /* Lighten green alert backgrounds for better text readability */
-        .bg-green-900\\/20,
-        .bg-green-900\\/30 {
+        /* Lighten green alert backgrounds for better text readability - LIGHT THEME ONLY */
+        .theme-light .bg-green-900\\/20,
+        .theme-light .bg-green-900\\/30 {
           background-color: rgb(240 253 244) !important; /* green-50 */
         }
         
-        /* Lighten blue alert backgrounds for better text readability */
-        .bg-blue-900\\/20,
-        .bg-blue-900\\/30 {
+        /* Lighten blue alert backgrounds for better text readability - LIGHT THEME ONLY */
+        .theme-light .bg-blue-900\\/20,
+        .theme-light .bg-blue-900\\/30 {
           background-color: rgb(239 246 255) !important; /* blue-50 */
         }
         
-        /* Lighten yellow/amber alert backgrounds */
-        .bg-yellow-900\\/20,
-        .bg-yellow-900\\/30,
-        .bg-amber-900\\/20,
-        .bg-amber-900\\/30 {
+        /* Lighten yellow/amber alert backgrounds - LIGHT THEME ONLY */
+        .theme-light .bg-yellow-900\\/20,
+        .theme-light .bg-yellow-900\\/30,
+        .theme-light .bg-amber-900\\/20,
+        .theme-light .bg-amber-900\\/30 {
           background-color: rgb(254 252 232) !important; /* yellow-50 */
         }
         
-        /* Lighten red alert backgrounds */
-        .bg-red-900\\/20,
-        .bg-red-900\\/30 {
+        /* Lighten red alert backgrounds - LIGHT THEME ONLY */
+        .theme-light .bg-red-900\\/20,
+        .theme-light .bg-red-900\\/30 {
           background-color: rgb(254 242 242) !important; /* red-50 */
         }
         
-        /* Ensure text in these alerts is dark enough */
-        [class*="bg-green-900"] .text-green-300,
-        [class*="bg-blue-900"] .text-blue-300,
-        [class*="bg-yellow-900"] .text-yellow-300,
-        [class*="bg-amber-900"] .text-amber-300,
-        [class*="bg-red-900"] .text-red-300 {
+        /* Ensure text in these alerts is dark enough - LIGHT THEME ONLY */
+        .theme-light [class*="bg-green-900"] .text-green-300,
+        .theme-light [class*="bg-blue-900"] .text-blue-300,
+        .theme-light [class*="bg-yellow-900"] .text-yellow-300,
+        .theme-light [class*="bg-amber-900"] .text-amber-300,
+        .theme-light [class*="bg-red-900"] .text-red-300 {
           color: rgb(21 128 61) !important; /* green-700 for green alerts */
         }
         
-        [class*="bg-blue-900"] .text-blue-300 {
+        .theme-light [class*="bg-blue-900"] .text-blue-300 {
           color: rgb(29 78 216) !important; /* blue-700 */
         }
         
-        [class*="bg-yellow-900"] .text-yellow-300,
-        [class*="bg-amber-900"] .text-amber-300 {
+        .theme-light [class*="bg-yellow-900"] .text-yellow-300,
+        .theme-light [class*="bg-amber-900"] .text-amber-300 {
           color: rgb(161 98 7) !important; /* yellow-700 */
         }
         
-        [class*="bg-red-900"] .text-red-300 {
+        .theme-light [class*="bg-red-900"] .text-red-300 {
           color: rgb(185 28 28) !important; /* red-700 */
         }
       `}</style>

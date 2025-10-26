@@ -128,23 +128,23 @@ export default function OpportunityDetailPanel({
     }
   };
 
-  // Helper for stage badge colors
+  // Helper for stage badge colors - matching OpportunityCard semi-transparent style
   const getStageColor = (stage) => {
     switch (stage) {
       case "prospecting":
-        return "bg-blue-600";
+        return "bg-blue-900/20 text-blue-300 border-blue-700";
       case "qualification":
-        return "bg-indigo-600";
+        return "bg-indigo-900/20 text-indigo-300 border-indigo-700";
       case "proposal":
-        return "bg-purple-600";
+        return "bg-purple-900/20 text-purple-300 border-purple-700";
       case "negotiation":
-        return "bg-yellow-600";
+        return "bg-yellow-900/20 text-yellow-300 border-yellow-700";
       case "closed_won":
-        return "bg-green-600";
+        return "bg-emerald-900/20 text-emerald-300 border-emerald-700";
       case "closed_lost":
-        return "bg-red-600";
+        return "bg-red-900/20 text-red-300 border-red-700";
       default:
-        return "bg-gray-600";
+        return "bg-slate-900/20 text-slate-300 border-slate-700";
     }
   };
 
@@ -212,13 +212,14 @@ export default function OpportunityDetailPanel({
 
   const getActivityStatusColor = (status) => {
     const colors = {
-      scheduled: "bg-blue-100 text-blue-800 border-blue-200",
-      overdue: "bg-red-100 text-red-800 border-red-200",
-      completed: "bg-green-100 text-green-800 border-green-200",
-      cancelled: "bg-gray-100 text-gray-800 border-gray-200",
-      "in-progress": "bg-yellow-100 text-yellow-800 border-yellow-200",
+      scheduled: "bg-blue-900/20 text-blue-300 border-blue-700",
+      overdue: "bg-red-900/20 text-red-300 border-red-700",
+      completed: "bg-emerald-900/20 text-emerald-300 border-emerald-700",
+      cancelled: "bg-slate-900/20 text-slate-300 border-slate-700",
+      in_progress: "bg-yellow-900/20 text-yellow-300 border-yellow-700",
+      "in-progress": "bg-yellow-900/20 text-yellow-300 border-yellow-700",
     };
-    return colors[status] || "bg-gray-100 text-gray-800 border-gray-200";
+    return colors[status] || "bg-slate-900/20 text-slate-300 border-slate-700";
   };
 
   const getActivityTypeIcon = (type) => {
@@ -245,10 +246,14 @@ export default function OpportunityDetailPanel({
             <h2 className="text-2xl font-bold text-slate-100 mb-2">{localOpportunity.name}</h2>
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1">
-                <Badge className={`${getStageColor(localOpportunity.stage)} !text-white`}>
+                <Badge 
+                  className={`${getStageColor(localOpportunity.stage)} contrast-badge border font-semibold`}
+                  data-variant="status"
+                  data-status={localOpportunity.stage}
+                >
                   {localOpportunity.stage?.replace(/_/g, " ")}
                 </Badge>
-                <StatusHelper statusKey={`opp_${localOpportunity.stage}`} />
+                <StatusHelper statusKey={`opportunity_${localOpportunity.stage}`} />
               </div>
               {localOpportunity.type && (
                 <Badge variant="outline" className="border-slate-600 text-slate-300">
@@ -492,7 +497,9 @@ export default function OpportunityDetailPanel({
                               <Badge
                                 className={`${getActivityStatusColor(
                                   activity.status
-                                )} text-xs flex-shrink-0`}
+                                )} contrast-badge text-xs flex-shrink-0 border`}
+                                data-variant="status"
+                                data-status={activity.status}
                               >
                                 {activity.status}
                               </Badge>

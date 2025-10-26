@@ -125,7 +125,11 @@ export default function AccountCard({ account, assignedUserName, onEdit, onDelet
         )}
 
         <div className="flex justify-between items-center pt-2 border-t border-slate-700">
-          <Badge className={`${typeColors[account.type]} border capitalize`}>
+          <Badge 
+            className={`${typeColors[account.type]} contrast-badge border capitalize`}
+            data-variant="status"
+            data-status={account.type}
+          >
             {account.type}
           </Badge>
           <span className="text-xs text-slate-500">

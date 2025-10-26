@@ -1077,7 +1077,12 @@ export default function AccountsPage() {
                           {employeesMap[account.assigned_to] || usersMap[account.assigned_to] || <span className="text-slate-500">Unassigned</span>}
                         </td>
                         <td className="cursor-pointer p-3" onClick={() => handleViewDetails(account)}>
-                          <Badge className={`${typeBadgeColors[account.type]} border capitalize text-xs font-semibold whitespace-nowrap`}>
+                          <Badge 
+                            variant="outline"
+                            className={`${typeBadgeColors[account.type]} contrast-badge border capitalize text-xs font-semibold whitespace-nowrap`}
+                            data-variant="status"
+                            data-status={account.type}
+                          >
                             {account.type?.replace(/_/g, ' ')}
                           </Badge>
                         </td>

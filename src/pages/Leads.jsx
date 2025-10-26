@@ -1336,7 +1336,11 @@ export default function LeadsPage() {
                             {employeesMap[lead.assigned_to] || usersMap[lead.assigned_to] || lead.assigned_to_name || <span className="text-slate-500">Unassigned</span>}
                           </td>
                           <td className="cursor-pointer p-3" onClick={() => handleViewDetails(lead)}>
-                            <Badge className={`${statusColors[lead.status]} capitalize text-xs font-semibold border`}>
+                            <Badge 
+                              className={`${statusColors[lead.status]} contrast-badge capitalize text-xs font-semibold border`}
+                              data-variant="status"
+                              data-status={lead.status}
+                            >
                               {lead.status}
                             </Badge>
                           </td>

@@ -10,8 +10,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 // Matching the stat card colors - semi-transparent backgrounds
 const statusColors = {
   active: 'bg-green-900/20 text-green-300 border-green-700',
-  prospect: 'bg-cyan-900/20 text-cyan-300 border-cyan-700',
-  customer: 'bg-purple-900/20 text-purple-300 border-purple-700',
+  prospect: 'bg-blue-900/20 text-blue-300 border-blue-700',
+  customer: 'bg-emerald-900/20 text-emerald-300 border-emerald-700',
   inactive: 'bg-slate-900/20 text-slate-300 border-slate-700'
 };
 
@@ -120,7 +120,12 @@ export default function ContactCard({ contact, accountId, accountName, assignedU
 
           <div className="flex justify-between items-center pt-2 border-t border-slate-700">
             <div className="flex items-center gap-1">
-              <Badge variant="outline" className={`${statusColors[contact.status]} border capitalize`}>
+              <Badge 
+                variant="outline" 
+                className={`${statusColors[contact.status]} contrast-badge border capitalize`}
+                data-variant="status"
+                data-status={contact.status}
+              >
                 {contact.status}
               </Badge>
               <StatusHelper statusKey={`contact_${contact.status}`} />

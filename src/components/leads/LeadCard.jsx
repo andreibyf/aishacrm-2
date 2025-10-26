@@ -150,7 +150,11 @@ export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClic
 
           <div className="flex justify-between items-center pt-2 border-t border-slate-700">
             <div className="flex items-center gap-1">
-              <Badge className={`${statusColors[lead.status]} capitalize text-xs font-semibold border`}>
+              <Badge 
+                className={`${statusColors[lead.status]} contrast-badge capitalize text-xs font-semibold border`}
+                data-variant="status"
+                data-status={lead.status}
+              >
                 {lead.status}
               </Badge>
               <StatusHelper statusKey={`lead_${lead.status}`} />

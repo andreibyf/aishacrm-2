@@ -1,11 +1,10 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Users,
-  UserCheck,
   TrendingUp,
   Target,
   Calendar,
@@ -54,7 +53,7 @@ export default function WorkflowGuide() {
 
         {/* Employee Workflow */}
         <TabsContent value="employee" className="space-y-6 mt-6">
-          <Card className="bg-slate-800 border-slate-700">
+          <Card className="bg-slate-800 border-slate-700 transition-all hover:border-blue-500 hover:shadow-xl hover:shadow-blue-500/10">
             <CardHeader>
               <CardTitle className="text-slate-100 flex items-center gap-2">
                 <Star className="w-5 h-5 text-blue-400" />
@@ -181,30 +180,25 @@ export default function WorkflowGuide() {
           </Card>
 
           {/* Employee Tools Guide */}
-          <Card className="bg-slate-800 border-slate-700">
+          <Card className="bg-slate-800 border-slate-700 transition-all hover:border-purple-500 hover:shadow-xl hover:shadow-purple-500/10">
             <CardHeader>
               <CardTitle className="text-slate-100">Employee Tools & Features</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <ToolCard
-                title="AI Calling"
-                description="Automate initial outreach and qualification calls. Review transcripts and outcomes."
-                icon={<Phone className="w-5 h-5 text-green-400" />}
+                title="AI Lead Scoring"
+                description="Focus on high-scoring leads (70+) first. Low scores may need nurturing."
+                icon={<Target className="w-5 h-5 text-blue-400" />}
               />
               <ToolCard
                 title="AI Email Composer"
-                description="Generate personalized follow-up emails based on lead data and conversation history."
-                icon={<Mail className="w-5 h-5 text-blue-400" />}
+                description="Generate personalized emails instantly. Edit for your voice, send via your email."
+                icon={<Mail className="w-5 h-5 text-purple-400" />}
               />
               <ToolCard
-                title="Lead Scoring"
-                description="Focus on high-scoring leads (70+) first. Low scores may need nurturing."
-                icon={<Star className="w-5 h-5 text-yellow-400" />}
-              />
-              <ToolCard
-                title="Activities Calendar"
-                description="Visual view of all your scheduled tasks. Never miss a follow-up."
-                icon={<Calendar className="w-5 h-5 text-purple-400" />}
+                title="AI Calling & Transcription"
+                description="Make calls through CRM. Auto-transcription captures conversation details."
+                icon={<Phone className="w-5 h-5 text-green-400" />}
               />
             </CardContent>
           </Card>
@@ -212,7 +206,7 @@ export default function WorkflowGuide() {
 
         {/* Manager Workflow */}
         <TabsContent value="manager" className="space-y-6 mt-6">
-          <Card className="bg-slate-800 border-slate-700">
+          <Card className="bg-slate-800 border-slate-700 transition-all hover:border-purple-500 hover:shadow-xl hover:shadow-purple-500/10">
             <CardHeader>
               <CardTitle className="text-slate-100 flex items-center gap-2">
                 <Award className="w-5 h-5 text-purple-400" />
@@ -317,7 +311,7 @@ export default function WorkflowGuide() {
           </Card>
 
           {/* Manager Tools */}
-          <Card className="bg-slate-800 border-slate-700">
+          <Card className="bg-slate-800 border-slate-700 transition-all hover:border-orange-500 hover:shadow-xl hover:shadow-orange-500/10">
             <CardHeader>
               <CardTitle className="text-slate-100">Manager-Specific Tools</CardTitle>
             </CardHeader>
@@ -452,7 +446,7 @@ export default function WorkflowGuide() {
 // Helper Components
 function WorkflowStep({ number, title, description, icon, bestPractice }) {
   return (
-    <div className="flex gap-4 p-4 bg-slate-700/30 rounded-lg border border-slate-600/50">
+    <div className="flex gap-4 p-4 bg-slate-700/30 rounded-lg border border-slate-600/50 transition-all hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/20">
       <div className="flex-shrink-0">
         <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm">
           {number}
@@ -477,7 +471,7 @@ function WorkflowStep({ number, title, description, icon, bestPractice }) {
 
 function ToolCard({ title, description, icon }) {
   return (
-    <div className="flex gap-3 p-3 bg-slate-700/30 rounded-lg border border-slate-600/50">
+    <div className="flex gap-3 p-3 bg-slate-700/30 rounded-lg border border-slate-600/50 transition-all hover:border-purple-500 hover:shadow-lg hover:shadow-purple-500/20">
       <div className="flex-shrink-0 mt-1">{icon}</div>
       <div>
         <h4 className="font-semibold text-slate-200 mb-1">{title}</h4>
@@ -489,7 +483,7 @@ function ToolCard({ title, description, icon }) {
 
 function CaseStudy({ title, industry, challenge, solution, results, workflow }) {
   return (
-    <Card className="bg-slate-800 border-slate-700">
+    <Card className="bg-slate-800 border-slate-700 transition-all hover:border-green-500 hover:shadow-xl hover:shadow-green-500/10">
       <CardHeader>
         <div className="flex items-start justify-between">
           <div>
