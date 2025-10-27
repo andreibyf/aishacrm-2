@@ -63,7 +63,11 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   
   // Get tenant_id from mock user for local dev
   const mockUser = isLocalDevMode() ? createMockUser() : null;
-  const tenantId = mockUser?.tenant_id || 'local-tenant-001';
+  const defaultTenantId = mockUser?.tenant_id || 'local-tenant-001';
+  
+  // Use provided tenant_id from data, or fall back to default
+  // This allows explicit tenant_id values (including 'none') to be preserved
+  const tenantId = data?.tenant_id !== undefined ? data.tenant_id : defaultTenantId;
   
   const options = {
     method: method,
@@ -77,7 +81,9 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       // GET by ID - append ID to URL
       url += `/${id}`;
       if (data && method !== 'DELETE') {
-        options.body = JSON.stringify({ ...data, tenant_id: tenantId });
+        // Preserve explicit tenant_id if provided
+        const bodyData = data.tenant_id !== undefined ? data : { ...data, tenant_id: tenantId };
+        options.body = JSON.stringify(bodyData);
       }
     } else {
       // GET list/filter - convert to query params
@@ -98,12 +104,14 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   } else if (id) {
     url += `/${id}`;
     if (data && method !== 'DELETE') {
-      // Include tenant_id in body
-      options.body = JSON.stringify({ ...data, tenant_id: tenantId });
+      // Preserve explicit tenant_id if provided, otherwise use default
+      const bodyData = data.tenant_id !== undefined ? data : { ...data, tenant_id: tenantId };
+      options.body = JSON.stringify(bodyData);
     }
   } else if (data && method !== 'GET') {
-    // Include tenant_id in body
-    options.body = JSON.stringify({ ...data, tenant_id: tenantId });
+    // Preserve explicit tenant_id if provided, otherwise use default
+    const bodyData = data.tenant_id !== undefined ? data : { ...data, tenant_id: tenantId };
+    options.body = JSON.stringify(bodyData);
   }
 
   let response;
@@ -823,12 +831,6 @@ export const User = {
    * Uses Supabase Auth with local dev fallback
    */
   me: async () => {
-    // Local dev mode: return mock user
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Using mock user');
-      return createMockUser();
-    }
-
     // Production: Use Supabase Auth
     if (isSupabaseConfigured()) {
       try {
@@ -907,12 +909,6 @@ export const User = {
    * @param {string} password - User password
    */
   signIn: async (email, password) => {
-    // Local dev mode: return mock user
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Mock sign in for:', email);
-      return createMockUser();
-    }
-
     // Production: Use Supabase Auth
     if (isSupabaseConfigured()) {
       try {
@@ -952,12 +948,6 @@ export const User = {
    * Sign out current user
    */
   signOut: async () => {
-    // Local dev mode: just clear state
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Mock sign out');
-      return true;
-    }
-
     // Production: Use Supabase Auth
     if (isSupabaseConfigured()) {
       try {
@@ -988,12 +978,6 @@ export const User = {
    * @param {object} metadata - Additional user metadata (tenant_id, name, etc.)
    */
   signUp: async (email, password, metadata = {}) => {
-    // Local dev mode: return mock user
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Mock sign up for:', email);
-      return createMockUser();
-    }
-
     // Production: Use Supabase Auth
     if (isSupabaseConfigured()) {
       try {
@@ -1036,12 +1020,6 @@ export const User = {
    * @param {object} updates - User metadata to update
    */
   updateMyUserData: async (updates) => {
-    // Local dev mode: return mock user
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Mock updating user data', updates);
-      return createMockUser();
-    }
-
     // Production: Use Supabase Auth
     if (isSupabaseConfigured()) {
       try {
@@ -1082,13 +1060,8 @@ export const User = {
    * List all users (admin function - uses backend API)
    */
   list: async (filters) => {
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Mock listing users');
-      return [createMockUser()];
-    }
-    
-    // Use backend API for listing users (not Supabase Auth)
-    // This calls your Express backend's /api/users endpoint
+    // ALWAYS use backend API for listing users (don't mock this - we need real data)
+    console.log('[User.list] Fetching users via backend API');
     return callBackendAPI('user', 'GET', filters);
   },
 

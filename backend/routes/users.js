@@ -90,14 +90,17 @@ export default function createUserRoutes(pgPool) {
       const { id } = req.params;
       const { tenant_id } = req.query;
 
-      if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      // tenant_id is optional - allow querying users without tenant (tenant_id='none' or NULL)
+      let query, params;
+      if (tenant_id !== undefined && tenant_id !== 'null') {
+        query = 'SELECT id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at FROM employees WHERE id = $1 AND tenant_id = $2';
+        params = [id, tenant_id];
+      } else {
+        query = 'SELECT id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at FROM employees WHERE id = $1';
+        params = [id];
       }
 
-      const result = await pgPool.query(
-        'SELECT id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at FROM employees WHERE id = $1 AND tenant_id = $2',
-        [id, tenant_id]
-      );
+      const result = await pgPool.query(query, params);
 
       if (result.rows.length === 0) {
         return res.status(404).json({ status: 'error', message: 'User not found' });

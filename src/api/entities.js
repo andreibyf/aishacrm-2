@@ -63,7 +63,11 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   
   // Get tenant_id from mock user for local dev
   const mockUser = isLocalDevMode() ? createMockUser() : null;
-  const tenantId = mockUser?.tenant_id || 'local-tenant-001';
+  const defaultTenantId = mockUser?.tenant_id || 'local-tenant-001';
+  
+  // Use provided tenant_id from data, or fall back to default
+  // This allows explicit tenant_id values (including 'none') to be preserved
+  const tenantId = data?.tenant_id !== undefined ? data.tenant_id : defaultTenantId;
   
   const options = {
     method: method,
@@ -77,13 +81,17 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       // GET by ID - append ID to URL
       url += `/${id}`;
       if (data && method !== 'DELETE') {
-        options.body = JSON.stringify({ ...data, tenant_id: tenantId });
+        // Preserve explicit tenant_id if provided
+        const bodyData = data.tenant_id !== undefined ? data : { ...data, tenant_id: tenantId };
+        options.body = JSON.stringify(bodyData);
       }
     } else {
       // GET list/filter - convert to query params
       const params = new URLSearchParams();
-      // Always include tenant_id for list operations
-      params.append('tenant_id', tenantId);
+      // Only include tenant_id if it's not explicitly null (null means "get all tenants")
+      if (tenantId !== null) {
+        params.append('tenant_id', tenantId);
+      }
       
       // Add filter parameters if provided
       if (data && Object.keys(data).length > 0) {
@@ -93,17 +101,20 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
           }
         });
       }
-      url += `?${params.toString()}`;
+      url += params.toString() ? `?${params.toString()}` : '';
     }
-  } else if (id) {
+  } else if (id && (method === 'PUT' || method === 'DELETE' || method === 'PATCH')) {
+    // Only append ID for update/delete operations, NOT for POST
     url += `/${id}`;
     if (data && method !== 'DELETE') {
-      // Include tenant_id in body
-      options.body = JSON.stringify({ ...data, tenant_id: tenantId });
+      // Preserve explicit tenant_id if provided, otherwise use default
+      const bodyData = data.tenant_id !== undefined ? data : { ...data, tenant_id: tenantId };
+      options.body = JSON.stringify(bodyData);
     }
   } else if (data && method !== 'GET') {
-    // Include tenant_id in body
-    options.body = JSON.stringify({ ...data, tenant_id: tenantId });
+    // POST and other methods - include data in body, no ID in URL
+    const bodyData = data.tenant_id !== undefined ? data : { ...data, tenant_id: tenantId };
+    options.body = JSON.stringify(bodyData);
   }
 
   let response;

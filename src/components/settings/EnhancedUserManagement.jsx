@@ -153,7 +153,7 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
             console.log('[EnhancedUserManagement] Navigation permissions being saved:', navPerms);
 
             const updateData = {
-                tenant_id: formData.tenant_id === 'no-client' ? null : formData.tenant_id,
+                tenant_id: formData.tenant_id,
                 employee_role: formData.employee_role || 'employee', // Always set employee_role
                 is_active: formData.is_active,
                 tags: formData.tags,
@@ -226,8 +226,7 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
                                 <SelectValue placeholder="Select client" />
                             </SelectTrigger>
                             <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                                <SelectItem value="none">No Client</SelectItem>
-                                {tenants.filter(tenant => tenant.tenant_id !== 'no-client').map(tenant => (
+                                {tenants.map(tenant => (
                                     <SelectItem key={tenant.id} value={tenant.tenant_id}>
                                         {tenant.name}
                                     </SelectItem>
@@ -476,7 +475,7 @@ export default function EnhancedUserManagement() {
         setLoading(true);
         try {
             const [usersData, tenantsData, userData] = await Promise.all([
-                User.list(),
+                User.list({ tenant_id: null }), // Pass null to get ALL users across all tenants
                 Tenant.list(),
                 User.me()
             ]);
@@ -508,10 +507,6 @@ export default function EnhancedUserManagement() {
             }
 
             const cleanedData = { ...data };
-            // Convert 'none' to actual NULL for database
-            if (cleanedData.tenant_id === 'none') {
-                cleanedData.tenant_id = null;
-            }
             if (cleanedData.full_name) {
                 cleanedData.display_name = cleanedData.full_name;
                 delete cleanedData.full_name;
@@ -795,7 +790,7 @@ export default function EnhancedUserManagement() {
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    {user.tenant_id && user.tenant_id !== 'none' ? (
+                                                    {user.tenant_id ? (
                                                         <Badge variant="outline" className="bg-slate-700 border-slate-600 text-slate-300">
                                                             {tenant?.name || 'Unknown Client'}
                                                         </Badge>
@@ -804,7 +799,7 @@ export default function EnhancedUserManagement() {
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {user.tenant_id && user.tenant_id !== 'none' ? (
+                                                    {user.tenant_id ? (
                                                         <div className="flex items-center gap-1">
                                                             <code className="text-xs text-cyan-400 bg-slate-900/50 px-2 py-1 rounded font-mono">
                                                                 {user.tenant_id.substring(0, 8)}...

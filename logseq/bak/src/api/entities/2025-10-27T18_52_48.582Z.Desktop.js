@@ -63,7 +63,11 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   
   // Get tenant_id from mock user for local dev
   const mockUser = isLocalDevMode() ? createMockUser() : null;
-  const tenantId = mockUser?.tenant_id || 'local-tenant-001';
+  const defaultTenantId = mockUser?.tenant_id || 'local-tenant-001';
+  
+  // Use provided tenant_id from data, or fall back to default
+  // This allows explicit tenant_id values (including 'none') to be preserved
+  const tenantId = data?.tenant_id !== undefined ? data.tenant_id : defaultTenantId;
   
   const options = {
     method: method,
@@ -823,12 +827,6 @@ export const User = {
    * Uses Supabase Auth with local dev fallback
    */
   me: async () => {
-    // Local dev mode: return mock user
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Using mock user');
-      return createMockUser();
-    }
-
     // Production: Use Supabase Auth
     if (isSupabaseConfigured()) {
       try {
@@ -907,12 +905,6 @@ export const User = {
    * @param {string} password - User password
    */
   signIn: async (email, password) => {
-    // Local dev mode: return mock user
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Mock sign in for:', email);
-      return createMockUser();
-    }
-
     // Production: Use Supabase Auth
     if (isSupabaseConfigured()) {
       try {
@@ -952,12 +944,6 @@ export const User = {
    * Sign out current user
    */
   signOut: async () => {
-    // Local dev mode: just clear state
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Mock sign out');
-      return true;
-    }
-
     // Production: Use Supabase Auth
     if (isSupabaseConfigured()) {
       try {
@@ -988,12 +974,6 @@ export const User = {
    * @param {object} metadata - Additional user metadata (tenant_id, name, etc.)
    */
   signUp: async (email, password, metadata = {}) => {
-    // Local dev mode: return mock user
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Mock sign up for:', email);
-      return createMockUser();
-    }
-
     // Production: Use Supabase Auth
     if (isSupabaseConfigured()) {
       try {
@@ -1036,12 +1016,6 @@ export const User = {
    * @param {object} updates - User metadata to update
    */
   updateMyUserData: async (updates) => {
-    // Local dev mode: return mock user
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Mock updating user data', updates);
-      return createMockUser();
-    }
-
     // Production: Use Supabase Auth
     if (isSupabaseConfigured()) {
       try {

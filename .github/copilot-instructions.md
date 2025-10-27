@@ -20,6 +20,7 @@
 - **Database:** Use Supabase; run migrations from `backend/migrations/`; seed with `npm run seed`.
 - **Testing:** Custom tests in `src/pages/UnitTests.jsx`; backend tests via `npm test`.
 - **Backend Issues:** If server exits immediately, see `backend/TROUBLESHOOTING_NODE_ESM.md` for ESM-specific debugging.
+- **Directory Awareness:** ALWAYS run `Get-Location` (PowerShell) or `pwd` (bash) before executing terminal commands to verify you're in the correct directory. Never assume your current location.
 
 ## Project-Specific Conventions
 - Components: Function-based React, domain-grouped; use `ConfirmDialog` instead of `window.confirm()`.

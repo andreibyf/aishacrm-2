@@ -13,8 +13,13 @@ export default function createUserRoutes(pgPool) {
   const expandUserMetadata = (user) => {
     if (!user) return user;
     const { metadata = {}, ...rest } = user;
+    
+    // Convert NULL tenant_id to 'none' for "No Client"
+    const tenant_id = rest.tenant_id === null ? 'none' : rest.tenant_id;
+    
     return {
       ...rest,
+      tenant_id, // Use 'none' instead of null
       ...metadata, // Spread ALL metadata fields to top level
       metadata, // Keep original metadata for backwards compatibility
     };
@@ -148,11 +153,17 @@ export default function createUserRoutes(pgPool) {
   // POST /api/users - Create new user (global admin or tenant employee)
   router.post('/', async (req, res) => {
     try {
-      const { email, first_name, last_name, role, tenant_id, status, metadata } = req.body;
+      const { email, first_name, last_name, role, tenant_id, status, metadata, ...otherFields } = req.body;
 
       if (!email || !first_name) {
         return res.status(400).json({ status: 'error', message: 'email and first_name are required' });
       }
+
+      // Merge metadata with unknown fields
+      const combinedMetadata = {
+        ...(metadata || {}),
+        ...otherFields
+      };
 
       const isGlobalUser = (role === 'superadmin' || role === 'admin') && !tenant_id;
 
@@ -172,13 +183,15 @@ export default function createUserRoutes(pgPool) {
           `INSERT INTO users (email, first_name, last_name, role, metadata, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
            RETURNING id, email, first_name, last_name, role, metadata, created_at, updated_at`,
-          [email, first_name, last_name, role || 'admin', JSON.stringify(metadata || {})]
+          [email, first_name, last_name, role || 'admin', combinedMetadata]
         );
+
+        const user = expandUserMetadata(result.rows[0]);
 
         res.json({
           status: 'success',
           message: 'Global user created successfully',
-          data: { user: result.rows[0] },
+          data: { user },
         });
       } else {
         // Create employees (tenant-assigned user)
@@ -200,13 +213,15 @@ export default function createUserRoutes(pgPool) {
           `INSERT INTO employees (tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
            RETURNING id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at`,
-          [tenant_id, email, first_name, last_name, role || 'employee', status || 'active', JSON.stringify(metadata || {})]
+          [tenant_id, email, first_name, last_name, role || 'employee', status || 'active', combinedMetadata]
         );
+
+        const user = expandUserMetadata(result.rows[0]);
 
         res.json({
           status: 'success',
           message: 'Employee created successfully',
-          data: { user: result.rows[0] },
+          data: { user },
         });
       }
     } catch (error) {
@@ -301,14 +316,10 @@ export default function createUserRoutes(pgPool) {
         ...otherFields  // Capture any unknown fields
       } = req.body;
 
-      if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
-      }
-
-      // First, get the current user to merge metadata
+      // First, get the current user to merge metadata (don't require tenant_id in body)
       const currentUser = await pgPool.query(
-        'SELECT metadata FROM employees WHERE id = $1 AND tenant_id = $2',
-        [id, tenant_id]
+        'SELECT metadata, tenant_id FROM employees WHERE id = $1',
+        [id]
       );
 
       if (currentUser.rows.length === 0) {
@@ -329,17 +340,21 @@ export default function createUserRoutes(pgPool) {
         ...otherFields, // Include any unknown fields in metadata
       };
 
+      // Allow NULL tenant_id for users without a client
+      const finalTenantId = tenant_id !== undefined ? tenant_id : currentUser.rows[0].tenant_id;
+
       const result = await pgPool.query(
         `UPDATE employees 
          SET first_name = COALESCE($1, first_name),
              last_name = COALESCE($2, last_name),
              role = COALESCE($3, role),
              status = COALESCE($4, status),
-             metadata = $5,
+             tenant_id = $5,
+             metadata = $6,
              updated_at = NOW()
-         WHERE id = $6 AND tenant_id = $7
+         WHERE id = $7
          RETURNING id, tenant_id, email, first_name, last_name, role, status, metadata, updated_at`,
-        [first_name, last_name, role, status, updatedMetadata, id, tenant_id]
+        [first_name, last_name, role, status, finalTenantId, updatedMetadata, id]
       );
 
       if (result.rows.length === 0) {
@@ -366,14 +381,20 @@ export default function createUserRoutes(pgPool) {
       const { id } = req.params;
       const { tenant_id } = req.query;
 
-      if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      // Allow deletion with or without tenant_id
+      // If tenant_id is provided, use it; otherwise allow NULL tenant_id users to be deleted
+      let query, params;
+      
+      if (tenant_id !== undefined && tenant_id !== 'null') {
+        query = 'DELETE FROM employees WHERE id = $1 AND tenant_id = $2 RETURNING id, email';
+        params = [id, tenant_id];
+      } else {
+        // Delete by ID only (works for NULL tenant_id users)
+        query = 'DELETE FROM employees WHERE id = $1 RETURNING id, email';
+        params = [id];
       }
 
-      const result = await pgPool.query(
-        'DELETE FROM employees WHERE id = $1 AND tenant_id = $2 RETURNING id, email',
-        [id, tenant_id]
-      );
+      const result = await pgPool.query(query, params);
 
       if (result.rows.length === 0) {
         return res.status(404).json({ status: 'error', message: 'User not found' });
