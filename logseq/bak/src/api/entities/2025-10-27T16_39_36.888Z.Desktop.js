@@ -823,12 +823,6 @@ export const User = {
    * Uses Supabase Auth with local dev fallback
    */
   me: async () => {
-    // Local dev mode: return mock user
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Using mock user');
-      return createMockUser();
-    }
-
     // Production: Use Supabase Auth
     if (isSupabaseConfigured()) {
       try {
@@ -907,12 +901,6 @@ export const User = {
    * @param {string} password - User password
    */
   signIn: async (email, password) => {
-    // Local dev mode: return mock user
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Mock sign in for:', email);
-      return createMockUser();
-    }
-
     // Production: Use Supabase Auth
     if (isSupabaseConfigured()) {
       try {
@@ -952,12 +940,6 @@ export const User = {
    * Sign out current user
    */
   signOut: async () => {
-    // Local dev mode: just clear state
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Mock sign out');
-      return true;
-    }
-
     // Production: Use Supabase Auth
     if (isSupabaseConfigured()) {
       try {
@@ -988,12 +970,6 @@ export const User = {
    * @param {object} metadata - Additional user metadata (tenant_id, name, etc.)
    */
   signUp: async (email, password, metadata = {}) => {
-    // Local dev mode: return mock user
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Mock sign up for:', email);
-      return createMockUser();
-    }
-
     // Production: Use Supabase Auth
     if (isSupabaseConfigured()) {
       try {
@@ -1082,13 +1058,8 @@ export const User = {
    * List all users (admin function - uses backend API)
    */
   list: async (filters) => {
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Mock listing users');
-      return [createMockUser()];
-    }
-    
-    // Use backend API for listing users (not Supabase Auth)
-    // This calls your Express backend's /api/users endpoint
+    // ALWAYS use backend API for listing users (don't mock this - we need real data)
+    console.log('[User.list] Fetching users via backend API');
     return callBackendAPI('user', 'GET', filters);
   },
 
@@ -1096,12 +1067,8 @@ export const User = {
    * Update any user by ID (admin function - uses backend API)
    */
   update: async (userId, updates) => {
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Mock updating user', userId, updates);
-      return createMockUser();
-    }
-    
-    // Use backend API for admin user updates
+    // ALWAYS use backend API for user updates (don't mock this - we need real persistence)
+    console.log('[User.update] Updating user via backend API:', userId, updates);
     return callBackendAPI('user', 'PUT', updates, userId);
   },
 

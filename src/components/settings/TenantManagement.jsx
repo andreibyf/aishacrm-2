@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Building2, Plus, Edit, Save, X, Loader2, AlertCircle, Copy } from 'lucide-react';
+import { Building2, Plus, Edit, Save, X, Loader2, AlertCircle, Copy, Trash2 } from 'lucide-react';
 import { toast } from "sonner";
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
@@ -424,6 +424,8 @@ export default function TenantManagement() {
   const [loading, setLoading] = useState(true);
   const [editingTenant, setEditingTenant] = useState(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [deletingTenant, setDeletingTenant] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const loadTenants = async () => {
     try {
@@ -451,7 +453,12 @@ export default function TenantManagement() {
         await Tenant.update(editingTenant.id, formData);
         toast.success('Tenant updated successfully');
       } else {
-        await Tenant.create(formData);
+        // Auto-generate tenant_id from name if not provided
+        const tenantData = {
+          ...formData,
+          tenant_id: formData.tenant_id || formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+        };
+        await Tenant.create(tenantData);
         toast.success('Tenant created successfully');
       }
       setEditingTenant(null);
@@ -466,6 +473,29 @@ export default function TenantManagement() {
   const handleCancel = () => {
     setEditingTenant(null);
     setShowCreateDialog(false);
+  };
+
+  const handleDeleteClick = (tenant) => {
+    setDeletingTenant(tenant);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      await Tenant.delete(deletingTenant.id);
+      toast.success(`Tenant "${deletingTenant.name}" deleted successfully`);
+      setShowDeleteConfirm(false);
+      setDeletingTenant(null);
+      loadTenants();
+    } catch (error) {
+      console.error('Failed to delete tenant:', error);
+      toast.error('Failed to delete tenant');
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false);
+    setDeletingTenant(null);
   };
 
   if (loading) {
@@ -527,6 +557,7 @@ export default function TenantManagement() {
                         {tenant.domain && (
                           <p className="text-xs text-slate-500">{tenant.domain}</p>
                         )}
+                        <p className="text-xs text-slate-500 font-mono mt-0.5">{tenant.id}</p>
                       </div>
                     </div>
                   </TableCell>
@@ -568,14 +599,24 @@ export default function TenantManagement() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setEditingTenant(tenant)}
-                      className="text-slate-400 hover:text-slate-200"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditingTenant(tenant)}
+                        className="text-slate-400 hover:text-slate-200"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteClick(tenant)}
+                        className="text-red-400 hover:text-red-300 hover:bg-red-950/50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -591,6 +632,43 @@ export default function TenantManagement() {
           onCancel={handleCancel}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="bg-slate-800 border-slate-700">
+          <DialogHeader>
+            <DialogTitle className="text-slate-200 flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-red-400" />
+              Confirm Delete
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-slate-300">
+              Are you sure you want to delete the tenant <span className="font-semibold text-white">&ldquo;{deletingTenant?.name}&rdquo;</span>?
+            </p>
+            <p className="text-sm text-slate-400 mt-2">
+              This action cannot be undone. All data associated with this tenant may be affected.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={handleDeleteCancel}
+              className="border-slate-600 text-slate-300 hover:bg-slate-700"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete Tenant
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

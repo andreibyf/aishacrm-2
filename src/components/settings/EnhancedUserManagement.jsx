@@ -227,8 +227,8 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
                             </SelectTrigger>
                             <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
                                 <SelectItem value="no-client">No Client</SelectItem>
-                                {tenants.map(tenant => (
-                                    <SelectItem key={tenant.id} value={tenant.id}>
+                                {tenants.filter(tenant => tenant.tenant_id !== 'no-client').map(tenant => (
+                                    <SelectItem key={tenant.id} value={tenant.tenant_id}>
                                         {tenant.name}
                                     </SelectItem>
                                 ))}
@@ -508,6 +508,7 @@ export default function EnhancedUserManagement() {
             }
 
             const cleanedData = { ...data };
+            // Convert 'no-client' to actual NULL for database
             if (cleanedData.tenant_id === 'no-client') {
                 cleanedData.tenant_id = null;
             }
@@ -769,6 +770,7 @@ export default function EnhancedUserManagement() {
                                                                 {user.display_name || user.full_name || 'Unknown User'}
                                                             </div>
                                                             <div className="text-sm text-slate-400">{user.email}</div>
+                                                            <div className="text-xs text-slate-500 font-mono mt-0.5">{user.id}</div>
                                                         </div>
                                                     </div>
                                                     {isCreator && (

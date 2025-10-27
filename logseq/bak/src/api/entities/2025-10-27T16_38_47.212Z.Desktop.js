@@ -58,16 +58,12 @@ const makeDevFallback = (entityName, method, data, id) => {
 
 // Helper to call independent backend API
 const callBackendAPI = async (entityName, method, data = null, id = null) => {
-  console.log(`[API DEBUG] callBackendAPI called: ${entityName} ${method}`, { data, id });
-  
   const entityPath = pluralize(entityName);
   let url = `${BACKEND_URL}/api/${entityPath}`;
   
   // Get tenant_id from mock user for local dev
   const mockUser = isLocalDevMode() ? createMockUser() : null;
   const tenantId = mockUser?.tenant_id || 'local-tenant-001';
-  
-  console.log(`[API DEBUG] Building URL for ${entityName}, path: ${entityPath}, tenantId: ${tenantId}`);
   
   const options = {
     method: method,
@@ -76,17 +72,29 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     },
   };
 
-  if (method === 'GET' && data) {
-    // Convert filter object to query params
-    const params = new URLSearchParams();
-    // Always include tenant_id
-    params.append('tenant_id', tenantId);
-    Object.entries(data).forEach(([key, value]) => {
-      if (key !== 'tenant_id') { // Don't duplicate tenant_id
-        params.append(key, typeof value === 'object' ? JSON.stringify(value) : value);
+  if (method === 'GET') {
+    if (id) {
+      // GET by ID - append ID to URL
+      url += `/${id}`;
+      if (data && method !== 'DELETE') {
+        options.body = JSON.stringify({ ...data, tenant_id: tenantId });
       }
-    });
-    url += `?${params.toString()}`;
+    } else {
+      // GET list/filter - convert to query params
+      const params = new URLSearchParams();
+      // Always include tenant_id for list operations
+      params.append('tenant_id', tenantId);
+      
+      // Add filter parameters if provided
+      if (data && Object.keys(data).length > 0) {
+        Object.entries(data).forEach(([key, value]) => {
+          if (key !== 'tenant_id') { // Don't duplicate tenant_id
+            params.append(key, typeof value === 'object' ? JSON.stringify(value) : value);
+          }
+        });
+      }
+      url += `?${params.toString()}`;
+    }
   } else if (id) {
     url += `/${id}`;
     if (data && method !== 'DELETE') {
@@ -100,9 +108,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
 
   let response;
   try {
-    console.log(`[API DEBUG] Fetching: ${url}`, options);
     response = await fetch(url, options);
-    console.log(`[API DEBUG] Response status: ${response.status} ${response.statusText}`);
   } catch (error) {
     // Network errors (connection refused, DNS failure, etc)
     apiHealthMonitor.reportNetworkError(url, {
@@ -151,8 +157,6 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   
   const result = await response.json();
   
-  console.log(`[API DEBUG] ${entityName} ${method} response:`, result);
-  
   // Backend returns { status: "success", data: { entityName: [...] } }
   // Extract the actual data array/object
   if (result.status === 'success' && result.data) {
@@ -160,9 +164,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     const entityKey = Object.keys(result.data).find(key => 
       key !== 'tenant_id' && Array.isArray(result.data[key])
     );
-    console.log(`[API DEBUG] ${entityName} found entityKey:`, entityKey, 'isArray:', Array.isArray(result.data[entityKey]));
     if (entityKey && Array.isArray(result.data[entityKey])) {
-      console.log(`[API DEBUG] ${entityName} returning array of`, result.data[entityKey].length, 'items');
       return result.data[entityKey];
     }
     // For single item operations (get, create, update), return the data directly
@@ -171,7 +173,6 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     }
   }
   
-  console.log(`[API DEBUG] ${entityName} returning raw result:`, result);
   return result;
 };
 
@@ -1081,13 +1082,8 @@ export const User = {
    * List all users (admin function - uses backend API)
    */
   list: async (filters) => {
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Mock listing users');
-      return [createMockUser()];
-    }
-    
-    // Use backend API for listing users (not Supabase Auth)
-    // This calls your Express backend's /api/users endpoint
+    // ALWAYS use backend API for listing users (don't mock this - we need real data)
+    console.log('[User.list] Fetching users via backend API');
     return callBackendAPI('user', 'GET', filters);
   },
 
@@ -1095,12 +1091,8 @@ export const User = {
    * Update any user by ID (admin function - uses backend API)
    */
   update: async (userId, updates) => {
-    if (isLocalDevMode()) {
-      console.log('[Local Dev Mode] Mock updating user', userId, updates);
-      return createMockUser();
-    }
-    
-    // Use backend API for admin user updates
+    // ALWAYS use backend API for user updates (don't mock this - we need real persistence)
+    console.log('[User.update] Updating user via backend API:', userId, updates);
     return callBackendAPI('user', 'PUT', updates, userId);
   },
 

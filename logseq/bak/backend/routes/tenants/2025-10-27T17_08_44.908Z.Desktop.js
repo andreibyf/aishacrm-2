@@ -96,14 +96,7 @@ export default function createTenantRoutes(pgPool) {
   // POST /api/tenants - Create tenant
   router.post('/', async (req, res) => {
     try {
-      const { 
-        tenant_id, name, branding_settings, status, metadata,
-        // Individual branding fields
-        logo_url, primary_color, accent_color,
-        // Individual metadata fields
-        country, major_city, industry, business_model, geographic_focus, 
-        elevenlabs_agent_id, display_order, domain
-      } = req.body;
+      const { tenant_id, name, branding_settings, status, metadata } = req.body;
 
       if (!pgPool) {
         return res.status(503).json({ 
@@ -119,27 +112,6 @@ export default function createTenantRoutes(pgPool) {
         });
       }
 
-      // Build branding_settings from individual fields or use provided object
-      const finalBrandingSettings = {
-        ...(branding_settings || {}),
-        ...(logo_url !== undefined ? { logo_url } : {}),
-        ...(primary_color !== undefined ? { primary_color } : {}),
-        ...(accent_color !== undefined ? { accent_color } : {})
-      };
-
-      // Build metadata from individual fields or use provided object
-      const finalMetadata = {
-        ...(metadata || {}),
-        ...(country !== undefined ? { country } : {}),
-        ...(major_city !== undefined ? { major_city } : {}),
-        ...(industry !== undefined ? { industry } : {}),
-        ...(business_model !== undefined ? { business_model } : {}),
-        ...(geographic_focus !== undefined ? { geographic_focus } : {}),
-        ...(elevenlabs_agent_id !== undefined ? { elevenlabs_agent_id } : {}),
-        ...(display_order !== undefined ? { display_order } : {}),
-        ...(domain !== undefined ? { domain } : {})
-      };
-
       const query = `
         INSERT INTO tenant (tenant_id, name, branding_settings, status, metadata)
         VALUES ($1, $2, $3, $4, $5)
@@ -149,9 +121,9 @@ export default function createTenantRoutes(pgPool) {
       const result = await pgPool.query(query, [
         tenant_id,
         name || null,
-        finalBrandingSettings,
+        branding_settings || {},
         status || 'active',
-        finalMetadata
+        metadata || {}
       ]);
 
       res.json({

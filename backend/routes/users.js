@@ -311,14 +311,10 @@ export default function createUserRoutes(pgPool) {
         ...otherFields  // Capture any unknown fields
       } = req.body;
 
-      if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
-      }
-
-      // First, get the current user to merge metadata
+      // First, get the current user to merge metadata (don't require tenant_id in body)
       const currentUser = await pgPool.query(
-        'SELECT metadata FROM employees WHERE id = $1 AND tenant_id = $2',
-        [id, tenant_id]
+        'SELECT metadata, tenant_id FROM employees WHERE id = $1',
+        [id]
       );
 
       if (currentUser.rows.length === 0) {
@@ -339,17 +335,21 @@ export default function createUserRoutes(pgPool) {
         ...otherFields, // Include any unknown fields in metadata
       };
 
+      // Allow NULL tenant_id for users without a client
+      const finalTenantId = tenant_id !== undefined ? tenant_id : currentUser.rows[0].tenant_id;
+
       const result = await pgPool.query(
         `UPDATE employees 
          SET first_name = COALESCE($1, first_name),
              last_name = COALESCE($2, last_name),
              role = COALESCE($3, role),
              status = COALESCE($4, status),
-             metadata = $5,
+             tenant_id = $5,
+             metadata = $6,
              updated_at = NOW()
-         WHERE id = $6 AND tenant_id = $7
+         WHERE id = $7
          RETURNING id, tenant_id, email, first_name, last_name, role, status, metadata, updated_at`,
-        [first_name, last_name, role, status, updatedMetadata, id, tenant_id]
+        [first_name, last_name, role, status, finalTenantId, updatedMetadata, id]
       );
 
       if (result.rows.length === 0) {
