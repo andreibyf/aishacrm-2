@@ -3,6 +3,7 @@
 import React, { useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom"; // Import useNavigate
 import { createPageUrl } from "@/utils";
+import PasswordChangeModal from "@/components/auth/PasswordChangeModal";
 import {
   BarChart3,
   Bot,
@@ -1783,6 +1784,25 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         </div>
       </div>);
 
+  }
+
+  // ⚠️ Check if user needs to change password
+  if (user && user.user_metadata?.password_change_required) {
+    return (
+      <>
+        <PasswordChangeModal
+          user={user}
+          onPasswordChanged={() => {
+            console.log('[Password Change] Password changed successfully, reloading...');
+            window.location.reload(); // Reload to refresh user data
+          }}
+        />
+        {/* Show minimal UI behind the modal */}
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+          <Loader2 className="w-12 h-12 text-purple-600 animate-spin" />
+        </div>
+      </>
+    );
   }
 
   const SidebarContent = ({ onNavClick }) =>

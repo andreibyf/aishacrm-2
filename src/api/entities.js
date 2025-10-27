@@ -927,6 +927,47 @@ export const User = {
 
         console.log('[Supabase Auth] Sign in successful:', data.user?.email);
         
+        // ⚠️ CHECK 1: Password Expiration
+        const passwordExpiresAt = data.user.user_metadata?.password_expires_at;
+        if (passwordExpiresAt) {
+          const expirationDate = new Date(passwordExpiresAt);
+          const now = new Date();
+          
+          if (expirationDate < now) {
+            // Password has expired - sign out and reject
+            await supabase.auth.signOut();
+            throw new Error('Your temporary password has expired. Please contact your administrator for a password reset.');
+          }
+        }
+
+        // ⚠️ CHECK 2: Fetch user from backend to check CRM access and account status
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/users?email=${encodeURIComponent(email)}`);
+          if (response.ok) {
+            const result = await response.json();
+            const users = result.data?.users || result.data || result;
+            
+            if (users && users.length > 0) {
+              const dbUser = users[0];
+              
+              // Check if account status is inactive
+              if (dbUser.status === 'inactive') {
+                await supabase.auth.signOut();
+                throw new Error('Your account has been suspended. Contact your administrator.');
+              }
+              
+              // Check if CRM access is revoked (permissions array doesn't include 'crm_access')
+              if (dbUser.permissions && !dbUser.permissions.includes('crm_access')) {
+                await supabase.auth.signOut();
+                throw new Error('CRM access has been disabled for your account. Contact your administrator.');
+              }
+            }
+          }
+        } catch (backendError) {
+          // Log but don't block login if backend check fails
+          console.warn('[Supabase Auth] Could not verify account status:', backendError.message);
+        }
+        
         // Return mapped user object
         return {
           id: data.user.id,
