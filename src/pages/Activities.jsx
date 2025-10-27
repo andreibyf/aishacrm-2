@@ -98,7 +98,7 @@ export default function ActivitiesPage() {
   const [pageSize, setPageSize] = useState(25);
   const [totalItems, setTotalItems] = useState(0);
 
-  const { cachedRequest, clearCacheByKey } = useApiManager();
+  const { cachedRequest, clearCache } = useApiManager();
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
   
   const initialLoadDone = useRef(false);
@@ -350,7 +350,7 @@ export default function ActivitiesPage() {
 
     setIsFormOpen(false);
     setEditingActivity(null);
-    clearCacheByKey('Activity');
+    clearCache('');
     await Promise.all([
       loadActivities(1, pageSize),
       loadTotalStats()
@@ -378,7 +378,7 @@ export default function ActivitiesPage() {
       // Small delay to let optimistic update settle before reloading
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      clearCacheByKey('Activity');
+      clearCache('');
       await Promise.all([
         loadActivities(currentPage, pageSize),
         loadTotalStats()
@@ -421,7 +421,7 @@ export default function ActivitiesPage() {
 
         setSelectedActivities(new Set());
         setSelectAllMode(false);
-        clearCacheByKey('Activity');
+        clearCache('');
         await Promise.all([
           loadActivities(1, pageSize),
           loadTotalStats()
@@ -442,7 +442,7 @@ export default function ActivitiesPage() {
       try {
         await Promise.all([...selectedActivities].map(id => Activity.delete(id)));
         setSelectedActivities(new Set());
-        clearCacheByKey('Activity');
+        clearCache('');
         await Promise.all([
           loadActivities(currentPage, pageSize),
           loadTotalStats()
@@ -485,7 +485,7 @@ export default function ActivitiesPage() {
 
         setSelectedActivities(new Set());
         setSelectAllMode(false);
-        clearCacheByKey('Activity');
+        clearCache('');
         await Promise.all([
           loadActivities(currentPage, pageSize),
           loadTotalStats()
@@ -508,7 +508,7 @@ export default function ActivitiesPage() {
         
         await Promise.all(promises);
         setSelectedActivities(new Set());
-        clearCacheByKey('Activity');
+        clearCache('');
         await Promise.all([
           loadActivities(currentPage, pageSize),
           loadTotalStats()
@@ -551,7 +551,7 @@ export default function ActivitiesPage() {
 
         setSelectedActivities(new Set());
         setSelectAllMode(false);
-        clearCacheByKey('Activity');
+        clearCache('');
         await Promise.all([
           loadActivities(currentPage, pageSize),
           loadTotalStats()
@@ -574,7 +574,7 @@ export default function ActivitiesPage() {
         
         await Promise.all(promises);
         setSelectedActivities(new Set());
-        clearCacheByKey('Activity');
+        clearCache('');
         await Promise.all([
           loadActivities(currentPage, pageSize),
           loadTotalStats()
@@ -624,12 +624,12 @@ export default function ActivitiesPage() {
   };
 
   const handleRefresh = async () => {
-    clearCacheByKey('Activity');
-    clearCacheByKey('Employee');
-    clearCacheByKey('Account');
-    clearCacheByKey('Contact');
-    clearCacheByKey('Lead');
-    clearCacheByKey('Opportunity');
+    clearCache('');
+    clearCache('');
+    clearCache('');
+    clearCache('');
+    clearCache('');
+    clearCache('');
     await Promise.all([
       loadActivities(currentPage, pageSize),
       loadTotalStats()
@@ -762,7 +762,7 @@ export default function ActivitiesPage() {
           onOpenChange={setIsImportOpen}
           schema={Activity.schema ? Activity.schema() : null}
           onSuccess={async () => {
-            clearCacheByKey('Activity');
+            clearCache('');
             await Promise.all([
               loadActivities(1, pageSize),
               loadTotalStats()
