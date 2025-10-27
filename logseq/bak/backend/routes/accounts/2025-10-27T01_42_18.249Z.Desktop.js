@@ -128,22 +128,7 @@ export default function createAccountRoutes(pgPool) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, type, industry, website, metadata, ...otherFields } = req.body;
-
-      // First, get current account to merge metadata
-      const currentAccount = await pgPool.query('SELECT metadata FROM accounts WHERE id = $1', [id]);
-      
-      if (currentAccount.rows.length === 0) {
-        return res.status(404).json({ status: 'error', message: 'Account not found' });
-      }
-
-      // Merge metadata - preserve existing and add/update new fields
-      const currentMetadata = currentAccount.rows[0].metadata || {};
-      const updatedMetadata = {
-        ...currentMetadata,
-        ...(metadata || {}),
-        ...otherFields, // Any unknown fields go into metadata
-      };
+      const { name, type, industry, website } = req.body;
 
       const updates = [];
       const values = [];
@@ -166,9 +151,9 @@ export default function createAccountRoutes(pgPool) {
         values.push(website);
       }
 
-      // Always update metadata with merged data
-      updates.push(`metadata = $${paramCount++}`);
-      values.push(updatedMetadata);
+      if (updates.length === 0) {
+        return res.status(400).json({ status: 'error', message: 'No fields to update' });
+      }
 
       updates.push(`updated_at = NOW()`);
       values.push(id);
@@ -180,13 +165,10 @@ export default function createAccountRoutes(pgPool) {
         return res.status(404).json({ status: 'error', message: 'Account not found' });
       }
 
-      // Expand metadata in response
-      const updatedAccount = expandMetadata(result.rows[0]);
-
       res.json({
         status: 'success',
         message: 'Account updated',
-        data: updatedAccount,
+        data: result.rows[0],
       });
     } catch (error) {
       console.error('Error updating account:', error);

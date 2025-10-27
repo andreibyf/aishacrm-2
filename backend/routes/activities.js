@@ -3,6 +3,17 @@ import express from 'express';
 export default function createActivityRoutes(pgPool) {
   const router = express.Router();
 
+// Helper function to expand metadata fields to top-level properties
+  const expandMetadata = (record) => {
+    if (!record) return record;
+    const { metadata = {}, ...rest } = record;
+    return {
+      ...rest,
+      ...metadata,
+      metadata,
+    };
+  };
+
   // Helper to merge metadata and expose UI-friendly fields
   function normalizeActivity(row) {
     const meta = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};

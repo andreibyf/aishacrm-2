@@ -195,13 +195,12 @@ export default function createContactRoutes(pgPool) {
       }
 
       // Expand metadata in response
-      // Expand metadata in response
       const updatedContact = expandMetadata(result.rows[0]);
 
       res.json({
         status: 'success',
         message: 'Contact updated',
-        data: updatedContact,
+        data: result.rows[0],
       });
     } catch (error) {
       console.error('Error updating contact:', error);

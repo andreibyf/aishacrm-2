@@ -9,13 +9,17 @@ export default function createUserRoutes(pgPool) {
   const router = express.Router();
 
   // Helper function to expand metadata fields to top-level properties
-  // Helper function to expand metadata fields to top-level properties
   const expandUserMetadata = (user) => {
     if (!user) return user;
     const { metadata = {}, ...rest } = user;
     return {
       ...rest,
-      ...metadata, // Spread ALL metadata fields to top level
+      display_name: metadata.display_name,
+      is_active: metadata.is_active,
+      tags: metadata.tags,
+      employee_role: metadata.employee_role,
+      permissions: metadata.permissions,
+      navigation_permissions: metadata.navigation_permissions,
       metadata, // Keep original metadata for backwards compatibility
     };
   };
@@ -148,17 +152,11 @@ export default function createUserRoutes(pgPool) {
   // POST /api/users - Create new user (global admin or tenant employee)
   router.post('/', async (req, res) => {
     try {
-      const { email, first_name, last_name, role, tenant_id, status, metadata, ...otherFields } = req.body;
+      const { email, first_name, last_name, role, tenant_id, status, metadata } = req.body;
 
       if (!email || !first_name) {
         return res.status(400).json({ status: 'error', message: 'email and first_name are required' });
       }
-
-      // Merge metadata with unknown fields
-      const combinedMetadata = {
-        ...(metadata || {}),
-        ...otherFields
-      };
 
       const isGlobalUser = (role === 'superadmin' || role === 'admin') && !tenant_id;
 
@@ -178,15 +176,13 @@ export default function createUserRoutes(pgPool) {
           `INSERT INTO users (email, first_name, last_name, role, metadata, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
            RETURNING id, email, first_name, last_name, role, metadata, created_at, updated_at`,
-          [email, first_name, last_name, role || 'admin', combinedMetadata]
+          [email, first_name, last_name, role || 'admin', JSON.stringify(metadata || {})]
         );
-
-        const user = expandUserMetadata(result.rows[0]);
 
         res.json({
           status: 'success',
           message: 'Global user created successfully',
-          data: { user },
+          data: { user: result.rows[0] },
         });
       } else {
         // Create employees (tenant-assigned user)
@@ -208,15 +204,13 @@ export default function createUserRoutes(pgPool) {
           `INSERT INTO employees (tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
            RETURNING id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at`,
-          [tenant_id, email, first_name, last_name, role || 'employee', status || 'active', combinedMetadata]
+          [tenant_id, email, first_name, last_name, role || 'employee', status || 'active', JSON.stringify(metadata || {})]
         );
-
-        const user = expandUserMetadata(result.rows[0]);
 
         res.json({
           status: 'success',
           message: 'Employee created successfully',
-          data: { user },
+          data: { user: result.rows[0] },
         });
       }
     } catch (error) {

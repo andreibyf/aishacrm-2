@@ -134,7 +134,8 @@ export default function createNotificationRoutes(pgPool) {
       const query = `
         UPDATE notifications SET
           is_read = COALESCE($1, is_read),
-          metadata = $2
+          metadata = COALESCE($2, metadata),
+          updated_date = NOW()
         WHERE id = $3
         RETURNING *
       `;

@@ -146,7 +146,7 @@ export default function createOpportunityRoutes(pgPool) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, account_id, contact_id, amount, stage, probability, close_date, metadata, ...otherFields } = req.body;
+      const { name, account_id, amount, stage, probability, close_date, description, assigned_to, metadata, ...otherFields } = req.body;
       
       // Fetch current metadata
       const currentOpp = await pgPool.query('SELECT metadata FROM opportunities WHERE id = $1', [id]);
@@ -170,25 +170,27 @@ export default function createOpportunityRoutes(pgPool) {
         UPDATE opportunities SET
           name = COALESCE($1, name),
           account_id = COALESCE($2, account_id),
-          contact_id = COALESCE($3, contact_id),
-          amount = COALESCE($4, amount),
-          stage = COALESCE($5, stage),
-          probability = COALESCE($6, probability),
-          close_date = COALESCE($7, close_date),
-          metadata = $8,
-          updated_at = NOW()
-        WHERE id = $9
+          amount = COALESCE($3, amount),
+          stage = COALESCE($4, stage),
+          probability = COALESCE($5, probability),
+          close_date = COALESCE($6, close_date),
+          description = COALESCE($7, description),
+          assigned_to = COALESCE($8, assigned_to),
+          metadata = COALESCE($9, metadata),
+          updated_date = NOW()
+        WHERE id = $10
         RETURNING *
       `;
       
       const values = [
         name,
         account_id,
-        contact_id,
         amount,
         stage,
         probability,
         close_date,
+        description,
+        assigned_to,
         updatedMetadata,
         id
       ];

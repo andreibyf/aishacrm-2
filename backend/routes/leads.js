@@ -8,6 +8,17 @@ import express from 'express';
 export default function createLeadRoutes(pgPool) {
   const router = express.Router();
 
+// Helper function to expand metadata fields to top-level properties
+  const expandMetadata = (record) => {
+    if (!record) return record;
+    const { metadata = {}, ...rest } = record;
+    return {
+      ...rest,
+      ...metadata,
+      metadata,
+    };
+  };
+
   // GET /api/leads - List leads
   router.get('/', async (req, res) => {
     try {
@@ -38,9 +49,12 @@ export default function createLeadRoutes(pgPool) {
       }
       const countResult = await pgPool.query(countQuery, countParams);
 
+      // Expand metadata for all leads
+      const leads = result.rows.map(expandMetadata);
+
       res.json({
         status: 'success',
-        data: { leads: result.rows, total: parseInt(countResult.rows[0].count), status, limit: parseInt(limit), offset: parseInt(offset) },
+        data: { leads, total: parseInt(countResult.rows[0].count), status, limit: parseInt(limit), offset: parseInt(offset) },
       });
     } catch (error) {
       console.error('Error listing leads:', error);
@@ -51,15 +65,21 @@ export default function createLeadRoutes(pgPool) {
   // POST /api/leads - Create lead
   router.post('/', async (req, res) => {
     try {
-      const { tenant_id, first_name, last_name, email, phone, company, job_title, status = 'new', source } = req.body;
+      const { tenant_id, first_name, last_name, email, phone, company, job_title, status = 'new', source, metadata, ...otherFields } = req.body;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
+      // Merge metadata with unknown fields
+      const combinedMetadata = {
+        ...(metadata || {}),
+        ...otherFields
+      };
+
       const query = `
-        INSERT INTO leads (tenant_id, first_name, last_name, email, phone, company, job_title, status, source, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+        INSERT INTO leads (tenant_id, first_name, last_name, email, phone, company, job_title, status, source, metadata, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
         RETURNING *
       `;
       
@@ -72,13 +92,16 @@ export default function createLeadRoutes(pgPool) {
         company,
         job_title,
         status,
-        source
+        source,
+        combinedMetadata
       ]);
+
+      const lead = expandMetadata(result.rows[0]);
 
       res.json({
         status: 'success',
         message: 'Lead created',
-        data: result.rows[0],
+        data: lead,
       });
     } catch (error) {
       console.error('Error creating lead:', error);
@@ -97,9 +120,12 @@ export default function createLeadRoutes(pgPool) {
         return res.status(404).json({ status: 'error', message: 'Lead not found' });
       }
 
+      // Expand metadata to top-level properties
+      const lead = expandMetadata(result.rows[0]);
+
       res.json({
         status: 'success',
-        data: result.rows[0],
+        data: lead,
       });
     } catch (error) {
       console.error('Error fetching lead:', error);
@@ -111,7 +137,22 @@ export default function createLeadRoutes(pgPool) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { first_name, last_name, email, phone, company, job_title, status, source } = req.body;
+      const { first_name, last_name, email, phone, company, job_title, status, source, metadata, ...otherFields } = req.body;
+
+      // First, get current lead to merge metadata
+      const currentLead = await pgPool.query('SELECT metadata FROM leads WHERE id = $1', [id]);
+      
+      if (currentLead.rows.length === 0) {
+        return res.status(404).json({ status: 'error', message: 'Lead not found' });
+      }
+
+      // Merge metadata
+      const currentMetadata = currentLead.rows[0].metadata || {};
+      const updatedMetadata = {
+        ...currentMetadata,
+        ...(metadata || {}),
+        ...otherFields,
+      };
 
       const updates = [];
       const values = [];
@@ -150,9 +191,9 @@ export default function createLeadRoutes(pgPool) {
         values.push(source);
       }
 
-      if (updates.length === 0) {
-        return res.status(400).json({ status: 'error', message: 'No fields to update' });
-      }
+      // Always update metadata
+      updates.push(`metadata = $${paramCount++}`);
+      values.push(updatedMetadata);
 
       updates.push(`updated_at = NOW()`);
       values.push(id);
@@ -164,10 +205,13 @@ export default function createLeadRoutes(pgPool) {
         return res.status(404).json({ status: 'error', message: 'Lead not found' });
       }
 
+      // Expand metadata in response
+      const updatedLead = expandMetadata(result.rows[0]);
+
       res.json({
         status: 'success',
         message: 'Lead updated',
-        data: result.rows[0],
+        data: updatedLead,
       });
     } catch (error) {
       console.error('Error updating lead:', error);

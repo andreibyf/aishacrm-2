@@ -133,22 +133,7 @@ export default function createContactRoutes(pgPool) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { first_name, last_name, email, phone, account_id, status, metadata, ...otherFields } = req.body;
-
-      // First, get current contact to merge metadata
-      const currentContact = await pgPool.query('SELECT metadata FROM contacts WHERE id = $1', [id]);
-      
-      if (currentContact.rows.length === 0) {
-        return res.status(404).json({ status: 'error', message: 'Contact not found' });
-      }
-
-      // Merge metadata
-      const currentMetadata = currentContact.rows[0].metadata || {};
-      const updatedMetadata = {
-        ...currentMetadata,
-        ...(metadata || {}),
-        ...otherFields,
-      };
+      const { first_name, last_name, email, phone, account_id, status } = req.body;
 
       // Build dynamic update query
       const updates = [];
@@ -180,9 +165,9 @@ export default function createContactRoutes(pgPool) {
         values.push(status);
       }
 
-      // Always update metadata
-      updates.push(`metadata = $${paramCount++}`);
-      values.push(updatedMetadata);
+      if (updates.length === 0) {
+        return res.status(400).json({ status: 'error', message: 'No fields to update' });
+      }
 
       updates.push(`updated_at = NOW()`);
       values.push(id);
@@ -194,14 +179,10 @@ export default function createContactRoutes(pgPool) {
         return res.status(404).json({ status: 'error', message: 'Contact not found' });
       }
 
-      // Expand metadata in response
-      // Expand metadata in response
-      const updatedContact = expandMetadata(result.rows[0]);
-
       res.json({
         status: 'success',
         message: 'Contact updated',
-        data: updatedContact,
+        data: result.rows[0],
       });
     } catch (error) {
       console.error('Error updating contact:', error);

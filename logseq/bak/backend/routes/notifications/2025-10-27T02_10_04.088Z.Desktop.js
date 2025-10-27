@@ -63,40 +63,31 @@ export default function createNotificationRoutes(pgPool) {
   // POST /api/notifications - Create notification
   router.post('/', async (req, res) => {
     try {
-      const { tenant_id, user_email, title, message, type, is_read, metadata, ...otherFields } = req.body;
-      
-      // Merge metadata with unknown fields
-      const combinedMetadata = {
-        ...(metadata || {}),
-        ...otherFields
-      };
+      const notif = req.body;
       
       const query = `
         INSERT INTO notifications (
           tenant_id, user_email, title, message, type, 
-          is_read, metadata, created_date
+          is_read, created_date
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, NOW()
+          $1, $2, $3, $4, $5, $6, NOW()
         ) RETURNING *
       `;
       
       const values = [
-        tenant_id,
-        user_email,
-        title,
-        message,
-        type || 'info',
-        is_read || false,
-        combinedMetadata
+        notif.tenant_id,
+        notif.user_email,
+        notif.title,
+        notif.message,
+        notif.type || 'info',
+        notif.is_read || false
       ];
       
       const result = await pgPool.query(query, values);
       
-      const notification = expandMetadata(result.rows[0]);
-      
       res.status(201).json({
         status: 'success',
-        data: notification
+        data: result.rows[0]
       });
     } catch (error) {
       console.error('Error creating notification:', error);
@@ -134,7 +125,8 @@ export default function createNotificationRoutes(pgPool) {
       const query = `
         UPDATE notifications SET
           is_read = COALESCE($1, is_read),
-          metadata = $2
+          metadata = COALESCE($2, metadata),
+          updated_date = NOW()
         WHERE id = $3
         RETURNING *
       `;

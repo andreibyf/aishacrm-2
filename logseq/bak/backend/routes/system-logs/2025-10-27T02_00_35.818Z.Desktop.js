@@ -17,13 +17,7 @@ export default function createSystemLogRoutes(pgPool) {
   // POST /api/system-logs - Create system log entry
   router.post('/', async (req, res) => {
     try {
-      const { tenant_id, level, message, source, user_email, metadata, user_agent, url, stack_trace, ...otherFields } = req.body;
-      
-      // Merge metadata with unknown fields
-      const combinedMetadata = {
-        ...(metadata || {}),
-        ...otherFields
-      };
+      const log = req.body;
       
       const query = `
         INSERT INTO system_logs (
@@ -35,24 +29,22 @@ export default function createSystemLogRoutes(pgPool) {
       `;
       
       const values = [
-        tenant_id,
-        level || 'INFO',
-        message,
-        source,
-        user_email,
-        combinedMetadata,
-        user_agent,
-        url,
-        stack_trace
+        log.tenant_id,
+        log.level || 'INFO',
+        log.message,
+        log.source,
+        log.user_email,
+        JSON.stringify(log.metadata || {}),
+        log.user_agent,
+        log.url,
+        log.stack_trace
       ];
       
       const result = await pgPool.query(query, values);
       
-      const systemLog = expandMetadata(result.rows[0]);
-      
       res.status(201).json({
         status: 'success',
-        data: systemLog
+        data: result.rows[0]
       });
     } catch (error) {
       console.error('Error creating system log:', error);
@@ -89,12 +81,10 @@ export default function createSystemLogRoutes(pgPool) {
       
       const result = await pgPool.query(query, values);
       
-      const systemLogs = result.rows.map(expandMetadata);
-      
       res.json({
         status: 'success',
         data: {
-          'system-logs': systemLogs,
+          'system-logs': result.rows,
           total: result.rows.length,
           limit: parseInt(limit),
           offset: parseInt(offset)

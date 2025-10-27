@@ -40,12 +40,10 @@ export default function createNotificationRoutes(pgPool) {
       
       const result = await pgPool.query(query, values);
       
-      const notifications = result.rows.map(expandMetadata);
-      
       res.json({
         status: 'success',
         data: {
-          notifications,
+          notifications: result.rows,
           total: result.rows.length,
           limit: parseInt(limit),
           offset: parseInt(offset)
@@ -63,40 +61,31 @@ export default function createNotificationRoutes(pgPool) {
   // POST /api/notifications - Create notification
   router.post('/', async (req, res) => {
     try {
-      const { tenant_id, user_email, title, message, type, is_read, metadata, ...otherFields } = req.body;
-      
-      // Merge metadata with unknown fields
-      const combinedMetadata = {
-        ...(metadata || {}),
-        ...otherFields
-      };
+      const notif = req.body;
       
       const query = `
         INSERT INTO notifications (
           tenant_id, user_email, title, message, type, 
-          is_read, metadata, created_date
+          is_read, created_date
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, NOW()
+          $1, $2, $3, $4, $5, $6, NOW()
         ) RETURNING *
       `;
       
       const values = [
-        tenant_id,
-        user_email,
-        title,
-        message,
-        type || 'info',
-        is_read || false,
-        combinedMetadata
+        notif.tenant_id,
+        notif.user_email,
+        notif.title,
+        notif.message,
+        notif.type || 'info',
+        notif.is_read || false
       ];
       
       const result = await pgPool.query(query, values);
       
-      const notification = expandMetadata(result.rows[0]);
-      
       res.status(201).json({
         status: 'success',
-        data: notification
+        data: result.rows[0]
       });
     } catch (error) {
       console.error('Error creating notification:', error);
@@ -111,35 +100,17 @@ export default function createNotificationRoutes(pgPool) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { is_read, metadata, ...otherFields } = req.body;
-      
-      // Fetch current metadata
-      const currentNotif = await pgPool.query('SELECT metadata FROM notifications WHERE id = $1', [id]);
-      
-      if (currentNotif.rows.length === 0) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'Notification not found'
-        });
-      }
-
-      // Merge metadata
-      const currentMetadata = currentNotif.rows[0].metadata || {};
-      const updatedMetadata = {
-        ...currentMetadata,
-        ...(metadata || {}),
-        ...otherFields,
-      };
+      const { is_read } = req.body;
       
       const query = `
         UPDATE notifications SET
-          is_read = COALESCE($1, is_read),
-          metadata = $2
-        WHERE id = $3
+          is_read = $1,
+          updated_date = NOW()
+        WHERE id = $2
         RETURNING *
       `;
       
-      const result = await pgPool.query(query, [is_read, updatedMetadata, id]);
+      const result = await pgPool.query(query, [is_read, id]);
       
       if (result.rows.length === 0) {
         return res.status(404).json({
@@ -148,11 +119,9 @@ export default function createNotificationRoutes(pgPool) {
         });
       }
       
-      const updatedNotification = expandMetadata(result.rows[0]);
-      
       res.json({
         status: 'success',
-        data: updatedNotification
+        data: result.rows[0]
       });
     } catch (error) {
       console.error('Error updating notification:', error);

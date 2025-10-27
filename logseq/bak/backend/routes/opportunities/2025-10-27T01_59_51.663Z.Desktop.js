@@ -71,11 +71,9 @@ export default function createOpportunityRoutes(pgPool) {
         });
       }
       
-      const opportunity = expandMetadata(result.rows[0]);
-      
       res.json({
         status: 'success',
-        data: opportunity
+        data: result.rows[0]
       });
     } catch (error) {
       console.error('Error fetching opportunity:', error);
@@ -89,20 +87,14 @@ export default function createOpportunityRoutes(pgPool) {
   // POST /api/opportunities - Create new opportunity
   router.post('/', async (req, res) => {
     try {
-      const { tenant_id, name, account_id, contact_id, amount, stage, probability, close_date, metadata, ...otherFields } = req.body;
+      const opp = req.body;
       
-      if (!tenant_id) {
+      if (!opp.tenant_id) {
         return res.status(400).json({
           status: 'error',
           message: 'tenant_id is required'
         });
       }
-
-      // Merge metadata with unknown fields
-      const combinedMetadata = {
-        ...(metadata || {}),
-        ...otherFields
-      };
 
       const query = `
         INSERT INTO opportunities (
@@ -114,24 +106,22 @@ export default function createOpportunityRoutes(pgPool) {
       `;
       
       const values = [
-        tenant_id,
-        name,
-        account_id || null,
-        contact_id || null,
-        amount || 0,
-        stage || 'prospecting',
-        probability || 0,
-        close_date || null,
-        combinedMetadata
+        opp.tenant_id,
+        opp.name,
+        opp.account_id || null,
+        opp.contact_id || null,
+        opp.amount || 0,
+        opp.stage || 'prospecting',
+        opp.probability || 0,
+        opp.close_date || null,
+        opp.metadata || {}
       ];
       
       const result = await pgPool.query(query, values);
       
-      const opportunity = expandMetadata(result.rows[0]);
-      
       res.status(201).json({
         status: 'success',
-        data: opportunity
+        data: result.rows[0]
       });
     } catch (error) {
       console.error('Error creating opportunity:', error);
@@ -146,7 +136,7 @@ export default function createOpportunityRoutes(pgPool) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, account_id, contact_id, amount, stage, probability, close_date, metadata, ...otherFields } = req.body;
+      const { name, account_id, amount, stage, probability, close_date, description, assigned_to, metadata, ...otherFields } = req.body;
       
       // Fetch current metadata
       const currentOpp = await pgPool.query('SELECT metadata FROM opportunities WHERE id = $1', [id]);
@@ -170,25 +160,27 @@ export default function createOpportunityRoutes(pgPool) {
         UPDATE opportunities SET
           name = COALESCE($1, name),
           account_id = COALESCE($2, account_id),
-          contact_id = COALESCE($3, contact_id),
-          amount = COALESCE($4, amount),
-          stage = COALESCE($5, stage),
-          probability = COALESCE($6, probability),
-          close_date = COALESCE($7, close_date),
-          metadata = $8,
-          updated_at = NOW()
-        WHERE id = $9
+          amount = COALESCE($3, amount),
+          stage = COALESCE($4, stage),
+          probability = COALESCE($5, probability),
+          close_date = COALESCE($6, close_date),
+          description = COALESCE($7, description),
+          assigned_to = COALESCE($8, assigned_to),
+          metadata = COALESCE($9, metadata),
+          updated_date = NOW()
+        WHERE id = $10
         RETURNING *
       `;
       
       const values = [
         name,
         account_id,
-        contact_id,
         amount,
         stage,
         probability,
         close_date,
+        description,
+        assigned_to,
         updatedMetadata,
         id
       ];
