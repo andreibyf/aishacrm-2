@@ -4,7 +4,7 @@ import { Lead, Account, Contact } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { X, Save, Loader2, Star, AlertCircle } from "lucide-react";
+import { Save, Loader2, AlertCircle } from "lucide-react";
 import { getTenantFilter } from "../shared/tenantUtils";
 import { useTenant } from "../shared/tenantContext";
 import PhoneInput from "../shared/PhoneInput";
@@ -13,12 +13,11 @@ import { Label } from "@/components/ui/label";
 import { generateUniqueId } from "@/api/functions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import TagInput from "../shared/TagInput";
 import LazyAccountSelector from "../shared/LazyAccountSelector";
 import CreateAccountDialog from "../accounts/CreateAccountDialog";
 import { useApiManager } from "../shared/ApiManager";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 // Utility: Normalize date to yyyy-MM-dd format for HTML5 date inputs
 const formatDateForInput = (dateValue) => {
@@ -264,33 +263,21 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
 
     // Validate required fields
     if (!formData.first_name?.trim() || !formData.last_name?.trim()) {
-      toast({
-        title: "Missing Information",
-        description: "First name and last name are required.",
-        variant: "destructive",
-      });
+      toast.error("First name and last name are required.");
       return;
     }
 
     // Guard: Ensure user is available
     if (!user) {
       console.error('LeadForm.Submit: User is undefined');
-      toast({
-        title: "User Not Loaded",
-        description: "Cannot save lead: User not loaded. Please refresh the page.",
-        variant: "destructive",
-      });
+      toast.error("Cannot save lead: User not loaded. Please refresh the page.");
       return;
     }
 
     // Guard: Ensure onSave callback exists
     if (!onSave || typeof onSave !== 'function') {
       console.error('LeadForm.Submit: onSave callback is not a function', { onSave });
-      toast({
-        title: "System Error",
-        description: "Cannot save lead: Invalid save handler. Please refresh the page.",
-        variant: "destructive",
-      });
+      toast.error("Cannot save lead: Invalid save handler. Please refresh the page.");
       return;
     }
 
@@ -314,11 +301,7 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
           selectedTenantId,
           userTenantId: user?.tenant_id 
         });
-        toast({
-          title: "Tenant Not Assigned",
-          description: "Cannot save lead: No client assigned to your account. Please contact an administrator.",
-          variant: "destructive",
-        });
+        toast.error("Cannot save lead: No client assigned to your account. Please contact an administrator.");
         setIsSubmitting(false);
         return;
       }
@@ -403,11 +386,7 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
         response: error?.response,
         stack: error?.stack
       });
-      toast({
-        title: "Error Saving Lead",
-        description: `Failed to save lead: ${error.message || "An unexpected error occurred."}`,
-        variant: "destructive",
-      });
+      toast.error(`Failed to save lead: ${error.message || "An unexpected error occurred."}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -420,27 +399,8 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
                       formData.last_name?.trim();
 
   return (
-    <Dialog open={true} onOpenChange={onCancel}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800 border-slate-700">
-        <DialogHeader className="border-b bg-slate-700/50 border-slate-600 p-6">
-          <DialogTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-yellow-600 rounded-full flex items-center justify-center">
-                <Star className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-slate-100">{lead ? 'Edit Lead' : 'Add New Lead'}</h3>
-                <p className="text-sm text-slate-400">{lead ? 'Update lead details' : 'Create a new potential customer'}</p>
-              </div>
-            </div>
-            <Button variant="ghost" size="icon" onClick={onCancel} className="text-slate-400 hover:text-slate-200 hover:bg-slate-700">
-              <X className="w-5 h-5" />
-            </Button>
-          </DialogTitle>
-        </DialogHeader>
-        
-        <div className="p-6 bg-slate-800">
-          <form onSubmit={handleSubmit} className="space-y-6" data-testid="lead-form">
+    <>
+      <form onSubmit={handleSubmit} className="space-y-6" data-testid="lead-form">
             {!loading && (!user?.tenant_id && !selectedTenantId && user?.role !== 'superadmin') && (
               <Alert variant="destructive" className="mb-6 bg-red-900/20 border-red-700/50 text-red-300">
                 <AlertCircle className="h-4 w-4" />
@@ -735,8 +695,6 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
               </Button>
             </div>
           </form>
-        </div>
-      </DialogContent>
       {/* Create Account Dialog for LazyAccountSelector */}
       {showCreateAccountDialog && (
         <CreateAccountDialog
@@ -745,6 +703,6 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
           onSuccess={handleCreateAccountSuccess}
         />
       )}
-    </Dialog>
+    </>
   );
 }

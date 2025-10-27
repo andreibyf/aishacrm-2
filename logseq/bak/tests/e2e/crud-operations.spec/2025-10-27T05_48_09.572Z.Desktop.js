@@ -115,10 +115,7 @@ test.describe('CRUD Operations - End-to-End', () => {
     test('should edit an existing activity', async ({ page }) => {
       // Navigate to Activities
       await page.click('a[href="/activities"]');
-      await page.waitForURL('**/activities', { timeout: 30000 });
-      
-      // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 15000 });
+      await page.waitForURL('**/activities');
       
       // Find first activity row and click edit button
       const firstRow = page.locator('table tbody tr').first();
@@ -145,9 +142,6 @@ test.describe('CRUD Operations - End-to-End', () => {
       
       // Wait for form to close
       await page.waitForSelector('form', { state: 'hidden', timeout: 10000 });
-      
-      // Wait for table to refresh after update
-      await page.waitForTimeout(2000);
       
       // Verify updated activity appears
       await expect(page.locator(`text=${updatedSubject}`)).toBeVisible({ timeout: 10000 });
@@ -229,10 +223,7 @@ test.describe('CRUD Operations - End-to-End', () => {
     test('should create a new lead', async ({ page }) => {
       // Navigate to Leads
       await page.click('a[href="/leads"]');
-      await page.waitForURL('**/leads', { timeout: 30000 });
-      
-      // Wait for page to fully load
-      await page.waitForSelector('table, button:has-text("Add Lead"), button:has-text("New Lead")', { timeout: 15000 });
+      await page.waitForURL('**/leads');
       
       // Click Add Lead
       await page.click('button:has-text("Add Lead"), button:has-text("New Lead")');
@@ -289,9 +280,12 @@ test.describe('CRUD Operations - End-to-End', () => {
       
       await page.waitForSelector('form', { state: 'visible' });
       
-      // Update job title
+      // Update job title - using ID selector
       const newJobTitle = `Manager ${Date.now()}`;
       await page.fill('#job_title', newJobTitle);
+
+      // Wait a moment to ensure form is populated
+      await page.waitForTimeout(300);
 
       // Set up response promise BEFORE submitting
       const responsePromise = page.waitForResponse(
@@ -299,17 +293,24 @@ test.describe('CRUD Operations - End-to-End', () => {
         { timeout: 15000 }
       );
 
-      // Submit form
+      // Submit form using button click instead of keyboard to ensure it works
       await page.click('button[type="submit"]:has-text("Update")');
 
       // Wait for the API response
-      await responsePromise;
+      const response = await responsePromise;
+      console.log('[Test] PUT response received:', response.status());
 
       // Wait for dialog to close
       await page.waitForSelector('[data-testid="lead-form"]', { state: 'hidden', timeout: 10000 });
+
+      // Dismiss any toasts that might be blocking the table
+      await page.evaluate(() => {
+        const closeButtons = document.querySelectorAll('[role="status"] button, .toast button');
+        closeButtons.forEach(btn => btn.click());
+      });
       
       // Wait for table refresh
-      await page.waitForTimeout(1000);      // Wait a moment for the table to refresh
+      await page.waitForTimeout(1500);      // Wait a moment for the table to refresh
       await page.waitForTimeout(1000);
       
       // Re-query the lead row after update (in case DOM refreshed)
@@ -327,10 +328,7 @@ test.describe('CRUD Operations - End-to-End', () => {
     test('should create a new contact', async ({ page }) => {
       // Navigate to Contacts
       await page.click('a[href="/contacts"]');
-      await page.waitForURL('**/contacts', { timeout: 30000 });
-      
-      // Wait for page to fully load
-      await page.waitForSelector('table, button:has-text("Add Contact"), button:has-text("New Contact")', { timeout: 15000 });
+      await page.waitForURL('**/contacts');
       
       // Click Add Contact
       await page.click('button:has-text("Add Contact"), button:has-text("New Contact")');

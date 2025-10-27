@@ -58,12 +58,16 @@ const makeDevFallback = (entityName, method, data, id) => {
 
 // Helper to call independent backend API
 const callBackendAPI = async (entityName, method, data = null, id = null) => {
+  console.log(`[API DEBUG] callBackendAPI called: ${entityName} ${method}`, { data, id });
+  
   const entityPath = pluralize(entityName);
   let url = `${BACKEND_URL}/api/${entityPath}`;
   
   // Get tenant_id from mock user for local dev
   const mockUser = isLocalDevMode() ? createMockUser() : null;
   const tenantId = mockUser?.tenant_id || 'local-tenant-001';
+  
+  console.log(`[API DEBUG] Building URL for ${entityName}, path: ${entityPath}, tenantId: ${tenantId}`);
   
   const options = {
     method: method,
@@ -96,7 +100,9 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
 
   let response;
   try {
+    console.log(`[API DEBUG] Fetching: ${url}`, options);
     response = await fetch(url, options);
+    console.log(`[API DEBUG] Response status: ${response.status} ${response.statusText}`);
   } catch (error) {
     // Network errors (connection refused, DNS failure, etc)
     apiHealthMonitor.reportNetworkError(url, {
@@ -145,6 +151,8 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   
   const result = await response.json();
   
+  console.log(`[API DEBUG] ${entityName} ${method} response:`, result);
+  
   // Backend returns { status: "success", data: { entityName: [...] } }
   // Extract the actual data array/object
   if (result.status === 'success' && result.data) {
@@ -152,7 +160,9 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     const entityKey = Object.keys(result.data).find(key => 
       key !== 'tenant_id' && Array.isArray(result.data[key])
     );
+    console.log(`[API DEBUG] ${entityName} found entityKey:`, entityKey, 'isArray:', Array.isArray(result.data[entityKey]));
     if (entityKey && Array.isArray(result.data[entityKey])) {
+      console.log(`[API DEBUG] ${entityName} returning array of`, result.data[entityKey].length, 'items');
       return result.data[entityKey];
     }
     // For single item operations (get, create, update), return the data directly
@@ -161,6 +171,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     }
   }
   
+  console.log(`[API DEBUG] ${entityName} returning raw result:`, result);
   return result;
 };
 
