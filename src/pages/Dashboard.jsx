@@ -51,7 +51,7 @@ export default function DashboardPage() {
   
   const [widgetPreferences, setWidgetPreferences] = useState({});
   const [isPickerOpen, setIsPickerOpen] = useState(false);
-  const [showTestData, setShowTestData] = useState(false);
+  const [showTestData, setShowTestData] = useState(true); // Default to showing all data
 
   const { cachedRequest, clearCacheByKey } = useApiManager();
   const { selectedEmail } = useEmployeeScope();

@@ -61,7 +61,7 @@ export default function ContactsPage() {
   const [convertingContact, setConvertingContact] = useState(null);
   const [selectedTags, setSelectedTags] = useState([]);
   // Added showTestData state to support the new getTenantFilter logic from the outline
-  const [showTestData, setShowTestData] = useState(false);
+  const [showTestData, setShowTestData] = useState(true); // Default to showing all data
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
 
   const [totalStats, setTotalStats] = useState({

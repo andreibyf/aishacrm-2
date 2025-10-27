@@ -79,7 +79,7 @@ export default function ActivitiesPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
   const [dateRange, setDateRange] = useState({ start: null, end: null });
-  const [showTestData, setShowTestData] = useState(false);
+  const [showTestData, setShowTestData] = useState(true); // Default to showing all data
   const { selectedEmail } = useEmployeeScope();
 
   const { selectedTimezone } = useTimezone();

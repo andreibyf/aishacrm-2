@@ -68,6 +68,15 @@ export const createMockTenant = () => ({
 });
 
 export const isLocalDevMode = () => {
+  // Use local backend mode if the backend URL is configured
+  const hasBackendUrl = !!import.meta.env.VITE_AISHACRM_BACKEND_URL;
+  
+  // If backend URL is set, use local backend (even with Supabase auth)
+  if (hasBackendUrl) {
+    return true;
+  }
+  
+  // Otherwise, fallback to original logic:
   // Use local dev mode (mock users) if:
   // 1. Base44 auth is disabled AND
   // 2. Supabase is not configured

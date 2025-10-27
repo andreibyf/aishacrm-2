@@ -57,7 +57,7 @@ export default function LeadsPage() {
   const [convertingLead, setConvertingLead] = useState(null);
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
   const [isConversionDialogOpen, setIsConversionDialogOpen] = useState(false);
-  const [showTestData, setShowTestData] = useState(false);
+  const [showTestData, setShowTestData] = useState(true); // Default to showing all data including test data
 
   // Define age buckets matching dashboard
   const ageBuckets = [
@@ -278,6 +278,9 @@ export default function LeadsPage() {
       // 1. Fetch all leads matching server-side filters (up to a limit)
       // We fetch a larger number (e.g., 10000) to accurately determine total count after client-side filtering.
       const allLeadsMatchingServerFilter = await Lead.filter(currentFilter, '-created_date', 10000);
+      console.log('[Leads DEBUG] API returned:', allLeadsMatchingServerFilter?.length, 'leads');
+      console.log('[Leads DEBUG] First lead:', allLeadsMatchingServerFilter?.[0]);
+      console.log('[Leads DEBUG] Filter used:', currentFilter);
 
       // 2. Apply client-side age filter to the full set to determine true total count and to prepare for pagination
       let ageFilteredAllLeads = allLeadsMatchingServerFilter;

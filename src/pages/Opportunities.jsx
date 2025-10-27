@@ -64,7 +64,7 @@ export default function OpportunitiesPage() {
   const [detailOpportunity, setDetailOpportunity] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
-  const [showTestData, setShowTestData] = useState(false); // Added showTestData state
+  const [showTestData, setShowTestData] = useState(true); // Default to showing all data
   
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
 

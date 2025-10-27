@@ -50,7 +50,7 @@ export default function AccountsPage() {
   const [detailAccount, setDetailAccount] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
-  const [showTestData, setShowTestData] = useState(false); // Added: New state for test data filter
+  const [showTestData, setShowTestData] = useState(true); // Default to showing all data
 
   // Stats for ALL accounts (not just current page)
   const [totalStats, setTotalStats] = useState({
