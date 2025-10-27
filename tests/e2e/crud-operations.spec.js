@@ -7,6 +7,10 @@ import { test, expect } from '@playwright/test';
 const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:5173';
 const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
 
+// Test user credentials
+const TEST_EMAIL = 'admin@aishacrm.com';
+const TEST_PASSWORD = process.env.SUPERADMIN_PASSWORD || 'SuperAdmin123!';
+
 // Helper: Wait for backend to be healthy
 async function waitForBackendHealth() {
   const maxAttempts = 30;
@@ -20,6 +24,27 @@ async function waitForBackendHealth() {
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
   throw new Error('Backend health check timeout after 30s');
+}
+
+// Helper: Login as user
+async function loginAsUser(page, email, password) {
+  await page.goto(BASE_URL);
+  
+  // Wait for login form
+  await page.waitForSelector('input[type="email"], input[name="email"]', { timeout: 10000 });
+  
+  // Fill login form
+  await page.fill('input[type="email"], input[name="email"]', email);
+  await page.fill('input[type="password"], input[name="password"]', password);
+  
+  // Submit login
+  await page.click('button[type="submit"]');
+  
+  // Wait for successful login (dashboard or main content loads)
+  await page.waitForSelector('main, [role="main"], .dashboard', { timeout: 15000 });
+  
+  // Wait for navigation to settle
+  await page.waitForTimeout(1000);
 }
 
 test.describe('CRUD Operations - End-to-End', () => {
@@ -39,17 +64,8 @@ test.describe('CRUD Operations - End-to-End', () => {
       }
     });
 
-    // Navigate to app and wait for initial load
-    await page.goto(BASE_URL, { waitUntil: 'networkidle' });
-    
-    // Wait for app to be fully initialized - wait for main content
-    await page.waitForSelector('main, [role="main"], .app-content', { timeout: 15000 }).catch(() => {
-      // If no main selector, just wait for any content to load
-      return page.waitForSelector('body', { timeout: 5000 });
-    });
-    
-    // Give React time to hydrate
-    await page.waitForTimeout(1000);
+    // Login before each test
+    await loginAsUser(page, TEST_EMAIL, TEST_PASSWORD);
   });
 
   test.describe('Activities CRUD', () => {

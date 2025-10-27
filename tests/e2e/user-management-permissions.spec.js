@@ -9,7 +9,7 @@ const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3
 
 // Test user credentials
 const SUPERADMIN_EMAIL = 'admin@aishacrm.com';
-const SUPERADMIN_PASSWORD = process.env.SUPERADMIN_PASSWORD || 'admin123';
+const SUPERADMIN_PASSWORD = process.env.SUPERADMIN_PASSWORD || 'SuperAdmin123!';
 
 // Helper: Wait for backend health
 async function waitForBackendHealth() {
@@ -328,7 +328,8 @@ test.describe('User Management - Permission System', () => {
     });
     
     expect(response.ok).toBeTruthy();
-    const data = await response.json();
+    const result = await response.json();
+    const data = result.data.user;
     
     // Verify metadata includes CRM access
     expect(data.metadata).toBeDefined();
