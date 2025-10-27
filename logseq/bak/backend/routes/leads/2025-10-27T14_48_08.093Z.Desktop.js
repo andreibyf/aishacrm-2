@@ -37,7 +37,7 @@ export default function createLeadRoutes(pgPool) {
         if (typeof status === 'string' && status.startsWith('{')) {
           try {
             parsedStatus = JSON.parse(status);
-          } catch {
+          } catch (_e) {
             // If it's not valid JSON, treat as literal string
           }
         }
@@ -67,7 +67,7 @@ export default function createLeadRoutes(pgPool) {
         if (typeof status === 'string' && status.startsWith('{')) {
           try {
             parsedStatus = JSON.parse(status);
-          } catch {
+          } catch (_e) {
             // If it's not valid JSON, treat as literal string
           }
         }

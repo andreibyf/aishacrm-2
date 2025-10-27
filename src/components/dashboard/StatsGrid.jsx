@@ -1,6 +1,6 @@
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Users, Target, Building2, TrendingUp, DollarSign, Calendar, HelpCircle } from "lucide-react";
+import { Users, Target, Building2, TrendingUp, DollarSign, Calendar, HelpCircle, CheckCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function StatsGrid({ stats }) {
@@ -30,7 +30,19 @@ export default function StatsGrid({ stats }) {
       color: "orange",
       ringColor: "ring-orange-500",
       textColor: "text-orange-400",
-      description: "Active sales opportunities"
+      description: "Active sales opportunities (not won or lost)"
+    },
+    {
+      title: "Won Deals",
+      value: stats?.wonOpportunities || 0,
+      icon: CheckCircle,
+      color: "green",
+      ringColor: "ring-green-600",
+      textColor: "text-green-500",
+      description: "Total closed-won opportunities",
+      secondaryValue: typeof stats?.wonValue === 'number' 
+        ? `$${(stats.wonValue / 1000).toFixed(0)}K` 
+        : null
     },
     {
       title: "Pipeline Value",
@@ -50,12 +62,12 @@ export default function StatsGrid({ stats }) {
       color: "cyan",
       ringColor: "ring-cyan-500",
       textColor: "text-cyan-400",
-      description: "Activities completed in last 30 days"
+      description: "Activities created in last 30 days"
     }
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
       {statCards.map((stat, index) => {
         const Icon = stat.icon;
         return (
@@ -77,6 +89,9 @@ export default function StatsGrid({ stats }) {
               </TooltipProvider>
             </div>
             <p className={`text-3xl font-bold ${stat.textColor}`}>{stat.value}</p>
+            {stat.secondaryValue && (
+              <p className="text-sm text-slate-400 mt-1">{stat.secondaryValue} total</p>
+            )}
           </div>
         );
       })}

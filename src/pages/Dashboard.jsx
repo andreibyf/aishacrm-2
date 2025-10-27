@@ -208,12 +208,22 @@ export default function DashboardPage() {
           cachedRequest('Activity', 'filter', { filter: tenantFilter }, () => Activity.filter(tenantFilter)),
         ]);
 
-        // Calculate pipeline value (active opportunities only)
+        // Calculate pipeline value (active opportunities only - exclude won and lost)
         const activeOpps = opportunities?.filter(o => 
-          o.stage !== 'closed_won' && o.stage !== 'closed_lost'
+          o.stage !== 'won' && o.stage !== 'closed_won' && o.stage !== 'lost' && o.stage !== 'closed_lost'
+        ) || [];
+        
+        // Count won opportunities
+        const wonOpps = opportunities?.filter(o => 
+          o.stage === 'won' || o.stage === 'closed_won'
         ) || [];
         
         const pipelineValue = activeOpps.reduce((sum, opp) => {
+          const amount = parseFloat(opp.amount) || 0;
+          return sum + amount;
+        }, 0);
+        
+        const wonValue = wonOpps.reduce((sum, opp) => {
           const amount = parseFloat(opp.amount) || 0;
           return sum + amount;
         }, 0);
@@ -236,13 +246,17 @@ export default function DashboardPage() {
           totalContacts: contacts?.length || 0,
           newLeads: newLeads.length,
           activeOpportunities: activeOpps.length,
+          wonOpportunities: wonOpps.length,
           pipelineValue: pipelineValue,
+          wonValue: wonValue,
           activitiesLogged: recentActivities.length,
           trends: {
             contacts: null,
             newLeads: null,
             activeOpportunities: null,
+            wonOpportunities: null,
             pipelineValue: null,
+            wonValue: null,
             activitiesLogged: null,
           }
         };

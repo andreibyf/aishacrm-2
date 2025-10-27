@@ -1,6 +1,6 @@
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, TrendingUp, DollarSign } from "lucide-react";
+import { Building2, DollarSign } from "lucide-react";
 import { createPageUrl } from "@/utils";
 
 export default function TopAccounts({ tenantFilter, showTestData }) {
@@ -10,21 +10,62 @@ export default function TopAccounts({ tenantFilter, showTestData }) {
   React.useEffect(() => {
     const loadTopAccounts = async () => {
       try {
-        const { Account } = await import("@/api/entities");
+        const { Account, Opportunity, Contact } = await import("@/api/entities");
         
         let filter = { ...tenantFilter };
         if (!showTestData) {
           filter.is_test_data = { $ne: true };
         }
         
-        const accountsData = await Account.filter(filter);
+        // Load all necessary data
+        const [accountsData, opportunitiesData, contactsData] = await Promise.all([
+          Account.filter(filter),
+          Opportunity.filter({ ...filter, stage: 'won' }), // Only won opportunities
+          Contact.filter(filter)
+        ]);
         
-        const sortedAccounts = (accountsData || [])
-          .filter(a => a.annual_revenue)
-          .sort((a, b) => (b.annual_revenue || 0) - (a.annual_revenue || 0))
+        // Build contact lookup map (contact_id -> account_id)
+        const contactToAccountMap = {};
+        (contactsData || []).forEach(contact => {
+          if (contact.id && contact.account_id) {
+            contactToAccountMap[contact.id] = contact.account_id;
+          }
+        });
+        
+        // Calculate revenue per account
+        const accountRevenue = {};
+        const accountDealCount = {};
+        
+        (opportunitiesData || []).forEach(opp => {
+          let targetAccountId = null;
+          
+          // Attribution logic:
+          // 1. Direct account_id on opportunity
+          // 2. Rollup through contact -> account relationship
+          if (opp.account_id) {
+            targetAccountId = opp.account_id;
+          } else if (opp.contact_id && contactToAccountMap[opp.contact_id]) {
+            targetAccountId = contactToAccountMap[opp.contact_id];
+          }
+          
+          if (targetAccountId) {
+            accountRevenue[targetAccountId] = (accountRevenue[targetAccountId] || 0) + (parseFloat(opp.amount) || 0);
+            accountDealCount[targetAccountId] = (accountDealCount[targetAccountId] || 0) + 1;
+          }
+        });
+        
+        // Enrich accounts with revenue data and sort
+        const accountsWithRevenue = (accountsData || [])
+          .map(account => ({
+            ...account,
+            totalRevenue: accountRevenue[account.id] || 0,
+            dealCount: accountDealCount[account.id] || 0
+          }))
+          .filter(a => a.totalRevenue > 0) // Only show accounts with won deals
+          .sort((a, b) => b.totalRevenue - a.totalRevenue)
           .slice(0, 5);
         
-        setAccounts(sortedAccounts);
+        setAccounts(accountsWithRevenue);
       } catch (error) {
         console.error("Failed to load top accounts:", error);
       } finally {
@@ -50,7 +91,7 @@ export default function TopAccounts({ tenantFilter, showTestData }) {
       <CardHeader>
         <CardTitle className="text-slate-100 flex items-center gap-2">
           <Building2 className="w-5 h-5 text-blue-400" />
-          Top Accounts by Revenue
+          Top Accounts by Won Deals
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -76,15 +117,16 @@ export default function TopAccounts({ tenantFilter, showTestData }) {
                     <p className="text-slate-200 font-medium group-hover:text-blue-400 transition-colors">
                       {account.name}
                     </p>
-                    {account.industry && (
-                      <p className="text-slate-500 text-xs">{account.industry}</p>
-                    )}
+                    <p className="text-slate-500 text-xs">
+                      {account.dealCount} {account.dealCount === 1 ? 'deal' : 'deals'} won
+                      {account.industry && ` • ${account.industry}`}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <DollarSign className="w-4 h-4 text-green-400" />
                   <span className="text-slate-300 font-semibold">
-                    {formatCurrency(account.annual_revenue)}
+                    {formatCurrency(account.totalRevenue)}
                   </span>
                 </div>
               </a>
@@ -93,7 +135,7 @@ export default function TopAccounts({ tenantFilter, showTestData }) {
         ) : (
           <div className="text-center py-8 text-slate-500">
             <Building2 className="w-12 h-12 mx-auto mb-2 opacity-50" />
-            <p>No accounts with revenue data</p>
+            <p>No accounts with won deals</p>
           </div>
         )}
       </CardContent>

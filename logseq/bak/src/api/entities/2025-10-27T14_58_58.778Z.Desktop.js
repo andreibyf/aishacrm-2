@@ -72,29 +72,22 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     },
   };
 
-  if (method === 'GET') {
-    if (id) {
-      // GET by ID - append ID to URL
-      url += `/${id}`;
-      if (data && method !== 'DELETE') {
-        options.body = JSON.stringify({ ...data, tenant_id: tenantId });
+  if (method === 'GET' && data) {
+    // Convert filter object to query params
+    const params = new URLSearchParams();
+    // Always include tenant_id
+    params.append('tenant_id', tenantId);
+    Object.entries(data).forEach(([key, value]) => {
+      if (key !== 'tenant_id') { // Don't duplicate tenant_id
+        params.append(key, typeof value === 'object' ? JSON.stringify(value) : value);
       }
-    } else {
-      // GET list/filter - convert to query params
-      const params = new URLSearchParams();
-      // Always include tenant_id for list operations
-      params.append('tenant_id', tenantId);
-      
-      // Add filter parameters if provided
-      if (data && Object.keys(data).length > 0) {
-        Object.entries(data).forEach(([key, value]) => {
-          if (key !== 'tenant_id') { // Don't duplicate tenant_id
-            params.append(key, typeof value === 'object' ? JSON.stringify(value) : value);
-          }
-        });
-      }
-      url += `?${params.toString()}`;
-    }
+    });
+    url += `?${params.toString()}`;
+  } else if (method === 'GET' && !id) {
+    // GET request without filter data - still need tenant_id for list operations
+    const params = new URLSearchParams();
+    params.append('tenant_id', tenantId);
+    url += `?${params.toString()}`;
   } else if (id) {
     url += `/${id}`;
     if (data && method !== 'DELETE') {
