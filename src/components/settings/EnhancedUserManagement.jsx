@@ -48,7 +48,8 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
         { key: 'Utilities', label: 'Utilities' },
         { key: 'ClientOnboarding', label: 'Client Onboarding' },
         { key: 'WorkflowGuide', label: 'Workflow Guide' },
-        { key: 'ClientRequirements', label: 'Client Requirements' }, // Added ClientRequirements
+        { key: 'ClientRequirements', label: 'Client Requirements' },
+        { key: 'Workflows', label: 'Workflows (Experimental)' },
     ];
 
     const initNavPerms = () => {
@@ -111,7 +112,8 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
         return employeesInTenant.filter((e) => e.id !== idToExclude);
     }, [employeesInTenant, myEmployeeRecord]);
 
-    const canEditPermissions = (currentUser?.role === 'admin'); // Changed: Only Admin can edit granular permissions
+    // Admins and SuperAdmins can edit permissions (case-insensitive check)
+    const canEditPermissions = ['admin', 'superadmin'].includes(currentUser?.role?.toLowerCase());
 
     const handleAddTag = () => {
         if (tagInput && !formData.tags.includes(tagInput.trim())) {
@@ -235,37 +237,60 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
                     </div>
 
                     {/* SIMPLIFIED: Only Employee Role - No confusing "Role/Status" field */}
-                    <div>
-                        <Label htmlFor="employee_role" className="text-slate-200">CRM Role</Label>
-                        <Select
-                            value={formData.employee_role || 'employee'}
-                            onValueChange={(value) => setFormData(prev => ({
-                                ...prev,
-                                employee_role: value
-                            }))}
-                        >
-                            <SelectTrigger id="employee_role" className="bg-slate-700 border-slate-600 text-slate-200">
-                                <SelectValue placeholder="Select CRM role" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                                <SelectItem value="employee">
-                                    <div className="flex flex-col">
-                                        <span className="font-semibold">Employee</span>
-                                        <span className="text-xs text-slate-400">Can only see their own records</span>
-                                    </div>
-                                </SelectItem>
-                                <SelectItem value="manager">
-                                    <div className="flex flex-col">
-                                        <span className="font-semibold">Manager</span>
-                                        <span className="text-xs text-slate-400">Can see all records in their tenant</span>
-                                    </div>
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <p className="text-xs text-slate-500 mt-1">
-                            Note: Base44 role is always "user" for Employees/Managers. This controls CRM data visibility.
-                        </p>
-                    </div>
+                    {/* Hide CRM Role for Admins/SuperAdmins - they have full access automatically */}
+                    {user?.role?.toLowerCase() !== 'admin' && user?.role?.toLowerCase() !== 'superadmin' && (
+                        <div>
+                            <Label htmlFor="employee_role" className="text-slate-200">CRM Role</Label>
+                            <Select
+                                value={formData.employee_role || 'employee'}
+                                onValueChange={(value) => setFormData(prev => ({
+                                    ...prev,
+                                    employee_role: value
+                                }))}
+                            >
+                                <SelectTrigger id="employee_role" className="bg-slate-700 border-slate-600 text-slate-200">
+                                    <SelectValue placeholder="Select CRM role" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                                    <SelectItem value="employee">
+                                        <div className="flex flex-col">
+                                            <span className="font-semibold">Employee</span>
+                                            <span className="text-xs text-slate-400">Can only see their own records</span>
+                                        </div>
+                                    </SelectItem>
+                                    <SelectItem value="manager">
+                                        <div className="flex flex-col">
+                                            <span className="font-semibold">Manager</span>
+                                            <span className="text-xs text-slate-400">Can see all records in their tenant</span>
+                                        </div>
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-slate-500 mt-1">
+                                Note: Base44 role is always "user" for Employees/Managers. This controls CRM data visibility.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Show System Role Badge for Admins/SuperAdmins */}
+                    {(user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'superadmin') && (
+                        <div className="p-4 bg-purple-900/20 border border-purple-700/50 rounded-lg">
+                            <div className="flex items-center gap-2">
+                                <ShieldCheck className="w-5 h-5 text-purple-400" />
+                                <div>
+                                    <p className="font-semibold text-purple-300">
+                                        {user?.role?.toLowerCase() === 'superadmin' ? 'Super Administrator' : 'Tenant Administrator'}
+                                    </p>
+                                    <p className="text-xs text-slate-400">
+                                        {user?.role?.toLowerCase() === 'superadmin' 
+                                            ? 'Global system access - can manage all tenants and users'
+                                            : 'Tenant admin - can manage users and settings for this tenant only'
+                                        }
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Active Status */}
                     <div className="flex items-center space-x-2">
@@ -571,15 +596,18 @@ export default function EnhancedUserManagement() {
 
     // Simplified role display
     const getRoleDisplay = (user) => {
-        if (user.role === 'admin' || user.role === 'superadmin') return 'Admin (App Owner)';
+        const role = user.role?.toLowerCase();
+        if (role === 'superadmin') return 'Super Admin';
+        if (role === 'admin') return 'Tenant Admin';
         if (user.employee_role === 'manager') return 'Manager';
         return 'Employee';
     };
 
     // Simplified role badge class
     const getRoleBadgeClass = (user) => {
-        if (user.is_active === false) return 'bg-red-100 text-red-800';
-        if (user.role === 'admin' || user.role === 'superadmin') return 'bg-purple-100 text-purple-800';
+        const role = user.role?.toLowerCase();
+        if (user.status === 'inactive') return 'bg-red-100 text-red-800';
+        if (role === 'admin' || role === 'superadmin') return 'bg-purple-100 text-purple-800';
         if (user.employee_role === 'manager') return 'bg-blue-100 text-blue-800';
         return 'bg-gray-100 text-gray-800';
     };
@@ -592,16 +620,17 @@ export default function EnhancedUserManagement() {
 
         let matchesRoleFilter = true;
         if (roleFilter !== 'all') {
+            const userRole = user.role?.toLowerCase();
             if (roleFilter === 'superadmin') {
-                matchesRoleFilter = user.role === 'superadmin';
+                matchesRoleFilter = userRole === 'superadmin';
             } else if (roleFilter === 'admin') {
-                matchesRoleFilter = user.role === 'admin';
+                matchesRoleFilter = userRole === 'admin';
             } else if (roleFilter === 'power-user') {
                 // Map 'power-user' filter to 'manager' employee_role for non-admins
-                matchesRoleFilter = user.employee_role === 'manager' && user.role !== 'admin' && user.role !== 'superadmin';
+                matchesRoleFilter = user.employee_role === 'manager' && userRole !== 'admin' && userRole !== 'superadmin';
             } else if (roleFilter === 'user') {
                 // Map 'user' filter to 'employee' employee_role for non-admins
-                matchesRoleFilter = user.employee_role === 'employee' && user.role !== 'admin' && user.role !== 'superadmin';
+                matchesRoleFilter = user.employee_role === 'employee' && userRole !== 'admin' && userRole !== 'superadmin';
             }
         }
         return matchesSearch && matchesRoleFilter;

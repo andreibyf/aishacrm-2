@@ -8,22 +8,6 @@ import express from 'express';
 export default function createUserRoutes(pgPool) {
   const router = express.Router();
 
-  // Helper function to expand metadata fields to top-level properties
-  const expandUserMetadata = (user) => {
-    if (!user) return user;
-    const { metadata = {}, ...rest } = user;
-    return {
-      ...rest,
-      display_name: metadata.display_name,
-      is_active: metadata.is_active,
-      tags: metadata.tags,
-      employee_role: metadata.employee_role,
-      permissions: metadata.permissions,
-      navigation_permissions: metadata.navigation_permissions,
-      metadata, // Keep original metadata for backwards compatibility
-    };
-  };
-
   // GET /api/users - List users (combines global users + tenant employees)
   router.get('/', async (req, res) => {
     try {
@@ -39,8 +23,7 @@ export default function createUserRoutes(pgPool) {
         const countQuery = 'SELECT COUNT(*) FROM employees WHERE tenant_id = $1';
         const countResult = await pgPool.query(countQuery, [tenant_id]);
         
-        // Expand metadata fields for each user
-        allUsers = employeeResult.rows.map(expandUserMetadata);
+        allUsers = employeeResult.rows;
         
         res.json({
           status: 'success',
@@ -61,8 +44,8 @@ export default function createUserRoutes(pgPool) {
         const employeesQuery = 'SELECT id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at, \'employee\' as user_type FROM employees ORDER BY created_at DESC LIMIT $1 OFFSET $2';
         const employeesResult = await pgPool.query(employeesQuery, [parseInt(limit), parseInt(offset)]);
         
-        // Combine both - global users first, then employees, and expand metadata
-        allUsers = [...globalUsersResult.rows, ...employeesResult.rows].map(expandUserMetadata);
+        // Combine both - global users first, then employees
+        allUsers = [...globalUsersResult.rows, ...employeesResult.rows];
         
         // Sort by created_at desc
         allUsers.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -102,12 +85,9 @@ export default function createUserRoutes(pgPool) {
         return res.status(404).json({ status: 'error', message: 'User not found' });
       }
 
-      // Expand metadata to top-level properties
-      const user = expandUserMetadata(result.rows[0]);
-
       res.json({
         status: 'success',
-        data: { user },
+        data: { user: result.rows[0] },
       });
     } catch (error) {
       console.error('Error getting user:', error);
@@ -348,13 +328,10 @@ export default function createUserRoutes(pgPool) {
         return res.status(404).json({ status: 'error', message: 'User not found' });
       }
 
-      // Expand metadata to top-level properties
-      const updatedUser = expandUserMetadata(result.rows[0]);
-
       res.json({
         status: 'success',
         message: 'User updated',
-        data: { user: updatedUser },
+        data: { user: result.rows[0] },
       });
     } catch (error) {
       console.error('Error updating user:', error);

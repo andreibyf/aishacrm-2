@@ -147,6 +147,14 @@ const defaultModules = [
     description: 'Streamlined form for prospects to submit their requirements and request a demo',
     icon: Users,
     features: ['Project Requirements Form', 'Module Selection', 'Navigation Permissions Setup', 'Initial User Configuration', 'Admin Review & Approval']
+  },
+  {
+    id: 'workflows',
+    name: 'Workflows (Experimental)',
+    description: 'Automate business processes with custom workflows and triggers',
+    icon: Zap,
+    features: ['Visual Workflow Builder', 'Custom Triggers', 'Multi-step Automation', 'Conditional Logic', 'Email & Notification Actions'],
+    experimental: true
   }
 ];
 
@@ -311,7 +319,14 @@ export default function ModuleManager() {
                           />
                         </div>
                         <div className="flex-1">
-                          <h3 className="font-semibold text-slate-100">{module.name}</h3>
+                          <h3 className="font-semibold text-slate-100">
+                            {module.name}
+                            {module.experimental && (
+                              <Badge className="ml-2 bg-yellow-600 text-white hover:bg-yellow-700 text-xs">
+                                BETA
+                              </Badge>
+                            )}
+                          </h3>
                           <Badge
                             className={`mt-1 ${
                               isActive

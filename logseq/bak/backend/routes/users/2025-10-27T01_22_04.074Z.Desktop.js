@@ -348,13 +348,10 @@ export default function createUserRoutes(pgPool) {
         return res.status(404).json({ status: 'error', message: 'User not found' });
       }
 
-      // Expand metadata to top-level properties
-      const updatedUser = expandUserMetadata(result.rows[0]);
-
       res.json({
         status: 'success',
         message: 'User updated',
-        data: { user: updatedUser },
+        data: { user: result.rows[0] },
       });
     } catch (error) {
       console.error('Error updating user:', error);
