@@ -68,6 +68,10 @@ if (process.env.USE_SUPABASE_PROD === 'true') {
   console.warn('⚠ No database configured - set DATABASE_URL or USE_SUPABASE_PROD=true');
 }
 
+// Initialize Supabase Auth
+import { initSupabaseAuth } from './lib/supabaseAuth.js';
+const supabaseAuth = initSupabaseAuth();
+
 // Middleware
 app.use(helmet()); // Security headers
 app.use(compression()); // Compress responses
@@ -177,7 +181,7 @@ app.use('/api/billing', createBillingRoutes(pgPool));
 app.use('/api/storage', createStorageRoutes(pgPool));
 app.use('/api/webhooks', createWebhookRoutes(pgPool));
 app.use('/api/system', createSystemRoutes(pgPool));
-app.use('/api/users', createUserRoutes(pgPool));
+app.use('/api/users', createUserRoutes(pgPool, supabaseAuth));
 app.use('/api/employees', createEmployeeRoutes(pgPool));
 app.use('/api/permissions', createPermissionRoutes(pgPool));
 app.use('/api/testing', createTestingRoutes(pgPool));
