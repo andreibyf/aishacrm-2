@@ -20,6 +20,9 @@ import InviteUserDialog from './InviteUserDialog';
 import { Switch } from "@/components/ui/switch";
 import { format } from 'date-fns';
 import { updateEmployeeSecure } from "@/api/functions";
+import { deleteUser } from "@/functions/users/deleteUser";
+import { canDeleteUser } from "@/utils/permissions";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
     const navigationPages = [
@@ -437,6 +440,8 @@ export default function EnhancedUserManagement() {
     const [searchTerm, setSearchTerm] = useState('');
     const [roleFilter, setRoleFilter] = useState('all');
     const [isInviteModalOpen, setInviteModalOpen] = useState(false);
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [userToDelete, setUserToDelete] = useState(null);
 
     useEffect(() => {
         loadData();
@@ -532,6 +537,38 @@ export default function EnhancedUserManagement() {
         loadData();
     };
 
+    const handleDeleteUser = (user) => {
+        // Check permissions
+        if (!canDeleteUser(currentUser, user)) {
+            toast.error("You do not have permission to delete this user");
+            return;
+        }
+
+        // Open confirmation dialog
+        setUserToDelete(user);
+        setDeleteConfirmOpen(true);
+    };
+
+    const confirmDelete = async () => {
+        if (!userToDelete) return;
+
+        try {
+            const response = await deleteUser(userToDelete.id, userToDelete.tenant_id, currentUser);
+            
+            if (response.status === 200) {
+                toast.success(`User ${userToDelete.email} has been deleted`);
+                setDeleteConfirmOpen(false);
+                setUserToDelete(null);
+                await loadData(); // Refresh user list
+            } else {
+                toast.error(`Failed to delete user: ${response.data?.error || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error("Error deleting user:", error);
+            toast.error(`Failed to delete user: ${error.message}`);
+        }
+    };
+
     // Simplified role display
     const getRoleDisplay = (user) => {
         if (user.role === 'admin' || user.role === 'superadmin') return 'Admin (App Owner)';
@@ -589,7 +626,7 @@ export default function EnhancedUserManagement() {
                         </div>
                         <Button onClick={() => setInviteModalOpen(true)} className="bg-blue-600 hover:bg-blue-700">
                             <Plus className="w-4 h-4 mr-2" />
-                            Invite User
+                            Add User
                         </Button>
                     </div>
                 </CardHeader>
@@ -772,16 +809,28 @@ export default function EnhancedUserManagement() {
                                                     }
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => setEditingUser(user)}
-                                                        disabled={!managerCanEdit}
-                                                        className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600 disabled:opacity-60"
-                                                    >
-                                                        <Edit className="w-4 h-4 mr-1" />
-                                                        Edit
-                                                    </Button>
+                                                    <div className="flex gap-2 justify-end">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => setEditingUser(user)}
+                                                            disabled={!managerCanEdit}
+                                                            className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600 disabled:opacity-60"
+                                                        >
+                                                            <Edit className="w-4 h-4 mr-1" />
+                                                            Edit
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => handleDeleteUser(user)}
+                                                            disabled={!canDeleteUser(currentUser, user)}
+                                                            className="bg-red-700 border-red-600 text-red-100 hover:bg-red-600 disabled:opacity-60"
+                                                        >
+                                                            <Trash2 className="w-4 h-4 mr-1" />
+                                                            Delete
+                                                        </Button>
+                                                    </div>
                                                 </TableCell>
                                             </TableRow>
                                         );
@@ -810,6 +859,40 @@ export default function EnhancedUserManagement() {
                 tenants={allTenants}
                 currentUser={currentUser}
             />
+
+            <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                <AlertDialogContent className="bg-slate-800 border-slate-700">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="text-red-400 flex items-center gap-2">
+                            <Trash2 className="w-5 h-5" />
+                            Delete User
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-slate-300 space-y-2">
+                            <p>Are you sure you want to permanently delete this user?</p>
+                            {userToDelete && (
+                                <div className="mt-3 p-3 bg-slate-900 rounded border border-slate-700">
+                                    <p><strong className="text-slate-200">Name:</strong> {userToDelete.full_name || userToDelete.display_name || 'N/A'}</p>
+                                    <p><strong className="text-slate-200">Email:</strong> {userToDelete.email}</p>
+                                    <p><strong className="text-slate-200">Role:</strong> {getRoleDisplay(userToDelete)}</p>
+                                    <p><strong className="text-slate-200">Tenant:</strong> {userToDelete.tenant_id || 'No Tenant'}</p>
+                                </div>
+                            )}
+                            <p className="text-yellow-400 font-semibold mt-3">⚠️ This action cannot be undone.</p>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction 
+                            onClick={confirmDelete} 
+                            className="bg-red-600 hover:bg-red-700 text-white"
+                        >
+                            Delete User
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

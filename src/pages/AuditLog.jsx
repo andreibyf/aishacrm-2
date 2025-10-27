@@ -58,10 +58,13 @@ export default function AuditLogPage() {
         AuditLog.list({}, '-created_at', 100) // Get last 100 entries, sorted by created_at descending
       ]);
       
+      console.log('[AuditLog] Loaded user:', user?.email);
+      console.log('[AuditLog] Loaded logs:', logs?.length || 0, 'entries');
+      
       setCurrentUser(user);
       setAuditLogs(Array.isArray(logs) ? logs : []);
     } catch (error) {
-      console.error('Error loading audit logs:', error);
+      console.error('[AuditLog] Error loading audit logs:', error);
       toast.error('Failed to load audit logs');
       setAuditLogs([]);
     } finally {

@@ -140,7 +140,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
   }
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
-  const isPowerUser = currentUser?.permissions?.role === 'power-user' || currentUser?.tier === 'Tier3' || currentUser?.tier === 'Tier4';
+  const isManager = currentUser?.role === 'manager';
   const isSuperadmin = currentUser?.role === 'superadmin';
 
   // Define all tabs based on the outline, preserving existing components by creating new tabs where necessary
@@ -150,15 +150,15 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
     { id: 'regional', label: 'Regional', icon: Globe, color: 'blue', roles: ['any'] }, // New tab for TimezoneSettings
     { id: 'billing', label: 'Billing', icon: CreditCard, color: 'blue', roles: ['any'] }, // New tab for BillingSettings
 
-    // Admin & PowerUser accessible tabs
-    ...(isAdmin || isPowerUser ? [
-      { id: 'global-integrations', label: 'Global Integrations', icon: Plug, color: 'orange', roles: ['admin', 'superadmin', 'power-user'] }, // New tab for IntegrationSettings to preserve it
-      { id: 'tenant-integrations', label: 'Tenant Integrations', icon: Puzzle, color: 'orange', roles: ['admin', 'superadmin', 'power-user'] }, // Explicitly for TenantIntegrationSettings as per outline's implicit mapping
-      { id: 'webhooks', label: 'Webhooks', icon: Webhook, color: 'orange', roles: ['admin', 'superadmin', 'power-user'] },
+    // Admin & Manager accessible tabs
+    ...(isAdmin || isManager ? [
+      { id: 'global-integrations', label: 'Global Integrations', icon: Plug, color: 'orange', roles: ['admin', 'superadmin', 'manager'] },
+      { id: 'tenant-integrations', label: 'Tenant Integrations', icon: Puzzle, color: 'orange', roles: ['admin', 'superadmin', 'manager'] },
+      { id: 'webhooks', label: 'Webhooks', icon: Webhook, color: 'orange', roles: ['admin', 'superadmin', 'manager'] },
 
-      { id: 'data-consistency', label: 'Data Consistency', icon: Database, color: 'cyan', roles: ['admin', 'superadmin', 'power-user'] },
-      { id: 'denormalization', label: 'Denormalization', icon: Shuffle, color: 'cyan', roles: ['admin', 'superadmin', 'power-user'] },
-      { id: 'data-optimization', label: 'Data Optimization', icon: BarChart2, color: 'cyan', roles: ['admin', 'superadmin', 'power-user'] },
+      { id: 'data-consistency', label: 'Data Consistency', icon: Database, color: 'cyan', roles: ['admin', 'superadmin', 'manager'] },
+      { id: 'denormalization', label: 'Denormalization', icon: Shuffle, color: 'cyan', roles: ['admin', 'superadmin', 'manager'] },
+      { id: 'data-optimization', label: 'Data Optimization', icon: BarChart2, color: 'cyan', roles: ['admin', 'superadmin', 'manager'] },
     ] : []),
 
     // Admin-specific tabs
@@ -384,7 +384,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               )}
 
               {/* Integrations & Webhooks */}
-              {activeTab === 'global-integrations' && (isAdmin || isPowerUser) && ( // New tab content
+              {activeTab === 'global-integrations' && (isAdmin || isManager) && ( // New tab content
                 <Card className="bg-slate-800 border-slate-700">
                   <CardHeader>
                     <CardTitle className="text-slate-100">System Integrations</CardTitle>
@@ -396,7 +396,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                 </Card>
               )}
 
-              {activeTab === 'tenant-integrations' && (isAdmin || isPowerUser) && ( // Tab from outline mapping to TenantIntegrationSettings
+              {activeTab === 'tenant-integrations' && (isAdmin || isManager) && ( // Tab from outline mapping to TenantIntegrationSettings
                 <Card className="bg-slate-800 border-slate-700">
                   <CardHeader>
                     <CardTitle className="text-slate-100">Tenant-Specific Integrations</CardTitle>
@@ -408,7 +408,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                 </Card>
               )}
 
-              {activeTab === 'webhooks' && (isAdmin || isPowerUser) && (
+              {activeTab === 'webhooks' && (isAdmin || isManager) && (
                 <Card className="bg-slate-800 border-slate-700">
                   <CardHeader>
                     <CardTitle className="text-slate-100">Webhook Management</CardTitle>
@@ -518,7 +518,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               )}
 
               {/* Data Management */}
-              {activeTab === 'data-consistency' && (isAdmin || isPowerUser) && ( // New tab content
+              {activeTab === 'data-consistency' && (isAdmin || isManager) && ( // New tab content
                 <Card className="bg-slate-800 border-slate-700">
                   <CardHeader>
                     <CardTitle className="text-slate-100">Data Consistency Manager</CardTitle>
@@ -530,7 +530,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                 </Card>
               )}
 
-              {activeTab === 'denormalization' && (isAdmin || isPowerUser) && ( // New tab content
+              {activeTab === 'denormalization' && (isAdmin || isManager) && ( // New tab content
                 <Card className="bg-slate-800 border-slate-700">
                   <CardHeader>
                     <CardTitle className="text-slate-100">Denormalization Sync</CardTitle>
@@ -542,7 +542,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                 </Card>
               )}
 
-              {activeTab === 'data-optimization' && (isAdmin || isPowerUser) && ( // New tab content
+              {activeTab === 'data-optimization' && (isAdmin || isManager) && ( // New tab content
                 <Card className="bg-slate-800 border-slate-700">
                   <CardHeader>
                     <CardTitle className="text-slate-100">Query Optimization</CardTitle>

@@ -13,27 +13,61 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, Send } from 'lucide-react';
+import { Loader2, Send, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { inviteUser } from '@/api/functions';
+import { canAssignCRMAccess, canAssignRole, getAssignableRoles, validateUserPermissions } from '@/utils/permissions';
 
 export default function InviteUserDialog({ open, onOpenChange, onSuccess, tenants, currentUser }) {
   const { toast } = useToast();
+  
+  // Get roles this user can assign
+  const assignableRoles = getAssignableRoles(currentUser);
+  
   const [formData, setFormData] = useState({
     email: '',
     full_name: '',
-    role: 'user',
-    employee_role: '', // NEW: Add employee role
-    tenant_id: '',
+    role: 'employee',
+    tenant_id: currentUser?.tenant_id || '', // Default to current user's tenant if they have one
+    crm_access: true, // CRM Access toggle - default to true for new users
     can_use_softphone: false,
     access_level: 'read_write',
     phone: '',
-    navigation_permissions: {},
+    navigation_permissions: {
+      Dashboard: true,
+      Contacts: true,
+      Accounts: true,
+      Leads: true,
+      Opportunities: true,
+      Activities: true,
+      Calendar: true,
+      BizDevSources: false,
+      CashFlow: false,
+      Employees: false,
+      Reports: false,
+      Settings: true,
+      Integrations: false,
+      AICampaigns: false,
+      Agent: true,
+      Documentation: true,
+    },
   });
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validate permissions before submitting
+    const validation = validateUserPermissions(currentUser, formData, 'create');
+    if (!validation.valid) {
+      toast({ 
+        variant: "destructive", 
+        title: "Permission Denied", 
+        description: validation.error 
+      });
+      return;
+    }
+    
     if (!formData.email || !formData.full_name || !formData.role) {
       toast({ variant: "destructive", title: "Validation Error", description: "Email, name, and role are required." });
       return;
@@ -45,8 +79,8 @@ export default function InviteUserDialog({ open, onOpenChange, onSuccess, tenant
         email: formData.email,
         full_name: formData.full_name,
         role: formData.role,
-        employee_role: formData.employee_role === 'none' ? null : formData.employee_role || null, // NEW: Handle 'none' value
         tenant_id: formData.tenant_id || null,
+        crm_access: formData.crm_access, // Include CRM access toggle
         requested_access: formData.access_level || 'read_write',
         can_use_softphone: formData.can_use_softphone || false,
         phone: formData.phone || null,
@@ -55,31 +89,23 @@ export default function InviteUserDialog({ open, onOpenChange, onSuccess, tenant
         }
       };
 
-      const response = await inviteUser(payload);
+      const response = await inviteUser(payload, currentUser);
       
       if (response?.status === 200 && response?.data?.success) {
         const data = response.data;
         
-        if (data.requires_manual_invite) {
-          toast({ 
-            title: "Invitation Notifications Sent", 
-            description: `${formData.email} will receive a welcome email. Please complete the invite via base44 platform (Dashboard → Users → Invite User).`,
-            duration: 8000
-          });
-        } else {
-          toast({ 
-            title: "User Invited Successfully", 
-            description: data.message || `${formData.email} has been added to the system.`
-          });
-        }
+        toast({ 
+          title: "User Created Successfully", 
+          description: data.message || `${formData.email} has been added to the system.`
+        });
         
         onOpenChange(false);
         if (onSuccess) onSuccess();
       } else {
-        const errorMsg = response?.data?.error || response?.data?.message || 'Failed to process invitation';
+        const errorMsg = response?.data?.error || response?.data?.message || 'Failed to create user';
         toast({ 
           variant: "destructive", 
-          title: "Invitation Failed", 
+          title: "User Creation Failed", 
           description: errorMsg 
         });
       }
@@ -99,13 +125,30 @@ export default function InviteUserDialog({ open, onOpenChange, onSuccess, tenant
     setFormData({
       email: '',
       full_name: '',
-      role: 'user',
-      employee_role: '', // NEW
+      role: 'employee',
       tenant_id: '',
+      crm_access: true, // Reset CRM access to default
       can_use_softphone: false,
       access_level: 'read_write',
       phone: '',
-      navigation_permissions: {},
+      navigation_permissions: {
+        Dashboard: true,
+        Contacts: true,
+        Accounts: true,
+        Leads: true,
+        Opportunities: true,
+        Activities: true,
+        Calendar: true,
+        BizDevSources: false,
+        CashFlow: false,
+        Employees: false,
+        Reports: false,
+        Settings: true,
+        Integrations: false,
+        AICampaigns: false,
+        Agent: true,
+        Documentation: true,
+      },
     });
     onOpenChange(false);
   };
@@ -124,9 +167,9 @@ export default function InviteUserDialog({ open, onOpenChange, onSuccess, tenant
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800 border-slate-700">
         <DialogHeader>
-          <DialogTitle className="text-slate-100">Invite New User</DialogTitle>
+          <DialogTitle className="text-slate-100">Add New User</DialogTitle>
           <DialogDescription className="text-slate-400">
-            Send an invitation to join your CRM workspace
+            Create a new user account for your CRM workspace
           </DialogDescription>
         </DialogHeader>
 
@@ -170,37 +213,23 @@ export default function InviteUserDialog({ open, onOpenChange, onSuccess, tenant
             <p className="text-xs text-slate-500 mt-1">Include country code for SMS notification (e.g., +1 for US)</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="role" className="text-slate-200">Role</Label>
-              <Select value={formData.role} onValueChange={(value) => setFormData(prev => ({ ...prev, role: value }))}>
-                <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
-                  <SelectValue placeholder="Select access level" />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-600 text-slate-200">
-                  <SelectItem value="admin">Admin - Can manage the app</SelectItem>
-                  <SelectItem value="power-user">Power User - Advanced features</SelectItem>
-                  <SelectItem value="user">User - Can use the app</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="employee_role" className="text-slate-200">Employee Role</Label>
-              <Select 
-                value={formData.employee_role || 'none'} 
-                onValueChange={(value) => setFormData(prev => ({ ...prev, employee_role: value === 'none' ? '' : value }))}
-              >
-                <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
-                  <SelectValue placeholder="Select employee role" />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-600 text-slate-200">
-                  <SelectItem value="none">None (Use Base44 Role)</SelectItem>
-                  <SelectItem value="manager">Manager (Full Visibility)</SelectItem>
-                  <SelectItem value="employee">Employee (Own Records)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div>
+            <Label htmlFor="role" className="text-slate-200">Role</Label>
+            <Select value={formData.role} onValueChange={(value) => setFormData(prev => ({ ...prev, role: value }))}>
+              <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
+                <SelectValue placeholder="Select role" />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-800 border-slate-600 text-slate-200">
+                {assignableRoles.map(role => (
+                  <SelectItem key={role.value} value={role.value}>
+                    {role.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-slate-500 mt-1">
+              You can assign: {assignableRoles.map(r => r.value).join(', ')}
+            </p>
           </div>
 
           {tenants && tenants.length > 0 && (
@@ -221,6 +250,32 @@ export default function InviteUserDialog({ open, onOpenChange, onSuccess, tenant
               </Select>
             </div>
           )}
+
+          <div className="border border-slate-600 rounded-lg p-4 bg-slate-700/50">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center space-x-2">
+                <ShieldCheck className="h-5 w-5 text-orange-500" />
+                <Label htmlFor="crm_access" className="text-slate-200 font-semibold">CRM Access (Login Enabled)</Label>
+              </div>
+              <Switch
+                id="crm_access"
+                checked={formData.crm_access}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, crm_access: checked }))}
+                disabled={!canAssignCRMAccess(currentUser)}
+                className="data-[state=checked]:bg-orange-500"
+              />
+            </div>
+            <p className="text-sm text-slate-400">
+              {formData.crm_access 
+                ? "✓ User can log in and access the CRM application" 
+                : "✗ User exists in system but cannot log in (for reference/reporting only)"}
+            </p>
+            {!canAssignCRMAccess(currentUser) && (
+              <p className="text-xs text-amber-400 mt-2">
+                Only Admins and SuperAdmins can assign CRM access
+              </p>
+            )}
+          </div>
 
           <div>
             <Label htmlFor="access_level" className="text-slate-200">Access Level</Label>
@@ -245,20 +300,44 @@ export default function InviteUserDialog({ open, onOpenChange, onSuccess, tenant
             <Label htmlFor="can_use_softphone" className="text-slate-200">Can use Softphone</Label>
           </div>
 
-          <div className="p-3 bg-slate-700 border border-slate-600 rounded-lg text-slate-300">
-            <h3 className="font-semibold mb-2">Navigation Permissions (Advanced)</h3>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-slate-200 font-semibold">Navigation Permissions (Advanced)</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const allEnabled = Object.keys(formData.navigation_permissions).reduce((acc, key) => {
+                    acc[key] = true;
+                    return acc;
+                  }, {});
+                  setFormData(prev => ({ ...prev, navigation_permissions: allEnabled }));
+                }}
+                className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600 text-xs"
+              >
+                Enable All
+              </Button>
+            </div>
             <p className="text-sm text-slate-400">
-              Granular control over specific application routes. (UI not fully implemented in this example)
+              Granular control over which pages this user can access
             </p>
-            {/* Example: A simple checkbox for a specific nav item */}
-            {/* <div className="flex items-center space-x-2 mt-2">
-              <Switch
-                id="nav_dashboard"
-                checked={formData.navigation_permissions.dashboard || false}
-                onCheckedChange={(checked) => handleNavigationChange('dashboard', checked)}
-              />
-              <Label htmlFor="nav_dashboard">Access Dashboard</Label>
-            </div> */}
+            
+            <div className="grid grid-cols-2 gap-3 p-3 bg-slate-700 border border-slate-600 rounded-lg max-h-60 overflow-y-auto">
+              {Object.keys(formData.navigation_permissions).map(permKey => (
+                <div key={permKey} className="flex items-center space-x-2">
+                  <Switch
+                    id={`nav_${permKey}`}
+                    checked={formData.navigation_permissions[permKey] || false}
+                    onCheckedChange={(checked) => handleNavigationChange(permKey, checked)}
+                    className="data-[state=checked]:bg-orange-500"
+                  />
+                  <Label htmlFor={`nav_${permKey}`} className="text-slate-300 text-sm cursor-pointer">
+                    {permKey}
+                  </Label>
+                </div>
+              ))}
+            </div>
           </div>
 
           <DialogFooter>
@@ -279,12 +358,12 @@ export default function InviteUserDialog({ open, onOpenChange, onSuccess, tenant
               {submitting ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Sending...
+                  Creating...
                 </>
               ) : (
                 <>
                   <Send className="w-4 h-4 mr-2" />
-                  Send Invitation
+                  Create User
                 </>
               )}
             </Button>

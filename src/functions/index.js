@@ -45,6 +45,7 @@ export { userExistsByEmail } from './users/userExistsByEmail';
 export { listTenantUsers } from './users/listTenantUsers';
 export { setUserTenant } from './users/setUserTenant';
 export { requestUserInvite } from './users/requestUserInvite';
+export { deleteUser } from './users/deleteUser';
 
 // Billing & Payments
 export { createCheckoutSession } from './billing/createCheckoutSession';

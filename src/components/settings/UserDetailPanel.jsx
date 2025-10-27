@@ -52,13 +52,11 @@ export default function UserDetailPanel({ open, onClose, targetUser, editorUser,
     return filled;
   }, [targetUser]);
 
-  const [tier, setTier] = React.useState(targetUser?.tier || "Tier1");
   const [crmAccess, setCrmAccess] = React.useState(targetUser?.crm_access !== false);
   const [accessLevel, setAccessLevel] = React.useState(targetUser?.access_level || "read_write");
   const [nav, setNav] = React.useState(initialNav);
 
   React.useEffect(() => {
-    setTier(targetUser?.tier || "Tier1");
     setCrmAccess(targetUser?.crm_access !== false);
     setAccessLevel(targetUser?.access_level || "read_write");
     setNav(initialNav);
@@ -66,11 +64,15 @@ export default function UserDetailPanel({ open, onClose, targetUser, editorUser,
 
   const canEdit = React.useMemo(() => {
     const role = editorUser?.role;
+    // Superadmins and Admins can edit anyone
     if (role === "superadmin" || role === "admin") return true;
-    const editorTier = editorUser?.tier || "Tier1";
-    const targetRole = targetUser?.permissions?.intended_role || targetUser?.role || "user";
-    const isTargetEmployee = !["admin","superadmin","power-user"].includes(targetRole);
-    return (editorTier === "Tier3" || editorTier === "Tier4") && isTargetEmployee;
+    // Managers can edit employees only
+    if (role === "manager") {
+      const targetRole = targetUser?.role || "employee";
+      return targetRole === "employee";
+    }
+    // Regular employees cannot edit user permissions
+    return false;
   }, [editorUser, targetUser]);
 
   const handleToggle = (k, v) => setNav((prev) => ({ ...prev, [k]: !!v }));
@@ -79,11 +81,12 @@ export default function UserDetailPanel({ open, onClose, targetUser, editorUser,
     if (!targetUser?.id) return;
     setSaving(true);
     try {
-      // Persist tier + access level via function (service role) first
+      // Persist access level and navigation permissions
       await updateEmployeeUserAccess({
         user_id: targetUser.id,
-        tier: tier,
-        access_level: accessLevel
+        access_level: accessLevel,
+        crm_access: !!crmAccess,
+        navigation_permissions: { ...nav }
       });
 
       // Build permissions with nav mirrored in both places to keep compatibility
@@ -118,27 +121,12 @@ export default function UserDetailPanel({ open, onClose, targetUser, editorUser,
             User Access Settings — {targetUser?.email || targetUser?.full_name || ""}
           </DialogTitle>
           <DialogDescription className="text-slate-400">
-            Admins and Power Users can assign Tiers. Tier sets default permissions which you can override below.
+            Configure user permissions, CRM access, and navigation visibility.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-slate-800/60 border border-slate-700 rounded-lg p-3">
-            <div>
-              <Label className="text-slate-300">Tier</Label>
-              <Select value={tier} onValueChange={setTier} disabled={!canEdit}>
-                <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200 mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                  <SelectItem value="Tier1">Tier 1</SelectItem>
-                  <SelectItem value="Tier2">Tier 2</SelectItem>
-                  <SelectItem value="Tier3">Tier 3</SelectItem>
-                  <SelectItem value="Tier4">Tier 4</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-800/60 border border-slate-700 rounded-lg p-3">
             <div className="flex flex-col justify-end">
               <Label className="text-slate-300">CRM Access</Label>
               <div className="flex items-center gap-2 mt-1">

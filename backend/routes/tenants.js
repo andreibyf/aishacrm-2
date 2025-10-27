@@ -60,13 +60,22 @@ export default function createTenantRoutes(pgPool) {
       const countResult = await pgPool.query(countQuery, countParams);
       const total = parseInt(countResult.rows[0].count);
 
-      // Normalize tenant rows to expose common branding fields from settings/metadata
+      // Normalize tenant rows to expose common branding fields from branding_settings/metadata
       const tenants = result.rows.map(r => ({
         ...r,
-        logo_url: r.settings?.logo_url || r.metadata?.logo_url || null,
-        primary_color: r.settings?.primary_color || r.metadata?.primary_color || null,
-        accent_color: r.settings?.accent_color || r.metadata?.accent_color || null,
-        branding_settings: r.settings?.branding_settings || r.metadata?.branding_settings || {}
+        logo_url: r.branding_settings?.logo_url || r.metadata?.logo_url || null,
+        primary_color: r.branding_settings?.primary_color || r.metadata?.primary_color || null,
+        accent_color: r.branding_settings?.accent_color || r.metadata?.accent_color || null,
+        settings: r.branding_settings || {}, // For backward compatibility
+        // Extract metadata fields to top-level for UI
+        country: r.metadata?.country || '',
+        major_city: r.metadata?.major_city || '',
+        industry: r.metadata?.industry || 'other',
+        business_model: r.metadata?.business_model || 'b2b',
+        geographic_focus: r.metadata?.geographic_focus || 'north_america',
+        elevenlabs_agent_id: r.metadata?.elevenlabs_agent_id || '',
+        display_order: r.metadata?.display_order ?? 0,
+        domain: r.metadata?.domain || ''
       }));
 
       res.json({
@@ -167,10 +176,19 @@ export default function createTenantRoutes(pgPool) {
       const row = result.rows[0];
       const normalized = {
         ...row,
-        logo_url: row.settings?.logo_url || row.metadata?.logo_url || null,
-        primary_color: row.settings?.primary_color || row.metadata?.primary_color || null,
-        accent_color: row.settings?.accent_color || row.metadata?.accent_color || null,
-        branding_settings: row.settings?.branding_settings || row.metadata?.branding_settings || {}
+        logo_url: row.branding_settings?.logo_url || row.metadata?.logo_url || null,
+        primary_color: row.branding_settings?.primary_color || row.metadata?.primary_color || null,
+        accent_color: row.branding_settings?.accent_color || row.metadata?.accent_color || null,
+        settings: row.branding_settings || {}, // For backward compatibility
+        // Extract metadata fields to top-level for UI
+        country: row.metadata?.country || '',
+        major_city: row.metadata?.major_city || '',
+        industry: row.metadata?.industry || 'other',
+        business_model: row.metadata?.business_model || 'b2b',
+        geographic_focus: row.metadata?.geographic_focus || 'north_america',
+        elevenlabs_agent_id: row.metadata?.elevenlabs_agent_id || '',
+        display_order: row.metadata?.display_order ?? 0,
+        domain: row.metadata?.domain || ''
       };
 
       res.json({
@@ -186,8 +204,14 @@ export default function createTenantRoutes(pgPool) {
   // PUT /api/tenants/:id - Update tenant
   router.put('/:id', async (req, res) => {
     try {
-  const { id } = req.params;
-  const { name, settings, status, metadata, logo_url, primary_color, accent_color, branding_settings } = req.body;
+      const { id } = req.params;
+      const { 
+        name, settings, status, metadata, 
+        logo_url, primary_color, accent_color, branding_settings,
+        // Additional metadata fields
+        country, major_city, industry, business_model, geographic_focus, 
+        elevenlabs_agent_id, display_order, domain
+      } = req.body;
 
       if (!pgPool) {
         return res.status(503).json({ 
@@ -206,39 +230,62 @@ export default function createTenantRoutes(pgPool) {
         paramCount++;
       }
 
-      if (settings !== undefined) {
-        updates.push(`settings = $${paramCount}`);
-        params.push(settings);
-        paramCount++;
-      }
-
       if (status !== undefined) {
         updates.push(`status = $${paramCount}`);
         params.push(status);
         paramCount++;
       }
 
-      if (metadata !== undefined) {
+      // Handle metadata - merge with existing and add new fields
+      const shouldUpdateMetadata = metadata !== undefined || country !== undefined || 
+        major_city !== undefined || industry !== undefined || business_model !== undefined ||
+        geographic_focus !== undefined || elevenlabs_agent_id !== undefined || 
+        display_order !== undefined || domain !== undefined || settings !== undefined;
+      
+      if (shouldUpdateMetadata) {
+        // Fetch existing metadata to merge
+        const cur = await pgPool.query('SELECT metadata FROM tenant WHERE id = $1', [id]);
+        const existingMetadata = cur.rows[0]?.metadata || {};
+        
+        // Merge all metadata fields
+        const mergedMetadata = {
+          ...existingMetadata,
+          ...metadata,
+          ...(settings || {}), // Legacy settings field
+          ...(country !== undefined ? { country } : {}),
+          ...(major_city !== undefined ? { major_city } : {}),
+          ...(industry !== undefined ? { industry } : {}),
+          ...(business_model !== undefined ? { business_model } : {}),
+          ...(geographic_focus !== undefined ? { geographic_focus } : {}),
+          ...(elevenlabs_agent_id !== undefined ? { elevenlabs_agent_id } : {}),
+          ...(display_order !== undefined ? { display_order } : {}),
+          ...(domain !== undefined ? { domain } : {})
+        };
+        
         updates.push(`metadata = $${paramCount}`);
-        params.push(metadata);
+        params.push(mergedMetadata);
         paramCount++;
       }
 
-      // If branding fields provided, merge them into settings
-      if ((logo_url !== undefined) || (primary_color !== undefined) || (accent_color !== undefined) || (branding_settings !== undefined)) {
-        // Fetch existing tenant settings
-        const cur = await pgPool.query('SELECT settings FROM tenant WHERE id = $1', [id]);
-        const existingSettings = cur.rows[0]?.settings || {};
-        const merged = {
-          ...existingSettings,
-          ...(settings || {}),
+      // Handle settings/branding - merge branding fields if provided
+      const hasBrandingFields = (logo_url !== undefined) || (primary_color !== undefined) || (accent_color !== undefined) || (branding_settings !== undefined);
+      
+      if (settings !== undefined || hasBrandingFields) {
+        // Fetch existing tenant branding_settings to merge
+        const cur = await pgPool.query('SELECT branding_settings FROM tenant WHERE id = $1', [id]);
+        const existingBranding = cur.rows[0]?.branding_settings || {};
+        
+        // Merge into branding_settings
+        const mergedBranding = {
+          ...existingBranding,
+          ...(settings?.branding_settings || branding_settings || {}),
           ...(logo_url !== undefined ? { logo_url } : {}),
           ...(primary_color !== undefined ? { primary_color } : {}),
-          ...(accent_color !== undefined ? { accent_color } : {}),
-          ...(branding_settings !== undefined ? { branding_settings } : {})
+          ...(accent_color !== undefined ? { accent_color } : {})
         };
-        updates.push(`settings = $${paramCount}`);
-        params.push(merged);
+        
+        updates.push(`branding_settings = $${paramCount}`);
+        params.push(mergedBranding);
         paramCount++;
       }
 
@@ -269,11 +316,59 @@ export default function createTenantRoutes(pgPool) {
       const row = result.rows[0];
       const normalized = {
         ...row,
-        logo_url: row.settings?.logo_url || row.metadata?.logo_url || null,
-        primary_color: row.settings?.primary_color || row.metadata?.primary_color || null,
-        accent_color: row.settings?.accent_color || row.metadata?.accent_color || null,
-        branding_settings: row.settings?.branding_settings || row.metadata?.branding_settings || {}
+        logo_url: row.branding_settings?.logo_url || row.metadata?.logo_url || null,
+        primary_color: row.branding_settings?.primary_color || row.metadata?.primary_color || null,
+        accent_color: row.branding_settings?.accent_color || row.metadata?.accent_color || null,
+        settings: row.branding_settings || {}, // For backward compatibility
+        // Extract metadata fields to top-level for UI
+        country: row.metadata?.country || '',
+        major_city: row.metadata?.major_city || '',
+        industry: row.metadata?.industry || 'other',
+        business_model: row.metadata?.business_model || 'b2b',
+        geographic_focus: row.metadata?.geographic_focus || 'north_america',
+        elevenlabs_agent_id: row.metadata?.elevenlabs_agent_id || '',
+        display_order: row.metadata?.display_order ?? 0,
+        domain: row.metadata?.domain || ''
       };
+
+      // Create audit log entry
+      try {
+        const auditLog = {
+          tenant_id: row.tenant_id,
+          user_email: req.user?.email || 'system',
+          action: 'update',
+          entity_type: 'Tenant',
+          entity_id: id,
+          changes: { 
+            name, status, logo_url, primary_color, accent_color, metadata, branding_settings,
+            country, major_city, industry, business_model, geographic_focus, 
+            elevenlabs_agent_id, display_order, domain
+          },
+          ip_address: req.ip,
+          user_agent: req.get('user-agent')
+        };
+        
+        await pgPool.query(`
+          INSERT INTO audit_log (
+            tenant_id, user_email, action, entity_type, entity_id,
+            changes, ip_address, user_agent, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+        `, [
+          auditLog.tenant_id,
+          auditLog.user_email,
+          auditLog.action,
+          auditLog.entity_type,
+          auditLog.entity_id,
+          JSON.stringify(auditLog.changes),
+          auditLog.ip_address,
+          auditLog.user_agent
+        ]);
+        
+        console.log('[AUDIT] Tenant updated:', id, 'by', auditLog.user_email);
+      } catch (auditError) {
+        console.error('[AUDIT] Failed to create audit log:', auditError.message);
+        // Don't fail the request if audit logging fails
+      }
 
       res.json({
         status: 'success',
@@ -281,7 +376,7 @@ export default function createTenantRoutes(pgPool) {
         data: normalized,
       });
     } catch (error) {
-      console.error('Error updating tenant:', error);
+      console.error('[ERROR] Error updating tenant:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

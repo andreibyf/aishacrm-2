@@ -427,10 +427,14 @@ export default function TenantManagement() {
 
   const loadTenants = async () => {
     try {
+      console.log('[TenantManagement] Loading tenants...');
       const fetchedTenants = await Tenant.list();
+      console.log('[TenantManagement] Fetched tenants:', fetchedTenants);
+      console.log('[TenantManagement] Number of tenants:', fetchedTenants?.length);
       setTenants(fetchedTenants.sort((a, b) => (a.display_order || 0) - (b.display_order || 0)));
+      console.log('[TenantManagement] Tenants set to state');
     } catch (error) {
-      console.error('Failed to load tenants:', error);
+      console.error('[TenantManagement] Failed to load tenants:', error);
       toast.error('Failed to load tenants');
     } finally {
       setLoading(false);

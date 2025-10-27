@@ -230,7 +230,172 @@ const wrapEntityWithFilter = (entity, entityName) => {
 
 export const Contact = wrapEntityWithFilter(base44.entities.Contact, 'Contact');
 
-export const Account = wrapEntityWithFilter(base44.entities.Account, 'Account');
+// Account entity - direct backend API calls
+export const Account = {
+  async list(filters = {}, orderBy = '-created_at', limit = 100) {
+    try {
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+      
+      const params = new URLSearchParams();
+      if (filters.tenant_id) params.append('tenant_id', filters.tenant_id);
+      if (filters.name) params.append('name', filters.name);
+      if (filters.industry) params.append('industry', filters.industry);
+      if (filters.status) params.append('status', filters.status);
+      if (limit) params.append('limit', limit);
+      params.append('offset', filters.offset || 0);
+
+      const url = `${BACKEND_URL}/api/accounts?${params}`;
+      console.log('[Account.list] Fetching from:', url);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        },
+      });
+
+      console.log('[Account.list] Response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('[Account.list] Response data:', result);
+      
+      if (result.status === 'success' && result.data && result.data.accounts) {
+        console.log('[Account.list] Returning', result.data.accounts.length, 'accounts');
+        return result.data.accounts;
+      }
+
+      console.log('[Account.list] Using fallback return format');
+      return result.data || result;
+    } catch (error) {
+      console.error('[Account.list] Error fetching accounts:', error);
+      return [];
+    }
+  },
+
+  async get(id) {
+    try {
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+      console.log('[Account.get] Fetching account:', id);
+      
+      const response = await fetch(`${BACKEND_URL}/api/accounts/${id}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('[Account.get] Response status:', response.status);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.data || result;
+    } catch (error) {
+      console.error(`[Account.get] Error fetching account ${id}:`, error);
+      throw error;
+    }
+  },
+
+  async create(data) {
+    try {
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+      console.log('[Account.create] Creating account with data:', data);
+      
+      const response = await fetch(`${BACKEND_URL}/api/accounts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      console.log('[Account.create] Response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Account.create] Error response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('[Account.create] Response data:', result);
+      return result.data || result;
+    } catch (error) {
+      console.error('[Account.create] Error creating account:', error);
+      throw error;
+    }
+  },
+
+  async update(id, data) {
+    try {
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+      console.log('[Account.update] Updating account:', id, 'with data:', data);
+      
+      const response = await fetch(`${BACKEND_URL}/api/accounts/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      console.log('[Account.update] Response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Account.update] Error response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('[Account.update] Response data:', result);
+      return result.data || result;
+    } catch (error) {
+      console.error(`[Account.update] Error updating account ${id}:`, error);
+      throw error;
+    }
+  },
+
+  async delete(id) {
+    try {
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+      console.log('[Account.delete] Deleting account:', id);
+      
+      const response = await fetch(`${BACKEND_URL}/api/accounts/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('[Account.delete] Response status:', response.status);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.data || result;
+    } catch (error) {
+      console.error(`[Account.delete] Error deleting account ${id}:`, error);
+      throw error;
+    }
+  },
+
+  // Alias for list() - some components use filter() instead
+  async filter(filters = {}, orderBy = '-created_at', limit = 100) {
+    console.log('[Account.filter] Called with filters:', filters);
+    return this.list(filters, orderBy, limit);
+  },
+};
 
 export const Lead = wrapEntityWithFilter(base44.entities.Lead, 'Lead');
 
@@ -238,8 +403,149 @@ export const Opportunity = wrapEntityWithFilter(base44.entities.Opportunity, 'Op
 
 export const Activity = wrapEntityWithFilter(base44.entities.Activity, 'Activity');
 
-// Wrap Tenant entity - uses backend API in local dev mode
-export const Tenant = wrapEntityWithFilter(base44.entities.Tenant, 'Tenant');
+// Tenant entity - direct backend API calls
+export const Tenant = {
+  async list(orderBy = 'display_order') {
+    try {
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+      const response = await fetch(`${BACKEND_URL}/api/tenants`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      // Handle {status: 'success', data: {tenants: [...], total: N}} format
+      if (result.status === 'success' && result.data && result.data.tenants) {
+        const tenants = result.data.tenants;
+        
+        // Sort by requested field
+        if (orderBy) {
+          return tenants.sort((a, b) => {
+            if (a[orderBy] < b[orderBy]) return -1;
+            if (a[orderBy] > b[orderBy]) return 1;
+            return 0;
+          });
+        }
+        
+        return tenants;
+      }
+
+      // Fallback: return data directly if format is different
+      return result.data || result;
+    } catch (error) {
+      console.error('[Tenant.list] Error fetching tenants:', error);
+      return [];
+    }
+  },
+
+  async get(id) {
+    try {
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+      const response = await fetch(`${BACKEND_URL}/api/tenants/${id}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      // Handle {status: 'success', data: {...}} format
+      return result.data || result;
+    } catch (error) {
+      console.error(`[Tenant.get] Error fetching tenant ${id}:`, error);
+      throw error;
+    }
+  },
+
+  async create(data) {
+    try {
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+      const response = await fetch(`${BACKEND_URL}/api/tenants`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.data || result;
+    } catch (error) {
+      console.error('[Tenant.create] Error creating tenant:', error);
+      throw error;
+    }
+  },
+
+  async update(id, data) {
+    try {
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+      console.log('[Tenant.update] Updating tenant:', id, 'with data:', data);
+      
+      const response = await fetch(`${BACKEND_URL}/api/tenants/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      console.log('[Tenant.update] Response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Tenant.update] Error response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('[Tenant.update] Response data:', result);
+      return result.data || result;
+    } catch (error) {
+      console.error(`[Tenant.update] Error updating tenant ${id}:`, error);
+      throw error;
+    }
+  },
+
+  async delete(id) {
+    try {
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+      const response = await fetch(`${BACKEND_URL}/api/tenants/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.data || result;
+    } catch (error) {
+      console.error(`[Tenant.delete] Error deleting tenant ${id}:`, error);
+      throw error;
+    }
+  },
+};
 
 export const Notification = wrapEntityWithFilter(base44.entities.Notification, 'Notification');
 
@@ -247,7 +553,155 @@ export const FieldCustomization = wrapEntityWithFilter(base44.entities.FieldCust
 
 export const ModuleSettings = wrapEntityWithFilter(base44.entities.ModuleSettings, 'ModuleSettings');
 
-export const AuditLog = wrapEntityWithFilter(base44.entities.AuditLog, 'AuditLog');
+// AuditLog entity - direct backend API calls
+export const AuditLog = {
+  async list(filters = {}, orderBy = '-created_at', limit = 100) {
+    try {
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+      
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (filters.tenant_id) params.append('tenant_id', filters.tenant_id);
+      if (filters.user_email) params.append('user_email', filters.user_email);
+      if (filters.action) params.append('action', filters.action);
+      if (filters.entity_type) params.append('entity_type', filters.entity_type);
+      if (filters.entity_id) params.append('entity_id', filters.entity_id);
+      if (limit) params.append('limit', limit);
+      params.append('offset', filters.offset || 0);
+
+      const url = `${BACKEND_URL}/api/audit-logs?${params}`;
+      console.log('[AuditLog.list] Fetching from:', url);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        },
+      });
+
+      console.log('[AuditLog.list] Response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('[AuditLog.list] Response data:', result);
+      
+      // Handle {status: 'success', data: {'audit-logs': [...], total: N}} format
+      if (result.status === 'success' && result.data && result.data['audit-logs']) {
+        console.log('[AuditLog.list] Returning', result.data['audit-logs'].length, 'audit logs');
+        return result.data['audit-logs'];
+      }
+
+      // Fallback: return data directly if format is different
+      console.log('[AuditLog.list] Using fallback return format');
+      return result.data || result;
+    } catch (error) {
+      console.error('[AuditLog.list] Error fetching audit logs:', error);
+      return [];
+    }
+  },
+
+  async get(id) {
+    try {
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+      const response = await fetch(`${BACKEND_URL}/api/audit-logs/${id}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.data || result;
+    } catch (error) {
+      console.error(`[AuditLog.get] Error fetching audit log ${id}:`, error);
+      throw error;
+    }
+  },
+
+  async create(data) {
+    try {
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+      const response = await fetch(`${BACKEND_URL}/api/audit-logs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.data || result;
+    } catch (error) {
+      console.error('[AuditLog.create] Error creating audit log:', error);
+      throw error;
+    }
+  },
+
+  async delete(id) {
+    try {
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+      const response = await fetch(`${BACKEND_URL}/api/audit-logs/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.data || result;
+    } catch (error) {
+      console.error(`[AuditLog.delete] Error deleting audit log ${id}:`, error);
+      throw error;
+    }
+  },
+
+  async clear(filters = {}) {
+    try {
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+      
+      // Build query parameters for bulk delete
+      const params = new URLSearchParams();
+      if (filters.tenant_id) params.append('tenant_id', filters.tenant_id);
+      if (filters.user_email) params.append('user_email', filters.user_email);
+      if (filters.entity_type) params.append('entity_type', filters.entity_type);
+      if (filters.older_than_days) params.append('older_than_days', filters.older_than_days);
+
+      const response = await fetch(`${BACKEND_URL}/api/audit-logs?${params}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.data || result;
+    } catch (error) {
+      console.error('[AuditLog.clear] Error clearing audit logs:', error);
+      throw error;
+    }
+  },
+};
 
 export const Note = wrapEntityWithFilter(base44.entities.Note, 'Note');
 
@@ -653,3 +1107,6 @@ export const User = {
     return User.signOut();
   },
 };
+
+// Export callBackendAPI for use in other modules (audit logging, etc.)
+export { callBackendAPI };

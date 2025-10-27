@@ -250,29 +250,29 @@ function getDefaultNavigationPermissions(role) {
       Utilities: true, UnitTests: true, WorkflowGuide: true, ClientOnboarding: true, ClientRequirements: true, // NEW
       DuplicateContacts: true, DuplicateAccounts: true, DuplicateLeads: true,
     },
-    'power-user': {
+    manager: {
       ...basePermissions,
       Dashboard: true, Contacts: true, Accounts: true, Leads: true,
       Opportunities: true, Activities: true, Calendar: true,
       BizDevSources: true, CashFlow: true,
       DocumentProcessing: true, DocumentManagement: true,
       Employees: true, Reports: true, Integrations: true, PaymentPortal: false, AICampaigns: true, Agent: true,
-      Workflows: true, // NEW: Added Workflows for power-user
+      Workflows: true,
       Tenants: false, Settings: true, Documentation: true, AuditLog: true,
-      Utilities: true, UnitTests: false, WorkflowGuide: true, ClientOnboarding: true, ClientRequirements: false, // NEW: False for power-user
+      Utilities: true, UnitTests: false, WorkflowGuide: true, ClientOnboarding: true, ClientRequirements: false,
       DuplicateContacts: true, DuplicateAccounts: true, DuplicateLeads: true,
     },
-    user: {
+    employee: {
       ...basePermissions,
       Dashboard: true, Contacts: true, Leads: true,
       Opportunities: true, Activities: true, Calendar: true,
-      Documentation: true, Agent: true, WorkflowGuide: true, ClientOnboarding: false, ClientRequirements: false, // NEW: False for user
-      Workflows: false, // NEW: False for regular users by default
+      Documentation: true, Agent: true, WorkflowGuide: true, ClientOnboarding: false, ClientRequirements: false,
+      Workflows: false,
     }
   };
 
   // Merge the basePermissions with role-specific permissions, ensuring role-specific explicit 'true's override 'false'
-  const rolePermissions = { ...(defaults[role] || defaults.user) };
+  const rolePermissions = { ...(defaults[role] || defaults.employee) };
 
   // Explicitly ensure 'Settings', 'Documentation', 'Agent', 'WorkflowGuide' are accessible for all roles if CRM access is true
   // (CRM access check is done in hasPageAccess first)
