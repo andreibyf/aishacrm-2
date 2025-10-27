@@ -163,20 +163,29 @@ export default function createUserRoutes(pgPool, supabaseAuth) {
         return res.status(400).json({ status: 'error', message: 'email and first_name are required' });
       }
 
+      // ⚠️ CRITICAL: Admin role MUST be assigned to a tenant (not global)
+      if (role === 'admin' && !tenant_id) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'Admin users must be assigned to a tenant. Only superadmins can be global users.' 
+        });
+      }
+
       // Merge metadata with unknown fields
       const combinedMetadata = {
         ...(metadata || {}),
         ...otherFields
       };
 
-      const isGlobalUser = (role === 'superadmin' || role === 'admin') && !tenant_id;
+      // Only superadmin can be global (no tenant_id)
+      const isGlobalUser = role === 'superadmin' && !tenant_id;
 
       // Use default password or custom password
       const userPassword = password || process.env.DEFAULT_USER_PASSWORD || 'Welcome2024!';
       let authUserId = null;
 
       if (isGlobalUser) {
-        // Create global user in users table
+        // Create global superadmin in users table (no tenant_id)
         // Check if user already exists
         const existingUser = await pgPool.query(
           'SELECT id FROM users WHERE email = $1',
@@ -211,14 +220,69 @@ export default function createUserRoutes(pgPool, supabaseAuth) {
           `INSERT INTO users (email, first_name, last_name, role, metadata, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
            RETURNING id, email, first_name, last_name, role, metadata, created_at, updated_at`,
-          [email, first_name, last_name, role || 'admin', combinedMetadata]
+          [email, first_name, last_name, role, combinedMetadata]
         );
 
         const user = expandUserMetadata(result.rows[0]);
 
         res.json({
           status: 'success',
-          message: 'Global user created successfully',
+          message: 'Global superadmin created successfully',
+          data: { 
+            user,
+            auth: {
+              created: !!authUserId,
+              password: userPassword,
+              password_expires_hours: 24,
+              must_change_password: true
+            }
+          },
+        });
+      } else if (role === 'admin' && tenant_id) {
+        // Create tenant-scoped admin in users table WITH tenant_id
+        // Check if user already exists
+        const existingUser = await pgPool.query(
+          'SELECT id FROM users WHERE email = $1',
+          [email]
+        );
+
+        if (existingUser.rows.length > 0) {
+          return res.status(409).json({ status: 'error', message: 'User already exists' });
+        }
+
+        // Create Supabase Auth user
+        const authMetadata = {
+          first_name,
+          last_name,
+          role: 'admin',
+          tenant_id,
+          display_name: `${first_name} ${last_name || ''}`.trim()
+        };
+        
+        const { user: authUser, error: authError } = await createAuthUser(email, userPassword, authMetadata);
+        
+        if (authError) {
+          console.error('[User Creation] Supabase Auth error:', authError);
+          return res.status(500).json({ 
+            status: 'error', 
+            message: `Failed to create auth user: ${authError.message}` 
+          });
+        }
+
+        authUserId = authUser?.id;
+
+        const result = await pgPool.query(
+          `INSERT INTO users (email, first_name, last_name, role, tenant_id, metadata, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+           RETURNING id, email, first_name, last_name, role, tenant_id, metadata, created_at, updated_at`,
+          [email, first_name, last_name, 'admin', tenant_id, combinedMetadata]
+        );
+
+        const user = expandUserMetadata(result.rows[0]);
+
+        res.json({
+          status: 'success',
+          message: 'Tenant admin created successfully',
           data: { 
             user,
             auth: {
@@ -230,7 +294,7 @@ export default function createUserRoutes(pgPool, supabaseAuth) {
           },
         });
       } else {
-        // Create employees (tenant-assigned user)
+        // Create manager/employee in employees table (tenant-assigned user)
         if (!tenant_id) {
           return res.status(400).json({ status: 'error', message: 'tenant_id is required for non-admin users' });
         }

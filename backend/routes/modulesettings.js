@@ -1,7 +1,12 @@
 import express from 'express';
+import { requireAdminRole } from '../middleware/validateTenant.js';
 
 export default function createModuleSettingsRoutes(pool) {
   const router = express.Router();
+
+  // ⚠️ PROTECTION: Only superadmin and admin can access settings
+  // This blocks Manager and Employee roles from modifying settings
+  router.use(requireAdminRole);
 
   // GET /api/modulesettings - List module settings with filters
   router.get('/', async (req, res) => {

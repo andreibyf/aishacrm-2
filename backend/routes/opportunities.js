@@ -1,7 +1,12 @@
 import express from 'express';
+import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 
 export default function createOpportunityRoutes(pgPool) {
   const router = express.Router();
+
+  // Apply tenant validation and employee data scope to all routes
+  router.use(validateTenantAccess);
+  router.use(enforceEmployeeDataScope);
 
 // Helper function to expand metadata fields to top-level properties
   const expandMetadata = (record) => {

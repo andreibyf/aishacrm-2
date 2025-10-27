@@ -198,9 +198,15 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     }
   }
 
-  // For system pages, admins always have access (only if no explicit permission set above)
+  // For system pages, admins and superadmins have access (only if no explicit permission set above)
+  // Settings: ONLY superadmin and admin roles
+  // Documentation, AuditLog, Agent, etc.: admin and superadmin
+  if (pageName === 'Settings' && (user.role === 'superadmin' || user.role === 'admin')) {
+    return true;
+  }
+  
   if ((user.role === 'admin' || user.role === 'superadmin') &&
-    (pageName === 'Documentation' || pageName === 'Settings' || pageName === 'AuditLog' || pageName === 'Tenants' || pageName === 'Agent' || pageName === 'UnitTests' || pageName === 'WorkflowGuide' || pageName === 'ClientRequirements' || pageName === 'Workflows')) { // NEW: Added ClientRequirements, Workflows
+    (pageName === 'Documentation' || pageName === 'AuditLog' || pageName === 'Tenants' || pageName === 'Agent' || pageName === 'UnitTests' || pageName === 'WorkflowGuide' || pageName === 'ClientRequirements' || pageName === 'Workflows')) { // NEW: Added ClientRequirements, Workflows
     return true;
   }
 
@@ -2753,7 +2759,8 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
           <div className="flex flex-1 items-center justify-end gap-x-4 lg:gap-x-6">
             {/* SystemStatusIndicator removed from here, now at AppLayout root */}
-            {(user?.role === 'admin' || user?.role === 'superadmin') &&
+            {/* Only superadmins can switch tenants - admins are locked to their assigned tenant */}
+            {user?.role === 'superadmin' &&
               <TenantSwitcher user={user} />
             }
             {/* REMOVED: TenantBrandingChip debug component */}
