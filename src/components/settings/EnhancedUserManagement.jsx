@@ -226,7 +226,7 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
                                 <SelectValue placeholder="Select client" />
                             </SelectTrigger>
                             <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                                <SelectItem value="no-client">No Client</SelectItem>
+                                <SelectItem value="none">No Client</SelectItem>
                                 {tenants.filter(tenant => tenant.tenant_id !== 'no-client').map(tenant => (
                                     <SelectItem key={tenant.id} value={tenant.tenant_id}>
                                         {tenant.name}
@@ -508,8 +508,8 @@ export default function EnhancedUserManagement() {
             }
 
             const cleanedData = { ...data };
-            // Convert 'no-client' to actual NULL for database
-            if (cleanedData.tenant_id === 'no-client') {
+            // Convert 'none' to actual NULL for database
+            if (cleanedData.tenant_id === 'none') {
                 cleanedData.tenant_id = null;
             }
             if (cleanedData.full_name) {
@@ -795,7 +795,7 @@ export default function EnhancedUserManagement() {
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    {user.tenant_id ? (
+                                                    {user.tenant_id && user.tenant_id !== 'none' ? (
                                                         <Badge variant="outline" className="bg-slate-700 border-slate-600 text-slate-300">
                                                             {tenant?.name || 'Unknown Client'}
                                                         </Badge>
@@ -804,7 +804,7 @@ export default function EnhancedUserManagement() {
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {user.tenant_id ? (
+                                                    {user.tenant_id && user.tenant_id !== 'none' ? (
                                                         <div className="flex items-center gap-1">
                                                             <code className="text-xs text-cyan-400 bg-slate-900/50 px-2 py-1 rounded font-mono">
                                                                 {user.tenant_id.substring(0, 8)}...

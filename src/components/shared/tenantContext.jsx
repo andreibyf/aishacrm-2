@@ -147,7 +147,13 @@ export const TenantProvider = ({ children }) => {
 
     try {
       const saved = localStorage.getItem('selected_tenant_id');
-      if (saved && saved !== 'null' && saved !== 'undefined') {
+      if (saved === null || saved === 'null' || saved === 'undefined' || saved === '') {
+        // No tenant or explicitly null - keep as null (No Client)
+        setSelectedTenantIdState(null);
+        logTenantEvent('INFO', 'No tenant selected (No Client)', {
+          tenantId: null
+        });
+      } else {
         const sanitized = String(saved);
         // Use shared validation function
         if (isValidId(sanitized)) {
@@ -159,22 +165,13 @@ export const TenantProvider = ({ children }) => {
           logTenantEvent('WARNING', 'Invalid tenant ID format in localStorage', {
             savedValue: saved
           });
-          // Reset to local development tenant ID
-          const defaultTenantId = 'local-tenant-001';
-          setSelectedTenantIdState(defaultTenantId);
-          localStorage.setItem('selected_tenant_id', defaultTenantId);
-          logTenantEvent('INFO', 'Reset tenant ID to local development default', {
-            tenantId: defaultTenantId
+          // Reset to null instead of defaulting to local-tenant-001
+          setSelectedTenantIdState(null);
+          localStorage.removeItem('selected_tenant_id');
+          logTenantEvent('INFO', 'Reset tenant ID to null due to invalid format', {
+            tenantId: null
           });
         }
-      } else {
-        // No tenant in localStorage - set local development default
-        const defaultTenantId = 'local-tenant-001';
-        setSelectedTenantIdState(defaultTenantId);
-        localStorage.setItem('selected_tenant_id', defaultTenantId);
-        logTenantEvent('INFO', 'Initialized tenant to local development default', {
-          tenantId: defaultTenantId
-        });
       }
     } catch (error) {
       logTenantEvent('ERROR', 'Failed to load tenant from storage', {

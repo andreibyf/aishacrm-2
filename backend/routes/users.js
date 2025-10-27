@@ -13,8 +13,13 @@ export default function createUserRoutes(pgPool) {
   const expandUserMetadata = (user) => {
     if (!user) return user;
     const { metadata = {}, ...rest } = user;
+    
+    // Convert NULL tenant_id to 'none' for "No Client"
+    const tenant_id = rest.tenant_id === null ? 'none' : rest.tenant_id;
+    
     return {
       ...rest,
+      tenant_id, // Use 'none' instead of null
       ...metadata, // Spread ALL metadata fields to top level
       metadata, // Keep original metadata for backwards compatibility
     };
@@ -376,14 +381,20 @@ export default function createUserRoutes(pgPool) {
       const { id } = req.params;
       const { tenant_id } = req.query;
 
-      if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      // Allow deletion with or without tenant_id
+      // If tenant_id is provided, use it; otherwise allow NULL tenant_id users to be deleted
+      let query, params;
+      
+      if (tenant_id !== undefined && tenant_id !== 'null') {
+        query = 'DELETE FROM employees WHERE id = $1 AND tenant_id = $2 RETURNING id, email';
+        params = [id, tenant_id];
+      } else {
+        // Delete by ID only (works for NULL tenant_id users)
+        query = 'DELETE FROM employees WHERE id = $1 RETURNING id, email';
+        params = [id];
       }
 
-      const result = await pgPool.query(
-        'DELETE FROM employees WHERE id = $1 AND tenant_id = $2 RETURNING id, email',
-        [id, tenant_id]
-      );
+      const result = await pgPool.query(query, params);
 
       if (result.rows.length === 0) {
         return res.status(404).json({ status: 'error', message: 'User not found' });
