@@ -3,13 +3,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, RefreshCw, Users, Building, Star, Target, Activity, BrainCircuit, History, Clock, AlertCircle, CheckCircle, AlertTriangle, ListTodo } from 'lucide-react';
-import { Contact, Account, Lead, Opportunity, Activity as ActivityEntity } from '@/api/entities';
 import { toast } from "sonner";
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { timeApiCall } from '../utils/apiTimer';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { listPerformanceLogs } from "@/api/functions";
 import { MetricCard, SystemHealthSummary, PerformanceGuide } from './PerformanceStatusCard';
 import { THRESHOLDS } from './performanceThresholds';
 
@@ -19,15 +17,15 @@ export default function InternalPerformanceDashboard({ user }) {
     errorRate: 0,
     totalApiCalls: 0,
     successfulApiCalls: 0,
-    entityCounts: {
-      contacts: 0,
-      accounts: 0,
-      leads: 0,
-      opportunities: 0,
-      activities: 0
+    endpointMetrics: {
+      contacts: { avg: 0, count: 0 },
+      accounts: { avg: 0, count: 0 },
+      leads: { avg: 0, count: 0 },
+      opportunities: { avg: 0, count: 0 },
+      activities: { avg: 0, count: 0 }
     },
     recentErrors: [],
-    rawLogs: [] // Added for the new live log viewer
+    rawLogs: []
   });
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(null);
@@ -39,53 +37,62 @@ export default function InternalPerformanceDashboard({ user }) {
       const tenantId = user?.tenant_id || 'local-tenant-001';
       
       const [
-        perfLogsResp, // Changed from perfLogs to perfLogsResp to handle object structure
-        contactsData,
-        accountsData,
-        leadsData,
-        opportunitiesData,
-        activitiesData
+        perfLogsResp
       ] = await timeApiCall('dashboard.loadAllMetrics', () => Promise.all([
-        // Use backend function instead of direct entity call to avoid Network Error
-        listPerformanceLogs({ limit: 500, tenant_id: tenantId }),
-        Contact.list({ tenant_id: tenantId }),
-        Account.list({ tenant_id: tenantId }),
-        Lead.list({ tenant_id: tenantId }),
-        Opportunity.list({ tenant_id: tenantId }),
-        ActivityEntity.list({ tenant_id: tenantId })
+        // Use backend metrics API endpoint
+        fetch(`${import.meta.env.VITE_AISHACRM_BACKEND_URL}/api/metrics/performance?tenant_id=${tenantId}&limit=500`).then(r => r.json())
       ]));
 
+      // Backend returns logs in data.logs and metrics in data.metrics
       const perfLogs = Array.isArray(perfLogsResp?.data?.logs) ? perfLogsResp.data.logs : [];
+      const backendMetrics = perfLogsResp?.data?.metrics || {};
 
-      // --- Calculate REAL metrics from performance logs ---
-      let avgResponseTime = 0;
-      const totalCalls = perfLogs.length;
-      const successfulCalls = perfLogs.filter((log) => log.status === 'success').length;
-      const errorRate = totalCalls > 0 ? (totalCalls - successfulCalls) / totalCalls * 100 : 0;
-
-      if (successfulCalls > 0) {
-        const totalResponseTime = perfLogs
-          .filter((log) => log.status === 'success')
-          .reduce((acc, log) => acc + (Number(log.response_time_ms) || 0), 0); // Ensure response_time_ms is a number
-        avgResponseTime = totalResponseTime / successfulCalls;
-      }
-
-      const realEntityCounts = {
-        contacts: contactsData.length,
-        accounts: accountsData.length,
-        leads: leadsData.length,
-        opportunities: opportunitiesData.length,
-        activities: activitiesData.length
+      // Calculate endpoint-specific metrics
+      const endpointPatterns = {
+        contacts: /\/api\/contacts/i,
+        accounts: /\/api\/accounts/i,
+        leads: /\/api\/leads/i,
+        opportunities: /\/api\/opportunities/i,
+        activities: /\/api\/activities/i
       };
+
+      const endpointMetrics = {};
+      Object.keys(endpointPatterns).forEach(key => {
+        const endpointLogs = perfLogs.filter(log => 
+          endpointPatterns[key].test(log.endpoint) && log.status_code < 400
+        );
+        const avgTime = endpointLogs.length > 0
+          ? endpointLogs.reduce((sum, log) => sum + log.duration_ms, 0) / endpointLogs.length
+          : 0;
+        endpointMetrics[key] = {
+          avg: Math.round(avgTime),
+          count: endpointLogs.length
+        };
+      });
+
+      // --- Use backend-calculated metrics ---
+      const totalCalls = backendMetrics.totalCalls || perfLogs.length;
+      const successfulCalls = backendMetrics.successCount || perfLogs.filter(log => log.status_code < 400).length;
+      const errorRate = backendMetrics.errorRate || 0;
+      const avgResponseTime = backendMetrics.avgResponseTime || 0;
+
+      // Transform backend logs to match dashboard expectations
+      const transformedLogs = perfLogs.map(log => ({
+        ...log,
+        function_name: `${log.method} ${log.endpoint}`,
+        status: log.status_code < 400 ? 'success' : 'error',
+        response_time_ms: log.duration_ms,
+        timestamp: log.created_at
+      }));
 
       setMetrics({
         averageResponseTime: avgResponseTime,
         errorRate: errorRate,
         totalApiCalls: totalCalls,
         successfulApiCalls: successfulCalls,
-        entityCounts: realEntityCounts,
-        recentErrors: perfLogs.filter((log) => log.status === 'error').slice(0, 5),
-        rawLogs: perfLogs.slice(0, 10) // Store the 10 most recent logs for the new viewer
+        endpointMetrics: endpointMetrics,
+        recentErrors: transformedLogs.filter(log => log.status === 'error').slice(0, 5),
+        rawLogs: transformedLogs.slice(0, 10)
       });
 
       setLastRefresh(new Date());
@@ -97,7 +104,7 @@ export default function InternalPerformanceDashboard({ user }) {
         errorRate: 100,
         totalApiCalls: 0,
         successfulApiCalls: 0,
-        entityCounts: { contacts: "Error", accounts: "Error", leads: "Error", opportunities: "Error", activities: "Error" },
+        endpointMetrics: { contacts: { avg: 0, count: 0 }, accounts: { avg: 0, count: 0 }, leads: { avg: 0, count: 0 }, opportunities: { avg: 0, count: 0 }, activities: { avg: 0, count: 0 } },
         recentErrors: [{ message: String(error?.message || error), timestamp: new Date().toISOString(), function_name: 'loadMetrics' }],
         rawLogs: []
       });
@@ -220,51 +227,56 @@ export default function InternalPerformanceDashboard({ user }) {
               </Card>
             </div>
 
-            {/* Data Volume Cards */}
+            {/* Endpoint Performance Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
               <Card className="bg-slate-800 border-slate-700">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-slate-400">Contacts</CardTitle>
+                  <CardTitle className="text-sm font-medium text-slate-400">Contacts API</CardTitle>
                   <Users className="h-4 w-4 text-slate-500" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-slate-200">{formatNumber(metrics.entityCounts.contacts)}</div>
+                  <div className="text-2xl font-bold text-slate-200">{formatNumber(metrics.endpointMetrics.contacts.avg)}ms</div>
+                  <p className="text-xs text-slate-500 mt-1">{metrics.endpointMetrics.contacts.count} calls</p>
                 </CardContent>
               </Card>
               <Card className="bg-slate-800 border-slate-700">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-slate-400">Accounts</CardTitle>
+                  <CardTitle className="text-sm font-medium text-slate-400">Accounts API</CardTitle>
                   <Building className="h-4 w-4 text-slate-500" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-slate-200">{formatNumber(metrics.entityCounts.accounts)}</div>
+                  <div className="text-2xl font-bold text-slate-200">{formatNumber(metrics.endpointMetrics.accounts.avg)}ms</div>
+                  <p className="text-xs text-slate-500 mt-1">{metrics.endpointMetrics.accounts.count} calls</p>
                 </CardContent>
               </Card>
               <Card className="bg-slate-800 border-slate-700">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-slate-400">Leads</CardTitle>
+                  <CardTitle className="text-sm font-medium text-slate-400">Leads API</CardTitle>
                   <Star className="h-4 w-4 text-slate-500" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-slate-200">{formatNumber(metrics.entityCounts.leads)}</div>
+                  <div className="text-2xl font-bold text-slate-200">{formatNumber(metrics.endpointMetrics.leads.avg)}ms</div>
+                  <p className="text-xs text-slate-500 mt-1">{metrics.endpointMetrics.leads.count} calls</p>
                 </CardContent>
               </Card>
               <Card className="bg-slate-800 border-slate-700">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-slate-400">Opportunities</CardTitle>
+                  <CardTitle className="text-sm font-medium text-slate-400">Opportunities API</CardTitle>
                   <Target className="h-4 w-4 text-slate-500" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-slate-200">{formatNumber(metrics.entityCounts.opportunities)}</div>
+                  <div className="text-2xl font-bold text-slate-200">{formatNumber(metrics.endpointMetrics.opportunities.avg)}ms</div>
+                  <p className="text-xs text-slate-500 mt-1">{metrics.endpointMetrics.opportunities.count} calls</p>
                 </CardContent>
               </Card>
               <Card className="bg-slate-800 border-slate-700">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-slate-400">Activities</CardTitle>
+                  <CardTitle className="text-sm font-medium text-slate-400">Activities API</CardTitle>
                   <Activity className="h-4 w-4 text-slate-500" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-slate-200">{formatNumber(metrics.entityCounts.activities)}</div>
+                  <div className="text-2xl font-bold text-slate-200">{formatNumber(metrics.endpointMetrics.activities.avg)}ms</div>
+                  <p className="text-xs text-slate-500 mt-1">{metrics.endpointMetrics.activities.count} calls</p>
                 </CardContent>
               </Card>
             </div>

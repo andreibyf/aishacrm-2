@@ -1,8 +1,7 @@
-import { PerformanceLog } from '@/api/entities';
-
 /**
  * A utility to time an async function (API call) and log its performance.
- * It does not block the UI thread for logging.
+ * Performance logging is now handled server-side via the performanceLogger middleware.
+ * This function now only times the call for potential client-side metrics.
  *
  * @param {string} functionName - A descriptive name for the function being timed.
  * @param {Function} apiCall - The async function to execute and time.
@@ -10,32 +9,17 @@ import { PerformanceLog } from '@/api/entities';
  */
 export async function timeApiCall(functionName, apiCall) {
     const startTime = performance.now();
-    let status = 'success';
-    let errorMessage = null;
-    let result;
 
     try {
-        result = await apiCall();
-        return result; // Return immediately to not delay UI
-    } catch (error) {
-        status = 'error';
-        errorMessage = error.message;
-        throw error; // Re-throw error so the calling function can handle it
+        return await apiCall();
     } finally {
         const endTime = performance.now();
         const responseTime = endTime - startTime;
 
-        // Log performance in the background, without awaiting it.
-        // This is a "fire and forget" operation to avoid blocking the UI.
-        PerformanceLog.create({
-            function_name: functionName,
-            response_time_ms: Math.round(responseTime),
-            status: status,
-            error_message: errorMessage
-        }).catch(logError => {
-            // This might happen if user is offline or RLS prevents writing.
-            // We log it to the console but don't bother the user.
-            console.warn(`Failed to log performance for ${functionName}:`, logError);
-        });
+        // Performance logging is now handled server-side via middleware
+        // Only log to console in development mode for debugging slow calls
+        if (import.meta.env.DEV && responseTime > 1000) {
+            console.warn(`Slow API call: ${functionName} took ${Math.round(responseTime)}ms`);
+        }
     }
 }

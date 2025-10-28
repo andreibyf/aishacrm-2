@@ -223,7 +223,14 @@ export default function InviteUserDialog({ open, onOpenChange, onSuccess, tenant
 
           <div>
             <Label htmlFor="role" className="text-slate-200">Role</Label>
-            <Select value={formData.role} onValueChange={(value) => setFormData(prev => ({ ...prev, role: value }))}>
+            <Select value={formData.role} onValueChange={(value) => {
+              setFormData(prev => ({ 
+                ...prev, 
+                role: value,
+                // Clear tenant_id for SuperAdmin (must be global)
+                tenant_id: value === 'superadmin' ? null : prev.tenant_id
+              }));
+            }}>
               <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
                 <SelectValue placeholder="Select role" />
               </SelectTrigger>
@@ -240,10 +247,10 @@ export default function InviteUserDialog({ open, onOpenChange, onSuccess, tenant
             </p>
           </div>
 
-          {tenants && tenants.length > 0 && (
+          {tenants && tenants.length > 0 && formData.role !== 'superadmin' && (
             <div>
-              <Label htmlFor="tenant" className="text-slate-200">Client (Optional)</Label>
-              <Select value={formData.tenant_id} onValueChange={(value) => setFormData(prev => ({ ...prev, tenant_id: value }))}>
+              <Label htmlFor="tenant" className="text-slate-200">Client {formData.role === 'admin' ? '(Required)' : '(Optional)'}</Label>
+              <Select value={formData.tenant_id || 'no-client'} onValueChange={(value) => setFormData(prev => ({ ...prev, tenant_id: value === 'no-client' ? null : value }))}>
                 <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
                   <SelectValue placeholder="Select client" />
                 </SelectTrigger>
@@ -256,6 +263,14 @@ export default function InviteUserDialog({ open, onOpenChange, onSuccess, tenant
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {formData.role === 'superadmin' && (
+            <div className="border border-yellow-600 rounded-lg p-4 bg-yellow-900/20">
+              <p className="text-sm text-yellow-400">
+                <strong>⚠️ SuperAdmin Note:</strong> This user will have global access to all tenants and system settings. No client assignment needed.
+              </p>
             </div>
           )}
 

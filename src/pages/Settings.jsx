@@ -25,8 +25,7 @@ import {
   Clock,
   Key,
   Trash2,
-  FileText, // Added for UserRecordDiagnostic and System Logs
-  Eye, // Added for LeadVisibilityDiagnostic
+  FileText, // Added for System Logs
   ExternalLink, // Added for External Tools
 
   // Icons for components not in outline's tabs array but preserved:
@@ -86,13 +85,6 @@ import SyncHealthMonitor from "../components/settings/SyncHealthMonitor";
 import MCPServerMonitor from "../components/settings/MCPServerMonitor";
 import PerformanceMonitor from '../components/settings/PerformanceMonitor';
 import SystemHealthDashboard from "../components/settings/SystemHealthDashboard"; // NEW: SystemHealthDashboard
-
-// Testing & Diagnostics
-import AIExecutionLogViewer from "../components/settings/AIExecutionLogViewer";
-import FileUploadDiagnostics from "../components/settings/FileUploadDiagnostics";
-import SysAdminGuide from "../components/settings/SysAdminGuide";
-import UserRecordDiagnostic from "../components/settings/UserRecordDiagnostic"; // NEW: User Record Diagnostic Tool
-import LeadVisibilityDiagnostic from "../components/settings/LeadVisibilityDiagnostic"; // NEW: Lead Visibility Diagnostic
 
 export default function SettingsPage() { // Renamed from Settings to SettingsPage as per outline
   const [currentUser, setCurrentUser] = useState(null);
@@ -184,8 +176,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
       { id: 'system-health', label: 'System Health', icon: Activity, color: 'emerald', roles: ['admin', 'superadmin'] }, // NEW: System Health Dashboard
       { id: 'system-logs', label: 'System Logs', icon: FileText, color: 'slate', roles: ['admin', 'superadmin'] }, // NEW: System Logs
 
-      // Consolidated Testing & Diagnostics tab
-      { id: 'diagnostics', label: 'Diagnostics', icon: TestTube2, color: 'red', roles: ['admin', 'superadmin'] },
+      // Testing & Diagnostics
       { id: 'unit-tests', label: 'Unit Tests', icon: TestTube2, color: 'blue', roles: ['admin', 'superadmin'] }, // NEW: Unit Tests tab
       { id: 'external-tools', label: 'External Tools', icon: ExternalLink, color: 'orange', roles: ['admin', 'superadmin'] }, // NEW: External Tools tab
       { id: 'api-health', label: 'API Health', icon: Activity, color: 'red', roles: ['admin', 'superadmin'] }, // NEW: API Health Monitor
@@ -649,97 +640,6 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                     <SystemLogsViewer />
                   </CardContent>
                 </Card>
-              )}
-
-              {/* NEW: Consolidated Diagnostics Tab */}
-              {activeTab === 'diagnostics' && isAdmin && (
-                <div className="space-y-6">
-                  {/* AI Execution Logs */}
-                  <Card className="bg-slate-800 border-slate-700">
-                    <CardHeader>
-                      <CardTitle className="text-slate-100">AI Execution Logs</CardTitle>
-                      <CardDescription className="text-slate-400">View detailed logs of AI function calls and responses</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <AIExecutionLogViewer />
-                    </CardContent>
-                  </Card>
-
-                  {/* File Upload Diagnostics */}
-                  <Card className="bg-slate-800 border-slate-700">
-                    <CardHeader>
-                      <CardTitle className="text-slate-100">File Upload Diagnostics</CardTitle>
-                      <CardDescription className="text-slate-400">Test and troubleshoot file upload functionality</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <FileUploadDiagnostics />
-                    </CardContent>
-                  </Card>
-
-                  {/* System Admin Guide */}
-                  <Card className="bg-slate-800 border-slate-700">
-                    <CardHeader>
-                      <CardTitle className="text-slate-100">System Administrator Guide</CardTitle>
-                      <CardDescription className="text-slate-400">Comprehensive documentation for system administration</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <SysAdminGuide />
-                    </CardContent>
-                  </Card>
-
-                  {/* NEW: User Record Diagnostic */}
-                  <Card className="bg-slate-800 border-slate-700">
-                    <CardHeader>
-                      <CardTitle className="text-slate-100 flex items-center gap-2">
-                        <FileText className="w-5 h-5 text-red-400" />
-                        User Record Diagnostic
-                      </CardTitle>
-                      <CardDescription className="text-slate-400">
-                        Diagnose and inspect user-related data records for consistency and issues.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <UserRecordDiagnostic />
-                    </CardContent>
-                  </Card>
-
-                  {/* NEW: Lead Visibility Diagnostic */}
-                  <Card className="bg-slate-800 border-slate-700">
-                    <CardHeader>
-                      <CardTitle className="text-slate-100 flex items-center gap-2">
-                        <Eye className="w-5 h-5 text-blue-400" />
-                        Lead Visibility Diagnostic
-                      </CardTitle>
-                      <CardDescription className="text-slate-400">
-                        Analyze why a specific lead might not be visible to certain users or modules.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <LeadVisibilityDiagnostic />
-                    </CardContent>
-                  </Card>
-
-                  {/* Data Cleanup (from original diagnostics tab) */}
-                  <Card className="bg-slate-800 border-slate-700">
-                    <CardHeader>
-                      <CardTitle className="text-slate-100">Orphaned Data & Cleanup</CardTitle>
-                      <CardDescription className="text-slate-400">
-                        View and clean up orphaned or test data to maintain database hygiene.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <Button
-                        onClick={() => window.location.href = '/DataDiagnostics'}
-                        className="bg-blue-600 hover:bg-blue-700 text-white"
-                      >
-                        Open Diagnostics Dashboard
-                      </Button>
-                      <p className="text-xs text-slate-400 mt-2">
-                        Access a dedicated interface for identifying and managing data inconsistencies.
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
               )}
 
               {/* NEW: Unit Tests tab content */}

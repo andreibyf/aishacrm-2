@@ -72,7 +72,8 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
         access_level: user?.permissions?.access_level || 'read_write',
         dashboard_scope: user?.permissions?.dashboard_scope || 'own',
         navigation_permissions: initNavPerms(),
-        manager_employee_id: null
+        manager_employee_id: null,
+        new_password: '' // For password reset
     });
     const [saving, setSaving] = useState(false);
     const [tagInput, setTagInput] = useState('');
@@ -93,7 +94,8 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
             access_level: user?.permissions?.access_level || 'read_write',
             dashboard_scope: user?.permissions?.dashboard_scope || 'own',
             navigation_permissions: initNavPerms(),
-            manager_employee_id: null
+            manager_employee_id: null,
+            new_password: '' // Reset password field when opening dialog
         });
     }, [user]);
 
@@ -229,6 +231,22 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
                         />
                         <p className="text-xs text-slate-500 mt-1">
                             This will update how the user's name appears in the app
+                        </p>
+                    </div>
+
+                    {/* Reset Password */}
+                    <div>
+                        <Label htmlFor="new_password" className="text-slate-200">Reset Password (Optional)</Label>
+                        <Input
+                            id="new_password"
+                            type="password"
+                            value={formData.new_password || ''}
+                            onChange={(e) => setFormData(prev => ({ ...prev, new_password: e.target.value }))}
+                            placeholder="Leave blank to keep current password"
+                            className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">
+                            Enter a new password to reset. Minimum 8 characters with uppercase, lowercase, number, and special character.
                         </p>
                     </div>
 

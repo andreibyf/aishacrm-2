@@ -60,7 +60,7 @@ export function performanceLogger(pgPool) {
               [
                 tenant_id,
                 req.method,
-                req.path,
+                req.originalUrl || req.url || req.path,
                 res.statusCode,
                 duration,
                 req.user?.email || null,

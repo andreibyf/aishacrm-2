@@ -5,7 +5,7 @@ import { assert } from './testUtils';
  * 
  * ✅ Backend Infrastructure: READY
  * ✅ Database: Supabase Cloud (DEV/QA)
- * ✅ CRUD Operations: Fully Implemented
+ * ✅ CRUD Operations: Fully Implemented & Tested
  * 
  * Current Setup:
  * - Backend routes have full SQL CRUD operations
@@ -13,21 +13,58 @@ import { assert } from './testUtils';
  * - All migrations applied (contacts, leads, accounts tables ready)
  * - Real database operations (not stub data)
  * 
+ * Tests include:
+ * - Infrastructure checks (backend health, database connectivity)
+ * - Full CRUD cycle: Create → Read → Update → Delete
+ * - Data validation and integrity checks
+ * 
  * To run tests:
  * 1. Ensure backend is running: npm start (in backend folder)
  * 2. Backend should show: "Supabase Cloud DEV/QA" connection
  * 3. Click "Run All Tests" below
  */
 
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+const TEST_TENANT_ID = 'unit-test-tenant';
+
+// Helper to generate unique test data
+const generateTestData = () => {
+  const timestamp = Date.now();
+  return {
+    contact: {
+      tenant_id: TEST_TENANT_ID,
+      first_name: `Test`,
+      last_name: `Contact_${timestamp}`,
+      email: `test.contact.${timestamp}@unittest.local`,
+      phone: '555-0100',
+      status: 'active'
+    },
+    lead: {
+      tenant_id: TEST_TENANT_ID,
+      first_name: `Test`,
+      last_name: `Lead_${timestamp}`,
+      email: `test.lead.${timestamp}@unittest.local`,
+      phone: '555-0200',
+      company: 'Test Company',
+      status: 'new',
+      source: 'unit-test'
+    },
+    account: {
+      tenant_id: TEST_TENANT_ID,
+      name: `Test Account ${timestamp}`,
+      type: 'customer',
+      industry: 'technology',
+      website: 'https://test.local'
+    }
+  };
+};
+
 export const crudTests = {
   name: 'CRUD Operations',
   tests: [
     {
-      name: 'CRUD Infrastructure Check',
+      name: 'Infrastructure Check',
       fn: async () => {
-        // Check backend connectivity
-        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
-        
         try {
           const response = await fetch(`${BACKEND_URL}/health`);
           const healthData = await response.json();
@@ -43,13 +80,12 @@ export const crudTests = {
           console.log('');
           console.log('✅ Backend routes have full SQL CRUD operations');
           console.log('✅ Connected to Supabase Cloud PostgreSQL');
-          console.log('✅ Migrations applied (contacts, leads, accounts)');
-          console.log('✅ Ready for testing');
+          console.log('✅ Ready for CRUD testing');
           console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           
           assert.equal(healthData.status, 'ok', 'Backend should be healthy');
           assert.equal(healthData.database, 'connected', 'Database should be connected');
-        } catch {
+        } catch (error) {
           console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           console.error('❌ BACKEND NOT RUNNING');
           console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -57,35 +93,329 @@ export const crudTests = {
           console.error('To start backend:');
           console.error('  cd backend');
           console.error('  npm start');
-          console.error('');
-          console.error('Backend should show: "Supabase Cloud DEV/QA"');
           console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           
-          throw new Error(`Backend not reachable at ${BACKEND_URL}. Please start the backend server.`);
+          throw new Error(`Backend not reachable at ${BACKEND_URL}: ${error.message}`);
         }
       }
     },
+
+    // ==================== CONTACT CRUD TESTS ====================
     {
-      name: 'Backend API Connectivity',
+      name: 'Contact: Create',
       fn: async () => {
-        // Test that backend is reachable and database is connected
-        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+        const testData = generateTestData();
         
-        const response = await fetch(`${BACKEND_URL}/api/contacts?tenant_id=test-tenant`, {
+        const response = await fetch(`${BACKEND_URL}/api/contacts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(testData.contact)
+        });
+        
+        assert.truthy(response.ok, `Create should succeed (status: ${response.status})`);
+        
+        const result = await response.json();
+        assert.equal(result.status, 'success', 'Response status should be success');
+        assert.exists(result.data, 'Response should contain created contact data');
+        assert.exists(result.data.id, 'Created contact should have an ID');
+        assert.equal(result.data.email, testData.contact.email, 'Email should match');
+        
+        console.log(`✅ Created contact: ${result.data.first_name} ${result.data.last_name} (ID: ${result.data.id})`);
+        
+        // Store ID for next tests
+        window.__test_contact_id = result.data.id;
+      }
+    },
+    {
+      name: 'Contact: Read',
+      fn: async () => {
+        const contactId = window.__test_contact_id;
+        assert.exists(contactId, 'Contact ID from create test should exist');
+        
+        const response = await fetch(`${BACKEND_URL}/api/contacts/${contactId}?tenant_id=${TEST_TENANT_ID}`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' }
         });
         
-        assert.truthy(response.ok, `Backend API should respond successfully (status: ${response.status})`);
+        assert.truthy(response.ok, `Read should succeed (status: ${response.status})`);
         
-        const data = await response.json();
-        assert.exists(data.status, 'Response should have status field');
-        assert.equal(data.status, 'success', 'API response status should be success');
-        assert.exists(data.data, 'Response should have data field');
+        const result = await response.json();
+        assert.equal(result.status, 'success', 'Response status should be success');
+        assert.exists(result.data, 'Response should contain contact data');
+        assert.equal(result.data.id, contactId, 'Contact ID should match');
         
-        console.log('✅ Backend API responding correctly');
-        console.log(`   Endpoint: ${BACKEND_URL}/api/contacts`);
-        console.log(`   Response format: Valid`);
+        console.log(`✅ Read contact: ${result.data.first_name} ${result.data.last_name}`);
+      }
+    },
+    {
+      name: 'Contact: Update',
+      fn: async () => {
+        const contactId = window.__test_contact_id;
+        assert.exists(contactId, 'Contact ID from create test should exist');
+        
+        const updateData = {
+          tenant_id: TEST_TENANT_ID,
+          phone: '555-9999',
+          status: 'inactive'
+        };
+        
+        const response = await fetch(`${BACKEND_URL}/api/contacts/${contactId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updateData)
+        });
+        
+        assert.truthy(response.ok, `Update should succeed (status: ${response.status})`);
+        
+        const result = await response.json();
+        assert.equal(result.status, 'success', 'Response status should be success');
+        assert.equal(result.data.phone, '555-9999', 'Phone should be updated');
+        assert.equal(result.data.status, 'inactive', 'Status should be updated');
+        
+        console.log(`✅ Updated contact: phone=${result.data.phone}, status=${result.data.status}`);
+      }
+    },
+    {
+      name: 'Contact: Delete',
+      fn: async () => {
+        const contactId = window.__test_contact_id;
+        assert.exists(contactId, 'Contact ID from create test should exist');
+        
+        const response = await fetch(`${BACKEND_URL}/api/contacts/${contactId}?tenant_id=${TEST_TENANT_ID}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        assert.truthy(response.ok, `Delete should succeed (status: ${response.status})`);
+        
+        const result = await response.json();
+        assert.equal(result.status, 'success', 'Response status should be success');
+        
+        // Verify deletion by trying to read
+        const readResponse = await fetch(`${BACKEND_URL}/api/contacts/${contactId}?tenant_id=${TEST_TENANT_ID}`);
+        const readResult = await readResponse.json();
+        
+        assert.truthy(
+          readResult.status === 'error' || !readResult.data,
+          'Contact should not exist after deletion'
+        );
+        
+        console.log(`✅ Deleted contact ID: ${contactId}`);
+        delete window.__test_contact_id;
+      }
+    },
+
+    // ==================== LEAD CRUD TESTS ====================
+    {
+      name: 'Lead: Create',
+      fn: async () => {
+        const testData = generateTestData();
+        
+        const response = await fetch(`${BACKEND_URL}/api/leads`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(testData.lead)
+        });
+        
+        assert.truthy(response.ok, `Create should succeed (status: ${response.status})`);
+        
+        const result = await response.json();
+        assert.equal(result.status, 'success', 'Response status should be success');
+        assert.exists(result.data, 'Response should contain created lead data');
+        assert.exists(result.data.id, 'Created lead should have an ID');
+        assert.equal(result.data.email, testData.lead.email, 'Email should match');
+        
+        console.log(`✅ Created lead: ${result.data.first_name} ${result.data.last_name} (ID: ${result.data.id})`);
+        
+        window.__test_lead_id = result.data.id;
+      }
+    },
+    {
+      name: 'Lead: Read',
+      fn: async () => {
+        const leadId = window.__test_lead_id;
+        assert.exists(leadId, 'Lead ID from create test should exist');
+        
+        const response = await fetch(`${BACKEND_URL}/api/leads/${leadId}?tenant_id=${TEST_TENANT_ID}`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        assert.truthy(response.ok, `Read should succeed (status: ${response.status})`);
+        
+        const result = await response.json();
+        assert.equal(result.status, 'success', 'Response status should be success');
+        assert.exists(result.data, 'Response should contain lead data');
+        assert.equal(result.data.id, leadId, 'Lead ID should match');
+        
+        console.log(`✅ Read lead: ${result.data.first_name} ${result.data.last_name}`);
+      }
+    },
+    {
+      name: 'Lead: Update',
+      fn: async () => {
+        const leadId = window.__test_lead_id;
+        assert.exists(leadId, 'Lead ID from create test should exist');
+        
+        const updateData = {
+          tenant_id: TEST_TENANT_ID,
+          status: 'qualified',
+          source: 'unit-test-updated'
+        };
+        
+        const response = await fetch(`${BACKEND_URL}/api/leads/${leadId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updateData)
+        });
+        
+        assert.truthy(response.ok, `Update should succeed (status: ${response.status})`);
+        
+        const result = await response.json();
+        assert.equal(result.status, 'success', 'Response status should be success');
+        assert.equal(result.data.status, 'qualified', 'Status should be updated');
+        
+        console.log(`✅ Updated lead: status=${result.data.status}`);
+      }
+    },
+    {
+      name: 'Lead: Delete',
+      fn: async () => {
+        const leadId = window.__test_lead_id;
+        assert.exists(leadId, 'Lead ID from create test should exist');
+        
+        const response = await fetch(`${BACKEND_URL}/api/leads/${leadId}?tenant_id=${TEST_TENANT_ID}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        assert.truthy(response.ok, `Delete should succeed (status: ${response.status})`);
+        
+        const result = await response.json();
+        assert.equal(result.status, 'success', 'Response status should be success');
+        
+        console.log(`✅ Deleted lead ID: ${leadId}`);
+        delete window.__test_lead_id;
+      }
+    },
+
+    // ==================== ACCOUNT CRUD TESTS ====================
+    {
+      name: 'Account: Create',
+      fn: async () => {
+        const testData = generateTestData();
+        
+        const response = await fetch(`${BACKEND_URL}/api/accounts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(testData.account)
+        });
+        
+        assert.truthy(response.ok, `Create should succeed (status: ${response.status})`);
+        
+        const result = await response.json();
+        assert.equal(result.status, 'success', 'Response status should be success');
+        assert.exists(result.data, 'Response should contain created account data');
+        assert.exists(result.data.id, 'Created account should have an ID');
+        assert.equal(result.data.name, testData.account.name, 'Name should match');
+        
+        console.log(`✅ Created account: ${result.data.name} (ID: ${result.data.id})`);
+        
+        window.__test_account_id = result.data.id;
+      }
+    },
+    {
+      name: 'Account: Read',
+      fn: async () => {
+        const accountId = window.__test_account_id;
+        assert.exists(accountId, 'Account ID from create test should exist');
+        
+        const response = await fetch(`${BACKEND_URL}/api/accounts/${accountId}?tenant_id=${TEST_TENANT_ID}`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        assert.truthy(response.ok, `Read should succeed (status: ${response.status})`);
+        
+        const result = await response.json();
+        assert.equal(result.status, 'success', 'Response status should be success');
+        assert.exists(result.data, 'Response should contain account data');
+        assert.equal(result.data.id, accountId, 'Account ID should match');
+        
+        console.log(`✅ Read account: ${result.data.name}`);
+      }
+    },
+    {
+      name: 'Account: Update',
+      fn: async () => {
+        const accountId = window.__test_account_id;
+        assert.exists(accountId, 'Account ID from create test should exist');
+        
+        const updateData = {
+          tenant_id: TEST_TENANT_ID,
+          industry: 'finance',
+          type: 'partner'
+        };
+        
+        const response = await fetch(`${BACKEND_URL}/api/accounts/${accountId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updateData)
+        });
+        
+        assert.truthy(response.ok, `Update should succeed (status: ${response.status})`);
+        
+        const result = await response.json();
+        assert.equal(result.status, 'success', 'Response status should be success');
+        assert.equal(result.data.industry, 'finance', 'Industry should be updated');
+        assert.equal(result.data.type, 'partner', 'Type should be updated');
+        
+        console.log(`✅ Updated account: industry=${result.data.industry}, type=${result.data.type}`);
+      }
+    },
+    {
+      name: 'Account: Delete',
+      fn: async () => {
+        const accountId = window.__test_account_id;
+        assert.exists(accountId, 'Account ID from create test should exist');
+        
+        const response = await fetch(`${BACKEND_URL}/api/accounts/${accountId}?tenant_id=${TEST_TENANT_ID}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        assert.truthy(response.ok, `Delete should succeed (status: ${response.status})`);
+        
+        const result = await response.json();
+        assert.equal(result.status, 'success', 'Response status should be success');
+        
+        console.log(`✅ Deleted account ID: ${accountId}`);
+        delete window.__test_account_id;
+      }
+    },
+
+    // ==================== DATA INTEGRITY TESTS ====================
+    {
+      name: 'List with Filters',
+      fn: async () => {
+        // Test that GET endpoints support filtering
+        const response = await fetch(`${BACKEND_URL}/api/contacts?tenant_id=${TEST_TENANT_ID}&limit=10`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        assert.truthy(response.ok, `List should succeed (status: ${response.status})`);
+        
+        const result = await response.json();
+        assert.equal(result.status, 'success', 'Response status should be success');
+        assert.exists(result.data, 'Response should contain data object');
+        assert.exists(result.data.contacts, 'Data should have contacts array');
+        assert.truthy(Array.isArray(result.data.contacts), 'Contacts should be an array');
+        assert.exists(result.data.total, 'Response should include total count');
+        assert.exists(result.data.limit, 'Response should include limit');
+        assert.exists(result.data.offset, 'Response should include offset');
+        
+        console.log(`✅ List contacts returned ${result.data.contacts.length} of ${result.data.total} total records`);
       }
     }
   ]

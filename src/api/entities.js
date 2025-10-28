@@ -853,48 +853,100 @@ export const User = {
           return null;
         }
 
-        // Fetch employee record from database to get permissions and tenant_id
-        let employeeData = null;
+  // Fetch user record from database to get permissions and tenant_id
+        // Try users table first (for SuperAdmins/Admins), then employees table
+        let userData = null;
         try {
-          const response = await fetch(`${BACKEND_URL}/api/employees?email=${encodeURIComponent(user.email)}`);
+          // First, try users table (for SuperAdmins and Admins)
+          let response = await fetch(`${BACKEND_URL}/api/users?email=${encodeURIComponent(user.email)}`);
           if (response.ok) {
             const result = await response.json();
-            // Backend returns {status: 'success', data: [...]}
-            const employees = result.data || result;
-            if (employees && employees.length > 0) {
-              employeeData = employees[0]; // Get first matching employee
-              console.log('[Supabase Auth] Employee data loaded:', employeeData.role, employeeData.metadata?.access_level);
-            } else {
-              console.warn('[Supabase Auth] No employee record found for:', user.email);
+            const users = result.data?.users || result.data || result;
+            if (users && users.length > 0) {
+              userData = users[0];
+              console.log('[Supabase Auth] User data loaded from users table:', userData.role, userData.metadata?.access_level);
             }
-          } else {
-            console.error('[Supabase Auth] Failed to fetch employee data:', response.status, response.statusText);
+          }
+
+          // If not found in users table, try employees table
+          if (!userData) {
+            response = await fetch(`${BACKEND_URL}/api/employees?email=${encodeURIComponent(user.email)}`);
+            if (response.ok) {
+              const result = await response.json();
+              const employees = result.data || result;
+              if (employees && employees.length > 0) {
+                userData = employees[0];
+                console.log('[Supabase Auth] User data loaded from employees table:', userData.role, userData.metadata?.access_level);
+              } else {
+                console.warn('[Supabase Auth] No user or employee record found for:', user.email);
+              }
+            } else {
+              console.error('[Supabase Auth] Failed to fetch user data:', response.status, response.statusText);
+            }
+          }
+
+          // If still not found, auto-create CRM record from auth metadata and re-fetch
+          if (!userData) {
+            console.log('[Supabase Auth] Ensuring CRM user record exists for:', user.email);
+            try {
+              const syncResp = await fetch(`${BACKEND_URL}/api/users/sync-from-auth`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: user.email })
+              });
+              if (syncResp.ok) {
+                // Re-try lookup in users table first, then employees
+                let retry = await fetch(`${BACKEND_URL}/api/users?email=${encodeURIComponent(user.email)}`);
+                if (retry.ok) {
+                  const r = await retry.json();
+                  const list = r.data?.users || r.data || r;
+                  if (list && list.length > 0) {
+                    userData = list[0];
+                  }
+                }
+                if (!userData) {
+                  retry = await fetch(`${BACKEND_URL}/api/employees?email=${encodeURIComponent(user.email)}`);
+                  if (retry.ok) {
+                    const r2 = await retry.json();
+                    const list2 = r2.data || r2;
+                    if (list2 && list2.length > 0) {
+                      userData = list2[0];
+                    }
+                  }
+                }
+              } else {
+                const txt = await syncResp.text();
+                console.warn('[Supabase Auth] sync-from-auth failed:', syncResp.status, txt);
+              }
+            } catch (syncError) {
+              console.warn('[Supabase Auth] Could not auto-create CRM record:', syncError.message);
+            }
           }
         } catch (err) {
-          console.error('[Supabase Auth] Error fetching employee data:', err.message);
+          console.error('[Supabase Auth] Error fetching user data:', err.message);
         }
 
-        // Map Supabase user to our User format with employee data
+        // Map Supabase user to our User format with database data
         return {
           id: user.id,
           email: user.email,
           user_metadata: user.user_metadata,
-          tenant_id: employeeData?.tenant_id || user.user_metadata?.tenant_id || null,
+          tenant_id: userData?.tenant_id || user.user_metadata?.tenant_id || null,
           created_at: user.created_at,
           updated_at: user.updated_at,
-          // Include employee data if available
-          ...(employeeData && {
-            employee_id: employeeData.id,
-            first_name: employeeData.first_name,
-            last_name: employeeData.last_name,
-            role: (employeeData.role || '').toLowerCase(), // Normalize role to lowercase
-            status: employeeData.status,
-            permissions: employeeData.metadata?.permissions || [],
-            access_level: employeeData.metadata?.access_level,
-            is_superadmin: employeeData.metadata?.is_superadmin || false,
-            can_manage_users: employeeData.metadata?.can_manage_users || false,
-            can_manage_settings: employeeData.metadata?.can_manage_settings || false,
-            crm_access: true, // Grant CRM access to authenticated users with employee records
+          // Include database user data if available
+          ...(userData && {
+            employee_id: userData.id,
+            first_name: userData.first_name,
+            last_name: userData.last_name,
+            role: (userData.role || '').toLowerCase(), // Normalize role to lowercase
+            status: userData.status,
+            permissions: userData.metadata?.permissions || [],
+            access_level: userData.metadata?.access_level,
+            is_superadmin: (userData.role || '').toLowerCase() === 'superadmin',
+            can_manage_users: userData.metadata?.can_manage_users || false,
+            can_manage_settings: userData.metadata?.can_manage_settings || false,
+            crm_access: true, // Grant CRM access to authenticated users with records
           }),
           // Include any custom fields from user_metadata
           ...user.user_metadata,

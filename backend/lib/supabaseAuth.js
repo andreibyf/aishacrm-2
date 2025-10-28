@@ -126,6 +126,42 @@ export async function sendPasswordResetEmail(email) {
 }
 
 /**
+ * Invite user by email - sends invitation email via Supabase Auth
+ * @param {string} email - User email address
+ * @param {Object} metadata - User metadata
+ * @returns {Promise<{user, error}>}
+ */
+export async function inviteUserByEmail(email, metadata = {}) {
+  if (!supabaseAdmin) {
+    throw new Error('Supabase Auth not initialized');
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+      data: {
+        ...metadata,
+        password_change_required: true
+      },
+      redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/accept-invite`
+    });
+
+    if (error) {
+      console.error('[Supabase Auth] Error inviting user:', error);
+      return { user: null, error };
+    }
+
+    console.log(`✓ User created and invitation queued for: ${email}`);
+    console.log(`  → Auth User ID: ${data.user?.id}`);
+    console.log(`  → Email will be sent via configured SMTP`);
+    console.log(`  → Check Supabase Dashboard → Auth → Logs to verify delivery`);
+    return { user: data.user, error: null };
+  } catch (error) {
+    console.error('[Supabase Auth] Exception inviting user:', error);
+    return { user: null, error };
+  }
+}
+
+/**
  * Delete auth user from Supabase
  * @param {string} userId - Supabase auth user ID
  * @returns {Promise<{data, error}>}
@@ -211,6 +247,7 @@ export default {
   createAuthUser,
   updateAuthUserPassword,
   sendPasswordResetEmail,
+  inviteUserByEmail,
   deleteAuthUser,
   getAuthUserByEmail,
   updateAuthUserMetadata
