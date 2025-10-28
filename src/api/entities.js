@@ -16,8 +16,12 @@ const pluralize = (entityName) => {
     'opportunity': 'opportunities',
     'activity': 'activities',
     'employee': 'employees',
+    'user': 'users', // Prevent double 's'
+    'users': 'users', // Already plural
     'systemlog': 'system-logs',
+    'system-logs': 'system-logs', // Already plural
     'auditlog': 'audit-logs',
+    'audit-logs': 'audit-logs', // Already plural
     'notification': 'notifications',
     'apikey': 'apikeys',
     'cashflow': 'cashflow',

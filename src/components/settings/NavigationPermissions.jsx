@@ -25,7 +25,7 @@ function toLabel(key) {
 const ORDER = [
   "Dashboard","Contacts","Accounts","Leads","Opportunities","Activities","Calendar",
   "BizDevSources","CashFlow","DocumentProcessing","DocumentManagement","AICampaigns","Employees",
-  "Reports","Integrations","Documentation","Settings","Agent","PaymentPortal","Utilities","ClientOnboarding","WorkflowGuide","ClientRequirements"
+  "Reports","Integrations","Documentation","Settings","Agent","PaymentPortal","Utilities","Workflows","ClientOnboarding","WorkflowGuide","ClientRequirements"
 ];
 
 export default function NavigationPermissions({ value, onChange, disabled = false, className = "" }) {

@@ -8,9 +8,27 @@ const callMCPServerDirect = async (payload) => {
   if (!MCP_SERVER_URL) {
     throw new Error('MCP server URL not configured (VITE_MCP_SERVER_URL)');
   }
+  // Support optional API key from env or per-tenant local storage for authenticated MCP servers
+  const headers = { 'Content-Type': 'application/json' };
+  const envApiKey = import.meta.env.VITE_MCP_SERVER_API_KEY || null;
+  if (envApiKey) {
+    headers['x-api-key'] = envApiKey;
+  } else {
+    try {
+      // Try to infer tenant_id from payload.params or payload.context
+      const tenantId = payload?.params?.tenant_id || payload?.params?.tenantId || payload?.context?.tenant_id || 'local-tenant-001';
+      const storageKey = `local_user_api_key_${tenantId}`;
+      const stored = localStorage.getItem(storageKey);
+      if (stored) headers['x-api-key'] = stored;
+    } catch (err) {
+      // ignore localStorage read errors
+      void err;
+    }
+  }
+
   const response = await fetch(MCP_SERVER_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(payload)
   });
   if (!response.ok) {
@@ -26,6 +44,31 @@ const createFunctionProxy = (functionName) => {
   // so the UI works in standalone mode without backend/cloud-functions running.
   return async (...args) => {
     if (isLocalDevMode()) {
+      // ========================================
+      // Workflows (Local Backend)
+      // ========================================
+
+      if (functionName === 'executeWorkflow') {
+        try {
+          const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+          const { workflow_id, payload, input_data } = args[0] || {};
+          const body = { workflow_id, payload: payload ?? input_data };
+          const response = await fetch(`${BACKEND_URL}/api/workflows/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          const json = await response.json();
+          if (!response.ok) {
+            return { data: { status: 'error', error: json?.message || response.statusText } };
+          }
+          return { data: json };
+        } catch (err) {
+          console.warn(`[Local Dev Mode] executeWorkflow backend call failed: ${err?.message || err}`);
+          return { data: { status: 'error', error: err?.message || String(err) } };
+        }
+      }
+
       // ========================================
       // CRUD Operations
       // ========================================
@@ -146,7 +189,17 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'testSuites') {
-        console.log('[Local Dev Mode] testSuites: returning mock test suites');
+        try {
+          const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+          const response = await fetch(`${BACKEND_URL}/api/testing/suites`);
+          if (response.ok) {
+            const result = await response.json();
+            return { data: result.data };
+          }
+        } catch (error) {
+          console.error('[Backend API] Error fetching test suites:', error);
+        }
+        // Fallback to mock data
         return {
           data: {
             suites: [
@@ -209,14 +262,41 @@ const createFunctionProxy = (functionName) => {
       // ========================================
       
       if (functionName === 'listPerformanceLogs') {
-        console.log('[Local Dev Mode] listPerformanceLogs: returning mock performance data');
+        try {
+          const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+          const params = new URLSearchParams();
+          
+          if (args[0]?.tenant_id) params.append('tenant_id', args[0].tenant_id);
+          if (args[0]?.limit) params.append('limit', args[0].limit);
+          if (args[0]?.hours) params.append('hours', args[0].hours);
+          
+          const response = await fetch(`${BACKEND_URL}/api/metrics/performance?${params}`);
+          
+          if (response.ok) {
+            const result = await response.json();
+            return {
+              data: {
+                logs: result.data.logs || [],
+                count: result.data.count || 0,
+                metrics: result.data.metrics
+              }
+            };
+          }
+        } catch (error) {
+          console.error('[Backend API] Error fetching performance logs:', error);
+        }
+        
+        // Fallback to empty data if backend is down
         return {
           data: {
-            logs: [
-              { timestamp: new Date().toISOString(), operation: 'query', duration: 45, status: 'success' },
-              { timestamp: new Date(Date.now() - 60000).toISOString(), operation: 'mutation', duration: 120, status: 'success' },
-            ],
-            count: 2
+            logs: [],
+            count: 0,
+            metrics: {
+              totalCalls: 0,
+              avgResponseTime: 0,
+              errorRate: 0,
+              uptime: 0
+            }
           }
         };
       }
@@ -300,18 +380,9 @@ const createFunctionProxy = (functionName) => {
       // User & Tenant Management
       // ========================================
       
-      if (functionName === 'inviteUser') {
-        const { email } = args[0] || {};
-        console.log('[Local Dev Mode] inviteUser: returning mock invite result for', email);
-        return {
-          data: {
-            success: true,
-            message: `User invitation sent to ${email} (local-dev mock)`,
-            inviteId: `local-invite-${Date.now()}`
-          }
-        };
-      }
-
+      // inviteUser is now handled by the real implementation in src/functions/users/inviteUser.js
+      // No need for mock - it calls the backend directly
+      
       if (functionName === 'cleanupUserData') {
         console.log('[Local Dev Mode] cleanupUserData: returning mock cleanup result');
         return {
@@ -385,6 +456,24 @@ const createFunctionProxy = (functionName) => {
         };
       }
 
+      if (functionName === 'getOrCreateUserApiKey') {
+        try {
+          const mockTenant = args[0]?.tenantId || 'local-tenant-001';
+          const storageKey = `local_user_api_key_${mockTenant}`;
+          let existing = localStorage.getItem(storageKey);
+          if (existing) {
+            return { data: { success: true, apiKey: existing } };
+          }
+          // generate a key similar to the app format
+          const generated = `aisha_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+          localStorage.setItem(storageKey, generated);
+          return { data: { success: true, apiKey: generated } };
+        } catch (err) {
+          console.warn(`[Local Dev Mode] getOrCreateUserApiKey fallback failed: ${err?.message || err}`);
+          return { data: { success: false, error: err?.message || String(err) } };
+        }
+      }
+
       // ========================================
       // Billing
       // ========================================
@@ -439,19 +528,9 @@ const createFunctionProxy = (functionName) => {
 // Create a Proxy handler that wraps all function access
 const functionsProxy = new Proxy({}, {
   get: (target, prop) => {
-    // Local dev mode: always use function proxy (mock/no-op implementations)
-    if (isLocalDevMode()) {
-      return createFunctionProxy(prop);
-    }
-
-    // If Base44 provides the function, use it
-    if (base44.functions && base44.functions[prop]) {
-      return base44.functions[prop];
-    }
-
     // If a direct MCP server URL is configured, allow direct JSON-RPC calls
-    // for MCP-related function names (mcpServer*, mcpHandler, etc.)
-    if (MCP_SERVER_URL && (String(prop).startsWith('mcpServer') || String(prop).startsWith('mcpHandler') || String(prop).startsWith('mcpTool'))) {
+    // for MCP-related function names (mcpServer*, mcpHandler, mcpTool*) even in local-dev.
+    if (MCP_SERVER_URL && (String(prop).startsWith('mcpServer') || String(prop).startsWith('mcpHandler') || String(prop).startsWith('mcpTool') || String(prop).startsWith('mcpToolFinder'))) {
       return async (...args) => {
         try {
           const payload = args[0] || {};
@@ -459,11 +538,20 @@ const functionsProxy = new Proxy({}, {
           // Return in the codebase's expected shape: { data: <json-rpc-response> }
           return { data: result };
         } catch (err) {
-          // Mirror behavior of other functions on error
           console.error(`[MCP Direct] Error calling MCP server for ${String(prop)}:`, err);
           throw err;
         }
       };
+    }
+
+    // Local dev mode: use function proxy (mock/no-op implementations)
+    if (isLocalDevMode()) {
+      return createFunctionProxy(prop);
+    }
+
+    // If Base44 provides the function, use it
+    if (base44.functions && base44.functions[prop]) {
+      return base44.functions[prop];
     }
 
     // Fallback: return the local dev proxy (no-op) if function not present

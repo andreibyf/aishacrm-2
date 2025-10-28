@@ -159,6 +159,8 @@ export default function createUserRoutes(pgPool, supabaseAuth) {
     try {
       const { email, first_name, last_name, role, tenant_id, status, metadata, password, ...otherFields } = req.body;
 
+      console.log('[POST /api/users] Creating user:', { email, first_name, last_name, role, tenant_id });
+
       if (!email || !first_name) {
         return res.status(400).json({ status: 'error', message: 'email and first_name are required' });
       }

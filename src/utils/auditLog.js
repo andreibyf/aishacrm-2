@@ -15,7 +15,7 @@ import { callBackendAPI } from '@/api/entities.js';
  */
 export async function logCRMAccessGrant(actor, targetUser, details = {}) {
   try {
-    await callBackendAPI('system-logs', 'POST', null, {
+    await callBackendAPI('system-logs', 'POST', {
       tenant_id: targetUser?.tenant_id || actor?.tenant_id || 'global',
       level: 'INFO',
       message: `CRM access granted to ${targetUser?.email} by ${actor?.email}`,

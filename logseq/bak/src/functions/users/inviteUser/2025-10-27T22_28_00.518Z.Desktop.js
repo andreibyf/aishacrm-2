@@ -10,18 +10,16 @@ export async function inviteUser(userData, currentUser) {
   try {
     console.log('[inviteUser] Creating user:', userData);
 
-    // Determine if this should go into users table (superadmin/admin) or employees table (manager/employee)
-    const isSystemUser = userData.role === 'superadmin' || userData.role === 'admin';
+    // Determine if this should be a global user or employee
+    const isGlobalUser = userData.role === 'superadmin' || userData.role === 'admin';
     
-    if (isSystemUser) {
-      // Create in users table (superadmin or admin)
+    if (isGlobalUser && !userData.tenant_id) {
+      // Create global user in users table
       const response = await callBackendAPI('users', 'POST', {
         email: userData.email,
         first_name: userData.full_name?.split(' ')[0] || '',
         last_name: userData.full_name?.split(' ').slice(1).join(' ') || '',
-        display_name: userData.full_name || '', // Explicitly set display_name
         role: userData.role,
-        tenant_id: userData.tenant_id || null, // NULL for superadmin, specific value for admin
         metadata: {
           access_level: userData.requested_access || 'read_write',
           crm_access: userData.crm_access !== undefined ? userData.crm_access : true,
@@ -56,21 +54,20 @@ export async function inviteUser(userData, currentUser) {
         status: 200,
         data: {
           success: true,
-          message: `${userData.role === 'superadmin' ? 'Super Admin' : 'Admin'} user created successfully`,
+          message: `Global ${userData.role} user created successfully`,
           user: response
         }
       };
     } else {
-      // Create manager/employee (tenant-assigned user) in employees table
+      // Create employee (tenant-assigned user)
       if (!userData.tenant_id) {
         throw new Error('Tenant ID is required for non-admin users');
       }
 
-      const response = await callBackendAPI('users', 'POST', {
+      const response = await callBackendAPI('users', 'POST', null, {
         email: userData.email,
         first_name: userData.full_name?.split(' ')[0] || '',
         last_name: userData.full_name?.split(' ').slice(1).join(' ') || '',
-        display_name: userData.full_name || '', // Explicitly set display_name
         tenant_id: userData.tenant_id,
         role: userData.role || 'employee',
         status: 'active',

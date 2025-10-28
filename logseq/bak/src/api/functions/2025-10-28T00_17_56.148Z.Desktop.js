@@ -380,13 +380,18 @@ const createFunctionProxy = (functionName) => {
       // User & Tenant Management
       // ========================================
       
-      // inviteUser: Call the REAL implementation instead of mocking
       if (functionName === 'inviteUser') {
-        // Import and call the actual backend function
-        const { inviteUser: actualInviteUser } = await import('../functions/users/inviteUser.js');
-        return actualInviteUser(args[0], args[1]);
+        const { email } = args[0] || {};
+        console.log('[Local Dev Mode] inviteUser: returning mock invite result for', email);
+        return {
+          data: {
+            success: true,
+            message: `User invitation sent to ${email} (local-dev mock)`,
+            inviteId: `local-invite-${Date.now()}`
+          }
+        };
       }
-      
+
       if (functionName === 'cleanupUserData') {
         console.log('[Local Dev Mode] cleanupUserData: returning mock cleanup result');
         return {

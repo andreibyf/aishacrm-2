@@ -21,6 +21,17 @@ export function validateTenantAccess(req, res, next) {
   // This middleware assumes req.user is populated by authentication middleware
   const { user } = req;
   
+  // In local dev mode without auth, create a mock superadmin user
+  if (!user && process.env.NODE_ENV === 'development') {
+    req.user = {
+      id: 'local-dev-superadmin',
+      email: 'dev@localhost',
+      role: 'superadmin',
+      tenant_id: null
+    };
+    return next();
+  }
+  
   if (!user) {
     return res.status(401).json({ 
       status: 'error', 
@@ -83,6 +94,17 @@ export function validateTenantAccess(req, res, next) {
  */
 export function requireAdminRole(req, res, next) {
   const { user } = req;
+  
+  // In local dev mode without auth, create a mock superadmin user
+  if (!user && process.env.NODE_ENV === 'development') {
+    req.user = {
+      id: 'local-dev-superadmin',
+      email: 'dev@localhost',
+      role: 'superadmin',
+      tenant_id: null
+    };
+    return next();
+  }
   
   if (!user) {
     return res.status(401).json({ 

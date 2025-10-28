@@ -80,6 +80,23 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
     const [employeesInTenant, setEmployeesInTenant] = useState([]);
     const [myEmployeeRecord, setMyEmployeeRecord] = useState(null);
 
+    // Reset form data when user changes (dialog opens/closes)
+    useEffect(() => {
+        setFormData({
+            full_name: user?.display_name || user?.full_name || '',
+            tenant_id: user?.tenant_id || 'no-client',
+            employee_role: user?.employee_role || 'employee',
+            is_active: user?.is_active !== false,
+            tags: user?.tags || [],
+            can_use_softphone: user?.permissions?.can_use_softphone || false,
+            crm_access: user?.permissions?.crm_access !== false,
+            access_level: user?.permissions?.access_level || 'read_write',
+            dashboard_scope: user?.permissions?.dashboard_scope || 'own',
+            navigation_permissions: initNavPerms(),
+            manager_employee_id: null
+        });
+    }, [user]);
+
     useEffect(() => {
         (async () => {
             const tenantId = user?.tenant_id || null;
