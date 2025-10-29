@@ -1,5 +1,5 @@
 {
-    "recommendations": [
-        "sourcegraph.cody-ai"
-    ]
+  "recommendations": [
+    "denoland.vscode-deno"
+  ]
 }
