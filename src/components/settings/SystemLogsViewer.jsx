@@ -38,7 +38,7 @@ export default function SystemLogsViewer() {
       ]);
 
       if (!tenantResponse.ok && !systemResponse.ok) {
-        throw new Error('Backend not available, trying Base44...');
+        throw new Error('Backend server is not available. Please check if the backend is running.');
       }
 
       let allLogs = [];
@@ -68,12 +68,6 @@ export default function SystemLogsViewer() {
       
       // Sort by created_at descending (newest first)
       allLogs.sort((a, b) => new Date(b.created_at || b.created_date) - new Date(a.created_at || a.created_date));
-      
-      // If backend returns empty, try Base44 as fallback
-      if (!allLogs || allLogs.length === 0) {
-        console.log('No logs from backend, trying Base44...');
-        allLogs = await SystemLog.list('-created_date', 200);
-      }
       
       // Extract unique sources
       const sources = [...new Set(allLogs.map(log => log.source).filter(Boolean))];

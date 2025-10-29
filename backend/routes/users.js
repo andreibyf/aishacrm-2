@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import jwt from 'jsonwebtoken';
 import { deleteAuthUser, sendPasswordResetEmail, inviteUserByEmail, getAuthUserByEmail, updateAuthUserPassword, updateAuthUserMetadata } from '../lib/supabaseAuth.js';
 
 export default function createUserRoutes(pgPool, supabaseAuth) {
@@ -253,13 +254,27 @@ export default function createUserRoutes(pgPool, supabaseAuth) {
         return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
       }
 
-      // TODO: Implement JWT token generation
+      const user = result.rows[0];
+      
+      // Generate JWT token
+      const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+      const token = jwt.sign(
+        { 
+          user_id: user.id,
+          email: user.email,
+          role: user.role,
+          tenant_id: user.tenant_id
+        },
+        JWT_SECRET,
+        { expiresIn: '7d' } // Token expires in 7 days
+      );
+
       res.json({
         status: 'success',
         message: 'Login successful',
         data: { 
-          user: result.rows[0],
-          token: 'TODO_implement_jwt'
+          user,
+          token
         },
       });
     } catch (error) {

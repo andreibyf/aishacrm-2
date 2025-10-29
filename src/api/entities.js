@@ -1,4 +1,3 @@
-import { base44 } from './base44Client';
 // Import mock data utilities at the top for use throughout
 import { createMockUser, isLocalDevMode } from './mockData';
 import { apiHealthMonitor } from '../utils/apiHealthMonitor';
@@ -191,71 +190,44 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   return result;
 };
 
-// Helper function to wrap entities with a filter method and backend fallback
-const wrapEntityWithFilter = (entity, entityName) => {
-  if (!entity) return entity;
-  
+// Create a standard entity object that calls our independent backend API
+const createEntity = (entityName) => {
   return {
-    ...entity,
     // Add filter method as alias for list with better parameter handling
     filter: async (filterObj, sortField, limit) => {
-      // In local dev mode, use independent backend
-      if (isLocalDevMode()) {
-        return callBackendAPI(entityName, 'GET', filterObj);
-      }
-      // Base44 list() method signature: list(filter, sort, limit)
-      return entity.list(filterObj, sortField, limit);
+      return callBackendAPI(entityName, 'GET', filterObj);
     },
     // List method
     list: async (filterObj, sortField, limit) => {
-      if (isLocalDevMode()) {
-        return callBackendAPI(entityName, 'GET', filterObj);
-      }
-      return entity.list(filterObj, sortField, limit);
+      return callBackendAPI(entityName, 'GET', filterObj);
     },
     // Get by ID
     get: async (id) => {
-      if (isLocalDevMode()) {
-        return callBackendAPI(entityName, 'GET', null, id);
-      }
-      return entity.get(id);
+      return callBackendAPI(entityName, 'GET', null, id);
     },
     // Create
     create: async (data) => {
-      if (isLocalDevMode()) {
-        return callBackendAPI(entityName, 'POST', data);
-      }
-      return entity.create(data);
+      return callBackendAPI(entityName, 'POST', data);
     },
     // Update
     update: async (id, data) => {
-      if (isLocalDevMode()) {
-        return callBackendAPI(entityName, 'PUT', data, id);
-      }
-      return entity.update(id, data);
+      return callBackendAPI(entityName, 'PUT', data, id);
     },
     // Delete
     delete: async (id) => {
-      if (isLocalDevMode()) {
-        return callBackendAPI(entityName, 'DELETE', null, id);
-      }
-      return entity.delete(id);
+      return callBackendAPI(entityName, 'DELETE', null, id);
     },
-    // Ensure bulkCreate exists (fallback to multiple create calls if not)
-    bulkCreate: entity.bulkCreate || (async (items) => {
+    // Bulk create
+    bulkCreate: async (items) => {
       if (!Array.isArray(items)) {
         throw new Error('bulkCreate requires an array of items');
       }
-      return Promise.all(items.map(item => 
-        isLocalDevMode() 
-          ? callBackendAPI(entityName, 'POST', item)
-          : entity.create(item)
-      ));
-    })
+      return Promise.all(items.map(item => callBackendAPI(entityName, 'POST', item)));
+    }
   };
 };
 
-export const Contact = wrapEntityWithFilter(base44.entities.Contact, 'Contact');
+export const Contact = createEntity('Contact');
 
 // Account entity - direct backend API calls
 export const Account = {
@@ -424,11 +396,11 @@ export const Account = {
   },
 };
 
-export const Lead = wrapEntityWithFilter(base44.entities.Lead, 'Lead');
+export const Lead = createEntity('Lead');
 
-export const Opportunity = wrapEntityWithFilter(base44.entities.Opportunity, 'Opportunity');
+export const Opportunity = createEntity('Opportunity');
 
-export const Activity = wrapEntityWithFilter(base44.entities.Activity, 'Activity');
+export const Activity = createEntity('Activity');
 
 // Tenant entity - direct backend API calls
 export const Tenant = {
@@ -574,11 +546,11 @@ export const Tenant = {
   },
 };
 
-export const Notification = wrapEntityWithFilter(base44.entities.Notification, 'Notification');
+export const Notification = createEntity('Notification');
 
-export const FieldCustomization = wrapEntityWithFilter(base44.entities.FieldCustomization, 'FieldCustomization');
+export const FieldCustomization = createEntity('FieldCustomization');
 
-export const ModuleSettings = wrapEntityWithFilter(base44.entities.ModuleSettings, 'ModuleSettings');
+export const ModuleSettings = createEntity('ModuleSettings');
 
 // AuditLog entity - direct backend API calls
 export const AuditLog = {
@@ -730,86 +702,87 @@ export const AuditLog = {
   },
 };
 
-export const Note = wrapEntityWithFilter(base44.entities.Note, 'Note');
+export const Note = createEntity('Note');
 
-export const SubscriptionPlan = wrapEntityWithFilter(base44.entities.SubscriptionPlan, 'SubscriptionPlan');
+export const SubscriptionPlan = createEntity('SubscriptionPlan');
 
-export const Subscription = wrapEntityWithFilter(base44.entities.Subscription, 'Subscription');
+export const Subscription = createEntity('Subscription');
 
-export const Webhook = wrapEntityWithFilter(base44.entities.Webhook, 'Webhook');
+export const Webhook = createEntity('Webhook');
 
-export const TestReport = wrapEntityWithFilter(base44.entities.TestReport, 'TestReport');
+export const TestReport = createEntity('TestReport');
 
-export const TenantIntegration = wrapEntityWithFilter(base44.entities.TenantIntegration, 'TenantIntegration');
+export const TenantIntegration = createEntity('TenantIntegration');
 
-export const Announcement = wrapEntityWithFilter(base44.entities.Announcement, 'Announcement');
+export const Announcement = createEntity('Announcement');
 
-export const DataManagementSettings = wrapEntityWithFilter(base44.entities.DataManagementSettings, 'DataManagementSettings');
+export const DataManagementSettings = createEntity('DataManagementSettings');
 
-export const Employee = wrapEntityWithFilter(base44.entities.Employee, 'Employee');
+export const Employee = createEntity('Employee');
 
-export const DocumentationFile = wrapEntityWithFilter(base44.entities.DocumentationFile, 'DocumentationFile');
+export const DocumentationFile = createEntity('DocumentationFile');
 
-export const UserInvitation = wrapEntityWithFilter(base44.entities.UserInvitation, 'UserInvitation');
+export const UserInvitation = createEntity('UserInvitation');
 
-export const GuideContent = wrapEntityWithFilter(base44.entities.GuideContent, 'GuideContent');
+export const GuideContent = createEntity('GuideContent');
 
-export const AICampaign = wrapEntityWithFilter(base44.entities.AICampaign, 'AICampaign');
+export const AICampaign = createEntity('AICampaign');
 
-export const ApiKey = wrapEntityWithFilter(base44.entities.ApiKey, 'ApiKey');
+export const ApiKey = createEntity('ApiKey');
 
-export const CashFlow = wrapEntityWithFilter(base44.entities.CashFlow, 'CashFlow');
+export const CashFlow = createEntity('CashFlow');
 
-export const CronJob = wrapEntityWithFilter(base44.entities.CronJob, 'CronJob');
+export const CronJob = createEntity('CronJob');
 
-export const PerformanceLog = wrapEntityWithFilter(base44.entities.PerformanceLog, 'PerformanceLog');
+export const PerformanceLog = createEntity('PerformanceLog');
 
-export const EmailTemplate = wrapEntityWithFilter(base44.entities.EmailTemplate, 'EmailTemplate');
+export const EmailTemplate = createEntity('EmailTemplate');
 
-export const SystemBranding = wrapEntityWithFilter(base44.entities.SystemBranding, 'SystemBranding');
+export const SystemBranding = createEntity('SystemBranding');
 
-export const Checkpoint = wrapEntityWithFilter(base44.entities.Checkpoint, 'Checkpoint');
+export const Checkpoint = createEntity('Checkpoint');
 
-export const SyncHealth = wrapEntityWithFilter(base44.entities.SyncHealth, 'SyncHealth');
+export const SyncHealth = createEntity('SyncHealth');
 
-export const ContactHistory = wrapEntityWithFilter(base44.entities.ContactHistory, 'ContactHistory');
+export const ContactHistory = createEntity('ContactHistory');
 
-export const LeadHistory = wrapEntityWithFilter(base44.entities.LeadHistory, 'LeadHistory');
+export const LeadHistory = createEntity('LeadHistory');
 
-export const OpportunityHistory = wrapEntityWithFilter(base44.entities.OpportunityHistory, 'OpportunityHistory');
+export const OpportunityHistory = createEntity('OpportunityHistory');
 
-export const DailySalesMetrics = wrapEntityWithFilter(base44.entities.DailySalesMetrics, 'DailySalesMetrics');
+export const DailySalesMetrics = createEntity('DailySalesMetrics');
 
-export const MonthlyPerformance = wrapEntityWithFilter(base44.entities.MonthlyPerformance, 'MonthlyPerformance');
+export const MonthlyPerformance = createEntity('MonthlyPerformance');
 
-export const UserPerformanceCache = wrapEntityWithFilter(base44.entities.UserPerformanceCache, 'UserPerformanceCache');
+export const UserPerformanceCache = createEntity('UserPerformanceCache');
 
-export const ImportLog = wrapEntityWithFilter(base44.entities.ImportLog, 'ImportLog');
+export const ImportLog = createEntity('ImportLog');
 
 export const BizDevSource = {
-  ...wrapEntityWithFilter(base44.entities.BizDevSource, 'BizDevSource'),
+  ...createEntity('BizDevSource'),
   schema: async () => {
-    if (isLocalDevMode()) {
-      return {
-        properties: {
-          name: { type: 'string' },
-          description: { type: 'string' },
-        },
-        required: ['name'],
-      };
-    }
-    return base44.entities.BizDevSource.schema();
+    // Return default schema structure
+    return {
+      properties: {
+        name: { type: 'string' },
+        description: { type: 'string' },
+        url: { type: 'string' },
+        category: { type: 'string' },
+        tenant_id: { type: 'string' },
+      },
+      required: ['name'],
+    };
   },
 };
 
-export const ArchiveIndex = wrapEntityWithFilter(base44.entities.ArchiveIndex, 'ArchiveIndex');
+export const ArchiveIndex = createEntity('ArchiveIndex');
 
-export const IndustryMarketData = wrapEntityWithFilter(base44.entities.IndustryMarketData, 'IndustryMarketData');
+export const IndustryMarketData = createEntity('IndustryMarketData');
 
-export const ClientRequirement = wrapEntityWithFilter(base44.entities.ClientRequirement, 'ClientRequirement');
+export const ClientRequirement = createEntity('ClientRequirement');
 
 // SystemLog with safe fallback to suppress connection errors in local dev when backend is down
-const baseSystemLog = wrapEntityWithFilter(base44.entities.SystemLog, 'SystemLog');
+const baseSystemLog = createEntity('SystemLog');
 export const SystemLog = {
   ...baseSystemLog,
   create: async (data) => {
@@ -823,9 +796,9 @@ export const SystemLog = {
   },
 };
 
-export const Workflow = wrapEntityWithFilter(base44.entities.Workflow, 'Workflow');
+export const Workflow = createEntity('Workflow');
 
-export const WorkflowExecution = wrapEntityWithFilter(base44.entities.WorkflowExecution, 'WorkflowExecution');
+export const WorkflowExecution = createEntity('WorkflowExecution');
 
 // ============================================
 // SUPABASE AUTHENTICATION
@@ -957,9 +930,9 @@ export const User = {
       }
     }
 
-    // Fallback: Use Base44 if Supabase not configured
-    console.warn('[Auth] Supabase not configured, falling back to Base44');
-    return base44.auth.me();
+    // No authentication system configured
+    console.error('[Auth] No authentication system configured');
+    throw new Error('Authentication system not configured. Please configure Supabase.');
   },
 
   /**
@@ -1039,9 +1012,9 @@ export const User = {
       }
     }
 
-    // Fallback: Use Base44 if Supabase not configured
-    console.warn('[Auth] Supabase not configured, falling back to Base44');
-    return base44.auth.signIn(email, password);
+    // No authentication system configured
+    console.error('[Auth] No authentication system configured');
+    throw new Error('Authentication system not configured. Please configure Supabase.');
   },
 
   /**
@@ -1066,9 +1039,9 @@ export const User = {
       }
     }
 
-    // Fallback: Use Base44 if Supabase not configured
-    console.warn('[Auth] Supabase not configured, falling back to Base44');
-    return base44.auth.signOut();
+    // No authentication system configured
+    console.error('[Auth] No authentication system configured');
+    throw new Error('Authentication system not configured. Please configure Supabase.');
   },
 
   /**
@@ -1110,9 +1083,9 @@ export const User = {
       }
     }
 
-    // Fallback: Use Base44 if Supabase not configured
-    console.warn('[Auth] Supabase not configured, falling back to Base44');
-    return base44.auth.signUp(email, password, metadata);
+    // No authentication system configured
+    console.error('[Auth] No authentication system configured');
+    throw new Error('Authentication system not configured. Please configure Supabase.');
   },
 
   /**
@@ -1147,13 +1120,9 @@ export const User = {
       }
     }
 
-    // Fallback: Use Base44 SDK
-    console.warn('[Auth] Supabase not configured, falling back to Base44');
-    const currentUser = await base44.auth.me();
-    if (!currentUser?.id) {
-      throw new Error('No authenticated user found');
-    }
-    return base44.entities.User.update(currentUser.id, updates);
+    // No authentication system configured
+    console.error('[Auth] No authentication system configured');
+    throw new Error('Authentication system not configured. Please configure Supabase.');
   },
 
   /**
