@@ -25,10 +25,11 @@ export default function createSystemLogRoutes(pgPool) {
         ...otherFields
       };
       
+      // Use created_at instead of created_date for compatibility
       const query = `
         INSERT INTO system_logs (
           tenant_id, level, message, source, user_email, 
-          metadata, user_agent, url, stack_trace, created_date
+          metadata, user_agent, url, stack_trace, created_at
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()
         ) RETURNING *
@@ -40,7 +41,7 @@ export default function createSystemLogRoutes(pgPool) {
         message,
         source,
         user_email,
-        combinedMetadata,
+        JSON.stringify(combinedMetadata),  // Ensure metadata is stringified
         user_agent,
         url,
         stack_trace
@@ -84,7 +85,7 @@ export default function createSystemLogRoutes(pgPool) {
         valueIndex++;
       }
 
-      query += ` ORDER BY created_date DESC LIMIT $${valueIndex} OFFSET $${valueIndex + 1}`;
+      query += ` ORDER BY created_at DESC LIMIT $${valueIndex} OFFSET $${valueIndex + 1}`;
       values.push(parseInt(limit), parseInt(offset));
       
       const result = await pgPool.query(query, values);
@@ -160,7 +161,7 @@ export default function createSystemLogRoutes(pgPool) {
       }
 
       if (older_than_days) {
-        query += ` AND created_date < NOW() - INTERVAL '${parseInt(older_than_days)} days'`;
+        query += ` AND created_at < NOW() - INTERVAL '${parseInt(older_than_days)} days'`;
       }
 
       query += ' RETURNING *';

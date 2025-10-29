@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext } from 'react';
-import { User } from '@/api/entities';
+import { User, SystemLog } from '@/api/entities';
 
 // Client-side error log storage
 const errorLog = [];
@@ -41,6 +41,30 @@ export function ErrorLogProvider({ children }) {
 
     // Also log to console for developers
     console.error(`[${errorEntry.component}]`, errorEntry.message, errorEntry.details);
+
+    // CRITICAL: Persist errors to system_logs table
+    // Map severity to log level: critical/error → ERROR, warning → WARNING
+    const logLevel = errorEntry.severity === 'critical' || errorEntry.severity === 'error' ? 'ERROR' : 'WARNING';
+    
+    SystemLog.create({
+      level: logLevel,
+      message: `[${errorEntry.component}] ${errorEntry.message}`,
+      source: errorEntry.component,
+      user_email: errorEntry.userEmail || 'anonymous',
+      tenant_id: user?.tenant_id || null,
+      metadata: {
+        status: errorEntry.status,
+        severity: errorEntry.severity,
+        actionable: errorEntry.actionable,
+        details: errorEntry.details,
+        timestamp: errorEntry.timestamp
+      },
+      user_agent: navigator.userAgent,
+      url: window.location.href
+    }).catch((logErr) => {
+      // Don't fail the app if logging fails
+      console.warn('Failed to persist error to system_logs:', logErr);
+    });
   };
 
   const clearErrors = () => {

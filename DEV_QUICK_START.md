@@ -52,16 +52,20 @@ This starts:
 ## 🔄 Auto-Restart Features
 
 ### Backend Auto-Restart
-- **How it works**: Node.js `--watch` flag monitors file changes
+- **How it works**: Custom wrapper monitors file changes with restart limits
 - **What triggers restart**: Any `.js` file modification in `backend/`
-- **Restart time**: ~1 second
+- **Restart time**: ~2 seconds (includes cooldown)
+- **Safety limits**: Max 10 restarts per minute, auto-exits if exceeded
 - **Manual start**: `cd backend && npm run dev`
+- **Unlimited mode**: `cd backend && npm run dev:unlimited` (not recommended)
 
 ### Frontend Hot Module Replacement (HMR)
 - **How it works**: Vite detects changes and updates browser instantly
 - **What updates**: React components, CSS, config files
 - **Update time**: Instant (no page reload needed)
+- **Crash recovery**: Auto-restarts if Vite crashes (max 5/min)
 - **Manual start**: `npm run dev`
+- **Direct Vite**: `npm run dev:vite` (no crash recovery)
 
 ## 📝 Development Workflow
 

@@ -228,9 +228,50 @@ app.use((err, req, res, _next) => {
   });
 });
 
+// Helper to log backend lifecycle events to system_logs
+async function logBackendEvent(level, message, metadata = {}) {
+  if (!pgPool) return; // Skip if no database
+  
+  try {
+    const query = `
+      INSERT INTO system_logs (
+        tenant_id, level, message, source, user_email, 
+        metadata, created_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, NOW()
+      )
+    `;
+    
+    await pgPool.query(query, [
+      'system', // Special tenant_id for system events
+      level,
+      message,
+      'Backend Server',
+      'system@aishacrm.com',
+      JSON.stringify({
+        ...metadata,
+        port: PORT,
+        environment: process.env.NODE_ENV || 'development',
+        database_type: dbConnectionType,
+        timestamp: new Date().toISOString()
+      })
+    ]);
+  } catch (error) {
+    // Don't fail startup/shutdown if logging fails
+    console.error('Failed to log backend event:', error.message);
+  }
+}
+
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully...');
+  
+  // Log shutdown event
+  await logBackendEvent('WARNING', 'Backend server shutting down (SIGTERM received)', {
+    uptime_seconds: process.uptime(),
+    shutdown_reason: 'SIGTERM signal'
+  });
+  
   if (pgPool) {
     pgPool.end(() => {
       console.log('PostgreSQL pool closed');
@@ -241,10 +282,27 @@ process.on('SIGTERM', () => {
   }
 });
 
+// Handle unexpected crashes
+process.on('uncaughtException', async (err) => {
+  console.error('[uncaughtException]', err);
+  
+  // Log crash event
+  await logBackendEvent('ERROR', 'Backend server crashed (uncaughtException)', {
+    error: err.message,
+    stack_trace: err.stack,
+    uptime_seconds: process.uptime()
+  });
+  
+  // Don't exit on uncaught exceptions in development
+  if (process.env.NODE_ENV !== 'development') {
+    process.exit(1);
+  }
+});
+
 // Start server
 const server = createServer(app);
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
@@ -253,7 +311,7 @@ server.listen(PORT, () => {
 ║   Status: Running                                         ║
 ║   Port: ${PORT}                                              ║
 ║   Environment: ${process.env.NODE_ENV || 'development'}                              ║
-║   Database: ${pgPool ? 'Connected' : 'Not configured'}                           ║
+║   Database: ${pgPool ? 'Connected (' + dbConnectionType + ')' : 'Not configured'}   ║
 ║                                                           ║
 ║   Health Check: http://localhost:${PORT}/health             ║
 ║   API Status: http://localhost:${PORT}/api/status           ║
@@ -262,28 +320,42 @@ server.listen(PORT, () => {
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
   `);
+  
+  // Log startup event
+  await logBackendEvent('INFO', 'Backend server started successfully', {
+    endpoints_count: 197,
+    categories_count: 26,
+    startup_time: new Date().toISOString()
+  });
 });
 
 // Handle server errors (port already in use, etc.)
-server.on('error', (error) => {
+server.on('error', async (error) => {
   console.error('Server error:', error);
+  
+  // Log server error
+  await logBackendEvent('ERROR', `Backend server error: ${error.message}`, {
+    error_code: error.code,
+    error: error.message,
+    stack_trace: error.stack
+  });
+  
   if (error.code === 'EADDRINUSE') {
     console.error(`Port ${PORT} is already in use`);
     process.exit(1);
   }
 });
 
-// Handle unhandled rejections and exceptions to prevent silent crashes
-process.on('unhandledRejection', (err) => {
+// Handle unhandled rejections - log them to system_logs
+process.on('unhandledRejection', async (err) => {
   console.error('[unhandledRejection]', err);
-});
-
-process.on('uncaughtException', (err) => {
-  console.error('[uncaughtException]', err);
-  // Don't exit on uncaught exceptions in development
-  if (process.env.NODE_ENV === 'production') {
-    process.exit(1);
-  }
+  
+  // Log unhandled rejection
+  await logBackendEvent('ERROR', 'Unhandled promise rejection detected', {
+    error: err?.message || String(err),
+    stack_trace: err?.stack,
+    type: 'unhandledRejection'
+  });
 });
 
 export { app, pgPool, server };

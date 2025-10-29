@@ -36,18 +36,26 @@ Your own independent backend infrastructure - no more dependency on Base44!
 
 ## 🔄 Development Mode
 
-The backend supports **auto-restart** for faster development:
+The backend supports **smart auto-restart** for faster development with safeguards:
 
 ```bash
 npm run dev
 ```
 
-This uses Node.js's built-in `--watch` flag to automatically restart the server when you modify any `.js` files. No need to manually stop/start the server!
+This uses a custom wrapper (`dev-server.js`) that:
+- ✅ Automatically restarts when `.js` files change
+- ✅ **Limits to 10 restarts per minute** (prevents infinite crash loops)
+- ✅ **2-second cooldown** between restarts (debounces rapid saves)
+- ✅ **Auto-exits** if limit exceeded (forces you to fix the issue)
+
+**Restart Policy:**
+- **Safe Mode (default):** `npm run dev` - Max 10 restarts/min, 2s cooldown
+- **Unlimited Mode:** `npm run dev:unlimited` - No limits (use with caution)
 
 **Benefits:**
-- ✅ Instant feedback - changes apply in ~1 second
-- ✅ No external dependencies (uses native Node.js feature)
-- ✅ Works with all file types in the backend directory
+- ✅ Instant feedback - changes apply in ~2 seconds
+- ✅ Prevents crash loops from going unnoticed
+- ✅ Forces immediate attention to critical errors
 
 ## 📡 API Endpoints
 

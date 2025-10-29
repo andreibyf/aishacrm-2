@@ -4,11 +4,31 @@
  */
 
 import { callBackendAPI } from '../../api/entities.js';
-import { logUserCreated, logCRMAccessGrant } from '../../utils/auditLog.js';
+
+// Lazy load audit logging to avoid circular dependencies
+let logUserCreated, logCRMAccessGrant;
+async function getAuditLoggers() {
+  if (!logUserCreated) {
+    try {
+      const auditLog = await import('../../utils/auditLog.js');
+      logUserCreated = auditLog.logUserCreated;
+      logCRMAccessGrant = auditLog.logCRMAccessGrant;
+    } catch (error) {
+      console.warn('[inviteUser] Could not load audit loggers:', error);
+      // Provide no-op fallbacks
+      logUserCreated = async () => {};
+      logCRMAccessGrant = async () => {};
+    }
+  }
+  return { logUserCreated, logCRMAccessGrant };
+}
 
 export async function inviteUser(userData, currentUser) {
   try {
     console.log('[inviteUser] Creating user:', userData);
+
+    // Get audit loggers (lazy loaded to avoid circular dependencies)
+    const { logUserCreated, logCRMAccessGrant } = await getAuditLoggers();
 
     // Determine if this should go into users table (superadmin/admin) or employees table (manager/employee)
     const isSystemUser = userData.role === 'superadmin' || userData.role === 'admin';

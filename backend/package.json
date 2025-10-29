@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js",
+    "dev": "node dev-server.js",
+    "dev:unlimited": "node --watch server.js",
     "test": "node --test",
     "seed": "node scripts/run_seed.js",
     "worker:email": "node workers/emailWorker.js"

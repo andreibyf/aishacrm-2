@@ -30,25 +30,44 @@ export default function SystemLogsViewer() {
       // Try backend first (for local dev with Supabase Cloud)
       // Note: backend mounts this router at /api/system-logs (dash), not /api/system/logs
       const tenantId = selectedTenantId || 'local-tenant-001';
-      const response = await fetch(`${BACKEND_URL}/api/system-logs?tenant_id=${encodeURIComponent(tenantId)}&limit=200`);
+      
+      // Fetch logs for BOTH selected tenant AND 'system' tenant (for backend lifecycle events)
+      const [tenantResponse, systemResponse] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/system-logs?tenant_id=${encodeURIComponent(tenantId)}&limit=200`),
+        fetch(`${BACKEND_URL}/api/system-logs?tenant_id=system&limit=200`)
+      ]);
 
-      if (!response.ok) {
+      if (!tenantResponse.ok && !systemResponse.ok) {
         throw new Error('Backend not available, trying Base44...');
       }
 
-      const data = await response.json();
-      // Backend returns { status: 'success', data: { 'system-logs': [...] } }
-      // Normalize to an array of logs for the UI.
       let allLogs = [];
-      if (data && data.status === 'success' && data.data) {
-        if (Array.isArray(data.data['system-logs'])) {
-          allLogs = data.data['system-logs'];
-        } else if (Array.isArray(data.data)) {
-          allLogs = data.data;
+      
+      // Combine logs from both tenant and system
+      if (tenantResponse.ok) {
+        const data = await tenantResponse.json();
+        if (data && data.status === 'success' && data.data) {
+          if (Array.isArray(data.data['system-logs'])) {
+            allLogs = [...allLogs, ...data.data['system-logs']];
+          } else if (Array.isArray(data.data)) {
+            allLogs = [...allLogs, ...data.data];
+          }
         }
-      } else if (Array.isArray(data)) {
-        allLogs = data;
       }
+      
+      if (systemResponse.ok) {
+        const systemData = await systemResponse.json();
+        if (systemData && systemData.status === 'success' && systemData.data) {
+          if (Array.isArray(systemData.data['system-logs'])) {
+            allLogs = [...allLogs, ...systemData.data['system-logs']];
+          } else if (Array.isArray(systemData.data)) {
+            allLogs = [...allLogs, ...systemData.data];
+          }
+        }
+      }
+      
+      // Sort by created_at descending (newest first)
+      allLogs.sort((a, b) => new Date(b.created_at || b.created_date) - new Date(a.created_at || a.created_date));
       
       // If backend returns empty, try Base44 as fallback
       if (!allLogs || allLogs.length === 0) {
@@ -313,7 +332,7 @@ export default function SystemLogsViewer() {
                         {log.source}
                       </Badge>
                       <span className="text-xs text-slate-500">
-                        {new Date(log.created_date).toLocaleString()}
+                        {new Date(log.created_at || log.created_date).toLocaleString()}
                       </span>
                     </div>
 
