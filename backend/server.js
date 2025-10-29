@@ -364,7 +364,7 @@ async function logRecoveryIfGap() {
 // Start server
 const server = createServer(app);
 
-server.listen(PORT, async () => {
+server.listen(PORT, () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
@@ -383,16 +383,44 @@ server.listen(PORT, async () => {
 ╚═══════════════════════════════════════════════════════════╝
   `);
   
-  // Log startup event
-  await logBackendEvent('INFO', 'Backend server started successfully', {
+  console.log('✓ Server listening on port', PORT);
+  
+  // Log startup event (non-blocking - don't block server startup)
+  logBackendEvent('INFO', 'Backend server started successfully', {
     endpoints_count: 197,
     categories_count: 26,
     startup_time: new Date().toISOString()
-  });
+  }).catch(err => console.error('Failed to log startup event:', err.message));
 
   // If there was a gap in heartbeats, log a recovery event, then start periodic heartbeats
-  await logRecoveryIfGap();
-  startHeartbeat();
+  // Run in background - don't block server startup
+  console.log('✓ Initializing heartbeat system in 1 second...');
+  setTimeout(async () => {
+    console.log('→ Starting heartbeat initialization...');
+    try {
+      await logRecoveryIfGap();
+      console.log('✓ Recovery check complete');
+      startHeartbeat();
+      console.log('✓ Heartbeat system started');
+      console.log('✓ Heartbeat timer ID:', heartbeatTimer);
+    } catch (err) {
+      console.error('Failed to start heartbeat system:', err.message);
+    }
+  }, 1000); // Delay 1 second to ensure server is fully started
+  
+  // Keep-alive interval to prevent process from exiting
+  setInterval(() => {
+    // This empty interval keeps the event loop alive
+  }, 60000);
+});
+
+// Debug: Log if process is about to exit
+process.on('exit', (code) => {
+  console.log('⚠️  Process exiting with code:', code);
+});
+
+process.on('beforeExit', (code) => {
+  console.log('⚠️  Process about to exit (beforeExit) with code:', code);
 });
 
 // Handle server errors (port already in use, etc.)
