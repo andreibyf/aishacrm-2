@@ -120,7 +120,7 @@ app.get('/api/status', (req, res) => {
     version: '1.0.0',
     services: {
       database: pgPool ? 'connected' : 'not configured',
-      base44: 'independent',
+      mode: 'independent',
     },
   });
 });
@@ -271,6 +271,7 @@ process.on('SIGTERM', async () => {
     uptime_seconds: process.uptime(),
     shutdown_reason: 'SIGTERM signal'
   });
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
   
   if (pgPool) {
     pgPool.end(() => {
@@ -298,6 +299,67 @@ process.on('uncaughtException', async (err) => {
     process.exit(1);
   }
 });
+
+// ----------------------------------------------------------------------------
+// Heartbeat support: record periodic heartbeats so missing intervals indicate downtime
+// ----------------------------------------------------------------------------
+let heartbeatTimer = null;
+
+async function writeHeartbeat() {
+  if (!pgPool) return;
+  try {
+    await pgPool.query(
+      `INSERT INTO system_logs (tenant_id, level, message, source, user_email, metadata, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+      [
+        'system',
+        'INFO',
+        'Heartbeat',
+        'Backend Server',
+        'system@aishacrm.com',
+        JSON.stringify({ type: 'heartbeat' })
+      ]
+    );
+  } catch (e) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Failed to write heartbeat:', e.message);
+    }
+  }
+}
+
+function startHeartbeat() {
+  if (!pgPool) return;
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  // Immediate heartbeat then every 60 seconds
+  writeHeartbeat();
+  heartbeatTimer = setInterval(writeHeartbeat, 60000);
+}
+
+async function logRecoveryIfGap() {
+  if (!pgPool) return;
+  try {
+    const result = await pgPool.query(
+      `SELECT created_at FROM system_logs
+       WHERE tenant_id = 'system' AND source = 'Backend Server' AND message = 'Heartbeat'
+       ORDER BY created_at DESC LIMIT 1`
+    );
+    if (result.rows.length > 0) {
+      const last = new Date(result.rows[0].created_at);
+      const gapMs = Date.now() - last.getTime();
+      const thresholdMs = 2 * 60 * 1000; // >2 minutes gap implies downtime
+      if (gapMs > thresholdMs) {
+        await logBackendEvent('WARNING', 'Backend recovered after downtime', {
+          downtime_ms: gapMs,
+          last_heartbeat: last.toISOString()
+        });
+      }
+    }
+  } catch (e) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Failed to check last heartbeat:', e.message);
+    }
+  }
+}
 
 // Start server
 const server = createServer(app);
@@ -327,6 +389,10 @@ server.listen(PORT, async () => {
     categories_count: 26,
     startup_time: new Date().toISOString()
   });
+
+  // If there was a gap in heartbeats, log a recovery event, then start periodic heartbeats
+  await logRecoveryIfGap();
+  startHeartbeat();
 });
 
 // Handle server errors (port already in use, etc.)

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,10 +12,14 @@ import {
   FileText
 } from "lucide-react";
 
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+
 export default function TestRunner({ testSuites }) {
   const [results, setResults] = useState([]);
   const [running, setRunning] = useState(false);
   const [currentTest, setCurrentTest] = useState(null);
+  const [preflight, setPreflight] = useState({ status: 'unknown', message: null, database: 'unknown' });
+  const [checking, setChecking] = useState(true);
 
   const runTests = async () => {
     setRunning(true);
@@ -66,26 +70,79 @@ export default function TestRunner({ testSuites }) {
         <CardHeader>
           <CardTitle className="text-slate-100 flex items-center justify-between">
             <span>Test Suite Runner</span>
-            <Button 
-              onClick={runTests} 
-              disabled={running}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              {running ? (
-                <>
-                  <Clock className="w-4 h-4 mr-2 animate-spin" />
-                  Running...
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4 mr-2" />
-                  Run All Tests
-                </>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={async () => {
+                  setChecking(true);
+                  try {
+                    let resp = await fetch(`${BACKEND_URL}/api/status`);
+                    if (!resp.ok) throw new Error(`Status ${resp.status}`);
+                    const data = await resp.json();
+                    const db = data?.services?.database || 'unknown';
+                    setPreflight({ status: 'ok', message: data?.message || 'Backend online', database: db });
+                  } catch (e1) {
+                    try {
+                      const resp = await fetch(`${BACKEND_URL}/health`);
+                      if (!resp.ok) throw new Error(`Status ${resp.status}`);
+                      const data = await resp.json();
+                      setPreflight({ status: 'ok', message: 'Backend online', database: data?.database || 'unknown' });
+                    } catch (e2) {
+                      setPreflight({ status: 'error', message: `Backend not reachable at ${BACKEND_URL}`, database: 'unknown' });
+                    }
+                  } finally {
+                    setChecking(false);
+                  }
+                }}
+                variant="outline"
+                className="bg-slate-700 border-slate-600"
+                disabled={checking}
+              >
+                {checking ? <Clock className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-4 h-4 mr-2" />}
+                Check Backend
+              </Button>
+              <Button 
+                onClick={runTests} 
+                disabled={running || checking || preflight.status !== 'ok'}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {running ? (
+                  <>
+                    <Clock className="w-4 h-4 mr-2 animate-spin" />
+                    Running...
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4 mr-2" />
+                    Run All Tests
+                  </>
+                )}
+              </Button>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Preflight banner */}
+          {checking ? (
+            <Alert className="mb-4 bg-blue-900/30 border-blue-700">
+              <Clock className="h-4 w-4 animate-spin" />
+              <AlertDescription className="text-blue-300">Checking backend status…</AlertDescription>
+            </Alert>
+          ) : preflight.status !== 'ok' ? (
+            <Alert className="mb-4 bg-red-900/30 border-red-700">
+              <AlertTriangle className="h-4 w-4 text-red-400" />
+              <AlertDescription className="text-red-300">
+                {preflight.message}. Tests are disabled until the backend is reachable.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Alert className="mb-4 bg-green-900/30 border-green-700">
+              <CheckCircle2 className="h-4 w-4 text-green-400" />
+              <AlertDescription className="text-green-300">
+                Backend online (database: {preflight.database}). You can run the tests.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {running && currentTest && (
             <Alert className="mb-4 bg-blue-900/30 border-blue-700">
               <Clock className="h-4 w-4 animate-spin" />

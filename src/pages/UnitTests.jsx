@@ -6,6 +6,7 @@ import { utilityFunctionTests } from '../components/testing/utilityFunctionTests
 import { employeeScopeTests } from '../components/testing/employeeScopeTests';
 import { apiHealthMonitorTests } from '../components/testing/apiHealthMonitorTests';
 import { crudTests } from '../components/testing/crudTests';
+import { systemLogsTests } from '../components/testing/systemLogsTests';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Info, TestTube } from "lucide-react";
@@ -17,7 +18,8 @@ import { Info, TestTube } from "lucide-react";
     utilityFunctionTests,
     employeeScopeTests,
     apiHealthMonitorTests,
-    crudTests
+    crudTests,
+    systemLogsTests
   ];export default function UnitTestsPage() {
   return (
     <div className="min-h-screen bg-slate-900 p-6">
@@ -79,10 +81,10 @@ import { Info, TestTube } from "lucide-react";
               <div className="p-3 bg-slate-700 rounded-lg">
                 <div className="font-medium text-slate-200 mb-1 flex items-center gap-2">
                   🔧 CRUD Operations
-                  <span className="text-xs px-2 py-0.5 bg-yellow-900/50 text-yellow-300 rounded">Needs Backend DB</span>
+                  <span className="text-xs px-2 py-0.5 bg-green-900/40 text-green-300 border border-green-700/60 rounded">Live DB</span>
                 </div>
                 <div className="text-sm text-slate-400">
-                  Infrastructure checks for Create, Read, Update, Delete operations. Full tests available when backend implements database queries.
+                  End-to-end Create, Read, Update, Delete tests running against Supabase Cloud PostgreSQL.
                 </div>
               </div>
               <div className="p-3 bg-slate-700 rounded-lg">
