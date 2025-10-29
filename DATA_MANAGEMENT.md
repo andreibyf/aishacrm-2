@@ -1,6 +1,25 @@
 # Data Management Quick Reference
 
-## Clear Test Data
+## Clear All Data (Nuclear Option)
+
+If you need to delete **ALL** data from **ALL** tenants (including orphaned demo-tenant data):
+
+```powershell
+# Using the nuclear cleanup endpoint
+$body = @{ confirm = "DELETE_ALL_DATA" } | ConvertTo-Json
+Invoke-RestMethod -Uri "http://localhost:3001/api/database/nuclear-cleanup" -Method POST -Body $body -ContentType "application/json"
+```
+
+This deletes:
+- ✅ ALL contacts (regardless of tenant)
+- ✅ ALL leads (regardless of tenant)
+- ✅ ALL accounts (regardless of tenant)
+- ✅ ALL opportunities (regardless of tenant)
+- ✅ ALL activities (regardless of tenant)
+
+**Use with extreme caution!** This cannot be undone.
+
+## Clear Data by Tenant
 
 ### Keep Tenants, Clear Data (Recommended for testing)
 ```powershell

@@ -114,5 +114,66 @@ export default function createDatabaseRoutes(pgPool) {
     }
   });
 
+  // POST /api/database/nuclear-cleanup - DELETE ALL DATA (use with extreme caution!)
+  router.post('/nuclear-cleanup', async (req, res) => {
+    try {
+      if (!pgPool) {
+        return res.status(503).json({
+          status: 'error',
+          message: 'Database not configured',
+        });
+      }
+
+      const { confirm } = req.body;
+
+      if (confirm !== 'DELETE_ALL_DATA') {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Confirmation required. Send {"confirm": "DELETE_ALL_DATA"}',
+        });
+      }
+
+      // Delete from all entity tables (in correct order to respect foreign keys)
+      const results = {};
+
+      // Activities first (has foreign keys to other tables)
+      const activitiesResult = await pgPool.query('DELETE FROM activities RETURNING id');
+      results.activities = activitiesResult.rowCount;
+
+      // Opportunities
+      const oppsResult = await pgPool.query('DELETE FROM opportunities RETURNING id');
+      results.opportunities = oppsResult.rowCount;
+
+      // Accounts
+      const accountsResult = await pgPool.query('DELETE FROM accounts RETURNING id');
+      results.accounts = accountsResult.rowCount;
+
+      // Leads
+      const leadsResult = await pgPool.query('DELETE FROM leads RETURNING id');
+      results.leads = leadsResult.rowCount;
+
+      // Contacts
+      const contactsResult = await pgPool.query('DELETE FROM contacts RETURNING id');
+      results.contacts = contactsResult.rowCount;
+
+      const totalDeleted = Object.values(results).reduce((sum, count) => sum + count, 0);
+
+      res.json({
+        status: 'success',
+        message: `Nuclear cleanup complete. Deleted ${totalDeleted} total records.`,
+        data: {
+          deletedCounts: results,
+          totalDeleted,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      res.status(500).json({
+        status: 'error',
+        message: error.message,
+      });
+    }
+  });
+
   return router;
 }
