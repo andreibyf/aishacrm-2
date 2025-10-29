@@ -1,16 +1,53 @@
 # Development Quick Start Guide
 
-## 🚀 One-Command Startup
+## � CRITICAL RULES - READ FIRST
+
+### Terminal & Directory Management (MANDATORY)
+
+**Before running ANY command:**
+
+1. **Verify Directory Location:**
+   ```powershell
+   Get-Location  # ALWAYS run this first!
+   ```
+
+2. **Navigate to Project Root if Needed:**
+   ```powershell
+   cd c:\Users\andre\Documents\GitHub\ai-sha-crm-copy-c872be53
+   ```
+
+3. **Use Separate Terminals:**
+   - Frontend runs in Terminal 1
+   - Backend runs in Terminal 2
+   - Your work/commands go in Terminal 3 (NEW terminal after starting services)
+
+**Why This Matters:**
+- Running commands in wrong directory = errors/failures
+- Background processes occupy terminals = need new terminal for commands
+- Assuming location instead of verifying = waste time debugging phantom issues
+
+---
+
+## �🚀 One-Command Startup
 
 Start everything with auto-restart enabled:
 
 ```powershell
+# 1. Verify you're in project root
+Get-Location
+
+# 2. Start all services (occupies this terminal)
 .\start-all.ps1
+
+# 3. Open a NEW terminal for your work
+# (Ctrl+Shift+` in VS Code or use terminal menu)
 ```
 
 This starts:
 - ✅ Backend server with auto-restart (port 3001)
 - ✅ Frontend dev server with HMR (port 5173)
+
+**⚠️ IMPORTANT:** After services start, open a NEW terminal for running other commands!
 
 ## 🔄 Auto-Restart Features
 

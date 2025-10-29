@@ -4,6 +4,17 @@
 
 Originally powered by Ai-SHA, now transitioning to your own independent infrastructure for complete control and zero vendor dependency.
 
+## 🚨 Critical: Read This First
+
+**Before running ANY commands, read:**
+- [TERMINAL_RULES.md](./TERMINAL_RULES.md) - **MANDATORY** terminal & directory rules
+- [DEV_QUICK_START.md](./DEV_QUICK_START.md) - Development workflow guide
+
+**TL;DR:**
+1. ALWAYS run `Get-Location` before executing commands
+2. Use separate terminals for backend, frontend, and your work
+3. Verify directory location - never assume where you are
+
 ## Getting Started
 
 ### Initial Setup

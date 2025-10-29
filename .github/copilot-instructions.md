@@ -13,14 +13,40 @@
 - **Why Independent:** Prevents downtime when Base44 is unavailable; full control over data and functions.
 
 ## Developer Workflows
+
+### 🚨 CRITICAL: Terminal & Directory Rules
+**MUST FOLLOW EVERY TIME - NO EXCEPTIONS:**
+
+1. **Directory Verification (MANDATORY):**
+   - ALWAYS run `Get-Location` (PowerShell) or `pwd` (bash) BEFORE executing ANY terminal command
+   - NEVER assume your current directory
+   - Verify you're in the correct location before running scripts or commands
+
+2. **Terminal Management (MANDATORY):**
+   - Frontend and backend MUST run in SEPARATE terminals
+   - After starting services with `.\start-all.ps1`, you MUST open a NEW terminal for subsequent commands
+   - Background processes occupy the terminal - always spawn a new one for additional work
+
+3. **Command Execution Pattern:**
+   ```powershell
+   # ALWAYS do this first:
+   Get-Location  # Verify current directory
+   
+   # Then navigate if needed:
+   cd c:\Users\andre\Documents\GitHub\ai-sha-crm-copy-c872be53
+   
+   # Then execute your command:
+   .\your-script.ps1
+   ```
+
+### Standard Workflows
 - **Setup:** `npm install` (root & backend); copy `.env.example` to `.env`; configure `VITE_AISHACRM_BACKEND_URL` and database credentials.
-- **Dev Server:** `npm run dev` (frontend); `cd backend && npm run dev` (backend with auto-reload in separate terminal).
+- **Dev Server:** `.\start-all.ps1` (starts both in background) OR `npm run dev` (frontend); `cd backend && npm run dev` (backend) in separate terminals.
 - **Build:** `npm run build` (frontend); backend runs via `npm start`.
 - **Linting:** `npm run lint` (frontend); check `eslint-results.json` for issues.
 - **Database:** Use Supabase; run migrations from `backend/migrations/`; seed with `npm run seed`.
 - **Testing:** Custom tests in `src/pages/UnitTests.jsx`; backend tests via `npm test`.
 - **Backend Issues:** If server exits immediately, see `backend/TROUBLESHOOTING_NODE_ESM.md` for ESM-specific debugging.
-- **Directory Awareness:** ALWAYS run `Get-Location` (PowerShell) or `pwd` (bash) before executing terminal commands to verify you're in the correct directory. Never assume your current location.
 
 ## Project-Specific Conventions
 - Components: Function-based React, domain-grouped; use `ConfirmDialog` instead of `window.confirm()`.
