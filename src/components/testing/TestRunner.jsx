@@ -21,6 +21,34 @@ export default function TestRunner({ testSuites }) {
   const [preflight, setPreflight] = useState({ status: 'unknown', message: null, database: 'unknown' });
   const [checking, setChecking] = useState(true);
 
+  // Preflight check function
+  const checkBackend = useCallback(async () => {
+    setChecking(true);
+    try {
+      let resp = await fetch(`${BACKEND_URL}/api/status`);
+      if (!resp.ok) throw new Error(`Status ${resp.status}`);
+      const data = await resp.json();
+      const db = data?.services?.database || 'unknown';
+      setPreflight({ status: 'ok', message: data?.message || 'Backend online', database: db });
+    } catch {
+      try {
+        const resp = await fetch(`${BACKEND_URL}/health`);
+        if (!resp.ok) throw new Error(`Status ${resp.status}`);
+        const data = await resp.json();
+        setPreflight({ status: 'ok', message: 'Backend online', database: data?.database || 'unknown' });
+      } catch {
+        setPreflight({ status: 'error', message: `Backend not reachable at ${BACKEND_URL}`, database: 'unknown' });
+      }
+    } finally {
+      setChecking(false);
+    }
+  }, []);
+
+  // Run preflight check on mount
+  useEffect(() => {
+    checkBackend();
+  }, [checkBackend]);
+
   const runTests = async () => {
     setRunning(true);
     setResults([]);
@@ -72,27 +100,7 @@ export default function TestRunner({ testSuites }) {
             <span>Test Suite Runner</span>
             <div className="flex items-center gap-2">
               <Button
-                onClick={async () => {
-                  setChecking(true);
-                  try {
-                    let resp = await fetch(`${BACKEND_URL}/api/status`);
-                    if (!resp.ok) throw new Error(`Status ${resp.status}`);
-                    const data = await resp.json();
-                    const db = data?.services?.database || 'unknown';
-                    setPreflight({ status: 'ok', message: data?.message || 'Backend online', database: db });
-                  } catch (e1) {
-                    try {
-                      const resp = await fetch(`${BACKEND_URL}/health`);
-                      if (!resp.ok) throw new Error(`Status ${resp.status}`);
-                      const data = await resp.json();
-                      setPreflight({ status: 'ok', message: 'Backend online', database: data?.database || 'unknown' });
-                    } catch (e2) {
-                      setPreflight({ status: 'error', message: `Backend not reachable at ${BACKEND_URL}`, database: 'unknown' });
-                    }
-                  } finally {
-                    setChecking(false);
-                  }
-                }}
+                onClick={checkBackend}
                 variant="outline"
                 className="bg-slate-700 border-slate-600"
                 disabled={checking}
