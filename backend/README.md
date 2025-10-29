@@ -22,8 +22,10 @@ Your own independent backend infrastructure - no more dependency on Base44!
 
 4. **Start the server:**
    ```bash
+   # Production mode (manual restart required)
    npm start
-   # or for development with auto-reload:
+   
+   # Development mode (auto-restart on file changes)
    npm run dev
    ```
 
@@ -31,6 +33,21 @@ Your own independent backend infrastructure - no more dependency on Base44!
    ```bash
    curl http://localhost:3001/health
    ```
+
+## 🔄 Development Mode
+
+The backend supports **auto-restart** for faster development:
+
+```bash
+npm run dev
+```
+
+This uses Node.js's built-in `--watch` flag to automatically restart the server when you modify any `.js` files. No need to manually stop/start the server!
+
+**Benefits:**
+- ✅ Instant feedback - changes apply in ~1 second
+- ✅ No external dependencies (uses native Node.js feature)
+- ✅ Works with all file types in the backend directory
 
 ## 📡 API Endpoints
 

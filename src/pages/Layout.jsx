@@ -457,17 +457,21 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     let nextTenantId = null;
 
     if (isAdminLike) {
-      // SuperAdmins/Admins: null selectedTenantId = global access to ALL tenants
-      if (selectedTenantId === null || selectedTenantId === undefined) {
-        if (superAdmin) {
-          console.log('[Layout] SuperAdmin global access - viewing ALL tenants');
-          return null; // null = "all tenants" for superadmins
-        }
-        // Regular admins default to their own tenant if no selection
-        nextTenantId = user?.tenant_id;
-      } else {
-        // Specific tenant selected
+      // Check if there's a UI tenant selection first (explicit override)
+      if (selectedTenantId !== null && selectedTenantId !== undefined) {
+        // Specific tenant selected via UI dropdown
         nextTenantId = selectedTenantId;
+      } else {
+        // No UI selection - check user's assigned tenant_id
+        if (user?.tenant_id) {
+          // Super Admin or Admin has an assigned tenant - default to it
+          console.log('[Layout] Admin defaulting to assigned tenant:', user.tenant_id);
+          nextTenantId = user.tenant_id;
+        } else if (superAdmin) {
+          // Super Admin with NO assigned tenant = global access to ALL tenants
+          console.log('[Layout] SuperAdmin global access - viewing ALL tenants');
+          return null; // null = "all tenants" for superadmins without tenant assignment
+        }
       }
     } else {
       // Non-admins always use their assigned tenant_id
@@ -830,7 +834,8 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     // Admins/Superadmins: do not override manual tenant switching
     if (isAdminLike) {
       if (!hasManualSelection) {
-        // No prior selection (fresh login or cleared), set a sensible default once
+        // No prior selection (fresh login or cleared), set to user's assigned tenant
+        // This ensures Super Admins with tenant_id assignments default to their tenant
         if (setSelectedTenantId) setSelectedTenantId(currTenantId || null);
       }
       return; // Never force-reset when admin picked a tenant

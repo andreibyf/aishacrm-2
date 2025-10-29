@@ -1,11 +1,23 @@
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Clock, Zap, Database, AlertCircle, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { listPerformanceLogs } from '@/api/functions';
+
+// Helper function to calculate trend percentage
+const calculateTrend = (oldValue, newValue) => {
+  if (oldValue === 0) return 0;
+  return Math.round(((newValue - oldValue) / oldValue) * 100);
+};
+
+// Helper function to format trend display
+const formatTrend = (trend) => {
+  if (trend === 0) return '—';
+  const sign = trend > 0 ? '+' : '';
+  return `${sign}${trend}%`;
+};
 
 export default function PerformanceMonitor({ user }) {
   const [metrics, setMetrics] = useState({
@@ -15,8 +27,16 @@ export default function PerformanceMonitor({ user }) {
     errorRate: 0,
     totalCalls: 0
   });
+  const previousMetricsRef = useRef(null); // Use ref instead of state to avoid dependency cycles
+  const [trends, setTrends] = useState({
+    avgResponseTime: 0,
+    functionExecutionTime: 0,
+    databaseQueryTime: 0,
+    errorRate: 0
+  });
   const [chartData, setChartData] = useState([]);
   const [timeRange, setTimeRange] = useState('30');
+  const [labelDensity, setLabelDensity] = useState('auto'); // 'sparse' | 'auto' | 'dense'
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState(null);
 
@@ -27,13 +47,11 @@ export default function PerformanceMonitor({ user }) {
       // Get tenant_id from user context
       const tenantId = user?.tenant_id || 'local-tenant-001';
       
-      // Load actual performance logs from the database
-      const response = await listPerformanceLogs({ 
-        limit: 500, 
-        tenant_id: tenantId,
-        hours: parseInt(timeRange) * 24 
-      });
-      
+      // Load performance logs from backend metrics API (more complete than Base44 function)
+      const limit =  Math.min(5000, Math.max(500, (parseInt(timeRange) || 1) * 200));
+      const resp = await fetch(`${import.meta.env.VITE_AISHACRM_BACKEND_URL}/api/metrics/performance?tenant_id=${tenantId}&limit=${limit}`);
+      const response = await resp.json();
+
       const logs = Array.isArray(response?.data?.logs) ? response.data.logs : [];
       const metricsData = response?.data?.metrics || {};
       
@@ -51,66 +69,87 @@ export default function PerformanceMonitor({ user }) {
       }
 
       // Use backend-calculated metrics
-      setMetrics({
+      const newMetrics = {
         avgResponseTime: metricsData.avgResponseTime || 0,
         functionExecutionTime: Math.round((metricsData.avgResponseTime || 0) * 0.7),
         databaseQueryTime: Math.round((metricsData.avgResponseTime || 0) * 0.3),
         errorRate: metricsData.errorRate || 0,
         totalCalls: metricsData.totalCalls || logs.length
-      });
+      };
+      
+      // Calculate trends (percentage change from previous) using ref
+      if (previousMetricsRef.current) {
+        setTrends({
+          avgResponseTime: calculateTrend(previousMetricsRef.current.avgResponseTime, newMetrics.avgResponseTime),
+          functionExecutionTime: calculateTrend(previousMetricsRef.current.functionExecutionTime, newMetrics.functionExecutionTime),
+          databaseQueryTime: calculateTrend(previousMetricsRef.current.databaseQueryTime, newMetrics.databaseQueryTime),
+          errorRate: calculateTrend(previousMetricsRef.current.errorRate, newMetrics.errorRate)
+        });
+      }
+      
+      previousMetricsRef.current = newMetrics; // Store in ref (doesn't trigger re-render)
+      setMetrics(newMetrics);
 
       // Group by time buckets for chart
-      const now = new Date();
-      const cutoffTime = new Date(now.getTime() - (parseInt(timeRange) * 24 * 60 * 60 * 1000));
+  const days = Math.max(1, parseInt(timeRange) || 1);
+  const groupBy = days <= 2 ? 'hour' : 'day';
+  const now = new Date();
+  const cutoffTime = new Date(now.getTime() - (days * 24 * 60 * 60 * 1000));
       
       const recentLogs = logs.filter(log => {
         const logDate = new Date(log.created_at);
         return logDate >= cutoffTime;
       });
 
-      // Group logs by hour
-      const hourlyData = {};
+      // Group logs dynamically by hour (<=2 days) or by day (>2 days)
+      const buckets = {};
       recentLogs.forEach(log => {
         const logDate = new Date(log.created_at);
-        const hourKey = `${logDate.getMonth() + 1}/${logDate.getDate()} ${logDate.getHours()}:00`;
-        
-        if (!hourlyData[hourKey]) {
-          hourlyData[hourKey] = {
-            time: hourKey,
+        const bucketTs = groupBy === 'hour'
+          ? new Date(
+              logDate.getFullYear(),
+              logDate.getMonth(),
+              logDate.getDate(),
+              logDate.getHours(), 0, 0, 0
+            ).getTime()
+          : new Date(
+              logDate.getFullYear(),
+              logDate.getMonth(),
+              logDate.getDate(), 0, 0, 0, 0
+            ).getTime();
+
+        const bucketLabel = groupBy === 'hour'
+          ? `${logDate.getMonth() + 1}/${logDate.getDate()} ${logDate.getHours()}:00`
+          : `${logDate.getMonth() + 1}/${logDate.getDate()}`;
+
+        if (!buckets[bucketTs]) {
+          buckets[bucketTs] = {
+            ts: bucketTs,
+            time: bucketLabel,
             calls: 0,
             totalTime: 0,
             errors: 0
           };
         }
-        
-        hourlyData[hourKey].calls++;
-        hourlyData[hourKey].totalTime += Number(log.duration_ms) || 0;
+
+        buckets[bucketTs].calls++;
+        buckets[bucketTs].totalTime += Number(log.duration_ms) || 0;
         if (log.status_code >= 400) {
-          hourlyData[hourKey].errors++;
+          buckets[bucketTs].errors++;
         }
       });
 
       // Convert to array and calculate averages
-      const chartDataArray = Object.values(hourlyData)
+      const chartDataArray = Object.values(buckets)
         .map(bucket => ({
+          ts: bucket.ts,
           time: bucket.time,
           avgResponseTime: bucket.calls > 0 ? Math.round(bucket.totalTime / bucket.calls) : 0,
           calls: bucket.calls,
           errorRate: bucket.calls > 0 ? Math.round((bucket.errors / bucket.calls) * 100) : 0
         }))
-        .sort((a, b) => {
-          const [dateA, timeA] = a.time.split(' ');
-          const [dateB, timeB] = b.time.split(' ');
-          const [monthA, dayA] = dateA.split('/').map(Number);
-          const [monthB, dayB] = dateB.split('/').map(Number);
-          const [hourA] = timeA.split(':').map(Number);
-          const [hourB] = timeB.split(':').map(Number);
-          
-          if (monthA !== monthB) return monthA - monthB;
-          if (dayA !== dayB) return dayA - dayB;
-          return hourA - hourB;
-        })
-        .slice(-24);
+        .sort((a, b) => a.ts - b.ts)
+        .slice(-(groupBy === 'hour' ? days * 24 : days));
 
       setChartData(chartDataArray);
       setLastUpdate(new Date());
@@ -120,15 +159,35 @@ export default function PerformanceMonitor({ user }) {
     } finally {
       setLoading(false);
     }
-  }, [timeRange, user]); // Dependencies: timeRange and user
+  }, [timeRange, user]); // Dependencies: timeRange and user only (previousMetricsRef doesn't need to be a dependency)
 
   useEffect(() => {
     loadRealPerformanceData();
     
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(loadRealPerformanceData, 30000);
+    // Auto-refresh every 5 minutes (300 seconds) for long-term trend tracking
+    const interval = setInterval(loadRealPerformanceData, 300000);
     return () => clearInterval(interval);
   }, [loadRealPerformanceData]); // Now depends on the memoized function
+
+  // Compute X-axis ticks based on selected label density and data length
+  const xTicks = useMemo(() => {
+    if (!Array.isArray(chartData) || chartData.length === 0) return [];
+    const labels = chartData.map(d => d.time);
+    if (labels.length <= 2) return labels; // show ends when few points
+
+    const targetByDensity = {
+      sparse: 4,
+      auto: 8,
+      dense: 12
+    };
+    const target = targetByDensity[labelDensity] ?? 8;
+    const step = Math.max(1, Math.ceil(labels.length / target));
+    const ticks = labels.filter((_, i) => i % step === 0);
+    // Ensure first/last are included
+    if (ticks[0] !== labels[0]) ticks.unshift(labels[0]);
+    if (ticks[ticks.length - 1] !== labels[labels.length - 1]) ticks.push(labels[labels.length - 1]);
+    return ticks;
+  }, [chartData, labelDensity]);
 
   const getChangeColor = (value) => {
     if (value === 0) return 'text-slate-400';
@@ -156,6 +215,16 @@ export default function PerformanceMonitor({ user }) {
               <SelectItem value="1">Last 24 Hours</SelectItem>
               <SelectItem value="7">Last 7 Days</SelectItem>
               <SelectItem value="30">Last 30 Days</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={labelDensity} onValueChange={setLabelDensity}>
+            <SelectTrigger className="w-[160px] bg-slate-800 border-slate-700 text-slate-200">
+              <SelectValue placeholder="Labels: Auto" />
+            </SelectTrigger>
+            <SelectContent className="bg-slate-800 border-slate-700">
+              <SelectItem value="sparse">Labels: Sparse</SelectItem>
+              <SelectItem value="auto">Labels: Auto</SelectItem>
+              <SelectItem value="dense">Labels: Dense</SelectItem>
             </SelectContent>
           </Select>
           <Button 
@@ -193,8 +262,8 @@ export default function PerformanceMonitor({ user }) {
                 <span className="text-3xl font-bold text-slate-100">{metrics.avgResponseTime}</span>
                 <span className="text-sm text-slate-400">ms</span>
               </div>
-              <div className={`text-xs mt-1 ${getChangeColor(0)}`}>
-                {getChangeIcon(0)} +0%
+              <div className={`text-xs mt-1 ${getChangeColor(trends.avgResponseTime)}`}>
+                {getChangeIcon(trends.avgResponseTime)} {formatTrend(trends.avgResponseTime)}
               </div>
             </div>
 
@@ -207,8 +276,8 @@ export default function PerformanceMonitor({ user }) {
                 <span className="text-3xl font-bold text-slate-100">{metrics.functionExecutionTime}</span>
                 <span className="text-sm text-slate-400">ms</span>
               </div>
-              <div className={`text-xs mt-1 ${getChangeColor(0)}`}>
-                {getChangeIcon(0)} +0%
+              <div className={`text-xs mt-1 ${getChangeColor(trends.functionExecutionTime)}`}>
+                {getChangeIcon(trends.functionExecutionTime)} {formatTrend(trends.functionExecutionTime)}
               </div>
             </div>
 
@@ -221,8 +290,8 @@ export default function PerformanceMonitor({ user }) {
                 <span className="text-3xl font-bold text-slate-100">{metrics.databaseQueryTime}</span>
                 <span className="text-sm text-slate-400">ms</span>
               </div>
-              <div className={`text-xs mt-1 ${getChangeColor(0)}`}>
-                {getChangeIcon(0)} +0%
+              <div className={`text-xs mt-1 ${getChangeColor(trends.databaseQueryTime)}`}>
+                {getChangeIcon(trends.databaseQueryTime)} {formatTrend(trends.databaseQueryTime)}
               </div>
             </div>
 
@@ -235,8 +304,8 @@ export default function PerformanceMonitor({ user }) {
                 <span className="text-3xl font-bold text-slate-100">{metrics.errorRate}</span>
                 <span className="text-sm text-slate-400">%</span>
               </div>
-              <div className={`text-xs mt-1 ${getChangeColor(0)}`}>
-                {getChangeIcon(0)} +0%
+              <div className={`text-xs mt-1 ${getChangeColor(trends.errorRate)}`}>
+                {getChangeIcon(trends.errorRate)} {formatTrend(trends.errorRate)}
               </div>
             </div>
           </div>
@@ -252,10 +321,16 @@ export default function PerformanceMonitor({ user }) {
                       dataKey="time" 
                       stroke="#94a3b8"
                       tick={{ fill: '#94a3b8', fontSize: 12 }}
+                      minTickGap={12}
+                      interval={0}
+                      ticks={xTicks}
                     />
                     <YAxis 
                       stroke="#94a3b8"
                       tick={{ fill: '#94a3b8', fontSize: 12 }}
+                      allowDecimals={false}
+                      domain={[0, (dataMax) => Math.ceil((dataMax || 0) / 50) * 50]}
+                      tickFormatter={(v) => `${v} ms`}
                       label={{ value: 'Response Time (ms)', angle: -90, position: 'insideLeft', fill: '#94a3b8' }}
                     />
                     <Tooltip 

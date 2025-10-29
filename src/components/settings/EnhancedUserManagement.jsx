@@ -172,7 +172,7 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
             console.log('[EnhancedUserManagement] Navigation permissions being saved:', navPerms);
 
             const updateData = {
-                tenant_id: formData.tenant_id,
+                tenant_id: formData.tenant_id === 'no-client' ? null : formData.tenant_id,
                 employee_role: formData.employee_role || 'employee', // Always set employee_role
                 is_active: formData.is_active,
                 tags: formData.tags,
@@ -542,6 +542,10 @@ export default function EnhancedUserManagement() {
             }
 
             const cleanedData = { ...data };
+            // Normalize tenant sentinel from form to persist correctly
+            if (cleanedData.tenant_id === 'no-client') {
+                cleanedData.tenant_id = null;
+            }
             if (cleanedData.full_name) {
                 cleanedData.display_name = cleanedData.full_name;
                 delete cleanedData.full_name;

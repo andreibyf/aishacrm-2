@@ -41,13 +41,12 @@ import { Info, TestTube } from "lucide-react";
           </AlertDescription>
         </Alert>
 
-        <Alert className="bg-yellow-900/30 border-yellow-700">
-          <Info className="h-4 w-4 text-yellow-400" />
-          <AlertTitle className="text-yellow-300">⚠️ CRUD Tests - Backend Implementation Required</AlertTitle>
-          <AlertDescription className="text-yellow-400">
-            CRUD tests are currently disabled in local-dev mode because backend routes (contacts, leads, accounts, opportunities) 
-            return stub data instead of actual database operations. To enable: implement SQL queries in backend routes 
-            or set VITE_USE_BASE44_AUTH=true to test against Ai-SHA cloud.
+        <Alert className="bg-green-900/30 border-green-700">
+          <Info className="h-4 w-4 text-green-400" />
+          <AlertTitle className="text-green-300">✅ Full Database Testing Enabled</AlertTitle>
+          <AlertDescription className="text-green-400">
+            Backend is connected to Supabase Cloud PostgreSQL with full CRUD operations implemented. 
+            All tests run against real database operations for comprehensive validation.
           </AlertDescription>
         </Alert>
 

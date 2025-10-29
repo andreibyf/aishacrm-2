@@ -4,23 +4,19 @@
  */
 
 import express from 'express';
-import { deleteAuthUser, sendPasswordResetEmail, inviteUserByEmail, getAuthUserByEmail, updateAuthUserPassword } from '../lib/supabaseAuth.js';
+import { deleteAuthUser, sendPasswordResetEmail, inviteUserByEmail, getAuthUserByEmail, updateAuthUserPassword, updateAuthUserMetadata } from '../lib/supabaseAuth.js';
 
 export default function createUserRoutes(pgPool, supabaseAuth) {
   const router = express.Router();
 
   // Helper function to expand metadata fields to top-level properties
-  // Helper function to expand metadata fields to top-level properties
   const expandUserMetadata = (user) => {
     if (!user) return user;
     const { metadata = {}, ...rest } = user;
-    
-    // Convert NULL tenant_id to 'none' for "No Client"
-    const tenant_id = rest.tenant_id === null ? 'none' : rest.tenant_id;
-    
+
+    // Keep tenant_id as-is (null means "No Client"); don't coerce to string
     return {
       ...rest,
-      tenant_id, // Use 'none' instead of null
       ...metadata, // Spread ALL metadata fields to top level
       metadata, // Keep original metadata for backwards compatibility
     };
@@ -545,7 +541,7 @@ export default function createUserRoutes(pgPool, supabaseAuth) {
     }
   });
 
-  // PUT /api/users/:id - Update user (actually updates employees table)
+  // PUT /api/users/:id - Update user (supports users and employees tables)
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
@@ -623,8 +619,12 @@ export default function createUserRoutes(pgPool, supabaseAuth) {
         ...otherFields, // Include any unknown fields in metadata
       };
 
-      // Allow NULL tenant_id for users without a client
-      const finalTenantId = tenant_id !== undefined ? tenant_id : currentUser.rows[0].tenant_id;
+      // Normalize tenant_id inputs (treat various sentinels as null)
+      const normalizeTenant = (val) => {
+        if (val === '' || val === 'no-client' || val === 'none' || val === 'null' || val === undefined) return null;
+        return val;
+      };
+      const finalTenantId = tenant_id !== undefined ? normalizeTenant(tenant_id) : currentUser.rows[0].tenant_id;
 
       // Update the correct table based on where the user was found
       const updateQuery = tableName === 'users'
@@ -632,9 +632,10 @@ export default function createUserRoutes(pgPool, supabaseAuth) {
            SET first_name = COALESCE($1, first_name),
                last_name = COALESCE($2, last_name),
                role = COALESCE($3, role),
-               metadata = $4,
+               tenant_id = $4,
+               metadata = $5,
                updated_at = NOW()
-           WHERE id = $5
+           WHERE id = $6
            RETURNING id, tenant_id, email, first_name, last_name, role, metadata, updated_at`
         : `UPDATE employees 
            SET first_name = COALESCE($1, first_name),
@@ -648,7 +649,7 @@ export default function createUserRoutes(pgPool, supabaseAuth) {
            RETURNING id, tenant_id, email, first_name, last_name, role, status, metadata, updated_at`;
 
       const updateParams = tableName === 'users'
-        ? [first_name, last_name, role, updatedMetadata, id]
+        ? [first_name, last_name, role, finalTenantId, updatedMetadata, id]
         : [first_name, last_name, role, status, finalTenantId, updatedMetadata, id];
 
       const result = await pgPool.query(updateQuery, updateParams);
@@ -766,6 +767,64 @@ export default function createUserRoutes(pgPool, supabaseAuth) {
       });
     } catch (error) {
       console.error('Error sending password reset:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // POST /api/users/admin-password-reset - Direct password reset (for dev/admin use)
+  router.post('/admin-password-reset', async (req, res) => {
+    try {
+      const { email, password } = req.body;
+
+      if (!email || !password) {
+        return res.status(400).json({ status: 'error', message: 'email and password are required' });
+      }
+
+      // Get auth user by email
+      const { user: authUser, error: getUserError } = await getAuthUserByEmail(email);
+      
+      if (getUserError || !authUser) {
+        return res.status(404).json({ 
+          status: 'error', 
+          message: `User not found: ${getUserError?.message || 'No auth user with this email'}` 
+        });
+      }
+
+      // Update password AND clear expiration metadata
+      const { error: updateError } = await updateAuthUserPassword(authUser.id, password);
+
+      if (updateError) {
+        console.error('[Admin Password Reset] Error:', updateError);
+        return res.status(500).json({ 
+          status: 'error', 
+          message: `Failed to update password: ${updateError.message}` 
+        });
+      }
+
+      // Clear password expiration metadata
+      const currentMetadata = authUser.user_metadata || {};
+      const updatedMetadata = {
+        ...currentMetadata,
+        password_change_required: false,
+        password_expires_at: null
+      };
+
+      const { error: metadataError } = await updateAuthUserMetadata(authUser.id, updatedMetadata);
+      
+      if (metadataError) {
+        console.warn('[Admin Password Reset] Could not clear expiration metadata:', metadataError);
+        // Don't fail the request - password was updated successfully
+      }
+
+      console.log(`✓ Password reset for: ${email} (expiration cleared)`);
+
+      res.json({
+        status: 'success',
+        message: 'Password updated successfully and expiration cleared',
+        data: { email, userId: authUser.id },
+      });
+    } catch (error) {
+      console.error('Error in admin password reset:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

@@ -89,12 +89,12 @@ if (Test-Port -Port 3001) {
 }
 
 if (-not $backendRunning) {
-    Write-Host "  Starting backend server..." -ForegroundColor Cyan
-    Start-Process pwsh -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot\backend'; node server.js"
+    Write-Host "  Starting backend server in dev mode (auto-restart)..." -ForegroundColor Cyan
+    Start-Process pwsh -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot\backend'; npm run dev"
     Start-Sleep -Seconds 3
     
     if (Test-Port -Port 3001) {
-        Write-Host "  ✓ Backend started on port 3001" -ForegroundColor Green
+        Write-Host "  ✓ Backend started on port 3001 (watch mode enabled)" -ForegroundColor Green
     } else {
         Write-Host "  ❌ Backend failed to start" -ForegroundColor Red
         exit 1

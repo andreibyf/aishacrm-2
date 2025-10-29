@@ -62,14 +62,14 @@ if ($existingProcess) {
 Set-Location $scriptDir
 
 if ($Foreground) {
-    Write-Host "Starting server in foreground mode (Ctrl+C to stop)..." -ForegroundColor Cyan
+    Write-Host "Starting server in foreground mode with auto-restart (Ctrl+C to stop)..." -ForegroundColor Cyan
     Write-Host ""
-    node server.js
+    npm run dev
     exit 0
 }
 
-Write-Host "Starting server in background..." -ForegroundColor Cyan
-$serverProcess = Start-Process -FilePath "node" -ArgumentList "server.js" -WorkingDirectory $scriptDir -PassThru -WindowStyle Hidden
+Write-Host "Starting server in background with auto-restart..." -ForegroundColor Cyan
+$serverProcess = Start-Process -FilePath "pwsh" -ArgumentList "-NoExit", "-Command", "npm run dev" -WorkingDirectory $scriptDir -PassThru
 
 if (-not $serverProcess) {
     Write-Host "✗ Failed to start server" -ForegroundColor Red

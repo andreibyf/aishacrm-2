@@ -30,13 +30,32 @@ Originally powered by Ai-SHA, now transitioning to your own independent infrastr
    npm install
    cp .env.example .env
    # Edit backend/.env with your database credentials
-   npm start
+   npm run dev  # Starts with auto-restart enabled
    ```
 
 4. **Run the development server**
    ```bash
-   npm run dev
+   npm run dev  # Frontend with hot module replacement
    ```
+
+### Quick Start (All Services)
+
+Use the convenience script to start everything at once:
+```bash
+.\start-all.ps1  # Starts both backend and frontend with auto-restart
+```
+
+## Development Features
+
+### Auto-Restart
+Both frontend and backend automatically restart when you save changes:
+- **Frontend**: Vite HMR (Hot Module Replacement) - instant updates in browser
+- **Backend**: Node.js `--watch` flag - auto-restarts on file changes
+
+### Development Mode
+- Backend: `npm run dev` uses `node --watch` for automatic restart
+- Frontend: `npm run dev` uses Vite with HMR enabled
+- Production: `npm start` (backend) and `npm run build` (frontend)
 
 ## Building the app
 
