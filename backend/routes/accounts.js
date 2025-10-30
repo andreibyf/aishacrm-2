@@ -3,8 +3,11 @@
  * Full CRUD operations with PostgreSQL database
  */
 
-import express from 'express';
-import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
+import express from "express";
+import {
+  enforceEmployeeDataScope,
+  validateTenantAccess,
+} from "../middleware/validateTenant.js";
 
 export default function createAccountRoutes(pgPool) {
   const router = express.Router();
@@ -25,59 +28,91 @@ export default function createAccountRoutes(pgPool) {
   };
 
   // GET /api/accounts - List accounts
-  router.get('/', async (req, res) => {
+  router.get("/", async (req, res) => {
     try {
       const { tenant_id, type, limit = 50, offset = 0 } = req.query;
 
-      if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      // Build dynamic query based on tenant_id presence
+      let query = "SELECT * FROM accounts";
+      const params = [];
+      const whereClauses = [];
+
+      // Add tenant_id filter if provided (optional for superadmins)
+      if (tenant_id) {
+        params.push(tenant_id);
+        whereClauses.push(`tenant_id = $${params.length}`);
       }
 
-      let query = 'SELECT * FROM accounts WHERE tenant_id = $1';
-      const params = [tenant_id];
-      
       if (type) {
         params.push(type);
-        query += ` AND type = $${params.length}`;
+        whereClauses.push(`type = $${params.length}`);
       }
-      
-      query += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
+
+      if (whereClauses.length > 0) {
+        query += " WHERE " + whereClauses.join(" AND ");
+      }
+
+      query += " ORDER BY created_at DESC LIMIT $" + (params.length + 1) +
+        " OFFSET $" + (params.length + 2);
       params.push(parseInt(limit), parseInt(offset));
 
       const result = await pgPool.query(query, params);
-      
-      let countQuery = 'SELECT COUNT(*) FROM accounts WHERE tenant_id = $1';
-      const countParams = [tenant_id];
+
+      // Build count query with same filters
+      let countQuery = "SELECT COUNT(*) FROM accounts";
+      const countParams = [];
+      const countWhereClauses = [];
+
+      if (tenant_id) {
+        countParams.push(tenant_id);
+        countWhereClauses.push(`tenant_id = $${countParams.length}`);
+      }
       if (type) {
         countParams.push(type);
-        countQuery += ' AND type = $2';
+        countWhereClauses.push(`type = $${countParams.length}`);
       }
+
+      if (countWhereClauses.length > 0) {
+        countQuery += " WHERE " + countWhereClauses.join(" AND ");
+      }
+
       const countResult = await pgPool.query(countQuery, countParams);
 
       // Expand metadata for all accounts
       const accounts = result.rows.map(expandMetadata);
 
       res.json({
-        status: 'success',
-        data: { accounts, total: parseInt(countResult.rows[0].count), limit: parseInt(limit), offset: parseInt(offset) },
+        status: "success",
+        data: {
+          accounts,
+          total: parseInt(countResult.rows[0].count),
+          limit: parseInt(limit),
+          offset: parseInt(offset),
+        },
       });
     } catch (error) {
-      console.error('Error listing accounts:', error);
-      res.status(500).json({ status: 'error', message: error.message });
+      console.error("Error listing accounts:", error);
+      res.status(500).json({ status: "error", message: error.message });
     }
   });
 
   // POST /api/accounts - Create account
-  router.post('/', async (req, res) => {
+  router.post("/", async (req, res) => {
     try {
       const { tenant_id, name, type, industry, website } = req.body;
 
       if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+        return res.status(400).json({
+          status: "error",
+          message: "tenant_id is required",
+        });
       }
 
       if (!name) {
-        return res.status(400).json({ status: 'error', message: 'name is required' });
+        return res.status(400).json({
+          status: "error",
+          message: "name is required",
+        });
       }
 
       const query = `
@@ -85,61 +120,74 @@ export default function createAccountRoutes(pgPool) {
         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
         RETURNING *
       `;
-      
+
       const result = await pgPool.query(query, [
         tenant_id,
         name,
         type,
         industry,
-        website
+        website,
       ]);
 
       res.json({
-        status: 'success',
-        message: 'Account created',
+        status: "success",
+        message: "Account created",
         data: result.rows[0],
       });
     } catch (error) {
-      console.error('Error creating account:', error);
-      res.status(500).json({ status: 'error', message: error.message });
+      console.error("Error creating account:", error);
+      res.status(500).json({ status: "error", message: error.message });
     }
   });
 
   // GET /api/accounts/:id - Get single account
-  router.get('/:id', async (req, res) => {
+  router.get("/:id", async (req, res) => {
     try {
       const { id } = req.params;
 
-      const result = await pgPool.query('SELECT * FROM accounts WHERE id = $1', [id]);
-      
+      const result = await pgPool.query(
+        "SELECT * FROM accounts WHERE id = $1",
+        [id],
+      );
+
       if (result.rows.length === 0) {
-        return res.status(404).json({ status: 'error', message: 'Account not found' });
+        return res.status(404).json({
+          status: "error",
+          message: "Account not found",
+        });
       }
 
       // Expand metadata to top-level properties
       const account = expandMetadata(result.rows[0]);
 
       res.json({
-        status: 'success',
+        status: "success",
         data: account,
       });
     } catch (error) {
-      console.error('Error fetching account:', error);
-      res.status(500).json({ status: 'error', message: error.message });
+      console.error("Error fetching account:", error);
+      res.status(500).json({ status: "error", message: error.message });
     }
   });
 
   // PUT /api/accounts/:id - Update account
-  router.put('/:id', async (req, res) => {
+  router.put("/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, type, industry, website, metadata, ...otherFields } = req.body;
+      const { name, type, industry, website, metadata, ...otherFields } =
+        req.body;
 
       // First, get current account to merge metadata
-      const currentAccount = await pgPool.query('SELECT metadata FROM accounts WHERE id = $1', [id]);
-      
+      const currentAccount = await pgPool.query(
+        "SELECT metadata FROM accounts WHERE id = $1",
+        [id],
+      );
+
       if (currentAccount.rows.length === 0) {
-        return res.status(404).json({ status: 'error', message: 'Account not found' });
+        return res.status(404).json({
+          status: "error",
+          message: "Account not found",
+        });
       }
 
       // Merge metadata - preserve existing and add/update new fields
@@ -178,46 +226,57 @@ export default function createAccountRoutes(pgPool) {
       updates.push(`updated_at = NOW()`);
       values.push(id);
 
-      const query = `UPDATE accounts SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`;
+      const query = `UPDATE accounts SET ${
+        updates.join(", ")
+      } WHERE id = $${paramCount} RETURNING *`;
       const result = await pgPool.query(query, values);
 
       if (result.rows.length === 0) {
-        return res.status(404).json({ status: 'error', message: 'Account not found' });
+        return res.status(404).json({
+          status: "error",
+          message: "Account not found",
+        });
       }
 
       // Expand metadata in response
       const updatedAccount = expandMetadata(result.rows[0]);
 
       res.json({
-        status: 'success',
-        message: 'Account updated',
+        status: "success",
+        message: "Account updated",
         data: updatedAccount,
       });
     } catch (error) {
-      console.error('Error updating account:', error);
-      res.status(500).json({ status: 'error', message: error.message });
+      console.error("Error updating account:", error);
+      res.status(500).json({ status: "error", message: error.message });
     }
   });
 
   // DELETE /api/accounts/:id - Delete account
-  router.delete('/:id', async (req, res) => {
+  router.delete("/:id", async (req, res) => {
     try {
       const { id } = req.params;
 
-      const result = await pgPool.query('DELETE FROM accounts WHERE id = $1 RETURNING id', [id]);
+      const result = await pgPool.query(
+        "DELETE FROM accounts WHERE id = $1 RETURNING id",
+        [id],
+      );
 
       if (result.rows.length === 0) {
-        return res.status(404).json({ status: 'error', message: 'Account not found' });
+        return res.status(404).json({
+          status: "error",
+          message: "Account not found",
+        });
       }
 
       res.json({
-        status: 'success',
-        message: 'Account deleted',
+        status: "success",
+        message: "Account deleted",
         data: { id: result.rows[0].id },
       });
     } catch (error) {
-      console.error('Error deleting account:', error);
-      res.status(500).json({ status: 'error', message: error.message });
+      console.error("Error deleting account:", error);
+      res.status(500).json({ status: "error", message: error.message });
     }
   });
 

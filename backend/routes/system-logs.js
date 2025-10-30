@@ -1,9 +1,9 @@
-import express from 'express';
+import express from "express";
 
 export default function createSystemLogRoutes(pgPool) {
   const router = express.Router();
 
-// Helper function to expand metadata fields to top-level properties
+  // Helper function to expand metadata fields to top-level properties
   const expandMetadata = (record) => {
     if (!record) return record;
     const { metadata = {}, ...rest } = record;
@@ -15,16 +15,30 @@ export default function createSystemLogRoutes(pgPool) {
   };
 
   // POST /api/system-logs - Create system log entry
-  router.post('/', async (req, res) => {
+  router.post("/", async (req, res) => {
     try {
-      const { tenant_id, level, message, source, user_email, metadata, user_agent, url, stack_trace, ...otherFields } = req.body;
-      
+      const {
+        tenant_id,
+        level,
+        message,
+        source,
+        user_email,
+        metadata,
+        user_agent,
+        url,
+        stack_trace,
+        ...otherFields
+      } = req.body;
+
+      // Default to 'system' tenant for null/undefined tenant_id (superadmins, system logs)
+      const effectiveTenantId = tenant_id || "system";
+
       // Merge metadata with unknown fields
       const combinedMetadata = {
         ...(metadata || {}),
-        ...otherFields
+        ...otherFields,
       };
-      
+
       // Use created_at instead of created_date for compatibility
       const query = `
         INSERT INTO system_logs (
@@ -34,42 +48,42 @@ export default function createSystemLogRoutes(pgPool) {
           $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()
         ) RETURNING *
       `;
-      
+
       const values = [
-        tenant_id,
-        level || 'INFO',
+        effectiveTenantId,
+        level || "INFO",
         message,
         source,
         user_email,
-        JSON.stringify(combinedMetadata),  // Ensure metadata is stringified
+        JSON.stringify(combinedMetadata), // Ensure metadata is stringified
         user_agent,
         url,
-        stack_trace
+        stack_trace,
       ];
-      
+
       const result = await pgPool.query(query, values);
-      
+
       const systemLog = expandMetadata(result.rows[0]);
-      
+
       res.status(201).json({
-        status: 'success',
-        data: systemLog
+        status: "success",
+        data: systemLog,
       });
     } catch (error) {
-      console.error('Error creating system log:', error);
+      console.error("Error creating system log:", error);
       res.status(500).json({
-        status: 'error',
-        message: error.message
+        status: "error",
+        message: error.message,
       });
     }
   });
 
   // GET /api/system-logs - List system logs
-  router.get('/', async (req, res) => {
+  router.get("/", async (req, res) => {
     try {
       const { tenant_id, level, limit = 100, offset = 0 } = req.query;
 
-      let query = 'SELECT * FROM system_logs WHERE 1=1';
+      let query = "SELECT * FROM system_logs WHERE 1=1";
       const values = [];
       let valueIndex = 1;
 
@@ -85,66 +99,68 @@ export default function createSystemLogRoutes(pgPool) {
         valueIndex++;
       }
 
-      query += ` ORDER BY created_at DESC LIMIT $${valueIndex} OFFSET $${valueIndex + 1}`;
+      query += ` ORDER BY created_at DESC LIMIT $${valueIndex} OFFSET $${
+        valueIndex + 1
+      }`;
       values.push(parseInt(limit), parseInt(offset));
-      
+
       const result = await pgPool.query(query, values);
-      
+
       const systemLogs = result.rows.map(expandMetadata);
-      
+
       res.json({
-        status: 'success',
+        status: "success",
         data: {
-          'system-logs': systemLogs,
+          "system-logs": systemLogs,
           total: result.rows.length,
           limit: parseInt(limit),
-          offset: parseInt(offset)
-        }
+          offset: parseInt(offset),
+        },
       });
     } catch (error) {
-      console.error('Error fetching system logs:', error);
+      console.error("Error fetching system logs:", error);
       res.status(500).json({
-        status: 'error',
-        message: error.message
+        status: "error",
+        message: error.message,
       });
     }
   });
 
   // DELETE /api/system-logs/:id - Delete a specific system log
-  router.delete('/:id', async (req, res) => {
+  router.delete("/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      
-      const query = 'DELETE FROM system_logs WHERE id = $1 RETURNING *';
+
+      const query = "DELETE FROM system_logs WHERE id = $1 RETURNING *";
       const result = await pgPool.query(query, [id]);
-      
+
       if (result.rows.length === 0) {
         return res.status(404).json({
-          status: 'error',
-          message: 'System log not found'
+          status: "error",
+          message: "System log not found",
         });
       }
-      
+
       res.json({
-        status: 'success',
-        message: 'System log deleted',
-        data: result.rows[0]
+        status: "success",
+        message: "System log deleted",
+        data: result.rows[0],
       });
     } catch (error) {
-      console.error('Error deleting system log:', error);
+      console.error("Error deleting system log:", error);
       res.status(500).json({
-        status: 'error',
-        message: error.message
+        status: "error",
+        message: error.message,
       });
     }
   });
 
   // DELETE /api/system-logs - Clear all system logs (with optional filters)
-  router.delete('/', async (req, res) => {
+  router.delete("/", async (req, res) => {
     try {
       const { tenant_id, level, older_than_days } = req.query;
 
-      let query = 'DELETE FROM system_logs WHERE 1=1';
+      let query = "DELETE FROM system_logs WHERE 1=1";
       const values = [];
       let valueIndex = 1;
 
@@ -161,25 +177,27 @@ export default function createSystemLogRoutes(pgPool) {
       }
 
       if (older_than_days) {
-        query += ` AND created_at < NOW() - INTERVAL '${parseInt(older_than_days)} days'`;
+        query += ` AND created_at < NOW() - INTERVAL '${
+          parseInt(older_than_days)
+        } days'`;
       }
 
-      query += ' RETURNING *';
-      
+      query += " RETURNING *";
+
       const result = await pgPool.query(query, values);
-      
+
       res.json({
-        status: 'success',
+        status: "success",
         message: `Deleted ${result.rows.length} system log(s)`,
         data: {
-          deleted_count: result.rows.length
-        }
+          deleted_count: result.rows.length,
+        },
       });
     } catch (error) {
-      console.error('Error clearing system logs:', error);
+      console.error("Error clearing system logs:", error);
       res.status(500).json({
-        status: 'error',
-        message: error.message
+        status: "error",
+        message: error.message,
       });
     }
   });

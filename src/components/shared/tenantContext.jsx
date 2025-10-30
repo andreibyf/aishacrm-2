@@ -1,15 +1,22 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { isValidId } from './tenantUtils';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { isValidId } from "./tenantUtils";
 
 window.__fixPrototype = (obj) => {
-  if (!obj || typeof obj !== 'object') return obj;
-  if (typeof obj.hasOwnProperty !== 'function') {
+  if (!obj || typeof obj !== "object") return obj;
+  if (typeof obj.hasOwnProperty !== "function") {
     return JSON.parse(JSON.stringify(obj));
   }
   return obj;
 };
 
-if (typeof Object.prototype.hasOwnProperty !== 'function') {
+if (typeof Object.prototype.hasOwnProperty !== "function") {
   const goodProto = {}.__proto__;
   Object.setPrototypeOf(Object.prototype, goodProto);
 }
@@ -35,39 +42,41 @@ let loggerInstance = null;
 function logTenantEvent(level, message, metadata) {
   if (!loggerInstance) {
     // Lazy load logger to avoid circular deps
-    import('./Logger').then(module => {
+    import("./Logger").then((module) => {
       // Prefer non-hook facade for non-React consumers
-      if (module && module.loggerFacade &&
-          typeof module.loggerFacade.info === 'function' &&
-          typeof module.loggerFacade.warn === 'function' &&
-          typeof module.loggerFacade.error === 'function' &&
-          typeof module.loggerFacade.debug === 'function') {
+      if (
+        module && module.loggerFacade &&
+        typeof module.loggerFacade.info === "function" &&
+        typeof module.loggerFacade.warn === "function" &&
+        typeof module.loggerFacade.error === "function" &&
+        typeof module.loggerFacade.debug === "function"
+      ) {
         loggerInstance = module.loggerFacade;
-      } else if (module && typeof module.useLogger === 'object') {
+      } else if (module && typeof module.useLogger === "object") {
         // Backward compat if an object was exported under useLogger
         loggerInstance = module.useLogger;
       } else {
         // Quiet fallback: keep console only without noisy warnings
         // console.info('[TenantContext] Logger facade unavailable; using console only');
       }
-    }).catch(e => {
-      console.error('[TenantContext] Failed to load logger module:', e);
+    }).catch((e) => {
+      console.error("[TenantContext] Failed to load logger module:", e);
     });
   }
-  
+
   // Also keep console logging - FIX: ensure we always have a valid method
   const consoleMethodMap = {
-    'INFO': 'info',
-    'WARNING': 'warn',
-    'ERROR': 'error',
-    'DEBUG': 'debug'
+    "INFO": "info",
+    "WARNING": "warn",
+    "ERROR": "error",
+    "DEBUG": "debug",
   };
-  
-  const methodName = consoleMethodMap[level] || 'log';
+
+  const methodName = consoleMethodMap[level] || "log";
   const consoleMethod = console[methodName];
-  
+
   // Only call if the method exists
-  if (typeof consoleMethod === 'function') {
+  if (typeof consoleMethod === "function") {
     consoleMethod.call(console, `[TenantContext] ${message}`, metadata);
   } else {
     // Fallback to console.log
@@ -78,15 +87,19 @@ function logTenantEvent(level, message, metadata) {
   // Note: This might not run on the very first log if loggerInstance is still loading.
   if (loggerInstance) {
     const loggerMethodMap = {
-      'INFO': 'info',
-      'WARNING': 'warn',
-      'ERROR': 'error',
-      'DEBUG': 'debug'
+      "INFO": "info",
+      "WARNING": "warn",
+      "ERROR": "error",
+      "DEBUG": "debug",
     };
-    const method = loggerMethodMap[level] || 'info';
-    if (typeof loggerInstance[method] === 'function') {
+    const method = loggerMethodMap[level] || "info";
+    if (typeof loggerInstance[method] === "function") {
       const logMetadata = sanitizeObject(metadata);
-      loggerInstance[method](`[TenantContext] ${message}`, 'TenantContext', logMetadata);
+      loggerInstance[method](
+        `[TenantContext] ${message}`,
+        "TenantContext",
+        logMetadata,
+      );
     }
   }
 }
@@ -97,40 +110,61 @@ export const TenantProvider = ({ children }) => {
   const persistenceAttempted = useRef(false);
   const isSettingTenant = useRef(false); // Guard against rapid changes
 
+  // Helper: reflect tenant selection in the URL (e.g., ?tenant=<uuid>) without reloading
+  const updateUrlTenantParam = useCallback((tenantId) => {
+    try {
+      const url = new URL(window.location.href);
+      if (tenantId) {
+        url.searchParams.set("tenant", String(tenantId));
+      } else {
+        url.searchParams.delete("tenant");
+      }
+      // Replace state to avoid polluting history
+      window.history.replaceState({}, "", url);
+    } catch (e) {
+      logTenantEvent("WARNING", "Failed to update URL tenant param", {
+        error: e?.message,
+      });
+    }
+  }, []);
+
   const setSelectedTenantId = useCallback((newTenantId) => {
     // Guard against re-entrant calls
     if (isSettingTenant.current) {
-      console.log('[TenantContext] Blocked re-entrant tenant change attempt');
+      console.log("[TenantContext] Blocked re-entrant tenant change attempt");
       return;
     }
-    
+
     isSettingTenant.current = true;
-    
+
     try {
-      const sanitized = newTenantId === null || newTenantId === undefined || newTenantId === '' 
-        ? null 
-        : String(newTenantId);
+      const sanitized =
+        newTenantId === null || newTenantId === undefined || newTenantId === ""
+          ? null
+          : String(newTenantId);
 
       if (sanitized === selectedTenantId) {
         return;
       }
 
-      logTenantEvent('INFO', 'Tenant selection changed', {
+      logTenantEvent("INFO", "Tenant selection changed", {
         from: selectedTenantId,
-        to: sanitized
+        to: sanitized,
       });
 
       setSelectedTenantIdState(sanitized);
 
       try {
         if (sanitized === null) {
-          localStorage.removeItem('selected_tenant_id');
+          localStorage.removeItem("selected_tenant_id");
         } else {
-          localStorage.setItem('selected_tenant_id', sanitized);
+          localStorage.setItem("selected_tenant_id", sanitized);
         }
+        // Also reflect in URL for persistence across reloads/deep links
+        updateUrlTenantParam(sanitized);
       } catch (error) {
-        logTenantEvent('ERROR', 'Failed to persist tenant selection', {
-          error: error.message
+        logTenantEvent("ERROR", "Failed to persist tenant selection", {
+          error: error.message,
         });
       }
     } finally {
@@ -139,43 +173,79 @@ export const TenantProvider = ({ children }) => {
         isSettingTenant.current = false;
       }, 50);
     }
-  }, [selectedTenantId]); // Dependency on selectedTenantId ensures we compare against the *current* state
+  }, [selectedTenantId, updateUrlTenantParam]); // Include URL updater to satisfy hook deps
 
   useEffect(() => {
     if (persistenceAttempted.current) return;
     persistenceAttempted.current = true;
 
     try {
-      const saved = localStorage.getItem('selected_tenant_id');
-      if (saved === null || saved === 'null' || saved === 'undefined' || saved === '') {
+      // 1) Highest priority: URL parameter (?tenant=UUID)
+      let urlTenant = null;
+      try {
+        const url = new URL(window.location.href);
+        const t = url.searchParams.get("tenant");
+        if (t && typeof t === "string" && isValidId(String(t))) {
+          urlTenant = String(t);
+        }
+      } catch {
+        // ignore URL parse errors
+      }
+
+      if (urlTenant) {
+        setSelectedTenantIdState(urlTenant);
+        // keep storage in sync
+        try {
+          localStorage.setItem("selected_tenant_id", urlTenant);
+        } catch { /* ignore storage error */ }
+        logTenantEvent("INFO", "Applied tenant from URL parameter", {
+          tenantId: urlTenant,
+        });
+        return; // Do not fall through to localStorage branch
+      }
+
+      // 2) Fallback: localStorage
+      const saved = localStorage.getItem("selected_tenant_id");
+      if (
+        saved === null || saved === "null" || saved === "undefined" ||
+        saved === ""
+      ) {
         // No tenant or explicitly null - keep as null (No Client)
         setSelectedTenantIdState(null);
-        logTenantEvent('INFO', 'No tenant selected (No Client)', {
-          tenantId: null
+        logTenantEvent("INFO", "No tenant selected (No Client)", {
+          tenantId: null,
         });
       } else {
         const sanitized = String(saved);
         // Use shared validation function
         if (isValidId(sanitized)) {
           setSelectedTenantIdState(sanitized);
-          logTenantEvent('INFO', 'Restored tenant from localStorage', {
-            tenantId: sanitized
+          logTenantEvent("INFO", "Restored tenant from localStorage", {
+            tenantId: sanitized,
           });
         } else {
-          logTenantEvent('WARNING', 'Invalid tenant ID format in localStorage', {
-            savedValue: saved
-          });
+          logTenantEvent(
+            "WARNING",
+            "Invalid tenant ID format in localStorage",
+            {
+              savedValue: saved,
+            },
+          );
           // Reset to null instead of defaulting to local-tenant-001
           setSelectedTenantIdState(null);
-          localStorage.removeItem('selected_tenant_id');
-          logTenantEvent('INFO', 'Reset tenant ID to null due to invalid format', {
-            tenantId: null
-          });
+          localStorage.removeItem("selected_tenant_id");
+          logTenantEvent(
+            "INFO",
+            "Reset tenant ID to null due to invalid format",
+            {
+              tenantId: null,
+            },
+          );
         }
       }
     } catch (error) {
-      logTenantEvent('ERROR', 'Failed to load tenant from storage', {
-        error: error.message
+      logTenantEvent("ERROR", "Failed to load tenant from storage", {
+        error: error.message,
       });
     }
   }, []); // Empty dependency array means this runs once on mount
@@ -183,15 +253,15 @@ export const TenantProvider = ({ children }) => {
   useEffect(() => {
     if (selectedTenantId && selectedTenantId !== lastSyncedTenantId) {
       setLastSyncedTenantId(selectedTenantId);
-      
-      logTenantEvent('INFO', 'Tenant context synchronized', {
-        tenantId: selectedTenantId
+
+      logTenantEvent("INFO", "Tenant context synchronized", {
+        tenantId: selectedTenantId,
       });
 
       window.dispatchEvent(
-        new CustomEvent('tenant-changed', {
-          detail: { tenantId: selectedTenantId }
-        })
+        new CustomEvent("tenant-changed", {
+          detail: { tenantId: selectedTenantId },
+        }),
       );
     }
   }, [selectedTenantId, lastSyncedTenantId]); // Dependencies: selectedTenantId and lastSyncedTenantId
@@ -207,7 +277,7 @@ export const TenantProvider = ({ children }) => {
 export const useTenant = () => {
   const context = useContext(TenantContext);
   if (!context) {
-    logTenantEvent('WARNING', 'useTenant called outside TenantProvider', {});
+    logTenantEvent("WARNING", "useTenant called outside TenantProvider", {});
     // Return a default, non-functional object to prevent crashes
     return { selectedTenantId: null, setSelectedTenantId: () => {} };
   }
