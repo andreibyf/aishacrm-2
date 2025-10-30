@@ -18,14 +18,18 @@ const __dirname = dirname(__filename);
 
 // Restart policy configuration
 const MAX_RESTARTS_PER_MINUTE = 10;
-const RESTART_COOLDOWN_MS = 2000; // 2 seconds
-const RESTART_WINDOW_MS = 60000; // 1 minute
+const RESTART_COOLDOWN_MS = 2000; // 2 seconds between kill/start cycles
+const RESTART_WINDOW_MS = 60000; // 1 minute window
+const INITIAL_SUPPRESS_MS = 8000; // suppress fs events for N ms after (re)start
+const RESTART_DEBOUNCE_MS = 750; // batch multiple fs events into one restart
 
 // State tracking
 let serverProcess = null;
 let restartTimestamps = [];
 let lastRestartTime = 0;
 let isRestarting = false;
+let suppressUntil = 0; // suppress watcher events shortly after (re)start
+let restartTimer = null; // debounce timer
 
 // Color codes for terminal output
 const colors = {
@@ -74,6 +78,8 @@ function startServer() {
   // Track restart
   restartTimestamps.push(now);
   lastRestartTime = now;
+  // Suppress spurious file change events during module loading on Windows
+  suppressUntil = now + INITIAL_SUPPRESS_MS;
   
   log('🚀 Starting backend server...', colors.green);
   
@@ -85,11 +91,17 @@ function startServer() {
   
   serverProcess.on('exit', (code, signal) => {
     if (signal === 'SIGTERM' || signal === 'SIGINT') {
+      // Child was stopped intentionally (likely due to a restart)
       log('✓ Server stopped gracefully', colors.green);
-      process.exit(0);
+      // Do NOT exit the wrapper here; restartServer schedules the next start
+      if (!isRestarting) {
+        log('Waiting for file changes to restart...', colors.cyan);
+      }
     } else if (code !== 0) {
       log(`⚠️  Server exited with code ${code}`, colors.yellow);
       log('Waiting for file changes to restart...', colors.cyan);
+    } else {
+      log('ℹ️  Server exited normally', colors.gray);
     }
   });
   
@@ -128,13 +140,24 @@ const watcher = watch(__dirname, { recursive: true }, (eventType, filename) => {
   if (!filename || 
       !filename.endsWith('.js') || 
       filename.includes('node_modules') ||
+      filename.includes('public') ||
+      filename.includes('server-debug.log') ||
       filename.startsWith('.') ||
       filename.includes('dev-server.js')) {
     return;
   }
+  // Suppress events immediately after a (re)start to avoid restart storms on Windows
+  if (Date.now() < suppressUntil) {
+    return;
+  }
   
   log(`📝 File changed: ${filename}`, colors.cyan);
-  restartServer();
+  // Debounce restarts to coalesce rapid bursts of fs events
+  if (restartTimer) clearTimeout(restartTimer);
+  restartTimer = setTimeout(() => {
+    restartTimer = null;
+    restartServer();
+  }, RESTART_DEBOUNCE_MS);
 });
 
 // Handle process termination

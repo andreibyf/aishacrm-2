@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,17 +25,24 @@ export default function TestRunner({ testSuites }) {
   const checkBackend = useCallback(async () => {
     setChecking(true);
     try {
-      let resp = await fetch(`${BACKEND_URL}/api/status`);
+      // Prefer the deeper system status that actually hits the DB
+      let resp = await fetch(`${BACKEND_URL}/api/system/status`);
       if (!resp.ok) throw new Error(`Status ${resp.status}`);
-      const data = await resp.json();
-      const db = data?.services?.database || 'unknown';
-      setPreflight({ status: 'ok', message: data?.message || 'Backend online', database: db });
+      const sys = await resp.json();
+      const dbStatus = sys?.data?.database || 'unknown';
+      if (dbStatus === 'connected') {
+        setPreflight({ status: 'ok', message: 'Backend online', database: 'connected' });
+      } else {
+        setPreflight({ status: 'error', message: `Database not ready: ${dbStatus}`, database: dbStatus });
+      }
     } catch {
       try {
+        // Fallback to lightweight health check
         const resp = await fetch(`${BACKEND_URL}/health`);
         if (!resp.ok) throw new Error(`Status ${resp.status}`);
         const data = await resp.json();
-        setPreflight({ status: 'ok', message: 'Backend online', database: data?.database || 'unknown' });
+        // Health may say connected = based on pool exist; keep conservative
+        setPreflight({ status: data?.database === 'connected' ? 'ok' : 'error', message: data?.database === 'connected' ? 'Backend online' : 'Database not ready', database: data?.database || 'unknown' });
       } catch {
         setPreflight({ status: 'error', message: `Backend not reachable at ${BACKEND_URL}`, database: 'unknown' });
       }
