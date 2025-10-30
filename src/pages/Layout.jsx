@@ -636,11 +636,10 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     }
 
     // Use shared validation function
-    const validTenantId =
-      nextTenantId && typeof nextTenantId === "string" &&
+    const validTenantId = nextTenantId && typeof nextTenantId === "string" &&
         isValidId(nextTenantId)
-        ? nextTenantId
-        : null;
+      ? nextTenantId
+      : null;
     if (validTenantId) {
       console.log("[Layout] Filtering data for tenant:", validTenantId);
     }
@@ -1039,12 +1038,13 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     const loadCurrentTenant = async () => {
       // ALWAYS log effect entry in dev
       if (import.meta.env.DEV) {
-        console.log('[Layout] loadCurrentTenant EFFECT RUNNING:', { 
-          user: !!user, 
-          effectiveTenantId, 
-          selectedTenantId, 
+        console.log("[Layout] loadCurrentTenant EFFECT RUNNING:", {
+          user: !!user,
+          effectiveTenantId,
+          selectedTenantId,
           lastRequest: lastTenantRequestIdRef.current,
-          currentTenantData: currentTenantData?.name || currentTenantData?.id || null
+          currentTenantData: currentTenantData?.name || currentTenantData?.id ||
+            null,
         });
       }
 
@@ -1059,9 +1059,13 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
       try {
         const tenantIdToFetch = effectiveTenantId;
-        
+
         if (import.meta.env.DEV) {
-          console.log('[Layout] loadCurrentTenant FETCHING:', { effectiveTenantId: tenantIdToFetch, selectedTenantId, lastRequest: lastTenantRequestIdRef.current });
+          console.log("[Layout] loadCurrentTenant FETCHING:", {
+            effectiveTenantId: tenantIdToFetch,
+            selectedTenantId,
+            lastRequest: lastTenantRequestIdRef.current,
+          });
         }
 
         if (!tenantIdToFetch) {
@@ -1096,7 +1100,10 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         // Dedupe by id to prevent redundant Tenant.get calls
         if (lastTenantRequestIdRef.current === tenantIdToFetch) {
           if (import.meta.env.DEV) {
-            console.log('[Layout] loadCurrentTenant SKIPPED (dedupe):', tenantIdToFetch);
+            console.log(
+              "[Layout] loadCurrentTenant SKIPPED (dedupe):",
+              tenantIdToFetch,
+            );
           }
           return;
         }
@@ -1176,7 +1183,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     // ALWAYS load tenant data when effectiveTenantId changes
     // Branding needs tenant data on ALL pages, including Settings
     loadCurrentTenant();
-    
+
     // DEPS: run only when the effective tenant truly changes or page context changes
     // eslint-disable-next-line react-hooks/exhaustive-deps -- currentTenantData is logged for debugging only, not used in logic
   }, [
@@ -1538,39 +1545,57 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   const brandingSettings = getBrandingSettings();
   const companyName = brandingSettings.companyName;
   const logoUrl = brandingSettings.logoUrl;
-  
+
   // Debug: log branding in dev
   React.useEffect(() => {
     if (import.meta.env.DEV) {
-      console.log('[Layout] Branding:', { companyName, logoUrl, user: user?.email, selectedTenantId, currentTenantData: currentTenantData?.name });
+      console.log("[Layout] Branding:", {
+        companyName,
+        logoUrl,
+        user: user?.email,
+        selectedTenantId,
+        currentTenantData: currentTenantData?.name,
+      });
     }
-  }, [companyName, logoUrl, user?.email, selectedTenantId, currentTenantData?.name]);
-  
+  }, [
+    companyName,
+    logoUrl,
+    user?.email,
+    selectedTenantId,
+    currentTenantData?.name,
+  ]);
+
   // Cache-bust static logo paths so updated files with the same name show immediately
   const logoVersionRef = React.useRef(0);
-  React.useEffect(() => { logoVersionRef.current = Date.now(); }, [logoUrl]);
+  React.useEffect(() => {
+    logoVersionRef.current = Date.now();
+  }, [logoUrl]);
   const displayedLogoUrl = React.useMemo(() => {
     if (!logoUrl) return null;
     if (/^data:/i.test(String(logoUrl))) return logoUrl; // data URLs don't need cache busting
-    
+
     // If it's already a full URL (http/https), keep it as-is but add cache-busting
     if (/^https?:\/\//i.test(String(logoUrl))) {
       try {
         const u = new URL(String(logoUrl));
-        u.searchParams.set('v', String(logoVersionRef.current || 1));
+        u.searchParams.set("v", String(logoVersionRef.current || 1));
         return u.toString();
       } catch {
-        return `${logoUrl}${String(logoUrl).includes('?') ? '&' : '?'}v=${logoVersionRef.current || 1}`;
+        return `${logoUrl}${String(logoUrl).includes("?") ? "&" : "?"}v=${
+          logoVersionRef.current || 1
+        }`;
       }
     }
-    
+
     // For relative paths (e.g., /assets/...), make them relative to origin
     try {
       const u = new URL(String(logoUrl), window.location.origin);
-      u.searchParams.set('v', String(logoVersionRef.current || 1));
+      u.searchParams.set("v", String(logoVersionRef.current || 1));
       return u.pathname + u.search + u.hash;
     } catch {
-      return `${logoUrl}${String(logoUrl).includes('?') ? '&' : '?'}v=${logoVersionRef.current || 1}`;
+      return `${logoUrl}${String(logoUrl).includes("?") ? "&" : "?"}v=${
+        logoVersionRef.current || 1
+      }`;
     }
   }, [logoUrl]);
   // Use tenant branding colors with safe fallbacks (remove hardcoded overrides)
@@ -2212,7 +2237,10 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               className="h-32 w-auto max-w-[400px] object-contain"
               onError={(e) => {
                 if (import.meta.env.DEV) {
-                  console.debug("Logo failed to load:", { raw: logoUrl, resolved: displayedLogoUrl });
+                  console.debug("Logo failed to load:", {
+                    raw: logoUrl,
+                    resolved: displayedLogoUrl,
+                  });
                 }
                 e.target.style.display = "none";
                 if (e.target.nextElementSibling) {

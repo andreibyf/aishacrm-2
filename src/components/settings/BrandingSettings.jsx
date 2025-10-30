@@ -1,12 +1,25 @@
-
 import React, { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea"; // NEW
-import { Loader2, Palette, Image as ImageIcon, Save, Lock, Upload } from "lucide-react"; // NEW: Upload
+import {
+  Image as ImageIcon,
+  Loader2,
+  Lock,
+  Palette,
+  Save,
+  Upload,
+} from "lucide-react"; // NEW: Upload
 import { User } from "@/api/entities";
 import { Tenant } from "@/api/entities";
 import { SystemBranding } from "@/api/entities"; // NEW
@@ -27,7 +40,7 @@ export default function BrandingSettings() {
     logoUrl: "",
     primaryColor: "#06b6d4",
     accentColor: "#6366f1",
-    footerLogoUrl: ""
+    footerLogoUrl: "",
   });
 
   // NEW: State for SystemBranding (global footer)
@@ -58,7 +71,7 @@ export default function BrandingSettings() {
     (async () => {
       try {
         const rows = await SystemBranding.list();
-        const active = rows.find(r => r.is_active) || rows[0] || null;
+        const active = rows.find((r) => r.is_active) || rows[0] || null;
         if (!mounted) return;
         if (active) {
           setBrandingId(active.id);
@@ -71,9 +84,10 @@ export default function BrandingSettings() {
         if (mounted) setLoadingFooter(false);
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
-
 
   useEffect(() => {
     let mounted = true;
@@ -85,10 +99,11 @@ export default function BrandingSettings() {
 
         const isAdmin = u?.role === "admin" || u?.role === "superadmin";
         // Determine which tenant to load for admins; regular users will only view their own if any
-        const targetTenantId =
-          (isAdmin && selectedTenantId) ? selectedTenantId :
-          (isAdmin && u?.tenant_id) ? u.tenant_id :
-          null;
+        const targetTenantId = (isAdmin && selectedTenantId)
+          ? selectedTenantId
+          : (isAdmin && u?.tenant_id)
+          ? u.tenant_id
+          : null;
 
         if (isAdmin && (targetTenantId || u?.tenant_id)) {
           // Admin editing tenant branding
@@ -101,7 +116,7 @@ export default function BrandingSettings() {
             logoUrl: t?.logo_url || "",
             primaryColor: t?.primary_color || "#06b6d4",
             accentColor: t?.accent_color || "#6366f1",
-            footerLogoUrl: bs.footerLogoUrl || ""
+            footerLogoUrl: bs.footerLogoUrl || "",
           });
           setMessage(`Editing tenant branding: ${t?.name || "Tenant"}`);
         } else if (u?.tenant_id && !isAdmin) {
@@ -112,7 +127,7 @@ export default function BrandingSettings() {
             logoUrl: bs.logoUrl || "",
             primaryColor: bs.primaryColor || "#06b6d4",
             accentColor: bs.accentColor || "#6366f1",
-            footerLogoUrl: bs.footerLogoUrl || ""
+            footerLogoUrl: bs.footerLogoUrl || "",
           });
           setMessage("Personal branding (does not override tenant theme)");
         } else {
@@ -123,7 +138,7 @@ export default function BrandingSettings() {
             logoUrl: bs.logoUrl || "",
             primaryColor: bs.primaryColor || "#06b6d4",
             accentColor: bs.accentColor || "#6366f1",
-            footerLogoUrl: bs.footerLogoUrl || ""
+            footerLogoUrl: bs.footerLogoUrl || "",
           });
           setMessage("No tenant selected; editing personal branding");
         }
@@ -133,7 +148,9 @@ export default function BrandingSettings() {
         if (mounted) setLoading(false);
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [selectedTenantId]);
 
   const onChange = (key, val) => {
@@ -151,27 +168,32 @@ export default function BrandingSettings() {
     setUploading(true);
     try {
       const result = await UploadFile({ file });
-      
+
       // Check if upload was successful
       if (result?.file_url) {
         setBrandingData((prev) => ({ ...prev, [key]: result.file_url }));
         setMessage("Image uploaded successfully.");
       } else {
         // Local dev or integration unavailable: inline the image as data URL for preview and save
-        const toDataUrl = (f) => new Promise((resolve, reject) => {
-          try {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = (err) => reject(err);
-            reader.readAsDataURL(f);
-          } catch (err) { reject(err); }
-        });
+        const toDataUrl = (f) =>
+          new Promise((resolve, reject) => {
+            try {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result);
+              reader.onerror = (err) => reject(err);
+              reader.readAsDataURL(f);
+            } catch (err) {
+              reject(err);
+            }
+          });
         try {
           const dataUrl = await toDataUrl(file);
           setBrandingData((prev) => ({ ...prev, [key]: dataUrl }));
-          setMessage(import.meta.env.DEV
-            ? "Upload service unavailable; using inlined image (dev mode)."
-            : "Upload unavailable; using inlined image.");
+          setMessage(
+            import.meta.env.DEV
+              ? "Upload service unavailable; using inlined image (dev mode)."
+              : "Upload unavailable; using inlined image.",
+          );
         } catch {
           setMessage("Upload failed. Paste a direct image URL instead.");
         }
@@ -196,14 +218,16 @@ export default function BrandingSettings() {
     setUploading(true);
     try {
       const result = await UploadFile({ file });
-      
+
       // Check if upload was successful
       if (result?.file_url) {
         setFooterLogoUrl(result.file_url);
         setMessage("Footer logo uploaded successfully.");
       } else if (result?.success === false) {
         // Local dev mode - show helpful message
-        setMessage("File upload not available in local dev mode. Please paste an image URL instead.");
+        setMessage(
+          "File upload not available in local dev mode. Please paste an image URL instead.",
+        );
       } else {
         setMessage("Upload failed: Unexpected response format");
       }
@@ -222,12 +246,16 @@ export default function BrandingSettings() {
       const isAdmin = user?.role === "admin" || user?.role === "superadmin";
       // If admin and we have a tenant context, update Tenant branding directly
       if (isAdmin && (tenant?.id || selectedTenantId || user?.tenant_id)) {
-        const tenantIdToUpdate = tenant?.id || selectedTenantId || user?.tenant_id;
-        console.log('[BrandingSettings] Saving tenant branding:', { tenantIdToUpdate, logoUrl: brandingData.logoUrl });
-        
+        const tenantIdToUpdate = tenant?.id || selectedTenantId ||
+          user?.tenant_id;
+        console.log("[BrandingSettings] Saving tenant branding:", {
+          tenantIdToUpdate,
+          logoUrl: brandingData.logoUrl,
+        });
+
         const nextBrandingSettings = {
           ...(tenant?.branding_settings || {}),
-          footerLogoUrl: brandingData.footerLogoUrl || ""
+          footerLogoUrl: brandingData.footerLogoUrl || "",
         };
         await Tenant.update(tenantIdToUpdate, {
           // name is editable here only if they changed it; otherwise keep existing
@@ -235,23 +263,25 @@ export default function BrandingSettings() {
           logo_url: brandingData.logoUrl || null,
           primary_color: brandingData.primaryColor,
           accent_color: brandingData.accentColor,
-          branding_settings: nextBrandingSettings
+          branding_settings: nextBrandingSettings,
         });
         setMessage("Tenant branding saved. Refreshing to apply...");
-        console.log('[BrandingSettings] Tenant branding saved successfully');
+        console.log("[BrandingSettings] Tenant branding saved successfully");
         // Simple and reliable: reload to rebind CSS variables across app
         setTimeout(() => window.location.reload(), 600);
       } else {
         // Regular users save personal preferences (does not override tenant theme)
         await User.updateMyUserData({
-          branding_settings: { ...brandingData }
+          branding_settings: { ...brandingData },
         });
-        setMessage("Your personal branding preferences were saved. Refreshing to apply...");
+        setMessage(
+          "Your personal branding preferences were saved. Refreshing to apply...",
+        );
         // Reload to pick up the updated user.branding_settings (including logo)
         setTimeout(() => window.location.reload(), 600);
       }
     } catch (e) {
-      console.error('[BrandingSettings] Save failed:', e);
+      console.error("[BrandingSettings] Save failed:", e);
       setMessage(e?.message || "Failed to save");
       setTimeout(() => setMessage(""), 3000);
     } finally {
@@ -266,7 +296,7 @@ export default function BrandingSettings() {
       const payload = {
         footer_logo_url: footerLogoUrl || null,
         footer_legal_html: footerLegalHtml || null,
-        is_active: true
+        is_active: true,
       };
       if (brandingId) {
         await SystemBranding.update(brandingId, payload);
@@ -310,8 +340,7 @@ export default function BrandingSettings() {
           <CardDescription className="text-slate-400">
             {tenant
               ? `Editing branding for tenant: ${tenant?.name || "Tenant"}`
-              : "Customize your personal branding"
-            }
+              : "Customize your personal branding"}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 grid gap-6">
@@ -325,7 +354,8 @@ export default function BrandingSettings() {
             />
             {!tenant && (
               <p className="text-xs text-slate-400">
-                Personal preference only; tenant theme colors are controlled by your admin.
+                Personal preference only; tenant theme colors are controlled by
+                your admin.
               </p>
             )}
           </div>
@@ -355,17 +385,19 @@ export default function BrandingSettings() {
             <div className="grid gap-3">
               <Label className="text-slate-200">Header/Company Logo</Label>
               <div className="flex items-center gap-3">
-                {brandingData.logoUrl ? (
-                  <img
-                    src={brandingData.logoUrl}
-                    alt="Logo"
-                    className="w-20 h-16 object-contain border border-slate-600 rounded bg-white"
-                  />
-                ) : (
-                  <div className="w-20 h-16 border border-dashed border-slate-600 rounded flex items-center justify-center text-slate-500">
-                    <ImageIcon className="w-5 h-5" />
-                  </div>
-                )}
+                {brandingData.logoUrl
+                  ? (
+                    <img
+                      src={brandingData.logoUrl}
+                      alt="Logo"
+                      className="w-20 h-16 object-contain border border-slate-600 rounded bg-white"
+                    />
+                  )
+                  : (
+                    <div className="w-20 h-16 border border-dashed border-slate-600 rounded flex items-center justify-center text-slate-500">
+                      <ImageIcon className="w-5 h-5" />
+                    </div>
+                  )}
                 <Input
                   type="file"
                   accept="image/*"
@@ -383,19 +415,23 @@ export default function BrandingSettings() {
             </div>
 
             <div className="grid gap-3">
-              <Label className="text-slate-200">Footer Logo (tenant/user specific)</Label>
+              <Label className="text-slate-200">
+                Footer Logo (tenant/user specific)
+              </Label>
               <div className="flex items-center gap-3">
-                {brandingData.footerLogoUrl ? (
-                  <img
-                    src={brandingData.footerLogoUrl}
-                    alt="Footer Logo"
-                    className="w-20 h-16 object-contain border border-slate-600 rounded bg-white"
-                  />
-                ) : (
-                  <div className="w-20 h-16 border border-dashed border-slate-600 rounded flex items-center justify-center text-slate-500">
-                    <ImageIcon className="w-5 h-5" />
-                  </div>
-                )}
+                {brandingData.footerLogoUrl
+                  ? (
+                    <img
+                      src={brandingData.footerLogoUrl}
+                      alt="Footer Logo"
+                      className="w-20 h-16 object-contain border border-slate-600 rounded bg-white"
+                    />
+                  )
+                  : (
+                    <div className="w-20 h-16 border border-dashed border-slate-600 rounded flex items-center justify-center text-slate-500">
+                      <ImageIcon className="w-5 h-5" />
+                    </div>
+                  )}
                 <Input
                   type="file"
                   accept="image/*"
@@ -424,7 +460,9 @@ export default function BrandingSettings() {
               disabled={saving}
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+              {saving
+                ? <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                : <Save className="w-4 h-4 mr-2" />}
               Save
             </Button>
           </div>
@@ -435,82 +473,122 @@ export default function BrandingSettings() {
       <Card className="bg-slate-800 border-slate-700">
         <CardHeader className="border-b border-slate-700">
           <CardTitle className="flex items-center gap-2 text-slate-100">
-            {canEdit ? <Upload className="w-5 h-5 text-emerald-400" /> : <Lock className="w-5 h-5 text-slate-400" />}
+            {canEdit
+              ? <Upload className="w-5 h-5 text-emerald-400" />
+              : <Lock className="w-5 h-5 text-slate-400" />}
             Ai‑SHA Global Footer (Logo & Legal)
           </CardTitle>
           <CardDescription className="text-slate-400">
-            This controls the footer for ALL tenants and users. Only admins can edit.
+            This controls the footer for ALL tenants and users. Only admins can
+            edit.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
-          {loadingFooter ? (
-            <div className="flex items-center gap-2 text-slate-400">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Loading footer settings…
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-slate-200">Footer Logo</Label>
-                  <div className="flex items-center gap-4">
-                    <div className="h-16 w-44 border border-slate-700 rounded bg-white flex items-center justify-center overflow-hidden">
-                      {footerLogoUrl ? (
-                        <img src={footerLogoUrl} alt="Global Footer Logo" className="max-h-16 max-w-44 object-contain" />
-                      ) : (
-                        <span className="text-slate-500 text-xs">No logo set</span>
+          {loadingFooter
+            ? (
+              <div className="flex items-center gap-2 text-slate-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading footer settings…
+              </div>
+            )
+            : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-slate-200">Footer Logo</Label>
+                    <div className="flex items-center gap-4">
+                      <div className="h-16 w-44 border border-slate-700 rounded bg-white flex items-center justify-center overflow-hidden">
+                        {footerLogoUrl
+                          ? (
+                            <img
+                              src={footerLogoUrl}
+                              alt="Global Footer Logo"
+                              className="max-h-16 max-w-44 object-contain"
+                            />
+                          )
+                          : (
+                            <span className="text-slate-500 text-xs">
+                              No logo set
+                            </span>
+                          )}
+                      </div>
+                      {canEdit && (
+                        <div>
+                          <Input
+                            id="footer-logo-file"
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) =>
+                              handleGlobalFooterUpload(e.target.files?.[0])}
+                            disabled={uploading}
+                          />
+                          <Button
+                            asChild
+                            variant="outline"
+                            className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
+                            disabled={uploading}
+                          >
+                            <label
+                              htmlFor="footer-logo-file"
+                              className="cursor-pointer"
+                            >
+                              Upload
+                            </label>
+                          </Button>
+                        </div>
                       )}
                     </div>
+                    <p className="text-xs text-slate-500">
+                      Recommended: transparent PNG or SVG, height ~64px.
+                    </p>
                     {canEdit && (
-                      <div>
-                        <Input
-                          id="footer-logo-file"
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => handleGlobalFooterUpload(e.target.files?.[0])}
-                          disabled={uploading}
-                        />
-                        <Button asChild variant="outline" className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600" disabled={uploading}>
-                          <label htmlFor="footer-logo-file" className="cursor-pointer">Upload</label>
-                        </Button>
-                      </div>
+                      <Input
+                        placeholder="Or paste a direct image URL…"
+                        value={footerLogoUrl || ""}
+                        onChange={(e) => setFooterLogoUrl(e.target.value)}
+                        className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400"
+                      />
                     )}
                   </div>
-                  <p className="text-xs text-slate-500">Recommended: transparent PNG or SVG, height ~64px.</p>
-                  {canEdit && (
-                  <Input
-                    placeholder="Or paste a direct image URL…"
-                    value={footerLogoUrl || ""}
-                    onChange={(e) => setFooterLogoUrl(e.target.value)}
-                    className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400"
-                  />
-                  )}
-                </div>
 
-                <div className="space-y-2">
-                  <Label className="text-slate-200">Legal Text (HTML allowed)</Label>
-                  <Textarea
-                    value={footerLegalHtml || ""}
-                    onChange={(e) => setFooterLegalHtml(e.target.value)}
-                    className="min-h-[120px] bg-slate-700 border-slate-600 text-slate-100"
-                    placeholder={`<div>Ai‑SHA® is a registered trademark of 4V Data Consulting LLC.</div>\n<div>© ${new Date().getFullYear()} 4V Data Consulting LLC. All rights reserved.</div>`}
-                    readOnly={!canEdit}
-                  />
+                  <div className="space-y-2">
+                    <Label className="text-slate-200">
+                      Legal Text (HTML allowed)
+                    </Label>
+                    <Textarea
+                      value={footerLegalHtml || ""}
+                      onChange={(e) => setFooterLegalHtml(e.target.value)}
+                      className="min-h-[120px] bg-slate-700 border-slate-600 text-slate-100"
+                      placeholder={`<div>Ai‑SHA® is a registered trademark of 4V Data Consulting LLC.</div>\n<div>© ${
+                        new Date().getFullYear()
+                      } 4V Data Consulting LLC. All rights reserved.</div>`}
+                      readOnly={!canEdit}
+                    />
+                  </div>
                 </div>
-              </div>
-            </>
-          )}
+              </>
+            )}
         </CardContent>
         <CardFooter className="border-t border-slate-700 flex justify-end">
-          {canEdit ? (
-            <Button onClick={handleGlobalFooterSave} disabled={savingFooter || uploading} className="bg-blue-600 hover:bg-blue-700">
-              {savingFooter || uploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-              Save Footer
-            </Button>
-          ) : (
-            <div className="text-xs text-slate-500">Read-only for your role.</div>
-          )}
+          {canEdit
+            ? (
+              <Button
+                onClick={handleGlobalFooterSave}
+                disabled={savingFooter || uploading}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {savingFooter || uploading
+                  ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  : <Save className="w-4 h-4 mr-2" />}
+                Save Footer
+              </Button>
+            )
+            : (
+              <div className="text-xs text-slate-500">
+                Read-only for your role.
+              </div>
+            )}
         </CardFooter>
       </Card>
     </div>

@@ -1,11 +1,16 @@
-import { base44 } from './base44Client';
-import { isLocalDevMode } from './mockData';
+import { base44 } from "./base44Client";
+import { isLocalDevMode } from "./mockData";
 
 // Create mock integration functions for local dev mode
 const createMockIntegration = (name) => () => {
   if (isLocalDevMode()) {
-    console.warn(`[Local Dev Mode] Integration '${name}' called but not available in local dev mode.`);
-    return Promise.resolve({ success: false, message: 'Integration not available in local dev mode' });
+    console.warn(
+      `[Local Dev Mode] Integration '${name}' called but not available in local dev mode.`,
+    );
+    return Promise.resolve({
+      success: false,
+      message: "Integration not available in local dev mode",
+    });
   }
   return null;
 };
@@ -15,33 +20,34 @@ const createMockIntegration = (name) => () => {
  * Works in both local dev and production
  */
 export const UploadFile = async ({ file }) => {
-  const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+  const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
+    "http://localhost:3001";
 
   // Attempt to infer tenant id from URL or localStorage
   let tenantId = null;
   try {
-    const urlTenant = new URL(window.location.href).searchParams.get('tenant');
-    const storedTenant = localStorage.getItem('selected_tenant_id');
+    const urlTenant = new URL(window.location.href).searchParams.get("tenant");
+    const storedTenant = localStorage.getItem("selected_tenant_id");
     tenantId = urlTenant || storedTenant || null;
   } catch (err) {
     // ignore access errors in non-browser contexts
     void err;
   }
-  
+
   try {
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append("file", file);
 
     const response = await fetch(`${backendUrl}/api/storage/upload`, {
-      method: 'POST',
+      method: "POST",
       // Don't set Content-Type for FormData; add tenant header if present
-      headers: tenantId ? { 'x-tenant-id': tenantId } : undefined,
+      headers: tenantId ? { "x-tenant-id": tenantId } : undefined,
       body: formData,
     });
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.message || 'Upload failed');
+      throw new Error(errorData.message || "Upload failed");
     }
 
     const result = await response.json();
@@ -51,22 +57,26 @@ export const UploadFile = async ({ file }) => {
       success: true,
     };
   } catch (error) {
-    console.error('[UploadFile] Error:', error);
+    console.error("[UploadFile] Error:", error);
     throw error;
   }
 };
 
 // Mock Core integration object
 const mockCore = {
-  InvokeLLM: createMockIntegration('InvokeLLM'),
-  SendEmail: createMockIntegration('SendEmail'),
-  GenerateImage: createMockIntegration('GenerateImage'),
-  ExtractDataFromUploadedFile: createMockIntegration('ExtractDataFromUploadedFile'),
-  CreateFileSignedUrl: createMockIntegration('CreateFileSignedUrl'),
-  UploadPrivateFile: createMockIntegration('UploadPrivateFile'),
+  InvokeLLM: createMockIntegration("InvokeLLM"),
+  SendEmail: createMockIntegration("SendEmail"),
+  GenerateImage: createMockIntegration("GenerateImage"),
+  ExtractDataFromUploadedFile: createMockIntegration(
+    "ExtractDataFromUploadedFile",
+  ),
+  CreateFileSignedUrl: createMockIntegration("CreateFileSignedUrl"),
+  UploadPrivateFile: createMockIntegration("UploadPrivateFile"),
 };
 
-export const Core = isLocalDevMode() || !base44.integrations?.Core ? mockCore : base44.integrations.Core;
+export const Core = isLocalDevMode() || !base44.integrations?.Core
+  ? mockCore
+  : base44.integrations.Core;
 
 export const InvokeLLM = Core.InvokeLLM;
 export const SendEmail = Core.SendEmail;
@@ -74,9 +84,3 @@ export const GenerateImage = Core.GenerateImage;
 export const ExtractDataFromUploadedFile = Core.ExtractDataFromUploadedFile;
 export const CreateFileSignedUrl = Core.CreateFileSignedUrl;
 export const UploadPrivateFile = Core.UploadPrivateFile;
-
-
-
-
-
-
