@@ -1,9 +1,21 @@
-
-import { useState, useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { User } from "@/api/entities";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, FileText, CreditCard, X, FolderOpen, AlertCircle } from "lucide-react";
+import {
+  AlertCircle,
+  CreditCard,
+  FileText,
+  FolderOpen,
+  Upload,
+  X,
+} from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import BusinessCardProcessor from "../components/documents/BusinessCardProcessor";
 import DocumentExtractor from "../components/documents/DocumentExtractor";
@@ -50,13 +62,14 @@ export default function DocumentProcessing() {
             Document Processing
           </h1>
           <p className="text-slate-400 mt-1 text-sm lg:text-base">
-            Process business cards and documents with AI, or upload files for storage.
+            Process business cards and documents with AI, or upload files for
+            storage.
           </p>
         </div>
-        
+
         {(activeProcessor || isProcessing) && (
           <Button
-            variant="outline" 
+            variant="outline"
             onClick={handleCancel}
             className="bg-red-700 hover:bg-red-600 text-white border-red-600 flex items-center gap-2"
           >
@@ -71,7 +84,8 @@ export default function DocumentProcessing() {
           <Alert className="bg-blue-900/30 border-blue-700/50">
             <AlertCircle className="h-4 w-4 text-blue-400" />
             <AlertDescription className="text-blue-300">
-              Choose between AI-powered extraction (which analyzes and extracts data) or simple storage upload (no processing).
+              Choose between AI-powered extraction (which analyzes and extracts
+              data) or simple storage upload (no processing).
             </AlertDescription>
           </Alert>
 
@@ -92,8 +106,8 @@ export default function DocumentProcessing() {
               <CardContent>
                 <Button
                   onClick={() => {
-                    setActiveProcessor('business-card');
-                    setUploadMode('extract');
+                    setActiveProcessor("business-card");
+                    setUploadMode("extract");
                   }}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                 >
@@ -119,8 +133,8 @@ export default function DocumentProcessing() {
               <CardContent>
                 <Button
                   onClick={() => {
-                    setActiveProcessor('document-extractor');
-                    setUploadMode('extract');
+                    setActiveProcessor("document-extractor");
+                    setUploadMode("extract");
                   }}
                   className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
                 >
@@ -146,8 +160,8 @@ export default function DocumentProcessing() {
               <CardContent>
                 <Button
                   onClick={() => {
-                    setActiveProcessor('cash-flow');
-                    setUploadMode('extract');
+                    setActiveProcessor("cash-flow");
+                    setUploadMode("extract");
                   }}
                   className="w-full bg-green-600 hover:bg-green-700 text-white"
                 >
@@ -173,8 +187,8 @@ export default function DocumentProcessing() {
               <CardContent>
                 <Button
                   onClick={() => {
-                    setActiveProcessor('storage-only');
-                    setUploadMode('storage');
+                    setActiveProcessor("storage-only");
+                    setUploadMode("storage");
                   }}
                   className="w-full bg-purple-600 hover:bg-purple-700 text-white"
                 >
@@ -188,31 +202,31 @@ export default function DocumentProcessing() {
       )}
 
       {/* Active Processor */}
-      {activeProcessor === 'business-card' && (
-        <BusinessCardProcessor 
+      {activeProcessor === "business-card" && (
+        <BusinessCardProcessor
           user={currentUser}
           onCancel={handleCancel}
           onProcessingChange={handleProcessingStateChange}
         />
       )}
 
-      {activeProcessor === 'document-extractor' && (
-        <DocumentExtractor 
+      {activeProcessor === "document-extractor" && (
+        <DocumentExtractor
           onCancel={handleCancel}
           onProcessingChange={handleProcessingStateChange}
         />
       )}
 
-      {activeProcessor === 'cash-flow' && (
+      {activeProcessor === "cash-flow" && (
         <CashFlowExtractor
           user={currentUser}
           onCancel={handleCancel}
           onProcessingChange={handleProcessingStateChange}
         />
       )}
-      
-      {activeProcessor === 'storage-only' && (
-        <StorageUploader 
+
+      {activeProcessor === "storage-only" && (
+        <StorageUploader
           onCancel={handleCancel}
           onProcessingChange={handleProcessingStateChange}
         />
@@ -251,9 +265,9 @@ function StorageUploader({ onCancel, onProcessingChange }) {
 
       // Upload file to private storage
       const uploadResult = await UploadPrivateFile({ file: selectedFile });
-      
+
       if (!uploadResult.file_uri) {
-        throw new Error('File upload failed - no URI returned');
+        throw new Error("File upload failed - no URI returned");
       }
 
       // Get current user for tenant info
@@ -265,23 +279,22 @@ function StorageUploader({ onCancel, onProcessingChange }) {
         description: "Document uploaded for storage only",
         file_name: selectedFile.name,
         file_uri: uploadResult.file_uri,
-        file_type: selectedFile.type.split('/')[1] || 'unknown',
-        category: 'other',
+        file_type: selectedFile.type.split("/")[1] || "unknown",
+        category: "other",
         tenant_id: currentUser.tenant_id,
-        tags: ['storage-upload']
+        tags: ["storage-upload"],
       });
 
       setUploadResult({
         success: true,
-        message: 'Document uploaded successfully for storage!',
-        documentId: documentRecord.id
+        message: "Document uploaded successfully for storage!",
+        documentId: documentRecord.id,
       });
-
     } catch (error) {
-      console.error('Storage upload error:', error);
+      console.error("Storage upload error:", error);
       setUploadResult({
         success: false,
-        message: `Upload failed: ${error.message}`
+        message: `Upload failed: ${error.message}`,
       });
     } finally {
       setUploading(false);
@@ -297,12 +310,17 @@ function StorageUploader({ onCancel, onProcessingChange }) {
             <FolderOpen className="w-6 h-6 text-purple-400" />
             Upload for Storage Only
           </span>
-          <Button variant="ghost" onClick={onCancel} className="text-slate-400 hover:text-slate-200">
+          <Button
+            variant="ghost"
+            onClick={onCancel}
+            className="text-slate-400 hover:text-slate-200"
+          >
             <X className="w-5 h-5" />
           </Button>
         </CardTitle>
         <CardDescription className="text-slate-400">
-          Upload documents to store them without any AI processing or data extraction.
+          Upload documents to store them without any AI processing or data
+          extraction.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -331,7 +349,8 @@ function StorageUploader({ onCancel, onProcessingChange }) {
               <Alert className="bg-slate-700 border-slate-600">
                 <FileText className="h-4 w-4 text-slate-400" />
                 <AlertDescription className="text-slate-300">
-                  Selected: <strong>{selectedFile.name}</strong> ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                  Selected: <strong>{selectedFile.name}</strong>{" "}
+                  ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
                 </AlertDescription>
               </Alert>
             )}
@@ -342,7 +361,7 @@ function StorageUploader({ onCancel, onProcessingChange }) {
                 disabled={!selectedFile || uploading}
                 className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
               >
-                {uploading ? 'Uploading...' : 'Upload for Storage'}
+                {uploading ? "Uploading..." : "Upload for Storage"}
               </Button>
               <Button
                 variant="outline"
@@ -356,9 +375,21 @@ function StorageUploader({ onCancel, onProcessingChange }) {
         )}
 
         {uploadResult && (
-          <Alert className={uploadResult.success ? 'bg-green-900/30 border-green-700/50' : 'bg-red-900/30 border-red-700/50'}>
-            <AlertCircle className={`h-4 w-4 ${uploadResult.success ? 'text-green-400' : 'text-red-400'}`} />
-            <AlertDescription className={uploadResult.success ? 'text-green-300' : 'text-red-300'}>
+          <Alert
+            className={uploadResult.success
+              ? "bg-green-900/30 border-green-700/50"
+              : "bg-red-900/30 border-red-700/50"}
+          >
+            <AlertCircle
+              className={`h-4 w-4 ${
+                uploadResult.success ? "text-green-400" : "text-red-400"
+              }`}
+            />
+            <AlertDescription
+              className={uploadResult.success
+                ? "text-green-300"
+                : "text-red-300"}
+            >
               {uploadResult.message}
             </AlertDescription>
           </Alert>

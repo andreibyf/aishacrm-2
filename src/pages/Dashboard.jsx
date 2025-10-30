@@ -458,8 +458,8 @@ export default function DashboardPage() {
                 )
                 : (
                   <div className="col-span-full text-center p-8 text-gray-500 bg-gray-800 rounded-lg">
-                    No widgets selected. Click &quot;Customize Dashboard&quot; to add
-                    widgets.
+                    No widgets selected. Click &quot;Customize Dashboard&quot;
+                    to add widgets.
                   </div>
                 )}
             </div>

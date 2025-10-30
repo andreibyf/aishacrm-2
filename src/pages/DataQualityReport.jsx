@@ -1,21 +1,27 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { 
-  AlertTriangle, 
-  CheckCircle, 
-  XCircle, 
-  Users, 
-  Building2, 
-  TrendingUp,
+import {
+  AlertTriangle,
+  Building2,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  FileText,
   Mail,
   Phone,
-  FileText,
   RefreshCw,
-  ChevronDown,
-  ChevronUp
+  TrendingUp,
+  Users,
+  XCircle,
 } from "lucide-react";
 import { User } from "@/api/entities";
 import { useTenant } from "../components/shared/tenantContext";
@@ -36,7 +42,7 @@ export default function DataQualityReport() {
   const [expandedSections, setExpandedSections] = useState({
     contacts: false,
     accounts: false,
-    leads: false
+    leads: false,
   });
 
   const { selectedTenantId } = useTenant();
@@ -69,14 +75,14 @@ export default function DataQualityReport() {
 
     try {
       const tenantId = selectedTenantId || currentUser?.tenant_id;
-      
-      if (!tenantId && currentUser?.role !== 'superadmin') {
+
+      if (!tenantId && currentUser?.role !== "superadmin") {
         setError("No tenant selected");
         return;
       }
 
       const { data } = await analyzeDataQuality({ tenant_id: tenantId });
-      
+
       if (data.success) {
         setReport(data.report);
       } else {
@@ -92,9 +98,9 @@ export default function DataQualityReport() {
   };
 
   const toggleSection = (section) => {
-    setExpandedSections(prev => ({
+    setExpandedSections((prev) => ({
       ...prev,
-      [section]: !prev[section]
+      [section]: !prev[section],
     }));
   };
 
@@ -105,9 +111,25 @@ export default function DataQualityReport() {
   };
 
   const getQualityBadge = (percentage) => {
-    if (percentage >= 90) return <Badge className="bg-green-900/50 text-green-300 border-green-700">Excellent</Badge>;
-    if (percentage >= 70) return <Badge className="bg-yellow-900/50 text-yellow-300 border-yellow-700">Fair</Badge>;
-    return <Badge className="bg-red-900/50 text-red-300 border-red-700">Needs Attention</Badge>;
+    if (percentage >= 90) {
+      return (
+        <Badge className="bg-green-900/50 text-green-300 border-green-700">
+          Excellent
+        </Badge>
+      );
+    }
+    if (percentage >= 70) {
+      return (
+        <Badge className="bg-yellow-900/50 text-yellow-300 border-yellow-700">
+          Fair
+        </Badge>
+      );
+    }
+    return (
+      <Badge className="bg-red-900/50 text-red-300 border-red-700">
+        Needs Attention
+      </Badge>
+    );
   };
 
   const renderEntitySection = (entityType, entityData, IconComponent) => {
@@ -130,7 +152,11 @@ export default function DataQualityReport() {
               </div>
             </div>
             <div className="text-right">
-              <div className={`text-3xl font-bold ${getQualityColor(qualityPercentage)}`}>
+              <div
+                className={`text-3xl font-bold ${
+                  getQualityColor(qualityPercentage)
+                }`}
+              >
                 {qualityPercentage.toFixed(1)}%
               </div>
               {getQualityBadge(qualityPercentage)}
@@ -144,18 +170,26 @@ export default function DataQualityReport() {
               <span>Data Quality Score</span>
               <span>{entityData.records_with_issues} issues found</span>
             </div>
-            <Progress 
-              value={qualityPercentage} 
+            <Progress
+              value={qualityPercentage}
               className="h-2"
             />
           </div>
 
           {/* Issues Summary */}
-          <Collapsible open={isExpanded} onOpenChange={() => toggleSection(entityType.toLowerCase())}>
+          <Collapsible
+            open={isExpanded}
+            onOpenChange={() => toggleSection(entityType.toLowerCase())}
+          >
             <CollapsibleTrigger asChild>
-              <Button variant="ghost" className="w-full justify-between text-slate-300 hover:text-slate-100 hover:bg-slate-700">
+              <Button
+                variant="ghost"
+                className="w-full justify-between text-slate-300 hover:text-slate-100 hover:bg-slate-700"
+              >
                 <span>View Detailed Issues</span>
-                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                {isExpanded
+                  ? <ChevronUp className="w-4 h-4" />
+                  : <ChevronDown className="w-4 h-4" />}
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-3 mt-4">
@@ -165,7 +199,10 @@ export default function DataQualityReport() {
                     <AlertTriangle className="w-4 h-4 text-yellow-400" />
                     <span className="text-slate-300">Missing First Name</span>
                   </div>
-                  <Badge variant="outline" className="bg-slate-800 text-slate-200 border-slate-600">
+                  <Badge
+                    variant="outline"
+                    className="bg-slate-800 text-slate-200 border-slate-600"
+                  >
                     {entityData.issues.missing_first_name} records
                   </Badge>
                 </div>
@@ -177,7 +214,10 @@ export default function DataQualityReport() {
                     <AlertTriangle className="w-4 h-4 text-yellow-400" />
                     <span className="text-slate-300">Missing Last Name</span>
                   </div>
-                  <Badge variant="outline" className="bg-slate-800 text-slate-200 border-slate-600">
+                  <Badge
+                    variant="outline"
+                    className="bg-slate-800 text-slate-200 border-slate-600"
+                  >
                     {entityData.issues.missing_last_name} records
                   </Badge>
                 </div>
@@ -187,9 +227,14 @@ export default function DataQualityReport() {
                 <div className="flex items-center justify-between p-3 rounded-lg bg-slate-700/50 border border-slate-600">
                   <div className="flex items-center gap-2">
                     <XCircle className="w-4 h-4 text-red-400" />
-                    <span className="text-slate-300">Invalid Name Characters</span>
+                    <span className="text-slate-300">
+                      Invalid Name Characters
+                    </span>
                   </div>
-                  <Badge variant="outline" className="bg-slate-800 text-slate-200 border-slate-600">
+                  <Badge
+                    variant="outline"
+                    className="bg-slate-800 text-slate-200 border-slate-600"
+                  >
                     {entityData.issues.invalid_name_characters} records
                   </Badge>
                 </div>
@@ -201,7 +246,10 @@ export default function DataQualityReport() {
                     <Mail className="w-4 h-4 text-red-400" />
                     <span className="text-slate-300">Invalid Email Format</span>
                   </div>
-                  <Badge variant="outline" className="bg-slate-800 text-slate-200 border-slate-600">
+                  <Badge
+                    variant="outline"
+                    className="bg-slate-800 text-slate-200 border-slate-600"
+                  >
                     {entityData.issues.invalid_email} records
                   </Badge>
                 </div>
@@ -211,9 +259,14 @@ export default function DataQualityReport() {
                 <div className="flex items-center justify-between p-3 rounded-lg bg-slate-700/50 border border-slate-600">
                   <div className="flex items-center gap-2">
                     <Phone className="w-4 h-4 text-red-400" />
-                    <span className="text-slate-300">No Contact Info (Email & Phone)</span>
+                    <span className="text-slate-300">
+                      No Contact Info (Email & Phone)
+                    </span>
                   </div>
-                  <Badge variant="outline" className="bg-slate-800 text-slate-200 border-slate-600">
+                  <Badge
+                    variant="outline"
+                    className="bg-slate-800 text-slate-200 border-slate-600"
+                  >
                     {entityData.issues.missing_contact_info} records
                   </Badge>
                 </div>
@@ -222,7 +275,9 @@ export default function DataQualityReport() {
               {entityData.records_with_issues === 0 && (
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-green-900/20 border border-green-700/50">
                   <CheckCircle className="w-4 h-4 text-green-400" />
-                  <span className="text-green-300">No data quality issues found!</span>
+                  <span className="text-green-300">
+                    No data quality issues found!
+                  </span>
                 </div>
               )}
             </CollapsibleContent>
@@ -287,17 +342,19 @@ export default function DataQualityReport() {
           disabled={analyzing}
           className="bg-blue-600 hover:bg-blue-700"
         >
-          {analyzing ? (
-            <>
-              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-              Analyzing...
-            </>
-          ) : (
-            <>
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh Report
-            </>
-          )}
+          {analyzing
+            ? (
+              <>
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                Analyzing...
+              </>
+            )
+            : (
+              <>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Refresh Report
+              </>
+            )}
         </Button>
       </div>
 
@@ -312,7 +369,11 @@ export default function DataQualityReport() {
         <CardContent>
           <div className="flex items-center justify-between">
             <div>
-              <div className={`text-6xl font-bold ${getQualityColor(overallQuality)}`}>
+              <div
+                className={`text-6xl font-bold ${
+                  getQualityColor(overallQuality)
+                }`}
+              >
                 {overallQuality.toFixed(1)}%
               </div>
               <p className="text-slate-400 mt-2">
@@ -348,8 +409,10 @@ export default function DataQualityReport() {
 
       {/* Entity-Specific Reports */}
       <div className="grid gap-6">
-        {report.contacts && renderEntitySection("Contacts", report.contacts, Users)}
-        {report.accounts && renderEntitySection("Accounts", report.accounts, Building2)}
+        {report.contacts &&
+          renderEntitySection("Contacts", report.contacts, Users)}
+        {report.accounts &&
+          renderEntitySection("Accounts", report.accounts, Building2)}
         {report.leads && renderEntitySection("Leads", report.leads, TrendingUp)}
       </div>
 
@@ -365,9 +428,12 @@ export default function DataQualityReport() {
           <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-900/20 border border-blue-700/50">
             <CheckCircle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-blue-300 font-medium">Review Records with Missing Names</p>
+              <p className="text-blue-300 font-medium">
+                Review Records with Missing Names
+              </p>
               <p className="text-slate-400 text-sm mt-1">
-                Update records that are missing first or last names to ensure complete contact information.
+                Update records that are missing first or last names to ensure
+                complete contact information.
               </p>
             </div>
           </div>
@@ -375,9 +441,12 @@ export default function DataQualityReport() {
           <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-900/20 border border-blue-700/50">
             <CheckCircle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-blue-300 font-medium">Validate Email Addresses</p>
+              <p className="text-blue-300 font-medium">
+                Validate Email Addresses
+              </p>
               <p className="text-slate-400 text-sm mt-1">
-                Correct or remove invalid email addresses to improve communication reliability.
+                Correct or remove invalid email addresses to improve
+                communication reliability.
               </p>
             </div>
           </div>
@@ -385,9 +454,12 @@ export default function DataQualityReport() {
           <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-900/20 border border-blue-700/50">
             <CheckCircle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-blue-300 font-medium">Add Contact Information</p>
+              <p className="text-blue-300 font-medium">
+                Add Contact Information
+              </p>
               <p className="text-slate-400 text-sm mt-1">
-                Ensure all records have at least one method of contact (email or phone number).
+                Ensure all records have at least one method of contact (email or
+                phone number).
               </p>
             </div>
           </div>
@@ -395,9 +467,12 @@ export default function DataQualityReport() {
           <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-900/20 border border-blue-700/50">
             <CheckCircle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-blue-300 font-medium">Clean Invalid Name Characters</p>
+              <p className="text-blue-300 font-medium">
+                Clean Invalid Name Characters
+              </p>
               <p className="text-slate-400 text-sm mt-1">
-                Remove numbers and special characters from name fields (except hyphens, apostrophes, and language-specific characters).
+                Remove numbers and special characters from name fields (except
+                hyphens, apostrophes, and language-specific characters).
               </p>
             </div>
           </div>

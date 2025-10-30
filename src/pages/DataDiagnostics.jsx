@@ -1,12 +1,11 @@
-
-import { useState, useEffect } from 'react';
-import { User } from '@/api/entities';
-import { Contact, Account, Lead, Opportunity } from '@/api/entities';
+import { useEffect, useState } from "react";
+import { User } from "@/api/entities";
+import { Account, Contact, Lead, Opportunity } from "@/api/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, Database, Loader2 } from 'lucide-react';
+import { AlertCircle, Database, Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import ActivityVisibilityDebug from '../components/settings/ActivityVisibilityDebug'; // New import for ActivityVisibilityDebug
+import ActivityVisibilityDebug from "../components/settings/ActivityVisibilityDebug"; // New import for ActivityVisibilityDebug
 
 /**
  * Component for General Database Diagnostics tab.
@@ -20,12 +19,13 @@ function GeneralDiagnosticsPanel({ user }) {
     setLoading(true);
     try {
       // Fetch ALL records without any filter
-      const [allContacts, allAccounts, allLeads, allOpportunities] = await Promise.all([
-        Contact.filter({}),
-        Account.filter({}),
-        Lead.filter({}),
-        Opportunity.filter({})
-      ]);
+      const [allContacts, allAccounts, allLeads, allOpportunities] =
+        await Promise.all([
+          Contact.filter({}),
+          Account.filter({}),
+          Lead.filter({}),
+          Opportunity.filter({}),
+        ]);
 
       // Analyze tenant_id distribution
       const contactTenants = {};
@@ -33,31 +33,33 @@ function GeneralDiagnosticsPanel({ user }) {
       const leadTenants = {};
       const oppTenants = {};
 
-      allContacts.forEach(c => {
-        const tid = c.tenant_id || 'NULL';
+      allContacts.forEach((c) => {
+        const tid = c.tenant_id || "NULL";
         contactTenants[tid] = (contactTenants[tid] || 0) + 1;
       });
 
-      allAccounts.forEach(a => {
-        const tid = a.tenant_id || 'NULL';
+      allAccounts.forEach((a) => {
+        const tid = a.tenant_id || "NULL";
         accountTenants[tid] = (accountTenants[tid] || 0) + 1;
       });
 
-      allLeads.forEach(l => {
-        const tid = l.tenant_id || 'NULL';
+      allLeads.forEach((l) => {
+        const tid = l.tenant_id || "NULL";
         leadTenants[tid] = (leadTenants[tid] || 0) + 1;
       });
 
-      allOpportunities.forEach(o => {
-        const tid = o.tenant_id || 'NULL';
+      allOpportunities.forEach((o) => {
+        const tid = o.tenant_id || "NULL";
         oppTenants[tid] = (oppTenants[tid] || 0) + 1;
       });
 
       // Analyze is_test_data distribution
       const contactTestData = {
-        true: allContacts.filter(c => c.is_test_data === true).length,
-        false: allContacts.filter(c => c.is_test_data === false).length,
-        null: allContacts.filter(c => c.is_test_data === null || c.is_test_data === undefined).length
+        true: allContacts.filter((c) => c.is_test_data === true).length,
+        false: allContacts.filter((c) => c.is_test_data === false).length,
+        null: allContacts.filter((c) =>
+          c.is_test_data === null || c.is_test_data === undefined
+        ).length,
       };
 
       setDiagnostics({
@@ -65,28 +67,27 @@ function GeneralDiagnosticsPanel({ user }) {
           contacts: allContacts.length,
           accounts: allAccounts.length,
           leads: allLeads.length,
-          opportunities: allOpportunities.length
+          opportunities: allOpportunities.length,
         },
         tenantDistribution: {
           contacts: contactTenants,
           accounts: accountTenants,
           leads: leadTenants,
-          opportunities: oppTenants
+          opportunities: oppTenants,
         },
         testDataDistribution: {
-          contacts: contactTestData
+          contacts: contactTestData,
         },
         currentUserTenantId: user?.tenant_id,
         sampleRecords: {
           contact: allContacts[0],
           account: allAccounts[0],
           lead: allLeads[0],
-          opportunity: allOpportunities[0]
-        }
+          opportunity: allOpportunities[0],
+        },
       });
-
     } catch (error) {
-      console.error('Diagnostic error:', error);
+      console.error("Diagnostic error:", error);
       // TODO: Add user-facing error message
     } finally {
       setLoading(false);
@@ -106,44 +107,63 @@ function GeneralDiagnosticsPanel({ user }) {
           <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-yellow-200">
             <p className="font-semibold mb-1">Admin Tool</p>
-            <p>This tool analyzes your entire database to identify data integrity issues like tenant ID distribution.</p>
+            <p>
+              This tool analyzes your entire database to identify data integrity
+              issues like tenant ID distribution.
+            </p>
           </div>
         </div>
 
-        <Button onClick={runDiagnostics} disabled={loading} className="bg-blue-600 hover:bg-blue-700">
-          {loading ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Running Diagnostics...
-            </>
-          ) : (
-            'Run Full Database Diagnostic'
-          )}
+        <Button
+          onClick={runDiagnostics}
+          disabled={loading}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
+          {loading
+            ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Running Diagnostics...
+              </>
+            )
+            : (
+              "Run Full Database Diagnostic"
+            )}
         </Button>
 
         {diagnostics && (
           <div className="space-y-6 mt-6">
             <Card className="bg-slate-700 border-slate-600">
               <CardHeader>
-                <CardTitle className="text-lg text-slate-100">Total Record Counts</CardTitle>
+                <CardTitle className="text-lg text-slate-100">
+                  Total Record Counts
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
                     <p className="text-sm text-slate-400">Contacts</p>
-                    <p className="text-2xl font-bold text-slate-100">{diagnostics.totalCounts.contacts}</p>
+                    <p className="text-2xl font-bold text-slate-100">
+                      {diagnostics.totalCounts.contacts}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-slate-400">Accounts</p>
-                    <p className="text-2xl font-bold text-slate-100">{diagnostics.totalCounts.accounts}</p>
+                    <p className="text-2xl font-bold text-slate-100">
+                      {diagnostics.totalCounts.accounts}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-slate-400">Leads</p>
-                    <p className="text-2xl font-bold text-slate-100">{diagnostics.totalCounts.leads}</p>
+                    <p className="text-2xl font-bold text-slate-100">
+                      {diagnostics.totalCounts.leads}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-slate-400">Opportunities</p>
-                    <p className="text-2xl font-bold text-slate-100">{diagnostics.totalCounts.opportunities}</p>
+                    <p className="text-2xl font-bold text-slate-100">
+                      {diagnostics.totalCounts.opportunities}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -151,43 +171,71 @@ function GeneralDiagnosticsPanel({ user }) {
 
             <Card className="bg-slate-700 border-slate-600">
               <CardHeader>
-                <CardTitle className="text-lg text-slate-100">Your Tenant ID</CardTitle>
+                <CardTitle className="text-lg text-slate-100">
+                  Your Tenant ID
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <code className="text-green-400 bg-slate-900 px-3 py-2 rounded">{diagnostics.currentUserTenantId}</code>
+                <code className="text-green-400 bg-slate-900 px-3 py-2 rounded">
+                  {diagnostics.currentUserTenantId}
+                </code>
               </CardContent>
             </Card>
 
             <Card className="bg-slate-700 border-slate-600">
               <CardHeader>
-                <CardTitle className="text-lg text-slate-100">Tenant ID Distribution</CardTitle>
+                <CardTitle className="text-lg text-slate-100">
+                  Tenant ID Distribution
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <p className="text-sm font-semibold text-slate-300 mb-2">Contacts by Tenant:</p>
+                  <p className="text-sm font-semibold text-slate-300 mb-2">
+                    Contacts by Tenant:
+                  </p>
                   <div className="bg-slate-900 rounded p-3 max-h-48 overflow-auto">
-                    {Object.entries(diagnostics.tenantDistribution.contacts).map(([tid, count]) => (
-                      <div key={tid} className="flex justify-between py-1">
-                        <code className={`text-sm ${tid === diagnostics.currentUserTenantId ? 'text-green-400 font-bold' : 'text-slate-400'}`}>
-                          {tid === 'NULL' ? '[NO TENANT_ID]' : tid}
-                        </code>
-                        <span className="text-slate-300">{count} records</span>
-                      </div>
-                    ))}
+                    {Object.entries(diagnostics.tenantDistribution.contacts)
+                      .map(([tid, count]) => (
+                        <div key={tid} className="flex justify-between py-1">
+                          <code
+                            className={`text-sm ${
+                              tid === diagnostics.currentUserTenantId
+                                ? "text-green-400 font-bold"
+                                : "text-slate-400"
+                            }`}
+                          >
+                            {tid === "NULL" ? "[NO TENANT_ID]" : tid}
+                          </code>
+                          <span className="text-slate-300">
+                            {count} records
+                          </span>
+                        </div>
+                      ))}
                   </div>
                 </div>
 
                 <div>
-                  <p className="text-sm font-semibold text-slate-300 mb-2">Accounts by Tenant:</p>
+                  <p className="text-sm font-semibold text-slate-300 mb-2">
+                    Accounts by Tenant:
+                  </p>
                   <div className="bg-slate-900 rounded p-3 max-h-48 overflow-auto">
-                    {Object.entries(diagnostics.tenantDistribution.accounts).map(([tid, count]) => (
-                      <div key={tid} className="flex justify-between py-1">
-                        <code className={`text-sm ${tid === diagnostics.currentUserTenantId ? 'text-green-400 font-bold' : 'text-slate-400'}`}>
-                          {tid === 'NULL' ? '[NO TENANT_ID]' : tid}
-                        </code>
-                        <span className="text-slate-300">{count} records</span>
-                      </div>
-                    ))}
+                    {Object.entries(diagnostics.tenantDistribution.accounts)
+                      .map(([tid, count]) => (
+                        <div key={tid} className="flex justify-between py-1">
+                          <code
+                            className={`text-sm ${
+                              tid === diagnostics.currentUserTenantId
+                                ? "text-green-400 font-bold"
+                                : "text-slate-400"
+                            }`}
+                          >
+                            {tid === "NULL" ? "[NO TENANT_ID]" : tid}
+                          </code>
+                          <span className="text-slate-300">
+                            {count} records
+                          </span>
+                        </div>
+                      ))}
                   </div>
                 </div>
               </CardContent>
@@ -195,21 +243,31 @@ function GeneralDiagnosticsPanel({ user }) {
 
             <Card className="bg-slate-700 border-slate-600">
               <CardHeader>
-                <CardTitle className="text-lg text-slate-100">Test Data Distribution (Contacts)</CardTitle>
+                <CardTitle className="text-lg text-slate-100">
+                  Test Data Distribution (Contacts)
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <p className="text-sm text-slate-400">is_test_data: true</p>
-                    <p className="text-xl font-bold text-slate-100">{diagnostics.testDataDistribution.contacts.true}</p>
+                    <p className="text-xl font-bold text-slate-100">
+                      {diagnostics.testDataDistribution.contacts.true}
+                    </p>
                   </div>
                   <div>
-                    <p className="text-sm text-slate-400">is_test_data: false</p>
-                    <p className="text-xl font-bold text-slate-100">{diagnostics.testDataDistribution.contacts.false}</p>
+                    <p className="text-sm text-slate-400">
+                      is_test_data: false
+                    </p>
+                    <p className="text-xl font-bold text-slate-100">
+                      {diagnostics.testDataDistribution.contacts.false}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-slate-400">is_test_data: null</p>
-                    <p className="text-xl font-bold text-slate-100">{diagnostics.testDataDistribution.contacts.null}</p>
+                    <p className="text-xl font-bold text-slate-100">
+                      {diagnostics.testDataDistribution.contacts.null}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -217,7 +275,9 @@ function GeneralDiagnosticsPanel({ user }) {
 
             <Card className="bg-slate-700 border-slate-600">
               <CardHeader>
-                <CardTitle className="text-lg text-slate-100">Sample Records</CardTitle>
+                <CardTitle className="text-lg text-slate-100">
+                  Sample Records
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <pre className="bg-slate-900 rounded p-4 text-xs text-slate-300 overflow-auto max-h-96">
@@ -244,12 +304,15 @@ function UserRecordDebug({ user }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-slate-300">This section will provide detailed diagnostics related to the current user&apos;s record.</p>
-        {user ? (
-          <pre className="bg-slate-900 rounded p-4 text-xs text-slate-300 overflow-auto max-h-96 mt-4">{JSON.stringify(user, null, 2)}</pre>
-        ) : (
-          <p className="text-slate-400 mt-4">User data is not available.</p>
-        )}
+        <p className="text-slate-300">
+          This section will provide detailed diagnostics related to the current
+          user&apos;s record.
+        </p>
+        {user
+          ? (
+            <pre className="bg-slate-900 rounded p-4 text-xs text-slate-300 overflow-auto max-h-96 mt-4">{JSON.stringify(user, null, 2)}</pre>
+          )
+          : <p className="text-slate-400 mt-4">User data is not available.</p>}
       </CardContent>
     </Card>
   );
@@ -267,7 +330,10 @@ function LeadVisibilityDebug() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-slate-300">This section will contain diagnostics to investigate lead visibility issues.</p>
+        <p className="text-slate-300">
+          This section will contain diagnostics to investigate lead visibility
+          issues.
+        </p>
         <p className="text-slate-400 mt-2">Implementation pending.</p>
       </CardContent>
     </Card>
@@ -276,7 +342,7 @@ function LeadVisibilityDebug() {
 
 export default function DataDiagnosticsPage() {
   const [user, setUser] = useState(null);
-  const [activeTab, setActiveTab] = useState('activity-visibility'); // Changed default to activity-visibility
+  const [activeTab, setActiveTab] = useState("activity-visibility"); // Changed default to activity-visibility
 
   useEffect(() => {
     const loadUser = async () => {
@@ -297,12 +363,18 @@ export default function DataDiagnosticsPage() {
   return (
     <div className="min-h-screen bg-slate-900 p-6">
       <div className="max-w-7xl mx-auto space-y-6">
-        <h1 className="text-3xl font-bold text-slate-100 mb-6">Data Diagnostics Admin Panel</h1>
+        <h1 className="text-3xl font-bold text-slate-100 mb-6">
+          Data Diagnostics Admin Panel
+        </h1>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="bg-slate-800 border-slate-700">
-            <TabsTrigger value="activity-visibility">Activity Visibility</TabsTrigger>
-            <TabsTrigger value="general-diagnostics">General Diagnostics</TabsTrigger>
+            <TabsTrigger value="activity-visibility">
+              Activity Visibility
+            </TabsTrigger>
+            <TabsTrigger value="general-diagnostics">
+              General Diagnostics
+            </TabsTrigger>
             <TabsTrigger value="user-record">User Record</TabsTrigger>
             <TabsTrigger value="lead-visibility">Lead Visibility</TabsTrigger>
           </TabsList>
