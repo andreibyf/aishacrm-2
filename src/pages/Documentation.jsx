@@ -1,36 +1,28 @@
-import React, { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+// Tabs are not used here
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
-  Search,
+  BarChart3,
   Book,
-  Users,
+  Brain,
+  Briefcase,
   Building2,
-  Star,
-  Target,
   Calendar,
+  Database,
   DollarSign,
   FileText,
-  BarChart3,
-  Puzzle,
-  CreditCard,
-  Database,
-  Briefcase,
-  Brain,
-  Wrench,
-  Sparkles,
   Info,
-  CheckCircle,
-  TrendingUp,
-  Zap,
-  Shield,
+  Puzzle,
+  Route,
+  Search,
   Settings,
-  Bot,
-  Route
+  Star,
+  Target,
+  Users,
+  Wrench,
 } from "lucide-react";
 import { User } from "@/api/entities";
 import ReactMarkdown from "react-markdown";
@@ -38,7 +30,7 @@ import ReactMarkdown from "react-markdown";
 export default function DocumentationPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeSection, setActiveSection] = useState("overview");
-  const [user, setUser] = useState(null);
+  const [, setUser] = useState(null);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -52,7 +44,7 @@ export default function DocumentationPage() {
     loadUser();
   }, []);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  // isAdmin removed (unused)
 
   const documentationSections = [
     {
@@ -85,7 +77,7 @@ Ai-SHA CRM is a comprehensive customer relationship management system designed t
 3. **Set up your pipeline** by creating opportunities
 4. **Start tracking activities** to measure productivity
 5. **Review reports** to gain insights into your business
-      `
+      `,
     },
     {
       id: "contacts",
@@ -134,7 +126,7 @@ Contacts are individuals you interact with - potential customers, existing clien
 ✓ **Keep notes updated** after each interaction
 ✓ **Assign ownership** for accountability
 ✓ **Regular cleanup** - mark inactive contacts
-      `
+      `,
     },
     {
       id: "accounts",
@@ -185,7 +177,7 @@ Over 30 industry options including:
 ✓ **Update regularly** - revenue, employee count
 ✓ **Track competitors** for market intelligence
 ✓ **Use custom tags** for segmentation
-      `
+      `,
     },
     {
       id: "leads",
@@ -249,7 +241,7 @@ When a lead is qualified, convert to:
 ✓ **Track lead sources** for ROI analysis
 ✓ **Add notes** at each touchpoint
 ✓ **Convert when ready** - don't wait too long
-      `
+      `,
     },
     {
       id: "opportunities",
@@ -302,7 +294,7 @@ Opportunities represent potential deals in your sales pipeline. Track them from 
 ✓ **Document next steps** for accountability
 ✓ **Review pipeline weekly** in team meetings
 ✓ **Clean up old opps** - close or disqualify stale deals
-      `
+      `,
     },
     {
       id: "activities",
@@ -381,7 +373,7 @@ Configure automated emails with:
 ✓ **Link to records** - maintain relationship history
 ✓ **Complete on time** - or reschedule proactively
 ✓ **Review daily** - check your activity list each morning
-      `
+      `,
     },
     {
       id: "bizdev",
@@ -457,7 +449,7 @@ Track industry-specific licenses:
 ✓ **Track conversion rates** - which sources perform best
 ✓ **Don't promote prematurely** - wait until deal is won
 ✓ **Use tags** for additional categorization
-      `
+      `,
     },
     {
       id: "cashflow",
@@ -545,7 +537,7 @@ Set up repeating transactions:
 ✓ **Set up recurring** - for predictable expenses
 ✓ **Review monthly** - check for unusual patterns
 ✓ **Project ahead** - plan for upcoming expenses
-      `
+      `,
     },
     {
       id: "documents",
@@ -628,7 +620,7 @@ AI suggests appropriate tax categories:
 ✓ **Add notes** - context for later
 ✓ **Organize files** - use consistent naming
 ✓ **Tag appropriately** - makes finding easier
-      `
+      `,
     },
     {
       id: "reports",
@@ -727,7 +719,7 @@ All reports support:
 ✓ **Set benchmarks** - track against goals
 ✓ **Export regularly** - for board meetings and reviews
 ✓ **Act on insights** - don't just collect data
-      `
+      `,
     },
     {
       id: "employees",
@@ -830,7 +822,7 @@ Control which modules each user can access:
 ✓ **Least privilege** - give minimum required access
 ✓ **Document skills** - track certifications and training
 ✓ **Update promptly** - reflect role changes immediately
-      `
+      `,
     },
     {
       id: "ai",
@@ -971,7 +963,7 @@ From receipts:
 ✓ **Train over time** - AI learns from corrections
 ✓ **Start small** - Test campaigns with small groups
 ✓ **Monitor results** - Track AI performance metrics
-      `
+      `,
     },
     {
       id: "integrations",
@@ -1118,7 +1110,7 @@ Notify Customer Success Team
 ✓ **Secure endpoints** - validate webhook signatures
 ✓ **Monitor usage** - check API rate limits
 ✓ **Document integrations** - for team reference
-      `
+      `,
     },
     {
       id: "calendar",
@@ -1233,7 +1225,7 @@ Activities color-coded by:
 ✓ **Update promptly** - Mark as complete when done
 ✓ **Review weekly** - Plan upcoming week on Fridays
 ✓ **Time blocking** - Group similar activities together
-      `
+      `,
     },
     {
       id: "utilities",
@@ -1399,7 +1391,7 @@ Configure retention policies:
 ✓ **Regular exports** - Backup your data externally
 ✓ **Archive old data** - Keep system performant
 ✓ **Test before production** - Use test data for training
-      `
+      `,
     },
     {
       id: "settings",
@@ -1615,7 +1607,7 @@ Track all actions:
 ✓ **Backup data** - Export data regularly
 ✓ **Update branding** - Keep logo and colors current
 ✓ **Test integrations** - Verify webhook functionality
-      `
+      `,
     },
     {
       id: "workflow",
@@ -1862,12 +1854,12 @@ When transferring records between team members:
 ✓ **Communicate** - Use notes to keep team informed
 ✓ **Leverage automation** - Let AI and integrations handle routine tasks
 ✓ **Measure and improve** - Track metrics and adjust processes
-      `
-    }
+      `,
+    },
   ];
 
   // Filter sections based on search
-  const filteredSections = documentationSections.filter(section => {
+  const filteredSections = documentationSections.filter((section) => {
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
     return (
@@ -1925,12 +1917,14 @@ When transferring records between team members:
                 onClick={() => setActiveSection(section.id)}
                 className={`p-4 rounded-lg border-2 transition-all text-left ${
                   activeSection === section.id
-                    ? 'bg-slate-700 border-purple-500'
-                    : 'bg-slate-800 border-slate-700 hover:border-slate-600'
+                    ? "bg-slate-700 border-purple-500"
+                    : "bg-slate-800 border-slate-700 hover:border-slate-600"
                 }`}
               >
                 <IconComponent className={`w-6 h-6 ${section.color} mb-2`} />
-                <p className="text-sm font-medium text-slate-200">{section.title}</p>
+                <p className="text-sm font-medium text-slate-200">
+                  {section.title}
+                </p>
               </button>
             );
           })}
@@ -1956,12 +1950,14 @@ When transferring records between team members:
                         onClick={() => setActiveSection(section.id)}
                         className={`w-full px-4 py-3 flex items-center gap-3 transition-colors text-left ${
                           activeSection === section.id
-                            ? 'bg-purple-600 text-white'
-                            : 'text-slate-300 hover:bg-slate-700'
+                            ? "bg-purple-600 text-white"
+                            : "text-slate-300 hover:bg-slate-700"
                         }`}
                       >
                         <IconComponent className="w-5 h-5 flex-shrink-0" />
-                        <span className="text-sm font-medium truncate">{section.title}</span>
+                        <span className="text-sm font-medium truncate">
+                          {section.title}
+                        </span>
                       </button>
                     );
                   })}
@@ -1974,69 +1970,95 @@ When transferring records between team members:
           <div className="lg:col-span-3">
             <Card className="bg-slate-800 border-slate-700">
               <CardContent className="p-6 sm:p-8">
-                {filteredSections.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Search className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                    <p className="text-slate-400">No documentation found matching your search.</p>
-                  </div>
-                ) : (
-                  <div className="prose prose-slate prose-invert max-w-none">
-                    <ReactMarkdown
-                      components={{
-                        h1: ({ children }) => (
-                          <h1 className="text-3xl font-bold text-slate-100 mb-4">{children}</h1>
-                        ),
-                        h2: ({ children }) => (
-                          <h2 className="text-2xl font-semibold text-slate-200 mt-8 mb-4">{children}</h2>
-                        ),
-                        h3: ({ children }) => (
-                          <h3 className="text-xl font-semibold text-slate-200 mt-6 mb-3">{children}</h3>
-                        ),
-                        h4: ({ children }) => (
-                          <h4 className="text-lg font-semibold text-slate-300 mt-4 mb-2">{children}</h4>
-                        ),
-                        p: ({ children }) => (
-                          <p className="text-slate-300 leading-relaxed mb-4">{children}</p>
-                        ),
-                        ul: ({ children }) => (
-                          <ul className="list-disc list-inside text-slate-300 space-y-2 mb-4">{children}</ul>
-                        ),
-                        ol: ({ children }) => (
-                          <ol className="list-decimal list-inside text-slate-300 space-y-2 mb-4">{children}</ol>
-                        ),
-                        li: ({ children }) => (
-                          <li className="text-slate-300">{children}</li>
-                        ),
-                        code: ({ inline, children }) => (
-                          inline ? (
-                            <code className="bg-slate-700 px-2 py-1 rounded text-purple-400 text-sm">
+                {filteredSections.length === 0
+                  ? (
+                    <div className="text-center py-12">
+                      <Search className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                      <p className="text-slate-400">
+                        No documentation found matching your search.
+                      </p>
+                    </div>
+                  )
+                  : (
+                    <div className="prose prose-slate prose-invert max-w-none">
+                      <ReactMarkdown
+                        components={{
+                          h1: ({ children }) => (
+                            <h1 className="text-3xl font-bold text-slate-100 mb-4">
                               {children}
-                            </code>
-                          ) : (
-                            <code className="block bg-slate-900 p-4 rounded-lg text-slate-300 text-sm overflow-x-auto mb-4">
+                            </h1>
+                          ),
+                          h2: ({ children }) => (
+                            <h2 className="text-2xl font-semibold text-slate-200 mt-8 mb-4">
                               {children}
-                            </code>
-                          )
-                        ),
-                        blockquote: ({ children }) => (
-                          <blockquote className="border-l-4 border-purple-500 pl-4 italic text-slate-400 my-4">
-                            {children}
-                          </blockquote>
-                        ),
-                        strong: ({ children }) => (
-                          <strong className="font-semibold text-slate-100">{children}</strong>
-                        ),
-                        a: ({ href, children }) => (
-                          <a href={href} className="text-purple-400 hover:text-purple-300 underline">
-                            {children}
-                          </a>
-                        ),
-                      }}
-                    >
-                      {filteredSections.find(s => s.id === activeSection)?.content || ''}
-                    </ReactMarkdown>
-                  </div>
-                )}
+                            </h2>
+                          ),
+                          h3: ({ children }) => (
+                            <h3 className="text-xl font-semibold text-slate-200 mt-6 mb-3">
+                              {children}
+                            </h3>
+                          ),
+                          h4: ({ children }) => (
+                            <h4 className="text-lg font-semibold text-slate-300 mt-4 mb-2">
+                              {children}
+                            </h4>
+                          ),
+                          p: ({ children }) => (
+                            <p className="text-slate-300 leading-relaxed mb-4">
+                              {children}
+                            </p>
+                          ),
+                          ul: ({ children }) => (
+                            <ul className="list-disc list-inside text-slate-300 space-y-2 mb-4">
+                              {children}
+                            </ul>
+                          ),
+                          ol: ({ children }) => (
+                            <ol className="list-decimal list-inside text-slate-300 space-y-2 mb-4">
+                              {children}
+                            </ol>
+                          ),
+                          li: ({ children }) => (
+                            <li className="text-slate-300">{children}</li>
+                          ),
+                          code: ({ inline, children }) => (
+                            inline
+                              ? (
+                                <code className="bg-slate-700 px-2 py-1 rounded text-purple-400 text-sm">
+                                  {children}
+                                </code>
+                              )
+                              : (
+                                <code className="block bg-slate-900 p-4 rounded-lg text-slate-300 text-sm overflow-x-auto mb-4">
+                                  {children}
+                                </code>
+                              )
+                          ),
+                          blockquote: ({ children }) => (
+                            <blockquote className="border-l-4 border-purple-500 pl-4 italic text-slate-400 my-4">
+                              {children}
+                            </blockquote>
+                          ),
+                          strong: ({ children }) => (
+                            <strong className="font-semibold text-slate-100">
+                              {children}
+                            </strong>
+                          ),
+                          a: ({ href, children }) => (
+                            <a
+                              href={href}
+                              className="text-purple-400 hover:text-purple-300 underline"
+                            >
+                              {children}
+                            </a>
+                          ),
+                        }}
+                      >
+                        {filteredSections.find((s) => s.id === activeSection)
+                          ?.content || ""}
+                      </ReactMarkdown>
+                    </div>
+                  )}
               </CardContent>
             </Card>
 
@@ -2044,7 +2066,9 @@ When transferring records between team members:
             <Alert className="mt-6 bg-blue-900/20 border-blue-700/50">
               <Info className="h-4 w-4 text-blue-400" />
               <AlertDescription className="text-blue-300">
-                <strong>Need more help?</strong> Contact support at support@ai-sha.com or use the AI Agent for instant assistance.
+                <strong>Need more help?</strong>{" "}
+                Contact support at support@ai-sha.com or use the AI Agent for
+                instant assistance.
               </AlertDescription>
             </Alert>
           </div>

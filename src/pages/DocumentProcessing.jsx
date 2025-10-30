@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { User } from "@/api/entities";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { ArrowRightLeft } from "lucide-react"; // New icon import
 
 export default function DocumentProcessing() {
   const [activeProcessor, setActiveProcessor] = useState(null);
-  const [uploadMode, setUploadMode] = useState(null); // 'extract' or 'storage'
+  const [, setUploadMode] = useState(null); // 'extract' or 'storage'
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
 

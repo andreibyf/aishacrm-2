@@ -1,14 +1,14 @@
-import React, { createContext, useContext, useCallback } from 'react';
-import { SystemLog } from '@/api/entities';
-import { User } from '@/api/entities';
+import { createContext, useCallback, useContext } from "react";
+import { SystemLog } from "@/api/entities";
+import { User } from "@/api/entities";
 
 const LoggerContext = createContext(null);
 
 const LOG_LEVELS = {
-  DEBUG: 'DEBUG',
-  INFO: 'INFO',
-  WARNING: 'WARNING',
-  ERROR: 'ERROR'
+  DEBUG: "DEBUG",
+  INFO: "INFO",
+  WARNING: "WARNING",
+  ERROR: "ERROR",
 };
 
 // In-memory buffer to batch logs
@@ -19,15 +19,15 @@ const MAX_BUFFER_SIZE = 50;
 
 async function flushLogs() {
   if (logBuffer.length === 0) return;
-  
+
   const logsToSend = [...logBuffer];
   logBuffer = [];
-  
+
   try {
     // Bulk create logs
     await SystemLog.bulkCreate(logsToSend);
   } catch (error) {
-    console.error('Failed to flush logs to database:', error);
+    console.error("Failed to flush logs to database:", error);
   }
 }
 
@@ -42,10 +42,14 @@ function scheduleFlush() {
 // Used by non-React modules (e.g., TenantContext) via dynamic import.
 async function rawLog(level, message, source, metadata = {}) {
   // Validate level parameter - ensure it's a valid log level
-  const validLevels = ['DEBUG', 'INFO', 'WARNING', 'ERROR'];
-  const normalizedLevel = typeof level === 'string' ? level.toUpperCase() : 'INFO';
-  const safeLevel = validLevels.includes(normalizedLevel) ? normalizedLevel : 'INFO';
-  
+  const validLevels = ["DEBUG", "INFO", "WARNING", "ERROR"];
+  const normalizedLevel = typeof level === "string"
+    ? level.toUpperCase()
+    : "INFO";
+  const safeLevel = validLevels.includes(normalizedLevel)
+    ? normalizedLevel
+    : "INFO";
+
   try {
     const user = await User.me().catch(() => null);
 
@@ -53,12 +57,16 @@ async function rawLog(level, message, source, metadata = {}) {
       level: safeLevel,
       message: String(message),
       source,
-      user_email: user?.email || 'anonymous',
+      user_email: user?.email || "anonymous",
       tenant_id: user?.tenant_id || null,
       metadata: metadata || {},
-      user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-      url: typeof window !== 'undefined' ? window.location.href : 'unknown',
-      stack_trace: safeLevel === 'ERROR' && metadata?.error ? metadata.error.stack : null
+      user_agent: typeof navigator !== "undefined"
+        ? navigator.userAgent
+        : "unknown",
+      url: typeof window !== "undefined" ? window.location.href : "unknown",
+      stack_trace: safeLevel === "ERROR" && metadata?.error
+        ? metadata.error.stack
+        : null,
     };
 
     // Buffer and schedule flush
@@ -71,11 +79,21 @@ async function rawLog(level, message, source, metadata = {}) {
 
     // Console echo in dev
     try {
-      const consoleMethodMap = { DEBUG: 'debug', INFO: 'info', WARNING: 'warn', ERROR: 'error' };
-      const methodName = consoleMethodMap[safeLevel] || 'log';
+      const consoleMethodMap = {
+        DEBUG: "debug",
+        INFO: "info",
+        WARNING: "warn",
+        ERROR: "error",
+      };
+      const methodName = consoleMethodMap[safeLevel] || "log";
       const consoleMethod = console[methodName];
-      if (typeof consoleMethod === 'function') {
-        consoleMethod.call(console, `[${safeLevel}] [${source}]`, message, metadata);
+      if (typeof consoleMethod === "function") {
+        consoleMethod.call(
+          console,
+          `[${safeLevel}] [${source}]`,
+          message,
+          metadata,
+        );
       } else {
         console.log(`[${safeLevel}] [${source}]`, message, metadata);
       }
@@ -94,9 +112,13 @@ async function rawLog(level, message, source, metadata = {}) {
         level: safeLevel,
         message: String(message),
         source,
-        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-        url: typeof window !== 'undefined' ? window.location.href : 'unknown',
-        stack_trace: safeLevel === 'ERROR' && metadata?.error ? metadata.error.stack : null
+        user_agent: typeof navigator !== "undefined"
+          ? navigator.userAgent
+          : "unknown",
+        url: typeof window !== "undefined" ? window.location.href : "unknown",
+        stack_trace: safeLevel === "ERROR" && metadata?.error
+          ? metadata.error.stack
+          : null,
       });
     } catch {
       // Secondary persistence failed; nothing else to do.
@@ -108,23 +130,29 @@ async function rawLog(level, message, source, metadata = {}) {
 export const LoggerProvider = ({ children }) => {
   const log = useCallback(async (level, message, source, metadata = {}) => {
     // Validate level parameter
-    const validLevels = ['DEBUG', 'INFO', 'WARNING', 'ERROR'];
-    const normalizedLevel = typeof level === 'string' ? level.toUpperCase() : 'INFO';
-    const safeLevel = validLevels.includes(normalizedLevel) ? normalizedLevel : 'INFO';
-    
+    const validLevels = ["DEBUG", "INFO", "WARNING", "ERROR"];
+    const normalizedLevel = typeof level === "string"
+      ? level.toUpperCase()
+      : "INFO";
+    const safeLevel = validLevels.includes(normalizedLevel)
+      ? normalizedLevel
+      : "INFO";
+
     try {
       const user = await User.me().catch(() => null);
-      
+
       const logEntry = {
         level: safeLevel,
         message: String(message),
         source,
-        user_email: user?.email || 'anonymous',
+        user_email: user?.email || "anonymous",
         tenant_id: user?.tenant_id || null,
         metadata: metadata || {},
         user_agent: navigator.userAgent,
         url: window.location.href,
-        stack_trace: safeLevel === 'ERROR' && metadata?.error ? metadata.error.stack : null
+        stack_trace: safeLevel === "ERROR" && metadata?.error
+          ? metadata.error.stack
+          : null,
       };
 
       // Add to buffer
@@ -133,18 +161,23 @@ export const LoggerProvider = ({ children }) => {
       // Also log to console in development - FIX: ensure method exists
       try {
         const consoleMethodMap = {
-          DEBUG: 'debug',
-          INFO: 'info',
-          WARNING: 'warn',
-          ERROR: 'error'
+          DEBUG: "debug",
+          INFO: "info",
+          WARNING: "warn",
+          ERROR: "error",
         };
-        
-        const methodName = consoleMethodMap[safeLevel] || 'log';
+
+        const methodName = consoleMethodMap[safeLevel] || "log";
         const consoleMethod = console[methodName];
-        
+
         // Only call if the method exists and is a function
-        if (typeof consoleMethod === 'function') {
-          consoleMethod.call(console, `[${safeLevel}] [${source}]`, message, metadata);
+        if (typeof consoleMethod === "function") {
+          consoleMethod.call(
+            console,
+            `[${safeLevel}] [${source}]`,
+            message,
+            metadata,
+          );
         } else {
           // Fallback to console.log
           console.log(`[${safeLevel}] [${source}]`, message, metadata);
@@ -160,7 +193,7 @@ export const LoggerProvider = ({ children }) => {
         scheduleFlush();
       }
     } catch (error) {
-      console.error('Logging failed:', error);
+      console.error("Logging failed:", error);
     }
   }, []);
 
@@ -197,7 +230,7 @@ export const useLogger = () => {
       info: () => {},
       warning: () => {},
       error: () => {},
-      log: () => {}
+      log: () => {},
     };
   }
   return context;
@@ -206,58 +239,64 @@ export const useLogger = () => {
 // Export a non-hook facade for non-React consumers
 // eslint-disable-next-line react-refresh/only-export-components
 export const loggerFacade = {
-  debug: (message, source = 'App', metadata) => rawLog(LOG_LEVELS.DEBUG, message, source, metadata),
-  info: (message, source = 'App', metadata) => rawLog(LOG_LEVELS.INFO, message, source, metadata),
-  warn: (message, source = 'App', metadata) => rawLog(LOG_LEVELS.WARNING, message, source, metadata),
-  error: (message, source = 'App', metadata) => rawLog(LOG_LEVELS.ERROR, message, source, metadata)
+  debug: (message, source = "App", metadata) =>
+    rawLog(LOG_LEVELS.DEBUG, message, source, metadata),
+  info: (message, source = "App", metadata) =>
+    rawLog(LOG_LEVELS.INFO, message, source, metadata),
+  warn: (message, source = "App", metadata) =>
+    rawLog(LOG_LEVELS.WARNING, message, source, metadata),
+  error: (message, source = "App", metadata) =>
+    rawLog(LOG_LEVELS.ERROR, message, source, metadata),
 };
 
 // Auto-capture console errors and warnings
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   const originalError = console.error;
   const originalWarn = console.warn;
 
-  console.error = function(...args) {
+  console.error = function (...args) {
     originalError.apply(console, args);
-    
+
     // Extract meaningful message
-    const message = args.map(arg => {
+    const message = args.map((arg) => {
       if (arg instanceof Error) return arg.message;
-      if (typeof arg === 'object') return JSON.stringify(arg);
+      if (typeof arg === "object") return JSON.stringify(arg);
       return String(arg);
-    }).join(' ');
+    }).join(" ");
 
     // Don't log if it's our own logging system
-    if (!message.includes('[ERROR]') && !message.includes('Logging failed')) {
+    if (!message.includes("[ERROR]") && !message.includes("Logging failed")) {
       SystemLog.create({
-        level: 'ERROR',
+        level: "ERROR",
         message,
-        source: 'console.error',
+        source: "console.error",
         user_agent: navigator.userAgent,
         url: window.location.href,
-        stack_trace: args.find(arg => arg instanceof Error)?.stack
+        stack_trace: args.find((arg) => arg instanceof Error)?.stack,
       }).catch(() => {});
     }
   };
 
-  console.warn = function(...args) {
+  console.warn = function (...args) {
     originalWarn.apply(console, args);
-    
-    const message = args.map(arg => {
-      if (typeof arg === 'object') return JSON.stringify(arg);
+
+    const message = args.map((arg) => {
+      if (typeof arg === "object") return JSON.stringify(arg);
       return String(arg);
-    }).join(' ');
+    }).join(" ");
 
     // Don't log if it's our own logging system or known noise
-    if (!message.includes('[WARNING]') && 
-        !message.includes('Storage access failed') &&
-        !message.includes('Failed to save')) {
+    if (
+      !message.includes("[WARNING]") &&
+      !message.includes("Storage access failed") &&
+      !message.includes("Failed to save")
+    ) {
       SystemLog.create({
-        level: 'WARNING',
+        level: "WARNING",
         message,
-        source: 'console.warn',
+        source: "console.warn",
         user_agent: navigator.userAgent,
-        url: window.location.href
+        url: window.location.href,
       }).catch(() => {});
     }
   };

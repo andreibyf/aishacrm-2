@@ -1,34 +1,46 @@
-import React, { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { User } from "@/api/entities";
-import { Loader2, Save, Globe } from "lucide-react";
+import { Globe, Loader2, Save } from "lucide-react";
 
 const COMMON_TIMEZONES = [
-  { value: 'America/New_York', label: 'Eastern Time (US & Canada)' },
-  { value: 'America/Chicago', label: 'Central Time (US & Canada)' },
-  { value: 'America/Denver', label: 'Mountain Time (US & Canada)' },
-  { value: 'America/Los_Angeles', label: 'Pacific Time (US & Canada)' },
-  { value: 'America/Phoenix', label: 'Arizona' },
-  { value: 'America/Anchorage', label: 'Alaska' },
-  { value: 'Pacific/Honolulu', label: 'Hawaii' },
-  { value: 'Europe/London', label: 'London' },
-  { value: 'Europe/Paris', label: 'Paris' },
-  { value: 'Europe/Berlin', label: 'Berlin' },
-  { value: 'Asia/Tokyo', label: 'Tokyo' },
-  { value: 'Asia/Shanghai', label: 'Shanghai' },
-  { value: 'Asia/Dubai', label: 'Dubai' },
-  { value: 'Australia/Sydney', label: 'Sydney' },
+  { value: "America/New_York", label: "Eastern Time (US & Canada)" },
+  { value: "America/Chicago", label: "Central Time (US & Canada)" },
+  { value: "America/Denver", label: "Mountain Time (US & Canada)" },
+  { value: "America/Los_Angeles", label: "Pacific Time (US & Canada)" },
+  { value: "America/Phoenix", label: "Arizona" },
+  { value: "America/Anchorage", label: "Alaska" },
+  { value: "Pacific/Honolulu", label: "Hawaii" },
+  { value: "Europe/London", label: "London" },
+  { value: "Europe/Paris", label: "Paris" },
+  { value: "Europe/Berlin", label: "Berlin" },
+  { value: "Asia/Tokyo", label: "Tokyo" },
+  { value: "Asia/Shanghai", label: "Shanghai" },
+  { value: "Asia/Dubai", label: "Dubai" },
+  { value: "Australia/Sydney", label: "Sydney" },
 ];
 
 export default function TimezoneSettings({ user, onUpdate }) {
   const [settings, setSettings] = useState({
-    timezone: 'America/New_York',
-    date_format: 'MM/dd/yyyy',
-    time_format: '12h'
+    timezone: "America/New_York",
+    date_format: "MM/dd/yyyy",
+    time_format: "12h",
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -36,9 +48,9 @@ export default function TimezoneSettings({ user, onUpdate }) {
   useEffect(() => {
     if (user) {
       setSettings({
-        timezone: user.timezone || 'America/New_York',
-        date_format: user.date_format || 'MM/dd/yyyy',
-        time_format: user.time_format || '12h'
+        timezone: user.timezone || "America/New_York",
+        date_format: user.date_format || "MM/dd/yyyy",
+        time_format: user.time_format || "12h",
       });
     }
   }, [user]);
@@ -62,7 +74,9 @@ export default function TimezoneSettings({ user, onUpdate }) {
     <div className="space-y-6">
       {message && (
         <Alert className="bg-blue-900/30 border-blue-700/50">
-          <AlertDescription className="text-blue-300">{message}</AlertDescription>
+          <AlertDescription className="text-blue-300">
+            {message}
+          </AlertDescription>
         </Alert>
       )}
 
@@ -81,14 +95,19 @@ export default function TimezoneSettings({ user, onUpdate }) {
             <Label className="text-slate-200">Timezone</Label>
             <Select
               value={settings.timezone}
-              onValueChange={(value) => setSettings({ ...settings, timezone: value })}
+              onValueChange={(value) =>
+                setSettings({ ...settings, timezone: value })}
             >
               <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
                 <SelectValue placeholder="Select timezone" />
               </SelectTrigger>
               <SelectContent className="bg-slate-800 border-slate-700">
-                {COMMON_TIMEZONES.map(tz => (
-                  <SelectItem key={tz.value} value={tz.value} className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">
+                {COMMON_TIMEZONES.map((tz) => (
+                  <SelectItem
+                    key={tz.value}
+                    value={tz.value}
+                    className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
+                  >
                     {tz.label}
                   </SelectItem>
                 ))}
@@ -100,15 +119,31 @@ export default function TimezoneSettings({ user, onUpdate }) {
             <Label className="text-slate-200">Date Format</Label>
             <Select
               value={settings.date_format}
-              onValueChange={(value) => setSettings({ ...settings, date_format: value })}
+              onValueChange={(value) =>
+                setSettings({ ...settings, date_format: value })}
             >
               <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
                 <SelectValue placeholder="Select date format" />
               </SelectTrigger>
               <SelectContent className="bg-slate-800 border-slate-700">
-                <SelectItem value="MM/dd/yyyy" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">MM/dd/yyyy (US)</SelectItem>
-                <SelectItem value="dd/MM/yyyy" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">dd/MM/yyyy (UK/EU)</SelectItem>
-                <SelectItem value="yyyy-MM-dd" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">yyyy-MM-dd (ISO)</SelectItem>
+                <SelectItem
+                  value="MM/dd/yyyy"
+                  className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
+                >
+                  MM/dd/yyyy (US)
+                </SelectItem>
+                <SelectItem
+                  value="dd/MM/yyyy"
+                  className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
+                >
+                  dd/MM/yyyy (UK/EU)
+                </SelectItem>
+                <SelectItem
+                  value="yyyy-MM-dd"
+                  className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
+                >
+                  yyyy-MM-dd (ISO)
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -117,14 +152,25 @@ export default function TimezoneSettings({ user, onUpdate }) {
             <Label className="text-slate-200">Time Format</Label>
             <Select
               value={settings.time_format}
-              onValueChange={(value) => setSettings({ ...settings, time_format: value })}
+              onValueChange={(value) =>
+                setSettings({ ...settings, time_format: value })}
             >
               <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
                 <SelectValue placeholder="Select time format" />
               </SelectTrigger>
               <SelectContent className="bg-slate-800 border-slate-700">
-                <SelectItem value="12h" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">12-hour (1:30 PM)</SelectItem>
-                <SelectItem value="24h" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">24-hour (13:30)</SelectItem>
+                <SelectItem
+                  value="12h"
+                  className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
+                >
+                  12-hour (1:30 PM)
+                </SelectItem>
+                <SelectItem
+                  value="24h"
+                  className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
+                >
+                  24-hour (13:30)
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -135,7 +181,9 @@ export default function TimezoneSettings({ user, onUpdate }) {
               disabled={saving}
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
-              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              {saving
+                ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                : <Save className="w-4 h-4 mr-2" />}
               Save Settings
             </Button>
           </div>

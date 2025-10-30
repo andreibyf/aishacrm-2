@@ -1,34 +1,33 @@
-import React, { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { 
-  TrendingUp, 
-  Calendar, 
-  CheckCircle2, 
+import {
   AlertTriangle,
-  Database,
-  Play,
   Archive,
+  Calendar,
+  CheckCircle2,
+  Database,
+  Loader2,
+  Play,
   Settings as SettingsIcon,
-  Loader2
+  TrendingUp,
 } from "lucide-react";
 
 export default function DataOptimizationDashboard() {
-  const [stats, setStats] = useState({
-    dailyMetricsCached: 0,
-    monthlyReports: 0,
-    successfulSyncs: 0,
-    failedSyncs: 0,
-    lastDailyCalc: null,
-    lastMonthlyCalc: null
-  });
-  const [loading, setLoading] = useState(false);
+  const [stats, setStats] = useState(null);
+  const [,] = useState(true);
   const [actionLoading, setActionLoading] = useState({
     daily: false,
     monthly: false,
     archive: false,
-    register: false
+    register: false,
   });
 
   useEffect(() => {
@@ -43,7 +42,7 @@ export default function DataOptimizationDashboard() {
       successfulSyncs: 0,
       failedSyncs: 0,
       lastDailyCalc: null,
-      lastMonthlyCalc: null
+      lastMonthlyCalc: null,
     });
   };
 
@@ -74,10 +73,14 @@ export default function DataOptimizationDashboard() {
   };
 
   const handleArchiveOldData = async () => {
-    if (!confirm("Archive old data? This will move completed activities and closed opportunities older than 1 year to archive tables.")) {
+    if (
+      !confirm(
+        "Archive old data? This will move completed activities and closed opportunities older than 1 year to archive tables.",
+      )
+    ) {
       return;
     }
-    
+
     setActionLoading({ ...actionLoading, archive: true });
     try {
       // Call archiveOldData function
@@ -108,7 +111,9 @@ export default function DataOptimizationDashboard() {
       <Alert className="bg-blue-900/30 border-blue-700/50">
         <Database className="h-4 w-4 text-blue-400" />
         <AlertDescription className="text-blue-300">
-          <strong>Query Optimization Active:</strong> Aggregate tables and caching are improving dashboard performance by up to 10x.
+          <strong>Query Optimization Active:</strong>{" "}
+          Aggregate tables and caching are improving dashboard performance by up
+          to 10x.
         </AlertDescription>
       </Alert>
 
@@ -118,10 +123,14 @@ export default function DataOptimizationDashboard() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-400">Daily Metrics Cached</p>
-                <p className="text-3xl font-bold text-slate-100">{stats.dailyMetricsCached}</p>
+                <p className="text-sm font-medium text-slate-400">
+                  Daily Metrics Cached
+                </p>
+                <p className="text-3xl font-bold text-slate-100">
+                  {stats.dailyMetricsCached}
+                </p>
                 <p className="text-xs text-slate-500 mt-1">
-                  Last: {stats.lastDailyCalc || 'Never'}
+                  Last: {stats.lastDailyCalc || "Never"}
                 </p>
               </div>
               <TrendingUp className="h-8 w-8 text-purple-400" />
@@ -133,10 +142,14 @@ export default function DataOptimizationDashboard() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-400">Monthly Reports</p>
-                <p className="text-3xl font-bold text-slate-100">{stats.monthlyReports}</p>
+                <p className="text-sm font-medium text-slate-400">
+                  Monthly Reports
+                </p>
+                <p className="text-3xl font-bold text-slate-100">
+                  {stats.monthlyReports}
+                </p>
                 <p className="text-xs text-slate-500 mt-1">
-                  Last: {stats.lastMonthlyCalc || 'Never'}
+                  Last: {stats.lastMonthlyCalc || "Never"}
                 </p>
               </div>
               <Calendar className="h-8 w-8 text-green-400" />
@@ -148,8 +161,12 @@ export default function DataOptimizationDashboard() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-400">Successful Syncs</p>
-                <p className="text-3xl font-bold text-slate-100">{stats.successfulSyncs}</p>
+                <p className="text-sm font-medium text-slate-400">
+                  Successful Syncs
+                </p>
+                <p className="text-3xl font-bold text-slate-100">
+                  {stats.successfulSyncs}
+                </p>
                 <p className="text-xs text-slate-500 mt-1">Last 10 runs</p>
               </div>
               <CheckCircle2 className="h-8 w-8 text-green-400" />
@@ -161,8 +178,12 @@ export default function DataOptimizationDashboard() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-400">Failed Syncs</p>
-                <p className="text-3xl font-bold text-slate-100">{stats.failedSyncs}</p>
+                <p className="text-sm font-medium text-slate-400">
+                  Failed Syncs
+                </p>
+                <p className="text-3xl font-bold text-slate-100">
+                  {stats.failedSyncs}
+                </p>
                 <p className="text-xs text-slate-500 mt-1">Needs attention</p>
               </div>
               <AlertTriangle className="h-8 w-8 text-red-400" />
@@ -174,7 +195,9 @@ export default function DataOptimizationDashboard() {
       {/* Manual Actions */}
       <Card className="bg-slate-800 border-slate-700">
         <CardHeader>
-          <CardTitle className="text-slate-100">Manual Optimization Actions</CardTitle>
+          <CardTitle className="text-slate-100">
+            Manual Optimization Actions
+          </CardTitle>
           <CardDescription className="text-slate-400">
             Run these manually or let automated cron jobs handle them
           </CardDescription>
@@ -182,38 +205,42 @@ export default function DataOptimizationDashboard() {
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between p-4 bg-slate-900 rounded-lg border border-slate-700">
             <div>
-              <h4 className="font-medium text-slate-100">Calculate Daily Metrics</h4>
-              <p className="text-sm text-slate-400">Compute and cache today's sales metrics</p>
+              <h4 className="font-medium text-slate-100">
+                Calculate Daily Metrics
+              </h4>
+              <p className="text-sm text-slate-400">
+                Compute and cache today&apos;s sales metrics
+              </p>
             </div>
             <Button
               onClick={handleCalculateDaily}
               disabled={actionLoading.daily}
               className="bg-green-600 hover:bg-green-700 text-white"
             >
-              {actionLoading.daily ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Play className="w-4 h-4 mr-2" />
-              )}
+              {actionLoading.daily
+                ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                : <Play className="w-4 h-4 mr-2" />}
               Calculate
             </Button>
           </div>
 
           <div className="flex items-center justify-between p-4 bg-slate-900 rounded-lg border border-slate-700">
             <div>
-              <h4 className="font-medium text-slate-100">Calculate Monthly Performance</h4>
-              <p className="text-sm text-slate-400">Rollup this month's comprehensive metrics</p>
+              <h4 className="font-medium text-slate-100">
+                Calculate Monthly Performance
+              </h4>
+              <p className="text-sm text-slate-400">
+                Rollup this month&apos;s comprehensive metrics
+              </p>
             </div>
             <Button
               onClick={handleCalculateMonthly}
               disabled={actionLoading.monthly}
               className="bg-green-600 hover:bg-green-700 text-white"
             >
-              {actionLoading.monthly ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Play className="w-4 h-4 mr-2" />
-              )}
+              {actionLoading.monthly
+                ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                : <Play className="w-4 h-4 mr-2" />}
               Calculate
             </Button>
           </div>
@@ -221,7 +248,10 @@ export default function DataOptimizationDashboard() {
           <div className="flex items-center justify-between p-4 bg-slate-900 rounded-lg border border-slate-700">
             <div>
               <h4 className="font-medium text-slate-100">Archive Old Data</h4>
-              <p className="text-sm text-slate-400">Move completed activities and closed deals older than 1 year to archive</p>
+              <p className="text-sm text-slate-400">
+                Move completed activities and closed deals older than 1 year to
+                archive
+              </p>
             </div>
             <Button
               onClick={handleArchiveOldData}
@@ -229,30 +259,30 @@ export default function DataOptimizationDashboard() {
               variant="outline"
               className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
             >
-              {actionLoading.archive ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Archive className="w-4 h-4 mr-2" />
-              )}
+              {actionLoading.archive
+                ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                : <Archive className="w-4 h-4 mr-2" />}
               Archive
             </Button>
           </div>
 
           <div className="flex items-center justify-between p-4 bg-amber-900/20 rounded-lg border border-amber-700/50">
             <div>
-              <h4 className="font-medium text-slate-100">Register Automated Cron Jobs</h4>
-              <p className="text-sm text-slate-400">Set up automated daily/monthly optimization jobs</p>
+              <h4 className="font-medium text-slate-100">
+                Register Automated Cron Jobs
+              </h4>
+              <p className="text-sm text-slate-400">
+                Set up automated daily/monthly optimization jobs
+              </p>
             </div>
             <Button
               onClick={handleRegisterCronJobs}
               disabled={actionLoading.register}
               className="bg-amber-600 hover:bg-amber-700 text-white"
             >
-              {actionLoading.register ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <SettingsIcon className="w-4 h-4 mr-2" />
-              )}
+              {actionLoading.register
+                ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                : <SettingsIcon className="w-4 h-4 mr-2" />}
               Register
             </Button>
           </div>

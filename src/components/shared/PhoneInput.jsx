@@ -1,23 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import PhonePrefixPicker from './PhonePrefixPicker';
+import PhonePrefixPicker from "./PhonePrefixPicker";
 
-export default function PhoneInput({ id, label, value, onChange, placeholder, className, labelClassName, darkMode = false, showPrefixPicker = false }) {
-  const [prefix, setPrefix] = useState('+1');
-  const [number, setNumber] = useState('');
+export default function PhoneInput(
+  {
+    id,
+    label,
+    value,
+    onChange,
+    placeholder,
+    className,
+    labelClassName,
+    darkMode = false,
+    showPrefixPicker = false,
+  },
+) {
+  const [prefix, setPrefix] = useState("+1");
+  const [number, setNumber] = useState("");
 
   useEffect(() => {
     if (value) {
-      const parts = value.split(' ');
-      if (parts.length > 1 && parts[0].startsWith('+')) {
+      const parts = value.split(" ");
+      if (parts.length > 1 && parts[0].startsWith("+")) {
         setPrefix(parts[0]);
-        setNumber(parts.slice(1).join(' '));
+        setNumber(parts.slice(1).join(" "));
       } else {
         setNumber(value);
       }
     } else {
-      setNumber('');
+      setNumber("");
     }
   }, [value]);
 
@@ -48,7 +60,11 @@ export default function PhoneInput({ id, label, value, onChange, placeholder, cl
           value={number}
           onChange={handleInputChange}
           placeholder={placeholder}
-          className={`${className} ${showPrefixPicker ? 'rounded-l-none border-l-0 focus:ring-0 focus:ring-offset-0' : ''}`}
+          className={`${className} ${
+            showPrefixPicker
+              ? "rounded-l-none border-l-0 focus:ring-0 focus:ring-offset-0"
+              : ""
+          }`}
         />
       </div>
     </div>

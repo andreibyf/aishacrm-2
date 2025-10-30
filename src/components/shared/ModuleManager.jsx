@@ -1,28 +1,34 @@
-import React, { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ModuleSettings } from "@/api/entities";
 import { User } from "@/api/entities";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
-  Users,
-  Building2,
-  TrendingUp,
-  Target,
-  Calendar,
-  BarChart3,
-  Settings,
-  Zap,
-  CheckCircle,
   AlertCircle,
-  FileText,
-  DollarSign,
+  BarChart3,
   BrainCircuit,
-  LayoutDashboard,
+  Building2,
+  Calendar,
+  CheckCircle,
   CreditCard,
+  Database,
+  DollarSign,
+  FileText,
+  LayoutDashboard,
+  Settings,
+  Target,
+  TrendingUp,
+  Users,
   Wrench,
-  Database
+  Zap,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { createAuditLog } from "@/api/functions";
@@ -30,132 +36,244 @@ import { toast } from "sonner";
 
 const defaultModules = [
   {
-    id: 'dashboard',
-    name: 'Dashboard',
-    description: 'Central hub for viewing key metrics and system activity.',
+    id: "dashboard",
+    name: "Dashboard",
+    description: "Central hub for viewing key metrics and system activity.",
     icon: LayoutDashboard,
-    features: ['Real-time Stats', 'Activity Feed', 'Sales Pipeline Overview', 'Lead Source Insights', 'Customizable Widgets']
+    features: [
+      "Real-time Stats",
+      "Activity Feed",
+      "Sales Pipeline Overview",
+      "Lead Source Insights",
+      "Customizable Widgets",
+    ],
   },
   {
-    id: 'contacts',
-    name: 'Contact Management',
-    description: 'Manage customer contacts and relationships',
+    id: "contacts",
+    name: "Contact Management",
+    description: "Manage customer contacts and relationships",
     icon: Users,
-    features: ['Create & Edit Contacts', 'CSV Import/Export', 'Search & Filter', 'Table & Card Views', 'Notes System']
+    features: [
+      "Create & Edit Contacts",
+      "CSV Import/Export",
+      "Search & Filter",
+      "Table & Card Views",
+      "Notes System",
+    ],
   },
   {
-    id: 'accounts',
-    name: 'Account Management',
-    description: 'Manage companies and organizations',
+    id: "accounts",
+    name: "Account Management",
+    description: "Manage companies and organizations",
     icon: Building2,
-    features: ['Company Profiles', 'Industry Categorization', 'Contact Associations', 'Address Management', 'CSV Import/Export']
+    features: [
+      "Company Profiles",
+      "Industry Categorization",
+      "Contact Associations",
+      "Address Management",
+      "CSV Import/Export",
+    ],
   },
   {
-    id: 'leads',
-    name: 'Lead Management',
-    description: 'Track and convert potential customers',
+    id: "leads",
+    name: "Lead Management",
+    description: "Track and convert potential customers",
     icon: TrendingUp,
-    features: ['Lead Creation & Editing', 'Status Tracking', 'Source Attribution', 'CSV Import/Export', 'Notes System']
+    features: [
+      "Lead Creation & Editing",
+      "Status Tracking",
+      "Source Attribution",
+      "CSV Import/Export",
+      "Notes System",
+    ],
   },
   {
-    id: 'opportunities',
-    name: 'Opportunities',
-    description: 'Manage sales opportunities and deals',
+    id: "opportunities",
+    name: "Opportunities",
+    description: "Manage sales opportunities and deals",
     icon: Target,
-    features: ['Pipeline Stages', 'Kanban Board View', 'Deal Tracking', 'Account/Contact Links', 'Amount Tracking']
+    features: [
+      "Pipeline Stages",
+      "Kanban Board View",
+      "Deal Tracking",
+      "Account/Contact Links",
+      "Amount Tracking",
+    ],
   },
   {
-    id: 'activities',
-    name: 'Activity Tracking',
-    description: 'Schedule and track tasks, meetings, calls',
+    id: "activities",
+    name: "Activity Tracking",
+    description: "Schedule and track tasks, meetings, calls",
     icon: Calendar,
-    features: ['Task Creation', 'Due Date Management', 'Priority Levels', 'Status Tracking', 'CSV Import/Export']
+    features: [
+      "Task Creation",
+      "Due Date Management",
+      "Priority Levels",
+      "Status Tracking",
+      "CSV Import/Export",
+    ],
   },
   {
-    id: 'calendar',
-    name: 'Calendar',
-    description: 'Manage and visualize scheduled events, tasks, and appointments within the CRM.',
+    id: "calendar",
+    name: "Calendar",
+    description:
+      "Manage and visualize scheduled events, tasks, and appointments within the CRM.",
     icon: Calendar,
-    features: ['Event Scheduling', 'Task Reminders', 'Meeting Management', 'Multiple Calendar Views', 'Integration with Activities']
+    features: [
+      "Event Scheduling",
+      "Task Reminders",
+      "Meeting Management",
+      "Multiple Calendar Views",
+      "Integration with Activities",
+    ],
   },
   {
-    id: 'bizdev_sources',
-    name: 'BizDev Sources',
-    description: 'Import and manage business development leads from external directories',
+    id: "bizdev_sources",
+    name: "BizDev Sources",
+    description:
+      "Import and manage business development leads from external directories",
     icon: Database,
-    features: ['Bulk CSV Import', 'Promote to Account', 'Archive to R2 Cloud', 'Batch Management', 'License Tracking', 'Archive Retrieval']
+    features: [
+      "Bulk CSV Import",
+      "Promote to Account",
+      "Archive to R2 Cloud",
+      "Batch Management",
+      "License Tracking",
+      "Archive Retrieval",
+    ],
   },
   {
-    id: 'cash_flow',
-    name: 'Cash Flow Management',
-    description: 'Track income, expenses, and cash flow trends',
+    id: "cash_flow",
+    name: "Cash Flow Management",
+    description: "Track income, expenses, and cash flow trends",
     icon: DollarSign,
-    features: ['Manual Transaction Entry', 'Income & Expense Tracking', 'Time Period Analysis', 'Recurring Transactions', 'CRM Integration']
+    features: [
+      "Manual Transaction Entry",
+      "Income & Expense Tracking",
+      "Time Period Analysis",
+      "Recurring Transactions",
+      "CRM Integration",
+    ],
   },
   {
-    id: 'document_processing',
-    name: 'Document Processing & Management',
-    description: 'AI-powered document extraction, business card scanning, and document management',
+    id: "document_processing",
+    name: "Document Processing & Management",
+    description:
+      "AI-powered document extraction, business card scanning, and document management",
     icon: FileText,
-    features: ['Business Card Scanning', 'Document Data Extraction', 'Auto-Contact Creation', 'Company Research', 'Mobile Photo Upload', 'Document Storage & Management', 'File Upload & Preview', 'Document Organization']
+    features: [
+      "Business Card Scanning",
+      "Document Data Extraction",
+      "Auto-Contact Creation",
+      "Company Research",
+      "Mobile Photo Upload",
+      "Document Storage & Management",
+      "File Upload & Preview",
+      "Document Organization",
+    ],
   },
   {
-    id: 'ai_campaigns',
-    name: 'AI Campaigns',
-    description: 'Create and manage AI-powered calling and outreach campaigns',
+    id: "ai_campaigns",
+    name: "AI Campaigns",
+    description: "Create and manage AI-powered calling and outreach campaigns",
     icon: BrainCircuit,
-    features: ['AI-powered Calling Lists', 'Automated Follow-ups', 'Campaign Performance Tracking', 'Custom Prompts']
+    features: [
+      "AI-powered Calling Lists",
+      "Automated Follow-ups",
+      "Campaign Performance Tracking",
+      "Custom Prompts",
+    ],
   },
   {
-    id: 'reports',
-    name: 'Analytics & Reports',
-    description: 'Business intelligence and insights',
+    id: "reports",
+    name: "Analytics & Reports",
+    description: "Business intelligence and insights",
     icon: BarChart3,
-    features: ['Dashboard Overview', 'Lead Source Charts', 'Sales Pipeline View', 'Activity Summary', 'Data Export']
+    features: [
+      "Dashboard Overview",
+      "Lead Source Charts",
+      "Sales Pipeline View",
+      "Activity Summary",
+      "Data Export",
+    ],
   },
   {
-    id: 'employees',
-    name: 'Employee Management',
-    description: 'Manage team members and workforce',
+    id: "employees",
+    name: "Employee Management",
+    description: "Manage team members and workforce",
     icon: Users,
-    features: ['Employee Profiles', 'Department Organization', 'Skills Tracking', 'Emergency Contacts', 'CSV Import/Export']
+    features: [
+      "Employee Profiles",
+      "Department Organization",
+      "Skills Tracking",
+      "Emergency Contacts",
+      "CSV Import/Export",
+    ],
   },
   {
-    id: 'integrations',
-    name: 'Integrations',
-    description: 'Connect with other tools and manage API settings',
+    id: "integrations",
+    name: "Integrations",
+    description: "Connect with other tools and manage API settings",
     icon: Zap,
-    features: ['Webhook Management', 'API Key Generation', 'Email Integration', 'Third-party Connectors']
+    features: [
+      "Webhook Management",
+      "API Key Generation",
+      "Email Integration",
+      "Third-party Connectors",
+    ],
   },
   {
-    id: 'payment_portal',
-    name: 'Payment Portal',
-    description: 'Manage payment provider connections like Stripe.',
+    id: "payment_portal",
+    name: "Payment Portal",
+    description: "Manage payment provider connections like Stripe.",
     icon: CreditCard,
-    features: ['Stripe Integration', 'Subscription Management', 'Billing Portal Access']
+    features: [
+      "Stripe Integration",
+      "Subscription Management",
+      "Billing Portal Access",
+    ],
   },
   {
-    id: 'utilities',
-    name: 'Utilities',
-    description: 'System utilities and tools',
+    id: "utilities",
+    name: "Utilities",
+    description: "System utilities and tools",
     icon: Wrench,
-    features: ['Duplicate Detection', 'Data Quality Reports', 'System Diagnostics', 'Bulk Operations']
+    features: [
+      "Duplicate Detection",
+      "Data Quality Reports",
+      "System Diagnostics",
+      "Bulk Operations",
+    ],
   },
   {
-    id: 'client_onboarding',
-    name: 'Client Onboarding',
-    description: 'Streamlined form for prospects to submit their requirements and request a demo',
+    id: "client_onboarding",
+    name: "Client Onboarding",
+    description:
+      "Streamlined form for prospects to submit their requirements and request a demo",
     icon: Users,
-    features: ['Project Requirements Form', 'Module Selection', 'Navigation Permissions Setup', 'Initial User Configuration', 'Admin Review & Approval']
+    features: [
+      "Project Requirements Form",
+      "Module Selection",
+      "Navigation Permissions Setup",
+      "Initial User Configuration",
+      "Admin Review & Approval",
+    ],
   },
   {
-    id: 'workflows',
-    name: 'Workflows (Experimental)',
-    description: 'Automate business processes with custom workflows and triggers',
+    id: "workflows",
+    name: "Workflows (Experimental)",
+    description:
+      "Automate business processes with custom workflows and triggers",
     icon: Zap,
-    features: ['Visual Workflow Builder', 'Custom Triggers', 'Multi-step Automation', 'Conditional Logic', 'Email & Notification Actions'],
-    experimental: true
-  }
+    features: [
+      "Visual Workflow Builder",
+      "Custom Triggers",
+      "Multi-step Automation",
+      "Conditional Logic",
+      "Email & Notification Actions",
+    ],
+    experimental: true,
+  },
 ];
 
 export default function ModuleManager() {
@@ -185,7 +303,9 @@ export default function ModuleManager() {
 
       // Initialize default settings for modules that don't exist
       const existingModuleIds = currentModuleSettings.map((s) => s.module_id);
-      const missingModules = defaultModules.filter((m) => !existingModuleIds.includes(m.id));
+      const missingModules = defaultModules.filter((m) =>
+        !existingModuleIds.includes(m.id)
+      );
 
       if (missingModules.length > 0 && currentUser) {
         try {
@@ -193,7 +313,7 @@ export default function ModuleManager() {
             module_id: module.id,
             module_name: module.name,
             is_active: true,
-            user_email: currentUser.email
+            user_email: currentUser.email,
           }));
           await ModuleSettings.bulkCreate(newModuleRecords);
 
@@ -215,13 +335,13 @@ export default function ModuleManager() {
 
     try {
       const setting = moduleSettings.find((s) => s.module_id === moduleId);
-      const module = defaultModules.find(m => m.id === moduleId);
+      const module = defaultModules.find((m) => m.id === moduleId);
       const newStatus = !currentStatus;
 
       if (setting) {
         await ModuleSettings.update(setting.id, {
           is_active: newStatus,
-          user_email: user.email
+          user_email: user.email,
         });
 
         // Update local state
@@ -234,28 +354,34 @@ export default function ModuleManager() {
         // Create audit log
         try {
           await createAuditLog({
-            action_type: 'module_toggle',
-            entity_type: 'ModuleSettings',
+            action_type: "module_toggle",
+            entity_type: "ModuleSettings",
             entity_id: setting.id,
-            description: `${newStatus ? 'Enabled' : 'Disabled'} module: ${module?.name || moduleId}`,
+            description: `${newStatus ? "Enabled" : "Disabled"} module: ${
+              module?.name || moduleId
+            }`,
             old_values: { is_active: currentStatus },
-            new_values: { is_active: newStatus }
+            new_values: { is_active: newStatus },
           });
         } catch (auditError) {
-          console.warn('Failed to create audit log:', auditError);
+          console.warn("Failed to create audit log:", auditError);
         }
 
         // Dispatch event to notify Layout and other components
-        window.dispatchEvent(new CustomEvent('module-settings-changed', {
-          detail: {
-            moduleId,
-            moduleName: module?.name || moduleId,
-            isActive: newStatus,
-            changedBy: user.email
-          }
-        }));
+        window.dispatchEvent(
+          new CustomEvent("module-settings-changed", {
+            detail: {
+              moduleId,
+              moduleName: module?.name || moduleId,
+              isActive: newStatus,
+              changedBy: user.email,
+            },
+          }),
+        );
 
-        toast.success(`${module?.name || moduleId} ${newStatus ? 'enabled' : 'disabled'}`);
+        toast.success(
+          `${module?.name || moduleId} ${newStatus ? "enabled" : "disabled"}`,
+        );
       }
     } catch (error) {
       console.error("Error toggling module:", error);
@@ -269,7 +395,9 @@ export default function ModuleManager() {
   };
 
   if (loading) {
-    return <div className="p-6 text-center text-slate-300">Loading modules...</div>;
+    return (
+      <div className="p-6 text-center text-slate-300">Loading modules...</div>
+    );
   }
 
   return (
@@ -281,17 +409,23 @@ export default function ModuleManager() {
             Ai-SHA CRM Module Management
           </CardTitle>
           <CardDescription className="text-slate-400">
-            Enable or disable modules to customize your CRM experience. Only administrators can manage module settings.
+            Enable or disable modules to customize your CRM experience. Only
+            administrators can manage module settings.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
           <Alert className="bg-blue-900/30 border-blue-700/50">
             <AlertCircle className="h-4 w-4 text-blue-400" />
             <AlertDescription className="text-blue-300">
-              <strong>Module settings are the final authority on visibility.</strong> Disabling a module here will hide it from all users, regardless of their individual permissions. Changes take effect immediately across the app.
+              <strong>
+                Module settings are the final authority on visibility.
+              </strong>{" "}
+              Disabling a module here will hide it from all users, regardless of
+              their individual permissions. Changes take effect immediately
+              across the app.
             </AlertDescription>
           </Alert>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {defaultModules.map((module) => {
               const isActive = getModuleStatus(module.id);
@@ -300,8 +434,8 @@ export default function ModuleManager() {
                   key={module.id}
                   className={`transition-all duration-200 ${
                     isActive
-                      ? 'border-green-600/50 bg-green-900/20 shadow-lg'
-                      : 'border-slate-600 bg-slate-700/50 hover:bg-slate-700/70'
+                      ? "border-green-600/50 bg-green-900/20 shadow-lg"
+                      : "border-slate-600 bg-slate-700/50 hover:bg-slate-700/70"
                   }`}
                 >
                   <CardHeader className="pb-4">
@@ -309,12 +443,12 @@ export default function ModuleManager() {
                       <div className="flex items-center gap-3">
                         <div
                           className={`w-12 h-12 rounded-lg flex items-center justify-center transition-colors ${
-                            isActive ? 'bg-green-600/20' : 'bg-slate-600/50'
+                            isActive ? "bg-green-600/20" : "bg-slate-600/50"
                           }`}
                         >
                           <module.icon
                             className={`w-6 h-6 ${
-                              isActive ? 'text-green-400' : 'text-slate-400'
+                              isActive ? "text-green-400" : "text-slate-400"
                             }`}
                           />
                         </div>
@@ -330,35 +464,47 @@ export default function ModuleManager() {
                           <Badge
                             className={`mt-1 ${
                               isActive
-                                ? 'bg-green-600 text-white hover:bg-green-700'
-                                : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+                                ? "bg-green-600 text-white hover:bg-green-700"
+                                : "bg-slate-600 text-slate-300 hover:bg-slate-500"
                             }`}
                           >
-                            {isActive ? 'Active' : 'Inactive'}
+                            {isActive ? "Active" : "Inactive"}
                           </Badge>
                         </div>
                       </div>
                       <Switch
                         checked={isActive}
-                        onCheckedChange={() => toggleModule(module.id, isActive)}
+                        onCheckedChange={() =>
+                          toggleModule(module.id, isActive)}
                         className="data-[state=checked]:bg-green-600"
                       />
                     </div>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <p className="text-sm text-slate-400 mb-4">{module.description}</p>
-                    
+                    <p className="text-sm text-slate-400 mb-4">
+                      {module.description}
+                    </p>
+
                     <div className="space-y-3">
-                      <h4 className="text-sm font-medium text-slate-300">Current Features:</h4>
+                      <h4 className="text-sm font-medium text-slate-300">
+                        Current Features:
+                      </h4>
                       <div className="space-y-2 max-h-32 overflow-y-auto">
                         {module.features.map((feature, index) => (
-                          <div key={index} className="flex items-center gap-2 text-sm">
+                          <div
+                            key={index}
+                            className="flex items-center gap-2 text-sm"
+                          >
                             <CheckCircle
                               className={`w-3 h-3 flex-shrink-0 ${
-                                isActive ? 'text-green-400' : 'text-slate-500'
+                                isActive ? "text-green-400" : "text-slate-500"
                               }`}
                             />
-                            <span className={isActive ? 'text-slate-300' : 'text-slate-500'}>
+                            <span
+                              className={isActive
+                                ? "text-slate-300"
+                                : "text-slate-500"}
+                            >
                               {feature}
                             </span>
                           </div>
@@ -370,15 +516,21 @@ export default function ModuleManager() {
               );
             })}
           </div>
-          
+
           <Card className="border-amber-600/50 bg-amber-900/20">
             <CardContent className="p-6">
               <div className="flex items-start gap-3">
                 <Zap className="w-6 h-6 text-amber-400 mt-0.5 flex-shrink-0" />
                 <div>
-                  <h4 className="text-amber-400 mb-2 text-lg font-semibold">Planned Enhancements</h4>
+                  <h4 className="text-amber-400 mb-2 text-lg font-semibold">
+                    Planned Enhancements
+                  </h4>
                   <p className="text-amber-600 text-sm leading-relaxed">
-                    Future releases will include: Advanced AI Scoring, Revenue Forecasting, Automated Workflows, Call Integration, Meeting Scheduler, Custom Reports, and advanced Analytics. These features will be automatically added to existing modules as they become available.
+                    Future releases will include: Advanced AI Scoring, Revenue
+                    Forecasting, Automated Workflows, Call Integration, Meeting
+                    Scheduler, Custom Reports, and advanced Analytics. These
+                    features will be automatically added to existing modules as
+                    they become available.
                   </p>
                 </div>
               </div>

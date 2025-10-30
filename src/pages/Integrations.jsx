@@ -1,27 +1,32 @@
-import React, { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { 
-  Zap, 
-  Webhook, 
-  Copy, 
-  ExternalLink, 
-  Settings,
-  Phone,
-  Mail,
-  Calendar,
-  Database,
-  Bot,
-  CreditCard,
-  FileText,
-  Users,
+import {
   Activity,
+  Bot,
   Building2,
-  Target,
+  Calendar,
+  Copy,
+  CreditCard,
+  Database,
+  ExternalLink,
+  FileText,
+  Loader2,
+  Mail,
+  Phone,
+  Settings,
   TrendingUp,
-  Loader2
+  Users,
+  Webhook,
+  Zap,
 } from "lucide-react";
 import { User } from "@/api/entities";
 import { createPageUrl } from "@/utils";
@@ -39,17 +44,17 @@ const webhookServices = [
     color: "bg-purple-100 text-purple-800",
     status: "active",
     method: "POST",
-    purpose: "Handles voice AI queries about CRM data"
+    purpose: "Handles voice AI queries about CRM data",
   },
   {
     name: "CallFluent AI Calling",
     description: "AI-powered phone calling and call results",
     webhook: "/functions/callFluentWebhookV2",
     icon: Phone,
-    color: "bg-blue-100 text-blue-800", 
+    color: "bg-blue-100 text-blue-800",
     status: "active",
     method: "POST",
-    purpose: "Processes AI call outcomes and updates activities"
+    purpose: "Processes AI call outcomes and updates activities",
   },
   {
     name: "Thoughtly AI Calling",
@@ -57,9 +62,9 @@ const webhookServices = [
     webhook: "/functions/thoughtlyCallResults",
     icon: Phone,
     color: "bg-green-100 text-green-800",
-    status: "active", 
+    status: "active",
     method: "POST",
-    purpose: "Handles Thoughtly AI call results and transcriptions"
+    purpose: "Handles Thoughtly AI call results and transcriptions",
   },
   {
     name: "Thoughtly Transcripts",
@@ -68,8 +73,8 @@ const webhookServices = [
     icon: FileText,
     color: "bg-green-100 text-green-800",
     status: "active",
-    method: "POST", 
-    purpose: "Processes call transcripts from Thoughtly AI calls"
+    method: "POST",
+    purpose: "Processes call transcripts from Thoughtly AI calls",
   },
   {
     name: "Stripe Payments",
@@ -79,7 +84,7 @@ const webhookServices = [
     color: "bg-orange-100 text-orange-800",
     status: "active",
     method: "POST",
-    purpose: "Handles Stripe payment events and subscription updates"
+    purpose: "Handles Stripe payment events and subscription updates",
   },
   {
     name: "General Incoming Webhook",
@@ -89,7 +94,7 @@ const webhookServices = [
     color: "bg-gray-100 text-gray-800",
     status: "active",
     method: "POST",
-    purpose: "General-purpose webhook for custom data ingestion"
+    purpose: "General-purpose webhook for custom data ingestion",
   },
   {
     name: "Create Activity",
@@ -99,37 +104,37 @@ const webhookServices = [
     color: "bg-indigo-100 text-indigo-800",
     status: "active",
     method: "POST",
-    purpose: "Creates activities directly from external scheduling systems"
+    purpose: "Creates activities directly from external scheduling systems",
   },
   {
     name: "n8n Create Lead",
     description: "Lead creation through n8n automation",
-    webhook: "/functions/n8nCreateLead", 
+    webhook: "/functions/n8nCreateLead",
     icon: TrendingUp,
     color: "bg-yellow-100 text-yellow-800",
     status: "active",
     method: "POST",
-    purpose: "Creates leads via n8n workflow automation"
+    purpose: "Creates leads via n8n workflow automation",
   },
   {
     name: "n8n Create Contact",
-    description: "Contact creation through n8n automation", 
+    description: "Contact creation through n8n automation",
     webhook: "/functions/n8nCreateContact",
     icon: Users,
     color: "bg-yellow-100 text-yellow-800",
     status: "active",
     method: "POST",
-    purpose: "Creates contacts via n8n workflow automation"
+    purpose: "Creates contacts via n8n workflow automation",
   },
   {
-    name: "n8n Update Contact", 
+    name: "n8n Update Contact",
     description: "Contact updates through n8n automation",
     webhook: "/functions/n8nUpdateContact",
     icon: Users,
-    color: "bg-yellow-100 text-yellow-800", 
+    color: "bg-yellow-100 text-yellow-800",
     status: "active",
     method: "POST",
-    purpose: "Updates contact information via n8n workflows"
+    purpose: "Updates contact information via n8n workflows",
   },
   {
     name: "n8n Get Data",
@@ -137,9 +142,9 @@ const webhookServices = [
     webhook: "/functions/n8nGetData",
     icon: Database,
     color: "bg-yellow-100 text-yellow-800",
-    status: "active", 
+    status: "active",
     method: "GET/POST",
-    purpose: "Retrieves CRM data for n8n workflow processing"
+    purpose: "Retrieves CRM data for n8n workflow processing",
   },
   {
     name: "Google Drive Integration",
@@ -149,17 +154,17 @@ const webhookServices = [
     color: "bg-red-100 text-red-800",
     status: "active",
     method: "POST",
-    purpose: "Handles Google Drive file operations per tenant"
+    purpose: "Handles Google Drive file operations per tenant",
   },
   {
     name: "Zapier Integration",
     description: "Zapier automation webhook",
-    webhook: "/functions/tenantZapierWebhook", 
+    webhook: "/functions/tenantZapierWebhook",
     icon: Zap,
     color: "bg-orange-100 text-orange-800",
     status: "active",
-    method: "POST", 
-    purpose: "Processes Zapier automation triggers and actions"
+    method: "POST",
+    purpose: "Processes Zapier automation triggers and actions",
   },
   {
     name: "OneDrive Integration",
@@ -169,71 +174,86 @@ const webhookServices = [
     color: "bg-blue-100 text-blue-800",
     status: "active",
     method: "POST",
-    purpose: "Handles OneDrive file management for tenants"
+    purpose: "Handles OneDrive file management for tenants",
   },
   {
-    name: "Outlook Email Integration", 
+    name: "Outlook Email Integration",
     description: "Microsoft Outlook email processing",
     webhook: "/functions/tenantOutlookEmail",
     icon: Mail,
     color: "bg-blue-100 text-blue-800",
     status: "active",
     method: "POST",
-    purpose: "Processes Outlook email integration events"
+    purpose: "Processes Outlook email integration events",
   },
   {
     name: "Outlook Calendar Integration",
-    description: "Microsoft Outlook calendar synchronization", 
+    description: "Microsoft Outlook calendar synchronization",
     webhook: "/functions/tenantOutlookCalendar",
     icon: Calendar,
     color: "bg-blue-100 text-blue-800",
     status: "active",
     method: "POST",
-    purpose: "Syncs Outlook calendar events with CRM activities"
-  }
+    purpose: "Syncs Outlook calendar events with CRM activities",
+  },
 ];
 
 const integrationCategories = [
   {
     name: "AI & Voice",
-    services: ["ElevenLabs AI Assistant", "CallFluent AI Calling", "Thoughtly AI Calling", "Thoughtly Transcripts"],
+    services: [
+      "ElevenLabs AI Assistant",
+      "CallFluent AI Calling",
+      "Thoughtly AI Calling",
+      "Thoughtly Transcripts",
+    ],
     icon: Bot,
-    color: "text-purple-600"
+    color: "text-purple-600",
   },
   {
-    name: "Automation Platforms", 
-    services: ["n8n Create Lead", "n8n Create Contact", "n8n Update Contact", "n8n Get Data", "Zapier Integration"],
+    name: "Automation Platforms",
+    services: [
+      "n8n Create Lead",
+      "n8n Create Contact",
+      "n8n Update Contact",
+      "n8n Get Data",
+      "Zapier Integration",
+    ],
     icon: Zap,
-    color: "text-yellow-600"
+    color: "text-yellow-600",
   },
   {
     name: "Microsoft Services",
-    services: ["OneDrive Integration", "Outlook Email Integration", "Outlook Calendar Integration"],
+    services: [
+      "OneDrive Integration",
+      "Outlook Email Integration",
+      "Outlook Calendar Integration",
+    ],
     icon: Building2,
-    color: "text-blue-600" 
+    color: "text-blue-600",
   },
   {
     name: "Google Services",
     services: ["Google Drive Integration"],
     icon: FileText,
-    color: "text-red-600"
+    color: "text-red-600",
   },
   {
     name: "Payments & Commerce",
-    services: ["Stripe Payments"], 
+    services: ["Stripe Payments"],
     icon: CreditCard,
-    color: "text-green-600"
+    color: "text-green-600",
   },
   {
     name: "General Webhooks",
     services: ["General Incoming Webhook", "Create Activity"],
     icon: Webhook,
-    color: "text-gray-600"
-  }
+    color: "text-gray-600",
+  },
 ];
 
 export default function IntegrationsPage() {
-  const [user, setUser] = useState(null);
+  const [, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -286,8 +306,12 @@ export default function IntegrationsPage() {
           <Card className="bg-slate-800 border-slate-700 hover:border-slate-600 transition-colors">
             <CardContent className="p-6 text-center">
               <Settings className="w-12 h-12 text-blue-500 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-slate-100 mb-2">Integration Settings</h3>
-              <p className="text-slate-400 text-sm mb-4">Configure API keys and connection settings</p>
+              <h3 className="text-lg font-semibold text-slate-100 mb-2">
+                Integration Settings
+              </h3>
+              <p className="text-slate-400 text-sm mb-4">
+                Configure API keys and connection settings
+              </p>
               <Link to={createPageUrl("Settings")}>
                 <Button className="bg-blue-600 hover:bg-blue-700">
                   <Settings className="w-4 h-4 mr-2" />
@@ -300,10 +324,17 @@ export default function IntegrationsPage() {
           <Card className="bg-slate-800 border-slate-700 hover:border-slate-600 transition-colors">
             <CardContent className="p-6 text-center">
               <FileText className="w-12 h-12 text-green-500 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-slate-100 mb-2">Documentation</h3>
-              <p className="text-slate-400 text-sm mb-4">API guides and webhook examples</p>
+              <h3 className="text-lg font-semibold text-slate-100 mb-2">
+                Documentation
+              </h3>
+              <p className="text-slate-400 text-sm mb-4">
+                API guides and webhook examples
+              </p>
               <Link to={createPageUrl("Documentation")}>
-                <Button variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-700">
+                <Button
+                  variant="outline"
+                  className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                >
                   <ExternalLink className="w-4 h-4 mr-2" />
                   View Docs
                 </Button>
@@ -314,10 +345,17 @@ export default function IntegrationsPage() {
           <Card className="bg-slate-800 border-slate-700 hover:border-slate-600 transition-colors">
             <CardContent className="p-6 text-center">
               <Activity className="w-12 h-12 text-purple-500 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-slate-100 mb-2">Webhook Logs</h3>
-              <p className="text-slate-400 text-sm mb-4">Monitor webhook activity and debug issues</p>
+              <h3 className="text-lg font-semibold text-slate-100 mb-2">
+                Webhook Logs
+              </h3>
+              <p className="text-slate-400 text-sm mb-4">
+                Monitor webhook activity and debug issues
+              </p>
               <Link to={createPageUrl("AuditLog")}>
-                <Button variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-700">
+                <Button
+                  variant="outline"
+                  className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                >
                   <Activity className="w-4 h-4 mr-2" />
                   View Logs
                 </Button>
@@ -328,45 +366,61 @@ export default function IntegrationsPage() {
 
         {/* Webhook Services by Category */}
         {integrationCategories.map((category) => (
-          <Card key={category.name} className="bg-slate-800 border-slate-700 mb-6">
+          <Card
+            key={category.name}
+            className="bg-slate-800 border-slate-700 mb-6"
+          >
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-slate-100">
                 <category.icon className={`w-6 h-6 ${category.color}`} />
                 {category.name}
               </CardTitle>
               <CardDescription className="text-slate-400">
-                {category.services.length} webhook{category.services.length !== 1 ? 's' : ''} available
+                {category.services.length}{" "}
+                webhook{category.services.length !== 1 ? "s" : ""} available
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {webhookServices
-                  .filter(service => category.services.includes(service.name))
+                  .filter((service) => category.services.includes(service.name))
                   .map((service) => (
-                    <div key={service.name} className="border border-slate-600 rounded-lg p-4 bg-slate-700/50">
+                    <div
+                      key={service.name}
+                      className="border border-slate-600 rounded-lg p-4 bg-slate-700/50"
+                    >
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-3">
                           <service.icon className="w-8 h-8 text-slate-400" />
                           <div>
-                            <h4 className="font-semibold text-slate-100">{service.name}</h4>
-                            <p className="text-sm text-slate-400">{service.description}</p>
+                            <h4 className="font-semibold text-slate-100">
+                              {service.name}
+                            </h4>
+                            <p className="text-sm text-slate-400">
+                              {service.description}
+                            </p>
                           </div>
                         </div>
                         <Badge className={service.color}>
                           {service.status}
                         </Badge>
                       </div>
-                      
+
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-slate-400">Method:</span>
-                          <Badge variant="outline" className="border-slate-500 text-slate-300">
+                          <Badge
+                            variant="outline"
+                            className="border-slate-500 text-slate-300"
+                          >
                             {service.method}
                           </Badge>
                         </div>
                         <div className="text-sm">
                           <span className="text-slate-400">Purpose:</span>
-                          <p className="text-slate-300 mt-1">{service.purpose}</p>
+                          <p className="text-slate-300 mt-1">
+                            {service.purpose}
+                          </p>
                         </div>
                         <div className="flex items-center gap-2 mt-3">
                           <code className="flex-1 bg-slate-800 text-slate-300 px-3 py-2 rounded text-sm font-mono">
@@ -393,7 +447,8 @@ export default function IntegrationsPage() {
         <Alert className="bg-blue-900/30 border-blue-700/50">
           <Webhook className="h-4 w-4 text-blue-400" />
           <AlertDescription className="text-blue-300">
-            <strong>Base URL:</strong> All webhooks use the base URL: <code className="bg-blue-800/50 px-2 py-1 rounded text-blue-200">
+            <strong>Base URL:</strong> All webhooks use the base URL:{" "}
+            <code className="bg-blue-800/50 px-2 py-1 rounded text-blue-200">
               {window.location.origin}/api/apps/{APP_ID}
             </code>
           </AlertDescription>

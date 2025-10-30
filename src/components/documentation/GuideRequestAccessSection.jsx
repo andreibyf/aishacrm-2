@@ -1,10 +1,16 @@
-import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Users, ClipboardList, Send, CheckCircle2, Info, AlertTriangle } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardList,
+  Info,
+  Send,
+  Users,
+} from "lucide-react";
 
 export default function GuideRequestAccessSection() {
   const copyEmailTemplate = () => {
@@ -29,7 +35,7 @@ export default function GuideRequestAccessSection() {
       "- Tier: Tier3 or Tier4",
       "",
       "Notes:",
-      "- Add any extra context here (team, manager, timeline)."
+      "- Add any extra context here (team, manager, timeline).",
     ].join("\n"));
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
   };
@@ -47,14 +53,17 @@ export default function GuideRequestAccessSection() {
           Requesting Access for New Users (Tier 3 & Tier 4)
         </h2>
         <p className="text-slate-400 mt-1 text-sm lg:text-base">
-          Tier 3 and Tier 4 users can request CRM access for teammates directly from the Employees page. These requests include your
-          authorization (your role and tier) and originate from your current tenant.
+          Tier 3 and Tier 4 users can request CRM access for teammates directly
+          from the Employees page. These requests include your authorization
+          (your role and tier) and originate from your current tenant.
         </p>
       </div>
 
       <Alert className="bg-slate-800 border-slate-700 mb-6">
         <AlertDescription className="text-slate-300">
-          Settings access is not required. Use the Employees page to submit the request. Only employees marked “has CRM access” and not yet linked will show the Request/Invite option.
+          Settings access is not required. Use the Employees page to submit the
+          request. Only employees marked “has CRM access” and not yet linked
+          will show the Request/Invite option.
         </AlertDescription>
       </Alert>
 
@@ -71,14 +80,23 @@ export default function GuideRequestAccessSection() {
               Open the Employees page.
               <div className="mt-2">
                 <Link to={createPageUrl("Employees")}>
-                  <Button variant="outline" className="filter-trigger bg-transparent">
+                  <Button
+                    variant="outline"
+                    className="filter-trigger bg-transparent"
+                  >
                     Go to Employees
                   </Button>
                 </Link>
               </div>
             </li>
-            <li>Find the employee who needs CRM access and ensure “has CRM access” is enabled on their record.</li>
-            <li>In the row actions menu, choose “Request Invite” (Tier 3) or “Invite to CRM” (Tier 4/Admin).</li>
+            <li>
+              Find the employee who needs CRM access and ensure “has CRM access”
+              is enabled on their record.
+            </li>
+            <li>
+              In the row actions menu, choose “Request Invite” (Tier 3) or
+              “Invite to CRM” (Tier 4/Admin).
+            </li>
             <li>Confirm the email and name. Submit the request.</li>
           </ol>
 
@@ -88,10 +106,22 @@ export default function GuideRequestAccessSection() {
               What gets sent
             </h4>
             <ul className="list-disc pl-5 space-y-2">
-              <li>A structured email to admins including requested user details (name, email, requested tier/role).</li>
-              <li>Your authorization context: your name, email, role, and tier (Tier 3 or Tier 4).</li>
-              <li>Implicit tenant context: the request originates from your current tenant (no separate selection needed).</li>
-              <li>Optional requested access flags (e.g., softphone), when provided.</li>
+              <li>
+                A structured email to admins including requested user details
+                (name, email, requested tier/role).
+              </li>
+              <li>
+                Your authorization context: your name, email, role, and tier
+                (Tier 3 or Tier 4).
+              </li>
+              <li>
+                Implicit tenant context: the request originates from your
+                current tenant (no separate selection needed).
+              </li>
+              <li>
+                Optional requested access flags (e.g., softphone), when
+                provided.
+              </li>
             </ul>
           </div>
         </CardContent>
@@ -107,8 +137,16 @@ export default function GuideRequestAccessSection() {
           </CardHeader>
           <CardContent className="text-slate-300 space-y-2">
             <ul className="list-disc pl-5 space-y-1">
-              <li><strong>Tier 3 — Team Lead:</strong> Aggregated dashboards, broader team visibility, request CRM access for team.</li>
-              <li><strong>Tier 4 — Power User:</strong> Broad data visibility, can directly invite (if permitted) or request on behalf of team.</li>
+              <li>
+                <strong>Tier 3 — Team Lead:</strong>{" "}
+                Aggregated dashboards, broader team visibility, request CRM
+                access for team.
+              </li>
+              <li>
+                <strong>Tier 4 — Power User:</strong>{" "}
+                Broad data visibility, can directly invite (if permitted) or
+                request on behalf of team.
+              </li>
             </ul>
           </CardContent>
         </Card>
@@ -122,11 +160,21 @@ export default function GuideRequestAccessSection() {
           </CardHeader>
           <CardContent className="text-slate-300 space-y-2">
             <ul className="list-disc pl-5 space-y-1">
-              <li>If the “Request/Invite” action isn’t visible, ensure the employee record has “has CRM access” enabled and a valid email.</li>
-              <li>If Employees page is unavailable, use the email template below to notify admins manually.</li>
+              <li>
+                If the “Request/Invite” action isn’t visible, ensure the
+                employee record has “has CRM access” enabled and a valid email.
+              </li>
+              <li>
+                If Employees page is unavailable, use the email template below
+                to notify admins manually.
+              </li>
             </ul>
             <div className="pt-2">
-              <Button variant="outline" onClick={copyEmailTemplate} className="filter-trigger bg-transparent">
+              <Button
+                variant="outline"
+                onClick={copyEmailTemplate}
+                className="filter-trigger bg-transparent"
+              >
                 Use email template
               </Button>
             </div>
@@ -144,8 +192,13 @@ export default function GuideRequestAccessSection() {
         <CardContent className="text-slate-300 space-y-2">
           <ul className="list-disc pl-5 space-y-1">
             <li>Confirm the employee’s email is correct before submitting.</li>
-            <li>Include the desired Tier (usually Tier1 for standard users) and any special permissions like softphone.</li>
-            <li>Follow up with admins if the user needs time-sensitive access.</li>
+            <li>
+              Include the desired Tier (usually Tier1 for standard users) and
+              any special permissions like softphone.
+            </li>
+            <li>
+              Follow up with admins if the user needs time-sensitive access.
+            </li>
           </ul>
         </CardContent>
       </Card>

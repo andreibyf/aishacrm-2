@@ -1,30 +1,63 @@
-import React, { useState, useEffect } from 'react';
-import { Tenant, User } from '@/api/entities';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Building2, Plus, Edit, Save, X, Loader2, AlertCircle } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { Tenant, User } from "@/api/entities";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import {
+  AlertCircle,
+  Building2,
+  Edit,
+  Loader2,
+  Plus,
+  Save,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const TenantForm = ({ tenant, onSave, onCancel }) => {
   const [formData, setFormData] = useState({
-    name: tenant?.name || '',
-    domain: tenant?.domain || '',
-    logo_url: tenant?.logo_url || '',
-    primary_color: tenant?.primary_color || '#3b82f6',
-    accent_color: tenant?.accent_color || '#f59e0b',
-    industry: tenant?.industry || 'other',
-    business_model: tenant?.business_model || 'b2b',
-    geographic_focus: tenant?.geographic_focus || 'north_america',
-    elevenlabs_agent_id: tenant?.elevenlabs_agent_id || '',
-    display_order: tenant?.display_order || 0
+    name: tenant?.name || "",
+    domain: tenant?.domain || "",
+    logo_url: tenant?.logo_url || "",
+    primary_color: tenant?.primary_color || "#3b82f6",
+    accent_color: tenant?.accent_color || "#f59e0b",
+    industry: tenant?.industry || "other",
+    business_model: tenant?.business_model || "b2b",
+    geographic_focus: tenant?.geographic_focus || "north_america",
+    elevenlabs_agent_id: tenant?.elevenlabs_agent_id || "",
+    display_order: tenant?.display_order || 0,
   });
   const [saving, setSaving] = useState(false);
 
@@ -42,7 +75,9 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
     <Dialog open={!!tenant} onOpenChange={onCancel}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{tenant?.id ? 'Edit Tenant' : 'Create New Tenant'}</DialogTitle>
+          <DialogTitle>
+            {tenant?.id ? "Edit Tenant" : "Create New Tenant"}
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -51,7 +86,8 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
               <Input
                 id="name"
                 value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })}
                 placeholder="Acme Corp"
                 required
               />
@@ -61,7 +97,8 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
               <Input
                 id="domain"
                 value={formData.domain}
-                onChange={(e) => setFormData({...formData, domain: e.target.value})}
+                onChange={(e) =>
+                  setFormData({ ...formData, domain: e.target.value })}
                 placeholder="acme.com"
               />
             </div>
@@ -72,7 +109,8 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
             <Input
               id="logo_url"
               value={formData.logo_url}
-              onChange={(e) => setFormData({...formData, logo_url: e.target.value})}
+              onChange={(e) =>
+                setFormData({ ...formData, logo_url: e.target.value })}
               placeholder="https://example.com/logo.png"
             />
           </div>
@@ -84,12 +122,14 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
                 <Input
                   type="color"
                   value={formData.primary_color}
-                  onChange={(e) => setFormData({...formData, primary_color: e.target.value})}
+                  onChange={(e) =>
+                    setFormData({ ...formData, primary_color: e.target.value })}
                   className="w-16 h-10"
                 />
                 <Input
                   value={formData.primary_color}
-                  onChange={(e) => setFormData({...formData, primary_color: e.target.value})}
+                  onChange={(e) =>
+                    setFormData({ ...formData, primary_color: e.target.value })}
                   placeholder="#3b82f6"
                   className="flex-1"
                 />
@@ -101,12 +141,14 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
                 <Input
                   type="color"
                   value={formData.accent_color}
-                  onChange={(e) => setFormData({...formData, accent_color: e.target.value})}
+                  onChange={(e) =>
+                    setFormData({ ...formData, accent_color: e.target.value })}
                   className="w-16 h-10"
                 />
                 <Input
                   value={formData.accent_color}
-                  onChange={(e) => setFormData({...formData, accent_color: e.target.value})}
+                  onChange={(e) =>
+                    setFormData({ ...formData, accent_color: e.target.value })}
                   placeholder="#f59e0b"
                   className="flex-1"
                 />
@@ -117,17 +159,31 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
           <div className="grid grid-cols-3 gap-4">
             <div>
               <Label htmlFor="industry">Industry</Label>
-              <Select value={formData.industry} onValueChange={(value) => setFormData({...formData, industry: value})}>
+              <Select
+                value={formData.industry}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, industry: value })}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="information_technology">Information Technology</SelectItem>
-                  <SelectItem value="healthcare_and_life_sciences">Healthcare & Life Sciences</SelectItem>
-                  <SelectItem value="banking_and_financial_services">Banking & Financial Services</SelectItem>
+                  <SelectItem value="information_technology">
+                    Information Technology
+                  </SelectItem>
+                  <SelectItem value="healthcare_and_life_sciences">
+                    Healthcare & Life Sciences
+                  </SelectItem>
+                  <SelectItem value="banking_and_financial_services">
+                    Banking & Financial Services
+                  </SelectItem>
                   <SelectItem value="manufacturing">Manufacturing</SelectItem>
-                  <SelectItem value="retail_and_wholesale">Retail & Wholesale</SelectItem>
-                  <SelectItem value="professional_services">Professional Services</SelectItem>
+                  <SelectItem value="retail_and_wholesale">
+                    Retail & Wholesale
+                  </SelectItem>
+                  <SelectItem value="professional_services">
+                    Professional Services
+                  </SelectItem>
                   <SelectItem value="real_estate">Real Estate</SelectItem>
                   <SelectItem value="construction">Construction</SelectItem>
                   <SelectItem value="education">Education</SelectItem>
@@ -137,7 +193,11 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
             </div>
             <div>
               <Label htmlFor="business_model">Business Model</Label>
-              <Select value={formData.business_model} onValueChange={(value) => setFormData({...formData, business_model: value})}>
+              <Select
+                value={formData.business_model}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, business_model: value })}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -150,7 +210,11 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
             </div>
             <div>
               <Label htmlFor="geographic_focus">Geographic Focus</Label>
-              <Select value={formData.geographic_focus} onValueChange={(value) => setFormData({...formData, geographic_focus: value})}>
+              <Select
+                value={formData.geographic_focus}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, geographic_focus: value })}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -172,7 +236,11 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
             <Input
               id="elevenlabs_agent_id"
               value={formData.elevenlabs_agent_id}
-              onChange={(e) => setFormData({...formData, elevenlabs_agent_id: e.target.value})}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  elevenlabs_agent_id: e.target.value,
+                })}
               placeholder="se8ujo4HwtLbAg1GMvuX"
             />
             <p className="text-xs text-slate-500 mt-1">
@@ -186,7 +254,11 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
               id="display_order"
               type="number"
               value={formData.display_order}
-              onChange={(e) => setFormData({...formData, display_order: parseInt(e.target.value) || 0})}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  display_order: parseInt(e.target.value) || 0,
+                })}
               placeholder="0"
             />
           </div>
@@ -196,8 +268,10 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
               Cancel
             </Button>
             <Button type="submit" disabled={saving}>
-              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              {tenant?.id ? 'Update' : 'Create'} Tenant
+              {saving
+                ? <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                : null}
+              {tenant?.id ? "Update" : "Create"} Tenant
             </Button>
           </DialogFooter>
         </form>
@@ -221,8 +295,8 @@ export default function TenantsPage() {
     setLoading(true);
     try {
       const [tenantsData, userData] = await Promise.all([
-        Tenant.list('display_order'),
-        User.me()
+        Tenant.list("display_order"),
+        User.me(),
       ]);
       setTenants(tenantsData);
       setCurrentUser(userData);
@@ -270,12 +344,13 @@ export default function TenantsPage() {
     );
   }
 
-  if (currentUser?.role !== 'admin' && currentUser?.role !== 'superadmin') {
+  if (currentUser?.role !== "admin" && currentUser?.role !== "superadmin") {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          You do not have permission to manage tenants. Only admins and superadmins can access this page.
+          You do not have permission to manage tenants. Only admins and
+          superadmins can access this page.
         </AlertDescription>
       </Alert>
     );
@@ -289,9 +364,14 @@ export default function TenantsPage() {
             <Building2 className="w-8 h-8 text-blue-600" />
             Tenant Management
           </h1>
-          <p className="text-slate-600 mt-1">Manage client organizations and their settings</p>
+          <p className="text-slate-600 mt-1">
+            Manage client organizations and their settings
+          </p>
         </div>
-        <Button onClick={() => setShowCreateForm(true)} className="bg-blue-600 hover:bg-blue-700">
+        <Button
+          onClick={() => setShowCreateForm(true)}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
           <Plus className="w-4 h-4 mr-2" />
           Create Tenant
         </Button>
@@ -301,7 +381,8 @@ export default function TenantsPage() {
         <CardHeader>
           <CardTitle>Active Tenants</CardTitle>
           <CardDescription>
-            Manage tenant organizations, their branding, and ElevenLabs AI agent configuration
+            Manage tenant organizations, their branding, and ElevenLabs AI agent
+            configuration
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -321,37 +402,47 @@ export default function TenantsPage() {
                 <TableRow key={tenant.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      {tenant.logo_url ? (
-                        <img src={tenant.logo_url} alt={tenant.name} className="w-8 h-8 rounded object-cover" />
-                      ) : (
-                        <div className="w-8 h-8 bg-slate-200 rounded flex items-center justify-center">
-                          <Building2 className="w-4 h-4 text-slate-600" />
-                        </div>
-                      )}
+                      {tenant.logo_url
+                        ? (
+                          <img
+                            src={tenant.logo_url}
+                            alt={tenant.name}
+                            className="w-8 h-8 rounded object-cover"
+                          />
+                        )
+                        : (
+                          <div className="w-8 h-8 bg-slate-200 rounded flex items-center justify-center">
+                            <Building2 className="w-4 h-4 text-slate-600" />
+                          </div>
+                        )}
                       <div>
                         <div className="font-medium">{tenant.name}</div>
-                        <div className="text-sm text-slate-500">ID: {tenant.id}</div>
+                        <div className="text-sm text-slate-500">
+                          ID: {tenant.id}
+                        </div>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    {tenant.domain ? (
-                      <Badge variant="outline">{tenant.domain}</Badge>
-                    ) : (
-                      <span className="text-slate-400">No domain</span>
-                    )}
+                    {tenant.domain
+                      ? <Badge variant="outline">{tenant.domain}</Badge>
+                      : <span className="text-slate-400">No domain</span>}
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary">
-                      {tenant.industry ? tenant.industry.replace(/_/g, ' ') : 'Not set'}
+                      {tenant.industry
+                        ? tenant.industry.replace(/_/g, " ")
+                        : "Not set"}
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {tenant.elevenlabs_agent_id ? (
-                      <Badge className="bg-green-100 text-green-800">Configured</Badge>
-                    ) : (
-                      <Badge variant="outline">Not set</Badge>
-                    )}
+                    {tenant.elevenlabs_agent_id
+                      ? (
+                        <Badge className="bg-green-100 text-green-800">
+                          Configured
+                        </Badge>
+                      )
+                      : <Badge variant="outline">Not set</Badge>}
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">View Users</Badge>

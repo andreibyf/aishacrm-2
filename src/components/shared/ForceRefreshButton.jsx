@@ -1,4 +1,3 @@
-import React from "react";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { useApiManager } from "./ApiManager";
@@ -12,14 +11,14 @@ export default function ForceRefreshButton({ entityName, onRefresh }) {
     clearCache();
     localStorage.clear();
     sessionStorage.clear();
-    
+
     toast.success("Cache cleared! Refreshing...");
-    
+
     // Call parent refresh if provided
     if (onRefresh) {
       onRefresh();
     }
-    
+
     // Force hard reload after a moment
     setTimeout(() => {
       window.location.reload(true);

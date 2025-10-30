@@ -1,23 +1,28 @@
-
-import React, { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Note } from "@/api/entities";
 import { User } from "@/api/entities";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  Loader2,
   Plus,
   StickyNote,
   Trash2,
-  Clock,
   User as UserIcon,
-  Loader2,
-  AlertCircle,
-  CheckCircle2
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
@@ -32,7 +37,7 @@ const noteTypes = [
 ];
 
 const getTypeColor = (type) => {
-  return noteTypes.find(t => t.value === type)?.color || "text-slate-400";
+  return noteTypes.find((t) => t.value === type)?.color || "text-slate-400";
 };
 
 export default function NotesSection({ relatedTo, relatedId, className = "" }) {
@@ -61,7 +66,9 @@ export default function NotesSection({ relatedTo, relatedId, className = "" }) {
       setCurrentUser(user);
 
       if (!user.tenant_id) {
-        console.warn("User does not have a tenant_id assigned. Please contact your administrator.");
+        console.warn(
+          "User does not have a tenant_id assigned. Please contact your administrator.",
+        );
       }
     } catch (error) {
       console.error("Error loading user:", error);
@@ -78,7 +85,7 @@ export default function NotesSection({ relatedTo, relatedId, className = "" }) {
     try {
       const notesList = await Note.filter(
         { related_to: relatedTo, related_id: relatedId },
-        '-created_date'
+        "-created_date",
       );
       setNotes(notesList);
     } catch (error) {
@@ -100,7 +107,9 @@ export default function NotesSection({ relatedTo, relatedId, className = "" }) {
     setSuccess(null);
 
     if (!currentUser?.tenant_id) {
-      setError("Error: User information not loaded or tenant not assigned. Please contact your administrator.");
+      setError(
+        "Error: User information not loaded or tenant not assigned. Please contact your administrator.",
+      );
       return;
     }
 
@@ -133,7 +142,11 @@ export default function NotesSection({ relatedTo, relatedId, className = "" }) {
       await loadNotes();
     } catch (error) {
       console.error("Error adding note:", error);
-      setError(`Error adding note: ${error.message || 'Please try again or contact support.'}`);
+      setError(
+        `Error adding note: ${
+          error.message || "Please try again or contact support."
+        }`,
+      );
     } finally {
       setLoading(false);
     }
@@ -162,27 +175,34 @@ export default function NotesSection({ relatedTo, relatedId, className = "" }) {
           <Input
             placeholder="Note title..."
             value={newNote.title}
-            onChange={(e) => setNewNote(prev => ({ ...prev, title: e.target.value }))}
+            onChange={(e) =>
+              setNewNote((prev) => ({ ...prev, title: e.target.value }))}
             className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500"
           />
           <Textarea
             placeholder="Write your note here..."
             value={newNote.content}
-            onChange={(e) => setNewNote(prev => ({ ...prev, content: e.target.value }))}
+            onChange={(e) =>
+              setNewNote((prev) => ({ ...prev, content: e.target.value }))}
             rows={3}
             className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500"
           />
           <div className="flex justify-between items-center">
             <Select
               value={newNote.type}
-              onValueChange={(value) => setNewNote(prev => ({ ...prev, type: value }))}
+              onValueChange={(value) =>
+                setNewNote((prev) => ({ ...prev, type: value }))}
             >
               <SelectTrigger className="w-40 bg-slate-700 border-slate-600 text-slate-200">
                 <SelectValue placeholder="Note type" />
               </SelectTrigger>
               <SelectContent className="bg-slate-800 border-slate-700">
-                {noteTypes.map(type => (
-                  <SelectItem key={type.value} value={type.value} className="text-slate-200 hover:bg-slate-700">
+                {noteTypes.map((type) => (
+                  <SelectItem
+                    key={type.value}
+                    value={type.value}
+                    className="text-slate-200 hover:bg-slate-700"
+                  >
                     {type.label}
                   </SelectItem>
                 ))}
@@ -190,15 +210,14 @@ export default function NotesSection({ relatedTo, relatedId, className = "" }) {
             </Select>
             <Button
               onClick={handleAddNote}
-              disabled={!newNote.title.trim() || !newNote.content.trim() || loading || !currentUser?.tenant_id}
+              disabled={!newNote.title.trim() || !newNote.content.trim() ||
+                loading || !currentUser?.tenant_id}
               size="sm"
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
-              {loading ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <Plus className="w-4 h-4 mr-2" />
-              )}
+              {loading
+                ? <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                : <Plus className="w-4 h-4 mr-2" />}
               Add Note
             </Button>
           </div>
@@ -206,76 +225,96 @@ export default function NotesSection({ relatedTo, relatedId, className = "" }) {
       </div>
 
       {/* Notes List */}
-      {loadingNotes ? (
-        <div className="space-y-3">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="bg-slate-700/30 rounded-lg p-4 border border-slate-600">
-              <div className="animate-pulse">
-                <div className="h-4 bg-slate-600 rounded w-1/3 mb-2"></div>
-                <div className="h-3 bg-slate-600 rounded w-full mb-1"></div>
-                <div className="h-3 bg-slate-600 rounded w-2/3"></div>
+      {loadingNotes
+        ? (
+          <div className="space-y-3">
+            {[...Array(3)].map((_, i) => (
+              <div
+                key={i}
+                className="bg-slate-700/30 rounded-lg p-4 border border-slate-600"
+              >
+                <div className="animate-pulse">
+                  <div className="h-4 bg-slate-600 rounded w-1/3 mb-2"></div>
+                  <div className="h-3 bg-slate-600 rounded w-full mb-1"></div>
+                  <div className="h-3 bg-slate-600 rounded w-2/3"></div>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      ) : notes.length > 0 ? (
-        <div className="space-y-3">
-          {notes.map(note => (
-            <motion.div
-              key={note.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-slate-700/30 rounded-lg p-4 border border-slate-600 hover:bg-slate-700/50 transition-colors"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <h4 className="font-medium text-slate-200">{note.title}</h4>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant="outline"
-                    className={`text-xs ${getTypeColor(note.type)} border-slate-600`}
-                  >
-                    {noteTypes.find(t => t.value === note.type)?.label || note.type}
-                  </Badge>
-                  {!note.is_private && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteNote(note.id)}
-                      className="h-6 w-6 p-0 text-slate-400 hover:text-red-400 hover:bg-red-900/20"
+            ))}
+          </div>
+        )
+        : notes.length > 0
+        ? (
+          <div className="space-y-3">
+            {notes.map((note) => (
+              <motion.div
+                key={note.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-slate-700/30 rounded-lg p-4 border border-slate-600 hover:bg-slate-700/50 transition-colors"
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <h4 className="font-medium text-slate-200">{note.title}</h4>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={`text-xs ${
+                        getTypeColor(note.type)
+                      } border-slate-600`}
                     >
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  )}
+                      {noteTypes.find((t) => t.value === note.type)?.label ||
+                        note.type}
+                    </Badge>
+                    {!note.is_private && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteNote(note.id)}
+                        className="h-6 w-6 p-0 text-slate-400 hover:text-red-400 hover:bg-red-900/20"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <p className="text-sm text-slate-300 mb-2 whitespace-pre-wrap">{note.content}</p>
-              <div className="flex justify-between items-center text-xs text-slate-500">
-                <div className="flex items-center gap-1">
-                  <UserIcon className="w-3 h-3" />
-                  <span>
-                    {note.created_by === currentUser?.email ? 'You' : note.created_by}
-                  </span>
+                <p className="text-sm text-slate-300 mb-2 whitespace-pre-wrap">
+                  {note.content}
+                </p>
+                <div className="flex justify-between items-center text-xs text-slate-500">
+                  <div className="flex items-center gap-1">
+                    <UserIcon className="w-3 h-3" />
+                    <span>
+                      {note.created_by === currentUser?.email
+                        ? "You"
+                        : note.created_by}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    <span>
+                      {format(
+                        new Date(note.created_date),
+                        "MMM d, yyyy h:mm a",
+                      )}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  <span>
-                    {format(new Date(note.created_date), 'MMM d, yyyy h:mm a')}
-                  </span>
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      ) : (
-        <div className="text-center py-8 bg-slate-700/30 rounded-lg border border-slate-600">
-          <StickyNote className="w-8 h-8 mx-auto mb-2 text-slate-500" />
-          <p className="text-slate-400">No notes yet</p>
-          <p className="text-sm text-slate-500">Add your first note above</p>
-        </div>
-      )}
+              </motion.div>
+            ))}
+          </div>
+        )
+        : (
+          <div className="text-center py-8 bg-slate-700/30 rounded-lg border border-slate-600">
+            <StickyNote className="w-8 h-8 mx-auto mb-2 text-slate-500" />
+            <p className="text-slate-400">No notes yet</p>
+            <p className="text-sm text-slate-500">Add your first note above</p>
+          </div>
+        )}
 
       {error && (
-        <Alert variant="destructive" className="bg-red-900/20 border-red-700/50 text-red-300">
+        <Alert
+          variant="destructive"
+          className="bg-red-900/20 border-red-700/50 text-red-300"
+        >
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>

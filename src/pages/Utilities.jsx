@@ -1,13 +1,18 @@
-
-import React, { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { User } from "@/api/entities";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Database, Wrench } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Database, Loader2, Wrench } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
 export default function UtilitiesPage() {
-  const [user, setUser] = useState(null);
+  const [, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // REMOVED: Local module permission check
@@ -33,14 +38,16 @@ export default function UtilitiesPage() {
     {
       id: "cleanup-orphaned-data",
       name: "Clean Up Orphaned Data",
-      description: "Removes records without a tenant_id, ensuring data integrity.",
+      description:
+        "Removes records without a tenant_id, ensuring data integrity.",
       icon: Database,
       page: "CleanupOrphanedData",
     },
     {
       id: "data-diagnostics",
       name: "Data Diagnostics",
-      description: "Analyze and troubleshoot data inconsistencies across your system.",
+      description:
+        "Analyze and troubleshoot data inconsistencies across your system.",
       icon: Database,
       page: "DataDiagnostics",
     },

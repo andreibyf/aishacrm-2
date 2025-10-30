@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { User } from '@/api/entities';
 import { Contact, Account, Lead, Opportunity } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -244,11 +244,9 @@ function UserRecordDebug({ user }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-slate-300">This section will provide detailed diagnostics related to the current user's record.</p>
+        <p className="text-slate-300">This section will provide detailed diagnostics related to the current user&apos;s record.</p>
         {user ? (
-          <pre className="bg-slate-900 rounded p-4 text-xs text-slate-300 overflow-auto max-h-96 mt-4">
-            {JSON.stringify(user, null, 2)}
-          </pre>
+          <pre className="bg-slate-900 rounded p-4 text-xs text-slate-300 overflow-auto max-h-96 mt-4">{JSON.stringify(user, null, 2)}</pre>
         ) : (
           <p className="text-slate-400 mt-4">User data is not available.</p>
         )}

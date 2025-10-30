@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User as UserEntity } from '@/api/entities';
+import { createContext, useContext, useEffect, useState } from "react";
+import { User as UserEntity } from "@/api/entities";
 
 const EmployeeScopeContext = createContext(null);
 
@@ -9,12 +9,12 @@ export const EmployeeScopeProvider = ({ children }) => {
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('employee_scope_filter');
-      if (saved && saved !== 'null' && saved !== 'undefined') {
+      const saved = localStorage.getItem("employee_scope_filter");
+      if (saved && saved !== "null" && saved !== "undefined") {
         setSelectedEmployeeEmail(saved);
       }
     } catch (error) {
-      console.warn('Failed to load employee scope filter:', error);
+      console.warn("Failed to load employee scope filter:", error);
     }
   }, []);
 
@@ -29,28 +29,30 @@ export const EmployeeScopeProvider = ({ children }) => {
         if (!canceled) setCurrentUser(null);
       }
     })();
-    return () => { canceled = true; };
+    return () => {
+      canceled = true;
+    };
   }, []);
 
   const setEmployeeScope = (email) => {
     setSelectedEmployeeEmail(email);
     try {
       if (email) {
-        localStorage.setItem('employee_scope_filter', email);
+        localStorage.setItem("employee_scope_filter", email);
       } else {
-        localStorage.removeItem('employee_scope_filter');
+        localStorage.removeItem("employee_scope_filter");
       }
     } catch (error) {
-      console.warn('Failed to save employee scope filter:', error);
+      console.warn("Failed to save employee scope filter:", error);
     }
   };
 
   const clearEmployeeScope = () => {
     setSelectedEmployeeEmail(null);
     try {
-      localStorage.removeItem('employee_scope_filter');
+      localStorage.removeItem("employee_scope_filter");
     } catch (error) {
-      console.warn('Failed to clear employee scope filter:', error);
+      console.warn("Failed to clear employee scope filter:", error);
     }
   };
 
@@ -58,16 +60,17 @@ export const EmployeeScopeProvider = ({ children }) => {
   const canViewAllRecords = () => {
     const u = currentUser;
     if (!u) return false;
-    if (u.role === 'superadmin' || u.role === 'admin') return true;
-    if (u.employee_role === 'manager') return true;
-    if (u.role === 'power-user') return true;
+    if (u.role === "superadmin" || u.role === "admin") return true;
+    if (u.employee_role === "manager") return true;
+    if (u.role === "power-user") return true;
     return false;
   };
 
   // Helper: determine employee-type
   const isEmployee = () => {
     const u = currentUser;
-    return !!u && u.employee_role === 'employee' && u.role !== 'admin' && u.role !== 'superadmin';
+    return !!u && u.employee_role === "employee" && u.role !== "admin" &&
+      u.role !== "superadmin";
   };
 
   // Helper: build a filter applying employee scope
@@ -77,7 +80,7 @@ export const EmployeeScopeProvider = ({ children }) => {
     if (!u) return { ...baseFilter };
 
     // If a specific employee email was selected, scope to that
-    if (selectedEmployeeEmail && selectedEmployeeEmail !== 'unassigned') {
+    if (selectedEmployeeEmail && selectedEmployeeEmail !== "unassigned") {
       return {
         ...baseFilter,
         $or: [
@@ -88,7 +91,7 @@ export const EmployeeScopeProvider = ({ children }) => {
     }
 
     // Unassigned selection: show items without an assignee
-    if (selectedEmployeeEmail === 'unassigned') {
+    if (selectedEmployeeEmail === "unassigned") {
       return { ...baseFilter, assigned_to: null };
     }
 
@@ -106,20 +109,22 @@ export const EmployeeScopeProvider = ({ children }) => {
   };
 
   return (
-    <EmployeeScopeContext.Provider value={{
-      // current value
-      selectedEmployeeEmail,
-      // backward-compat aliases
-      selectedEmail: selectedEmployeeEmail,
-      setSelectedEmployeeEmail: setEmployeeScope,
-      // explicit API
-      setEmployeeScope,
-      clearEmployeeScope,
-      // helpers
-      canViewAllRecords,
-      isEmployee,
-      getFilter,
-    }}>
+    <EmployeeScopeContext.Provider
+      value={{
+        // current value
+        selectedEmployeeEmail,
+        // backward-compat aliases
+        selectedEmail: selectedEmployeeEmail,
+        setSelectedEmployeeEmail: setEmployeeScope,
+        // explicit API
+        setEmployeeScope,
+        clearEmployeeScope,
+        // helpers
+        canViewAllRecords,
+        isEmployee,
+        getFilter,
+      }}
+    >
       {children}
     </EmployeeScopeContext.Provider>
   );
@@ -136,7 +141,7 @@ export const useEmployeeScope = () => {
       clearEmployeeScope: () => {},
       canViewAllRecords: () => false,
       isEmployee: () => false,
-      getFilter: (f = {}) => ({ ...f })
+      getFilter: (f = {}) => ({ ...f }),
     };
   }
   return context;

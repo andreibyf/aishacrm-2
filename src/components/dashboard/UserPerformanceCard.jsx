@@ -1,22 +1,19 @@
-
-import React, { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { 
-  Users, 
-  TrendingUp, 
-  Target, 
-  DollarSign, 
-  Trophy,
+import {
+  Award,
+  DollarSign,
   Medal,
-  Award
+  Target,
+  TrendingUp,
+  Trophy,
+  Users,
 } from "lucide-react";
 // New imports from outline
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'; // Added as per outline, even if not directly used in the card's visual output.
-import { User } from '@/api/entities'; // Assuming User entity exists at this path
-import { Opportunity } from '@/api/entities'; // Assuming Opportunity entity exists at this path
-
+import { User } from "@/api/entities"; // Assuming User entity exists at this path
+import { Opportunity } from "@/api/entities"; // Assuming Opportunity entity exists at this path
 
 export default function UserPerformanceCard({ currentUser, tenantFilter }) {
   // State to hold the performance data for the current user
@@ -29,7 +26,7 @@ export default function UserPerformanceCard({ currentUser, tenantFilter }) {
   const [error, setError] = useState(null);
 
   // Extract dateRange from tenantFilter for the badge, default to 'period' if not specified
-  const dateRange = tenantFilter?.dateRange || 'period';
+  const dateRange = tenantFilter?.dateRange || "period";
 
   useEffect(() => {
     const fetchPerformanceData = async () => {
@@ -50,11 +47,14 @@ export default function UserPerformanceCard({ currentUser, tenantFilter }) {
         // Fetch all users based on the tenant filter
         // Assuming User.filter can take a tenantFilter object and returns an array of User objects
         const users = await User.filter(tenantFilter);
-        
+
         // Fetch closed-won opportunities based on the tenant filter
         // Assuming Opportunity.filter can take a filter object and returns an array of Opportunity objects
-        const opportunities = await Opportunity.filter({ ...tenantFilter, stage: 'closed_won' });
-        
+        const opportunities = await Opportunity.filter({
+          ...tenantFilter,
+          stage: "closed_won",
+        });
+
         // Group opportunities by their owner_id (user ID)
         const opportunitiesByUser = opportunities.reduce((acc, opp) => {
           const ownerId = opp.owner_id; // Assuming Opportunity has an 'owner_id' property
@@ -74,9 +74,10 @@ export default function UserPerformanceCard({ currentUser, tenantFilter }) {
         }, {});
 
         // Calculate performance for each user
-        const calculatedPerformances = users.map(user => {
-          const userOpps = opportunitiesByUser[user.id] || { opportunities: 0, closed_deals: 0, revenue: 0 };
-          
+        const calculatedPerformances = users.map((user) => {
+          const userOpps = opportunitiesByUser[user.id] ||
+            { opportunities: 0, closed_deals: 0, revenue: 0 };
+
           // For 'contacts' and 'leads', assuming they are properties directly on the User entity
           // or can be derived. If not available, placeholders are used.
           // In a real application, these would likely be fetched from a dedicated 'Contact' or 'Lead' entity
@@ -85,13 +86,16 @@ export default function UserPerformanceCard({ currentUser, tenantFilter }) {
           const userLeads = user.leads_count || (user.id * 5 % 50) + 5; // Placeholder value
 
           // Calculate a temporary performance score for ranking purposes
-          const performanceScoreForRank = Math.min(100, Math.round(
-            (userContacts * 2) + 
-            (userLeads * 3) + 
-            (userOpps.opportunities * 5) + 
-            (userOpps.closed_deals * 10) + 
-            (userOpps.revenue / 1000)
-          ));
+          const performanceScoreForRank = Math.min(
+            100,
+            Math.round(
+              (userContacts * 2) +
+                (userLeads * 3) +
+                (userOpps.opportunities * 5) +
+                (userOpps.closed_deals * 10) +
+                (userOpps.revenue / 1000),
+            ),
+          );
 
           return {
             user,
@@ -108,12 +112,17 @@ export default function UserPerformanceCard({ currentUser, tenantFilter }) {
         calculatedPerformances.sort((a, b) => b.score - a.score);
 
         // Find the current user's performance and their rank
-        const foundUserPerformance = calculatedPerformances.find(p => p.user.id === currentUser.id);
-        const currentUserCalculatedRank = foundUserPerformance ? calculatedPerformances.findIndex(p => p.user.id === currentUser.id) + 1 : 0;
-        
+        const foundUserPerformance = calculatedPerformances.find((p) =>
+          p.user.id === currentUser.id
+        );
+        const currentUserCalculatedRank = foundUserPerformance
+          ? calculatedPerformances.findIndex((p) =>
+            p.user.id === currentUser.id
+          ) + 1
+          : 0;
+
         setUserPerformance(foundUserPerformance);
         setRank(currentUserCalculatedRank);
-
       } catch (err) {
         console.error("Failed to fetch performance data:", err);
         setError("Failed to load performance data. Please try again.");
@@ -135,7 +144,11 @@ export default function UserPerformanceCard({ currentUser, tenantFilter }) {
       case 3:
         return <Award className="w-4 h-4 text-amber-600" />;
       default:
-        return <span className="text-sm font-bold text-slate-600">#{currentRank}</span>;
+        return (
+          <span className="text-sm font-bold text-slate-600">
+            #{currentRank}
+          </span>
+        );
     }
   };
 
@@ -157,7 +170,9 @@ export default function UserPerformanceCard({ currentUser, tenantFilter }) {
     return (
       <Card className="shadow-lg border-2 bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base text-slate-700">Loading performance...</CardTitle>
+          <CardTitle className="text-base text-slate-700">
+            Loading performance...
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="animate-pulse space-y-4">
@@ -187,11 +202,15 @@ export default function UserPerformanceCard({ currentUser, tenantFilter }) {
     return (
       <Card className="shadow-lg border-2 bg-gradient-to-br from-red-50 to-orange-50 border-red-200">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base text-red-700">Error Loading Data</CardTitle>
+          <CardTitle className="text-base text-red-700">
+            Error Loading Data
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-red-600">{error}</p>
-          <p className="text-xs text-red-500 mt-2">Please check your network connection or try again later.</p>
+          <p className="text-xs text-red-500 mt-2">
+            Please check your network connection or try again later.
+          </p>
         </CardContent>
       </Card>
     );
@@ -202,40 +221,54 @@ export default function UserPerformanceCard({ currentUser, tenantFilter }) {
     return (
       <Card className="shadow-lg border-2 bg-gradient-to-br from-gray-50 to-slate-50 border-gray-200">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base text-slate-700">No Data Available</CardTitle>
+          <CardTitle className="text-base text-slate-700">
+            No Data Available
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-slate-600">No performance data found for the selected user in this period.</p>
-          <p className="text-xs text-slate-500 mt-2">Ensure the user exists and has associated data.</p>
+          <p className="text-sm text-slate-600">
+            No performance data found for the selected user in this period.
+          </p>
+          <p className="text-xs text-slate-500 mt-2">
+            Ensure the user exists and has associated data.
+          </p>
         </CardContent>
       </Card>
     );
   }
 
   // Destructure performance data for rendering
-  const { user, contacts, leads, opportunities, revenue, closed_deals } = userPerformance;
-  
+  const { user, contacts, leads, opportunities, revenue, closed_deals } =
+    userPerformance;
+
   // Calculate performance score (weighted)
-  const performanceScore = Math.min(100, Math.round(
-    (contacts * 2) + 
-    (leads * 3) + 
-    (opportunities * 5) + 
-    (closed_deals * 10) + 
-    (revenue / 1000)
-  ));
+  const performanceScore = Math.min(
+    100,
+    Math.round(
+      (contacts * 2) +
+        (leads * 3) +
+        (opportunities * 5) +
+        (closed_deals * 10) +
+        (revenue / 1000),
+    ),
+  );
 
   return (
-    <Card className={`shadow-lg border-2 bg-gradient-to-br ${getRankColor(rank)} hover:shadow-xl transition-all duration-300`}>
+    <Card
+      className={`shadow-lg border-2 bg-gradient-to-br ${
+        getRankColor(rank)
+      } hover:shadow-xl transition-all duration-300`}
+    >
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between text-base">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
-              {user.full_name?.charAt(0).toUpperCase() || '?'}
+              {user.full_name?.charAt(0).toUpperCase() || "?"}
             </div>
             <div>
               <p className="font-semibold text-slate-900">{user.full_name}</p>
               <p className="text-xs text-slate-500 capitalize">
-                {user.role === 'power-user' ? 'Power User' : user.role}
+                {user.role === "power-user" ? "Power User" : user.role}
               </p>
             </div>
           </div>
@@ -248,8 +281,12 @@ export default function UserPerformanceCard({ currentUser, tenantFilter }) {
         {/* Performance Score */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-slate-700">Performance Score</span>
-            <span className="text-sm font-bold text-slate-900">{performanceScore}/100</span>
+            <span className="text-sm font-medium text-slate-700">
+              Performance Score
+            </span>
+            <span className="text-sm font-bold text-slate-900">
+              {performanceScore}/100
+            </span>
           </div>
           <Progress value={performanceScore} className="h-2" />
         </div>
@@ -263,7 +300,7 @@ export default function UserPerformanceCard({ currentUser, tenantFilter }) {
             <p className="text-sm font-bold text-slate-900">{contacts}</p>
             <p className="text-xs text-slate-600">Contacts</p>
           </div>
-          
+
           <div className="text-center p-2 bg-white/50 rounded-lg">
             <div className="flex items-center justify-center mb-1">
               <TrendingUp className="w-4 h-4 text-purple-600" />
@@ -271,7 +308,7 @@ export default function UserPerformanceCard({ currentUser, tenantFilter }) {
             <p className="text-sm font-bold text-slate-900">{leads}</p>
             <p className="text-xs text-slate-600">Leads</p>
           </div>
-          
+
           <div className="text-center p-2 bg-white/50 rounded-lg">
             <div className="flex items-center justify-center mb-1">
               <Target className="w-4 h-4 text-orange-600" />
@@ -279,7 +316,7 @@ export default function UserPerformanceCard({ currentUser, tenantFilter }) {
             <p className="text-sm font-bold text-slate-900">{opportunities}</p>
             <p className="text-xs text-slate-600">Opportunities</p>
           </div>
-          
+
           <div className="text-center p-2 bg-white/50 rounded-lg">
             <div className="flex items-center justify-center mb-1">
               <DollarSign className="w-4 h-4 text-green-600" />
@@ -292,7 +329,9 @@ export default function UserPerformanceCard({ currentUser, tenantFilter }) {
         {/* Revenue */}
         <div className="pt-3 border-t border-slate-200">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-slate-700">Revenue Generated</span>
+            <span className="text-sm font-medium text-slate-700">
+              Revenue Generated
+            </span>
             <span className="text-lg font-bold text-green-700">
               ${(revenue / 1000).toFixed(0)}K
             </span>

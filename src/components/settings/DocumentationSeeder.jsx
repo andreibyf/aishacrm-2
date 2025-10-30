@@ -1,8 +1,14 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Book, CheckCircle, AlertTriangle } from "lucide-react";
+import { AlertTriangle, Book, CheckCircle, Loader2 } from "lucide-react";
 import { seedDocumentation } from "@/api/functions";
 
 export default function DocumentationSeeder() {
@@ -17,15 +23,18 @@ export default function DocumentationSeeder() {
 
     try {
       const response = await seedDocumentation();
-      
+
       if (response.data?.success) {
         setResult(response.data);
       } else {
-        setError(response.data?.error || response.data?.message || 'Failed to seed documentation');
+        setError(
+          response.data?.error || response.data?.message ||
+            "Failed to seed documentation",
+        );
       }
     } catch (err) {
-      console.error('Error seeding documentation:', err);
-      setError(err.message || 'An error occurred while seeding documentation');
+      console.error("Error seeding documentation:", err);
+      setError(err.message || "An error occurred while seeding documentation");
     } finally {
       setLoading(false);
     }
@@ -39,7 +48,8 @@ export default function DocumentationSeeder() {
           AI Avatar Documentation
         </CardTitle>
         <CardDescription className="text-slate-400">
-          Seed the documentation database to enable the AI Avatar to answer questions about system workflows, features, and best practices.
+          Seed the documentation database to enable the AI Avatar to answer
+          questions about system workflows, features, and best practices.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -66,13 +76,18 @@ export default function DocumentationSeeder() {
             <AlertDescription className="text-green-300">
               <strong>Success!</strong> {result.message}
               <br />
-              <span className="text-sm">Created {result.count} documentation records.</span>
+              <span className="text-sm">
+                Created {result.count} documentation records.
+              </span>
             </AlertDescription>
           </Alert>
         )}
 
         {error && (
-          <Alert variant="destructive" className="bg-red-900/30 border-red-700/50">
+          <Alert
+            variant="destructive"
+            className="bg-red-900/30 border-red-700/50"
+          >
             <AlertTriangle className="h-4 w-4 text-red-400" />
             <AlertDescription className="text-red-300">
               <strong>Error:</strong> {error}
@@ -86,31 +101,35 @@ export default function DocumentationSeeder() {
             disabled={loading}
             className="bg-blue-600 hover:bg-blue-700 text-white"
           >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                Seeding Documentation...
-              </>
-            ) : (
-              <>
-                <Book className="w-4 h-4 mr-2" />
-                Seed Documentation
-              </>
-            )}
+            {loading
+              ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Seeding Documentation...
+                </>
+              )
+              : (
+                <>
+                  <Book className="w-4 h-4 mr-2" />
+                  Seed Documentation
+                </>
+              )}
           </Button>
 
           <div className="text-xs text-slate-400">
-            This is safe to run multiple times - it won't create duplicates.
+            This is safe to run multiple times - it won&apos;t create
+            duplicates.
           </div>
         </div>
 
         <div className="text-xs text-slate-500 bg-slate-700/50 p-3 rounded border border-slate-600">
-          <strong>Note:</strong> After seeding, users can ask the AI Avatar questions like:
+          <strong>Note:</strong>{" "}
+          After seeding, users can ask the AI Avatar questions like:
           <ul className="mt-2 space-y-1 ml-4 list-disc">
-            <li>"How do I convert a lead?"</li>
-            <li>"What are BizDev Sources?"</li>
-            <li>"How does the calendar work?"</li>
-            <li>"How do I set up integrations?"</li>
+            <li>&quot;How do I convert a lead?&quot;</li>
+            <li>&quot;What are BizDev Sources?&quot;</li>
+            <li>&quot;How does the calendar work?&quot;</li>
+            <li>&quot;How do I set up integrations?&quot;</li>
           </ul>
         </div>
       </CardContent>

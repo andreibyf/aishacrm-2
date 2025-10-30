@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Account } from "@/api/entities";
 import { User } from "@/api/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,7 +38,7 @@ export default function DuplicateAccounts() {
   const { toast } = useToast();
 
   const [consolidating, setConsolidating] = useState(false);
-  const [consolidateTarget, setConsolidateTarget] = useState(null);
+  const [, setConsolidateTarget] = useState(null);
 
   useEffect(() => {
     loadUser();

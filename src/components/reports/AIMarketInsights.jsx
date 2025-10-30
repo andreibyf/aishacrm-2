@@ -1,28 +1,28 @@
-
-import React, { useState } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
-  TrendingUp,
-  Loader2,
-  Lightbulb,
   AlertCircle,
-  Target,
-  RefreshCw,
-  Building2,
   AlertTriangle,
-  Shield,
-  Zap,
-  TrendingDown,
-  Globe,
-  Newspaper,
+  Building2,
   CheckCircle,
-  XCircle
+  Globe,
+  Lightbulb,
+  Loader2,
+  Newspaper,
+  RefreshCw,
+  Shield,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  XCircle,
+  Zap,
 } from "lucide-react";
 import { InvokeLLM } from "@/api/integrations";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { isLocalDevMode } from "@/api/mockData";
+// Note: Charts removed; keeping UI minimal with indicator cards only.
 
 const INDUSTRY_LABELS = {
   accounting_and_finance: "Accounting & Finance",
@@ -36,7 +36,8 @@ const INDUSTRY_LABELS = {
   consulting_and_professional_services: "Consulting & Professional Services",
   consumer_goods_and_retail: "Consumer Goods & Retail",
   cybersecurity: "Cybersecurity",
-  data_analytics_and_business_intelligence: "Data Analytics & Business Intelligence",
+  data_analytics_and_business_intelligence:
+    "Data Analytics & Business Intelligence",
   education_and_training: "Education & Training",
   energy_oil_and_gas: "Energy, Oil & Gas",
   entertainment_and_media: "Entertainment & Media",
@@ -78,7 +79,7 @@ const INDUSTRY_LABELS = {
   veterinary_services: "Veterinary Services",
   warehousing_and_distribution: "Warehousing & Distribution",
   wealth_management: "Wealth Management",
-  other: "Other"
+  other: "Other",
 };
 
 const GEOGRAPHIC_LABELS = {
@@ -88,7 +89,7 @@ const GEOGRAPHIC_LABELS = {
   south_america: "South America",
   africa: "Africa",
   oceania: "Oceania",
-  global: "Global"
+  global: "Global",
 };
 
 export default function AIMarketInsights({ tenant }) {
@@ -98,43 +99,55 @@ export default function AIMarketInsights({ tenant }) {
 
   // Helper function to format large numbers with B/M/K suffixes
   const formatLargeNumber = (num) => {
-    if (num === null || num === undefined || typeof num !== 'number' || isNaN(num)) return num;
+    if (
+      num === null || num === undefined || typeof num !== "number" || isNaN(num)
+    ) return num;
 
     if (Math.abs(num) >= 1e9) {
-      return (num / 1e9).toFixed(1).replace(/\.0$/, '') + 'B';
+      return (num / 1e9).toFixed(1).replace(/\.0$/, "") + "B";
     } else if (Math.abs(num) >= 1e6) {
-      return (num / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+      return (num / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
     } else if (Math.abs(num) >= 1e3) {
-      return (num / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
+      return (num / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
     }
     return num.toFixed(1);
   };
 
   // Helper to format display value with unit
   const formatDisplayValue = (value, unit) => {
-    if (value === null || value === undefined || typeof value !== 'number' || isNaN(value)) return value;
+    if (
+      value === null || value === undefined || typeof value !== "number" ||
+      isNaN(value)
+    ) return value;
 
-    if (unit && typeof unit === 'string') {
+    if (unit && typeof unit === "string") {
       const lowerUnit = unit.toLowerCase();
-      if (lowerUnit.includes('usd') || lowerUnit.includes('dollar')) {
-        return '$' + formatLargeNumber(value);
-      } else if (lowerUnit.includes('percent') || lowerUnit === '%') {
-        return value.toFixed(1) + ' %';
-      } else if (lowerUnit.includes('job')) {
-        return value.toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' jobs';
-      } else if (lowerUnit.includes('index')) {
-        return Math.round(value).toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' index';
-      } else if (lowerUnit.includes('unit')) {
-        return value.toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' units';
+      if (lowerUnit.includes("usd") || lowerUnit.includes("dollar")) {
+        return "$" + formatLargeNumber(value);
+      } else if (lowerUnit.includes("percent") || lowerUnit === "%") {
+        return value.toFixed(1) + " %";
+      } else if (lowerUnit.includes("job")) {
+        return value.toLocaleString("en-US", { maximumFractionDigits: 0 }) +
+          " jobs";
+      } else if (lowerUnit.includes("index")) {
+        return Math.round(value).toLocaleString("en-US", {
+          maximumFractionDigits: 0,
+        }) + " index";
+      } else if (lowerUnit.includes("unit")) {
+        return value.toLocaleString("en-US", { maximumFractionDigits: 0 }) +
+          " units";
       }
     }
     // Default formatting if no specific unit match
-    return value.toLocaleString('en-US', { maximumFractionDigits: 2 }) + (unit ? ' ' + unit : '');
+    return value.toLocaleString("en-US", { maximumFractionDigits: 2 }) +
+      (unit ? " " + unit : "");
   };
 
   const handleGenerateInsights = async () => {
     if (!tenant?.industry) {
-      setError("No industry configured for the selected organization. Please update tenant settings.");
+      setError(
+        "No industry configured for the selected organization. Please update tenant settings.",
+      );
       return;
     }
 
@@ -145,7 +158,8 @@ export default function AIMarketInsights({ tenant }) {
     try {
       const industryLabel = INDUSTRY_LABELS[tenant.industry] || tenant.industry;
       const businessModel = tenant.business_model || "B2B";
-      const geographicFocus = GEOGRAPHIC_LABELS[tenant.geographic_focus] || "North America";
+      const geographicFocus = GEOGRAPHIC_LABELS[tenant.geographic_focus] ||
+        "North America";
 
       // Build location string with increasing specificity
       let locationContext = geographicFocus;
@@ -156,9 +170,14 @@ export default function AIMarketInsights({ tenant }) {
         }
       }
 
-      console.log('Generating insights for:', { industryLabel, businessModel, locationContext });
+      console.log("Generating insights for:", {
+        industryLabel,
+        businessModel,
+        locationContext,
+      });
 
-      const prompt = `You are an expert market research analyst. Provide a comprehensive, data-driven market analysis for a company operating in the ${industryLabel} industry.
+      const prompt =
+        `You are an expert market research analyst. Provide a comprehensive, data-driven market analysis for a company operating in the ${industryLabel} industry.
 
 **Company Context:**
 - Industry: ${industryLabel}
@@ -181,79 +200,262 @@ export default function AIMarketInsights({ tenant }) {
 
 Ensure the output is specific to ${locationContext} and the ${industryLabel} industry. Format perfectly as JSON according to the schema.`;
 
-  const response = await InvokeLLM({
-        prompt,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            market_overview: { type: "string" },
-            swot_analysis: {
-              type: "object",
-              properties: {
-                strengths: { type: "array", items: { type: "string" } },
-                weaknesses: { type: "array", items: { type: "string" } },
-                opportunities: { type: "array", items: { type: "string" } },
-                threats: { type: "array", items: { type: "string" } }
+      // Prefer Core.InvokeLLM when available (cloud). In local dev, fall back to backend MCP tools.
+      let response;
+      if (!isLocalDevMode() && typeof InvokeLLM === "function") {
+        response = await InvokeLLM({
+          prompt,
+          add_context_from_internet: true,
+          response_json_schema: {
+            type: "object",
+            properties: {
+              market_overview: { type: "string" },
+              swot_analysis: {
+                type: "object",
+                properties: {
+                  strengths: { type: "array", items: { type: "string" } },
+                  weaknesses: { type: "array", items: { type: "string" } },
+                  opportunities: { type: "array", items: { type: "string" } },
+                  threats: { type: "array", items: { type: "string" } },
+                },
+                required: [
+                  "strengths",
+                  "weaknesses",
+                  "opportunities",
+                  "threats",
+                ],
               },
-              required: ["strengths", "weaknesses", "opportunities", "threats"]
-            },
-            competitive_landscape: {
-              type: "object",
-              properties: {
-                overview: { type: "string" },
-                major_competitors: { type: "array", items: { type: "string" } },
-                market_dynamics: { type: "string" }
+              competitive_landscape: {
+                type: "object",
+                properties: {
+                  overview: { type: "string" },
+                  major_competitors: {
+                    type: "array",
+                    items: { type: "string" },
+                  },
+                  market_dynamics: { type: "string" },
+                },
+                required: ["overview", "major_competitors"],
               },
-              required: ["overview", "major_competitors"]
-            },
-            major_news: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                  description: { type: "string" },
-                  date: { type: "string" },
-                  impact: { type: "string", enum: ["positive", "negative", "neutral"] }
+              major_news: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    description: { type: "string" },
+                    date: { type: "string" },
+                    impact: {
+                      type: "string",
+                      enum: ["positive", "negative", "neutral"],
+                    },
+                  },
+                  required: ["title", "description", "date", "impact"],
                 },
-                required: ["title", "description", "date", "impact"]
-              }
-            },
-            recommendations: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                  description: { type: "string" },
-                  priority: { type: "string", enum: ["high", "medium", "low"] }
+              },
+              recommendations: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    description: { type: "string" },
+                    priority: {
+                      type: "string",
+                      enum: ["high", "medium", "low"],
+                    },
+                  },
+                  required: ["title", "description", "priority"],
                 },
-                required: ["title", "description", "priority"]
-              }
-            },
-            economic_indicators: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  name: { type: "string" },
-                  current_value: { type: "number" },
-                  trend: { type: "string", enum: ["up", "down", "stable"] },
-                  unit: { type: "string" }
+              },
+              economic_indicators: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    name: { type: "string" },
+                    current_value: { type: "number" },
+                    trend: { type: "string", enum: ["up", "down", "stable"] },
+                    unit: { type: "string" },
+                  },
+                  required: ["name", "current_value", "trend", "unit"],
                 },
-                required: ["name", "current_value", "trend", "unit"]
-              }
-            }
+              },
+            },
+            required: [
+              "market_overview",
+              "swot_analysis",
+              "competitive_landscape",
+              "major_news",
+              "recommendations",
+              "economic_indicators",
+            ],
           },
-          required: ["market_overview", "swot_analysis", "competitive_landscape", "major_news", "recommendations", "economic_indicators"]
+        });
+      } else {
+        // Local Dev Fallback: Build insights using backend MCP web + crm tools
+        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
+          "http://localhost:3001";
+        const execTool = async (server_id, tool_name, parameters) => {
+          const res = await fetch(`${BACKEND_URL}/api/mcp/execute-tool`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ server_id, tool_name, parameters }),
+          });
+          const json = await res.json();
+          if (json.status !== "success") {
+            throw new Error(json.message || "MCP tool error");
+          }
+          return json.data;
+        };
+
+        // 1) Get tenant stats to ground recommendations
+        const tenantId = tenant?.id || tenant?.tenant_id || "local-tenant-001";
+        let tenantStats = null;
+        try {
+          tenantStats = await execTool("crm", "crm.get_tenant_stats", {
+            tenant_id: tenantId,
+          });
+        } catch { /* non-fatal */ }
+
+        // 2) Do a quick Wikipedia search for industry/location context
+        const searchQuery = `${industryLabel} market ${locationContext}`;
+        const searchResults = await execTool("web", "web.search_wikipedia", {
+          q: searchQuery,
+        });
+        let overview = "";
+        try {
+          const first = Array.isArray(searchResults) ? searchResults[0] : null;
+          if (first?.pageid) {
+            const page = await execTool("web", "web.get_wikipedia_page", {
+              pageid: String(first.pageid),
+            });
+            overview = page?.extract || "";
+          }
+        } catch { /* ignore */ }
+
+        // 3) Assemble a basic insights JSON compatible with UI schema
+        const makeArray = (
+          arr,
+        ) => (Array.isArray(arr) && arr.length ? arr : []);
+        const majorNews = makeArray(searchResults).slice(0, 5).map((r) => ({
+          title: r?.title || "Industry update",
+          description: (r?.snippet || "").replace(/<[^>]*>/g, ""),
+          date: new Date().toISOString().slice(0, 10),
+          impact: "neutral",
+        }));
+
+        // Basic, sensible defaults; refined by stats if available
+        const swot = {
+          strengths: [
+            `${industryLabel} demand resilience in ${locationContext}`,
+            `Growing digital adoption in ${locationContext}`,
+          ],
+          weaknesses: [
+            `Operational costs volatility`,
+            `Talent acquisition challenges`,
+          ],
+          opportunities: [
+            `Niche positioning within ${industryLabel}`,
+            `Automation and AI-driven efficiency`,
+          ],
+          threats: [
+            `Competitive pressure from incumbents and startups`,
+            `Regulatory uncertainty`,
+          ],
+        };
+
+        const recs = [
+          {
+            title: "Tighten ICP and messaging",
+            description:
+              `Focus on segments with strong fit in ${locationContext}; align outreach with ${industryLabel} pain points.`,
+            priority: "high",
+          },
+          {
+            title: "Double down on pipeline hygiene",
+            description:
+              `Improve conversion tracking and deal reviews to increase forecast accuracy.`,
+            priority: "medium",
+          },
+        ];
+
+        if (tenantStats) {
+          if ((tenantStats.activities || 0) < 10) {
+            recs.push({
+              title: "Increase sales activity",
+              description:
+                `Low recent activity detected; run outreach sprints to boost top-of-funnel.`,
+              priority: "high",
+            });
+          }
+          if ((tenantStats.opportunities || 0) === 0) {
+            recs.push({
+              title: "Kickstart opportunities",
+              description:
+                `No active pipeline found; run targeted campaigns and warm intros to seed opportunities.`,
+              priority: "high",
+            });
+          }
         }
-      });
 
-      console.log('LLM Response:', response);
+        response = {
+          data: {
+            market_overview: overview ||
+              `Market context for ${industryLabel} in ${locationContext}.`,
+            swot_analysis: swot,
+            competitive_landscape: {
+              overview:
+                `Competitive environment in ${locationContext} features both established players and challengers. Differentiate on niche focus and velocity.`,
+              major_competitors: makeArray(searchResults).slice(0, 3).map((r) =>
+                r?.title || "Key competitor"
+              ),
+              market_dynamics:
+                `Monitor pricing pressure and emerging substitutes; emphasize speed-to-value.`,
+            },
+            major_news: majorNews,
+            recommendations: recs,
+            economic_indicators: [
+              {
+                name: "GDP Growth",
+                current_value: 2.2,
+                trend: "up",
+                unit: "percent",
+              },
+              {
+                name: "Inflation",
+                current_value: 3.1,
+                trend: "down",
+                unit: "percent",
+              },
+              {
+                name: "Unemployment",
+                current_value: 4.0,
+                trend: "stable",
+                unit: "percent",
+              },
+              {
+                name: "Venture Funding",
+                current_value: 12.5,
+                trend: "up",
+                unit: "USD (B)",
+              },
+              {
+                name: "Industry Index",
+                current_value: 108,
+                trend: "up",
+                unit: "index",
+              },
+            ],
+          },
+        };
+      }
 
-      // InvokeLLM returns data directly when response_json_schema is provided
-      if (response && (response.data || typeof response === 'object')) {
+      console.log("LLM Response:", response);
+
+      // InvokeLLM returns data directly when response_json_schema is provided (cloud)
+      // For local fallback, we already shaped 'response' as { data: {...} }
+      if (response && (response.data || typeof response === "object")) {
         // functions proxy returns { data: <payload> } in some cases; handle both shapes
         const payload = response.data || response;
         setInsights(payload);
@@ -273,8 +475,12 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
       <Card className="bg-slate-800 border-slate-700">
         <CardContent className="p-12 text-center">
           <Building2 className="w-12 h-12 text-slate-500 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-slate-300 mb-2">No Tenant Selected</h3>
-          <p className="text-slate-400">Please select a tenant to view AI market insights.</p>
+          <h3 className="text-lg font-semibold text-slate-300 mb-2">
+            No Tenant Selected
+          </h3>
+          <p className="text-slate-400">
+            Please select a tenant to view AI market insights.
+          </p>
         </CardContent>
       </Card>
     );
@@ -293,21 +499,24 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
             disabled={generating || !tenant?.industry}
             className="bg-blue-600 hover:bg-blue-700 text-white"
           >
-            {generating ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Analyzing...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Generate Insights
-              </>
-            )}
+            {generating
+              ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Analyzing...
+                </>
+              )
+              : (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Generate Insights
+                </>
+              )}
           </Button>
         </CardTitle>
         <p className="text-slate-400 mt-2">
-          AI-powered market analysis for <span className="font-semibold text-slate-200">{tenant.name}</span>
+          AI-powered market analysis for{" "}
+          <span className="font-semibold text-slate-200">{tenant.name}</span>
         </p>
         <div className="flex flex-wrap gap-2 mt-3">
           {tenant.industry && (
@@ -323,7 +532,8 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
           {tenant.geographic_focus && (
             <Badge className="bg-green-900/30 text-green-300 border border-green-700/50">
               <Globe className="w-3 h-3 mr-1" />
-              {GEOGRAPHIC_LABELS[tenant.geographic_focus] || tenant.geographic_focus}
+              {GEOGRAPHIC_LABELS[tenant.geographic_focus] ||
+                tenant.geographic_focus}
             </Badge>
           )}
           {tenant.country && (
@@ -340,11 +550,16 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
           )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-6" data-ai-insights={insights ? JSON.stringify(insights) : null}>
+      <CardContent
+        className="space-y-6"
+        data-ai-insights={insights ? JSON.stringify(insights) : null}
+      >
         {error && (
           <Alert className="bg-red-900/20 border-red-700/50">
             <AlertCircle className="h-4 w-4 text-red-400" />
-            <AlertDescription className="text-red-300">{error}</AlertDescription>
+            <AlertDescription className="text-red-300">
+              {error}
+            </AlertDescription>
           </Alert>
         )}
 
@@ -352,7 +567,8 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
           <Alert className="bg-yellow-900/20 border-yellow-700/50">
             <AlertTriangle className="h-4 w-4 text-yellow-400" />
             <AlertDescription className="text-yellow-300">
-              Please configure an industry for this organization in tenant settings to generate AI insights.
+              Please configure an industry for this organization in tenant
+              settings to generate AI insights.
             </AlertDescription>
           </Alert>
         )}
@@ -360,10 +576,14 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
         {!insights && !generating && tenant?.industry && (
           <div className="text-center py-12 text-slate-400">
             <Lightbulb className="w-16 h-16 mx-auto mb-4 opacity-50" />
-            <p>Click "Generate Insights" to analyze current market conditions</p>
+            <p>
+              Click &quot;Generate Insights&quot; to analyze current market
+              conditions
+            </p>
             {tenant.major_city && tenant.country && (
               <p className="text-sm mt-2">
-                Analysis will be focused on: {tenant.major_city}, {tenant.country}
+                Analysis will be focused on: {tenant.major_city},{" "}
+                {tenant.country}
               </p>
             )}
             {!tenant.major_city && tenant.country && (
@@ -373,7 +593,9 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
             )}
             {!tenant.country && tenant.geographic_focus && (
               <p className="text-sm mt-2">
-                Analysis will be focused on: {GEOGRAPHIC_LABELS[tenant.geographic_focus] || tenant.geographic_focus}
+                Analysis will be focused on:{" "}
+                {GEOGRAPHIC_LABELS[tenant.geographic_focus] ||
+                  tenant.geographic_focus}
               </p>
             )}
           </div>
@@ -388,7 +610,9 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
                   <Globe className="w-5 h-5" />
                   Market Overview
                 </h3>
-                <p className="text-slate-300 leading-relaxed">{insights.market_overview}</p>
+                <p className="text-slate-300 leading-relaxed">
+                  {insights.market_overview}
+                </p>
               </div>
             )}
 
@@ -396,7 +620,8 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
             {insights.swot_analysis && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Strengths */}
-                {insights.swot_analysis.strengths && insights.swot_analysis.strengths.length > 0 && (
+                {insights.swot_analysis.strengths &&
+                  insights.swot_analysis.strengths.length > 0 && (
                   <div className="bg-gradient-to-br from-green-900/30 to-green-800/20 border border-green-700/50 rounded-lg p-4">
                     <h4 className="font-semibold text-green-300 mb-3 flex items-center gap-2">
                       <CheckCircle className="w-5 h-5" />
@@ -404,7 +629,10 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
                     </h4>
                     <ul className="space-y-2">
                       {insights.swot_analysis.strengths.map((item, idx) => (
-                        <li key={idx} className="text-slate-300 text-sm flex items-start gap-2">
+                        <li
+                          key={idx}
+                          className="text-slate-300 text-sm flex items-start gap-2"
+                        >
                           <span className="text-green-400 mt-0.5">•</span>
                           <span>{item}</span>
                         </li>
@@ -414,7 +642,8 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
                 )}
 
                 {/* Weaknesses */}
-                {insights.swot_analysis.weaknesses && insights.swot_analysis.weaknesses.length > 0 && (
+                {insights.swot_analysis.weaknesses &&
+                  insights.swot_analysis.weaknesses.length > 0 && (
                   <div className="bg-gradient-to-br from-red-900/30 to-red-800/20 border border-red-700/50 rounded-lg p-4">
                     <h4 className="font-semibold text-red-300 mb-3 flex items-center gap-2">
                       <XCircle className="w-5 h-5" />
@@ -422,7 +651,10 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
                     </h4>
                     <ul className="space-y-2">
                       {insights.swot_analysis.weaknesses.map((item, idx) => (
-                        <li key={idx} className="text-slate-300 text-sm flex items-start gap-2">
+                        <li
+                          key={idx}
+                          className="text-slate-300 text-sm flex items-start gap-2"
+                        >
                           <span className="text-red-400 mt-0.5">•</span>
                           <span>{item}</span>
                         </li>
@@ -432,7 +664,8 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
                 )}
 
                 {/* Opportunities */}
-                {insights.swot_analysis.opportunities && insights.swot_analysis.opportunities.length > 0 && (
+                {insights.swot_analysis.opportunities &&
+                  insights.swot_analysis.opportunities.length > 0 && (
                   <div className="bg-gradient-to-br from-cyan-900/30 to-cyan-800/20 border border-cyan-700/50 rounded-lg p-4">
                     <h4 className="font-semibold text-cyan-300 mb-3 flex items-center gap-2">
                       <Target className="w-5 h-5" />
@@ -440,7 +673,10 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
                     </h4>
                     <ul className="space-y-2">
                       {insights.swot_analysis.opportunities.map((item, idx) => (
-                        <li key={idx} className="text-slate-300 text-sm flex items-start gap-2">
+                        <li
+                          key={idx}
+                          className="text-slate-300 text-sm flex items-start gap-2"
+                        >
                           <span className="text-cyan-400 mt-0.5">•</span>
                           <span>{item}</span>
                         </li>
@@ -450,7 +686,8 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
                 )}
 
                 {/* Threats */}
-                {insights.swot_analysis.threats && insights.swot_analysis.threats.length > 0 && (
+                {insights.swot_analysis.threats &&
+                  insights.swot_analysis.threats.length > 0 && (
                   <div className="bg-gradient-to-br from-orange-900/30 to-orange-800/20 border border-orange-700/50 rounded-lg p-4">
                     <h4 className="font-semibold text-orange-300 mb-3 flex items-center gap-2">
                       <AlertTriangle className="w-5 h-5" />
@@ -458,7 +695,10 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
                     </h4>
                     <ul className="space-y-2">
                       {insights.swot_analysis.threats.map((item, idx) => (
-                        <li key={idx} className="text-slate-300 text-sm flex items-start gap-2">
+                        <li
+                          key={idx}
+                          className="text-slate-300 text-sm flex items-start gap-2"
+                        >
                           <span className="text-orange-400 mt-0.5">•</span>
                           <span>{item}</span>
                         </li>
@@ -477,22 +717,36 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
                   Competitive Landscape
                 </h3>
                 {insights.competitive_landscape.overview && (
-                  <p className="text-slate-300 mb-3">{insights.competitive_landscape.overview}</p>
+                  <p className="text-slate-300 mb-3">
+                    {insights.competitive_landscape.overview}
+                  </p>
                 )}
-                {insights.competitive_landscape.major_competitors && insights.competitive_landscape.major_competitors.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium text-purple-200 mb-2">Major Competitors:</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {insights.competitive_landscape.major_competitors.map((comp, idx) => (
-                        <Badge key={idx} className="bg-purple-800/50 text-purple-200 border-purple-600">
-                          {comp}
-                        </Badge>
-                      ))}
+                {insights.competitive_landscape.major_competitors &&
+                  insights.competitive_landscape.major_competitors.length > 0 &&
+                  (
+                    <div>
+                      <h4 className="text-sm font-medium text-purple-200 mb-2">
+                        Major Competitors:
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {insights.competitive_landscape.major_competitors.map((
+                          comp,
+                          idx,
+                        ) => (
+                          <Badge
+                            key={idx}
+                            className="bg-purple-800/50 text-purple-200 border-purple-600"
+                          >
+                            {comp}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
                 {insights.competitive_landscape.market_dynamics && (
-                  <p className="text-slate-300 text-sm mt-3">{insights.competitive_landscape.market_dynamics}</p>
+                  <p className="text-slate-300 text-sm mt-3">
+                    {insights.competitive_landscape.market_dynamics}
+                  </p>
                 )}
               </div>
             )}
@@ -506,23 +760,36 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
                 </h3>
                 <div className="space-y-3">
                   {insights.major_news.map((news, idx) => (
-                    <div key={idx} className="bg-slate-800/50 rounded p-3 border border-slate-700">
+                    <div
+                      key={idx}
+                      className="bg-slate-800/50 rounded p-3 border border-slate-700"
+                    >
                       <div className="flex items-start justify-between gap-2 mb-1">
-                        <h4 className="font-medium text-slate-200">{news.title}</h4>
+                        <h4 className="font-medium text-slate-200">
+                          {news.title}
+                        </h4>
                         {news.impact && (
                           <Badge
-                            className={
-                              news.impact === 'positive' ? 'bg-green-800/50 text-green-200 border-green-600' :
-                              news.impact === 'negative' ? 'bg-red-800/50 text-red-200 border-red-600' :
-                              'bg-slate-700 text-slate-300 border-slate-600'
-                            }
+                            className={news.impact === "positive"
+                              ? "bg-green-800/50 text-green-200 border-green-600"
+                              : news.impact === "negative"
+                              ? "bg-red-800/50 text-red-200 border-red-600"
+                              : "bg-slate-700 text-slate-300 border-slate-600"}
                           >
                             {news.impact}
                           </Badge>
                         )}
                       </div>
-                      {news.date && <p className="text-sm text-slate-400 mb-1">{news.date}</p>}
-                      {news.description && <p className="text-sm text-slate-300">{news.description}</p>}
+                      {news.date && (
+                        <p className="text-sm text-slate-400 mb-1">
+                          {news.date}
+                        </p>
+                      )}
+                      {news.description && (
+                        <p className="text-sm text-slate-300">
+                          {news.description}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -530,7 +797,8 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
             )}
 
             {/* Economic Indicators Chart - UPDATED */}
-            {insights.economic_indicators && insights.economic_indicators.length > 0 && (
+            {insights.economic_indicators &&
+              insights.economic_indicators.length > 0 && (
               <div className="bg-gradient-to-br from-teal-900/30 to-teal-800/20 border border-teal-700/50 rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-teal-300 mb-4 flex items-center gap-2">
                   <TrendingUp className="w-5 h-5" />
@@ -540,15 +808,29 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
                 {/* Chart removed - replaced with indicator cards only */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {insights.economic_indicators.map((indicator, idx) => {
-                    const displayValue = formatDisplayValue(indicator.current_value, indicator.unit);
+                    const displayValue = formatDisplayValue(
+                      indicator.current_value,
+                      indicator.unit,
+                    );
 
                     return (
-                      <div key={idx} className="bg-slate-800/50 rounded p-3 border border-slate-700">
+                      <div
+                        key={idx}
+                        className="bg-slate-800/50 rounded p-3 border border-slate-700"
+                      >
                         <div className="flex items-start justify-between mb-1">
-                          <span className="text-sm font-medium text-slate-300">{indicator.name}</span>
-                          {indicator.trend === 'up' && <TrendingUp className="w-4 h-4 text-green-400" />}
-                          {indicator.trend === 'down' && <TrendingDown className="w-4 h-4 text-red-400" />}
-                          {indicator.trend === 'stable' && <span className="text-xs text-slate-500">→</span>}
+                          <span className="text-sm font-medium text-slate-300">
+                            {indicator.name}
+                          </span>
+                          {indicator.trend === "up" && (
+                            <TrendingUp className="w-4 h-4 text-green-400" />
+                          )}
+                          {indicator.trend === "down" && (
+                            <TrendingDown className="w-4 h-4 text-red-400" />
+                          )}
+                          {indicator.trend === "stable" && (
+                            <span className="text-xs text-slate-500">→</span>
+                          )}
                         </div>
                         <p className="text-lg font-semibold text-teal-300">
                           {displayValue}
@@ -561,35 +843,45 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
             )}
 
             {/* Strategic Recommendations */}
-            {insights.recommendations && insights.recommendations.length > 0 && (
-              <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/20 border border-amber-700/50 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-amber-300 mb-3 flex items-center gap-2">
-                  <Zap className="w-5 h-5" />
-                  Strategic Recommendations
-                </h3>
-                <div className="space-y-3">
-                  {insights.recommendations.map((rec, idx) => (
-                    <div key={idx} className="bg-slate-800/50 rounded p-3 border border-slate-700">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <h4 className="font-medium text-slate-200">{rec.title}</h4>
-                        {rec.priority && (
-                          <Badge
-                            className={
-                              rec.priority === 'high' ? 'bg-red-800/50 text-red-200 border-red-600' :
-                              rec.priority === 'medium' ? 'bg-yellow-800/50 text-yellow-200 border-yellow-600' :
-                              'bg-blue-800/50 text-blue-200 border-blue-600'
-                            }
-                          >
-                            {rec.priority}
-                          </Badge>
+            {insights.recommendations && insights.recommendations.length > 0 &&
+              (
+                <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/20 border border-amber-700/50 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-amber-300 mb-3 flex items-center gap-2">
+                    <Zap className="w-5 h-5" />
+                    Strategic Recommendations
+                  </h3>
+                  <div className="space-y-3">
+                    {insights.recommendations.map((rec, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-slate-800/50 rounded p-3 border border-slate-700"
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <h4 className="font-medium text-slate-200">
+                            {rec.title}
+                          </h4>
+                          {rec.priority && (
+                            <Badge
+                              className={rec.priority === "high"
+                                ? "bg-red-800/50 text-red-200 border-red-600"
+                                : rec.priority === "medium"
+                                ? "bg-yellow-800/50 text-yellow-200 border-yellow-600"
+                                : "bg-blue-800/50 text-blue-200 border-blue-600"}
+                            >
+                              {rec.priority}
+                            </Badge>
+                          )}
+                        </div>
+                        {rec.description && (
+                          <p className="text-sm text-slate-300">
+                            {rec.description}
+                          </p>
                         )}
                       </div>
-                      {rec.description && <p className="text-sm text-slate-300">{rec.description}</p>}
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
           </div>
         )}
       </CardContent>

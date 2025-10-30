@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -17,17 +17,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronDown, UserCheck, Tag, Trash2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ChevronDown, Tag, Trash2, UserCheck } from "lucide-react";
 import LazyEmployeeSelector from "../shared/LazyEmployeeSelector";
 
-export default function BulkActionsMenu({ 
-  selectedCount, 
-  onBulkStageChange, 
+export default function BulkActionsMenu({
+  selectedCount,
+  onBulkStageChange,
   onBulkAssign,
   onBulkDelete,
   selectAllMode = false,
-  totalCount = 0
+  totalCount = 0,
 }) {
   const [showStageDialog, setShowStageDialog] = useState(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
@@ -55,24 +61,29 @@ export default function BulkActionsMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
+          <Button
+            variant="outline"
+            className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
+          >
             Bulk Actions ({countLabel})
             <ChevronDown className="w-4 h-4 ml-2" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="bg-slate-800 border-slate-700">
           <DropdownMenuLabel className="text-slate-200">
-            Actions for {selectAllMode ? `all ${displayCount}` : displayCount} opportunity/opportunities
+            Actions for {selectAllMode ? `all ${displayCount}` : displayCount}
+            {" "}
+            opportunity/opportunities
           </DropdownMenuLabel>
           <DropdownMenuSeparator className="bg-slate-700" />
-          <DropdownMenuItem 
+          <DropdownMenuItem
             onClick={() => setShowStageDialog(true)}
             className="text-slate-200 hover:bg-slate-700 cursor-pointer"
           >
             <Tag className="w-4 h-4 mr-2" />
             Change Stage
           </DropdownMenuItem>
-          <DropdownMenuItem 
+          <DropdownMenuItem
             onClick={() => setShowAssignDialog(true)}
             className="text-slate-200 hover:bg-slate-700 cursor-pointer"
           >
@@ -80,7 +91,7 @@ export default function BulkActionsMenu({
             Assign To
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-slate-700" />
-          <DropdownMenuItem 
+          <DropdownMenuItem
             onClick={onBulkDelete}
             className="text-red-400 hover:bg-red-900/20 cursor-pointer"
           >
@@ -94,34 +105,77 @@ export default function BulkActionsMenu({
       <Dialog open={showStageDialog} onOpenChange={setShowStageDialog}>
         <DialogContent className="bg-slate-800 border-slate-700 text-slate-200">
           <DialogHeader>
-            <DialogTitle>Change Stage for {countLabel} Opportunity/Opportunities</DialogTitle>
+            <DialogTitle>
+              Change Stage for {countLabel} Opportunity/Opportunities
+            </DialogTitle>
             <DialogDescription className="text-slate-400">
-              Select a new stage to apply to {selectAllMode ? 'all selected' : 'the selected'} opportunities.
+              Select a new stage to apply to{" "}
+              {selectAllMode ? "all selected" : "the selected"} opportunities.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <Label htmlFor="stage" className="text-slate-200">New Stage</Label>
+              <Label htmlFor="stage" className="text-slate-200">
+                New Stage
+              </Label>
               <Select value={newStage} onValueChange={setNewStage}>
                 <SelectTrigger className="mt-2 bg-slate-700 border-slate-600 text-slate-200">
                   <SelectValue placeholder="Select stage..." />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700">
-                  <SelectItem value="prospecting" className="text-slate-200 hover:bg-slate-700">Prospecting</SelectItem>
-                  <SelectItem value="qualification" className="text-slate-200 hover:bg-slate-700">Qualification</SelectItem>
-                  <SelectItem value="proposal" className="text-slate-200 hover:bg-slate-700">Proposal</SelectItem>
-                  <SelectItem value="negotiation" className="text-slate-200 hover:bg-slate-700">Negotiation</SelectItem>
-                  <SelectItem value="closed_won" className="text-slate-200 hover:bg-slate-700">Closed Won</SelectItem>
-                  <SelectItem value="closed_lost" className="text-slate-200 hover:bg-slate-700">Closed Lost</SelectItem>
+                  <SelectItem
+                    value="prospecting"
+                    className="text-slate-200 hover:bg-slate-700"
+                  >
+                    Prospecting
+                  </SelectItem>
+                  <SelectItem
+                    value="qualification"
+                    className="text-slate-200 hover:bg-slate-700"
+                  >
+                    Qualification
+                  </SelectItem>
+                  <SelectItem
+                    value="proposal"
+                    className="text-slate-200 hover:bg-slate-700"
+                  >
+                    Proposal
+                  </SelectItem>
+                  <SelectItem
+                    value="negotiation"
+                    className="text-slate-200 hover:bg-slate-700"
+                  >
+                    Negotiation
+                  </SelectItem>
+                  <SelectItem
+                    value="closed_won"
+                    className="text-slate-200 hover:bg-slate-700"
+                  >
+                    Closed Won
+                  </SelectItem>
+                  <SelectItem
+                    value="closed_lost"
+                    className="text-slate-200 hover:bg-slate-700"
+                  >
+                    Closed Lost
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowStageDialog(false)} className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
+            <Button
+              variant="outline"
+              onClick={() => setShowStageDialog(false)}
+              className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
+            >
               Cancel
             </Button>
-            <Button onClick={handleStageChange} disabled={!newStage} className="bg-blue-600 hover:bg-blue-700">
+            <Button
+              onClick={handleStageChange}
+              disabled={!newStage}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
               Update Stage
             </Button>
           </DialogFooter>
@@ -132,14 +186,20 @@ export default function BulkActionsMenu({
       <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
         <DialogContent className="bg-slate-800 border-slate-700 text-slate-200">
           <DialogHeader>
-            <DialogTitle>Assign {countLabel} Opportunity/Opportunities</DialogTitle>
+            <DialogTitle>
+              Assign {countLabel} Opportunity/Opportunities
+            </DialogTitle>
             <DialogDescription className="text-slate-400">
-              Select an employee to assign {selectAllMode ? 'all selected' : 'the selected'} opportunities to.
+              Select an employee to assign{" "}
+              {selectAllMode ? "all selected" : "the selected"}{" "}
+              opportunities to.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <Label htmlFor="assignee" className="text-slate-200">Assign To</Label>
+              <Label htmlFor="assignee" className="text-slate-200">
+                Assign To
+              </Label>
               <LazyEmployeeSelector
                 value={newAssignee}
                 onValueChange={setNewAssignee}
@@ -153,10 +213,17 @@ export default function BulkActionsMenu({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAssignDialog(false)} className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
+            <Button
+              variant="outline"
+              onClick={() => setShowAssignDialog(false)}
+              className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
+            >
               Cancel
             </Button>
-            <Button onClick={handleAssign} className="bg-blue-600 hover:bg-blue-700">
+            <Button
+              onClick={handleAssign}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
               Assign Opportunities
             </Button>
           </DialogFooter>

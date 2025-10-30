@@ -1,30 +1,40 @@
-
-import React, { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Target, DollarSign, TrendingUp, Calendar, Award } from "lucide-react";
+import { Award, Calendar, DollarSign, Target } from "lucide-react";
 import {
-  BarChart,
   Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
-  ScatterChart,
-  Scatter,
-  Legend
 } from "recharts";
-import { startOfMonth, format, subMonths, differenceInDays } from "date-fns";
-import { Opportunity } from '@/api/entities';
+import { differenceInDays, format, startOfMonth, subMonths } from "date-fns";
+import { Opportunity } from "@/api/entities";
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+const COLORS = [
+  "#3b82f6",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#8b5cf6",
+  "#06b6d4",
+];
 
 // Changed component props to accept tenantFilter instead of direct opportunities/accounts
 export default function SalesAnalytics({ tenantFilter }) {
@@ -62,26 +72,32 @@ export default function SalesAnalytics({ tenantFilter }) {
   const getMonthlySalesData = (opportunitiesToProcess, currentPeriod) => {
     const months = currentPeriod === "12months" ? 12 : 6;
     const monthlyData = [];
-    
+
     for (let i = months - 1; i >= 0; i--) {
       const monthStart = startOfMonth(subMonths(new Date(), i));
       const monthEnd = startOfMonth(subMonths(new Date(), i - 1)); // Correctly represents the start of the next month
-      const monthName = format(monthStart, 'MMM yyyy');
-      
-      const monthOpps = opportunitiesToProcess.filter(opp => {
+      const monthName = format(monthStart, "MMM yyyy");
+
+      const monthOpps = opportunitiesToProcess.filter((opp) => {
         // Ensure close_date exists and is a valid date string
         if (!opp.close_date) return false;
         const closeDate = new Date(opp.close_date);
-        return closeDate >= monthStart && closeDate < monthEnd && opp.stage === 'closed_won';
+        return closeDate >= monthStart && closeDate < monthEnd &&
+          opp.stage === "closed_won";
       });
 
-      const monthlyRevenue = monthOpps.reduce((sum, opp) => sum + (opp.amount || 0), 0);
-      
+      const monthlyRevenue = monthOpps.reduce(
+        (sum, opp) => sum + (opp.amount || 0),
+        0,
+      );
+
       monthlyData.push({
         month: monthName,
         revenue: Math.round(monthlyRevenue / 1000), // Convert to thousands
         deals: monthOpps.length,
-        avgDeal: monthOpps.length > 0 ? Math.round(monthlyRevenue / monthOpps.length / 1000) : 0
+        avgDeal: monthOpps.length > 0
+          ? Math.round(monthlyRevenue / monthOpps.length / 1000)
+          : 0,
       });
     }
     return monthlyData;
@@ -95,32 +111,32 @@ export default function SalesAnalytics({ tenantFilter }) {
       proposal: { name: "Proposal", count: 0, value: 0 },
       negotiation: { name: "Negotiation", count: 0, value: 0 },
       closed_won: { name: "Closed Won", count: 0, value: 0 },
-      closed_lost: { name: "Closed Lost", count: 0, value: 0 }
+      closed_lost: { name: "Closed Lost", count: 0, value: 0 },
     };
 
-    opportunitiesToProcess.forEach(opp => {
+    opportunitiesToProcess.forEach((opp) => {
       if (stages[opp.stage]) {
         stages[opp.stage].count++;
         stages[opp.stage].value += opp.amount || 0;
       }
     });
 
-    return Object.values(stages).map(stage => ({
+    return Object.values(stages).map((stage) => ({
       ...stage,
-      value: Math.round(stage.value / 1000) // Convert to thousands for chart display
+      value: Math.round(stage.value / 1000), // Convert to thousands for chart display
     }));
   };
 
   // Lead source performance function - now accepts opportunities as an argument
   const getLeadSourcePerformance = (opportunitiesToProcess) => {
     const sources = {};
-    opportunitiesToProcess.forEach(opp => {
-      const source = opp.lead_source || 'unknown';
+    opportunitiesToProcess.forEach((opp) => {
+      const source = opp.lead_source || "unknown";
       if (!sources[source]) {
         sources[source] = { count: 0, revenue: 0, closed: 0 };
       }
       sources[source].count++;
-      if (opp.stage === 'closed_won') {
+      if (opp.stage === "closed_won") {
         sources[source].closed++;
         sources[source].revenue += opp.amount || 0;
       }
@@ -130,18 +146,28 @@ export default function SalesAnalytics({ tenantFilter }) {
       source: name,
       opportunities: data.count,
       revenue: Math.round(data.revenue / 1000), // Convert to thousands
-      winRate: data.count > 0 ? Math.round((data.closed / data.count) * 100) : 0
+      winRate: data.count > 0
+        ? Math.round((data.closed / data.count) * 100)
+        : 0,
     }));
   };
 
   // Calculate key metrics - these now depend on the 'opportunities' state
-  const totalPipelineValue = opportunities.reduce((sum, opp) => sum + (opp.amount || 0), 0);
-  const closedWon = opportunities.filter(opp => opp.stage === 'closed_won');
-  const closedLost = opportunities.filter(opp => opp.stage === 'closed_lost');
+  const totalPipelineValue = opportunities.reduce(
+    (sum, opp) => sum + (opp.amount || 0),
+    0,
+  );
+  const closedWon = opportunities.filter((opp) => opp.stage === "closed_won");
+  const closedLost = opportunities.filter((opp) => opp.stage === "closed_lost");
   // Avoid division by zero for winRate calculation
   const totalClosedOpportunities = closedWon.length + closedLost.length;
-  const winRate = totalClosedOpportunities > 0 ? (closedWon.length / totalClosedOpportunities) * 100 : 0;
-  const avgDealSize = closedWon.length > 0 ? closedWon.reduce((sum, opp) => sum + (opp.amount || 0), 0) / closedWon.length : 0;
+  const winRate = totalClosedOpportunities > 0
+    ? (closedWon.length / totalClosedOpportunities) * 100
+    : 0;
+  const avgDealSize = closedWon.length > 0
+    ? closedWon.reduce((sum, opp) => sum + (opp.amount || 0), 0) /
+      closedWon.length
+    : 0;
 
   // Calculate sales cycle length
   const avgSalesCycle = closedWon.reduce((sum, opp) => {
@@ -150,7 +176,7 @@ export default function SalesAnalytics({ tenantFilter }) {
       const createdDate = new Date(opp.created_date);
       // Ensure dates are valid before calculating difference
       if (!isNaN(closeDate.getTime()) && !isNaN(createdDate.getTime())) {
-          return sum + differenceInDays(closeDate, createdDate);
+        return sum + differenceInDays(closeDate, createdDate);
       }
     }
     return sum;
@@ -164,7 +190,9 @@ export default function SalesAnalytics({ tenantFilter }) {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-400">Total Pipeline</p>
+                <p className="text-sm font-medium text-slate-400">
+                  Total Pipeline
+                </p>
                 <p className="text-2xl font-bold text-slate-100">
                   ${(totalPipelineValue / 1000).toFixed(0)}K
                 </p>
@@ -179,7 +207,9 @@ export default function SalesAnalytics({ tenantFilter }) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-400">Win Rate</p>
-                <p className="text-2xl font-bold text-slate-100">{winRate.toFixed(1)}%</p>
+                <p className="text-2xl font-bold text-slate-100">
+                  {winRate.toFixed(1)}%
+                </p>
               </div>
               <Award className="w-8 h-8 text-green-400" />
             </div>
@@ -190,7 +220,9 @@ export default function SalesAnalytics({ tenantFilter }) {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-400">Avg Deal Size</p>
+                <p className="text-sm font-medium text-slate-400">
+                  Avg Deal Size
+                </p>
                 <p className="text-2xl font-bold text-slate-100">
                   ${(avgDealSize / 1000).toFixed(0)}K
                 </p>
@@ -204,8 +236,12 @@ export default function SalesAnalytics({ tenantFilter }) {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-400">Sales Cycle</p>
-                <p className="text-2xl font-bold text-slate-100">{Math.round(avgSalesCycle)} days</p>
+                <p className="text-sm font-medium text-slate-400">
+                  Sales Cycle
+                </p>
+                <p className="text-2xl font-bold text-slate-100">
+                  {Math.round(avgSalesCycle)} days
+                </p>
               </div>
               <Calendar className="w-8 h-8 text-orange-400" />
             </div>
@@ -215,8 +251,18 @@ export default function SalesAnalytics({ tenantFilter }) {
 
       <Tabs value={period} onValueChange={setPeriod}>
         <TabsList className="bg-slate-800 border border-slate-700">
-          <TabsTrigger value="6months" className="data-[state=active]:bg-slate-700 data-[state=active]:text-slate-100 text-slate-400">Last 6 Months</TabsTrigger>
-          <TabsTrigger value="12months" className="data-[state=active]:bg-slate-700 data-[state=active]:text-slate-100 text-slate-400">Last 12 Months</TabsTrigger>
+          <TabsTrigger
+            value="6months"
+            className="data-[state=active]:bg-slate-700 data-[state=active]:text-slate-100 text-slate-400"
+          >
+            Last 6 Months
+          </TabsTrigger>
+          <TabsTrigger
+            value="12months"
+            className="data-[state=active]:bg-slate-700 data-[state=active]:text-slate-100 text-slate-400"
+          >
+            Last 12 Months
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value={period} className="space-y-6">
@@ -224,35 +270,39 @@ export default function SalesAnalytics({ tenantFilter }) {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="shadow-lg bg-slate-800 border-slate-700">
               <CardHeader>
-                <CardTitle className="text-lg text-slate-100">Monthly Revenue Trend ($K)</CardTitle>
-                <CardDescription className="text-slate-400">Closed-won revenue over time.</CardDescription>
+                <CardTitle className="text-lg text-slate-100">
+                  Monthly Revenue Trend ($K)
+                </CardTitle>
+                <CardDescription className="text-slate-400">
+                  Closed-won revenue over time.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={dealsOverTime}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                    <XAxis 
-                      dataKey="month" 
-                      tick={{ fontSize: 12, fill: '#94a3b8' }}
+                    <XAxis
+                      dataKey="month"
+                      tick={{ fontSize: 12, fill: "#94a3b8" }}
                       angle={-45}
                       textAnchor="end"
                       height={80}
                     />
-                    <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} />
-                    <Tooltip 
-                      formatter={(value) => [`$${value}K`, 'Revenue']}
-                      contentStyle={{ 
-                        backgroundColor: '#1e293b', 
-                        border: '1px solid #475569', 
-                        borderRadius: '8px',
-                        color: '#f1f5f9'
+                    <YAxis tick={{ fontSize: 12, fill: "#94a3b8" }} />
+                    <Tooltip
+                      formatter={(value) => [`$${value}K`, "Revenue"]}
+                      contentStyle={{
+                        backgroundColor: "#1e293b",
+                        border: "1px solid #475569",
+                        borderRadius: "8px",
+                        color: "#f1f5f9",
                       }}
                     />
-                    <Line 
-                      type="monotone" 
-                      dataKey="revenue" 
-                      stroke="#10b981" 
-                      strokeWidth={3} 
+                    <Line
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="#10b981"
+                      strokeWidth={3}
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -261,27 +311,31 @@ export default function SalesAnalytics({ tenantFilter }) {
 
             <Card className="shadow-lg bg-slate-800 border-slate-700">
               <CardHeader>
-                <CardTitle className="text-lg text-slate-100">Deals Closed by Month</CardTitle>
-                <CardDescription className="text-slate-400">Number of opportunities closed-won each month.</CardDescription>
+                <CardTitle className="text-lg text-slate-100">
+                  Deals Closed by Month
+                </CardTitle>
+                <CardDescription className="text-slate-400">
+                  Number of opportunities closed-won each month.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={dealsOverTime}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                    <XAxis 
-                      dataKey="month" 
-                      tick={{ fontSize: 12, fill: '#94a3b8' }}
+                    <XAxis
+                      dataKey="month"
+                      tick={{ fontSize: 12, fill: "#94a3b8" }}
                       angle={-45}
                       textAnchor="end"
                       height={80}
                     />
-                    <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: '#1e293b', 
-                        border: '1px solid #475569', 
-                        borderRadius: '8px',
-                        color: '#f1f5f9'
+                    <YAxis tick={{ fontSize: 12, fill: "#94a3b8" }} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#1e293b",
+                        border: "1px solid #475569",
+                        borderRadius: "8px",
+                        color: "#f1f5f9",
                       }}
                     />
                     <Bar dataKey="deals" fill="#3b82f6" radius={[4, 4, 0, 0]} />
@@ -295,8 +349,12 @@ export default function SalesAnalytics({ tenantFilter }) {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="shadow-lg bg-slate-800 border-slate-700">
               <CardHeader>
-                <CardTitle className="text-lg text-slate-100">Pipeline by Stage ($K)</CardTitle>
-                <CardDescription className="text-slate-400">Current pipeline value by sales stage.</CardDescription>
+                <CardTitle className="text-lg text-slate-100">
+                  Pipeline by Stage ($K)
+                </CardTitle>
+                <CardDescription className="text-slate-400">
+                  Current pipeline value by sales stage.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
@@ -313,21 +371,24 @@ export default function SalesAnalytics({ tenantFilter }) {
                         if (percent >= 0.03) {
                           return `${name} (${(percent * 100).toFixed(0)}%)`;
                         }
-                        return '';
+                        return "";
                       }}
                       labelLine={false}
                     >
                       {revenueByStage.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={COLORS[index % COLORS.length]}
+                        />
                       ))}
                     </Pie>
-                    <Tooltip 
-                      formatter={(value) => [`$${value}K`, 'Pipeline Value']} 
-                      contentStyle={{ 
-                        backgroundColor: '#1e293b', 
-                        border: '1px solid #475569', 
-                        borderRadius: '8px',
-                        color: '#f1f5f9'
+                    <Tooltip
+                      formatter={(value) => [`$${value}K`, "Pipeline Value"]}
+                      contentStyle={{
+                        backgroundColor: "#1e293b",
+                        border: "1px solid #475569",
+                        borderRadius: "8px",
+                        color: "#f1f5f9",
                       }}
                     />
                     <Legend
@@ -335,11 +396,22 @@ export default function SalesAnalytics({ tenantFilter }) {
                       verticalAlign="bottom"
                       layout="horizontal"
                       iconType="circle"
-                      wrapperStyle={{ paddingTop: '20px', color: '#f1f5f9', fontSize: '12px' }}
-                      formatter={(value, entry) => {
-                        const item = revenueByStage.find(item => item.name === value);
-                        const total = revenueByStage.reduce((sum, item) => sum + item.value, 0);
-                        const percent = total > 0 ? ((item?.value || 0) / total * 100).toFixed(0) : 0;
+                      wrapperStyle={{
+                        paddingTop: "20px",
+                        color: "#f1f5f9",
+                        fontSize: "12px",
+                      }}
+                      formatter={(value) => {
+                        const item = revenueByStage.find((item) =>
+                          item.name === value
+                        );
+                        const total = revenueByStage.reduce(
+                          (sum, item) => sum + item.value,
+                          0,
+                        );
+                        const percent = total > 0
+                          ? ((item?.value || 0) / total * 100).toFixed(0)
+                          : 0;
                         return `${value} (${percent}%)`;
                       }}
                     />
@@ -350,31 +422,49 @@ export default function SalesAnalytics({ tenantFilter }) {
 
             <Card className="shadow-lg bg-slate-800 border-slate-700">
               <CardHeader>
-                <CardTitle className="text-lg text-slate-100">Lead Source Performance</CardTitle>
-                <CardDescription className="text-slate-400">Opportunities and revenue by lead source.</CardDescription>
+                <CardTitle className="text-lg text-slate-100">
+                  Lead Source Performance
+                </CardTitle>
+                <CardDescription className="text-slate-400">
+                  Opportunities and revenue by lead source.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {leadSourcePerformance.length > 0 ? (
-                    leadSourcePerformance.map((source, index) => (
-                      <div key={source.source} className="flex items-center justify-between p-3 bg-slate-700 rounded-lg">
-                        <div className="flex-1">
-                          <p className="font-medium text-slate-200 capitalize">{source.source}</p>
-                          <p className="text-sm text-slate-400">
-                            {source.opportunities} opportunities • ${source.revenue}K revenue
-                          </p>
-                        </div>
-                        <Badge 
-                          variant={source.winRate > 30 ? "default" : source.winRate > 15 ? "secondary" : "outline"}
-                          className="ml-4 bg-slate-600 text-slate-200 border-slate-500"
+                  {leadSourcePerformance.length > 0
+                    ? (
+                      leadSourcePerformance.map((source) => (
+                        <div
+                          key={source.source}
+                          className="flex items-center justify-between p-3 bg-slate-700 rounded-lg"
                         >
-                          {source.winRate}% win rate
-                        </Badge>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-400">No lead source data available.</p>
-                  )}
+                          <div className="flex-1">
+                            <p className="font-medium text-slate-200 capitalize">
+                              {source.source}
+                            </p>
+                            <p className="text-sm text-slate-400">
+                              {source.opportunities}{" "}
+                              opportunities • ${source.revenue}K revenue
+                            </p>
+                          </div>
+                          <Badge
+                            variant={source.winRate > 30
+                              ? "default"
+                              : source.winRate > 15
+                              ? "secondary"
+                              : "outline"}
+                            className="ml-4 bg-slate-600 text-slate-200 border-slate-500"
+                          >
+                            {source.winRate}% win rate
+                          </Badge>
+                        </div>
+                      ))
+                    )
+                    : (
+                      <p className="text-sm text-slate-400">
+                        No lead source data available.
+                      </p>
+                    )}
                 </div>
               </CardContent>
             </Card>

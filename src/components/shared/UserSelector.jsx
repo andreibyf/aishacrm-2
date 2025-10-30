@@ -1,10 +1,18 @@
-
-import React, { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { User } from "@/api/entities";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UserIcon, AlertCircle } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { AlertCircle, UserIcon } from "lucide-react";
 
-export default function UserSelector({ value, onValueChange, placeholder = "Assign to user..." }) {
+export default function UserSelector(
+  { value, onValueChange, placeholder = "Assign to user..." },
+) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
@@ -17,14 +25,17 @@ export default function UserSelector({ value, onValueChange, placeholder = "Assi
         // First get current user
         const current = await User.me();
         setCurrentUser(current);
-        
+
         // Try to get users list, but handle permission errors gracefully
         try {
           const usersData = await User.list();
           setUsers(usersData);
           setError(null);
         } catch (userListError) {
-          console.log("Cannot access full user list (permissions), showing current user only:", userListError);
+          console.log(
+            "Cannot access full user list (permissions), showing current user only:",
+            userListError,
+          );
           // If can't access full list, just show current user
           setUsers([current]);
           setError("Limited user access");
@@ -67,8 +78,12 @@ export default function UserSelector({ value, onValueChange, placeholder = "Assi
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-        {users.map(user => (
-          <SelectItem key={user.email} value={user.email} className="text-slate-200 hover:bg-slate-700">
+        {users.map((user) => (
+          <SelectItem
+            key={user.email}
+            value={user.email}
+            className="text-slate-200 hover:bg-slate-700"
+          >
             <div className="flex items-center gap-2">
               <UserIcon className="w-4 h-4 text-slate-400" />
               <span>{user.full_name || user.email}</span>
@@ -82,7 +97,9 @@ export default function UserSelector({ value, onValueChange, placeholder = "Assi
           <SelectItem disabled value="error" className="text-slate-400">
             <div className="flex items-center gap-2 text-amber-400">
               <AlertCircle className="w-4 h-4" />
-              <span className="text-xs">Limited access - showing available users only</span>
+              <span className="text-xs">
+                Limited access - showing available users only
+              </span>
             </div>
           </SelectItem>
         )}

@@ -1,8 +1,13 @@
-import React from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import PhoneInput from "./PhoneInput";
 import AddressFields from "./AddressFields";
 import TagInput from "./TagInput";
@@ -11,20 +16,23 @@ import LazyEmployeeSelector from "./LazyEmployeeSelector";
 
 // Reusable form field components to eliminate duplication
 
-export const TextField = ({ 
-  id, 
-  label, 
-  value, 
-  onChange, 
-  required = false, 
+export const TextField = ({
+  id,
+  label,
+  value,
+  onChange,
+  required = false,
   placeholder = "",
   disabled = false,
   type = "text",
   darkMode = true,
-  helpText = null
+  helpText = null,
 }) => (
   <div>
-    <Label htmlFor={id} className={darkMode ? "text-slate-200" : "text-slate-700"}>
+    <Label
+      htmlFor={id}
+      className={darkMode ? "text-slate-200" : "text-slate-700"}
+    >
       {label} {required && <span className="text-red-400">*</span>}
     </Label>
     <Input
@@ -35,30 +43,41 @@ export const TextField = ({
       required={required}
       placeholder={placeholder}
       disabled={disabled}
-      className={`mt-1 ${darkMode ? "bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400" : ""}`}
+      className={`mt-1 ${
+        darkMode
+          ? "bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400"
+          : ""
+      }`}
     />
     {helpText && (
-      <p className={`text-xs mt-1 ${darkMode ? "text-slate-500" : "text-slate-600"}`}>
+      <p
+        className={`text-xs mt-1 ${
+          darkMode ? "text-slate-500" : "text-slate-600"
+        }`}
+      >
         {helpText}
       </p>
     )}
   </div>
 );
 
-export const TextAreaField = ({ 
-  id, 
-  label, 
-  value, 
-  onChange, 
-  required = false, 
+export const TextAreaField = ({
+  id,
+  label,
+  value,
+  onChange,
+  required = false,
   placeholder = "",
   disabled = false,
   rows = 3,
   darkMode = true,
-  helpText = null
+  helpText = null,
 }) => (
   <div>
-    <Label htmlFor={id} className={darkMode ? "text-slate-200" : "text-slate-700"}>
+    <Label
+      htmlFor={id}
+      className={darkMode ? "text-slate-200" : "text-slate-700"}
+    >
       {label} {required && <span className="text-red-400">*</span>}
     </Label>
     <Textarea
@@ -69,43 +88,58 @@ export const TextAreaField = ({
       placeholder={placeholder}
       disabled={disabled}
       rows={rows}
-      className={`mt-1 ${darkMode ? "bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400" : ""}`}
+      className={`mt-1 ${
+        darkMode
+          ? "bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400"
+          : ""
+      }`}
     />
     {helpText && (
-      <p className={`text-xs mt-1 ${darkMode ? "text-slate-500" : "text-slate-600"}`}>
+      <p
+        className={`text-xs mt-1 ${
+          darkMode ? "text-slate-500" : "text-slate-600"
+        }`}
+      >
         {helpText}
       </p>
     )}
   </div>
 );
 
-export const SelectField = ({ 
-  id, 
-  label, 
-  value, 
-  onChange, 
+export const SelectField = ({
+  id,
+  label,
+  value,
+  onChange,
   options = [],
-  required = false, 
+  required = false,
   placeholder = "Select...",
   disabled = false,
   darkMode = true,
-  helpText = null
+  helpText = null,
 }) => (
   <div>
-    <Label htmlFor={id} className={darkMode ? "text-slate-200" : "text-slate-700"}>
+    <Label
+      htmlFor={id}
+      className={darkMode ? "text-slate-200" : "text-slate-700"}
+    >
       {label} {required && <span className="text-red-400">*</span>}
     </Label>
     <Select value={value || ""} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger 
+      <SelectTrigger
         id={id}
-        className={`mt-1 ${darkMode ? "bg-slate-700 border-slate-600 text-slate-200" : ""}`}
+        className={`mt-1 ${
+          darkMode ? "bg-slate-700 border-slate-600 text-slate-200" : ""
+        }`}
       >
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
-      <SelectContent className={darkMode ? "bg-slate-800 border-slate-700" : ""}>
-        {options.map(opt => (
-          <SelectItem 
-            key={opt.value} 
+      <SelectContent
+        className={darkMode ? "bg-slate-800 border-slate-700" : ""}
+      >
+        {options.map((opt) => (
+          <SelectItem
+            key={opt.value}
             value={opt.value}
             className={darkMode ? "text-slate-200 hover:bg-slate-700" : ""}
           >
@@ -115,23 +149,27 @@ export const SelectField = ({
       </SelectContent>
     </Select>
     {helpText && (
-      <p className={`text-xs mt-1 ${darkMode ? "text-slate-500" : "text-slate-600"}`}>
+      <p
+        className={`text-xs mt-1 ${
+          darkMode ? "text-slate-500" : "text-slate-600"
+        }`}
+      >
         {helpText}
       </p>
     )}
   </div>
 );
 
-export const PhoneField = ({ 
-  id, 
-  label, 
-  value, 
-  onChange, 
-  required = false, 
+export const PhoneField = ({
+  id,
+  label,
+  value,
+  onChange,
+  required = false,
   placeholder = "",
   darkMode = true,
   showPrefixPicker = true,
-  helpText = null
+  helpText = null,
 }) => (
   <div>
     <PhoneInput
@@ -146,7 +184,11 @@ export const PhoneField = ({
       showPrefixPicker={showPrefixPicker}
     />
     {helpText && (
-      <p className={`text-xs mt-1 ${darkMode ? "text-slate-500" : "text-slate-600"}`}>
+      <p
+        className={`text-xs mt-1 ${
+          darkMode ? "text-slate-500" : "text-slate-600"
+        }`}
+      >
         {helpText}
       </p>
     )}
@@ -159,7 +201,7 @@ export const AccountField = ({
   onChange,
   onCreateNew,
   darkMode = true,
-  helpText = null
+  helpText = null,
 }) => (
   <div>
     <Label className={darkMode ? "text-slate-200" : "text-slate-700"}>
@@ -170,12 +212,18 @@ export const AccountField = ({
       onValueChange={onChange}
       onCreateNew={onCreateNew}
       placeholder="Link to an existing account..."
-      className={`mt-1 ${darkMode ? "bg-slate-700 border-slate-600 text-slate-200" : ""}`}
+      className={`mt-1 ${
+        darkMode ? "bg-slate-700 border-slate-600 text-slate-200" : ""
+      }`}
       contentClassName={darkMode ? "bg-slate-800 border-slate-700" : ""}
       itemClassName={darkMode ? "text-slate-200 hover:bg-slate-700" : ""}
     />
     {helpText && (
-      <p className={`text-xs mt-1 ${darkMode ? "text-slate-500" : "text-slate-600"}`}>
+      <p
+        className={`text-xs mt-1 ${
+          darkMode ? "text-slate-500" : "text-slate-600"
+        }`}
+      >
         {helpText}
       </p>
     )}
@@ -188,7 +236,7 @@ export const EmployeeField = ({
   onChange,
   allowUnassigned = true,
   darkMode = true,
-  helpText = null
+  helpText = null,
 }) => (
   <div>
     <Label className={darkMode ? "text-slate-200" : "text-slate-700"}>
@@ -198,14 +246,20 @@ export const EmployeeField = ({
       value={value}
       onValueChange={onChange}
       placeholder={allowUnassigned ? "Unassigned" : "Select employee..."}
-      className={`w-full mt-1 ${darkMode ? "bg-slate-700 border-slate-600 text-slate-200" : ""}`}
+      className={`w-full mt-1 ${
+        darkMode ? "bg-slate-700 border-slate-600 text-slate-200" : ""
+      }`}
       contentClassName={darkMode ? "bg-slate-800 border-slate-700" : ""}
       itemClassName={darkMode ? "text-slate-200 hover:bg-slate-700" : ""}
       allowUnassigned={allowUnassigned}
       showLoadingState={true}
     />
     {helpText && (
-      <p className={`text-xs mt-1 ${darkMode ? "text-slate-500" : "text-slate-600"}`}>
+      <p
+        className={`text-xs mt-1 ${
+          darkMode ? "text-slate-500" : "text-slate-600"
+        }`}
+      >
         {helpText}
       </p>
     )}
@@ -218,10 +272,12 @@ export const TagsField = ({
   onChange,
   allTags = [],
   darkMode = true,
-  helpText = null
+  helpText = null,
 }) => (
   <div>
-    <Label className={`${darkMode ? "text-slate-200" : "text-slate-700"} block mb-2`}>
+    <Label
+      className={`${darkMode ? "text-slate-200" : "text-slate-700"} block mb-2`}
+    >
       {label}
     </Label>
     <TagInput
@@ -232,7 +288,11 @@ export const TagsField = ({
       darkMode={darkMode}
     />
     {helpText && (
-      <p className={`text-xs mt-1 ${darkMode ? "text-slate-500" : "text-slate-600"}`}>
+      <p
+        className={`text-xs mt-1 ${
+          darkMode ? "text-slate-500" : "text-slate-600"
+        }`}
+      >
         {helpText}
       </p>
     )}
@@ -242,14 +302,26 @@ export const TagsField = ({
 export const AddressSection = ({
   formData,
   onChange,
-  darkMode = true
+  darkMode = true,
 }) => (
-  <div className={`border-t pt-6 ${darkMode ? "border-slate-600" : "border-slate-300"}`}>
-    <h4 className={`text-lg font-semibold mb-4 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>
+  <div
+    className={`border-t pt-6 ${
+      darkMode ? "border-slate-600" : "border-slate-300"
+    }`}
+  >
+    <h4
+      className={`text-lg font-semibold mb-4 ${
+        darkMode ? "text-slate-100" : "text-slate-900"
+      }`}
+    >
       Address Information
     </h4>
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <AddressFields formData={formData} handleChange={onChange} darkMode={darkMode} />
+      <AddressFields
+        formData={formData}
+        handleChange={onChange}
+        darkMode={darkMode}
+      />
     </div>
   </div>
 );
