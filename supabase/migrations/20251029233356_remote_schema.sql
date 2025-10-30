@@ -13,14 +13,13 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 
+
+
 COMMENT ON SCHEMA "public" IS 'standard public schema';
 
 
 
 CREATE EXTENSION IF NOT EXISTS "hypopg" WITH SCHEMA "extensions";
-
-
-
 
 
 
@@ -2821,10 +2820,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 
 
 
-
-
-
-drop extension if exists "pg_net";
+CREATE EXTENSION IF NOT EXISTS "pg_net" WITH SCHEMA "extensions";
 
 revoke delete on table "public"."api_key" from "anon";
 
