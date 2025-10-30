@@ -4,6 +4,17 @@
  */
 
 import express from 'express';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+
+function getSupabaseAdmin() {
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return null;
+  return createSupabaseClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+}
+function getBucketName() {
+  return process.env.SUPABASE_STORAGE_BUCKET || 'tenant-assets';
+}
 
 export default function createTenantRoutes(pgPool) {
   const router = express.Router();
@@ -153,6 +164,26 @@ export default function createTenantRoutes(pgPool) {
         status || 'active',
         finalMetadata
       ]);
+
+      // Auto-provision tenant storage prefix by creating a placeholder object
+      try {
+        const supabase = getSupabaseAdmin();
+        const bucket = getBucketName();
+        if (supabase && bucket) {
+          const keepKey = `uploads/${tenant_id}/.keep`;
+          const empty = new Uint8Array(0);
+          const { error: upErr } = await supabase.storage
+            .from(bucket)
+            .upload(keepKey, empty, { contentType: 'text/plain', upsert: true });
+          if (upErr) {
+            console.warn('[Tenants] Failed to provision storage prefix for', tenant_id, upErr.message);
+          } else {
+            console.log('[Tenants] Provisioned storage prefix for', tenant_id);
+          }
+        }
+      } catch (provisionErr) {
+        console.warn('[Tenants] Storage provisioning error:', provisionErr.message);
+      }
 
       res.json({
         status: 'success',

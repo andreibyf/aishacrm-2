@@ -30,6 +30,7 @@ const pluralize = (entityName) => {
     'bizdevsource': 'bizdevsources',
     'tenant': 'tenants',
     'systembranding': 'systembrandings',
+    'synchealth': 'synchealths',
   };
   
   if (irregularPlurals[name]) {

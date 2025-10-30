@@ -166,6 +166,7 @@ import createAnnouncementRoutes from './routes/announcements.js';
 import createApikeyRoutes from './routes/apikeys.js';
 import createNoteRoutes from './routes/notes.js';
 import createSystemBrandingRoutes from './routes/systembrandings.js';
+import createSyncHealthRoutes from './routes/synchealths.js';
 
 // Mount routers with database pool
 app.use('/api/database', createDatabaseRoutes(pgPool));
@@ -208,6 +209,7 @@ app.use('/api/announcements', createAnnouncementRoutes(pgPool));
 app.use('/api/apikeys', createApikeyRoutes(pgPool));
 app.use('/api/notes', createNoteRoutes(pgPool));
 app.use('/api/systembrandings', createSystemBrandingRoutes(pgPool));
+app.use('/api/synchealths', createSyncHealthRoutes(pgPool));
 
 // 404 handler
 app.use((req, res) => {
@@ -364,6 +366,46 @@ async function logRecoveryIfGap() {
 // Start server
 const server = createServer(app);
 
+// Supabase admin helpers for storage bucket provisioning
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+function getSupabaseAdmin() {
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return null;
+  return createSupabaseClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+}
+function getBucketName() {
+  return process.env.SUPABASE_STORAGE_BUCKET || 'tenant-assets';
+}
+async function ensureStorageBucketExists() {
+  try {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) return;
+    const bucket = getBucketName();
+    // Check bucket existence
+    const { data: existing, error: getErr } = await supabase.storage.getBucket(bucket);
+    if (existing && !getErr) {
+      console.log(`✓ Supabase storage bucket '${bucket}' exists`);
+      return;
+    }
+    // Fallback via listBuckets when getBucket not available
+    const { data: list } = await supabase.storage.listBuckets();
+    if (list && Array.isArray(list) && list.find(b => b.name === bucket)) {
+      console.log(`✓ Supabase storage bucket '${bucket}' exists`);
+      return;
+    }
+    if (getErr && getErr.message) {
+      console.warn('Note: getBucket not available or returned error, attempted listBuckets fallback.');
+    }
+    // Create bucket (public=true for logos; adjust in Supabase UI if needed)
+    const { error: createErr } = await supabase.storage.createBucket(bucket, { public: true });
+    if (createErr) throw createErr;
+    console.log(`✓ Created Supabase storage bucket '${bucket}' (public: true)`);
+  } catch (e) {
+    console.error('Failed to ensure storage bucket:', e.message);
+  }
+}
+
 server.listen(PORT, () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
@@ -385,6 +427,9 @@ server.listen(PORT, () => {
   
   console.log('✓ Server listening on port', PORT);
   
+  // Kick off storage bucket provisioning (non-blocking)
+  ensureStorageBucketExists().catch(err => console.error('Bucket ensure failed:', err?.message));
+
   // Log startup event (non-blocking - don't block server startup)
   logBackendEvent('INFO', 'Backend server started successfully', {
     endpoints_count: 197,

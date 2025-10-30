@@ -156,11 +156,25 @@ export default function BrandingSettings() {
       if (result?.file_url) {
         setBrandingData((prev) => ({ ...prev, [key]: result.file_url }));
         setMessage("Image uploaded successfully.");
-      } else if (result?.success === false) {
-        // Local dev mode - show helpful message
-        setMessage("File upload not available in local dev mode. Please paste an image URL instead.");
       } else {
-        setMessage("Upload failed: Unexpected response format");
+        // Local dev or integration unavailable: inline the image as data URL for preview and save
+        const toDataUrl = (f) => new Promise((resolve, reject) => {
+          try {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = (err) => reject(err);
+            reader.readAsDataURL(f);
+          } catch (err) { reject(err); }
+        });
+        try {
+          const dataUrl = await toDataUrl(file);
+          setBrandingData((prev) => ({ ...prev, [key]: dataUrl }));
+          setMessage(import.meta.env.DEV
+            ? "Upload service unavailable; using inlined image (dev mode)."
+            : "Upload unavailable; using inlined image.");
+        } catch {
+          setMessage("Upload failed. Paste a direct image URL instead.");
+        }
       }
       setTimeout(() => setMessage(""), 3000);
     } catch (e) {
@@ -207,8 +221,10 @@ export default function BrandingSettings() {
     try {
       const isAdmin = user?.role === "admin" || user?.role === "superadmin";
       // If admin and we have a tenant context, update Tenant branding directly
-      if (isAdmin && (tenant?.id || user?.tenant_id)) {
-        const tenantIdToUpdate = tenant?.id || user?.tenant_id;
+      if (isAdmin && (tenant?.id || selectedTenantId || user?.tenant_id)) {
+        const tenantIdToUpdate = tenant?.id || selectedTenantId || user?.tenant_id;
+        console.log('[BrandingSettings] Saving tenant branding:', { tenantIdToUpdate, logoUrl: brandingData.logoUrl });
+        
         const nextBrandingSettings = {
           ...(tenant?.branding_settings || {}),
           footerLogoUrl: brandingData.footerLogoUrl || ""
@@ -222,6 +238,7 @@ export default function BrandingSettings() {
           branding_settings: nextBrandingSettings
         });
         setMessage("Tenant branding saved. Refreshing to apply...");
+        console.log('[BrandingSettings] Tenant branding saved successfully');
         // Simple and reliable: reload to rebind CSS variables across app
         setTimeout(() => window.location.reload(), 600);
       } else {
@@ -229,10 +246,12 @@ export default function BrandingSettings() {
         await User.updateMyUserData({
           branding_settings: { ...brandingData }
         });
-        setMessage("Your personal branding preferences were saved.");
-        setTimeout(() => setMessage(""), 2500);
+        setMessage("Your personal branding preferences were saved. Refreshing to apply...");
+        // Reload to pick up the updated user.branding_settings (including logo)
+        setTimeout(() => window.location.reload(), 600);
       }
     } catch (e) {
+      console.error('[BrandingSettings] Save failed:', e);
       setMessage(e?.message || "Failed to save");
       setTimeout(() => setMessage(""), 3000);
     } finally {

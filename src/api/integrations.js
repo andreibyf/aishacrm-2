@@ -16,6 +16,17 @@ const createMockIntegration = (name) => () => {
  */
 export const UploadFile = async ({ file }) => {
   const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+
+  // Attempt to infer tenant id from URL or localStorage
+  let tenantId = null;
+  try {
+    const urlTenant = new URL(window.location.href).searchParams.get('tenant');
+    const storedTenant = localStorage.getItem('selected_tenant_id');
+    tenantId = urlTenant || storedTenant || null;
+  } catch (err) {
+    // ignore access errors in non-browser contexts
+    void err;
+  }
   
   try {
     const formData = new FormData();
@@ -23,6 +34,8 @@ export const UploadFile = async ({ file }) => {
 
     const response = await fetch(`${backendUrl}/api/storage/upload`, {
       method: 'POST',
+      // Don't set Content-Type for FormData; add tenant header if present
+      headers: tenantId ? { 'x-tenant-id': tenantId } : undefined,
       body: formData,
     });
 
