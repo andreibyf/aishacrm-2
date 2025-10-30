@@ -1,24 +1,29 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { 
-  Play, 
-  CheckCircle2, 
-  XCircle, 
+import {
   AlertTriangle,
+  CheckCircle2,
   Clock,
-  FileText
+  FileText,
+  Play,
+  XCircle,
 } from "lucide-react";
 
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
+  "http://localhost:3001";
 
 export default function TestRunner({ testSuites }) {
   const [results, setResults] = useState([]);
   const [running, setRunning] = useState(false);
   const [currentTest, setCurrentTest] = useState(null);
-  const [preflight, setPreflight] = useState({ status: 'unknown', message: null, database: 'unknown' });
+  const [preflight, setPreflight] = useState({
+    status: "unknown",
+    message: null,
+    database: "unknown",
+  });
   const [checking, setChecking] = useState(true);
 
   // Preflight check function
@@ -29,11 +34,19 @@ export default function TestRunner({ testSuites }) {
       let resp = await fetch(`${BACKEND_URL}/api/system/status`);
       if (!resp.ok) throw new Error(`Status ${resp.status}`);
       const sys = await resp.json();
-      const dbStatus = sys?.data?.database || 'unknown';
-      if (dbStatus === 'connected') {
-        setPreflight({ status: 'ok', message: 'Backend online', database: 'connected' });
+      const dbStatus = sys?.data?.database || "unknown";
+      if (dbStatus === "connected") {
+        setPreflight({
+          status: "ok",
+          message: "Backend online",
+          database: "connected",
+        });
       } else {
-        setPreflight({ status: 'error', message: `Database not ready: ${dbStatus}`, database: dbStatus });
+        setPreflight({
+          status: "error",
+          message: `Database not ready: ${dbStatus}`,
+          database: dbStatus,
+        });
       }
     } catch {
       try {
@@ -42,9 +55,19 @@ export default function TestRunner({ testSuites }) {
         if (!resp.ok) throw new Error(`Status ${resp.status}`);
         const data = await resp.json();
         // Health may say connected = based on pool exist; keep conservative
-        setPreflight({ status: data?.database === 'connected' ? 'ok' : 'error', message: data?.database === 'connected' ? 'Backend online' : 'Database not ready', database: data?.database || 'unknown' });
+        setPreflight({
+          status: data?.database === "connected" ? "ok" : "error",
+          message: data?.database === "connected"
+            ? "Backend online"
+            : "Database not ready",
+          database: data?.database || "unknown",
+        });
       } catch {
-        setPreflight({ status: 'error', message: `Backend not reachable at ${BACKEND_URL}`, database: 'unknown' });
+        setPreflight({
+          status: "error",
+          message: `Backend not reachable at ${BACKEND_URL}`,
+          database: "unknown",
+        });
       }
     } finally {
       setChecking(false);
@@ -59,28 +82,28 @@ export default function TestRunner({ testSuites }) {
   const runTests = async () => {
     setRunning(true);
     setResults([]);
-    
+
     const allResults = [];
 
     for (const suite of testSuites) {
       for (const test of suite.tests) {
         setCurrentTest(`${suite.name} - ${test.name}`);
-        
+
         const startTime = Date.now();
         let result = {
           suite: suite.name,
           test: test.name,
-          status: 'running',
+          status: "running",
           duration: 0,
-          error: null
+          error: null,
         };
 
         try {
           await test.fn();
-          result.status = 'passed';
+          result.status = "passed";
           result.duration = Date.now() - startTime;
         } catch (error) {
-          result.status = 'failed';
+          result.status = "failed";
           result.duration = Date.now() - startTime;
           result.error = error.message;
         }
@@ -94,10 +117,15 @@ export default function TestRunner({ testSuites }) {
     setRunning(false);
   };
 
-  const totalTests = testSuites.reduce((sum, suite) => sum + suite.tests.length, 0);
-  const passedTests = results.filter(r => r.status === 'passed').length;
-  const failedTests = results.filter(r => r.status === 'failed').length;
-  const passRate = totalTests > 0 ? ((passedTests / results.length) * 100).toFixed(1) : 0;
+  const totalTests = testSuites.reduce(
+    (sum, suite) => sum + suite.tests.length,
+    0,
+  );
+  const passedTests = results.filter((r) => r.status === "passed").length;
+  const failedTests = results.filter((r) => r.status === "failed").length;
+  const passRate = totalTests > 0
+    ? ((passedTests / results.length) * 100).toFixed(1)
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -112,51 +140,63 @@ export default function TestRunner({ testSuites }) {
                 className="bg-slate-700 border-slate-600"
                 disabled={checking}
               >
-                {checking ? <Clock className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-4 h-4 mr-2" />}
+                {checking
+                  ? <Clock className="w-4 h-4 mr-2 animate-spin" />
+                  : <FileText className="w-4 h-4 mr-2" />}
                 Check Backend
               </Button>
-              <Button 
-                onClick={runTests} 
-                disabled={running || checking || preflight.status !== 'ok'}
+              <Button
+                onClick={runTests}
+                disabled={running || checking || preflight.status !== "ok"}
                 className="bg-blue-600 hover:bg-blue-700"
               >
-                {running ? (
-                  <>
-                    <Clock className="w-4 h-4 mr-2 animate-spin" />
-                    Running...
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-4 h-4 mr-2" />
-                    Run All Tests
-                  </>
-                )}
+                {running
+                  ? (
+                    <>
+                      <Clock className="w-4 h-4 mr-2 animate-spin" />
+                      Running...
+                    </>
+                  )
+                  : (
+                    <>
+                      <Play className="w-4 h-4 mr-2" />
+                      Run All Tests
+                    </>
+                  )}
               </Button>
             </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
           {/* Preflight banner */}
-          {checking ? (
-            <Alert className="mb-4 bg-blue-900/30 border-blue-700">
-              <Clock className="h-4 w-4 animate-spin" />
-              <AlertDescription className="text-blue-300">Checking backend status…</AlertDescription>
-            </Alert>
-          ) : preflight.status !== 'ok' ? (
-            <Alert className="mb-4 bg-red-900/30 border-red-700">
-              <AlertTriangle className="h-4 w-4 text-red-400" />
-              <AlertDescription className="text-red-300">
-                {preflight.message}. Tests are disabled until the backend is reachable.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <Alert className="mb-4 bg-green-900/30 border-green-700">
-              <CheckCircle2 className="h-4 w-4 text-green-400" />
-              <AlertDescription className="text-green-300">
-                Backend online (database: {preflight.database}). You can run the tests.
-              </AlertDescription>
-            </Alert>
-          )}
+          {checking
+            ? (
+              <Alert className="mb-4 bg-blue-900/30 border-blue-700">
+                <Clock className="h-4 w-4 animate-spin" />
+                <AlertDescription className="text-blue-300">
+                  Checking backend status…
+                </AlertDescription>
+              </Alert>
+            )
+            : preflight.status !== "ok"
+            ? (
+              <Alert className="mb-4 bg-red-900/30 border-red-700">
+                <AlertTriangle className="h-4 w-4 text-red-400" />
+                <AlertDescription className="text-red-300">
+                  {preflight.message}. Tests are disabled until the backend is
+                  reachable.
+                </AlertDescription>
+              </Alert>
+            )
+            : (
+              <Alert className="mb-4 bg-green-900/30 border-green-700">
+                <CheckCircle2 className="h-4 w-4 text-green-400" />
+                <AlertDescription className="text-green-300">
+                  Backend online (database:{" "}
+                  {preflight.database}). You can run the tests.
+                </AlertDescription>
+              </Alert>
+            )}
 
           {running && currentTest && (
             <Alert className="mb-4 bg-blue-900/30 border-blue-700">
@@ -172,25 +212,33 @@ export default function TestRunner({ testSuites }) {
               <Card className="bg-slate-700 border-slate-600">
                 <CardContent className="p-4">
                   <div className="text-sm text-slate-400">Total Tests</div>
-                  <div className="text-2xl font-bold text-slate-100">{results.length}</div>
+                  <div className="text-2xl font-bold text-slate-100">
+                    {results.length}
+                  </div>
                 </CardContent>
               </Card>
               <Card className="bg-green-900/30 border-green-700">
                 <CardContent className="p-4">
                   <div className="text-sm text-green-400">Passed</div>
-                  <div className="text-2xl font-bold text-green-300">{passedTests}</div>
+                  <div className="text-2xl font-bold text-green-300">
+                    {passedTests}
+                  </div>
                 </CardContent>
               </Card>
               <Card className="bg-red-900/30 border-red-700">
                 <CardContent className="p-4">
                   <div className="text-sm text-red-400">Failed</div>
-                  <div className="text-2xl font-bold text-red-300">{failedTests}</div>
+                  <div className="text-2xl font-bold text-red-300">
+                    {failedTests}
+                  </div>
                 </CardContent>
               </Card>
               <Card className="bg-blue-900/30 border-blue-700">
                 <CardContent className="p-4">
                   <div className="text-sm text-blue-400">Pass Rate</div>
-                  <div className="text-2xl font-bold text-blue-300">{passRate}%</div>
+                  <div className="text-2xl font-bold text-blue-300">
+                    {passRate}%
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -198,21 +246,19 @@ export default function TestRunner({ testSuites }) {
 
           <div className="space-y-2">
             {results.map((result, index) => (
-              <div 
+              <div
                 key={index}
                 className={`p-4 rounded-lg border ${
-                  result.status === 'passed' 
-                    ? 'bg-green-900/20 border-green-700' 
-                    : 'bg-red-900/20 border-red-700'
+                  result.status === "passed"
+                    ? "bg-green-900/20 border-green-700"
+                    : "bg-red-900/20 border-red-700"
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    {result.status === 'passed' ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-400" />
-                    ) : (
-                      <XCircle className="w-5 h-5 text-red-400" />
-                    )}
+                    {result.status === "passed"
+                      ? <CheckCircle2 className="w-5 h-5 text-green-400" />
+                      : <XCircle className="w-5 h-5 text-red-400" />}
                     <div>
                       <div className="font-medium text-slate-200">
                         {result.suite} - {result.test}
