@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Note } from "@/api/entities";
 import { User } from "@/api/entities";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";

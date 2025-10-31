@@ -1,12 +1,10 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { PerformanceLog } from '@/api/entities';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, Bot } from 'lucide-react'; // Added Bot, removed unused icons
-import { format, formatDistanceToNow } from 'date-fns';
-import { toast } from "sonner";
+import { format } from 'date-fns';
 import {
   Dialog,
   DialogContent,

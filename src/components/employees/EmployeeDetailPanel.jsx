@@ -12,23 +12,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
   Briefcase,
-  Building2,
-  Calendar,
   Clock,
   Edit,
-  FileText,
   Link2,
   Loader2,
   Mail,
   MapPin,
-  Phone,
   RefreshCw,
   Shield,
-  Tag,
   Trash2,
   User,
   Users,
-  X,
 } from "lucide-react";
 import PhoneDisplay from "../shared/PhoneDisplay";
 import EmployeePermissionsDialog from "./EmployeePermissionsDialog";

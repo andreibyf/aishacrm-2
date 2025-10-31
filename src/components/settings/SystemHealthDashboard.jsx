@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -16,7 +15,6 @@ import {
   Clock,
   Database,
   RefreshCw,
-  TrendingUp,
   XCircle,
 } from "lucide-react";
 import { useErrorLog } from "../shared/ErrorLogger";

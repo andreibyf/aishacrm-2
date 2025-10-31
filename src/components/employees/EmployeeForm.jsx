@@ -1,6 +1,5 @@
 
-import React, { useState } from "react";
-import { User } from "@/api/entities";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,10 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent } from "@/components/ui/card";
 // Removed Alert and AlertDescription as messages are now handled by toast
 // import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle2, Send } from "lucide-react";
 import { useTenant } from "../shared/tenantContext";
-import { requestUserInvite } from "@/api/functions";
-import { inviteUser } from "@/api/functions";
 import { saveEmployee } from "@/api/functions";
 import { toast } from "sonner";
 // Removed: ResendInviteButton is removed from this form's outline

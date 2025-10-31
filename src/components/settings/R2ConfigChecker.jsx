@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, CheckCircle, XCircle, AlertTriangle, RefreshCw, HelpCircle } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, AlertTriangle, RefreshCw } from "lucide-react";
 import { toast } from "react-hot-toast"; // Assuming react-hot-toast for toast notifications
 import { checkR2Config } from "@/api/functions";
 

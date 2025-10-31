@@ -25,7 +25,7 @@ import LazyEmployeeSelector from "../shared/LazyEmployeeSelector";
 import { DenormalizationHelper } from "../shared/DenormalizationHelper";
 
 // New imports for error logging
-import { useErrorLog, handleApiError, createError } from "../shared/ErrorLogger";
+import { useErrorLog, handleApiError } from "../shared/ErrorLogger";
 
 const leadSourceOptions = [
   { value: "website", label: "Website" },

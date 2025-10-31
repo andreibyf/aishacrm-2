@@ -1,5 +1,4 @@
 
-import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Webhook, Search, Edit, Trash2, Link as LinkIcon, UserPlus, GitBranch } from 'lucide-react';

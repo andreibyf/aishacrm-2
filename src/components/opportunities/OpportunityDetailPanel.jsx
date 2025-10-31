@@ -1,9 +1,8 @@
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,12 +12,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   Calendar as CalendarIcon,
-  CheckCircle2,
   X,
   Edit,
   Trash2,
-  TrendingUp,
-  MoreHorizontal,
   Loader2,
   Building2,
   User,
@@ -30,7 +26,6 @@ import {
   Presentation,
   ExternalLink,
   ChevronDown,
-  AlertCircle,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";

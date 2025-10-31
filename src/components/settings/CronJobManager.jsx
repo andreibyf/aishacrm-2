@@ -1,19 +1,10 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { CronJob } from '@/api/entities';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert"; // Added Alert and AlertDescription
-import { Plus, Clock, AlertCircle, CheckCircle, RefreshCw, Loader2, Pencil, Save, Trash2, AlertTriangle } from "lucide-react";
-import { format } from 'date-fns';
+import { Clock, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 // Available functions that can be scheduled

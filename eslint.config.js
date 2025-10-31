@@ -3,6 +3,7 @@ import globals from 'globals'
 import react from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
+import unusedImports from 'eslint-plugin-unused-imports'
 
 export default [
   { ignores: ['dist', 'logseq/**', 'scripts/**', 'backend/node_modules/**', 'src/functions/**', 'node_modules/**', '.DS_Store', '*.local', '.env.*', '*.env', 'logseq/bak/**', 'playwright-report/**', 'test-results/**'] },
@@ -22,6 +23,7 @@ export default [
       react,
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
+      'unused-imports': unusedImports,
     },
     rules: {
       ...js.configs.recommended.rules,
@@ -30,7 +32,12 @@ export default [
       ...reactHooks.configs.recommended.rules,
       'react/jsx-no-target-blank': 'off',
       'react/prop-types': 'off', // Disabled - using modern React patterns instead of legacy PropTypes
-      'no-unused-vars': 'warn', // Changed to warning - unused imports don't break functionality
+      'no-unused-vars': 'off', // Disabled in favor of unused-imports plugin
+      'unused-imports/no-unused-imports': 'error',
+      'unused-imports/no-unused-vars': [
+        'warn',
+        { vars: 'all', varsIgnorePattern: '^_', args: 'after-used', argsIgnorePattern: '^_' }
+      ],
       'react-refresh/only-export-components': [
         'warn',
         { allowConstantExport: true },
@@ -60,7 +67,9 @@ export default [
         sourceType: 'module',
       },
     },
-    plugins: {},
+    plugins: {
+      'unused-imports': unusedImports,
+    },
     rules: {
       ...js.configs.recommended.rules,
       // Ensure Node globals don't error
@@ -70,7 +79,9 @@ export default [
       'react/prop-types': 'off',
       'react-refresh/only-export-components': 'off',
       // Keep unused vars as warnings, ignore underscored args/vars
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-unused-vars': 'off', // Disabled in favor of unused-imports plugin
+      'unused-imports/no-unused-imports': 'error',
+      'unused-imports/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
   // Tests override: Playwright tests run in Node; allow process and test globals
@@ -86,6 +97,9 @@ export default [
         sourceType: 'module',
       },
     },
+    plugins: {
+      'unused-imports': unusedImports,
+    },
     rules: {
       ...js.configs.recommended.rules,
       // tests aren't React components
@@ -94,7 +108,9 @@ export default [
       'react-refresh/only-export-components': 'off',
       // Allow dev-oriented patterns
       'no-undef': 'off',
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-unused-vars': 'off',
+      'unused-imports/no-unused-imports': 'error',
+      'unused-imports/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
   // Functions override: parse Deno-style / ESM worker files and allow Deno global

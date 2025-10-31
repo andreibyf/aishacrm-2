@@ -1,4 +1,4 @@
-import { assert, createSpy } from './testUtils';
+import { assert } from './testUtils';
 import { createError, handleApiError } from '../shared/ErrorLogger';
 
 export const errorLoggerTests = {

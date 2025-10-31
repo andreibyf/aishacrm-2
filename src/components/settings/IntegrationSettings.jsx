@@ -12,18 +12,10 @@ import {
   Building2,
   Calendar,
   Copy,
-  CreditCard,
-  Database,
   ExternalLink,
-  File, // Added File icon
-  KeyRound,
+  File,
   Loader2,
-  Mail,
-  Phone,
   Shield,
-  TrendingUp,
-  Users,
-  Webhook,
   Workflow, // Added Workflow icon
   Zap,
 } from "lucide-react";
@@ -34,12 +26,8 @@ import WebhookEmailSettings from "./WebhookEmailSettings";
 import SecuritySettings from "./SecuritySettings";
 import FileUploadDiagnostics from "./FileUploadDiagnostics";
 import WebhookSetupGuide from "./WebhookSetupGuide"; // Added WebhookSetupGuide import
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";

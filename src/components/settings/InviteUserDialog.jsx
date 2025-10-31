@@ -23,7 +23,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { inviteUser } from "@/api/functions";
 import {
   canAssignCRMAccess,
-  canAssignRole,
   getAssignableRoles,
   validateUserPermissions,
 } from "@/utils/permissions";
