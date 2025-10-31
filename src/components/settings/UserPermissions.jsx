@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { User } from "@/api/entities";
 import { Tenant } from "@/api/entities";
 import { Button } from "@/components/ui/button";

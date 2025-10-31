@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { UploadFile, ExtractDataFromUploadedFile } from '@/api/integrations';
 import { CashFlow } from '@/api/entities';
 import { toast } from 'sonner';

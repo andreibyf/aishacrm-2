@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { CronJob } from '@/api/entities';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
