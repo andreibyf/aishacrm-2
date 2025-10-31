@@ -723,7 +723,6 @@ export default function ContactsPage() {
                 userId: user?.id || user?.email,
               });
             }}
-            className="bg-orange-600 hover:bg-orange-700 text-white"
           >
             <Plus className="w-4 h-4 mr-2" />
             Add Contact
@@ -1209,7 +1208,6 @@ export default function ContactsPage() {
                       { userId: user?.id || user?.email },
                     );
                   }}
-                  className="bg-orange-600 hover:bg-orange-700"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Add Your First Contact
