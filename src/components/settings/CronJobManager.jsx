@@ -2,10 +2,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { CronJob } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Clock, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-// Available functions that can be scheduled
-const SCHEDULABLE_FUNCTIONS = [
+// Available functions that can be scheduled (not currently used, reserved for future UI)
+const _SCHEDULABLE_FUNCTIONS = [
   {
     name: 'processScheduledAICalls',
     description: 'Process and execute scheduled AI calls',
@@ -72,27 +75,12 @@ const SCHEDULE_PRESETS = {
 
 export default function CronJobManager({ user }) {
   const [cronJobs, setCronJobs] = useState([]);
-  const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [editingJob, setEditingJob] = useState(null);
-  const [saving, setSaving] = useState(false);
-
-  const [formData, setFormData] = useState({
-    name: '',
-    tenant_id: '',
-    function_name: '',
-    schedule_expression: '',
-    description: '',
-    is_active: true,
-    max_retries: 3,
-    timeout_seconds: 300
-  });
 
   const loadCronJobs = useCallback(async () => {
     try {
       setLoading(true);
-      const [jobs, tenantsData] = await Promise.all([
+      const [jobs, _tenantsData] = await Promise.all([
         CronJob.list('-created_date'),
         user?.role === 'superadmin' || user?.role === 'admin' ?
           (async () => {
@@ -107,7 +95,6 @@ export default function CronJobManager({ user }) {
           })() : Promise.resolve([])
       ]);
       setCronJobs(jobs);
-      setTenants(tenantsData);
     } catch (error) {
       console.error('Error loading cron jobs:', error);
       toast.error('Failed to load scheduled tasks.');
@@ -120,86 +107,9 @@ export default function CronJobManager({ user }) {
     loadCronJobs();
   }, [loadCronJobs]);
 
-  const calculateNextExecution = (scheduleExpression) => {
-    // Simple calculation - in production you'd want a proper cron parser
-    const now = new Date();
-    // const preset = SCHEDULE_PRESETS[scheduleExpression]; // unused variable
-
-    // This simplified logic assumes schedule_expression directly maps to preset keys or implies 'every_minute'
-    // For a real cron expression, a library like 'cron-parser' would be used.
-    // For now, based on the existing logic:
-    switch (scheduleExpression) {
-      case 'every_minute':
-        return new Date(now.getTime() + 60 * 1000).toISOString();
-      case 'every_5_minutes':
-        return new Date(now.getTime() + 5 * 60 * 1000).toISOString();
-      case 'every_15_minutes':
-        return new Date(now.getTime() + 15 * 60 * 1000).toISOString();
-      case 'every_30_minutes':
-        return new Date(now.getTime() + 30 * 60 * 1000).toISOString();
-      case 'hourly':
-        const nextHour = new Date(now);
-        nextHour.setHours(now.getHours() + 1, 0, 0, 0);
-        return nextHour.toISOString();
-      case 'daily':
-      case 'daily_midnight':
-        const nextDay = new Date(now);
-        nextDay.setDate(now.getDate() + 1);
-        nextDay.setHours(0, 0, 0, 0);
-        return nextDay.toISOString();
-      case 'daily_8am':
-        const next8am = new Date(now);
-        if (now.getHours() >= 8) {
-          next8am.setDate(now.getDate() + 1);
-        }
-        next8am.setHours(8, 0, 0, 0);
-        return next8am.toISOString();
-      case 'weekly':
-        const nextWeek = new Date(now);
-        nextWeek.setDate(now.getDate() + (7 - now.getDay())); // Next Sunday
-        nextWeek.setHours(0, 0, 0, 0);
-        return nextWeek.toISOString();
-      case 'monthly':
-        const nextMonth = new Date(now);
-        nextMonth.setMonth(now.getMonth() + 1, 1); // 1st of next month
-        nextMonth.setHours(0, 0, 0, 0);
-        return nextMonth.toISOString();
-      default:
-        // If not a known preset, fallback to a default or error. Here, we'll mimic every minute.
-        return new Date(now.getTime() + 60 * 1000).toISOString();
-    }
-  };
-
-  // UNUSED: handleSubmit function - form submission not connected to UI
-  // const handleSubmit = async (e) => {
-  //   e.preventDefault();
-  //   setSaving(true);
-
-  //   try {
-  //     const payload = {
-  //       ...formData,
-  //       tenant_id: formData.tenant_id === '' ? null : formData.tenant_id
-  //     };
-
-  //     if (editingJob) {
-  //       await CronJob.update(editingJob.id, payload);
-  //       toast.success(`Task "${payload.name}" updated successfully.`);
-  //     } else {
-  //       const nextExecution = calculateNextExecution(formData.schedule_expression);
-  //       await CronJob.create({
-  //         ...payload,
-  //         next_execution: nextExecution
-  //       });
-  //       toast.success(`Task "${payload.name}" created successfully.`);
-  //     }
-
-  //     setIsCreateDialogOpen(false);
-  //     setEditingJob(null);
-  //     setFormData({
-  //       name: '',
-  //       tenant_id: '',
-  //       function_name: '',
-  //       schedule_expression: '',
+  // UNUSED: Future features for creating/editing cron jobs
+  // const calculateNextExecution = (scheduleExpression) => { ... }
+  // const handleSubmit = async (e) => { ... }
   //       description: '',
   //       is_active: true,
   //       max_retries: 3,

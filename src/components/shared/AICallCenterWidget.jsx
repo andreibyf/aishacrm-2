@@ -1,18 +1,13 @@
 import { useEffect, useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+// Card components unused - kept as comment for future UI enhancements
+// import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AnimatePresence, motion } from "framer-motion";
 // Removed Card components as they are replaced by custom divs with styling
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Bot, Loader2, Phone, User as UserIcon, X } from "lucide-react";
+import { Bot, Loader2, Phone, X } from "lucide-react";
 import { callFluentWebhookV2 } from "@/api/functions";
 import { toast } from "sonner";
 import { useTenant } from "./tenantContext";
@@ -20,7 +15,7 @@ import { useTenant } from "./tenantContext";
 export default function AICallCenterWidget({
   prefilledData = {},
   user,
-  tenantName = "your company",
+  _tenantName = "your company", // Reserved for future use
   className, // Added className prop to pass to the widget container
 }) {
   const [isVisible, setIsVisible] = useState(false); // Changed isOpen to isVisible

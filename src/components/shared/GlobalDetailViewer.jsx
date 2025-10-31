@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   CardContent,
-  CardDescription,
+  // CardDescription, // Reserved for future use
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";

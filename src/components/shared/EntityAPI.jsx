@@ -3,7 +3,7 @@
 import {
   Card,
   CardContent,
-  CardDescription,
+  // CardDescription, // Reserved for future use
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";

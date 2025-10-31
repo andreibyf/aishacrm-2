@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TestReport } from "@/api/entities"; // Keep TestReport for potential future use or if backend still interacts
+// import { TestReport } from "@/api/entities"; // Reserved for future backend interactions
 import { runComponentTests } from "@/api/functions";
 import { testSuites as getTestSuites } from "@/api/functions";
 import {

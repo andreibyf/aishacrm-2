@@ -7,15 +7,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Trash2, ShieldCheck, Users, Edit, AlertTriangle, Search, RefreshCw, Plus, X, Copy } from "lucide-react";
-import { User as UserEntity } from "@/api/entities";
+import { Loader2, Trash2, ShieldCheck, Edit, Search, RefreshCw, Plus, X, Copy } from "lucide-react";
+// Reserved for future use: Users, AlertTriangle
+import { User as _UserEntity } from "@/api/entities";
 import { User } from "@/api/entities";
 import { Tenant } from "@/api/entities";
 import { Employee } from "@/api/entities";
 import { toast } from "sonner";
 import { Badge } from '@/components/ui/badge';
-import UserPermissions from './UserPermissions';
-import { Alert, AlertDescription } from "@/components/ui/alert";
+// import UserPermissions from './UserPermissions'; // Reserved for future use
+// import { Alert, AlertDescription } from "@/components/ui/alert"; // Reserved for future use
 import InviteUserDialog from './InviteUserDialog';
 import { Switch } from "@/components/ui/switch";
 import { format } from 'date-fns';

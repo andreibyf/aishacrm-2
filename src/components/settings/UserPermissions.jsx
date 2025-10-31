@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Save, AlertCircle, Users2, Eye, PencilLine } from "lucide-react";
-import { useTenant } from "../shared/tenantContext";
+// import { useTenant } from "../shared/tenantContext"; // Reserved for future use
 import NavigationPermissions from "./NavigationPermissions";
 import TagInput from "../shared/TagInput";
 import { toast } from "sonner";
@@ -20,7 +20,8 @@ export default function UserPermissions({ userEmail, onClose }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const {  } = useTenant();
+  // useTenant hook not currently needed but kept for potential future use
+  // const { selectedTenantId } = useTenant();
 
   const [displayName, setDisplayName] = useState("");
   const [selectedTenant, setSelectedTenant] = useState("");

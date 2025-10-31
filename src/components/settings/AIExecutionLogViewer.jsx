@@ -1,12 +1,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
-import { PerformanceLog } from '@/api/entities';
+// import { PerformanceLog } from '@/api/entities'; // Reserved for future use
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, Bot } from 'lucide-react'; // Added Bot, removed unused icons
-import { format, formatDistanceToNow } from 'date-fns';
-import { toast } from "sonner";
+import { format } from 'date-fns';
+// import { formatDistanceToNow } from 'date-fns'; // Reserved for future use
+// import { toast } from "sonner"; // Reserved for future use
 import {
   Dialog,
   DialogContent,
@@ -19,7 +20,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"; // New import
 
 import { listPerformanceLogs } from "@/api/functions";
 
-const LogDetailDialog = ({ log }) => {
+// Unused component - reserved for future detail dialog enhancements
+const _LogDetailDialog = ({ log }) => {
   return (
     <Dialog>
       <DialogTrigger asChild>
