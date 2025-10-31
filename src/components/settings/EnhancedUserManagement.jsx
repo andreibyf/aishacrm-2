@@ -98,7 +98,8 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
             manager_employee_id: null,
             new_password: '' // Reset password field when opening dialog
         });
-    }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user]); // initNavPerms is stable (depends only on user which is already in deps)
 
     useEffect(() => {
         (async () => {
