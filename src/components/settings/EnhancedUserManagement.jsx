@@ -650,6 +650,11 @@ export default function EnhancedUserManagement() {
     };
 
     const filteredUsers = users.filter(user => {
+        // Only show global users (from users table), not employees
+        if (user.user_type !== 'global') {
+            return false;
+        }
+
         const matchesSearch = searchTerm === '' ||
             user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             user.display_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
