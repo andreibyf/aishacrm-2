@@ -10,7 +10,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
 import {
   Select,
   SelectContent,
@@ -40,8 +39,6 @@ import {
   Edit,
   Loader2,
   Plus,
-  Save,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -244,7 +241,7 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
               placeholder="se8ujo4HwtLbAg1GMvuX"
             />
             <p className="text-xs text-slate-500 mt-1">
-              The unique Agent ID from ElevenLabs for this tenant's AI widget
+              The unique Agent ID from ElevenLabs for this tenant&apos;s AI widget
             </p>
           </div>
 

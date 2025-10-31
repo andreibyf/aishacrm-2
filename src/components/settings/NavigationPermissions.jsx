@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,7 @@ const ORDER = [
 
 export default function NavigationPermissions({ value, onChange, disabled = false, className = "" }) {
   const [keys, setKeys] = useState([]);
-  const [_defaults, setDefaults] = useState({});
+  const [defaults, setDefaults] = useState({});
   const [local, setLocal] = useState(value || {});
   const [saving, setSaving] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);

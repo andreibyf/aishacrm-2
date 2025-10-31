@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -350,7 +351,7 @@ export default function ApiKeyManager() {
                               Delete API Key
                             </AlertDialogTitle>
                             <AlertDialogDescription className="text-slate-400">
-                              Are you sure you want to delete the API key "{key.key_name}"?
+                              Are you sure you want to delete the API key &quot;{key.key_name}&quot;?
                               This action cannot be undone and will break any integrations using this key.
                             </AlertDialogDescription>
                           </AlertDialogHeader>

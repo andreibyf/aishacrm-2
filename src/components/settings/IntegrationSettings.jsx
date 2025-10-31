@@ -12,18 +12,10 @@ import {
   Building2,
   Calendar,
   Copy,
-  CreditCard,
-  Database,
   ExternalLink,
   File, // Added File icon
-  KeyRound,
   Loader2,
-  Mail,
-  Phone,
   Shield,
-  TrendingUp,
-  Users,
-  Webhook,
   Workflow, // Added Workflow icon
   Zap,
 } from "lucide-react";
@@ -34,12 +26,7 @@ import WebhookEmailSettings from "./WebhookEmailSettings";
 import SecuritySettings from "./SecuritySettings";
 import FileUploadDiagnostics from "./FileUploadDiagnostics";
 import WebhookSetupGuide from "./WebhookSetupGuide"; // Added WebhookSetupGuide import
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+// Removed unused Accordion components
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -254,8 +241,8 @@ export default function IntegrationSettings() {
                   </li>
                   <li className="text-sky-600">
                     Click{" "}
-                    <strong>"Generate New Key"</strong>. Give it a memorable
-                    name like "ElevenLabs Tool Key" and click "Generate Key".
+                    <strong>&quot;Generate New Key&quot;</strong>. Give it a memorable
+                    name like &quot;ElevenLabs Tool Key&quot; and click &quot;Generate Key&quot;.
                   </li>
                   <li className="text-sky-600">
                     The new key will appear highlighted. Click the{" "}
@@ -279,7 +266,7 @@ export default function IntegrationSettings() {
                   <li className="text-sky-600">
                     Set the <strong>Webhook URL</strong>{" "}
                     to the following, replacing `{"{tenant_id}"}` with your
-                    client's actual Tenant ID (found in Settings → Tenants):
+                    client&apos;s actual Tenant ID (found in Settings → Tenants):
                     <div className="flex items-center gap-2 my-2">
                       <Input
                         readOnly

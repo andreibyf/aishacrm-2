@@ -23,7 +23,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { inviteUser } from "@/api/functions";
 import {
   canAssignCRMAccess,
-  canAssignRole,
   getAssignableRoles,
   validateUserPermissions,
 } from "@/utils/permissions";
@@ -36,8 +35,6 @@ export default function InviteUserDialog(
   // Get roles this user can assign
   const assignableRoles = getAssignableRoles(currentUser);
 
-  const [_sendingInvite, _setSendingInvite] = useState(false);
-  const [_error, _setError] = useState(null);
   const [formData, setFormData] = useState({
     email: "",
     full_name: "",

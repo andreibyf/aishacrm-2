@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react'
+
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -6,14 +7,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Trash2, ShieldCheck, Edit, Search, RefreshCw, Plus, X, Copy } from 'lucide-react'
+import { Loader2, Trash2, ShieldCheck, Users, Edit, AlertTriangle, Search, RefreshCw, Plus, X, Copy } from "lucide-react";
 import { User as UserEntity } from "@/api/entities";
 import { User } from "@/api/entities";
 import { Tenant } from "@/api/entities";
 import { Employee } from "@/api/entities";
 import { toast } from "sonner";
 import { Badge } from '@/components/ui/badge';
-
+import UserPermissions from './UserPermissions';
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import InviteUserDialog from './InviteUserDialog';
 import { Switch } from "@/components/ui/switch";
 import { format } from 'date-fns';

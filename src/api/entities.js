@@ -257,7 +257,7 @@ export const Contact = createEntity("Contact");
 
 // Account entity - direct backend API calls
 export const Account = {
-  async list(filters = {}, orderBy = "-created_at", limit = 100) {
+  async list(filters = {}, _orderBy = "-created_at", limit = 100) {
     try {
       const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
         "http://localhost:3001";
@@ -612,7 +612,7 @@ export const ModuleSettings = createEntity("ModuleSettings");
 
 // AuditLog entity - direct backend API calls
 export const AuditLog = {
-  async list(filters = {}, orderBy = "-created_at", limit = 100) {
+  async list(filters = {}, _orderBy = "-created_at", limit = 100) {
     try {
       const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
         "http://localhost:3001";

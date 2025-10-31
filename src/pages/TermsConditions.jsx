@@ -33,7 +33,7 @@ export default function TermsConditions() {
           <section>
             <h2 className="text-xl font-semibold text-slate-900 mb-3">1. Acceptance of Terms</h2>
             <p className="text-slate-700 leading-relaxed">
-              By accessing and using the Ai-SHA® CRM platform ("Service"), you accept and agree to be bound by the terms and provision of this agreement. If you do not agree to abide by the above, please do not use this service.
+              By accessing and using the Ai-SHA® CRM platform (&quot;Service&quot;), you accept and agree to be bound by the terms and provision of this agreement. If you do not agree to abide by the above, please do not use this service.
             </p>
           </section>
 
@@ -72,7 +72,7 @@ export default function TermsConditions() {
             <ul className="list-disc pl-6 space-y-2 text-slate-700">
               <li>Upload, store, or transmit any unlawful, harmful, or objectionable content</li>
               <li>Violate any applicable laws or regulations</li>
-              <li>Attempt to gain unauthorized access to our systems or other users' accounts</li>
+              <li>Attempt to gain unauthorized access to our systems or other users&apos; accounts</li>
               <li>Interfere with or disrupt the integrity or performance of the Service</li>
               <li>Use the Service for any commercial purpose other than your intended business use</li>
             </ul>

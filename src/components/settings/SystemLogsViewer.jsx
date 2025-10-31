@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react';
 import { SystemLog } from '@/api/entities';
 import { useTenant } from '@/components/shared/tenantContext';
 import { useConfirmDialog } from '@/components/shared/ConfirmDialog';

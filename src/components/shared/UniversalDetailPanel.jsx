@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from "react";
 import {
   Sheet,
   SheetContent,
@@ -494,6 +494,7 @@ export default function UniversalDetailPanel({
     );
   };
 
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent 
@@ -660,7 +661,7 @@ export default function UniversalDetailPanel({
                               <a 
                                 href={`tel:${contact.phone}`}
                                 className="text-blue-400 hover:text-blue-300"
-                                onClick={(_e) => e.stopPropagation()} // Prevent sheet from closing/re-rendering
+                                onClick={(e) => e.stopPropagation()} // Prevent sheet from closing/re-rendering
                               >
                                 {contact.phone}
                               </a>
@@ -674,7 +675,7 @@ export default function UniversalDetailPanel({
                               <a 
                                 href={`mailto:${contact.email}`}
                                 className="text-blue-400 hover:text-blue-300"
-                                onClick={(_e) => e.stopPropagation()} // Prevent sheet from closing/re-rendering
+                                onClick={(e) => e.stopPropagation()} // Prevent sheet from closing/re-rendering
                               >
                                 {contact.email}
                               </a>
@@ -689,7 +690,7 @@ export default function UniversalDetailPanel({
                               <a 
                                 href={`tel:${contact.mobile}`}
                                 className="text-blue-400 hover:text-blue-300"
-                                onClick={(_e) => e.stopPropagation()} // Prevent sheet from closing/re-rendering
+                                onClick={(e) => e.stopPropagation()} // Prevent sheet from closing/re-rendering
                               >
                                 {contact.mobile}
                               </a>
@@ -701,7 +702,7 @@ export default function UniversalDetailPanel({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={(_e) => {
+                          onClick={(e) => {
                             e.stopPropagation(); // Prevent sheet from closing/re-rendering
                             window.location.href = `/contacts/${contact.id}`; // Adjusted to a more common SPA route pattern if applicable
                           }}
@@ -787,13 +788,13 @@ export default function UniversalDetailPanel({
                 <Input
                   placeholder="Note title (optional)"
                   value={newNoteTitle}
-                  onChange={(_e) => setNewNoteTitle(e.target.value)}
+                  onChange={(e) => setNewNoteTitle(e.target.value)}
                   className="bg-slate-900 border-slate-700 text-slate-200 placeholder:text-slate-500"
                 />
                 <Textarea
                   placeholder="Write your note here..."
                   value={newNoteContent}
-                  onChange={(_e) => setNewNoteContent(e.target.value)}
+                  onChange={(e) => setNewNoteContent(e.target.value)}
                   className="bg-slate-900 border-slate-700 text-slate-200 min-h-[100px] placeholder:text-slate-500"
                 />
                 <div className="flex items-center gap-3">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -140,7 +140,7 @@ export default function WebhookForm({ webhook, onSubmitSuccess, onCancel }) {
       <Alert>
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          Webhooks are secured with your N8N_SHARED_SECRET. Make sure your receiving endpoint validates the signature in the 'x-webhook-signature' header.
+          Webhooks are secured with your N8N_SHARED_SECRET. Make sure your receiving endpoint validates the signature in the &apos;x-webhook-signature&apos; header.
         </AlertDescription>
       </Alert>
 

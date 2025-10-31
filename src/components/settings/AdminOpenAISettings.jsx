@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +14,7 @@ import { testSystemOpenAI } from '@/api/functions';
 import { toast } from "sonner";
 
 export default function AdminOpenAISettings() {
-  const [_user, setUser] = useState(null);
+  const [, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [localSettings, setLocalSettings] = useState({
     openai_api_key: '',
@@ -102,7 +103,7 @@ export default function AdminOpenAISettings() {
         <CardHeader>
           <CardTitle className="text-slate-100">System OpenAI Integration</CardTitle>
           <CardDescription className="text-slate-400">
-            Configure your personal OpenAI API key to power AI features across the platform. This will be used when tenants don't have their own OpenAI integration configured.
+            Configure your personal OpenAI API key to power AI features across the platform. This will be used when tenants don&apos;t have their own OpenAI integration configured.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">

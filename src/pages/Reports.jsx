@@ -42,7 +42,7 @@ export default function ReportsPage() {
   const [loadingStats, setLoadingStats] = useState(false);
   const [stats, setStats] = useState(null);
   const { selectedTenantId } = useTenant();
-  const { getFilter, canViewAllRecords, _isEmployee } = useEmployeeScope();
+  const { getFilter, canViewAllRecords } = useEmployeeScope();
   const [isExporting, setIsExporting] = useState(false);
   const { cachedRequest } = useApiManager();
   const [currentTenantData, setCurrentTenantData] = useState(null);
@@ -234,7 +234,7 @@ export default function ReportsPage() {
       if (aiInsightsElement && aiInsightsElement.dataset.aiInsights) {
         try {
           aiInsightsData = JSON.parse(aiInsightsElement.dataset.aiInsights);
-        } catch (e) {
+        } catch {
           console.warn('Could not parse AI insights data for export');
         }
       }

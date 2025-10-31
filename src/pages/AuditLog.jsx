@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+
+import { useState, useEffect } from 'react';
 import { AuditLog } from '@/api/entities';
 import { User } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -19,7 +20,7 @@ export default function AuditLogPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [actionFilter, setActionFilter] = useState('all');
   const [entityFilter, setEntityFilter] = useState('all');
-  const [_currentUser, setCurrentUser] = useState(null);
+  const [, setCurrentUser] = useState(null);
   const [showClearDialog, setShowClearDialog] = useState(false);
 
   useEffect(() => {

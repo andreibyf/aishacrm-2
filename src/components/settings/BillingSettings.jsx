@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+
+import { useState, useEffect } from 'react';
 import { SubscriptionPlan, Subscription, User, Tenant } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -152,6 +153,7 @@ const AdminStripeConfig = ({ user, onUpdate }) => {
     </Card>
   );
 };
+
 
 export default function BillingSettings() {
   const [plans, setPlans] = useState([]);

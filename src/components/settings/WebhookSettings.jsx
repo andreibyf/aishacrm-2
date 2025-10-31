@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+
+import { useState, useEffect, useCallback } from "react";
 import { Webhook } from "@/api/entities";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

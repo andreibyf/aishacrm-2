@@ -1,8 +1,7 @@
-import { useState } from 'react'
+import { useState } from "react";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -55,7 +54,7 @@ export default function UserRecordDiagnostic() {
       <CardHeader>
         <CardTitle className="text-slate-100">User Record Diagnostic</CardTitle>
         <p className="text-sm text-slate-400">
-          Check what's actually stored in a User's database record
+          Check what&apos;s actually stored in a User&apos;s database record
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -143,7 +142,7 @@ export default function UserRecordDiagnostic() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">
-                    Is Power User (role = "power-user"):
+                    Is Power User (role = &quot;power-user&quot;):
                   </span>
                   {result.rls_evaluation.is_power_user
                     ? <CheckCircle2 className="w-4 h-4 text-green-400" />
@@ -214,8 +213,8 @@ export default function UserRecordDiagnostic() {
                 </div>
                 {!result.should_see_leads && (
                   <div className="text-xs mt-2">
-                    User needs one of: role="admin/superadmin/power-user" OR
-                    employee_role="manager"
+                    User needs one of: role=&quot;admin/superadmin/power-user&quot; OR
+                    employee_role=&quot;manager&quot;
                   </div>
                 )}
               </AlertDescription>

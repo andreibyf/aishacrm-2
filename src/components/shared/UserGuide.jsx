@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -83,7 +83,7 @@ export default function UserGuide() {
 
               <h3 className="text-slate-100 text-lg font-semibold mt-6">Navigation</h3>
               <p>
-                Use the sidebar menu to access different sections of the CRM. The modules you can see depend on your role and permissions (see the "Roles & Permissions" tab).
+                Use the sidebar menu to access different sections of the CRM. The modules you can see depend on your role and permissions (see the &quot;Roles & Permissions&quot; tab).
               </p>
 
               <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 mt-4">
@@ -156,10 +156,10 @@ export default function UserGuide() {
                 <div>
                   <h4 className="text-green-400 font-medium flex items-center gap-2">
                     <Eye className="w-4 h-4" />
-                    If you're a Manager:
+                    If you&apos;re a Manager:
                   </h4>
                   <ul className="list-disc list-inside mt-2 space-y-1 text-sm text-slate-400 ml-4">
-                    <li>You'll see all leads, contacts, accounts, and opportunities for your organization</li>
+                    <li>You&apos;ll see all leads, contacts, accounts, and opportunities for your organization</li>
                     <li>You can view and edit records created by any team member</li>
                     <li>Dashboard stats show team-wide performance</li>
                     <li>You can reassign records to other team members</li>
@@ -169,13 +169,13 @@ export default function UserGuide() {
                 <div>
                   <h4 className="text-orange-400 font-medium flex items-center gap-2">
                     <EyeOff className="w-4 h-4" />
-                    If you're an Employee:
+                    If you&apos;re an Employee:
                   </h4>
                   <ul className="list-disc list-inside mt-2 space-y-1 text-sm text-slate-400 ml-4">
-                    <li>You'll only see leads, contacts, and accounts assigned to you</li>
-                    <li>You can create new records (they'll be auto-assigned to you)</li>
+                    <li>You&apos;ll only see leads, contacts, and accounts assigned to you</li>
+                    <li>You can create new records (they&apos;ll be auto-assigned to you)</li>
                     <li>Dashboard stats reflect only your personal activity</li>
-                    <li>You cannot see or edit other team members' records</li>
+                    <li>You cannot see or edit other team members&apos; records</li>
                   </ul>
                 </div>
               </div>
@@ -219,7 +219,7 @@ export default function UserGuide() {
 
               <h3 className="text-slate-100 text-lg font-semibold mt-6">Widgets</h3>
               <p>
-                Click <strong>"Customize Dashboard"</strong> to show or hide widgets:
+                Click <strong>&quot;Customize Dashboard&quot;</strong> to show or hide widgets:
               </p>
               <ul className="list-disc list-inside space-y-1">
                 <li><strong>Sales Pipeline:</strong> Opportunities by stage with values</li>
@@ -255,11 +255,11 @@ export default function UserGuide() {
               <h3 className="text-slate-100 text-lg font-semibold">Creating a Contact</h3>
               <ol className="list-decimal list-inside space-y-1">
                 <li>Navigate to <strong>Contacts</strong> in the sidebar</li>
-                <li>Click <strong>"Add Contact"</strong></li>
+                <li>Click <strong>&quot;Add Contact&quot;</strong></li>
                 <li>Fill in required fields (First Name, Last Name)</li>
                 <li>Optionally add email, phone, company, job title, and notes</li>
                 <li>Assign to a team member (or leave assigned to yourself)</li>
-                <li>Click <strong>"Save"</strong></li>
+                <li>Click <strong>&quot;Save&quot;</strong></li>
               </ol>
 
               <h3 className="text-slate-100 text-lg font-semibold mt-6">What You Can See</h3>
@@ -297,13 +297,13 @@ export default function UserGuide() {
             </CardHeader>
             <CardContent className="prose prose-invert prose-slate max-w-none space-y-4 text-slate-300">
               <p>
-                Leads are potential customers who haven't been qualified yet. They move through stages: New → Contacted → Qualified → Converted (or Lost).
+                Leads are potential customers who haven&apos;t been qualified yet. They move through stages: New → Contacted → Qualified → Converted (or Lost).
               </p>
 
               <h3 className="text-slate-100 text-lg font-semibold">Lead Lifecycle</h3>
               <ol className="list-decimal list-inside space-y-1">
                 <li><strong>New:</strong> Just entered your system</li>
-                <li><strong>Contacted:</strong> You've reached out (call, email, meeting)</li>
+                <li><strong>Contacted:</strong> You&apos;ve reached out (call, email, meeting)</li>
                 <li><strong>Qualified:</strong> They meet your buying criteria and are interested</li>
                 <li><strong>Converted:</strong> Turned into a Contact, Account, or Opportunity</li>
                 <li><strong>Lost:</strong> Not a fit or not interested</li>
@@ -321,12 +321,12 @@ export default function UserGuide() {
               </p>
               <ol className="list-decimal list-inside space-y-1">
                 <li>Open the lead detail panel</li>
-                <li>Click <strong>"Convert Lead"</strong></li>
+                <li>Click <strong>&quot;Convert Lead&quot;</strong></li>
                 <li>Choose what to create:
                   <ul className="list-disc list-inside ml-6 mt-1">
                     <li>Contact (always created)</li>
-                    <li>Account (if they're from a company)</li>
-                    <li>Opportunity (if there's a potential deal)</li>
+                    <li>Account (if they&apos;re from a company)</li>
+                    <li>Opportunity (if there&apos;s a potential deal)</li>
                   </ul>
                 </li>
                 <li>Review and confirm the conversion</li>
@@ -411,7 +411,7 @@ export default function UserGuide() {
                 <li><strong>Proposal:</strong> Presenting your solution</li>
                 <li><strong>Negotiation:</strong> Discussing terms and pricing</li>
                 <li><strong>Closed Won:</strong> Deal is won! 🎉</li>
-                <li><strong>Closed Lost:</strong> Deal didn't happen</li>
+                <li><strong>Closed Lost:</strong> Deal didn&apos;t happen</li>
               </ol>
 
               <h3 className="text-slate-100 text-lg font-semibold mt-6">What You Can See</h3>
@@ -577,11 +577,11 @@ export default function UserGuide() {
 
               <h3 className="text-slate-100 text-lg font-semibold mt-6">AI Email Composer</h3>
               <p>
-                When creating an activity of type "Email":
+                When creating an activity of type &quot;Email&quot;:
               </p>
               <ol className="list-decimal list-inside space-y-1">
                 <li>Describe what you want to say</li>
-                <li>Click <strong>"Generate with AI"</strong></li>
+                <li>Click <strong>&quot;Generate with AI&quot;</strong></li>
                 <li>Review and edit the drafted email</li>
                 <li>Send or save as an activity</li>
               </ol>

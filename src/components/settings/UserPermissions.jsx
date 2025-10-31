@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+
+import { useState, useEffect, useCallback } from "react";
 import { User } from "@/api/entities";
 import { Tenant } from "@/api/entities";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Save, AlertCircle, Users2, Eye, PencilLine } from 'lucide-react'
+import { Loader2, Save, AlertCircle, Users2, Eye, PencilLine } from "lucide-react";
 import { useTenant } from "../shared/tenantContext";
 import NavigationPermissions from "./NavigationPermissions";
 import TagInput from "../shared/TagInput";
@@ -19,7 +20,7 @@ export default function UserPermissions({ userEmail, onClose }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const { _selectedTenantId } = useTenant();
+  const {  } = useTenant();
 
   const [displayName, setDisplayName] = useState("");
   const [selectedTenant, setSelectedTenant] = useState("");
@@ -370,7 +371,7 @@ export default function UserPermissions({ userEmail, onClose }) {
                 </SelectContent>
               </Select>
               <p className="text-xs text-slate-400 mt-1">
-                A manager will be able to view this employee's data and their own team.
+                A manager will be able to view this employee&apos;s data and their own team.
               </p>
             </div>
           )}

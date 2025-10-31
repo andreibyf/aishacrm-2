@@ -1,17 +1,11 @@
-import { useState, useEffect, useCallback } from 'react'
+
+import { useState, useEffect, useCallback } from 'react';
 import { CronJob } from '@/api/entities';
-
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-
-import { Badge } from "@/components/ui/badge";
-
-import { Alert, AlertDescription } from "@/components/ui/alert"; // Added Alert and AlertDescription
-import { Clock, Loader2 } from 'lucide-react'
-
 import { toast } from "sonner";
 
 // Available functions that can be scheduled
-const _SCHEDULABLE_FUNCTIONS = [
+const SCHEDULABLE_FUNCTIONS = [
   {
     name: 'processScheduledAICalls',
     description: 'Process and execute scheduled AI calls',
@@ -78,13 +72,13 @@ const SCHEDULE_PRESETS = {
 
 export default function CronJobManager({ user }) {
   const [cronJobs, setCronJobs] = useState([]);
-  const [_tenants, setTenants] = useState([]);
+  const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [_isCreateDialogOpen, _setIsCreateDialogOpen] = useState(false);
-  const [_editingJob, _setEditingJob] = useState(null);
-  const [_saving, _setSaving] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [editingJob, setEditingJob] = useState(null);
+  const [saving, setSaving] = useState(false);
 
-  const [_formData, _setFormData] = useState({
+  const [formData, setFormData] = useState({
     name: '',
     tenant_id: '',
     function_name: '',
@@ -126,7 +120,7 @@ export default function CronJobManager({ user }) {
     loadCronJobs();
   }, [loadCronJobs]);
 
-  const _calculateNextExecution = (scheduleExpression) => {
+  const calculateNextExecution = (scheduleExpression) => {
     // Simple calculation - in production you'd want a proper cron parser
     const now = new Date();
     // const preset = SCHEDULE_PRESETS[scheduleExpression]; // unused variable

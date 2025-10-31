@@ -1,29 +1,15 @@
-import { useState, useEffect, useCallback } from 'react'
+
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   Activity, 
-  CheckCircle, 
   AlertCircle, 
-  Clock, 
-  TrendingUp,
   RefreshCw,
   Loader2 // Added Loader2 import
 } from "lucide-react";
 import { SyncHealth } from "@/api/entities";
-
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar
-} from "recharts";
 
 export default function SyncHealthMonitor({ tenantId = null }) {
   const [healthLogs, setHealthLogs] = useState([]);

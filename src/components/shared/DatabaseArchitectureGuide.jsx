@@ -1,7 +1,6 @@
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -60,7 +59,7 @@ export default function DatabaseArchitectureGuide() {
                 <span className="text-orange-500 mt-1">●</span>
                 <span>
                   <strong>No Referential Integrity:</strong>{" "}
-                  Base44/MongoDB doesn't enforce foreign key constraints
+                  Base44/MongoDB doesn&apos;t enforce foreign key constraints
                   automatically
                 </span>
               </li>
@@ -106,9 +105,9 @@ export default function DatabaseArchitectureGuide() {
             </h3>
             <p className="text-sm text-slate-700 mb-3">
               Combines traditional star schema patterns (fact tables + dimension
-              tables) with MongoDB's document flexibility. Core business
-              entities become "fact tables" while reference data becomes
-              "dimension tables."
+              tables) with MongoDB&apos;s document flexibility. Core business
+              entities become &quot;fact tables&quot; while reference data becomes
+              &quot;dimension tables.&quot;
             </p>
             <div className="text-sm text-slate-700">
               <strong>Benefits:</strong>{" "}
@@ -556,7 +555,7 @@ export default function DatabaseArchitectureGuide() {
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-amber-600 mt-1">✓</span>
-                  <span>Add "View Archive" option for historical lookups</span>
+                  <span>Add &quot;View Archive&quot; option for historical lookups</span>
                 </li>
               </ul>
               <div className="mt-3 text-sm text-slate-600">
@@ -722,7 +721,7 @@ export default function DatabaseArchitectureGuide() {
                   leads, pipeline value, etc.
                 </li>
                 <li>
-                  Dashboard reads from cache (instant load) with "as of date"
+                  Dashboard reads from cache (instant load) with &quot;as of date&quot;
                   timestamp
                 </li>
                 <li>Add real-time delta updates for critical metrics</li>
@@ -743,7 +742,7 @@ export default function DatabaseArchitectureGuide() {
                 <li>Auto-archive notifications older than 30 days</li>
                 <li>Move to ArchivedNotification entity for history</li>
                 <li>
-                  Add user preference: "Keep read notifications for X days"
+                  Add user preference: &quot;Keep read notifications for X days&quot;
                 </li>
                 <li>Reduce notification table size by 90%</li>
               </ul>

@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Check, ChevronsUpDown, User } from 'lucide-react'
+import { Check, ChevronsUpDown, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function ContactSelector({ 
@@ -66,13 +66,13 @@ export default function ContactSelector({
           <CommandList>
             <CommandEmpty>
               <div className="py-6 text-center text-sm">
-                <p>No contacts found matching "{searchValue}"</p>
+                <p>No contacts found matching &quot;{searchValue}&quot;</p>
               </div>
             </CommandEmpty>
             <CommandGroup>
               {!required && (
                 <CommandItem
-                  value="_none__"
+                  value="__none__"
                   onSelect={() => {
                     onValueChange(null);
                     setOpen(false);

@@ -30,7 +30,7 @@ export default [
       ...reactHooks.configs.recommended.rules,
       'react/jsx-no-target-blank': 'off',
       'react/prop-types': 'off', // Disabled - using modern React patterns instead of legacy PropTypes
-      'no-unused-vars': 'warn', // Changed to warning - unused imports don't break functionality
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }], // Allow underscore-prefixed unused vars
       'react-refresh/only-export-components': [
         'warn',
         { allowConstantExport: true },

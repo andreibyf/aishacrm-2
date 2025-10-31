@@ -147,7 +147,7 @@ export default function RouteGuard({ user, pageName, children }) {
             Access Denied
           </h2>
           <p className="text-slate-400">
-            You don't have permission to access this page. Please contact your
+            You don&apos;t have permission to access this page. Please contact your
             administrator if you believe this is an error.
           </p>
         </div>

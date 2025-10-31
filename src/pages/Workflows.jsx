@@ -7,11 +7,10 @@ import {
   Play,
   Plus,
   Trash2,
-  XCircle,
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -27,7 +26,7 @@ import { toast } from "sonner";
 
 export default function WorkflowsPage() {
   const [workflows, setWorkflows] = useState([]);
-  const [_user, setUser] = useState(null);
+  const [, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showBuilder, setShowBuilder] = useState(false);
   const [editingWorkflow, setEditingWorkflow] = useState(null);
