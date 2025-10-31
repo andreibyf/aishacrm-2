@@ -122,7 +122,7 @@ export default function NotificationPanel() {
             <div className="flex flex-col items-center justify-center py-8 text-slate-500">
               <Bell className="w-12 h-12 mb-2 text-slate-600" />
               <p>No notifications yet</p>
-              <p className="text-sm">You'll see important updates here</p>
+              <p className="text-sm">You&apos;ll see important updates here</p>
             </div>
           ) : (
             notifications.map((notification) => (

@@ -11,7 +11,7 @@ import {
   X,
   AlertTriangle,
   Loader2,
-  CheckCircle2,
+  // CheckCircle2, // Reserved for future success indicators
   Database,
   FileJson,
   FileSpreadsheet
@@ -103,7 +103,7 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
               <p className="font-semibold mb-1">Archive Action</p>
               <p className="text-sm">
                 Records will be serialized and uploaded to Cloudflare R2 cloud storage.
-                They will be marked as "Archived" in the CRM.
+                They will be marked as &quot;Archived&quot; in the CRM.
               </p>
             </AlertDescription>
           </Alert>

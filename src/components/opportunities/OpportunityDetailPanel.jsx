@@ -12,12 +12,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   Calendar as CalendarIcon,
-  CheckCircle2,
+  // CheckCircle2, // Reserved for future success indicators
   X,
   Edit,
   Trash2,
-  TrendingUp,
-  MoreHorizontal,
+  // TrendingUp, // Reserved for future trend indicators
+  // MoreHorizontal, // Reserved for future actions menu
   Loader2,
   Building2,
   User,
@@ -29,7 +29,7 @@ import {
   Presentation,
   ExternalLink,
   ChevronDown,
-  AlertCircle,
+  // AlertCircle, // Reserved for future alert indicators
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";

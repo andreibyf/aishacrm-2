@@ -331,7 +331,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
                         No accounts available
                       </SelectItem>
                     )}
-                    <SelectItem value={null}>No Account / Don't associate</SelectItem>
+                    <SelectItem value={null}>No Account / Don&apos;t associate</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
