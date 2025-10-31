@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useEffect } from 'react'; // Removed unused React and useState
 
 export function MCPManager() {

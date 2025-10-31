@@ -226,7 +226,7 @@ export function formatActivityDateTime(activity, offsetMinutes = null) {
       
       return format(dateOnly, 'PPP'); // e.g., "September 26, 2025"
     }
-  } catch (_error) {
+  } catch {
     return 'Invalid date/time';
   }
 }

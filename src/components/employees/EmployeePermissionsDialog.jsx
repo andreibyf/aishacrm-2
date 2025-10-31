@@ -150,8 +150,8 @@ export default function EmployeePermissionsDialog({ open, onOpenChange, employee
                 <ol className="list-decimal list-inside space-y-1 ml-2">
                   <li>Close this dialog</li>
                   <li>Click the Edit button (pencil icon) for this employee</li>
-                  <li>Enable "CRM Access" toggle</li>
-                  <li>Set the "CRM User Email" field</li>
+                  <li>Enable &quot;CRM Access&quot; toggle</li>
+                  <li>Set the &quot;CRM User Email&quot; field</li>
                   <li>Choose the appropriate Tier and Role</li>
                   <li>Optionally send an invite</li>
                   <li>Save the employee</li>

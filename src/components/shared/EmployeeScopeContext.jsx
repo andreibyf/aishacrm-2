@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useState } from "react";
 import { User as UserEntity } from "@/api/entities";
 
@@ -25,7 +26,7 @@ export const EmployeeScopeProvider = ({ children }) => {
       try {
         const u = await UserEntity.me();
         if (!canceled) setCurrentUser(u);
-      } catch (e) {
+      } catch {
         if (!canceled) setCurrentUser(null);
       }
     })();

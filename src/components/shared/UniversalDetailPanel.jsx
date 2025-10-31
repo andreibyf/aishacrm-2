@@ -458,7 +458,7 @@ export default function UniversalDetailPanel({
         } else if (key.includes('date')) {
           try {
             value = format(new Date(value), 'MMM d, yyyy'); // Using date-fns for consistent formatting
-          } catch (e) {
+          } catch {
             value = String(value); // Fallback if date is invalid
           }
         } else if (['status', 'stage', 'priority', 'type'].includes(key)) {
@@ -884,7 +884,7 @@ export default function UniversalDetailPanel({
                 {newNoteType !== "general" && (
                   <p className="text-xs text-amber-400 flex items-center gap-1 mt-2">
                     <Star className="w-3 h-3" />
-                    This will also create an Activity record of type "{mapNoteTypeToActivityType(newNoteType)}"
+                    This will also create an Activity record of type &quot;{mapNoteTypeToActivityType(newNoteType)}&quot;
                   </p>
                 )}
               </div>

@@ -218,32 +218,36 @@ export class DenormalizationHelper {
     if (activityData.related_to && activityData.related_id) {
       try {
         switch (activityData.related_to) {
-          case 'contact':
+          case 'contact': {
             const contact = await Contact.get(activityData.related_id);
             if (contact) {
               enriched.related_name = `${contact.first_name} ${contact.last_name}`;
               enriched.related_email = contact.email;
             }
             break;
-          case 'account':
+          }
+          case 'account': {
             const account = await Account.get(activityData.related_id);
             if (account) {
               enriched.related_name = account.name;
             }
             break;
-          case 'lead':
+          }
+          case 'lead': {
             const lead = await Lead.get(activityData.related_id);
             if (lead) {
               enriched.related_name = `${lead.first_name} ${lead.last_name}`;
               enriched.related_email = lead.email;
             }
             break;
-          case 'opportunity':
+          }
+          case 'opportunity': {
             const opp = await Opportunity.get(activityData.related_id);
             if (opp) {
               enriched.related_name = opp.name;
             }
             break;
+          }
         }
       } catch (error) {
         console.warn("Could not enrich related entity data:", error);

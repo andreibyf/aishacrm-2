@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 
 export default function AvatarWidget({
-  agentId,
-  apiKey,
-  onMessage,
-  onNavigate
+  agentId: _agentId,
+  apiKey: _apiKey,
+  onMessage: _onMessage,
+  onNavigate: _onNavigate
 }) {
   const [_isReady, _setIsReady] = useState(false); // isReady state added as per outline
   const [isListening, setIsListening] = useState(false);

@@ -418,13 +418,13 @@ export default function WorkflowGuide() {
                 <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
                 <div>
                   <strong className="text-slate-200">Structured Workflow Wins:</strong> BizDev Sources → Leads → Contacts → Opportunities. 
-                  Follow this flow and you won't lose prospects.
+                  Follow this flow and you won&apos;t lose prospects.
                 </div>
               </div>
               <div className="flex gap-3">
                 <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-slate-200">Manager Oversight is Critical:</strong> Use 'All Leads' view and bulk actions. 
+                  <strong className="text-slate-200">Manager Oversight is Critical:</strong> Use &apos;All Leads&apos; view and bulk actions. 
                   A good manager can 3x team performance with proper CRM usage.
                 </div>
               </div>

@@ -62,7 +62,7 @@ export default function TimezoneSettings({ user, onUpdate }) {
       setMessage("Settings saved successfully!");
       setTimeout(() => setMessage(""), 3000);
       if (onUpdate) onUpdate();
-    } catch (error) {
+    } catch {
       setMessage("Failed to save settings");
       setTimeout(() => setMessage(""), 3000);
     } finally {

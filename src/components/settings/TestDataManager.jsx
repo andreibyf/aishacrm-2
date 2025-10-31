@@ -120,7 +120,7 @@ export default function TestDataManager() {
 
           <div className="text-xs text-slate-400 bg-slate-700/50 p-3 rounded border border-slate-600">
             <strong>Pro Tip:</strong>{" "}
-            During development, always create test records with the "Test Data"
+            During development, always create test records with the &quot;Test Data&quot;
             checkbox enabled. This makes cleanup much easier before going live.
           </div>
         </div>

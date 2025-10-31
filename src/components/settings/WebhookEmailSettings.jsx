@@ -89,7 +89,7 @@ export default function WebhookEmailSettings() {
     } finally {
       setLoading(false);
     }
-  }, [selectedTenantId]); // Reload when tenant changes
+  }, [selectedTenantId, eventSettings]); // Reload when tenant or event settings shape changes
 
   useEffect(() => {
     loadIntegration();

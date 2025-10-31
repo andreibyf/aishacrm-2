@@ -358,10 +358,10 @@ export default function UserGuide() {
               <h3 className="text-slate-100 text-lg font-semibold">Creating an Account</h3>
               <ol className="list-decimal list-inside space-y-1">
                 <li>Navigate to <strong>Accounts</strong> in the sidebar</li>
-                <li>Click <strong>"Add Account"</strong></li>
+                <li>Click <strong>&quot;Add Account&quot;</strong></li>
                 <li>Fill in company details (Name, Industry, Website, Phone)</li>
                 <li>Add revenue and employee count for better segmentation</li>
-                <li>Click <strong>"Save"</strong></li>
+                <li>Click <strong>&quot;Save&quot;</strong></li>
               </ol>
 
               <h3 className="text-slate-100 text-lg font-semibold mt-6">What You Can See</h3>
@@ -422,7 +422,7 @@ export default function UserGuide() {
 
               <h3 className="text-slate-100 text-lg font-semibold mt-6">Key Opportunity Fields</h3>
               <ul className="list-disc list-inside space-y-1">
-                <li><strong>Name:</strong> Deal title (e.g., "ACME Corp - Website Redesign")</li>
+                <li><strong>Name:</strong> Deal title (e.g., &quot;ACME Corp - Website Redesign&quot;)</li>
                 <li><strong>Amount:</strong> Expected revenue in USD</li>
                 <li><strong>Close Date:</strong> When you expect to close the deal</li>
                 <li><strong>Probability:</strong> Likelihood of winning (0-100%)</li>
@@ -456,11 +456,11 @@ export default function UserGuide() {
               <h3 className="text-slate-100 text-lg font-semibold">Creating an Activity</h3>
               <ol className="list-decimal list-inside space-y-1">
                 <li>Navigate to <strong>Activities</strong> in the sidebar</li>
-                <li>Click <strong>"Add Activity"</strong></li>
+                <li>Click <strong>&quot;Add Activity&quot;</strong></li>
                 <li>Choose activity type and fill in details</li>
                 <li>Link to a Contact, Lead, Account, or Opportunity</li>
                 <li>Set due date and priority</li>
-                <li>Click <strong>"Save"</strong></li>
+                <li>Click <strong>&quot;Save&quot;</strong></li>
               </ol>
 
               <h3 className="text-slate-100 text-lg font-semibold mt-6">Activity Types</h3>

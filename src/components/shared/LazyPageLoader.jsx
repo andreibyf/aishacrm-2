@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";

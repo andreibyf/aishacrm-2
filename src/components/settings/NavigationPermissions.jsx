@@ -80,7 +80,7 @@ export default function NavigationPermissions({ value, onChange, disabled = fals
       }
     })();
     return () => { mounted = false; };
-  }, []);
+  }, [value]);
 
   // Update local state when value prop changes (for external updates)
   useEffect(() => {

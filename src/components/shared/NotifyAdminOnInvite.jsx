@@ -96,7 +96,7 @@ export async function notifyAdminOnInvite({
         (currentUserMe?.settings?.phone && String(currentUserMe.settings.phone).trim()) ||
         null;
     }
-  } catch (error) {
+  } catch {
     // ignore
   }
 
@@ -106,7 +106,7 @@ export async function notifyAdminOnInvite({
     try {
       const t = await Tenant.get(tenantId);
       tenantName = t?.name || null;
-    } catch (_e) {
+    } catch {
       // ignore
     }
   }

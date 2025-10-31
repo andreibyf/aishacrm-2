@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useCallback, useRef } from 'react';
 
 const ApiContext = createContext(null);

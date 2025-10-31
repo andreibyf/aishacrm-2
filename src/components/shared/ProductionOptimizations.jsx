@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 
 import React, { useEffect } from 'react';
 import { performanceCache } from './PerformanceCache';
@@ -30,7 +31,7 @@ export const PerformanceMonitor = ({ children }) => {
       
       try {
         observer.observe({ entryTypes: ['navigation', 'paint'] });
-      } catch (e) {
+      } catch {
         console.warn('Performance observer not fully supported');
       }
     }
@@ -40,9 +41,9 @@ export const PerformanceMonitor = ({ children }) => {
       if (observer) { 
         try {
           observer.disconnect();
-        } catch (e) {
+        } catch {
           // Observer already disconnected or other error during cleanup
-          console.warn('Error disconnecting PerformanceObserver:', e);
+          console.warn('Error disconnecting PerformanceObserver');
         }
       }
     };

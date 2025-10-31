@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useRef } from 'react'
 import { PerformanceLog } from '@/api/entities';
 
@@ -21,7 +22,7 @@ export function usePerformanceTracker(functionName, enabled = true) {
       return;
     }
 
-    try {
+  try {
       // Silently create performance log - don't throw if it fails
       await PerformanceLog.create({
         function_name: functionName,
@@ -33,7 +34,7 @@ export function usePerformanceTracker(functionName, enabled = true) {
       }).catch(() => {
         // Silently ignore performance logging failures
       });
-    } catch (error) {
+    } catch {
       // Silently ignore - performance logging shouldn't break the app
     }
   };
@@ -62,7 +63,7 @@ export function withPerformanceTracking(fn, functionName, enabled = true) {
             response_time_ms: responseTime,
             status: 'success'
           }).catch(() => {});
-        } catch (error) {
+        } catch {
           // Silently ignore
         }
       }
@@ -78,7 +79,7 @@ export function withPerformanceTracking(fn, functionName, enabled = true) {
           status: 'error',
           error_message: error?.message || 'Unknown error'
         }).catch(() => {});
-      } catch (logError) {
+      } catch {
         // Silently ignore
       }
       
