@@ -42,7 +42,7 @@ export default function ReportsPage() {
   const [loadingStats, setLoadingStats] = useState(false);
   const [stats, setStats] = useState(null);
   const { selectedTenantId } = useTenant();
-  const { getFilter, canViewAllRecords, isEmployee } = useEmployeeScope();
+  const { getFilter, canViewAllRecords, _isEmployee } = useEmployeeScope();
   const [isExporting, setIsExporting] = useState(false);
   const { cachedRequest } = useApiManager();
   const [currentTenantData, setCurrentTenantData] = useState(null);

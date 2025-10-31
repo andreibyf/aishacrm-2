@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
+
 import { User } from "@/api/entities";
 import {
   Select,

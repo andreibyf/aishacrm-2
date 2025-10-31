@@ -3,7 +3,7 @@ import { RefreshCw } from "lucide-react";
 import { useApiManager } from "./ApiManager";
 import { toast } from "sonner";
 
-export default function ForceRefreshButton({ entityName, onRefresh }) {
+export default function ForceRefreshButton({ _entityName, onRefresh }) {
   const { clearCache } = useApiManager();
 
   const handleRefresh = () => {

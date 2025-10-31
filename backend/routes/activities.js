@@ -9,7 +9,7 @@ export default function createActivityRoutes(pgPool) {
   router.use(enforceEmployeeDataScope);
 
 // Helper function to expand metadata fields to top-level properties
-  const expandMetadata = (record) => {
+  const _expandMetadata = (record) => {
     if (!record) return record;
     const { metadata = {}, ...rest } = record;
     return {

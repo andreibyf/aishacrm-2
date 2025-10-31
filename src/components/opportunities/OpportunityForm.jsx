@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from 'react'
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,14 +9,14 @@ import { User } from "@/api/entities";
 import { Tenant } from "@/api/entities";
 import { Employee } from "@/api/entities";
 import { useTenant } from "../shared/tenantContext";
-import { X, Plus } from "lucide-react";
+import { Plus } from 'lucide-react'
 import SearchableAccountSelector from "../shared/SearchableAccountSelector";
 import SearchableContactSelector from "../shared/SearchableContactSelector";
 import TagInput from "../shared/TagInput";
 import CreateAccountDialog from "../accounts/CreateAccountDialog";
 import LinkContactDialog from "../shared/LinkContactDialog";
 
-export default function OpportunityForm({ opportunity, onSubmit, onCancel, contacts: propContacts, accounts: propAccounts, users: propUsers, leads: propLeads }) {
+export default function OpportunityForm({ opportunity, onSubmit, onCancel, contacts: propContacts, accounts: propAccounts, users: _propUsers, leads: propLeads }) {
   const { selectedTenantId } = useTenant();
   const [formData, setFormData] = useState({
     name: "",

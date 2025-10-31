@@ -1,5 +1,3 @@
-
-import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Webhook, Search, Edit, Trash2, Link as LinkIcon, UserPlus, GitBranch } from 'lucide-react';
@@ -24,7 +22,7 @@ const nodeColors = {
   update_contact: 'bg-teal-600',
 };
 
-export default function WorkflowNode({ node, isSelected, isConnecting, onClick, onUpdate, onDelete, onStartConnect }) {
+export default function WorkflowNode({ node, isSelected, isConnecting, onClick, _onUpdate, onDelete, onStartConnect }) {
   const Icon = nodeIcons[node.type] || Edit;
   const colorClass = nodeColors[node.type] || 'bg-gray-600';
 

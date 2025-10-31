@@ -14,7 +14,7 @@ files.forEach(file => {
   const category = file.replace('.js', '');
   
   // Check for database operations
-  const hasPgPool = content.includes('pgPool');
+  const _hasPgPool = content.includes('pgPool');
   const hasQuery = content.includes('.query(');
   const hasInsert = content.includes('INSERT INTO');
   const hasSelect = content.includes('SELECT');
