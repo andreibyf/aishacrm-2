@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import { useState } from 'react'
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Check, ChevronsUpDown, User, Plus } from "lucide-react";
+import { Check, ChevronsUpDown, User } from 'lucide-react'
 import { cn } from "@/lib/utils";
 
 export default function ContactSelector({ 
@@ -72,7 +72,7 @@ export default function ContactSelector({
             <CommandGroup>
               {!required && (
                 <CommandItem
-                  value="__none__"
+                  value="_none__"
                   onSelect={() => {
                     onValueChange(null);
                     setOpen(false);

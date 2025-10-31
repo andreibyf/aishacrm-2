@@ -1,11 +1,10 @@
-
 import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, Info, Shield, AlertTriangle, ExternalLink } from "lucide-react";
+import { Loader2, Info, Shield, AlertTriangle } from 'lucide-react'
 import { updateEmployeeUserAccess } from "@/api/functions";
 // import { updateEmployeeDetails } from "@/api/functions/updateEmployeeDetails"; // TODO: Create this function
 const updateEmployeeDetails = async () => { throw new Error("updateEmployeeDetails not implemented"); }; // Temporary stub

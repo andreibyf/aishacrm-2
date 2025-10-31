@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react'
 import { UploadFile, ExtractDataFromUploadedFile } from '@/api/integrations';
 import { CashFlow } from '@/api/entities';
 import { toast } from 'sonner';
@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Upload, FileUp, CheckCircle, AlertTriangle, Save, Trash2, ArrowRightLeft } from 'lucide-react';
+import { Loader2, FileUp, CheckCircle, AlertTriangle, Save, Trash2 } from 'lucide-react'
 import { useTenant } from '../shared/tenantContext';
 
 const cashFlowExtractionSchema = {
@@ -37,7 +37,7 @@ const cashFlowCategories = [
 ];
 
 export default function CashFlowExtractor({ onCancel, onProcessingChange, user }) {
-  const [file, setFile] = useState(null);
+  const [_file, setFile] = useState(null);
   const [status, setStatus] = useState('idle'); // idle, uploading, extracting, review, saving, success
   const [extractedData, setExtractedData] = useState([]);
   const [error, setError] = useState(null);

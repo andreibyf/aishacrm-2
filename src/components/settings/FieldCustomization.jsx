@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from 'react'
 import { FieldCustomization as FieldCustomizationEntity } from "@/api/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -145,7 +144,7 @@ const defaultFields = {
 
 export default function FieldCustomization() {
   const [customizations, setCustomizations] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [_loading, setLoading] = useState(true);
   const [activeEntity, setActiveEntity] = useState('Contact');
   const [editingField, setEditingField] = useState(null);
   const [showDialog, setShowDialog] = useState(false);

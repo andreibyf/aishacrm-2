@@ -218,11 +218,11 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
 const createEntity = (entityName) => {
   return {
     // Add filter method as alias for list with better parameter handling
-    filter: async (filterObj, sortField, limit) => {
+    filter: async (filterObj, _sortField, _limit) => {
       return callBackendAPI(entityName, "GET", filterObj);
     },
     // List method
-    list: async (filterObj, sortField, limit) => {
+    list: async (filterObj, _sortField, _limit) => {
       return callBackendAPI(entityName, "GET", filterObj);
     },
     // Get by ID

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react'
 import { PerformanceLog } from '@/api/entities';
 
 // Track performance of function calls

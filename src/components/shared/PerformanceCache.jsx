@@ -75,7 +75,7 @@ class PerformanceCache {
 
   // Get from cache with configurable TTL
   getFromCache(entityName, method, params = {}, ttl) {
-    const key = this.getCacheKey(entityName, method, params);
+    const key = this.getCacheKey(entityName, _method, params);
     const cached = this.memoryCache.get(key);
     
     if (cached && this.isCacheValid(cached.timestamp, ttl)) {
@@ -91,7 +91,7 @@ class PerformanceCache {
 
   // Store in cache with automatic cleanup
   setCache(entityName, method, params = {}, data) {
-    const key = this.getCacheKey(entityName, method, params);
+    const key = this.getCacheKey(entityName, _method, params);
     this.memoryCache.set(key, {
       data,
       timestamp: Date.now()
@@ -249,7 +249,7 @@ class PerformanceCache {
   async cachedEntityCall(entityName, method, params = {}, priority = 'normal', ttl) {
     // Try cache first with custom TTL for different data types
     const defaultTTL = this.getDefaultTTL(entityName, method);
-    const cached = this.getFromCache(entityName, method, params, ttl || defaultTTL);
+    const cached = this.getFromCache(entityName, _method, params, ttl || defaultTTL);
     if (cached) {
       return cached;
     }

@@ -203,7 +203,7 @@ export default function LeadSourceChart(props) { // Changed to receive `props`
                           fontSize: "12px",
                         }}
                         // Explicitly define payload to include all categories, even those with 0 value
-                        payload={data.map((item, index) => {
+                        payload={data.map((item, _index) => {
                           // Find the actual index for coloring for items with value > 0
                           const visibleItems = data.filter((d) => d.value > 0);
                           const itemInVisibleIndex = visibleItems.findIndex(

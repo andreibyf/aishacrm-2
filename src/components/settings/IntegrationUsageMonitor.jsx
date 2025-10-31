@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react'
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button"; // Button is no longer used in the Alert but might be elsewhere or kept for future expansion. Let's remove it if not used.
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
