@@ -106,7 +106,7 @@ export default function TagInput({
                     onClick={() => addTag(inputValue)}
                     className={cn(darkMode ? "bg-blue-600 hover:bg-blue-700" : "bg-primary text-primary-foreground")}
                   >
-                    Create "{inputValue}"
+                    Create &quot;{inputValue}&quot;
                   </Button>
                 </div>
               ) : (
@@ -146,7 +146,7 @@ export default function TagInput({
                 >
                   <div className="flex items-center gap-2">
                     <Plus className="w-4 h-4 opacity-50" />
-                    Create "{inputValue}"
+                    Create &quot;{inputValue}&quot;
                   </div>
                 </CommandItem>
               </CommandGroup>

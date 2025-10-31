@@ -231,7 +231,7 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
                             className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400"
                         />
                         <p className="text-xs text-slate-500 mt-1">
-                            This will update how the user's name appears in the app
+                            This will update how the user&apos;s name appears in the app
                         </p>
                     </div>
 
@@ -302,7 +302,7 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
                                 </SelectContent>
                             </Select>
                             <p className="text-xs text-slate-500 mt-1">
-                                Note: Base44 role is always "user" for Employees/Managers. This controls CRM data visibility.
+                                Note: Base44 role is always &quot;user&quot; for Employees/Managers. This controls CRM data visibility.
                             </p>
                         </div>
                     )}

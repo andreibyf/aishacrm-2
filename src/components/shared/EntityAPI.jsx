@@ -217,7 +217,7 @@ export default function EntityAPI() {
         </CardHeader>
         <CardContent>
           <p className="text-slate-600 mb-4">
-            Ai-SHA CRM uses the base44 platform's built-in entity SDK for all
+            Ai-SHA CRM uses the base44 platform&apos;s built-in entity SDK for all
             data operations. Each entity provides a consistent API for CRUD
             operations with built-in tenant isolation.
           </p>
@@ -387,7 +387,7 @@ export default function EntityAPI() {
                     <p className="text-sm text-slate-600">
                       API credentials are encrypted at rest and isolated per
                       tenant. Only Power Users within each tenant can manage
-                      their organization's integrations.
+                      their organization&apos;s integrations.
                     </p>
                   </div>
                 </CardContent>

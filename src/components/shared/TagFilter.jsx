@@ -15,7 +15,7 @@ export default function TagFilter({
   allTags = [],
   selectedTags = [],
   onTagsChange,
-  placeholder = "Filter by tags...",
+  _placeholder = "Filter by tags...", // Reserved for future use
   disabled = false,
   className = "",
   compact = false

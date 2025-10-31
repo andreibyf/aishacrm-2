@@ -165,7 +165,7 @@ export const PhoneField = ({
   label,
   value,
   onChange,
-  required = false,
+  _required = false, // Reserved for future validation
   placeholder = "",
   darkMode = true,
   showPrefixPicker = true,

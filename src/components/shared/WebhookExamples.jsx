@@ -166,7 +166,7 @@ export default function WebhookExamples() {
                 </li>
                 <li>
                   <strong>tenant_name:</strong>{" "}
-                  Your organization's name for conversational context.
+                  Your organization&apos;s name for conversational context.
                 </li>
                 <li>
                   <strong>assignee_name:</strong>{" "}

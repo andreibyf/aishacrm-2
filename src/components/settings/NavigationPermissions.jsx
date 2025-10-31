@@ -30,7 +30,7 @@ const ORDER = [
 
 export default function NavigationPermissions({ value, onChange, disabled = false, className = "" }) {
   const [keys, setKeys] = useState([]);
-  const [defaults, setDefaults] = useState({});
+  const [_defaults, setDefaults] = useState({}); // Reserved for future default values feature
   const [local, setLocal] = useState(value || {});
   const [saving, setSaving] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
