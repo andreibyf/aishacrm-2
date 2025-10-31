@@ -1,5 +1,5 @@
 
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { performanceCache } from './PerformanceCache';
 import { User } from '@/api/entities';
 
