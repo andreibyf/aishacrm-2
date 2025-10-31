@@ -48,11 +48,11 @@ const formatPhoneDisplay = (phoneNumber) => {
 };
 
 export default function PhoneDisplay({
-  user,
+  _user, // Reserved for future use
   phone,
-  contactName,
-  enableCalling = false,
-  showCallingWidget = false,
+  _contactName, // Reserved for future use
+  _enableCalling = false, // Reserved for future softphone functionality
+  _showCallingWidget = false, // Reserved for future softphone functionality
   className = "",
 }) {
   // If no phone number is provided, display a placeholder
