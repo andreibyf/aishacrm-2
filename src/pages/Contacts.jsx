@@ -723,6 +723,7 @@ export default function ContactsPage() {
                 userId: user?.id || user?.email,
               });
             }}
+            variant="accent"
           >
             <Plus className="w-4 h-4 mr-2" />
             Add Contact
@@ -1208,6 +1209,7 @@ export default function ContactsPage() {
                       { userId: user?.id || user?.email },
                     );
                   }}
+                  variant="accent"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Add Your First Contact
