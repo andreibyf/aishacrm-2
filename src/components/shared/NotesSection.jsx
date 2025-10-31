@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Note } from "@/api/entities";
 import { User } from "@/api/entities";
-import { Card, CardContent } from "@/components/ui/card";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -44,7 +44,7 @@ export default function NotesSection({ relatedTo, relatedId, className = "" }) {
   const [notes, setNotes] = useState([]);
   const [loadingNotes, setLoadingNotes] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
-  const [userLoading, setUserLoading] = useState(true);
+  const [_userLoading, setUserLoading] = useState(true);
 
   const [newNote, setNewNote] = useState({
     title: "",

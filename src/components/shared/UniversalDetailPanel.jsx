@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Sheet,
   SheetContent,
@@ -458,7 +458,7 @@ export default function UniversalDetailPanel({
         } else if (key.includes('date')) {
           try {
             value = format(new Date(value), 'MMM d, yyyy'); // Using date-fns for consistent formatting
-          } catch (e) {
+          } catch (_e) {
             value = String(value); // Fallback if date is invalid
           }
         } else if (['status', 'stage', 'priority', 'type'].includes(key)) {

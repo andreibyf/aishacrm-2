@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Bot, Loader2, Phone, User as UserIcon, X } from "lucide-react";
+import { Bot, Loader2, Phone, User as , X } from "lucide-react";
 import { callFluentWebhookV2 } from "@/api/functions";
 import { toast } from "sonner";
 import { useTenant } from "./tenantContext";

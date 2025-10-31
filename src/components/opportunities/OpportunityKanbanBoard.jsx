@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { DragDropContext, Droppable } from '@hello-pangea/dnd';
 import OpportunityKanbanCard from './OpportunityKanbanCard';
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";

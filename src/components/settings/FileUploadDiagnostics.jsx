@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useState } from 'react';
+
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { User } from "@/api/entities";
 
 export default function FileUploadDiagnostics() {
   const [result, setResult] = useState(null);

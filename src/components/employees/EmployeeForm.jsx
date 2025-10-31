@@ -1,6 +1,6 @@
 
-import React, { useState } from "react";
-import { User } from "@/api/entities";
+import { useState } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,10 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent } from "@/components/ui/card";
 // Removed Alert and AlertDescription as messages are now handled by toast
 // import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle2, Send } from "lucide-react";
+
 import { useTenant } from "../shared/tenantContext";
-import { requestUserInvite } from "@/api/functions";
-import { inviteUser } from "@/api/functions";
+
 import { saveEmployee } from "@/api/functions";
 import { toast } from "sonner";
 // Removed: ResendInviteButton is removed from this form's outline
@@ -20,7 +19,7 @@ import { toast } from "sonner";
 
 export default function EmployeeForm({ employee, onSave, onCancel, tenantId }) {
   const isEdit = !!(employee && employee.id);
-  const { selectedTenantId } = useTenant(); // Kept for potential future use or context check
+  const { _selectedTenantId } = useTenant(); // Kept for potential future use or context check
 
   const [formData, setFormData] = useState(() => ({
     first_name: employee?.first_name || '',
@@ -57,8 +56,8 @@ export default function EmployeeForm({ employee, onSave, onCancel, tenantId }) {
   // Removed message state as toast is used for notifications
   // const [message, setMessage] = useState(null);
 
-  const [skillInput, setSkillInput] = useState(''); // New state variable
-  const [tagInput, setTagInput] = useState(''); // New state variable
+  const [_skillInput, _setSkillInput] = useState(''); // New state variable
+  const [_tagInput, _setTagInput] = useState(''); // New state variable
 
   const onChange = (key, value) => setFormData((f) => ({ ...f, [key]: value }));
 

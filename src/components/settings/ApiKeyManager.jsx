@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -139,7 +139,7 @@ export default function ApiKeyManager() {
     try {
       await navigator.clipboard.writeText(text);
       toast.success('Copied to clipboard');
-    } catch (error) {
+    } catch (_error) {
       toast.error('Failed to copy');
     }
   };

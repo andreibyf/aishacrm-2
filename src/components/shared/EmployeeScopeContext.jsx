@@ -25,7 +25,7 @@ export const EmployeeScopeProvider = ({ children }) => {
       try {
         const u = await UserEntity.me();
         if (!canceled) setCurrentUser(u);
-      } catch (e) {
+      } catch (_e) {
         if (!canceled) setCurrentUser(null);
       }
     })();

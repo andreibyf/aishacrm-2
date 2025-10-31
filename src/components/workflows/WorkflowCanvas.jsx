@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import WorkflowNode from './WorkflowNode';
 import { ArrowDown } from 'lucide-react';
 
@@ -30,7 +30,7 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
 
       {/* Render nodes */}
       <div className="space-y-6">
-        {nodes.map((node, index) => (
+        {nodes.map((node, _index) => (
           <React.Fragment key={node.id}>
             <WorkflowNode
               node={node}

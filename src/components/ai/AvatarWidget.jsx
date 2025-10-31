@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 
 export default function AvatarWidget({
   agentId,
@@ -7,7 +7,7 @@ export default function AvatarWidget({
   onMessage,
   onNavigate
 }) {
-  const [isReady, setIsReady] = useState(false); // isReady state added as per outline
+  const [_isReady, _setIsReady] = useState(false); // _isReady state added as per outline
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
 

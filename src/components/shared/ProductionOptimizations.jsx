@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { performanceCache } from './PerformanceCache';
 import { User } from '@/api/entities';
 
@@ -30,7 +30,7 @@ export const PerformanceMonitor = ({ children }) => {
       
       try {
         observer.observe({ entryTypes: ['navigation', 'paint'] });
-      } catch (e) {
+      } catch (_e) {
         console.warn('Performance observer not fully supported');
       }
     }

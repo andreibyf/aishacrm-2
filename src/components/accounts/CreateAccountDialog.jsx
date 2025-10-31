@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Account } from "@/api/entities";
 import { Lead } from "@/api/entities";
 import { User } from "@/api/entities";

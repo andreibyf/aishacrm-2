@@ -96,7 +96,7 @@ export async function notifyAdminOnInvite({
         (currentUserMe?.settings?.phone && String(currentUserMe.settings.phone).trim()) ||
         null;
     }
-  } catch (error) {
+  } catch (_error) {
     // ignore
   }
 

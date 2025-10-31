@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,7 @@ import { testSystemOpenAI } from '@/api/functions';
 import { toast } from "sonner";
 
 export default function AdminOpenAISettings() {
-  const [user, setUser] = useState(null);
+  const [_user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [localSettings, setLocalSettings] = useState({
     openai_api_key: '',

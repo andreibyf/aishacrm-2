@@ -16,7 +16,7 @@ import {
   updateAuthUserPassword,
 } from "../lib/supabaseAuth.js";
 
-export default function createUserRoutes(pgPool, supabaseAuth) {
+export default function createUserRoutes(pgPool, _supabaseAuth) {
   const router = express.Router();
 
   // Helper function to expand metadata fields to top-level properties

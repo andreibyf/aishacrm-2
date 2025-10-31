@@ -36,8 +36,8 @@ export default function InviteUserDialog(
   // Get roles this user can assign
   const assignableRoles = getAssignableRoles(currentUser);
 
-  const [sendingInvite, setSendingInvite] = useState(false);
-  const [error, setError] = useState(null);
+  const [_sendingInvite, _setSendingInvite] = useState(false);
+  const [_error, _setError] = useState(null);
   const [formData, setFormData] = useState({
     email: "",
     full_name: "",

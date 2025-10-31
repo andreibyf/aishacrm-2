@@ -276,7 +276,7 @@ class PerformanceCache {
   }
 
   // Get appropriate TTL based on data type
-  getDefaultTTL(entityName, method) {
+  getDefaultTTL(entityName, _method) {
     const ttlConfig = {
       'User': 10 * 60 * 1000, // 10 minutes - changes less frequently
       'Contact': 3 * 60 * 1000, // 3 minutes - moderate updates

@@ -1,4 +1,3 @@
-import React from "react";
 import UniversalDetailPanel from "../shared/UniversalDetailPanel";
 import { Button } from "@/components/ui/button";
 import { UserCheck } from "lucide-react";

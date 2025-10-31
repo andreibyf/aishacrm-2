@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { Contact, Account, Opportunity, Lead, User } from "@/api/entities";
 import {
   Dialog,
@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
+
 import { Loader2, UserPlus, Building2, Target, ArrowRight } from "lucide-react";
 import { generateUniqueId } from "@/api/functions";
 import { useApiManager } from "../shared/ApiManager";

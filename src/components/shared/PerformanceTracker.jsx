@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { PerformanceLog } from '@/api/entities';
 
 // Track performance of function calls
@@ -33,7 +33,7 @@ export function usePerformanceTracker(functionName, enabled = true) {
       }).catch(() => {
         // Silently ignore performance logging failures
       });
-    } catch (error) {
+    } catch (_error) {
       // Silently ignore - performance logging shouldn't break the app
     }
   };
@@ -62,7 +62,7 @@ export function withPerformanceTracking(fn, functionName, enabled = true) {
             response_time_ms: responseTime,
             status: 'success'
           }).catch(() => {});
-        } catch (error) {
+        } catch (_error) {
           // Silently ignore
         }
       }
@@ -78,7 +78,7 @@ export function withPerformanceTracking(fn, functionName, enabled = true) {
           status: 'error',
           error_message: error?.message || 'Unknown error'
         }).catch(() => {});
-      } catch (logError) {
+      } catch (_logError) {
         // Silently ignore
       }
       
