@@ -5,8 +5,8 @@ import fs from 'fs';
 import path from 'path';
 
 const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:5173';
-const SUPERADMIN_EMAIL = process.env.SUPERADMIN_EMAIL || 'admin@aishacrm.com';
-const SUPERADMIN_PASSWORD = process.env.SUPERADMIN_PASSWORD || 'SuperAdmin123!';
+const SUPERADMIN_EMAIL = process.env.SUPERADMIN_EMAIL || 'test@aishacrm.com';
+const SUPERADMIN_PASSWORD = process.env.SUPERADMIN_PASSWORD || 'TestPassword123!';
 
 const authDir = path.join('playwright', '.auth');
 const authFile = path.join(authDir, 'superadmin.json');
@@ -29,21 +29,31 @@ setup('authenticate as superadmin', async ({ page }) => {
     .catch(() => false);
 
   if (loginFormVisible) {
+    console.log('Login form detected, performing login...');
     // Fill and submit login form
     await page.fill('input[type="email"], input[name="email"]', SUPERADMIN_EMAIL);
     await page.fill('input[type="password"], input[name="password"]', SUPERADMIN_PASSWORD);
-    await page.click('button[type="submit"]');
+    
+    // Click login button and wait for navigation
+    await Promise.all([
+      page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 20000 }),
+      page.click('button[type="submit"]'),
+    ]);
 
     // Wait for main app shell to load
-    await page.waitForSelector('main, [role="main"], nav, header', { timeout: 20000 });
+    await page.waitForSelector('header, main', { timeout: 20000 });
+    console.log('Login successful, main app loaded');
+  } else {
+    console.log('Already logged in, skipping login form');
   }
 
   // Small settle time for client-side bootstrapping
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(1000);
 
-  // Verify we see some main UI element to confirm auth
-  await expect(page.locator('nav, header, [data-testid="app-shell"]').first()).toBeVisible({ timeout: 10000 });
+  // Verify we see the header element to confirm auth
+  await expect(page.locator('header').first()).toBeVisible({ timeout: 10000 });
 
   // Persist storage for reuse by all projects
   await page.context().storageState({ path: authFile });
+  console.log(`Auth state saved to ${authFile}`);
 });
