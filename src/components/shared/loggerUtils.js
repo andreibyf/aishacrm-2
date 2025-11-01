@@ -27,6 +27,8 @@ export function logTenantEvent(level, message, metadata) {
   if (loggerInstance && typeof loggerInstance[level] === 'function') {
     loggerInstance[level](message, metadata);
   } else {
-    console[level](message, metadata);
+    // Fallback to console with safe method mapping
+    const consoleMethod = ['log', 'info', 'warn', 'error', 'debug'].includes(level) ? level : 'log';
+    console[consoleMethod](message, metadata);
   }
 }

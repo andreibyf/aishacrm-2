@@ -77,7 +77,14 @@ import { initSupabaseAuth } from "./lib/supabaseAuth.js";
 const supabaseAuth = initSupabaseAuth();
 
 // Middleware
-app.use(helmet()); // Security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      "frame-ancestors": ["'self'", "http://localhost:5173", "https://localhost:5173"],
+    },
+  },
+})); // Security headers
 app.use(compression()); // Compress responses
 app.use(morgan("combined")); // Logging
 
@@ -120,7 +127,34 @@ app.get("/health", (req, res) => {
 
 // Swagger API Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-  customCss: '.swagger-ui .topbar { display: none }',
+  customCss: `
+    body { background-color: #1e293b; }
+    .swagger-ui .topbar { display: none }
+    .swagger-ui { background-color: #1e293b; color: #e2e8f0; }
+    .swagger-ui .wrapper { background-color: #1e293b; }
+    .swagger-ui .information-container { background-color: #1e293b; }
+    .swagger-ui .info .title { color: #f1f5f9; }
+    .swagger-ui .info { color: #cbd5e1; }
+    .swagger-ui .scheme-container { background: #334155; }
+    .swagger-ui .opblock-tag { color: #f1f5f9; border-color: #475569; }
+    .swagger-ui .opblock { background: #334155; border-color: #475569; }
+    .swagger-ui .opblock .opblock-summary { background: #475569; }
+    .swagger-ui .opblock-description-wrapper, .swagger-ui .opblock-external-docs-wrapper, .swagger-ui .opblock-title_normal { color: #cbd5e1; }
+    .swagger-ui table thead tr td, .swagger-ui table thead tr th { color: #f1f5f9; border-color: #475569; }
+    .swagger-ui .parameter__name, .swagger-ui .parameter__type { color: #e2e8f0; }
+    .swagger-ui .response-col_status { color: #f1f5f9; }
+    .swagger-ui .response-col_description { color: #cbd5e1; }
+    .swagger-ui section.models { border-color: #475569; }
+    .swagger-ui section.models .model-container { background: #334155; }
+    .swagger-ui .model-title { color: #f1f5f9; }
+    .swagger-ui .model { color: #cbd5e1; }
+    .swagger-ui .prop-type { color: #94a3b8; }
+    .swagger-ui input[type=text], .swagger-ui textarea, .swagger-ui select { 
+      background: #1e293b; 
+      color: #e2e8f0; 
+      border-color: #475569; 
+    }
+  `,
   customSiteTitle: 'Aisha CRM API Documentation'
 }));
 
