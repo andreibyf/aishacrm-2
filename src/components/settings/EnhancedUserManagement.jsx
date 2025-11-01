@@ -940,17 +940,19 @@ export default function EnhancedUserManagement() {
                             <Trash2 className="w-5 h-5" />
                             Delete User
                         </AlertDialogTitle>
-                        <AlertDialogDescription className="text-slate-300 space-y-2">
-                            <p>Are you sure you want to permanently delete this user?</p>
-                            {userToDelete && (
-                                <div className="mt-3 p-3 bg-slate-900 rounded border border-slate-700">
-                                    <p><strong className="text-slate-200">Name:</strong> {userToDelete.full_name || userToDelete.display_name || 'N/A'}</p>
-                                    <p><strong className="text-slate-200">Email:</strong> {userToDelete.email}</p>
-                                    <p><strong className="text-slate-200">Role:</strong> {getRoleDisplay(userToDelete)}</p>
-                                    <p><strong className="text-slate-200">Tenant:</strong> {userToDelete.tenant_id || 'No Tenant'}</p>
-                                </div>
-                            )}
-                            <p className="text-yellow-400 font-semibold mt-3">⚠️ This action cannot be undone.</p>
+                        <AlertDialogDescription className="text-slate-300">
+                            <div className="space-y-2">
+                                <div>Are you sure you want to permanently delete this user?</div>
+                                {userToDelete && (
+                                    <div className="mt-3 p-3 bg-slate-900 rounded border border-slate-700">
+                                        <div><strong className="text-slate-200">Name:</strong> {userToDelete.full_name || userToDelete.display_name || 'N/A'}</div>
+                                        <div><strong className="text-slate-200">Email:</strong> {userToDelete.email}</div>
+                                        <div><strong className="text-slate-200">Role:</strong> {getRoleDisplay(userToDelete)}</div>
+                                        <div><strong className="text-slate-200">Tenant:</strong> {userToDelete.tenant_id || 'No Tenant'}</div>
+                                    </div>
+                                )}
+                                <div className="text-yellow-400 font-semibold mt-3">⚠️ This action cannot be undone.</div>
+                            </div>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

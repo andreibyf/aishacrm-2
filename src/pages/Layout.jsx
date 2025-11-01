@@ -61,7 +61,6 @@ import TenantSwitcher from "../components/shared/TenantSwitcher";
 import SystemStatusIndicator from "../components/shared/SystemStatusIndicator";
 import Clock from "../components/shared/Clock";
 import RouteGuard from "../components/shared/RouteGuard";
-import { updateLastLogin } from "@/api/functions";
 import { getOrCreateUserApiKey } from "@/api/functions";
 import { createAuditLog } from "@/api/functions";
 import { MCPManager } from "../components/shared/MCPClient";
@@ -932,20 +931,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               // This is non-critical, user can still use the app without it
             });
 
-          const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000);
-          if (
-            !currentUser.last_login ||
-            new Date(currentUser.last_login) <= fourHoursAgo
-          ) {
-            updateLastLogin().catch((err) => {
-              if (
-                !err.message?.includes("Rate limit") &&
-                !err.message?.includes("rate limit")
-              ) {
-                console.warn("Failed to update last login time:", err.message);
-              }
-            });
-          }
+          // Note: last_login is now handled automatically by:
+          // 1. Backend /api/users/login endpoint on login
+          // 2. UserPresenceHeartbeat component for session updates
         }
       } catch (error) {
         console.error("User load failed:", error);

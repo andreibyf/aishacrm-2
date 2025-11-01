@@ -626,7 +626,7 @@ export const cleanupOrphanedData = functionsProxy.cleanupOrphanedData;
 
 export const inviteUser = functionsProxy.inviteUser;
 
-export const updateLastLogin = functionsProxy.updateLastLogin;
+// updateLastLogin - removed, now handled by backend /api/users/login and UserPresenceHeartbeat
 
 export const runFullSystemDiagnostics = functionsProxy.runFullSystemDiagnostics;
 
