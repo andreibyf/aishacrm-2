@@ -422,8 +422,12 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
   // Check if form is valid for submission
   // For admins/superadmins, check if they have selectedTenantId
   // For regular users, check if they have tenant_id
-  const isFormValid = formData.first_name?.trim() && 
-                      formData.last_name?.trim();
+  // Use useMemo to ensure this recalculates when formData changes
+  const isFormValid = useMemo(() => {
+    const hasFirstName = formData.first_name && formData.first_name.trim().length > 0;
+    const hasLastName = formData.last_name && formData.last_name.trim().length > 0;
+    return hasFirstName && hasLastName;
+  }, [formData.first_name, formData.last_name]);
 
   return (
     <>

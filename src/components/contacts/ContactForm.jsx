@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -581,7 +581,12 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
   console.log('[ContactForm] Rendering component, user available:', !!user, 'userLoading:', userLoading);
 
   // Basic validity check to disable submit until required fields are present
-  const isFormValid = formData.first_name?.trim() && formData.last_name?.trim();
+  // Use useMemo to ensure this recalculates when formData changes
+  const isFormValid = useMemo(() => {
+    const hasFirstName = formData.first_name && formData.first_name.trim().length > 0;
+    const hasLastName = formData.last_name && formData.last_name.trim().length > 0;
+    return hasFirstName && hasLastName;
+  }, [formData.first_name, formData.last_name]);
 
   if (userLoading || !user) {
     console.log('[ContactForm] Showing loader (userLoading:', userLoading, ', user:', !!user, ')');
