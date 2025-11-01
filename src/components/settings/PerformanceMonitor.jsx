@@ -47,9 +47,13 @@ export default function PerformanceMonitor({ user }) {
       // Get tenant_id from user context
       const tenantId = user?.tenant_id || 'local-tenant-001';
       
+      // Calculate hours based on time range
+      const days = parseInt(timeRange) || 1;
+      const hours = days * 24;
+      
       // Load performance logs from backend metrics API (more complete than Base44 function)
-      const limit =  Math.min(5000, Math.max(500, (parseInt(timeRange) || 1) * 200));
-      const resp = await fetch(`${import.meta.env.VITE_AISHACRM_BACKEND_URL}/api/metrics/performance?tenant_id=${tenantId}&limit=${limit}`);
+      const limit =  Math.min(5000, Math.max(500, days * 200));
+      const resp = await fetch(`${import.meta.env.VITE_AISHACRM_BACKEND_URL}/api/metrics/performance?tenant_id=${tenantId}&limit=${limit}&hours=${hours}`);
       const response = await resp.json();
 
       const logs = Array.isArray(response?.data?.logs) ? response.data.logs : [];
@@ -90,11 +94,10 @@ export default function PerformanceMonitor({ user }) {
       previousMetricsRef.current = newMetrics; // Store in ref (doesn't trigger re-render)
       setMetrics(newMetrics);
 
-      // Group by time buckets for chart
-  const days = Math.max(1, parseInt(timeRange) || 1);
-  const groupBy = days <= 2 ? 'hour' : 'day';
-  const now = new Date();
-  const cutoffTime = new Date(now.getTime() - (days * 24 * 60 * 60 * 1000));
+      // Group by time buckets for chart (reuse days variable from above)
+      const groupBy = days <= 2 ? 'hour' : 'day';
+      const now = new Date();
+      const cutoffTime = new Date(now.getTime() - (days * 24 * 60 * 60 * 1000));
       
       const recentLogs = logs.filter(log => {
         const logDate = new Date(log.created_at);
