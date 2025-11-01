@@ -110,6 +110,23 @@ export default function createLeadRoutes(pgPool) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
+      // Validate required name fields
+      if (!first_name || !first_name.trim()) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'first_name is required and cannot be empty',
+          field: 'first_name'
+        });
+      }
+
+      if (!last_name || !last_name.trim()) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'last_name is required and cannot be empty',
+          field: 'last_name'
+        });
+      }
+
       // Merge metadata with unknown fields
       const combinedMetadata = {
         ...(metadata || {}),
@@ -177,6 +194,23 @@ export default function createLeadRoutes(pgPool) {
     try {
       const { id } = req.params;
       const { first_name, last_name, email, phone, company, job_title, status, source, metadata, ...otherFields } = req.body;
+
+      // Validate required name fields if provided
+      if (first_name !== undefined && (!first_name || !first_name.trim())) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'first_name cannot be empty',
+          field: 'first_name'
+        });
+      }
+
+      if (last_name !== undefined && (!last_name || !last_name.trim())) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'last_name cannot be empty',
+          field: 'last_name'
+        });
+      }
 
       // First, get current lead to merge metadata
       const currentLead = await pgPool.query('SELECT metadata FROM leads WHERE id = $1', [id]);

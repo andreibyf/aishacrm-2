@@ -83,6 +83,23 @@ export default function createContactRoutes(pgPool) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
+      // Validate required name fields
+      if (!first_name || !first_name.trim()) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'first_name is required and cannot be empty',
+          field: 'first_name'
+        });
+      }
+
+      if (!last_name || !last_name.trim()) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'last_name is required and cannot be empty',
+          field: 'last_name'
+        });
+      }
+
       const query = `
         INSERT INTO contacts (tenant_id, first_name, last_name, email, phone, account_id, status, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
@@ -139,6 +156,23 @@ export default function createContactRoutes(pgPool) {
     try {
       const { id } = req.params;
       const { first_name, last_name, email, phone, account_id, status, metadata, ...otherFields } = req.body;
+
+      // Validate required name fields if provided
+      if (first_name !== undefined && (!first_name || !first_name.trim())) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'first_name cannot be empty',
+          field: 'first_name'
+        });
+      }
+
+      if (last_name !== undefined && (!last_name || !last_name.trim())) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'last_name cannot be empty',
+          field: 'last_name'
+        });
+      }
 
       // First, get current contact to merge metadata
       const currentContact = await pgPool.query('SELECT metadata FROM contacts WHERE id = $1', [id]);

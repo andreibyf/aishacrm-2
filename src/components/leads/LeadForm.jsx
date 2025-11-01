@@ -99,6 +99,12 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
   const [showCreateAccountDialog, setShowCreateAccountDialog] = useState(false);
   const { cachedRequest } = useApiManager();
 
+  // Field-level validation errors for a11y
+  const [fieldErrors, setFieldErrors] = useState({
+    first_name: '',
+    last_name: ''
+  });
+
   // Determine assignable employees based on role
   const assignableEmployees = useMemo(() => {
     if (!employees || !user) return [];
@@ -240,6 +246,12 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
 
   const handleChange = (field, value) => {
     console.log(`LeadForm: Updating ${field} to:`, value);
+    
+    // Clear field error when user starts typing
+    if (field === 'first_name' || field === 'last_name') {
+      setFieldErrors(prev => ({ ...prev, [field]: '' }));
+    }
+    
     setFormData(prev => {
       const updated = { ...prev, [field]: value };
       console.log('LeadForm: New formData:', updated);
@@ -261,8 +273,23 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
       return;
     }
 
-    // Validate required fields
-    if (!formData.first_name?.trim() || !formData.last_name?.trim()) {
+    // Clear and validate field errors
+    const errors = {
+      first_name: '',
+      last_name: ''
+    };
+
+    if (!formData.first_name?.trim()) {
+      errors.first_name = 'First name is required';
+    }
+
+    if (!formData.last_name?.trim()) {
+      errors.last_name = 'Last name is required';
+    }
+
+    // If there are validation errors, set them and stop submission
+    if (errors.first_name || errors.last_name) {
+      setFieldErrors(errors);
       toast.error("First name and last name are required.");
       return;
     }
@@ -427,8 +454,17 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
                   value={formData.first_name || ""}
                   onChange={(e) => handleChange('first_name', e.target.value)}
                   required
-                  className="mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500"
+                  aria-invalid={!!fieldErrors.first_name}
+                  aria-describedby={fieldErrors.first_name ? "first_name-error" : undefined}
+                  className={`mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500 ${
+                    fieldErrors.first_name ? 'border-red-500 focus:border-red-500' : ''
+                  }`}
                 />
+                {fieldErrors.first_name && (
+                  <p id="first_name-error" className="text-red-400 text-sm mt-1" role="alert">
+                    {fieldErrors.first_name}
+                  </p>
+                )}
               </div>
               <div>
                 <Label htmlFor="last_name" className="text-slate-200">Last Name *</Label>
@@ -437,8 +473,17 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
                   value={formData.last_name || ""}
                   onChange={(e) => handleChange('last_name', e.target.value)}
                   required
-                  className="mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500"
+                  aria-invalid={!!fieldErrors.last_name}
+                  aria-describedby={fieldErrors.last_name ? "last_name-error" : undefined}
+                  className={`mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500 ${
+                    fieldErrors.last_name ? 'border-red-500 focus:border-red-500' : ''
+                  }`}
                 />
+                {fieldErrors.last_name && (
+                  <p id="last_name-error" className="text-red-400 text-sm mt-1" role="alert">
+                    {fieldErrors.last_name}
+                  </p>
+                )}
               </div>
             </div>
 

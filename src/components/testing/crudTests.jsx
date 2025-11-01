@@ -65,59 +65,54 @@ export const crudTests = {
     {
       name: 'Infrastructure Check',
       fn: async () => {
-        try {
-          // Prefer deep status endpoint first
-          let status = 'unknown';
-          let database = 'unknown';
-          let environment = 'unknown';
+        // Prefer deep status endpoint first; fall back to /health on failure
+        let status = 'unknown';
+        let database = 'unknown';
+        let environment = 'unknown';
 
+        // Try /api/system/status
+        try {
+          const statusResp = await fetch(`${BACKEND_URL}/api/system/status`);
+          if (statusResp.ok) {
+            const sys = await statusResp.json();
+            status = sys?.status || status;
+            database = sys?.data?.database || database;
+            environment = sys?.data?.environment || environment;
+          } else {
+            throw new Error(`Status ${statusResp.status}`);
+          }
+        } catch (e1) {
+          // Try /health
           try {
-            const statusResp = await fetch(`${BACKEND_URL}/api/system/status`);
-            if (statusResp.ok) {
-              const sys = await statusResp.json();
-              status = sys?.status || status;
-              database = sys?.data?.database || database;
-              environment = sys?.data?.environment || environment;
-            } else {
-              throw new Error(`Status ${statusResp.status}`);
-            }
-          } catch {
-            // Fallback to lightweight /health
             const response = await fetch(`${BACKEND_URL}/health`);
+            if (!response.ok) throw new Error(`Status ${response.status}`);
             const healthData = await response.json();
             status = healthData?.status || status;
             database = healthData?.database || database;
             environment = healthData?.environment || environment;
+          } catch (e2) {
+            // Network-level reachability failure
+            throw new Error(`Backend not reachable at ${BACKEND_URL}: ${e2.message || e1.message}`);
           }
-
-          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          console.log('✅ CRUD INFRASTRUCTURE STATUS');
-          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          console.log('');
-          console.log(`Backend: ${BACKEND_URL}`);
-          console.log(`Status: ${status}`);
-          console.log(`Database: ${database}`);
-          console.log(`Environment: ${environment}`);
-          console.log('');
-          console.log('✅ Backend routes have full SQL CRUD operations');
-          console.log('✅ Connected to Supabase Cloud PostgreSQL');
-          console.log('✅ Ready for CRUD testing');
-          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-          assert.equal(status, 'ok', 'Backend should be healthy');
-          assert.equal(database, 'connected', 'Database should be connected');
-        } catch (error) {
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          console.error('❌ BACKEND NOT RUNNING');
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          console.error('');
-          console.error('To start backend:');
-          console.error('  cd backend');
-          console.error('  npm start');
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-          throw new Error(`Backend not reachable at ${BACKEND_URL}: ${error.message}`);
         }
+
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('✅ CRUD INFRASTRUCTURE STATUS');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('');
+        console.log(`Backend: ${BACKEND_URL}`);
+        console.log(`Status: ${status}`);
+        console.log(`Database: ${database}`);
+        console.log(`Environment: ${environment}`);
+        console.log('');
+        console.log('✅ Backend routes have full SQL CRUD operations');
+        console.log('✅ Connected to Supabase Cloud PostgreSQL');
+        console.log('✅ Ready for CRUD testing');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+        // Accept either 'ok' or 'success' as healthy
+        assert.truthy(['ok', 'success'].includes((status || '').toLowerCase()), 'Backend should be healthy');
+        assert.equal(database, 'connected', 'Database should be connected');
       }
     },
 
