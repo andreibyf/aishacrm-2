@@ -33,19 +33,23 @@ export default function createSystemLogRoutes(pgPool) {
       // Default to 'system' tenant for null/undefined tenant_id (superadmins, system logs)
       const effectiveTenantId = tenant_id || "system";
 
-      // Merge metadata with unknown fields
+      // Merge metadata with unknown fields and extra fields that don't exist as columns
       const combinedMetadata = {
         ...(metadata || {}),
         ...otherFields,
       };
 
-      // Use created_at instead of created_date for compatibility
+      // Add user_email, user_agent, url to metadata since they're not columns in the table
+      if (user_email) combinedMetadata.user_email = user_email;
+      if (user_agent) combinedMetadata.user_agent = user_agent;
+      if (url) combinedMetadata.url = url;
+
+      // Insert only columns that exist in the schema
       const query = `
         INSERT INTO system_logs (
-          tenant_id, level, message, source, user_email, 
-          metadata, user_agent, url, stack_trace, created_at
+          tenant_id, level, message, source, metadata, stack_trace, created_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()
+          $1, $2, $3, $4, $5, $6, NOW()
         ) RETURNING *
       `;
 
@@ -54,10 +58,7 @@ export default function createSystemLogRoutes(pgPool) {
         level || "INFO",
         message,
         source,
-        user_email,
         JSON.stringify(combinedMetadata), // Ensure metadata is stringified
-        user_agent,
-        url,
         stack_trace,
       ];
 
@@ -81,11 +82,16 @@ export default function createSystemLogRoutes(pgPool) {
   // GET /api/system-logs - List system logs
   router.get("/", async (req, res) => {
     try {
-      const { tenant_id, level, limit = 100, offset = 0 } = req.query;
+      const { tenant_id, level, limit = 100, offset = 0, hours } = req.query;
 
       let query = "SELECT * FROM system_logs WHERE 1=1";
       const values = [];
       let valueIndex = 1;
+
+      // Add time range filter if hours parameter is provided
+      if (hours) {
+        query += ` AND created_at > NOW() - INTERVAL '${parseInt(hours)} hours'`;
+      }
 
       if (tenant_id) {
         query += ` AND tenant_id = $${valueIndex}`;
@@ -158,11 +164,16 @@ export default function createSystemLogRoutes(pgPool) {
   // DELETE /api/system-logs - Clear all system logs (with optional filters)
   router.delete("/", async (req, res) => {
     try {
-      const { tenant_id, level, older_than_days } = req.query;
+      const { tenant_id, level, older_than_days, hours } = req.query;
 
       let query = "DELETE FROM system_logs WHERE 1=1";
       const values = [];
       let valueIndex = 1;
+
+      // Add time range filter if hours parameter is provided
+      if (hours) {
+        query += ` AND created_at > NOW() - INTERVAL '${parseInt(hours)} hours'`;
+      }
 
       if (tenant_id) {
         query += ` AND tenant_id = $${valueIndex}`;
@@ -185,6 +196,8 @@ export default function createSystemLogRoutes(pgPool) {
       query += " RETURNING *";
 
       const result = await pgPool.query(query, values);
+
+      console.log(`[System Logs] Deleted ${result.rows.length} system log(s) for tenant: ${tenant_id || 'all'}`);
 
       res.json({
         status: "success",

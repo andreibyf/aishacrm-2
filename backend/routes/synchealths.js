@@ -38,7 +38,11 @@ export default function createSyncHealthRoutes(pgPool) {
             query += ` OFFSET $${params.length}`;
 
             const result = await pgPool.query(query, params);
-            res.json({ data: result.rows, total: result.rowCount });
+            // Normalize response format to { status: 'success', data: { synchealths: [...], total: N } }
+            res.json({
+                status: 'success',
+                data: { synchealths: result.rows, total: result.rowCount }
+            });
         } catch (error) {
             console.error("Error fetching sync health records:", error);
             res.status(500).json({ error: error.message });

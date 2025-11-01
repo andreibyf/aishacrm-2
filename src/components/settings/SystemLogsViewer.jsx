@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
-import { SystemLog } from '@/api/entities';
+import React, { useState, useEffect, useCallback } from "react";
 import { useTenant } from '@/components/shared/tenantContext';
 import { useConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Loader2, RefreshCw, Trash2, Search, PlusCircle } from "lucide-react";
+import { Loader2, RefreshCw, Trash2, Search, PlusCircle, Download } from "lucide-react";
 import { toast } from "sonner";
 
 const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
@@ -23,6 +22,7 @@ export default function SystemLogsViewer() {
   const [filterSource, setFilterSource] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [uniqueSources, setUniqueSources] = useState([]);
+  const [timeRangeHours, setTimeRangeHours] = useState(24); // New: time range for API errors
 
   const loadLogs = useCallback(async () => {
     setLoading(true);
@@ -32,16 +32,19 @@ export default function SystemLogsViewer() {
       const tenantId = selectedTenantId || 'local-tenant-001';
       
       // Fetch logs for BOTH selected tenant AND 'system' tenant (for backend lifecycle events)
-      const [tenantResponse, systemResponse] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/system-logs?tenant_id=${encodeURIComponent(tenantId)}&limit=200`),
-        fetch(`${BACKEND_URL}/api/system-logs?tenant_id=system&limit=200`)
+      // Also fetch API performance logs to surface API errors (4xx/5xx)
+      const tenantParam = tenantId ? `tenant_id=${encodeURIComponent(tenantId)}&` : '';
+      const [tenantResponse, systemResponse, perfResponse] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/system-logs?${tenantParam}limit=200&hours=${timeRangeHours}`),
+        fetch(`${BACKEND_URL}/api/system-logs?tenant_id=system&limit=200&hours=${timeRangeHours}`),
+        fetch(`${BACKEND_URL}/api/metrics/performance?hours=${timeRangeHours}&limit=500${tenantId ? `&tenant_id=${encodeURIComponent(tenantId)}` : ''}`)
       ]);
 
       if (!tenantResponse.ok && !systemResponse.ok) {
         throw new Error('Backend server is not available. Please check if the backend is running.');
       }
 
-      let allLogs = [];
+  let allLogs = [];
       
       // Combine logs from both tenant and system
       if (tenantResponse.ok) {
@@ -66,11 +69,36 @@ export default function SystemLogsViewer() {
         }
       }
       
+      // Merge API performance logs as pseudo system logs to display API errors/warnings
+      if (perfResponse.ok) {
+        const perfData = await perfResponse.json();
+        const logs = perfData?.data?.logs || [];
+        const apiLogs = logs
+          .filter(l => (l.status_code || 0) >= 400) // only errors/warnings
+          .map(l => ({
+            id: `api-${l.id}`,
+            tenant_id: l.tenant_id,
+            level: (l.status_code || 0) >= 500 ? 'ERROR' : 'WARNING',
+            message: `${l.method} ${l.endpoint} → ${l.status_code}${l.error_message ? ` - ${l.error_message}` : ''}`,
+            source: 'API Request',
+            user_email: l.user_email,
+            created_at: l.created_at,
+            metadata: {
+              endpoint: l.endpoint,
+              method: l.method,
+              status_code: l.status_code,
+              duration_ms: l.duration_ms,
+              error_message: l.error_message,
+            }
+          }));
+        allLogs = [...allLogs, ...apiLogs];
+      }
+      
       // Sort by created_at descending (newest first)
       allLogs.sort((a, b) => new Date(b.created_at || b.created_date) - new Date(a.created_at || a.created_date));
       
       // Extract unique sources
-      const sources = [...new Set(allLogs.map(log => log.source).filter(Boolean))];
+  const sources = [...new Set(allLogs.map(log => log.source || 'Unknown').filter(Boolean))];
       setUniqueSources(sources);
 
       // Apply filters
@@ -98,7 +126,7 @@ export default function SystemLogsViewer() {
     } finally {
       setLoading(false);
     }
-  }, [filterLevel, filterSource, searchTerm, selectedTenantId]);
+  }, [filterLevel, filterSource, searchTerm, selectedTenantId, timeRangeHours]);
 
   useEffect(() => {
     loadLogs();
@@ -107,7 +135,7 @@ export default function SystemLogsViewer() {
   const handleClearLogs = async () => {
     const confirmed = await confirm({
       title: "Delete all logs?",
-      description: "Are you sure you want to delete all logs? This action cannot be undone.",
+      description: `Are you sure you want to delete all ${logs.length} filtered log(s)? This will delete both system logs and API performance logs. This action cannot be undone.`,
       variant: "destructive",
       confirmText: "Delete All",
       cancelText: "Cancel"
@@ -116,23 +144,49 @@ export default function SystemLogsViewer() {
 
     setClearing(true);
     try {
-      // Prefer backend bulk delete for speed
       const tenantId = selectedTenantId || 'local-tenant-001';
       const levelQuery = filterLevel !== 'all' ? `&level=${encodeURIComponent(filterLevel)}` : '';
-      const resp = await fetch(`${BACKEND_URL}/api/system-logs?tenant_id=${encodeURIComponent(tenantId)}${levelQuery}` , {
+      const tenantQuery = tenantId && tenantId !== 'local-tenant-001' ? `tenant_id=${encodeURIComponent(tenantId)}&` : '';
+      
+      let totalDeleted = 0;
+      
+      // Delete system logs with time range filter
+      const systemUrl = `${BACKEND_URL}/api/system-logs?${tenantQuery}hours=${timeRangeHours}${levelQuery}`;
+      console.log('Clearing system logs with URL:', systemUrl);
+      const systemResp = await fetch(systemUrl, {
         method: 'DELETE'
       });
-      if (!resp.ok) {
-        // Fallback: per-item delete via entity wrapper
-        for (const log of logs) {
-          await SystemLog.delete(log.id);
-        }
+      
+      if (systemResp.ok) {
+        const systemData = await systemResp.json();
+        console.log('System logs response:', systemData);
+        totalDeleted += systemData.data?.deleted_count || 0;
       }
-      toast.success('Logs cleared');
+      
+      // Also delete performance logs (API errors) if they exist
+      const perfTenantQuery = tenantId && tenantId !== 'local-tenant-001' ? `&tenant_id=${encodeURIComponent(tenantId)}` : '';
+      const perfUrl = `${BACKEND_URL}/api/metrics/performance?hours=${timeRangeHours}${perfTenantQuery}`;
+      console.log('Clearing performance logs with URL:', perfUrl);
+      const perfResp = await fetch(perfUrl, {
+        method: 'DELETE'
+      });
+      
+      if (perfResp.ok) {
+        const perfData = await perfResp.json();
+        console.log('Performance logs response:', perfData);
+        totalDeleted += perfData.data?.deleted_count || 0;
+      }
+      
+      if (totalDeleted > 0) {
+        toast.success(`Deleted ${totalDeleted} log(s)`);
+      } else {
+        toast.info('No logs matched the filter criteria');
+      }
+      
       await loadLogs();
     } catch (error) {
       console.error('Failed to clear logs:', error);
-      toast.error('Failed to clear logs');
+      toast.error(error.message || 'Failed to clear logs');
     } finally {
       setClearing(false);
     }
@@ -176,6 +230,18 @@ export default function SystemLogsViewer() {
       case 'DEBUG': return 'bg-gray-600 text-white hover:bg-gray-700';
       default: return 'bg-slate-600 text-white hover:bg-slate-700';
     }
+  };
+
+  const handleExport = () => {
+    const dataStr = JSON.stringify(logs, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `system-logs-${new Date().toISOString().slice(0,10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success('Logs exported');
   };
 
   return (
@@ -228,6 +294,23 @@ export default function SystemLogsViewer() {
               </Select>
             </div>
 
+            {/* Time Range selector for API errors */}
+            <div className="w-[180px]">
+              <label className="text-sm text-slate-300 mb-2 block">Time Range</label>
+              <Select value={String(timeRangeHours)} onValueChange={(v) => setTimeRangeHours(Number(v))}>
+                <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
+                  <SelectValue placeholder="Last 24 hours" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="1">Last 1 hour</SelectItem>
+                  <SelectItem value="6">Last 6 hours</SelectItem>
+                  <SelectItem value="24">Last 24 hours</SelectItem>
+                  <SelectItem value="72">Last 3 days</SelectItem>
+                  <SelectItem value="168">Last 7 days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <Button
               variant="outline"
               onClick={loadLogs}
@@ -272,6 +355,16 @@ export default function SystemLogsViewer() {
                   Clear All
                 </>
               )}
+            </Button>
+
+            <Button
+              onClick={handleExport}
+              disabled={loading || logs.length === 0}
+              variant="outline"
+              className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export
             </Button>
           </div>
         </CardContent>
@@ -325,6 +418,17 @@ export default function SystemLogsViewer() {
                       <Badge variant="outline" className="bg-slate-700 text-slate-300 border-slate-600">
                         {log.source}
                       </Badge>
+                      {log.metadata?.status_code && (
+                        <Badge variant="outline" className={
+                          log.metadata.status_code >= 500 
+                            ? 'bg-red-900/30 text-red-400 border-red-700/50' 
+                            : log.metadata.status_code >= 400
+                              ? 'bg-yellow-900/30 text-yellow-400 border-yellow-700/50'
+                              : 'bg-green-900/30 text-green-400 border-green-700/50'
+                        }>
+                          {log.metadata.status_code}
+                        </Badge>
+                      )}
                       <span className="text-xs text-slate-500">
                         {new Date(log.created_at || log.created_date).toLocaleString()}
                       </span>

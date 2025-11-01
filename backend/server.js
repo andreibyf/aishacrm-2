@@ -242,10 +242,9 @@ async function logBackendEvent(level, message, metadata = {}) {
   try {
     const query = `
       INSERT INTO system_logs (
-        tenant_id, level, message, source, user_email, 
-        metadata, created_at
+        tenant_id, level, message, source, metadata, created_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, NOW()
+        $1, $2, $3, $4, $5, NOW()
       )
     `;
 
@@ -254,13 +253,13 @@ async function logBackendEvent(level, message, metadata = {}) {
       level,
       message,
       "Backend Server",
-      "system@aishacrm.com",
       JSON.stringify({
         ...metadata,
         port: PORT,
         environment: process.env.NODE_ENV || "development",
         database_type: dbConnectionType,
         timestamp: new Date().toISOString(),
+        user_email: "system@aishacrm.com",
       }),
     ]);
   } catch (error) {
@@ -320,15 +319,14 @@ async function writeHeartbeat() {
   if (!pgPool) return;
   try {
     await pgPool.query(
-      `INSERT INTO system_logs (tenant_id, level, message, source, user_email, metadata, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+      `INSERT INTO system_logs (tenant_id, level, message, source, metadata, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
       [
         "system",
         "INFO",
         "Heartbeat",
         "Backend Server",
-        "system@aishacrm.com",
-        JSON.stringify({ type: "heartbeat" }),
+        JSON.stringify({ type: "heartbeat", user_email: "system@aishacrm.com" }),
       ],
     );
   } catch (e) {

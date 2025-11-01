@@ -22,7 +22,17 @@ export default function SyncHealthMonitor({ tenantId = null }) {
       // Load last 30 sync health records
       const filter = tenantId ? { tenant_id: tenantId } : {};
       const logs = await SyncHealth.filter(filter, '-start_time', 30);
-      setHealthLogs(logs);
+      // Normalize possible return shapes: array | {data:[...]} | {data:{synchealths:[...]}} | {synchealths:[...]}
+      const normalized = Array.isArray(logs)
+        ? logs
+        : Array.isArray(logs?.data?.synchealths)
+          ? logs.data.synchealths
+          : Array.isArray(logs?.data)
+            ? logs.data
+            : Array.isArray(logs?.synchealths)
+              ? logs.synchealths
+              : [];
+      setHealthLogs(normalized);
 
       // Removed statistics calculation as it's no longer used
     } catch (error) {
@@ -74,7 +84,7 @@ export default function SyncHealthMonitor({ tenantId = null }) {
             <div className="flex justify-center p-8">
               <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
             </div>
-          ) : healthLogs.length === 0 ? (
+          ) : !Array.isArray(healthLogs) || healthLogs.length === 0 ? (
             <div className="text-center p-8 text-slate-400">
               No sync operations recorded yet
             </div>

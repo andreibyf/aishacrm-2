@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -18,14 +19,17 @@ import {
   XCircle,
 } from "lucide-react";
 import { useErrorLog } from "../shared/ErrorLogger";
+import { useTenant } from "../shared/tenantContext";
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || "http://localhost:3001";
 
-export default function SystemHealthDashboard() {
-  const { errors, getRecentErrors, getCriticalErrors, clearErrors } =
-    useErrorLog();
+export default function SystemHealthDashboard({ onViewMore }) {
+  const { errors, getCriticalErrors, clearErrors } = useErrorLog();
+  const { selectedTenantId } = useTenant();
   const [backendStatus, setBackendStatus] = useState("checking");
   const [lastCheck, setLastCheck] = useState(null);
+  const [metrics, setMetrics] = useState({ errorRate: 0, errorCount: 0, serverErrorCount: 0, logs: [] });
+  const [rangeHours, setRangeHours] = useState(1); // time range for dashboard metrics
 
   const checkHealth = async () => {
     setBackendStatus("checking");
@@ -45,13 +49,33 @@ export default function SystemHealthDashboard() {
     }
   };
 
+  const loadMetrics = useCallback(async () => {
+    try {
+      const tenantParam = selectedTenantId ? `&tenant_id=${encodeURIComponent(selectedTenantId)}` : "";
+      const resp = await fetch(`${BACKEND_URL}/api/metrics/performance?hours=${rangeHours}&limit=200${tenantParam}`);
+      if (resp.ok) {
+        const result = await resp.json();
+        const data = result.data || {};
+        setMetrics({
+          errorRate: data.metrics?.errorRate || 0,
+          errorCount: data.metrics?.errorCount || 0,
+          serverErrorCount: data.metrics?.serverErrorCount || 0,
+          logs: Array.isArray(data.logs) ? data.logs : []
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to load performance metrics:", e.message);
+    }
+  }, [selectedTenantId, rangeHours]);
+
   useEffect(() => {
     checkHealth();
+    loadMetrics();
     const interval = setInterval(checkHealth, 60000); // Check every minute
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedTenantId, loadMetrics]);
 
-  const recentErrors = getRecentErrors(5);
+  // recentErrors derived from server metrics below
   const criticalErrors = getCriticalErrors();
 
   const statusIcon = {
@@ -70,7 +94,18 @@ export default function SystemHealthDashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-slate-100">System Health</h2>
-        <Button
+        <div className="flex items-center gap-2">
+          <Select value={String(rangeHours)} onValueChange={(v) => setRangeHours(Number(v))}>
+            <SelectTrigger className="h-8 bg-slate-700 border-slate-600 text-slate-200">
+              <SelectValue placeholder="Last 1 hour" />
+            </SelectTrigger>
+            <SelectContent className="bg-slate-800 border-slate-700">
+              <SelectItem value="1">Last 1 hour</SelectItem>
+              <SelectItem value="24">Last 24 hours</SelectItem>
+              <SelectItem value="168">Last 7 days</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
           onClick={checkHealth}
           variant="outline"
           size="sm"
@@ -83,7 +118,8 @@ export default function SystemHealthDashboard() {
             }`}
           />
           {backendStatus === "checking" ? "Checking..." : "Refresh"}
-        </Button>
+          </Button>
+        </div>
       </div>
 
       {/* System Status */}
@@ -123,10 +159,10 @@ export default function SystemHealthDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-100">
-              {errors.length}
+              {metrics.errorCount}
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              errors in last hour
+              errors in last hour ({metrics.errorRate}% rate)
             </p>
           </CardContent>
         </Card>
@@ -161,7 +197,7 @@ export default function SystemHealthDashboard() {
         </Alert>
       )}
 
-      {/* Recent Errors */}
+      {/* Recent Errors (from performance logs) */}
       <Card className="bg-slate-800 border-slate-700">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -176,10 +212,26 @@ export default function SystemHealthDashboard() {
                 Clear All
               </Button>
             )}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 hidden sm:inline">
+                Scope: {selectedTenantId ? `Tenant ${selectedTenantId.substring(0,8)}…` : 'All Clients'}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="bg-slate-700 border-slate-600 text-slate-200"
+                onClick={() => {
+                  if (onViewMore) onViewMore();
+                  else window.location.href = '/Settings?tab=system-logs';
+                }}
+              >
+                View all logs
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          {recentErrors.length === 0
+          {metrics.logs.filter(l => (l.status_code || 0) >= 400).length === 0
             ? (
               <div className="text-center py-8 text-slate-400">
                 <CheckCircle2 className="w-12 h-12 mx-auto mb-2 text-green-500" />
@@ -188,39 +240,25 @@ export default function SystemHealthDashboard() {
             )
             : (
               <div className="space-y-3">
-                {recentErrors.map((error) => (
+                {metrics.logs.filter(l => (l.status_code || 0) >= 400).slice(0,5).map((log) => (
                   <div
-                    key={error.id}
+                    key={log.id}
                     className="p-3 bg-slate-700/50 rounded-lg border border-slate-600"
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <Badge
-                            className={error.severity === "critical"
-                              ? "bg-red-600"
-                              : error.severity === "warning"
-                              ? "bg-yellow-600"
-                              : "bg-slate-600"}
-                          >
-                            {error.severity}
+                          <Badge className={(log.status_code || 0) >= 500 ? 'bg-red-600' : 'bg-yellow-600'}>
+                            {(log.status_code || 0) >= 500 ? 'critical' : 'warning'}
                           </Badge>
-                          <span className="text-sm font-medium text-slate-200">
-                            {error.component}
-                          </span>
+                          <span className="text-sm font-medium text-slate-200">{log.method} {log.endpoint}</span>
                         </div>
-                        <p className="text-sm text-slate-300">
-                          {error.message}
-                        </p>
-                        {error.actionable && (
-                          <p className="text-xs text-blue-400 mt-1">
-                            → {error.actionable}
-                          </p>
+                        <p className="text-sm text-slate-300">{log.error_message || `HTTP ${log.status_code}`}</p>
+                        {log.user_email && (
+                          <p className="text-xs text-slate-500 mt-1">User: {log.user_email}</p>
                         )}
                       </div>
-                      <span className="text-xs text-slate-500">
-                        {new Date(error.timestamp).toLocaleTimeString()}
-                      </span>
+                      <span className="text-xs text-slate-500">{new Date(log.created_at).toLocaleTimeString()}</span>
                     </div>
                   </div>
                 ))}

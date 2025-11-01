@@ -19,7 +19,6 @@ import {
   // New icons from outline's tabs array:
   Palette,
   LayoutGrid,
-  Menu,
   Puzzle,
   Webhook,
   Clock,
@@ -46,8 +45,6 @@ import BrandingSettings from "../components/settings/BrandingSettings";
 import TimezoneSettings from "../components/settings/TimezoneSettings";
 
 // Access & Security
-import UserPermissions from "../components/settings/UserPermissions";
-import NavigationPermissions from "../components/settings/NavigationPermissions";
 import SecuritySettings from "../components/settings/SecuritySettings";
 import ApiKeyManager from "../components/settings/ApiKeyManager";
 
@@ -158,8 +155,6 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
       { id: 'users', label: 'User Management', icon: Users, color: 'green', roles: ['admin', 'superadmin'] },
       { id: 'tenants', label: 'Client Management', icon: Building2, color: 'indigo', roles: ['admin', 'superadmin'] },
       { id: 'modules', label: 'Module Settings', icon: LayoutGrid, color: 'slate', roles: ['admin', 'superadmin'] },
-      { id: 'permissions', label: 'User Permissions', icon: Shield, color: 'purple', roles: ['admin', 'superadmin'] },
-      { id: 'navigation', label: 'Navigation Permissions', icon: Menu, color: 'indigo', roles: ['admin', 'superadmin'] },
       { id: 'cron', label: 'Cron Jobs', icon: Clock, color: 'yellow', roles: ['admin', 'superadmin'] },
       { id: 'security', label: 'Security', icon: Lock, color: 'purple', roles: ['admin', 'superadmin'] },
       { id: 'apikeys', label: 'API Keys', icon: Key, color: 'green', roles: ['admin', 'superadmin'] }, // Changed from Superadmin to Admin as per original code
@@ -301,36 +296,6 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               )}
 
               {/* Access & Security */}
-              {activeTab === 'permissions' && isAdmin && (
-                <Card className="bg-slate-800 border-slate-700">
-                  <CardHeader>
-                    <CardTitle className="text-slate-100 flex items-center gap-2">
-                      <Lock className="w-5 h-5 text-purple-400" />
-                      Role-Based Permissions
-                    </CardTitle>
-                    <CardDescription className="text-slate-400">Manage what different user roles can access and modify</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <UserPermissions user={currentUser} onUpdate={loadUser} />
-                  </CardContent>
-                </Card>
-              )}
-
-              {activeTab === 'navigation' && isAdmin && (
-                <Card className="bg-slate-800 border-slate-700">
-                  <CardHeader>
-                    <CardTitle className="text-slate-100 flex items-center gap-2">
-                      <Menu className="w-5 h-5 text-indigo-400" />
-                      Navigation Visibility
-                    </CardTitle>
-                    <CardDescription className="text-slate-400">Control which menu items are visible to each user role</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <NavigationPermissions user={currentUser} onUpdate={loadUser} />
-                  </CardContent>
-                </Card>
-              )}
-
               {activeTab === 'security' && isAdmin && (
                 <Card className="bg-slate-800 border-slate-700">
                   <CardHeader>

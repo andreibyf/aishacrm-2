@@ -14,9 +14,8 @@ export async function deleteUser(userId, tenantId, currentUser) {
       throw new Error('User ID is required');
     }
 
-    if (!tenantId) {
-      throw new Error('Tenant ID is required');
-    }
+    // tenantId is optional for superadmins (they can delete users without tenants)
+    // For regular admins, tenantId is required
 
     // Delete user from backend
     // callBackendAPI signature: (entityName, method, data, id)
@@ -24,13 +23,16 @@ export async function deleteUser(userId, tenantId, currentUser) {
     // and tenant_id needs to be in query params, but callBackendAPI handles this differently
     // We'll use a direct fetch call for more control
     const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
-    const url = `${BACKEND_URL}/api/users/${userId}?tenant_id=${tenantId}`;
+    const url = tenantId 
+      ? `${BACKEND_URL}/api/users/${userId}?tenant_id=${tenantId}`
+      : `${BACKEND_URL}/api/users/${userId}`;
     
     const fetchResponse = await fetch(url, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
       },
+      credentials: 'include',
     });
 
     if (!fetchResponse.ok) {

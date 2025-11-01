@@ -941,20 +941,20 @@ export default function EnhancedUserManagement() {
                             Delete User
                         </AlertDialogTitle>
                         <AlertDialogDescription className="text-slate-300">
-                            <div className="space-y-2">
-                                <div>Are you sure you want to permanently delete this user?</div>
-                                {userToDelete && (
-                                    <div className="mt-3 p-3 bg-slate-900 rounded border border-slate-700">
-                                        <div><strong className="text-slate-200">Name:</strong> {userToDelete.full_name || userToDelete.display_name || 'N/A'}</div>
-                                        <div><strong className="text-slate-200">Email:</strong> {userToDelete.email}</div>
-                                        <div><strong className="text-slate-200">Role:</strong> {getRoleDisplay(userToDelete)}</div>
-                                        <div><strong className="text-slate-200">Tenant:</strong> {userToDelete.tenant_id || 'No Tenant'}</div>
-                                    </div>
-                                )}
-                                <div className="text-yellow-400 font-semibold mt-3">⚠️ This action cannot be undone.</div>
-                            </div>
+                            Are you sure you want to permanently delete this user?
                         </AlertDialogDescription>
                     </AlertDialogHeader>
+                    {userToDelete && (
+                        <div className="space-y-3 px-6">
+                            <div className="p-3 bg-slate-900 rounded border border-slate-700 text-sm">
+                                <div className="text-slate-300"><strong className="text-slate-200">Name:</strong> {userToDelete.full_name || userToDelete.display_name || 'N/A'}</div>
+                                <div className="text-slate-300"><strong className="text-slate-200">Email:</strong> {userToDelete.email}</div>
+                                <div className="text-slate-300"><strong className="text-slate-200">Role:</strong> {getRoleDisplay(userToDelete)}</div>
+                                <div className="text-slate-300"><strong className="text-slate-200">Tenant:</strong> {userToDelete.tenant_id || 'No Tenant'}</div>
+                            </div>
+                            <div className="text-yellow-400 font-semibold text-sm">⚠️ This action cannot be undone.</div>
+                        </div>
+                    )}
                     <AlertDialogFooter>
                         <AlertDialogCancel className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
                             Cancel

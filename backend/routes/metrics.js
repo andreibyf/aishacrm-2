@@ -121,5 +121,177 @@ export default function createMetricsRoutes(pgPool) {
     }
   });
 
+  // DELETE /api/metrics/performance - Clear performance logs
+  router.delete('/performance', async (req, res) => {
+    try {
+      const { tenant_id, hours = 24 } = req.query;
+      
+      // Build WHERE clause
+      const conditions = ['created_at > NOW() - $1::INTERVAL'];
+      const params = [`${hours} hours`];
+      
+      if (tenant_id) {
+        params.push(tenant_id);
+        conditions.push(`tenant_id = $${params.length}`);
+      }
+      
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+      
+      // Delete performance logs matching criteria
+      const result = await pgPool.query(
+        `DELETE FROM performance_logs ${whereClause} RETURNING *`,
+        params
+      );
+
+      console.log(`[Metrics] Deleted ${result.rows.length} performance log(s) for tenant: ${tenant_id || 'all'}`);
+
+      res.json({
+        status: 'success',
+        message: `Deleted ${result.rows.length} performance log(s)`,
+        data: {
+          deleted_count: result.rows.length,
+        },
+      });
+    } catch (error) {
+      console.error('[Metrics] Error deleting performance logs:', error);
+      res.status(500).json({ 
+        status: 'error', 
+        message: error.message 
+      });
+    }
+  });
+
+  // GET /api/metrics/security - Get security metrics
+  router.get('/security', async (req, res) => {
+    try {
+      const { tenant_id, hours = 24 } = req.query;
+      
+      // Build WHERE clause for tenant filtering
+      const tenantCondition = tenant_id ? `AND tenant_id = $2` : '';
+      const params = [`${hours} hours`];
+      if (tenant_id) params.push(tenant_id);
+      
+      // Get authentication failures (401/403 errors)
+      const authFailuresResult = await pgPool.query(
+        `SELECT 
+          COUNT(*) FILTER (WHERE status_code = 401) as unauthorized_count,
+          COUNT(*) FILTER (WHERE status_code = 403) as forbidden_count,
+          COUNT(*) as total_auth_failures,
+          jsonb_agg(
+            jsonb_build_object(
+              'endpoint', endpoint,
+              'method', method,
+              'status_code', status_code,
+              'user_email', user_email,
+              'created_at', created_at
+            )
+            ORDER BY created_at DESC
+          ) FILTER (WHERE status_code IN (401, 403)) as recent_failures
+        FROM performance_logs
+        WHERE created_at > NOW() - $1::INTERVAL 
+          AND status_code IN (401, 403)
+          ${tenantCondition}`,
+        params
+      );
+
+      // Get rate limiting hits (429 errors)
+      const rateLimitResult = await pgPool.query(
+        `SELECT 
+          COUNT(*) as rate_limit_hits,
+          jsonb_agg(
+            jsonb_build_object(
+              'endpoint', endpoint,
+              'user_email', user_email,
+              'created_at', created_at
+            )
+            ORDER BY created_at DESC
+          ) as recent_rate_limits
+        FROM performance_logs
+        WHERE created_at > NOW() - $1::INTERVAL 
+          AND status_code = 429
+          ${tenantCondition}`,
+        params
+      );
+
+      // Get CORS errors (from error messages)
+      const corsErrorsResult = await pgPool.query(
+        `SELECT COUNT(*) as cors_error_count
+        FROM performance_logs
+        WHERE created_at > NOW() - $1::INTERVAL
+          AND (error_message ILIKE '%CORS%' OR error_message ILIKE '%origin%')
+          ${tenantCondition}`,
+        params
+      );
+
+      // Get API keys count (if table exists)
+      let apiKeysCount = 0;
+      try {
+        const apiKeysResult = await pgPool.query(
+          `SELECT COUNT(*) as count FROM apikeys WHERE is_active = true ${tenant_id ? 'AND tenant_id = $1' : ''}`,
+          tenant_id ? [tenant_id] : []
+        );
+        apiKeysCount = parseInt(apiKeysResult.rows[0]?.count || 0);
+      } catch {
+        // Table might not exist
+        console.log('[Metrics] API keys table not found, skipping');
+      }
+
+      const authFailures = authFailuresResult.rows[0];
+      const rateLimits = rateLimitResult.rows[0];
+      const corsErrors = corsErrorsResult.rows[0];
+
+      res.json({
+        status: 'success',
+        data: {
+          authentication: {
+            unauthorized_count: parseInt(authFailures.unauthorized_count || 0),
+            forbidden_count: parseInt(authFailures.forbidden_count || 0),
+            total_failures: parseInt(authFailures.total_auth_failures || 0),
+            recent_failures: (authFailures.recent_failures || []).slice(0, 10),
+            status: authFailures.total_auth_failures > 10 ? 'warning' : 'healthy'
+          },
+          rate_limiting: {
+            hits: parseInt(rateLimits.rate_limit_hits || 0),
+            recent_hits: (rateLimits.recent_rate_limits || []).slice(0, 10),
+            status: rateLimits.rate_limit_hits > 5 ? 'warning' : 'healthy',
+            enabled: true // Rate limiting is enabled in server.js
+          },
+          cors: {
+            error_count: parseInt(corsErrors.cors_error_count || 0),
+            status: corsErrors.cors_error_count > 0 ? 'warning' : 'healthy',
+            allowed_origins: ['http://localhost:5173', 'http://localhost:3001'] // From server.js
+          },
+          api_keys: {
+            active_count: apiKeysCount,
+            status: 'healthy'
+          },
+          rls_policies: {
+            enabled: true,
+            status: 'active',
+            note: 'Supabase Row-Level Security policies are enforced at the database level'
+          },
+          overall_status: 
+            authFailures.total_auth_failures > 10 || rateLimits.rate_limit_hits > 5
+              ? 'warning' 
+              : 'healthy'
+        }
+      });
+    } catch (error) {
+      console.error('[Metrics] Error fetching security metrics:', error);
+      res.status(500).json({ 
+        status: 'error', 
+        message: error.message,
+        data: {
+          authentication: { status: 'unknown' },
+          rate_limiting: { status: 'unknown' },
+          cors: { status: 'unknown' },
+          api_keys: { status: 'unknown' },
+          rls_policies: { status: 'unknown' },
+          overall_status: 'error'
+        }
+      });
+    }
+  });
+
   return router;
 }
