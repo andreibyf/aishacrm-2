@@ -778,12 +778,13 @@ export default function EnhancedUserManagement() {
                                         const managerCanEdit = (currentUser?.role === 'admin' || currentUser?.role === 'superadmin');
 
                                         const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+                                        const lastActivity = user.last_seen || user.last_login;
                                         let statusColor, statusText;
 
-                                        if (!user.last_login && user.is_active) {
+                                        if (!lastActivity && user.is_active) {
                                             statusColor = 'bg-amber-500';
                                             statusText = 'Invited';
-                                        } else if (user.is_active && user.last_login && new Date(user.last_login) > oneHourAgo) {
+                                        } else if (user.is_active && lastActivity && new Date(lastActivity) > oneHourAgo) {
                                             statusColor = 'bg-green-500';
                                             statusText = 'Online';
                                         } else if (!user.is_active) {
@@ -875,8 +876,8 @@ export default function EnhancedUserManagement() {
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="hidden lg:table-cell text-slate-300">
-                                                    {user.last_login ?
-                                                        format(new Date(user.last_login), "PPpp") :
+                                                    {lastActivity ?
+                                                        format(new Date(lastActivity), "PPpp") :
                                                         'Never'
                                                     }
                                                 </TableCell>

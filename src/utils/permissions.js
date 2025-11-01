@@ -73,9 +73,9 @@ export function canDeleteUser(currentUser, targetUser) {
   // Cannot delete yourself
   if (currentUser.id === targetUser.id) return false;
 
-  // SuperAdmins can delete anyone except other superadmins
+  // SuperAdmins can delete anyone except themselves (backend enforces at least one superadmin remains)
   if (userRole === 'superadmin') {
-    return targetRole !== 'superadmin';
+    return currentUser.id !== targetUser.id;
   }
 
   // Admins can delete employees and managers in their own tenant

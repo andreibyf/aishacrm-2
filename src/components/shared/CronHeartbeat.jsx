@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { cronJobRunner } from '@/api/functions';
 import { User } from '@/api/entities';
 import { useErrorLog, handleApiError, createError } from './ErrorLogger';
+
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
 
 export default function CronHeartbeat() {
   const lastRunRef = useRef(null);
@@ -35,8 +36,19 @@ export default function CronHeartbeat() {
           setTimeout(() => reject(new Error('Cron execution timeout')), 30000)
         );
         
-        const cronPromise = cronJobRunner({}).catch(err => {
-          throw err;
+        // Call our own backend instead of Base44 SDK
+        const cronPromise = fetch(`${BACKEND_URL}/api/cron/run`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include'
+        }).then(async res => {
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+            throw new Error(errorData.error || errorData.message || 'Cron execution failed');
+          }
+          return res.json();
         });
 
         await Promise.race([cronPromise, timeoutPromise]);

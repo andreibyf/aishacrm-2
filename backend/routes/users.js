@@ -316,15 +316,17 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       }
 
       // Check users table first (superadmins/admins)
+      let tableName = "users";
       let result = await pgPool.query(
-        "SELECT id, tenant_id, email, first_name, last_name, role, 'active' as status FROM users WHERE LOWER(email) = LOWER($1)",
+        "SELECT id, NULL as tenant_id, email, first_name, last_name, role, 'active' as status, metadata FROM users WHERE LOWER(email) = LOWER($1)",
         [email],
       );
 
       // If not found in users table, check employees table
       if (result.rows.length === 0) {
+        tableName = "employees";
         result = await pgPool.query(
-          "SELECT id, tenant_id, email, first_name, last_name, role, status FROM employees WHERE LOWER(email) = LOWER($1)",
+          "SELECT id, tenant_id, email, first_name, last_name, role, status, metadata FROM employees WHERE LOWER(email) = LOWER($1)",
           [email],
         );
       }
@@ -336,7 +338,69 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         });
       }
 
-      const user = result.rows[0];
+      const found = result.rows[0];
+
+      // Enforce disabled accounts: block login if marked inactive
+      try {
+        const meta = found.metadata || {};
+        const flatIsActive = typeof meta.is_active === 'boolean' ? meta.is_active : undefined;
+        const accountStatus = (meta.account_status || '').toLowerCase();
+        const rowStatus = (found.status || '').toLowerCase();
+
+        const isDisabled = accountStatus === 'inactive'
+          || flatIsActive === false
+          || rowStatus === 'inactive';
+
+        if (isDisabled) {
+          return res.status(403).json({
+            status: "error",
+            message: "Account is disabled. Contact an administrator.",
+            code: "ACCOUNT_DISABLED",
+          });
+        }
+      } catch (e) {
+        console.warn("[Login] Failed to evaluate disabled state:", e.message);
+      }
+
+      // On successful lookup, mark account active + online and record last_login
+      try {
+        // Build a timestamp string in UTC ISO-like format for JSON metadata
+        const updateSql = tableName === "users"
+          ? `UPDATE users
+               SET metadata = COALESCE(metadata, '{}'::jsonb)
+                               || jsonb_build_object(
+                                    'is_active', true,
+                                    'account_status', 'active',
+                                    'live_status', 'online',
+                                    'last_login', to_char((NOW() AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+                                  ),
+                   updated_at = NOW()
+             WHERE id = $1`
+          : `UPDATE employees
+               SET status = 'active',
+                   metadata = COALESCE(metadata, '{}'::jsonb)
+                               || jsonb_build_object(
+                                    'is_active', true,
+                                    'account_status', 'active',
+                                    'live_status', 'online',
+                                    'last_login', to_char((NOW() AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+                                  ),
+                   updated_at = NOW()
+             WHERE id = $1`;
+        await pgPool.query(updateSql, [found.id]);
+      } catch (e) {
+        console.warn("[Login] Failed to update live/account status:", e.message);
+        // Continue login even if status update fails
+      }
+
+      // Re-fetch the user to include updated metadata
+      const refreshed = await pgPool.query(
+        tableName === "users"
+          ? "SELECT id, NULL as tenant_id, email, first_name, last_name, role, 'active' as status, metadata FROM users WHERE id = $1"
+          : "SELECT id, tenant_id, email, first_name, last_name, role, status, metadata FROM employees WHERE id = $1",
+        [found.id],
+      );
+      const user = expandUserMetadata(refreshed.rows[0] || found);
 
       // Generate JWT token
       const JWT_SECRET = process.env.JWT_SECRET ||
@@ -362,6 +426,155 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       });
     } catch (error) {
       console.error("Error logging in:", error);
+      res.status(500).json({ status: "error", message: error.message });
+    }
+  });
+
+  // POST /api/users/heartbeat - Update last_seen and live_status
+  router.post("/heartbeat", async (req, res) => {
+    try {
+      const authHeader = req.headers?.authorization || "";
+      const bearer = authHeader.startsWith("Bearer ")
+        ? authHeader.substring(7)
+        : null;
+
+      let userId = null;
+      let email = (req.body?.email || req.query?.email || "").trim();
+
+      // Prefer JWT if provided
+      if (bearer) {
+        try {
+          const decoded = jwt.verify(
+            bearer,
+            process.env.JWT_SECRET || "your-secret-key-change-in-production",
+          );
+          userId = decoded?.user_id || null;
+        } catch {
+          // Ignore token errors; fall back to email
+        }
+      }
+
+      if (!userId && !email) {
+        return res.status(400).json({
+          status: "error",
+          message: "Provide Authorization bearer token or email",
+        });
+      }
+
+      // Resolve target user
+      let target = null;
+      if (userId) {
+        const u = await pgPool.query(
+          "SELECT id FROM users WHERE id = $1",
+          [userId],
+        );
+        if (u.rows.length > 0) {
+          target = { table: "users", id: userId };
+        } else {
+          const e = await pgPool.query(
+            "SELECT id FROM employees WHERE id = $1",
+            [userId],
+          );
+          if (e.rows.length > 0) target = { table: "employees", id: userId };
+        }
+      }
+
+      if (!target && email) {
+        const u = await pgPool.query(
+          "SELECT id FROM users WHERE LOWER(email) = LOWER($1)",
+          [email],
+        );
+        if (u.rows.length > 0) {
+          target = { table: "users", id: u.rows[0].id };
+        } else {
+          const e = await pgPool.query(
+            "SELECT id FROM employees WHERE LOWER(email) = LOWER($1)",
+            [email],
+          );
+          if (e.rows.length > 0) target = { table: "employees", id: e.rows[0].id };
+        }
+      }
+
+      if (!target) {
+        // Attempt to sync from Supabase Auth as a fallback (if email provided)
+        if (email) {
+          try {
+            const { user: authUser } = await getAuthUserByEmail(email);
+            if (authUser) {
+              const meta = authUser.user_metadata || {};
+              const role = (meta.role || "employee").toLowerCase();
+              const rawTenant = meta.tenant_id;
+              const normalizedTenantId = (rawTenant === "" || rawTenant === "no-client" || rawTenant === "none" || rawTenant === "null" || rawTenant === undefined) ? null : rawTenant;
+              const first_name = meta.first_name || authUser.email?.split("@")[0] || "";
+              const last_name = meta.last_name || "";
+              const display_name = meta.display_name || `${first_name} ${last_name}`.trim();
+
+              if (role === "superadmin" && !normalizedTenantId) {
+                const insert = await pgPool.query(
+                  `INSERT INTO users (email, first_name, last_name, role, metadata, created_at, updated_at)
+                   VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+                   RETURNING id`,
+                  [email, first_name, last_name, "superadmin", { display_name, ...meta }],
+                );
+                target = { table: "users", id: insert.rows[0].id };
+              } else if (role === "admin" && normalizedTenantId) {
+                const insert = await pgPool.query(
+                  `INSERT INTO users (email, first_name, last_name, role, tenant_id, metadata, created_at, updated_at)
+                   VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+                   RETURNING id`,
+                  [email, first_name, last_name, "admin", normalizedTenantId, { display_name, ...meta }],
+                );
+                target = { table: "users", id: insert.rows[0].id };
+              } else if (normalizedTenantId) {
+                const insert = await pgPool.query(
+                  `INSERT INTO employees (tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+                   RETURNING id`,
+                  [normalizedTenantId, email, first_name, last_name, role, "active", { display_name, ...meta }],
+                );
+                target = { table: "employees", id: insert.rows[0].id };
+              }
+            }
+          } catch {
+            // ignore sync errors
+          }
+        }
+
+        if (!target) {
+          return res.status(404).json({ status: "error", message: "User not found" });
+        }
+      }
+
+      const updateSql = target.table === "users"
+        ? `UPDATE users
+             SET metadata = COALESCE(metadata, '{}'::jsonb)
+                             || jsonb_build_object(
+                                  'live_status', 'online',
+                                  'last_seen', to_char((NOW() AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+                                ),
+                 updated_at = NOW()
+           WHERE id = $1`
+        : `UPDATE employees
+             SET metadata = COALESCE(metadata, '{}'::jsonb)
+                             || jsonb_build_object(
+                                  'live_status', 'online',
+                                  'last_seen', to_char((NOW() AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+                                ),
+                 updated_at = NOW()
+           WHERE id = $1`;
+
+      await pgPool.query(updateSql, [target.id]);
+
+      return res.json({
+        status: "success",
+        data: {
+          id: target.id,
+          table: target.table,
+          last_seen: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      console.error("Error in heartbeat:", error);
       res.status(500).json({ status: "error", message: error.message });
     }
   });
@@ -907,7 +1120,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
 
       // Try to find user in users table first (for SuperAdmins/Admins)
       let userResult = await pgPool.query(
-        "SELECT id, email FROM users WHERE id = $1",
+        "SELECT id, email, role FROM users WHERE id = $1",
         [id],
       );
       let tableName = "users";
@@ -933,6 +1146,22 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
           status: "error",
           message: "User not found in users or employees table",
         });
+      }
+
+      // Stopper: prevent deleting the last remaining superadmin
+      if (tableName === "users" && (userResult.rows[0].role || "").toLowerCase() === "superadmin") {
+        const countRes = await pgPool.query(
+          "SELECT COUNT(*)::int AS cnt FROM users WHERE role = 'superadmin' AND id <> $1",
+          [id],
+        );
+        const remaining = countRes.rows[0].cnt;
+        if (remaining <= 0) {
+          return res.status(403).json({
+            status: "error",
+            code: "LAST_SUPERADMIN",
+            message: "Cannot delete the last remaining superadmin.",
+          });
+        }
       }
 
       const userEmail = userResult.rows[0].email;

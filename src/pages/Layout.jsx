@@ -77,6 +77,7 @@ import {
 import ClearChatButton from "../components/ai/ClearChatButton";
 import { clearChat } from "../components/ai/chatUtils";
 import CronHeartbeat from "../components/shared/CronHeartbeat";
+import UserPresenceHeartbeat from "../components/shared/UserPresenceHeartbeat";
 import GlobalDomPatches from "../components/shared/GlobalDomPatches";
 import PortalRootManager from "../components/shared/PortalRootManager";
 import ModalHost from "../components/shared/ModalHost";
@@ -3167,7 +3168,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       </style>
 
       {/* Background heartbeat that ensures due cron jobs are processed when an admin is active */}
-      <CronHeartbeat />
+  <CronHeartbeat />
+  {/* Keep user presence fresh while they are active */}
+  <UserPresenceHeartbeat currentUser={user} />
 
       {/* System Status Indicator (moved to top level within AppLayout) */}
       <SystemStatusIndicator user={user} />
