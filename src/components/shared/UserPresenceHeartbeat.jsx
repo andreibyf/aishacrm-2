@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+
 // Pings backend to update last_seen/live_status for current user
 export default function UserPresenceHeartbeat({ currentUser, intervalMs = 60000 }) {
   const timerRef = useRef(null);
@@ -10,10 +12,11 @@ export default function UserPresenceHeartbeat({ currentUser, intervalMs = 60000 
 
     const ping = async () => {
       try {
-        await fetch("/api/users/heartbeat", {
+        await fetch(`${BACKEND_URL}/api/users/heartbeat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email }),
+          credentials: 'include',
           keepalive: true,
         });
       } catch {
