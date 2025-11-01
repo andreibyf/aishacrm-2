@@ -21,7 +21,14 @@ import {
 } from "lucide-react";
 
 export default function DataOptimizationDashboard() {
-  const [stats, setStats] = useState(null);
+  const [stats, setStats] = useState({
+    dailyMetricsCached: 0,
+    monthlyReports: 0,
+    successfulSyncs: 0,
+    failedSyncs: 0,
+    lastDailyCalc: null,
+    lastMonthlyCalc: null,
+  });
   const [,] = useState(true);
   const [actionLoading, setActionLoading] = useState({
     daily: false,

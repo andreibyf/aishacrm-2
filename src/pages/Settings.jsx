@@ -20,19 +20,17 @@ import {
   Palette,
   LayoutGrid,
   Puzzle,
-  Webhook,
   Clock,
   Key,
   Trash2,
   FileText, // Added for System Logs
   ExternalLink, // Added for External Tools
+  BookOpen, // Added for API Documentation
 
   // Icons for components not in outline's tabs array but preserved:
   Globe, // for TimezoneSettings (Regional Settings)
   CreditCard, // for BillingSettings
   Megaphone, // for SystemAnnouncements
-  Shuffle, // for DenormalizationSync
-  BarChart2, // for DataOptimizationDashboard
   Bug, // for TestDataManager
   RefreshCw, // for SyncHealthMonitor
   Server, // for MCPServerMonitor
@@ -56,9 +54,8 @@ import EnhancedUserManagement from "../components/settings/EnhancedUserManagemen
 import TenantManagement from "../components/settings/TenantManagement";
 import ClientOffboarding from "../components/settings/ClientOffboarding"; // New component for tenant deletion
 
-// Integrations & Webhooks
+// Integrations & API
 import IntegrationSettings from "../components/settings/IntegrationSettings"; // Global integrations
-import WebhookSettings from "../components/settings/WebhookSettings";
 import TenantIntegrationSettings from "../components/settings/TenantIntegrationSettings"; // Tenant-specific integrations
 
 // System Configuration
@@ -72,8 +69,6 @@ import ApiHealthDashboard from "../components/settings/ApiHealthDashboard"; // N
 
 // Data Management
 import DataConsistencyManager from "../components/settings/DataConsistencyManager";
-import DenormalizationSync from "../components/settings/DenormalizationSync";
-import DataOptimizationDashboard from "../components/settings/DataOptimizationDashboard";
 import TestDataManager from "../components/settings/TestDataManager";
 
 // Monitoring & Health
@@ -143,11 +138,9 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
     ...(isAdmin || isManager ? [
       { id: 'global-integrations', label: 'Global Integrations', icon: Plug, color: 'orange', roles: ['admin', 'superadmin', 'manager'] },
       { id: 'tenant-integrations', label: 'Tenant Integrations', icon: Puzzle, color: 'orange', roles: ['admin', 'superadmin', 'manager'] },
-      { id: 'webhooks', label: 'Webhooks', icon: Webhook, color: 'orange', roles: ['admin', 'superadmin', 'manager'] },
+      { id: 'api-docs', label: 'API Documentation', icon: BookOpen, color: 'blue', roles: ['admin', 'superadmin', 'manager'] },
 
       { id: 'data-consistency', label: 'Data Consistency', icon: Database, color: 'cyan', roles: ['admin', 'superadmin', 'manager'] },
-      { id: 'denormalization', label: 'Denormalization', icon: Shuffle, color: 'cyan', roles: ['admin', 'superadmin', 'manager'] },
-      { id: 'data-optimization', label: 'Data Optimization', icon: BarChart2, color: 'cyan', roles: ['admin', 'superadmin', 'manager'] },
     ] : []),
 
     // Admin-specific tabs
@@ -364,14 +357,40 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                 </Card>
               )}
 
-              {activeTab === 'webhooks' && (isAdmin || isManager) && (
+              {activeTab === 'api-docs' && (isAdmin || isManager) && (
                 <Card className="bg-slate-800 border-slate-700">
                   <CardHeader>
-                    <CardTitle className="text-slate-100">Webhook Management</CardTitle>
-                    <CardDescription className="text-slate-400">Configure outbound webhooks for CRM events</CardDescription>
+                    <CardTitle className="text-slate-100 flex items-center gap-2">
+                      <BookOpen className="w-5 h-5 text-blue-400" />
+                      API Documentation
+                    </CardTitle>
+                    <CardDescription className="text-slate-400">
+                      Interactive Swagger documentation for all 197 backend API endpoints
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <WebhookSettings />
+                    <div className="space-y-4">
+                      <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
+                        <p className="text-sm text-blue-300 mb-2">
+                          <strong>Full API documentation available at:</strong>
+                        </p>
+                        <a 
+                          href="http://localhost:3001/api-docs" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300 underline flex items-center gap-2"
+                        >
+                          http://localhost:3001/api-docs
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      </div>
+                      <iframe
+                        src="http://localhost:3001/api-docs"
+                        className="w-full border-0 rounded-lg bg-white"
+                        style={{ height: '800px' }}
+                        title="API Documentation"
+                      />
+                    </div>
                   </CardContent>
                 </Card>
               )}
@@ -486,31 +505,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                 </Card>
               )}
 
-              {activeTab === 'denormalization' && (isAdmin || isManager) && ( // New tab content
-                <Card className="bg-slate-800 border-slate-700">
-                  <CardHeader>
-                    <CardTitle className="text-slate-100">Denormalization Sync</CardTitle>
-                    <CardDescription className="text-slate-400">Keep cached data fields synchronized across entities</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <DenormalizationSync />
-                  </CardContent>
-                </Card>
-              )}
-
-              {activeTab === 'data-optimization' && (isAdmin || isManager) && ( // New tab content
-                <Card className="bg-slate-800 border-slate-700">
-                  <CardHeader>
-                    <CardTitle className="text-slate-100">Query Optimization</CardTitle>
-                    <CardDescription className="text-slate-400">Aggregate tables and performance caching for faster dashboards</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <DataOptimizationDashboard />
-                  </CardContent>
-                </Card>
-              )}
-
-              {activeTab === 'test-data' && isAdmin && ( // New tab content
+              {activeTab === 'test-data' && (isAdmin || isManager) && ( // New tab content
                 <Card className="bg-slate-800 border-slate-700">
                   <CardHeader>
                     <CardTitle className="text-slate-100">Test Data Management</CardTitle>

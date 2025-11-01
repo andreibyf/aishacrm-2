@@ -12,6 +12,8 @@ import dotenv from "dotenv";
 import { createServer } from "http";
 import pkg from "pg";
 const { Pool } = pkg;
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './lib/swagger.js';
 
 // Load environment variables
 // Try .env.local first (for local development), then fall back to .env
@@ -114,6 +116,18 @@ app.get("/health", (req, res) => {
     environment: process.env.NODE_ENV,
     database: pgPool ? "connected" : "not configured",
   });
+});
+
+// Swagger API Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Aisha CRM API Documentation'
+}));
+
+// Swagger JSON spec endpoint
+app.get('/api-docs.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
 });
 
 // Status endpoint (compatible with checkBackendStatus function)

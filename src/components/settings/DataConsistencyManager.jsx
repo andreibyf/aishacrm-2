@@ -11,20 +11,66 @@ import {
   Loader2,
   Info
 } from "lucide-react";
-import { detectOrphanedRecords } from "@/api/functions";
+import { useTenant } from '@/components/shared/tenantContext';
+
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
 
 export default function DataConsistencyManager() {
+  const { selectedTenantId } = useTenant();
   const [scanning, setScanning] = useState(false);
   const [results, setResults] = useState(null);
 
   const handleScan = async () => {
     setScanning(true);
+    setResults(null);
+    
     try {
-      const response = await detectOrphanedRecords();
-      setResults(response.data);
+      // Scan all entity types for duplicates
+      const entityTypes = [
+        { name: 'Contact', fields: ['email'] },
+        { name: 'Account', fields: ['name'] },
+        { name: 'Lead', fields: ['email'] },
+        { name: 'Opportunity', fields: ['name'] },
+      ];
+
+      const duplicateResults = {};
+      let totalDuplicates = 0;
+
+      for (const entity of entityTypes) {
+        const response = await fetch(`${BACKEND_URL}/api/validation/find-duplicates`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenant_id: selectedTenantId,
+            entity_type: entity.name,
+            fields: entity.fields,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to scan ${entity.name}`);
+        }
+
+        const data = await response.json();
+        if (data.status === 'success' && data.data.total > 0) {
+          duplicateResults[entity.name] = data.data.groups;
+          totalDuplicates += data.data.total;
+        }
+      }
+
+      setResults({
+        success: true,
+        totalOrphans: totalDuplicates,
+        orphanedRecords: duplicateResults,
+      });
     } catch (error) {
-      console.error("Error scanning for orphans:", error);
-      alert("Failed to scan for orphaned records: " + error.message);
+      console.error("Error scanning for duplicates:", error);
+      alert("Failed to scan for duplicate records: " + error.message);
+      setResults({
+        success: false,
+        totalOrphans: 0,
+        orphanedRecords: {},
+      });
     } finally {
       setScanning(false);
     }
@@ -39,14 +85,14 @@ export default function DataConsistencyManager() {
             Data Consistency Manager
           </CardTitle>
           <CardDescription className="text-slate-400">
-            Detect and fix orphaned records and invalid foreign key references
+            Detect duplicate records and data quality issues
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Alert className="bg-blue-900/30 border-blue-700/50">
             <Info className="h-4 w-4 text-blue-400" />
             <AlertDescription className="text-blue-300">
-              <strong>Phase 1 Implementation:</strong> This tool helps maintain referential integrity by finding records with invalid references to accounts, employees, contacts, or leads.
+              Scans for duplicate records across Contacts, Accounts, Leads, and Opportunities based on key fields like email and name.
             </AlertDescription>
           </Alert>
 
@@ -63,7 +109,7 @@ export default function DataConsistencyManager() {
             ) : (
               <>
                 <Search className="w-4 h-4 mr-2" />
-                Scan for Orphans
+                Scan for Duplicates
               </>
             )}
           </Button>
@@ -75,14 +121,14 @@ export default function DataConsistencyManager() {
                   <>
                     <AlertTriangle className="h-4 w-4 text-amber-400" />
                     <AlertDescription className="text-amber-300">
-                      <strong>Found {results.totalOrphans} orphaned records</strong> across {Object.keys(results.orphanedRecords).length} entities.
+                      <strong>Found {results.totalOrphans} duplicate record groups</strong> across {Object.keys(results.orphanedRecords).length} entity types.
                     </AlertDescription>
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="h-4 w-4 text-green-400" />
                     <AlertDescription className="text-green-300">
-                      <strong>Data integrity check passed!</strong> No orphaned records found.
+                      <strong>Data integrity check passed!</strong> No duplicate records found.
                     </AlertDescription>
                   </>
                 )}
@@ -91,20 +137,20 @@ export default function DataConsistencyManager() {
               {results.totalOrphans > 0 && (
                 <Card className="bg-slate-900 border-slate-700">
                   <CardHeader>
-                    <CardTitle className="text-slate-100 text-base">Orphaned Records by Entity</CardTitle>
+                    <CardTitle className="text-slate-100 text-base">Duplicate Record Groups by Entity</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
-                      {Object.entries(results.orphanedRecords).map(([entity, records]) => (
+                      {Object.entries(results.orphanedRecords).map(([entity, groups]) => (
                         <div key={entity} className="flex items-center justify-between p-3 bg-slate-800 rounded-lg border border-slate-700">
                           <div>
                             <p className="font-medium text-slate-200">{entity}</p>
                             <p className="text-xs text-slate-400">
-                              {records.length} record{records.length !== 1 ? 's' : ''} with invalid references
+                              {groups.length} duplicate group{groups.length !== 1 ? 's' : ''} found
                             </p>
                           </div>
                           <Badge variant="destructive" className="bg-red-600 text-white">
-                            {records.length}
+                            {groups.length}
                           </Badge>
                         </div>
                       ))}
@@ -117,7 +163,7 @@ export default function DataConsistencyManager() {
                 <Alert className="bg-slate-900 border-slate-700">
                   <Info className="h-4 w-4 text-blue-400" />
                   <AlertDescription className="text-slate-300">
-                    <strong>Next Steps:</strong> Review the orphaned records in the Data Diagnostics page to clean them up or reassign valid references.
+                    <strong>Next Steps:</strong> Review the duplicate records in your entity lists and merge or delete duplicates as needed.
                   </AlertDescription>
                 </Alert>
               )}
