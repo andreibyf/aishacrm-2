@@ -78,6 +78,8 @@ const supabaseAuth = initSupabaseAuth();
 
 // Middleware
 app.use(helmet({
+  // We rely on CSP frame-ancestors instead of legacy X-Frame-Options for embedding Swagger in the frontend
+  frameguard: false,
   contentSecurityPolicy: {
     directives: {
       ...helmet.contentSecurityPolicy.getDefaultDirectives(),
@@ -126,7 +128,11 @@ app.get("/health", (req, res) => {
 });
 
 // Swagger API Documentation
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+// Ensure X-Frame-Options does not block embedding from the frontend origin
+app.use('/api-docs', (req, res, next) => {
+  try { res.removeHeader('X-Frame-Options'); } catch { /* no-op */ }
+  next();
+}, swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customCss: `
     body { background-color: #1e293b; }
     .swagger-ui .topbar { display: none }
