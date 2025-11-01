@@ -16,7 +16,7 @@ async function waitForBackendHealth() {
   const maxAttempts = 30;
   for (let i = 0; i < maxAttempts; i++) {
     try {
-      const response = await fetch(`${BACKEND_URL}/health`);
+      const response = await fetch(`${BACKEND_URL}/api/system/status`);
       if (response.ok) return true;
     } catch {
       // Backend not ready
@@ -29,20 +29,26 @@ async function waitForBackendHealth() {
 // Helper: Login as user
 async function loginAsUser(page, email, password) {
   await page.goto(BASE_URL);
-  
-  // Wait for login form
-  await page.waitForSelector('input[type="email"], input[name="email"]', { timeout: 10000 });
-  
+
+  // If already logged in (thanks to storageState), skip login
+  const hasLoginForm = await page
+    .locator('input[type="email"], input[name="email"]')
+    .isVisible({ timeout: 2000 })
+    .catch(() => false);
+  if (!hasLoginForm) {
+    return;
+  }
+
   // Fill login form
   await page.fill('input[type="email"], input[name="email"]', email);
   await page.fill('input[type="password"], input[name="password"]', password);
-  
+
   // Submit login
   await page.click('button[type="submit"]');
-  
+
   // Wait for successful login (dashboard or main content loads)
   await page.waitForSelector('main, [role="main"], .dashboard', { timeout: 15000 });
-  
+
   // Wait for navigation to settle
   await page.waitForTimeout(1000);
 }

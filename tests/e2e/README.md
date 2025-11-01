@@ -90,24 +90,30 @@ Tests are configured in `playwright.config.js`:
 - **Video:** Retained on failure
 - **Trace:** On first retry
 
-## Auto-Start Servers
+## Start Servers (manual, recommended)
 
-Playwright automatically starts both frontend and backend servers before tests:
-- Frontend: `npm run dev` on port 5173
-- Backend: `cd backend && npm run dev` on port 3001
+Follow the workspace Terminal Rules. Start frontend and backend in separate terminals before running tests:
 
-To use existing servers (faster):
 ```powershell
-# Terminal 1: Start frontend
-npm run dev
+# Terminal 1: Verify location and start services
+Get-Location
+cd c:\Users\andre\Documents\GitHub\ai-sha-crm-copy-c872be53
+./start-all.ps1
 
-# Terminal 2: Start backend
-cd backend
-npm run dev
-
-# Terminal 3: Run tests
+# Terminal 2: Run tests
 npm run test:e2e
 ```
+
+Note: The Playwright config is set to reuse existing servers; it does not auto-start them.
+
+## Superuser Session (auto)
+
+Tests run as a SuperAdmin using a persisted login session created at the start of the run.
+
+- Email: `admin@aishacrm.com`
+- Password: from `SUPERADMIN_PASSWORD` env var, or fallback `SuperAdmin123!`
+
+The setup test `tests/e2e/auth.setup.js` logs in once and saves storage to `playwright/.auth/superadmin.json`, which is then reused across all browser projects. You typically don't need to run anything extra—just ensure the password env is correct if you've changed it.
 
 ## Troubleshooting
 
@@ -119,6 +125,11 @@ npm run test:e2e
 ### Frontend not loading
 - Check `VITE_AISHACRM_BACKEND_URL` points to backend (http://localhost:3001)
 - Verify port 5173 is not in use
+
+### SuperAdmin login failing
+- Ensure the user `admin@aishacrm.com` exists and is active
+- Set `SUPERADMIN_PASSWORD` in your environment before running tests
+- Delete `playwright/.auth/superadmin.json` to force a fresh login
 
 ### Tests timing out
 - Increase timeout in `playwright.config.js`
