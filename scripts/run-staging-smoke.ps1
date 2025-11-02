@@ -8,12 +8,15 @@ param(
 Write-Host "Verifying current directory..." -ForegroundColor Cyan
 Get-Location
 
-# Set the frontend base URL for tests and optional login creds
+# Set the frontend and backend URLs for tests and optional login creds
 $env:VITE_AISHACRM_FRONTEND_URL = $Url
+# Derive backend URL from frontend URL (replace frontend subdomain with backend)
+$env:VITE_AISHACRM_BACKEND_URL = $Url -replace 'frontend', 'backend'
 if ($Email) { $env:SUPERADMIN_EMAIL = $Email }
 if ($Password) { $env:SUPERADMIN_PASSWORD = $Password }
 
 Write-Host "Running staging smoke tests against $Url on project $Project" -ForegroundColor Green
+Write-Host "Backend URL: $env:VITE_AISHACRM_BACKEND_URL" -ForegroundColor Cyan
 
 # Stop on first failure
 $ErrorActionPreference = 'Stop'
