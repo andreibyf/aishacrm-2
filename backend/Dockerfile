@@ -25,6 +25,8 @@ COPY --from=builder /app .
 
 # Set environment
 ENV NODE_ENV=production
+# Force IPv4-only DNS resolution (Railway doesn't support IPv6 for external connections)
+ENV NODE_OPTIONS="--dns-result-order=ipv4first"
 
 # Expose port (Railway will set PORT env var)
 EXPOSE 3001
