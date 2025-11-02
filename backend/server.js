@@ -137,6 +137,23 @@ if (pgPool) {
   console.log("✓ Performance logging middleware enabled");
 }
 
+// Root endpoint - provides API information
+app.get("/", (req, res) => {
+  res.json({
+    name: "Aisha CRM Backend API",
+    version: "1.0.0",
+    status: "running",
+    endpoints: {
+      health: "/health",
+      apiStatus: "/api/status",
+      documentation: "/api-docs",
+      spec: "/api-docs.json"
+    },
+    database: pgPool ? "connected" : "not configured",
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.json({
