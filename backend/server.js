@@ -11,6 +11,7 @@ import compression from "compression";
 import dotenv from "dotenv";
 import { createServer } from "http";
 import dns from "dns/promises";
+import dnsStd from "dns";
 import pkg from "pg";
 const { Pool } = pkg;
 import swaggerUi from 'swagger-ui-express';
@@ -20,6 +21,16 @@ import { swaggerSpec } from './lib/swagger.js';
 // Try .env.local first (for local development), then fall back to .env
 dotenv.config({ path: ".env.local" });
 dotenv.config(); // Fallback to .env if .env.local doesn't exist
+
+// Prefer IPv4 for all DNS resolutions to avoid ENETUNREACH on some hosts
+try {
+  if (typeof dnsStd.setDefaultResultOrder === 'function') {
+    dnsStd.setDefaultResultOrder('ipv4first');
+    console.log("[DNS] setDefaultResultOrder('ipv4first') applied");
+  }
+} catch (e) {
+  console.warn("[DNS] Unable to set default result order:", e?.message || e);
+}
 
 const app = express();
 // Behind Railway/edge proxies, trust X-Forwarded-* to get real client IPs
