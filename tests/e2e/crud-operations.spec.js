@@ -5,25 +5,35 @@
 import { test, expect } from '@playwright/test';
 
 const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:5173';
-const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL || process.env.PLAYWRIGHT_BACKEND_URL || '';
 
 // Test user credentials (align with auth.setup defaults)
 const TEST_EMAIL = process.env.SUPERADMIN_EMAIL || 'test@aishacrm.com';
 const TEST_PASSWORD = process.env.SUPERADMIN_PASSWORD || 'TestPassword123!';
 
-// Helper: Wait for backend to be healthy
-async function waitForBackendHealth() {
-  const maxAttempts = 30;
-  for (let i = 0; i < maxAttempts; i++) {
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/system/status`);
-      if (response.ok) return true;
-    } catch {
-      // Backend not ready yet
-    }
-    await new Promise(resolve => setTimeout(resolve, 1000));
+// Helper: Wait for backend to be healthy using Playwright's request fixture
+async function waitForBackendHealth(request) {
+  if (!BACKEND_URL) {
+    throw new Error('BACKEND_URL is not set. Provide VITE_AISHACRM_BACKEND_URL for non-local runs.');
   }
-  throw new Error('Backend health check timeout after 30s');
+
+  await expect
+    .poll(
+      async () => {
+        try {
+          const res = await request.get(`${BACKEND_URL}/api/system/status`, { timeout: 5000 });
+          return res.ok() ? 200 : res.status();
+        } catch {
+          return 0; // Treat exceptions as retryable
+        }
+      },
+      {
+        timeout: 60_000,
+        intervals: [500, 1000, 1500],
+        message: `Waiting for backend health at ${BACKEND_URL}`
+      }
+    )
+    .toBe(200);
 }
 
 // Helper: Login as user
@@ -127,9 +137,9 @@ async function ensureUserTenantAssigned(page, email) {
 }
 
 test.describe('CRUD Operations - End-to-End', () => {
-  test.beforeAll(async () => {
+  test.beforeAll(async ({ request }) => {
     // Ensure backend is running
-    await waitForBackendHealth();
+    await waitForBackendHealth(request);
   });
 
   test.beforeEach(async ({ page }) => {
