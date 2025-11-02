@@ -3194,7 +3194,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       </aside>
 
       <div className="lg:pl-64">
-        <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-slate-800 bg-slate-900 px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
+        <header data-testid="app-header" className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-slate-800 bg-slate-900 px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
           {/* Removed AI Command brain button */}
           {/* THEME TOGGLE BUTTON */}
           <TooltipProvider>

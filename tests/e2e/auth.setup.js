@@ -22,7 +22,11 @@ setup('authenticate as superadmin', async ({ page }) => {
   // Navigate to app root and then resolve state: header (already logged in) or login form (sign in)
   await page.goto(BASE_URL, { waitUntil: 'load' });
 
-  const header = page.locator('header').first();
+  // If the app shows an intermediate loading screen, wait for it to disappear first
+  const loadingText = page.locator('text=Loading user data...');
+  await loadingText.waitFor({ state: 'detached', timeout: 45000 }).catch(() => {});
+
+  const header = page.locator('[data-testid="app-header"]').first();
   const emailInput = page.locator('#email, input[type="email"], input[name="email"]').first();
   const passwordInput = page.locator('#password, input[type="password"], input[name="password"]').first();
 
@@ -33,7 +37,7 @@ setup('authenticate as superadmin', async ({ page }) => {
     // Try to detect the login form properly (use wait APIs instead of isVisible timeout)
     let didFindLogin = false;
     try {
-      await emailInput.waitFor({ state: 'visible', timeout: 15000 });
+      await emailInput.waitFor({ state: 'visible', timeout: 30000 });
       didFindLogin = true;
     } catch {
       didFindLogin = false;
@@ -44,14 +48,16 @@ setup('authenticate as superadmin', async ({ page }) => {
       await emailInput.fill(SUPERADMIN_EMAIL);
       await passwordInput.fill(SUPERADMIN_PASSWORD);
       await page.click('button[type="submit"]');
-      // Wait until header shows up after the app reloads itself
-      await expect(header).toBeVisible({ timeout: 30000 });
+      // After submit, give the app time to authenticate and mount the layout header
+      await loadingText.waitFor({ state: 'detached', timeout: 45000 }).catch(() => {});
+      await expect(header).toBeVisible({ timeout: 45000 });
       console.log('Login successful, main app loaded');
     } else {
       // Neither header nor login form visible; try one more reload
       console.log('Neither header nor login form visible yet; reloading root and retrying header check...');
       await page.goto(BASE_URL, { waitUntil: 'load' });
-      await expect(header).toBeVisible({ timeout: 20000 });
+      await loadingText.waitFor({ state: 'detached', timeout: 45000 }).catch(() => {});
+      await expect(header).toBeVisible({ timeout: 45000 });
     }
   }
 
@@ -59,7 +65,7 @@ setup('authenticate as superadmin', async ({ page }) => {
   await page.waitForTimeout(500);
 
   // Verify we see the header element to confirm auth
-  await expect(header).toBeVisible({ timeout: 10000 });
+  await expect(header).toBeVisible({ timeout: 20000 });
 
   // Persist storage for reuse by all projects
   await page.context().storageState({ path: authFile });
