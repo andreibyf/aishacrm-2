@@ -34,6 +34,15 @@ param(
     [switch]$Follow
 )
 
+# Try to load persisted service from config if not provided via param
+$monitorConfigPath = Join-Path $PSScriptRoot "monitoring.config.json"
+if (-not $ServiceId -and (Test-Path $monitorConfigPath)) {
+    try {
+        $cfg = Get-Content $monitorConfigPath -Raw | ConvertFrom-Json
+        if ($cfg.serviceId) { $ServiceId = $cfg.serviceId }
+    } catch { }
+}
+
 # Colors for output
 $colors = @{
     Error   = "Red"
@@ -94,7 +103,7 @@ function Get-RailwayLogs {
 function Analyze-Logs {
     param([string[]]$LogLines)
 
-    Write-ColorOutput "`n📊 Log Analysis Report" "Highlight"
+    Write-ColorOutput "`nREPORT: Log Analysis Report" "Highlight"
     Write-ColorOutput ("=" * 60) "Info"
 
     # Pattern definitions
@@ -154,7 +163,7 @@ function Analyze-Logs {
 
     # Display results
     Write-Host ""
-    Write-ColorOutput "🔍 Pattern Match Summary:" "Highlight"
+    Write-ColorOutput "Pattern Match Summary:" "Highlight"
     Write-Host ""
 
     foreach ($key in $patterns.Keys) {
@@ -162,7 +171,7 @@ function Analyze-Logs {
         $pattern = $result.Pattern
         $count = $result.Count
 
-        $icon = if ($count -eq 0) { "✅" } else { "⚠️" }
+    $icon = if ($count -eq 0) { "OK" } else { "WARN" }
         $countStr = "$count matches"
         
         Write-Host "  $icon " -NoNewline
@@ -184,7 +193,7 @@ function Analyze-Logs {
             $hasCritical = $true
             Write-Host ""
             Write-ColorOutput "⚠️  CRITICAL: $($result.Pattern.Label) ($($result.Count) found)" "Error"
-            Write-ColorOutput ("─" * 60) "Info"
+            Write-ColorOutput ("-" * 60) "Info"
             
             # Show first 5 matches
             $samplesToShow = [Math]::Min(5, $result.Lines.Count)
@@ -206,59 +215,59 @@ function Analyze-Logs {
 
     if (-not $hasCritical) {
         Write-Host ""
-        Write-ColorOutput "✅ No critical issues detected in logs!" "Success"
+    Write-ColorOutput "OK: No critical issues detected in logs" "Success"
     }
 
     # IPv4 Stability Summary
     Write-Host ""
-    Write-ColorOutput "🌐 IPv4 Stability Status:" "Highlight"
-    Write-ColorOutput ("─" * 60) "Info"
+    Write-ColorOutput "IPv4 Stability Status:" "Highlight"
+    Write-ColorOutput ("-" * 60) "Info"
     
     $ipv6Count = $results["IPv6Errors"].Count
     $dbErrorCount = $results["DBErrors"].Count
     $startupCount = $results["StartupSuccess"].Count
 
     if ($ipv6Count -eq 0 -and $dbErrorCount -eq 0) {
-        Write-ColorOutput "  ✅ IPv4 DNS fix working correctly - no IPv6 errors detected" "Success"
-        Write-ColorOutput "  ✅ Database connections stable - no connection errors" "Success"
+    Write-ColorOutput "  OK: IPv4 DNS fix working correctly - no IPv6 errors detected" "Success"
+    Write-ColorOutput "  OK: Database connections stable - no connection errors" "Success"
     } elseif ($ipv6Count -gt 0) {
-        Write-ColorOutput "  ❌ IPv6 errors still occurring - DNS fix may need adjustment" "Error"
+    Write-ColorOutput "  ERROR: IPv6 errors still occurring - DNS fix may need adjustment" "Error"
     } elseif ($dbErrorCount -gt 0) {
-        Write-ColorOutput "  ⚠️  Database connection issues detected" "Warning"
+    Write-ColorOutput "  WARN: Database connection issues detected" "Warning"
     }
 
     if ($startupCount -gt 0) {
-        Write-ColorOutput "  ℹ️  $startupCount successful startup(s) detected" "Info"
+    Write-ColorOutput "  INFO: $startupCount successful startup(s) detected" "Info"
     }
 
     # Recommendations
     Write-Host ""
-    Write-ColorOutput "💡 Recommendations:" "Highlight"
-    Write-ColorOutput ("─" * 60) "Info"
+    Write-ColorOutput "Recommendations:" "Highlight"
+    Write-ColorOutput ("-" * 60) "Info"
 
     if ($ipv6Count -gt 0) {
-        Write-Host "  • Review IPv4 DNS configuration in backend/server.js"
-        Write-Host "  • Check if Supabase host resolution is using IPv6 fallback"
+    Write-Host "  - Review IPv4 DNS configuration in backend/server.js"
+    Write-Host "  - Check if Supabase host resolution is using IPv6 fallback"
     }
     
     if ($dbErrorCount -gt 0) {
-        Write-Host "  • Verify DATABASE_URL and Supabase connection string"
-        Write-Host "  • Check for connection pool exhaustion or timeouts"
+    Write-Host "  - Verify DATABASE_URL and Supabase connection string"
+    Write-Host "  - Check for connection pool exhaustion or timeouts"
     }
 
     if ($results["SystemLogs"].Count -eq 0) {
-        Write-Host "  • System logging may be disabled (DISABLE_DB_LOGGING=true)"
-        Write-Host "  • Enable logging to verify audit trail functionality"
+    Write-Host "  - System logging may be disabled (DISABLE_DB_LOGGING=true)"
+    Write-Host "  - Enable logging to verify audit trail functionality"
     } elseif ($results["SystemLogs"].Lines | Select-String "Failed to log") {
-        Write-Host "  • System logging errors detected - verify system_logs table exists"
+    Write-Host "  - System logging errors detected - verify system_logs table exists"
     }
 
     if ($results["ServerErrors"].Count -gt 5) {
-        Write-Host "  • High rate of 500 errors - investigate application errors"
+    Write-Host "  - High rate of 500 errors - investigate application errors"
     }
 
     if (-not ($ipv6Count -or $dbErrorCount -or ($results["ServerErrors"].Count -gt 5))) {
-        Write-ColorOutput "  ✅ Backend looks healthy - continue monitoring" "Success"
+    Write-ColorOutput "  OK: Backend looks healthy - continue monitoring" "Success"
     }
 
     Write-Host ""
@@ -266,13 +275,7 @@ function Analyze-Logs {
 
 # Main execution
 Clear-Host
-Write-ColorOutput @"
-╔════════════════════════════════════════════════════════════╗
-║           Railway Backend Log Monitor                      ║
-║           AishaCRM Production Diagnostics                  ║
-╚════════════════════════════════════════════════════════════╝
-"@ "Highlight"
-
+Write-ColorOutput "Railway Backend Log Monitor - AishaCRM Production Diagnostics" "Highlight"
 Write-Host ""
 
 # Check Railway CLI
@@ -292,9 +295,18 @@ if ($LASTEXITCODE -ne 0) {
 Write-ColorOutput "✅ Connected to Railway project" "Success"
 Write-Host ""
 
+# Ensure we have a service to query
+if (-not $ServiceId) {
+    Write-ColorOutput "No service specified. Please set one of the following:" "Warning"
+    Write-Host "  1) Run: railway service <service-id-or-name>  # to link the service in this repo"
+    Write-Host "  2) Run: .\\scripts\\monitor-railway-logs.ps1 -ServiceId '<service-id>'"
+    Write-Host "  3) Save it: echo '{\"serviceId\":\"<service-id>\"}' > $monitorConfigPath"
+    exit 1
+}
+
 # Fetch and analyze logs
 if ($Follow) {
-    Write-ColorOutput "📡 Starting continuous log monitoring (Ctrl+C to stop)..." "Info"
+    Write-ColorOutput "Starting continuous log monitoring (Ctrl+C to stop)..." "Info"
     Write-ColorOutput "Note: Analysis only available in snapshot mode (-Follow:$false)" "Warning"
     Write-Host ""
     Get-RailwayLogs -Service $ServiceId -NumLines $Lines -FollowMode $true
@@ -304,7 +316,7 @@ if ($Follow) {
     if ($logs -and $logs.Count -gt 0) {
         Analyze-Logs -LogLines $logs
     } else {
-        Write-ColorOutput "⚠️  No logs retrieved. Check Railway CLI configuration." "Warning"
+    Write-ColorOutput "WARN: No logs retrieved. Check Railway CLI configuration." "Warning"
     }
 }
 
