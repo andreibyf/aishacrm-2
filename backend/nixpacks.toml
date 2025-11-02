@@ -1,0 +1,9 @@
+# Force Nixpacks to use Node.js (not Deno)
+[phases.setup]
+nixPkgs = ["nodejs_20", "npm-9_x"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[start]
+cmd = "npm start"
