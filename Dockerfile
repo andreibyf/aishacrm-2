@@ -27,6 +27,10 @@ RUN npm install -g serve@14.2.5
 # Copy built assets from builder stage
 COPY --from=builder /app/dist ./dist
 
+# Copy frontend entrypoint that injects runtime env into env.js then runs server
+COPY scripts/frontend-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Expose port (Railway will set PORT env var)
 EXPOSE 3000
 
@@ -34,5 +38,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://127.0.0.1:${PORT:-3000}/ || exit 1
 
-# Start serve (use PORT from env or default to 3000)
-CMD ["sh", "-c", "serve -s dist -l ${PORT:-3000}"]
+# Start entrypoint (generates /dist/env.js from container env, then serves)
+CMD ["/entrypoint.sh"]
