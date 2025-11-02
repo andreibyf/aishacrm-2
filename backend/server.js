@@ -21,6 +21,8 @@ dotenv.config({ path: ".env.local" });
 dotenv.config(); // Fallback to .env if .env.local doesn't exist
 
 const app = express();
+// Behind Railway/edge proxies, trust X-Forwarded-* to get real client IPs
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
 // Database connection pool with Supabase support
@@ -90,6 +92,44 @@ app.use(helmet({
 })); // Security headers
 app.use(compression()); // Compress responses
 app.use(morgan("combined")); // Logging
+
+// Simple, in-memory rate limiter (dependency-free)
+// Configure via ENV: RATE_LIMIT_WINDOW_MS (default 60000), RATE_LIMIT_MAX (default 120)
+// Skips health and docs endpoints by default
+const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10);
+const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX || '120', 10);
+const rateBucket = new Map(); // key -> { count, ts }
+const rateSkip = new Set(['/health', '/api/status', '/api-docs', '/api-docs.json']);
+
+function rateLimiter(req, res, next) {
+  try {
+    if (rateSkip.has(req.path)) return next();
+    // Allow OPTIONS preflight freely
+    if (req.method === 'OPTIONS') return next();
+    const now = Date.now();
+    const key = `${req.ip}`; // after trust proxy, this reflects client IP
+    const entry = rateBucket.get(key);
+    if (!entry || now - entry.ts >= RATE_LIMIT_WINDOW_MS) {
+      rateBucket.set(key, { count: 1, ts: now });
+      return next();
+    }
+    if (entry.count < RATE_LIMIT_MAX) {
+      entry.count++;
+      return next();
+    }
+    res.setHeader('Retry-After', Math.ceil((entry.ts + RATE_LIMIT_WINDOW_MS - now) / 1000));
+    return res.status(429).json({
+      error: 'Too Many Requests',
+      message: `Rate limit exceeded. Try again soon.`,
+    });
+  } catch {
+    // Fail open on limiter errors
+    return next();
+  }
+}
+
+// Apply limiter to API routes; keep health/docs unthrottled
+app.use('/api', rateLimiter);
 
 // CORS configuration
 // Defaults: allow localhost dev and current staging domain; optionally allow *.up.railway.app
