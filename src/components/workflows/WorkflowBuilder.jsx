@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Workflow } from '@/api/entities';
 import { User } from '@/api/entities';
+import { BACKEND_URL } from '@/api/entities';
 import { Webhook, Search, Save, Plus, X, Copy, Check, RefreshCw } from 'lucide-react';
 import WorkflowCanvas from './WorkflowCanvas';
 import NodeLibrary from './NodeLibrary';
@@ -92,7 +93,6 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   };
 
   const handleCopyWebhookUrl = () => {
-    const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
     const localWebhook = `${BACKEND_URL}/api/workflows/execute?workflow_id=${workflow?.id || 'PENDING'}`;
     const webhookUrl = workflow?.webhook_url || localWebhook;
     navigator.clipboard.writeText(webhookUrl);
@@ -884,7 +884,6 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
     setSaving(true);
     try {
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
       const workflowData = {
         tenant_id: user.tenant_id,
         name,

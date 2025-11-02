@@ -1,7 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { AuditLog } from '@/api/entities';
-import { User } from '@/api/entities';
+import { AuditLog, User, BACKEND_URL } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -82,7 +81,7 @@ export default function AuditLogPage() {
       }
       
       // Call the backend DELETE endpoint
-      const url = `${import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001'}/api/audit-logs?tenant_id=${tenantId}`;
+  const url = `${BACKEND_URL}/api/audit-logs?tenant_id=${tenantId}`;
       
       if (import.meta.env.DEV) {
         console.log('DELETE URL:', url);

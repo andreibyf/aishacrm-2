@@ -20,8 +20,22 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+// Normalize Supabase URL to HTTPS if app is served over HTTPS to prevent mixed content
+const normalizedUrl = (() => {
+  try {
+    if (typeof window !== 'undefined' && window.location?.protocol === 'https:' && typeof url === 'string' && url.startsWith('http://')) {
+      const upgraded = 'https://' + url.substring('http://'.length);
+      console.warn('[Supabase] Upgrading SUPABASE URL to HTTPS to avoid mixed content:', upgraded);
+      return upgraded;
+    }
+  } catch {
+    // noop
+  }
+  return url;
+})();
+
 // Create Supabase client
-export const supabase = createClient(url, key, {
+export const supabase = createClient(normalizedUrl, key, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,

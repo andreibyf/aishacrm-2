@@ -1,8 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { User } from '@/api/entities';
+import { User, BACKEND_URL } from '@/api/entities';
 import { useErrorLog, handleApiError, createError } from './ErrorLogger';
-
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
 
 export default function CronHeartbeat() {
   const lastRunRef = useRef(null);

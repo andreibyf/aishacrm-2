@@ -4,9 +4,26 @@ import { apiHealthMonitor } from "../utils/apiHealthMonitor";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
 // Backend base URL: in dev, use relative path and Vite proxy to avoid CORS
-const BACKEND_URL = import.meta.env.DEV
+// In production, normalize to HTTPS when the app is served over HTTPS to avoid mixed-content blocks
+const normalizeBackendUrl = (url) => {
+  try {
+    if (typeof window !== 'undefined' && window.location?.protocol === 'https:' && typeof url === 'string' && url.startsWith('http://')) {
+      const upgraded = 'https://' + url.substring('http://'.length);
+      if (!import.meta.env.DEV) {
+        console.warn('[Config] Upgrading backend URL to HTTPS to avoid mixed content:', upgraded);
+      }
+      return upgraded;
+    }
+  } catch {
+    // noop
+  }
+  return url;
+};
+
+// Exported so other modules (CronHeartbeat, AuditLog, etc.) can consume the same normalized URL
+export const BACKEND_URL = import.meta.env.DEV
   ? ''
-  : (import.meta.env.VITE_AISHACRM_BACKEND_URL || "http://localhost:3001");
+  : normalizeBackendUrl(import.meta.env.VITE_AISHACRM_BACKEND_URL || "http://localhost:3001");
 
 // Helper to properly pluralize entity names for API endpoints
 const pluralize = (entityName) => {

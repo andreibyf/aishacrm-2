@@ -5,6 +5,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Clock, Zap, Database, AlertCircle, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { BACKEND_URL } from '@/api/entities';
 
 // Helper function to calculate trend percentage
 const calculateTrend = (oldValue, newValue) => {
@@ -53,7 +54,7 @@ export default function PerformanceMonitor({ user }) {
       
       // Load performance logs from backend metrics API (more complete than Base44 function)
       const limit =  Math.min(5000, Math.max(500, days * 200));
-      const resp = await fetch(`${import.meta.env.VITE_AISHACRM_BACKEND_URL}/api/metrics/performance?tenant_id=${tenantId}&limit=${limit}&hours=${hours}`);
+  const resp = await fetch(`${BACKEND_URL}/api/metrics/performance?tenant_id=${tenantId}&limit=${limit}&hours=${hours}`);
       const response = await resp.json();
 
       const logs = Array.isArray(response?.data?.logs) ? response.data.logs : [];

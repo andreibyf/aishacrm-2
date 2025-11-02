@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { MetricCard, SystemHealthSummary, PerformanceGuide } from './PerformanceStatusCard';
 import { THRESHOLDS } from './performanceThresholds';
+import { BACKEND_URL } from '@/api/entities';
 
 export default function InternalPerformanceDashboard({ user }) {
   const [metrics, setMetrics] = useState({
@@ -40,7 +41,7 @@ export default function InternalPerformanceDashboard({ user }) {
         perfLogsResp
       ] = await timeApiCall('dashboard.loadAllMetrics', () => Promise.all([
         // Use backend metrics API endpoint
-        fetch(`${import.meta.env.VITE_AISHACRM_BACKEND_URL}/api/metrics/performance?tenant_id=${tenantId}&limit=500`).then(r => r.json())
+        fetch(`${BACKEND_URL}/api/metrics/performance?tenant_id=${tenantId}&limit=500`).then(r => r.json())
       ]));
 
       // Backend returns logs in data.logs and metrics in data.metrics
