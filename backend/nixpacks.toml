@@ -1,6 +1,6 @@
 # Force Nixpacks to use Node.js (not Deno)
 [phases.setup]
-nixPkgs = ["nodejs_20"]
+nixPkgs = ["nodejs_22"]
 nixOverlays = []
 nixLibs = []
 
