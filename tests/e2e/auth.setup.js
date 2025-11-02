@@ -35,6 +35,9 @@ async function waitForBackendReady(request, { timeout = 90_000 } = {}) {
 }
 
 setup('authenticate as superadmin', async ({ page, request }) => {
+  // Extend timeouts for cloud deployments where cold starts can be slow
+  setup.setTimeout(180_000);
+  page.setDefaultNavigationTimeout(120_000);
   // If running against a remote backend, block until DB is healthy to avoid transient 401/500 noise
   try {
     await waitForBackendReady(request, { timeout: 120_000 });
@@ -47,8 +50,12 @@ setup('authenticate as superadmin', async ({ page, request }) => {
     fs.mkdirSync(authDir, { recursive: true });
   }
 
+  // Warm up frontend endpoints to reduce first navigation flakiness
+  try { await request.get(BASE_URL, { timeout: 15_000 }); } catch { /* warmup ignore */ }
+  try { await request.get(`${BASE_URL}/env.js`, { timeout: 15_000 }); } catch { /* warmup ignore */ }
+
   // Navigate to app root and then resolve state: header (already logged in) or login form (sign in)
-  await page.goto(BASE_URL, { waitUntil: 'load' });
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
 
   // If the app shows an intermediate loading screen, wait for it to disappear first
   const loadingText = page.locator('text=Loading user data...');
@@ -83,7 +90,7 @@ setup('authenticate as superadmin', async ({ page, request }) => {
     } else {
       // Neither header nor login form visible; try one more reload
       console.log('Neither header nor login form visible yet; reloading root and retrying header check...');
-      await page.goto(BASE_URL, { waitUntil: 'load' });
+      await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
       await loadingText.waitFor({ state: 'detached', timeout: 45000 }).catch(() => {});
       await expect(header).toBeVisible({ timeout: 45000 });
     }
