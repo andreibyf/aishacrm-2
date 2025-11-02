@@ -49,15 +49,6 @@ export default defineConfig({
     cssCodeSplit: true,
     rollupOptions: {
       output: {
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            if (id.includes('react')) return 'react';
-            if (id.includes('@radix-ui')) return 'radix';
-            if (id.includes('date-fns')) return 'date-fns';
-            if (id.includes('framer-motion')) return 'framer-motion';
-            return 'vendor';
-          }
-        },
         chunkFileNames: 'assets/chunk-[hash].js',
         entryFileNames: 'assets/entry-[hash].js',
         assetFileNames: 'assets/[name]-[hash][extname]'
