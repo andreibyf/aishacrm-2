@@ -10,6 +10,7 @@ import morgan from "morgan";
 import compression from "compression";
 import dotenv from "dotenv";
 import { createServer } from "http";
+import dns from "dns/promises";
 import pkg from "pg";
 const { Pool } = pkg;
 import swaggerUi from 'swagger-ui-express';
@@ -29,51 +30,83 @@ const PORT = process.env.PORT || 3001;
 let pgPool = null;
 let dbConnectionType = "none";
 
-if (process.env.USE_SUPABASE_PROD === "true") {
-  // Connect to Supabase Production
-  const supabaseConfig = {
-    host: process.env.SUPABASE_DB_HOST,
-    port: parseInt(process.env.SUPABASE_DB_PORT || "5432"),
-    database: process.env.SUPABASE_DB_NAME || "postgres",
-    user: process.env.SUPABASE_DB_USER || "postgres",
-    password: process.env.SUPABASE_DB_PASSWORD,
-    ssl: {
-      rejectUnauthorized: false, // Required for Supabase
-    },
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
-  };
-
-  pgPool = new Pool(supabaseConfig);
-  dbConnectionType = "Supabase Production";
-  console.log("✓ PostgreSQL connection pool initialized (Supabase Production)");
-} else if (process.env.DATABASE_URL) {
-  // Connect using DATABASE_URL (supports local Docker or Supabase Cloud)
-  // Support both direct (db.<ref>.supabase.co:5432) and pooled (aws-0-<region>.pooler.supabase.com:6543) URLs
-  const isSupabaseCloud = /supabase\.(co|com)/i.test(process.env.DATABASE_URL);
-
-  const poolConfig = {
-    connectionString: process.env.DATABASE_URL,
-  };
-
-  // Add SSL for Supabase Cloud connections
-  if (isSupabaseCloud || process.env.DB_SSL === "true") {
-    poolConfig.ssl = {
-      rejectUnauthorized: false,
+// Initialize database pool with IPv4 preference and optional DNS pre-resolution
+await (async () => {
+  if (process.env.USE_SUPABASE_PROD === "true") {
+    // Connect to Supabase Production via discrete fields
+    const supabaseConfig = {
+      host: process.env.SUPABASE_DB_HOST,
+      port: parseInt(process.env.SUPABASE_DB_PORT || "5432"),
+      database: process.env.SUPABASE_DB_NAME || "postgres",
+      user: process.env.SUPABASE_DB_USER || "postgres",
+      password: process.env.SUPABASE_DB_PASSWORD,
+      ssl: { rejectUnauthorized: false },
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
     };
-    dbConnectionType = "Supabase Cloud DEV/QA";
-  } else {
-    dbConnectionType = "Local Docker";
+    try {
+      // Resolve IPv4 for host to avoid IPv6 ENETUNREACH
+      if (supabaseConfig.host) {
+        const ipv4 = await dns.resolve4(supabaseConfig.host).then(a => a[0]).catch(() => null);
+        if (ipv4) {
+          console.log(`[DB] Resolved ${supabaseConfig.host} -> ${ipv4} (IPv4)`);
+          supabaseConfig.host = ipv4;
+        }
+      }
+    } catch { /* no-op */ }
+    pgPool = new Pool(supabaseConfig);
+    dbConnectionType = "Supabase Production";
+    console.log("✓ PostgreSQL connection pool initialized (Supabase Production)");
+    return;
   }
 
-  pgPool = new Pool(poolConfig);
-  console.log(`✓ PostgreSQL connection pool initialized (${dbConnectionType})`);
-} else {
-  console.warn(
-    "⚠ No database configured - set DATABASE_URL or USE_SUPABASE_PROD=true",
-  );
-}
+  if (process.env.DATABASE_URL) {
+    // Connect using DATABASE_URL (supports local Docker or Supabase Cloud)
+    const raw = process.env.DATABASE_URL;
+    const isSupabaseCloud = /supabase\.(co|com)/i.test(raw);
+
+    // Try to parse and pre-resolve to IPv4 to avoid IPv6 ENETUNREACH
+    let poolConfig = { connectionString: raw };
+    if (isSupabaseCloud || process.env.DB_SSL === "true") {
+      poolConfig.ssl = { rejectUnauthorized: false };
+      dbConnectionType = "Supabase Cloud DEV/QA";
+    } else {
+      dbConnectionType = "Local Docker";
+    }
+
+    try {
+      const u = new URL(raw);
+      const host = u.hostname;
+      const port = Number(u.port || 5432);
+      const database = decodeURIComponent(u.pathname.replace(/^\//, ""));
+      const user = decodeURIComponent(u.username || "");
+      const password = decodeURIComponent(u.password || "");
+
+      // Resolve IPv4-only and build explicit config
+      const ipv4 = await dns.resolve4(host).then(a => a[0]).catch(() => null);
+      if (ipv4) {
+        console.log(`[DB] Resolved ${host} -> ${ipv4} (IPv4)`);
+        poolConfig = {
+          host: ipv4,
+          port,
+          database,
+          user,
+          password,
+          ssl: (isSupabaseCloud || process.env.DB_SSL === "true") ? { rejectUnauthorized: false } : undefined,
+        };
+      }
+    } catch (e) {
+      console.warn("[DB] Could not pre-resolve IPv4:", e.message);
+    }
+
+    pgPool = new Pool(poolConfig);
+    console.log(`✓ PostgreSQL connection pool initialized (${dbConnectionType})`);
+    return;
+  }
+
+  console.warn("⚠ No database configured - set DATABASE_URL or USE_SUPABASE_PROD=true");
+})();
 
 // Initialize Supabase Auth
 import { initSupabaseAuth } from "./lib/supabaseAuth.js";
