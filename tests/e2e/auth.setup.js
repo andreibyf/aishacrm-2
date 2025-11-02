@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 
 const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:5173';
+const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
 const SUPERADMIN_EMAIL = process.env.SUPERADMIN_EMAIL || 'test@aishacrm.com';
 const SUPERADMIN_PASSWORD = process.env.SUPERADMIN_PASSWORD || 'TestPassword123!';
 
@@ -13,7 +14,34 @@ const authFile = path.join(authDir, 'superadmin.json');
 
 setup.describe.configure({ mode: 'serial' });
 
-setup('authenticate as superadmin', async ({ page }) => {
+async function waitForBackendReady(request, { timeout = 90_000 } = {}) {
+  // Poll backend status until DB is ready (not an error)
+  await expect
+    .poll(
+      async () => {
+        try {
+          const res = await request.get(`${BACKEND_URL}/api/system/status`, { timeout: 5000 });
+          if (!res.ok()) return 'not-ok';
+          const body = await res.json().catch(() => null);
+          const db = String(body?.data?.database || '');
+          return db && !/^error:/i.test(db) ? 'ready' : 'db-error';
+        } catch {
+          return 'net-error';
+        }
+      },
+      { timeout, intervals: [500, 1000, 2000, 3000] }
+    )
+    .toBe('ready');
+}
+
+setup('authenticate as superadmin', async ({ page, request }) => {
+  // If running against a remote backend, block until DB is healthy to avoid transient 401/500 noise
+  try {
+    await waitForBackendReady(request, { timeout: 120_000 });
+  } catch {
+    // Non-fatal: proceed, UI may still warm up; tests can retry as needed
+    console.warn('[Auth Setup] Backend not fully ready, proceeding with login');
+  }
   // Ensure auth directory exists
   if (!fs.existsSync(authDir)) {
     fs.mkdirSync(authDir, { recursive: true });
@@ -60,6 +88,10 @@ setup('authenticate as superadmin', async ({ page }) => {
       await expect(header).toBeVisible({ timeout: 45000 });
     }
   }
+
+  // Wait for main navigation as a signal that user context finished mounting
+  const mainNav = page.getByTestId('main-navigation');
+  await mainNav.waitFor({ timeout: 20_000 }).catch(() => {});
 
   // Small settle time for client-side bootstrapping
   await page.waitForTimeout(500);
