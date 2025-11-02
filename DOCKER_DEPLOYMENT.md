@@ -41,21 +41,22 @@ docker-compose --version
 
 ### 2. Environment Setup
 
-Create `.env` in the root directory:
+You have ready-to-copy Docker env examples:
 
-```bash
-# Supabase Configuration (required)
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-JWT_SECRET=your-jwt-secret
+- Root: `.env.docker.example` → copy to `.env`
+- Backend: `backend/.env.docker.example` → copy to `backend/.env`
 
-# Frontend Env Vars (with VITE_ prefix)
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
+```powershell
+# From repo root
+copy .env.docker.example .env
+copy backend/.env.docker.example backend/.env
+```
 
-# Optional: Use Supabase Cloud DB instead of local PostgreSQL
-# DATABASE_URL=postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres
+Alternatively, you can run Compose with an explicit env file:
+
+```powershell
+# Use a separate env file without renaming
+docker-compose --env-file .env.docker up --build
 ```
 
 ### 3. Start the Full Stack
