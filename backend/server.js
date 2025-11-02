@@ -59,7 +59,15 @@ await (async () => {
     try {
       // Resolve IPv4 for host to avoid IPv6 ENETUNREACH
       if (supabaseConfig.host) {
-        const ipv4 = await dns.resolve4(supabaseConfig.host).then(a => a[0]).catch(() => null);
+        let ipv4 = null;
+        try {
+          // Prefer system resolver to honor platform DNS config
+          const looked = await dnsStd.lookup(supabaseConfig.host, { family: 4 });
+          ipv4 = looked?.address || null;
+        } catch {
+          // Fallback to DNS query if system lookup fails
+          ipv4 = await dns.resolve4(supabaseConfig.host).then(a => a[0]).catch(() => null);
+        }
         if (ipv4) {
           console.log(`[DB] Resolved ${supabaseConfig.host} -> ${ipv4} (IPv4)`);
           supabaseConfig.host = ipv4;
@@ -95,7 +103,13 @@ await (async () => {
       const password = decodeURIComponent(u.password || "");
 
       // Resolve IPv4-only and build explicit config
-      const ipv4 = await dns.resolve4(host).then(a => a[0]).catch(() => null);
+      let ipv4 = null;
+      try {
+        const looked = await dnsStd.lookup(host, { family: 4 });
+        ipv4 = looked?.address || null;
+      } catch {
+        ipv4 = await dns.resolve4(host).then(a => a[0]).catch(() => null);
+      }
       if (ipv4) {
         console.log(`[DB] Resolved ${host} -> ${ipv4} (IPv4)`);
         poolConfig = {
