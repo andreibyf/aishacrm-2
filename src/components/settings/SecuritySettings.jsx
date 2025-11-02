@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Shield, CheckCircle2, AlertCircle, Lock, AlertTriangle, Key, Globe, Database, RefreshCw } from "lucide-react";
@@ -13,6 +13,38 @@ export default function SecuritySettings() {
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState(24);
+  const [loadError, setLoadError] = useState(false);
+
+  const defaultMetrics = useMemo(() => ({
+    authentication: {
+      unauthorized_count: 0,
+      forbidden_count: 0,
+      total_failures: 0,
+      recent_failures: [],
+      status: 'unknown',
+    },
+    rate_limiting: {
+      hits: 0,
+      recent_hits: [],
+      status: 'unknown',
+      enabled: true,
+    },
+    cors: {
+      error_count: 0,
+      status: 'unknown',
+      allowed_origins: [],
+    },
+    api_keys: {
+      active_count: 0,
+      status: 'unknown',
+    },
+    rls_policies: {
+      enabled: true,
+      status: 'unknown',
+      note: 'Security metrics unavailable; showing placeholders.',
+    },
+    overall_status: 'error',
+  }), []);
 
   const loadSecurityMetrics = useCallback(async () => {
     setLoading(true);
@@ -26,13 +58,17 @@ export default function SecuritySettings() {
       
       const data = await response.json();
       setMetrics(data.data);
+      setLoadError(false);
     } catch (error) {
       console.error('Error loading security metrics:', error);
       toast.error('Failed to load security metrics');
+      // Fallback to placeholder metrics so the UI remains usable
+      setMetrics(defaultMetrics);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
-  }, [selectedTenantId, timeRange]);
+  }, [selectedTenantId, timeRange, defaultMetrics]);
 
   useEffect(() => {
     loadSecurityMetrics();
@@ -64,19 +100,18 @@ export default function SecuritySettings() {
     );
   }
 
-  if (!metrics) {
-    return (
-      <Alert className="bg-red-900/30 border-red-700/50">
-        <AlertCircle className="h-4 w-4 text-red-400" />
-        <AlertDescription className="text-red-300">
-          Failed to load security metrics. Please check if the backend is running.
-        </AlertDescription>
-      </Alert>
-    );
-  }
+  // Always render the dashboard; if an error occurred, show an inline warning
 
   return (
     <div className="space-y-6">
+      {loadError && (
+        <Alert className="bg-red-900/30 border-red-700/50">
+          <AlertCircle className="h-4 w-4 text-red-400" />
+          <AlertDescription className="text-red-300">
+            Failed to load live security metrics. Showing placeholders.
+          </AlertDescription>
+        </Alert>
+      )}
       {/* Header with refresh */}
       <div className="flex items-center justify-between">
         <Alert className={`flex-1 ${getStatusColor(metrics.overall_status)}`}>
