@@ -46,7 +46,8 @@ docs
 # Scripts
 scripts
 *.ps1
-*.sh
+# Don't ignore frontend-entrypoint.sh (needed for Docker runtime)
+# *.sh
 
 # Database
 *.db
