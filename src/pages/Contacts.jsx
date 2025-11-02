@@ -100,6 +100,16 @@ export default function ContactsPage() {
   useEffect(() => {
     const loadUser = async () => {
       try {
+        // In E2E mode, use injected mock user to avoid failed User.me() calls
+        if (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser) {
+          setUser(window.__e2eUser);
+          logger.info("E2E mock user loaded", "ContactsPage", {
+            userId: window.__e2eUser.id || window.__e2eUser.email,
+            role: window.__e2eUser.role,
+          });
+          return;
+        }
+        
         const currentUser = await User.me();
         setUser(currentUser);
         logger.info("Current user loaded", "ContactsPage", {

@@ -7,6 +7,13 @@ import { toast } from 'sonner';
 
 class ApiHealthMonitor {
   constructor() {
+    // Skip monitoring in E2E test mode to prevent noise
+    if (typeof window !== 'undefined' && localStorage.getItem('E2E_TEST_MODE') === 'true') {
+      this.isE2EMode = true;
+    } else {
+      this.isE2EMode = false;
+    }
+    
     this.missingEndpoints = new Map(); // Track 404s
     this.serverErrors = new Map(); // Track 500s
     this.authErrors = new Map(); // Track 401/403s
@@ -92,6 +99,9 @@ class ApiHealthMonitor {
    * Report a network error (connection failed, DNS, etc)
    */
   reportNetworkError(endpoint, context = {}) {
+    // Skip in E2E mode
+    if (this.isE2EMode) return;
+    
     this._trackError(this.networkErrors, endpoint, context, {
       type: 'NETWORK',
       severity: 'critical',

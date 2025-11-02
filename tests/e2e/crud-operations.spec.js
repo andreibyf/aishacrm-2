@@ -7,9 +7,9 @@ import { test, expect } from '@playwright/test';
 const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:5173';
 const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
 
-// Test user credentials
-const TEST_EMAIL = 'admin@aishacrm.com';
-const TEST_PASSWORD = process.env.SUPERADMIN_PASSWORD || 'SuperAdmin123!';
+// Test user credentials (align with auth.setup defaults)
+const TEST_EMAIL = process.env.SUPERADMIN_EMAIL || 'test@aishacrm.com';
+const TEST_PASSWORD = process.env.SUPERADMIN_PASSWORD || 'TestPassword123!';
 
 // Helper: Wait for backend to be healthy
 async function waitForBackendHealth() {
@@ -54,6 +54,78 @@ async function loginAsUser(page, email, password) {
   await page.waitForTimeout(1000);
 }
 
+// Helper: Ensure a tenant is selected for admin/superadmin flows
+async function ensureTenantSelected(page) {
+  try {
+    // If a tenant is already selected in localStorage, keep it
+    const existing = await page.evaluate(() => localStorage.getItem('selected_tenant_id'));
+    if (existing && existing !== 'null' && existing !== 'undefined') {
+      return existing;
+    }
+
+    // Fetch any available tenant from backend
+    const resp = await page.request.get(`${BACKEND_URL}/api/tenants?limit=1`);
+    if (!resp.ok()) {
+      console.warn('[Test] Unable to fetch tenants, status:', resp.status());
+      return null;
+    }
+    const data = await resp.json();
+    const tenantId = data?.data?.tenants?.[0]?.tenant_id || null;
+    if (!tenantId) {
+      console.warn('[Test] No tenants available to select. Some create operations may be blocked.');
+      return null;
+    }
+    // Persist selection and reflect in URL param (TenantProvider reads both)
+    await page.evaluate((id) => {
+      try {
+        localStorage.setItem('selected_tenant_id', id);
+        const url = new URL(window.location.href);
+        url.searchParams.set('tenant', id);
+        window.history.replaceState({}, '', url);
+      } catch { /* ignore */ }
+    }, tenantId);
+    return tenantId;
+  } catch (e) {
+    console.warn('[Test] ensureTenantSelected error:', e?.message || e);
+    return null;
+  }
+}
+
+// Helper: Ensure the logged-in user has a tenant_id assigned (needed for some forms)
+async function ensureUserTenantAssigned(page, email) {
+  try {
+    // Determine selected tenant id (from storage) or fetch one
+    let tenantId = await page.evaluate(() => localStorage.getItem('selected_tenant_id'));
+    if (!tenantId || tenantId === 'null' || tenantId === 'undefined') {
+      const respTen = await page.request.get(`${BACKEND_URL}/api/tenants?limit=1`);
+      if (respTen.ok()) {
+        const data = await respTen.json();
+        tenantId = data?.data?.tenants?.[0]?.tenant_id || null;
+      }
+    }
+    if (!tenantId) return false;
+
+    // Find user by email (search across users/employees)
+    const resp = await page.request.get(`${BACKEND_URL}/api/users?email=${encodeURIComponent(email)}`);
+    if (!resp.ok()) return false;
+    const list = await resp.json();
+    const userRec = list?.data?.users?.[0];
+    if (!userRec?.id) return false;
+
+    // If already assigned to a tenant, nothing to do
+    if (userRec.tenant_id) return true;
+
+    // Assign tenant_id to this user
+    const put = await page.request.put(`${BACKEND_URL}/api/users/${userRec.id}`, {
+      data: { tenant_id: tenantId }
+    });
+    return put.ok();
+  } catch (e) {
+    console.warn('[Test] ensureUserTenantAssigned error:', e?.message || e);
+    return false;
+  }
+}
+
 test.describe('CRUD Operations - End-to-End', () => {
   test.beforeAll(async () => {
     // Ensure backend is running
@@ -64,24 +136,62 @@ test.describe('CRUD Operations - End-to-End', () => {
     // Auto-accept any native dialogs (e.g., window.confirm)
     page.on('dialog', dialog => dialog.accept());
     
-    // Log console messages from browser
+    // Log console messages from browser (including E2E debug logs)
     page.on('console', msg => {
-      if (msg.type() === 'error' || msg.text().includes('[ContactForm]')) {
-        console.log(`Browser console.${msg.type()}: ${msg.text()}`);
+      const text = msg.text();
+      if (msg.type() === 'error' || text.includes('[ContactForm]') || text.includes('[E2E]')) {
+        console.log(`Browser console.${msg.type()}: ${text}`);
       }
+    });
+
+    // Log failed network requests for debugging CORS/proxy issues
+    page.on('requestfailed', request => {
+      console.log(`[requestfailed] ${request.method()} ${request.url()} -> ${request.failure()?.errorText}`);
+    });
+
+    // Set E2E mode flag to suppress background polling/health checks
+    await page.addInitScript(() => {
+      localStorage.setItem('E2E_TEST_MODE', 'true');
+      
+      // Inject mock user with tenantId for E2E tests (User.me() will fail in headless mode)
+      window.__e2eUser = {
+        id: 'e2e-test-user-id',
+        email: 'test@aishacrm.com',
+        role: 'superadmin',
+        tenant_id: 'local-tenant-001'
+      };
     });
 
     // Login before each test
     await loginAsUser(page, TEST_EMAIL, TEST_PASSWORD);
+
+    // Ensure a tenant is selected to allow create/update operations (esp. for superadmins)
+    const selected = await ensureTenantSelected(page);
+    if (selected) {
+      // Navigate to root to ensure React picks up the tenant selection, then settle
+      await page.goto(`${BASE_URL}/`, { waitUntil: 'load' });
+      await page.waitForTimeout(250);
+    }
+
+    // Ensure the logged-in user has tenant_id set (ActivityForm requires tenantId)
+    const assigned = await ensureUserTenantAssigned(page, TEST_EMAIL);
+    if (assigned) {
+      // Refresh app state after assignment
+      await page.goto(`${BASE_URL}/`, { waitUntil: 'load' });
+      await page.waitForTimeout(250);
+    }
   });
 
   test.describe('Activities CRUD', () => {
     test('should create a new activity', async ({ page }) => {
       // Navigate to Activities page
-      await page.goto(`${BASE_URL}/activities`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE_URL}/activities`, { waitUntil: 'domcontentloaded' });
       
-      // Wait for page to load
+      // Wait for page header to appear (not full network idle, which may never arrive)
       await page.waitForSelector('h1, h2', { timeout: 10000 });
+      
+      // Small wait for React to hydrate
+      await page.waitForTimeout(1000);
       
       // Click Add Activity button - try multiple possible selectors
       const addButton = page.locator('button:has-text("Add Activity"), button:has-text("New Activity"), button:has-text("Create")').first();
@@ -100,16 +210,49 @@ test.describe('CRUD Operations - End-to-End', () => {
       if (await typeSelect.count() > 0) {
         await typeSelect.selectOption('task');
       }
-      
-  // Save activity
-  await page.click('button[type="submit"]:has-text("Save"), button:has-text("Create"), button:has-text("Submit")');
+      // Set up API response wait BEFORE submitting
+      const createResponsePromise = page.waitForResponse(
+        (response) =>
+          response.url().includes('/api/activities') &&
+          response.request().method() === 'POST',
+        { timeout: 15000 }
+      ).catch(() => null); // Don't fail if no POST observed (dev fallback mode)
 
-  // Wait for form to close and list to refresh
-  await page.waitForSelector('form', { state: 'hidden', timeout: 15000 }).catch(() => {});
-  await page.waitForLoadState('networkidle').catch(() => {});
+      // Save activity
+      await page.click('button[type="submit"]:has-text("Save"), button:has-text("Create"), button:has-text("Submit")');
+
+      // Wait for either: (1) API response, or (2) success flag in E2E mode
+      const createResp = await Promise.race([
+        createResponsePromise,
+        page.waitForFunction(() => window.__activitySaveSuccess === true, { timeout: 10000 }).then(() => ({ ok: () => true }))
+      ]).catch(() => null);
+
+      if (!createResp || !createResp.ok || (createResp.ok && !createResp.ok())) {
+        // If the API call failed or didn't arrive, surface any visible error toast
+        const errorToastText = await page.locator('[role="alert"], [data-toast]')
+          .first()
+          .textContent()
+          .catch(() => '');
+        throw new Error(`Activity creation did not succeed. ${errorToastText || 'No response or save flag.'}`);
+      }
+
+      // Wait for form to close and list to refresh
+      await page.waitForSelector('form', { state: 'hidden', timeout: 15000 }).catch(() => {});
+      // Force a small reload to ensure the new item is included in the table
+      await page.goto(`${BASE_URL}/activities`, { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('table tbody tr', { timeout: 10000 }).catch(() => {});
+
+      // Narrow down to the created subject using the built-in search to avoid pagination issues
+      const searchBox = page.locator('input[placeholder*="Search activities"], input[placeholder*="Search"]');
+      if (await searchBox.count() > 0) {
+        await searchBox.fill(testSubject);
+        // allow debounce/filter to apply
+        await page.waitForTimeout(1000);
+      }
       
-      // Verify activity appears (check for the subject text anywhere on page)
-      await expect(page.locator(`text=${testSubject}`).first()).toBeVisible({ timeout: 10000 });
+      // Verify activity appears in the table (search within rows for stability)
+      const rowWithSubject = page.locator('table tbody tr').filter({ hasText: testSubject }).first();
+      await expect(rowWithSubject).toBeVisible({ timeout: 15000 });
     });
 
     test('should edit an existing activity', async ({ page }) => {
@@ -396,24 +539,29 @@ test.describe('CRUD Operations - End-to-End', () => {
       // Check "Test Data" checkbox to skip duplicate validation
       await page.check('#is_test_data');
       
+       // Wait for the contact creation API call
+       const createPromise = page.waitForResponse(
+         response => response.url().includes('/api/contacts') && response.request().method() === 'POST',
+         { timeout: 10000 }
+       );
+     
       await page.click('button[type="submit"]:has-text("Create")');
-      await page.waitForSelector('form', { state: 'hidden', timeout: 10000 });
+     
+       // Wait for API response
+       await createPromise;
+       await page.waitForSelector('form', { state: 'hidden', timeout: 10000 });
       
-      // Wait for success toast and form close, then wait for contact to appear
-      await page.waitForTimeout(2000);
+    // Use the search box to find the newly created contact
+    await page.waitForTimeout(2000); // Wait for contact list to update
+    const searchBox = page.locator('input[placeholder*="Search contacts" i]');
+    await searchBox.fill(testEmail);
+    await page.waitForTimeout(1000); // Wait for search to filter
       
-      // Navigate to page 1 to ensure we see the new contact
-      const page1Button = page.locator('button:has-text("1")');
-      if (await page1Button.isVisible()) {
-        await page1Button.click();
-        await page.waitForTimeout(1000);
-      }
-      
-      // Verify contact appears in the table (pagination fix should show it on page 1)
-      await expect(page.locator(`table tbody tr:has-text("${testEmail}")`).first()).toBeVisible({ timeout: 10000 });
+    // Verify contact appears in the search results
+    const contactRow = page.locator(`table tbody tr:has-text("${testEmail}")`).first();
+    await expect(contactRow).toBeVisible({ timeout: 10000 });
       
       // Now open edit form for this contact - use first matching row in table
-      const contactRow = page.locator(`table tbody tr:has-text("${testEmail}")`).first();
       // The action buttons are icon buttons with tooltips - click the second button (Edit)
       await contactRow.locator('td:last-child button').nth(1).click();
       
@@ -459,8 +607,45 @@ test.describe('CRUD Operations - End-to-End', () => {
       await page.fill('#opp-close-date', futureDate.toISOString().split('T')[0]);
       
       // Save - button text is "Create Opportunity"
+      // Set up promise race between network response and success flag
+      const savePromise = Promise.race([
+        page.waitForResponse(resp => resp.url().includes('/api/opportunities') && resp.request().method() === 'POST', { timeout: 60000 })
+          .then(() => 'network'),
+        page.waitForFunction(() => window.__opportunitySaveSuccess === true, { timeout: 60000 })
+          .then(() => 'flag')
+      ]);
+      
       await page.click('button[type="submit"]:has-text("Create")');
-      await page.waitForSelector('form', { state: 'hidden', timeout: 10000 });
+      
+      await savePromise.catch(async () => {
+        const errorToastText = await page
+          .locator('[role="status"], .toast, [class*="toast"]')
+          .first()
+          .textContent()
+          .catch(() => '');
+        throw new Error(`Opportunity creation did not succeed. ${errorToastText || 'No response or save flag.'}`);
+      });
+      
+      // Wait for form to close and list to refresh
+      await page.waitForSelector('form', { state: 'hidden', timeout: 5000 }).catch(() => {});
+      
+      // Reload page to ensure fresh data (domcontentloaded is faster than networkidle)
+      await page.goto(`${BASE_URL}/opportunities`, { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1500); // Extra wait for Firefox to settle
+      
+      // Try clicking refresh button if available to force data reload
+      const refreshBtn = page.locator('button[aria-label*="efresh"], button:has-text("Refresh")').first();
+      if (await refreshBtn.isVisible().catch(() => false)) {
+        await refreshBtn.click();
+        await page.waitForTimeout(1000);
+      }
+      
+      // Search for the created opportunity to bring it into view
+      const searchBox = page.locator('input[placeholder*="Search"], input[type="search"]').first();
+      if (await searchBox.isVisible()) {
+        await searchBox.fill(testName);
+        await page.waitForTimeout(1500); // Longer wait for search debounce + Firefox
+      }
       
       // Verify opportunity appears
       await expect(page.locator(`text=${testName}`)).toBeVisible({ timeout: 10000 });

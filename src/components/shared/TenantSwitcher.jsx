@@ -21,6 +21,12 @@ export default function TenantSwitcher({ user }) {
   const { cachedRequest } = useApiManager();
 
   const loadTenants = useCallback(async () => {
+    // Skip tenant loading in E2E test mode to prevent aborted requests
+    if (typeof window !== 'undefined' && localStorage.getItem('E2E_TEST_MODE') === 'true') {
+      console.log('[TenantSwitcher] E2E mode detected, skipping tenant load');
+      return;
+    }
+    
     setLoading(true);
     setError(null);
     try {

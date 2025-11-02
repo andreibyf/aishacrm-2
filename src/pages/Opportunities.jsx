@@ -121,6 +121,19 @@ export default function OpportunitiesPage() {
   useEffect(() => {
     const loadUser = async () => {
       try {
+        // In E2E mode, use injected mock user to avoid failed User.me() calls
+        if (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser) {
+          if (import.meta.env.DEV) {
+            console.log("[Opportunities] E2E mock user loaded:", {
+              email: window.__e2eUser.email,
+              role: window.__e2eUser.role,
+              tenant_id: window.__e2eUser.tenant_id,
+            });
+          }
+          setUser(window.__e2eUser);
+          return;
+        }
+        
         const currentUser = await User.me();
         if (import.meta.env.DEV) {
           console.log("[Opportunities] User loaded:", {

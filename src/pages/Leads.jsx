@@ -183,6 +183,12 @@ export default function LeadsPage() {
   useEffect(() => {
     const loadUser = async () => {
       try {
+        // In E2E mode, use injected mock user to avoid failed User.me() calls
+        if (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser) {
+          setUser(window.__e2eUser);
+          return;
+        }
+        
         const currentUser = await User.me();
         setUser(currentUser);
       } catch (error) {

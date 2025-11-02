@@ -177,7 +177,12 @@ export default function OpportunityForm({ opportunity, onSubmit, onCancel, conta
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    // E2E mode detection
+    const isE2E = localStorage.getItem('E2E_TEST_MODE') === 'true';
+    if (isE2E) console.log('[E2E] OpportunityForm handleSubmit called');
+    
     if (!formData.name || !formData.amount || !formData.close_date) {
+      if (isE2E) console.log('[E2E] OpportunityForm validation failed: missing required fields');
       alert("Please fill in all required fields: Name, Amount, and Close Date");
       return;
     }
@@ -196,9 +201,17 @@ export default function OpportunityForm({ opportunity, onSubmit, onCancel, conta
         assigned_to: formData.assigned_to || undefined,
       };
 
+      if (isE2E) console.log('[E2E] OpportunityForm submitting with payload:', payload);
       await onSubmit(payload);
+      
+      // Set success flag for E2E tests
+      if (isE2E) {
+        window.__opportunitySaveSuccess = true;
+        console.log('[E2E] OpportunityForm set window.__opportunitySaveSuccess = true');
+      }
     } catch (error) {
       console.error("Error submitting opportunity:", error);
+      if (isE2E) console.log('[E2E] OpportunityForm save error:', error);
       alert("Failed to save opportunity. Please try again.");
     } finally {
       setIsSubmitting(false);

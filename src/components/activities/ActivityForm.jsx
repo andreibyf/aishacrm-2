@@ -379,6 +379,10 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    // E2E debug logging
+    const isE2E = typeof window !== 'undefined' && localStorage.getItem('E2E_TEST_MODE') === 'true';
+    if (isE2E) console.log('[E2E] ActivityForm handleSubmit called');
+    
     // Prevent double submission from programmatic triggers or quick clicks
     if (isSubmitting) {
       console.warn('ActivityForm: Submission already in progress. Ignoring duplicate call.');
@@ -389,6 +393,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
     
     try {
       if (!formData.subject) {
+        if (isE2E) console.log('[E2E] ActivityForm validation failed: subject required');
         toast.error('Subject is required.');
         setIsSubmitting(false); // Reset submitting state on validation failure
         return;
@@ -401,6 +406,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
 
 
       if (!tenantId) {
+        if (isE2E) console.log('[E2E] ActivityForm validation failed: no tenantId');
         toast.error('Error: No tenant ID provided. Cannot save activity.');
         setIsSubmitting(false); // Reset submitting state on validation failure
         return;
@@ -506,11 +512,20 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
 
       let result;
       if (activity?.id) {
+        if (isE2E) console.log('[E2E] ActivityForm updating activity:', activity.id);
         result = await Activity.update(activity.id, activityData);
         toast.success(`Updated: ${activityData.subject}`);
       } else {
+        if (isE2E) console.log('[E2E] ActivityForm creating activity with data:', activityData);
         result = await Activity.create(activityData);
+        if (isE2E) console.log('[E2E] ActivityForm create result:', result);
         toast.success(`Created: ${activityData.subject}`);
+      }
+
+      // Set success flag for E2E tests to detect successful save
+      if (isE2E) {
+        window.__activitySaveSuccess = true;
+        console.log('[E2E] ActivityForm set window.__activitySaveSuccess = true');
       }
 
       if (onSave) {
@@ -518,6 +533,8 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
       }
 
     } catch (error) {
+      const isE2E = typeof window !== 'undefined' && localStorage.getItem('E2E_TEST_MODE') === 'true';
+      if (isE2E) console.log('[E2E] ActivityForm save error:', error);
       console.error('Error saving activity:', error);
       toast.error(`Error saving activity: ${error.message || 'Unknown error occurred'}`);
     } finally {

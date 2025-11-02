@@ -3,9 +3,10 @@ import { createMockUser, isLocalDevMode } from "./mockData";
 import { apiHealthMonitor } from "../utils/apiHealthMonitor";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
-// Get backend URL from environment
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-  "http://localhost:3001";
+// Backend base URL: in dev, use relative path and Vite proxy to avoid CORS
+const BACKEND_URL = import.meta.env.DEV
+  ? ''
+  : (import.meta.env.VITE_AISHACRM_BACKEND_URL || "http://localhost:3001");
 
 // Helper to properly pluralize entity names for API endpoints
 const pluralize = (entityName) => {

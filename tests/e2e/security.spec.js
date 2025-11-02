@@ -23,8 +23,8 @@ test.describe('Settings - Security', () => {
     await expect(page.locator('text=JWT Authentication')).toBeVisible({ timeout: 15000 });
     await expect(page.locator('text=Rate Limiting')).toBeVisible();
     await expect(page.locator('text=CORS Security')).toBeVisible();
-    await expect(page.locator('text=Row-Level Security')).toBeVisible();
-    await expect(page.locator('text=Active API Keys')).toBeVisible();
+    await expect(page.locator('text=Row-Level Security').first()).toBeVisible();
+  await expect(page.locator('text=Active API Keys').first()).toBeVisible();
 
     // Use Refresh
     const refreshBtn = page.locator('button:has-text("Refresh")').first();

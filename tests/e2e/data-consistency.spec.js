@@ -17,7 +17,7 @@ test.describe('Settings - Data Consistency', () => {
     await dcTab.click();
 
     // Ensure header & button present
-    await expect(page.locator('text=Data Consistency Manager')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=Data Consistency Manager').first()).toBeVisible({ timeout: 10000 });
     const scanBtn = page.locator('button:has-text("Scan for Duplicates")');
     await expect(scanBtn).toBeVisible();
 
