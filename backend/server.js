@@ -330,6 +330,8 @@ app.use((err, req, res, _next) => {
 
 // Helper to log backend lifecycle events to system_logs
 async function logBackendEvent(level, message, metadata = {}) {
+  // Optional guard to disable DB-backed logging in constrained environments
+  if (process.env.DISABLE_DB_LOGGING === 'true') return;
   if (!pgPool) return; // Skip if no database
 
   try {
