@@ -1,13 +1,17 @@
 param(
   [Parameter(Mandatory=$true)][string]$Url,
-  [string]$Project = "chromium"
+  [string]$Project = "chromium",
+  [string]$Email,
+  [string]$Password
 )
 
 Write-Host "Verifying current directory..." -ForegroundColor Cyan
 Get-Location
 
-# Set the frontend base URL for tests
+# Set the frontend base URL for tests and optional login creds
 $env:VITE_AISHACRM_FRONTEND_URL = $Url
+if ($Email) { $env:SUPERADMIN_EMAIL = $Email }
+if ($Password) { $env:SUPERADMIN_PASSWORD = $Password }
 
 Write-Host "Running staging smoke tests against $Url on project $Project" -ForegroundColor Green
 
