@@ -5,7 +5,7 @@ set -e
 # Only includes non-secret, public variables intended for the frontend
 : "${PORT:=3000}"
 
-cat > /app/dist/env.js << 'EOF'
+cat > /app/dist/env.js << EOF
 window.__ENV = {
   VITE_SUPABASE_URL: '${VITE_SUPABASE_URL}',
   VITE_SUPABASE_PUBLISHABLE_KEY: '${VITE_SUPABASE_PUBLISHABLE_KEY}',
