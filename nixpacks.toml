@@ -9,7 +9,7 @@ cmds = ["npm ci --include=dev"]
 cmds = ["npm run build"]
 
 [start]
-cmd = "npm run preview -- --host 0.0.0.0 --port $PORT"
+cmd = "npx serve -s dist -l $PORT"
 
 [variables]
 # Increase Node.js heap for Vite build to avoid OOM on 1GB plans
