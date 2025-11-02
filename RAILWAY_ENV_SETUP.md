@@ -59,21 +59,29 @@ Navigate to your **backend service** in Railway → Settings → Variables and a
 
 #### Option 1: Supabase Cloud (Recommended for Staging/Prod)
 
-```bash
-# Database connection string from Supabase
-DATABASE_URL=postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1
+You can use either of these Supabase URLs — both are supported:
 
-# SSL is auto-detected from the connection string
-# The code checks if DATABASE_URL includes 'supabase.co' and enables SSL
+1) Pooled (recommended for serverless, uses PgBouncer, port 6543)
+```bash
+DATABASE_URL=postgresql://postgres:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1
 ```
 
-**How to get DATABASE_URL:**
-1. Go to your Supabase project dashboard
-2. Settings → Database
-3. Copy the **Connection Pooling** string (mode: Transaction)
-4. Replace `[YOUR-PASSWORD]` with your database password
+2) Direct (standard Postgres, port 5432)
+```bash
+DATABASE_URL=postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
+```
 
-#### Option 2: Direct Supabase Connection (Alternative)
+Notes:
+- SSL is auto-enabled for both `.supabase.co` and `.supabase.com` hosts by the backend.
+- Pooled connections are preferred on platforms like Railway to avoid connection limits.
+
+**How to get these:**
+1. Supabase Dashboard → Settings → Database
+2. For pooled: copy the Connection Pooling (Transaction) URL
+3. For direct: copy the standard connection string
+4. Insert your database password
+
+#### Option 2: Discrete Supabase Connection Variables (Alternative)
 
 ```bash
 USE_SUPABASE_PROD=true

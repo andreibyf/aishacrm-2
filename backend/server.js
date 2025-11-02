@@ -48,7 +48,8 @@ if (process.env.USE_SUPABASE_PROD === "true") {
   console.log("✓ PostgreSQL connection pool initialized (Supabase Production)");
 } else if (process.env.DATABASE_URL) {
   // Connect using DATABASE_URL (supports local Docker or Supabase Cloud)
-  const isSupabaseCloud = process.env.DATABASE_URL.includes("supabase.co");
+  // Support both direct (db.<ref>.supabase.co:5432) and pooled (aws-0-<region>.pooler.supabase.com:6543) URLs
+  const isSupabaseCloud = /supabase\.(co|com)/i.test(process.env.DATABASE_URL);
 
   const poolConfig = {
     connectionString: process.env.DATABASE_URL,
