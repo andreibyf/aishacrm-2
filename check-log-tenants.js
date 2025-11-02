@@ -1,4 +1,5 @@
 import pgPool from './backend/lib/db.cjs';
+import { exit } from 'node:process';
 
 (async () => {
   try {
@@ -27,6 +28,6 @@ import pgPool from './backend/lib/db.cjs';
     await pgPool.end();
   } catch (error) {
     console.error('Error:', error);
-    process.exit(1);
+    exit(1);
   }
 })();

@@ -7,13 +7,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { Database, Loader2, Wrench } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
 export default function UtilitiesPage() {
-  const [, setUser] = useState(null);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [testDataMode, setTestDataMode] = useState(false);
 
   // REMOVED: Local module permission check
   // Module visibility is now controlled centrally by ModuleSettings in Layout
@@ -33,6 +35,33 @@ export default function UtilitiesPage() {
     };
     loadUser();
   }, []);
+
+  useEffect(() => {
+    // Initialize toggle from localStorage
+    try {
+      const stored = localStorage.getItem("aishacrm:testDataMode");
+      const enabled = stored === "1" || stored === "true";
+      setTestDataMode(enabled);
+      // Expose as a window flag for ad-hoc consumers
+      if (typeof window !== "undefined") {
+        window.__TEST_DATA_MODE = enabled;
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
+  const handleToggle = (nextVal) => {
+    setTestDataMode(nextVal);
+    try {
+      localStorage.setItem("aishacrm:testDataMode", nextVal ? "1" : "0");
+      if (typeof window !== "undefined") {
+        window.__TEST_DATA_MODE = nextVal;
+      }
+    } catch {
+      // ignore storage errors
+    }
+  };
 
   const utilities = [
     {
@@ -71,6 +100,30 @@ export default function UtilitiesPage() {
 
   return (
     <div className="space-y-6">
+      {user?.role === "superadmin" && (
+        <Card className="bg-slate-800 border-slate-700">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-slate-100">
+              <Wrench className="w-5 h-5 text-blue-400" />
+              Testing & E2E Controls (Superadmin)
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              Toggle Test Data Mode to help mark or treat newly created records as test data and relax non-essential validations during testing.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="pr-4">
+                <div className="text-slate-100 font-medium">Test Data Mode</div>
+                <div className="text-slate-400 text-sm mt-1">
+                  Stores a local setting only for you. Some forms may use this to pre-check their Test Data options or skip duplicate checks. Cleanup scripts can target predictable test email patterns.
+                </div>
+              </div>
+              <Switch checked={testDataMode} onCheckedChange={handleToggle} id="test-data-mode" />
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <Card className="bg-slate-800 border-slate-700">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-slate-100">
