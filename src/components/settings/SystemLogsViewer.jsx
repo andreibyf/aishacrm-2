@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTenant } from '@/components/shared/tenantContext';
 import { useConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,8 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Loader2, RefreshCw, Trash2, Search, PlusCircle, Download } from "lucide-react";
 import { toast } from "sonner";
-
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+import { BACKEND_URL } from '@/api/entities';
 
 export default function SystemLogsViewer() {
   const { selectedTenantId } = useTenant();

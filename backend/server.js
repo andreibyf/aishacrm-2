@@ -91,16 +91,37 @@ app.use(compression()); // Compress responses
 app.use(morgan("combined")); // Logging
 
 // CORS configuration
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") ||
-  ["http://localhost:5173"];
+// Defaults: allow localhost dev and current staging domain; optionally allow *.up.railway.app
+const defaultAllowed = [
+  "http://localhost:5173",
+  "https://localhost:5173",
+  "https://aishacrm-2-staging.up.railway.app",
+];
+const envAllowed = (process.env.ALLOWED_ORIGINS?.split(",") || [])
+  .map(s => s.trim())
+  .filter(Boolean);
+const allowedOrigins = [...new Set([...defaultAllowed, ...envAllowed])];
+
 app.use(cors({
   origin: (origin, callback) => {
-    if (
-      !origin || allowedOrigins.includes(origin) || allowedOrigins.includes("*")
-    ) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
+    try {
+      // Allow server-to-server or same-origin calls
+      if (!origin) return callback(null, true);
+
+      // Explicit allowlist or wildcard
+      if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // Allow Railway preview/staging domains by default unless explicitly disabled
+      const allowRailway = process.env.ALLOW_RAILWAY_ORIGINS !== "false";
+      if (allowRailway && /^https?:\/\/.*\.up\.railway\.app$/.test(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    } catch {
+      return callback(new Error("CORS configuration error"));
     }
   },
   credentials: true,

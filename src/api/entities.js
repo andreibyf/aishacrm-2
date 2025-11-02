@@ -277,8 +277,7 @@ export const Contact = createEntity("Contact");
 export const Account = {
   async list(filters = {}, _orderBy = "-created_at", limit = 100) {
     try {
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        "http://localhost:3001";
+      // Use centralized, normalized BACKEND_URL
 
       const params = new URLSearchParams();
       if (filters.tenant_id) params.append("tenant_id", filters.tenant_id);
@@ -332,8 +331,6 @@ export const Account = {
 
   async get(id) {
     try {
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        "http://localhost:3001";
       console.log("[Account.get] Fetching account:", id);
 
       const response = await fetch(`${BACKEND_URL}/api/accounts/${id}`, {
@@ -359,8 +356,6 @@ export const Account = {
 
   async create(data) {
     try {
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        "http://localhost:3001";
       console.log("[Account.create] Creating account with data:", data);
 
       const response = await fetch(`${BACKEND_URL}/api/accounts`, {
@@ -392,8 +387,6 @@ export const Account = {
 
   async update(id, data) {
     try {
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        "http://localhost:3001";
       console.log("[Account.update] Updating account:", id, "with data:", data);
 
       const response = await fetch(`${BACKEND_URL}/api/accounts/${id}`, {
@@ -429,8 +422,6 @@ export const Account = {
 
   async delete(id) {
     try {
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        "http://localhost:3001";
       console.log("[Account.delete] Deleting account:", id);
 
       const response = await fetch(`${BACKEND_URL}/api/accounts/${id}`, {
@@ -471,8 +462,6 @@ export const Activity = createEntity("Activity");
 export const Tenant = {
   async list(orderBy = "display_order") {
     try {
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        "http://localhost:3001";
       const response = await fetch(`${BACKEND_URL}/api/tenants`, {
         method: "GET",
         headers: {
@@ -514,8 +503,6 @@ export const Tenant = {
 
   async get(id) {
     try {
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        "http://localhost:3001";
       const response = await fetch(`${BACKEND_URL}/api/tenants/${id}`, {
         method: "GET",
         headers: {
@@ -539,8 +526,6 @@ export const Tenant = {
 
   async create(data) {
     try {
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        "http://localhost:3001";
       const response = await fetch(`${BACKEND_URL}/api/tenants`, {
         method: "POST",
         headers: {
@@ -563,8 +548,6 @@ export const Tenant = {
 
   async update(id, data) {
     try {
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        "http://localhost:3001";
       console.log("[Tenant.update] Updating tenant:", id, "with data:", data);
 
       const response = await fetch(`${BACKEND_URL}/api/tenants/${id}`, {
@@ -600,8 +583,6 @@ export const Tenant = {
 
   async delete(id) {
     try {
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        "http://localhost:3001";
       const response = await fetch(`${BACKEND_URL}/api/tenants/${id}`, {
         method: "DELETE",
         headers: {
@@ -632,8 +613,7 @@ export const ModuleSettings = createEntity("ModuleSettings");
 export const AuditLog = {
   async list(filters = {}, _orderBy = "-created_at", limit = 100) {
     try {
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        "http://localhost:3001";
+      // Use centralized, normalized BACKEND_URL
 
       // Build query parameters
       const params = new URLSearchParams();
@@ -695,8 +675,6 @@ export const AuditLog = {
 
   async get(id) {
     try {
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        "http://localhost:3001";
       const response = await fetch(`${BACKEND_URL}/api/audit-logs/${id}`, {
         method: "GET",
         headers: {
@@ -718,8 +696,6 @@ export const AuditLog = {
 
   async create(data) {
     try {
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        "http://localhost:3001";
       const response = await fetch(`${BACKEND_URL}/api/audit-logs`, {
         method: "POST",
         headers: {
@@ -742,8 +718,6 @@ export const AuditLog = {
 
   async delete(id) {
     try {
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        "http://localhost:3001";
       const response = await fetch(`${BACKEND_URL}/api/audit-logs/${id}`, {
         method: "DELETE",
         headers: {
@@ -765,8 +739,7 @@ export const AuditLog = {
 
   async clear(filters = {}) {
     try {
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        "http://localhost:3001";
+      // Use centralized, normalized BACKEND_URL
 
       // Build query parameters for bulk delete
       const params = new URLSearchParams();

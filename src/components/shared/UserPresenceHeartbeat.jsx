@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
-
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+import { BACKEND_URL } from '@/api/entities';
 
 // Pings backend to update last_seen/live_status for current user
 export default function UserPresenceHeartbeat({ currentUser, intervalMs = 60000 }) {

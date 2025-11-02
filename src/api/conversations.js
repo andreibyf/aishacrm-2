@@ -3,7 +3,7 @@
  * Replaces Base44 agents API with local backend endpoints
  */
 
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+import { BACKEND_URL } from '@/api/entities';
 
 /**
  * Create a new conversation

@@ -20,8 +20,7 @@ import {
 } from "lucide-react";
 import { useErrorLog } from "../shared/ErrorLogger";
 import { useTenant } from "../shared/tenantContext";
-
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || "http://localhost:3001";
+import { BACKEND_URL } from '@/api/entities';
 
 export default function SystemHealthDashboard({ onViewMore }) {
   const { errors, getCriticalErrors, clearErrors } = useErrorLog();

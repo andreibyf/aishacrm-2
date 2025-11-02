@@ -6,8 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useTenant } from "@/components/shared/tenantContext";
 import { toast } from "sonner";
-
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+import { BACKEND_URL } from '@/api/entities';
 
 export default function SecuritySettings() {
   const { selectedTenantId } = useTenant();
