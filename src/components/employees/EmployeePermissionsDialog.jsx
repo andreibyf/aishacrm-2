@@ -79,8 +79,7 @@ export default function EmployeePermissionsDialog({ open, onOpenChange, employee
       // 2. NEW: Also update the Employee entity to keep it in sync
       await updateEmployeeDetails(employee.id, {
         crm_user_employee_role: formData.employee_role,
-        crm_user_access_level: formData.access_level,
-        crm_access_tier: formData.employee_role === 'manager' ? 'Tier4' : (employee.crm_access_tier || 'Tier1')
+        crm_user_access_level: formData.access_level
       });
 
       toast.success("Permissions updated successfully!");
@@ -152,7 +151,7 @@ export default function EmployeePermissionsDialog({ open, onOpenChange, employee
                   <li>Click the Edit button (pencil icon) for this employee</li>
                   <li>Enable &quot;CRM Access&quot; toggle</li>
                   <li>Set the &quot;CRM User Email&quot; field</li>
-                  <li>Choose the appropriate Tier and Role</li>
+                  <li>Choose the appropriate CRM Role</li>
                   <li>Optionally send an invite</li>
                   <li>Save the employee</li>
                   <li>Return here to manage detailed permissions</li>

@@ -47,7 +47,6 @@ export default function EmployeeForm({ employee, onSave, onCancel, tenantId }) {
 
     // Retained CRM-related fields from original as UI exists and functionality should be preserved
     has_crm_access: employee?.has_crm_access || false,
-    crm_access_tier: employee?.crm_access_tier || "Tier3",
     crm_user_employee_role: employee?.crm_user_employee_role || "employee",
   }));
 
@@ -124,7 +123,6 @@ export default function EmployeeForm({ employee, onSave, onCancel, tenantId }) {
           is_active: formData.is_active,
           // CRM fields are included conditionally, matching original logic
           has_crm_access: formData.has_crm_access,
-          crm_access_tier: formData.has_crm_access ? formData.crm_access_tier : null,
           crm_user_employee_role: formData.has_crm_access ? formData.crm_user_employee_role : null,
         },
         tenantId: tenantId
@@ -263,28 +261,8 @@ export default function EmployeeForm({ employee, onSave, onCancel, tenantId }) {
 
         {formData.has_crm_access && (
           <div className="space-y-4 pl-4 border-l-2 border-slate-700">
-            <p className="text-sm text-slate-400 mb-4">
-              Only Tier 3 or Tier 4 are allowed to request access.
-            </p>
-
             <div>
-              <Label className="text-slate-300">Access Tier</Label>
-              <Select
-                value={formData.crm_access_tier || "Tier3"}
-                onValueChange={(value) => onChange("crm_access_tier", value)}
-              >
-                <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700">
-                  <SelectItem value="Tier3" className="text-slate-200">Tier 3 (Team Lead)</SelectItem>
-                  <SelectItem value="Tier4" className="text-slate-200">Tier 4 (Manager/Admin)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label className="text-slate-300">Employee Role</Label>
+              <Label className="text-slate-300">CRM Role</Label>
               <Select
                 value={formData.crm_user_employee_role || "employee"}
                 onValueChange={(value) => onChange("crm_user_employee_role", value)}

@@ -37,9 +37,9 @@ export default function CalendarPage() {
     const tenantFilter = getTenantFilterHelper(currentUser, selectedTenantId);
     let filter = { ...tenantFilter };
 
-    const tier = currentUser.tier || "Tier1";
     const isAdminLike = currentUser.role === "admin" || currentUser.role === "superadmin";
-    const seeAll = isAdminLike || tier === "Tier3" || tier === "Tier4";
+    const isManager = currentUser.employee_role === "manager";
+    const seeAll = isAdminLike || isManager;
 
     if (!seeAll) {
       filter = { ...filter, assigned_to: currentUser.email };

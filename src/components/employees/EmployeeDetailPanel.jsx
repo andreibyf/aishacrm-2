@@ -70,7 +70,7 @@ export default function EmployeeDetailPanel({
     if (__currentUser.role === "admin" || __currentUser.role === "superadmin") {
       return true;
     }
-    return __currentUser.tier === "Tier3" || __currentUser.tier === "Tier4";
+    return __currentUser.employee_role === "manager";
   }, [__currentUser]);
 
   const handleLinkCRMUser = async () => {

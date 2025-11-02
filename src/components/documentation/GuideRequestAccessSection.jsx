@@ -50,12 +50,12 @@ export default function GuideRequestAccessSection() {
           <div className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-700/50 border border-slate-600/50">
             <Users className="w-5 h-5" style={iconAccent} />
           </div>
-          Requesting Access for New Users (Tier 3 & Tier 4)
+          Requesting Access for New Users (Manager Role)
         </h2>
         <p className="text-slate-400 mt-1 text-sm lg:text-base">
-          Tier 3 and Tier 4 users can request CRM access for teammates directly
+          Managers and Admins can request CRM access for teammates directly
           from the Employees page. These requests include your authorization
-          (your role and tier) and originate from your current tenant.
+          (your role) and originate from your current tenant.
         </p>
       </div>
 
@@ -94,8 +94,8 @@ export default function GuideRequestAccessSection() {
               is enabled on their record.
             </li>
             <li>
-              In the row actions menu, choose “Request Invite” (Tier 3) or
-              “Invite to CRM” (Tier 4/Admin).
+              In the row actions menu, choose &quot;Request Invite&quot; (Manager) or
+              &quot;Invite to CRM&quot; (Admin).
             </li>
             <li>Confirm the email and name. Submit the request.</li>
           </ol>
@@ -108,11 +108,11 @@ export default function GuideRequestAccessSection() {
             <ul className="list-disc pl-5 space-y-2">
               <li>
                 A structured email to admins including requested user details
-                (name, email, requested tier/role).
+                (name, email, requested role).
               </li>
               <li>
-                Your authorization context: your name, email, role, and tier
-                (Tier 3 or Tier 4).
+                Your authorization context: your name, email, role, and CRM role
+                (Employee or Manager).
               </li>
               <li>
                 Implicit tenant context: the request originates from your
@@ -132,20 +132,19 @@ export default function GuideRequestAccessSection() {
           <CardHeader className="border-b border-slate-700">
             <CardTitle className="text-slate-100 flex items-center gap-2">
               <Info className="w-5 h-5" style={iconPrimary} />
-              Tier quick guide
+              CRM Role quick guide
             </CardTitle>
           </CardHeader>
           <CardContent className="text-slate-300 space-y-2">
             <ul className="list-disc pl-5 space-y-1">
               <li>
-                <strong>Tier 3 — Team Lead:</strong>{" "}
-                Aggregated dashboards, broader team visibility, request CRM
-                access for team.
+                <strong>Employee:</strong>{" "}
+                Can view and manage own records only, limited visibility to assigned data.
               </li>
               <li>
-                <strong>Tier 4 — Power User:</strong>{" "}
-                Broad data visibility, can directly invite (if permitted) or
-                request on behalf of team.
+                <strong>Manager:</strong>{" "}
+                Full tenant visibility, can view and manage all records within their tenant,
+                can request/invite CRM access for team members.
               </li>
             </ul>
           </CardContent>

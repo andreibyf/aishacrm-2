@@ -4,77 +4,60 @@ import { sendSms } from "@/api/functions";
 import { User } from "@/api/entities";
 import { Tenant } from "@/api/entities";
 
-// Tier reference (quick guide shown in the email)
-const TIER_MAP = {
-  Tier1: {
-    label: "Tier 1 — Basic User",
-    summary: "Core CRM functions; can manage own records.",
+// Role reference (quick guide shown in the email)
+const ROLE_MAP = {
+  employee: {
+    label: "Employee",
+    summary: "Standard employee access - can manage own records only.",
     highlights: [
       "Create/update own Leads, Contacts, and Activities",
-      "Limited visibility to own data",
-      "No aggregated dashboards",
+      "Limited visibility to assigned data",
+      "No tenant-wide access",
     ],
   },
-  Tier2: {
-    label: "Tier 2 — Advanced User",
-    summary: "Includes Tier 1 plus access to select advanced modules.",
+  manager: {
+    label: "Manager",
+    summary: "Full tenant access - can view and manage all records in their tenant.",
     highlights: [
-      "May access Document Processing (if enabled)",
-      "Broader visibility per tenant rules",
-      "Ideal for senior ICs",
-    ],
-  },
-  Tier3: {
-    label: "Tier 3 — Team Lead",
-    summary: "Includes Tier 2 plus aggregated dashboard views.",
-    highlights: [
-      "Aggregated views across team",
-      "Can assist with team pipeline and activities",
-      "Good for supervisors/lead roles",
-    ],
-  },
-  Tier4: {
-    label: "Tier 4 — Power User",
-    summary: "Includes Tier 3 with broad data/reporting across tenant.",
-    highlights: [
-      "Broad visibility across tenant data (per RLS)",
+      "View all tenant data (per RLS)",
+      "Full access to all modules",
       "Advanced reporting and analytics",
-      "Ideal for operations managers and admins",
+      "Ideal for operations managers and team leads",
     ],
   },
 };
 
-// Renders a small HTML block for the tier card
-function renderTierCard(tierKey) {
-  const t = TIER_MAP[tierKey];
-  if (!t) return "";
-  const li = t.highlights.map((h) => `<li style="margin: 0 0 6px;">${h}</li>`).join("");
+// Renders a small HTML block for the role card
+function renderRoleCard(roleKey) {
+  const r = ROLE_MAP[roleKey];
+  if (!r) return "";
+  const li = r.highlights.map((h) => `<li style="margin: 0 0 6px;">${h}</li>`).join("");
   return `
     <div style="border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;background:#fff;margin:6px 0;">
-      <div style="font-weight:700;color:#0f172a;margin-bottom:6px;">${t.label}</div>
-      <div style="color:#334155;margin-bottom:8px;">${t.summary}</div>
+      <div style="font-weight:700;color:#0f172a;margin-bottom:6px;">${r.label}</div>
+      <div style="color:#334155;margin-bottom:8px;">${r.summary}</div>
       <ul style="padding-left:18px;margin:0;color:#475569;">${li}</ul>
     </div>
   `;
 }
 
-// Renders a compact quick guide with all tiers
-function renderAllTiersGuide() {
+// Renders a compact quick guide with all roles
+function renderAllRolesGuide() {
   return `
     <div style="margin-top:10px;">
-      ${["Tier1","Tier2","Tier3","Tier4"].map(renderTierCard).join("")}
+      ${["employee", "manager"].map(renderRoleCard).join("")}
     </div>
   `;
 }
 
 // Send admin notifications (email + SMS) about a new invite.
-// Accepts optional tier and tenantId for richer context.
+// Accepts optional employeeRole and tenantId for richer context.
 // If adminEmail/Phone overrides are not provided, falls back to current user's data.
 export async function notifyAdminOnInvite({
   invitedEmail,
   invitedName,
-  role,
-  tier,               // optional (Tier1 | Tier2 | Tier3 | Tier4)
+  role: _role,        // kept for backward compat but unused
+  employeeRole,       // optional (employee | manager)
   tenantId,           // optional tenant context for the invite
   adminEmailOverride, // optional override for admin email
   adminPhoneOverride, // optional override for admin phone
@@ -112,13 +95,12 @@ export async function notifyAdminOnInvite({
   }
 
   const cleanName = invitedName || invitedEmail || "New User";
-  const cleanRole = role || "user";
-  const cleanTier = tier || "Not provided";
+  const cleanEmployeeRole = employeeRole || "Not provided";
 
   const requestedByEmail = currentUserMe?.email || null;
   const requestedByName = currentUserMe?.full_name || currentUserMe?.display_name || requestedByEmail || "Requester";
   const requestedByRole = currentUserMe?.role || "user";
-  const requestedByTier = currentUserMe?.tier || "Unknown";
+  const requestedByEmployeeRole = currentUserMe?.employee_role || "Unknown";
 
   // Build requested access details
   const requestedAccessItems = [];
@@ -165,12 +147,8 @@ export async function notifyAdminOnInvite({
               <td style="padding:6px 8px;font-weight:600;">${cleanName} &lt;${invitedEmail}&gt;</td>
             </tr>
             <tr>
-              <td style="color:#475569;padding:6px 8px;">Role (requested)</td>
-              <td style="padding:6px 8px;">${cleanRole}</td>
-            </tr>
-            <tr>
-              <td style="color:#475569;padding:6px 8px;">Tier (requested)</td>
-              <td style="padding:6px 8px;">${cleanTier}</td>
+              <td style="color:#475569;padding:6px 8px;">CRM Role (requested)</td>
+              <td style="padding:6px 8px;">${cleanEmployeeRole}</td>
             </tr>
             ${tenantId ? `
             <tr>
@@ -183,7 +161,7 @@ export async function notifyAdminOnInvite({
             </tr>
             <tr>
               <td style="color:#475569;padding:6px 8px;">Requester authorization</td>
-              <td style="padding:6px 8px;">Role: <strong>${requestedByRole}</strong> • Tier: <strong>${requestedByTier}</strong></td>
+              <td style="padding:6px 8px;">System Role: <strong>${requestedByRole}</strong> • CRM Role: <strong>${requestedByEmployeeRole}</strong></td>
             </tr>
           </table>
         </div>
@@ -199,15 +177,15 @@ export async function notifyAdminOnInvite({
         </div>` : ``}
 
         <div style="margin-top:16px;">
-          <h3 style="margin:0 0 8px;font-size:16px;color:#0f172a;">Tier quick guide</h3>
-          ${TIER_MAP[cleanTier] ? renderTierCard(cleanTier) : renderAllTiersGuide()}
+          <h3 style="margin:0 0 8px;font-size:16px;color:#0f172a;">CRM Role quick guide</h3>
+          ${ROLE_MAP[cleanEmployeeRole] ? renderRoleCard(cleanEmployeeRole) : renderAllRolesGuide()}
         </div>
 
         <div style="margin-top:16px;">
           <h3 style="margin:0 0 8px;font-size:16px;color:#0f172a;">Suggested next steps</h3>
           <ol style="margin:0;padding-left:18px;color:#334155;">
             <li style="margin:0 0 8px;">Confirm the invitee can log in (or send platform invite).</li>
-            <li style="margin:0 0 8px;">Set the user’s Tier and Access Level as requested (adjust if needed).</li>
+            <li style="margin:0 0 8px;">Set the user's CRM Role and Access Level as requested (adjust if needed).</li>
             <li style="margin:0 0 8px;">Ensure the user is linked to the corresponding Employee record.</li>
           </ol>
         </div>
@@ -239,7 +217,7 @@ export async function notifyAdminOnInvite({
   }
 
   if (adminPhone) {
-    const sms = `Ai-SHA CRM: Access request for ${cleanName} <${invitedEmail}> by ${requestedByEmail || 'unknown'} [${requestedByTier}]`;
+    const sms = `Ai-SHA CRM: Access request for ${cleanName} <${invitedEmail}> by ${requestedByEmail || 'unknown'} [${requestedByEmployeeRole}]`;
     try {
       await sendSms({ to: adminPhone, message: sms });
        

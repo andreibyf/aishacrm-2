@@ -79,8 +79,7 @@ export default function Employees() {
       
       const canSeeAll = currentUser.role === 'admin' || 
                        currentUser.role === 'superadmin' || 
-                       currentUser.tier === 'Tier3' || 
-                       currentUser.tier === 'Tier4';
+                       currentUser.employee_role === 'manager';
       
       console.log('[Employees] Effective tenant ID:', effectiveTenantId);
       console.log('[Employees] Loading with filter:', filter);
@@ -213,11 +212,7 @@ export default function Employees() {
     
     if (!employee.user_email) return false;
     
-    if (currentUser.tier === 'Tier4') return true;
-    
-    if (currentUser.tier === 'Tier3') {
-      return true;
-    }
+    if (currentUser.employee_role === 'manager') return true;
     
     return false;
   };

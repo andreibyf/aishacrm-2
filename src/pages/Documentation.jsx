@@ -762,19 +762,19 @@ Manage your team members, assign CRM access, and control permissions.
 
 ## CRM Access Management
 
-### Access Tiers
+### CRM Roles
 
-**Tier 3 - Team Lead**
-- View team members' data
+**Employee**
+- View only assigned records
 - Full access to own records
-- Cannot access other teams
-- Read/write permissions
-- Can create and edit records
+- Cannot access other employees' data
+- Read/write permissions for own records
+- Can create and edit assigned records
 
-**Tier 4 - Manager/Administrator**
+**Manager**
 - View all tenant data
-- Full administrative controls
-- Manage users and settings
+- Full administrative controls for tenant
+- Manage team records and settings
 - Access to all modules
 - Export capabilities
 
@@ -782,7 +782,7 @@ Manage your team members, assign CRM access, and control permissions.
 
 For employees without CRM access:
 1. Click **"Request CRM Access"**
-2. Select desired tier (Tier 3 or Tier 4)
+2. Select desired role (Employee or Manager)
 3. Choose access level (Read or Read/Write)
 4. Submit request
 5. Admin receives notification
