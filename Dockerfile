@@ -28,7 +28,7 @@ RUN npm install -g serve@14.2.5
 COPY --from=builder /app/dist ./dist
 
 # Copy frontend entrypoint that injects runtime env into env.js then runs server
-COPY scripts/frontend-entrypoint.sh /entrypoint.sh
+COPY frontend-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Expose port (Railway will set PORT env var)
