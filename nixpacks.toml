@@ -10,3 +10,7 @@ cmds = ["npm run build"]
 
 [start]
 cmd = "npm run preview -- --host 0.0.0.0 --port $PORT"
+
+[variables]
+# Increase Node.js heap for Vite build to avoid OOM on 1GB plans
+NODE_OPTIONS = "--max-old-space-size=768"
