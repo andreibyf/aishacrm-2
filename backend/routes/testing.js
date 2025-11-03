@@ -108,7 +108,74 @@ export default function createTestingRoutes(_pgPool) {
           repo: `${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}`,
           ref,
           html_url: htmlUrl,
+          dispatched_at: new Date().toISOString(),
         },
+      });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // GET /api/testing/workflow-status - Get latest run status for the workflow
+  // Query params: ref=main, per_page=5, created_after=ISO8601
+  router.get('/workflow-status', async (req, res) => {
+    try {
+      const {
+        GITHUB_TOKEN,
+        GITHUB_REPO_OWNER = process.env.GITHUB_REPOSITORY_OWNER || 'andreibyf',
+        GITHUB_REPO_NAME = process.env.GITHUB_REPOSITORY_NAME || 'aishacrm-2',
+        GITHUB_WORKFLOW_FILE = process.env.GITHUB_WORKFLOW_FILE || 'e2e.yml',
+      } = process.env;
+
+      if (!GITHUB_TOKEN) {
+        return res.status(400).json({ status: 'error', message: 'GITHUB_TOKEN is not configured in backend environment' });
+      }
+
+      const ref = req.query.ref || 'main';
+      const perPage = Math.min(parseInt(req.query.per_page || '5', 10) || 5, 20);
+      const createdAfter = req.query.created_after ? new Date(String(req.query.created_after)) : null;
+
+      const listUrl = `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/actions/workflows/${GITHUB_WORKFLOW_FILE}/runs?branch=${encodeURIComponent(ref)}&event=workflow_dispatch&per_page=${perPage}`;
+
+      const ghRes = await fetch(listUrl, {
+        headers: {
+          'Authorization': `Bearer ${GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        }
+      });
+
+      if (!ghRes.ok) {
+        const text = await ghRes.text().catch(() => '');
+        return res.status(ghRes.status).json({ status: 'error', message: `GitHub runs fetch failed: ${ghRes.status} ${ghRes.statusText}`, details: text });
+      }
+
+      const data = await ghRes.json();
+      let runs = Array.isArray(data?.workflow_runs) ? data.workflow_runs : [];
+
+      if (createdAfter && !isNaN(createdAfter.getTime())) {
+        runs = runs.filter(r => {
+          const createdAt = new Date(r.created_at);
+          return !isNaN(createdAt.getTime()) && createdAt >= createdAfter;
+        });
+      }
+
+      // Pick the most recent run by created_at
+      runs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      const latest = runs[0] || null;
+
+      return res.json({
+        status: 'success',
+        data: latest ? {
+          id: latest.id,
+          status: latest.status, // queued | in_progress | completed
+          conclusion: latest.conclusion, // success | failure | cancelled | null
+          html_url: latest.html_url,
+          created_at: latest.created_at,
+          updated_at: latest.updated_at,
+          head_branch: latest.head_branch,
+          head_sha: latest.head_sha,
+        } : null,
       });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });

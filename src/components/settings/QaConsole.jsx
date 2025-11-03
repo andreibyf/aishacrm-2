@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, TestTube2 } from "lucide-react";
@@ -17,6 +17,8 @@ export default function QaConsole() {
   const [busySuite, setBusySuite] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [runStatus, setRunStatus] = useState(null); // { status, conclusion, html_url, id }
+  const pollTimerRef = useRef(null);
 
   const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || "http://localhost:3001";
 
@@ -24,7 +26,9 @@ export default function QaConsole() {
     setBusySuite(suiteId);
     setResult(null);
     setError(null);
+    setRunStatus(null);
     try {
+      const dispatchedAt = new Date().toISOString();
       const res = await fetch(`${BACKEND_URL}/api/testing/run-playwright`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -38,7 +42,10 @@ export default function QaConsole() {
           status: res.status,
         });
       } else {
-        setResult(json?.data || { message: "Dispatched" });
+        const data = json?.data || { message: "Dispatched" };
+        setResult(data);
+        // Start polling for the latest run after dispatch
+        startPolling({ createdAfter: data.dispatched_at || dispatchedAt });
       }
     } catch (e) {
       setError({ message: e?.message || String(e) });
@@ -46,6 +53,43 @@ export default function QaConsole() {
       setBusySuite(null);
     }
   };
+
+  const startPolling = ({ createdAfter }) => {
+    clearPolling();
+    const poll = async () => {
+      try {
+        const url = new URL(`${BACKEND_URL}/api/testing/workflow-status`);
+        url.searchParams.set("ref", "main");
+        if (createdAfter) url.searchParams.set("created_after", createdAfter);
+        const res = await fetch(url.toString());
+        const json = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setRunStatus(json?.data || null);
+          // Stop if completed
+          if (json?.data?.status === "completed") {
+            clearPolling();
+          }
+        } else {
+          // Non-fatal: keep polling, but surface a soft error
+          console.warn("Workflow status poll failed:", json?.message || res.statusText);
+        }
+      } catch (e) {
+        console.warn("Workflow status poll error:", e?.message || e);
+      }
+    };
+    // immediate check, then interval
+    poll();
+    pollTimerRef.current = setInterval(poll, 5000);
+  };
+
+  const clearPolling = () => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => clearPolling, []);
 
   return (
     <div className="space-y-6">
@@ -105,6 +149,40 @@ export default function QaConsole() {
                     >
                       <ExternalLink className="w-4 h-4 mr-2" />
                       View workflow runs
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Live Run Status */}
+          {runStatus && (
+            <div className="mt-4 p-4 rounded-lg bg-slate-700/40 border border-slate-600/60">
+              <div className="flex items-start gap-3">
+                {runStatus.status === 'completed' ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5" />
+                ) : (
+                  <Loader2 className="w-5 h-5 text-blue-400 mt-0.5 animate-spin" />
+                )}
+                <div className="flex-1">
+                  <div className="text-slate-200 font-medium">Latest run</div>
+                  <div className="text-slate-300 text-sm mt-1">
+                    Status: <span className="font-mono">{runStatus.status || 'unknown'}</span>
+                    {runStatus.status === 'completed' && (
+                      <>
+                        {" • "}Conclusion: <span className="font-mono">{runStatus.conclusion || 'n/a'}</span>
+                      </>
+                    )}
+                  </div>
+                  {runStatus.html_url && (
+                    <Button
+                      onClick={() => window.open(runStatus.html_url, "_blank")}
+                      variant="outline"
+                      className="mt-3 bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Open specific run
                     </Button>
                   )}
                 </div>
