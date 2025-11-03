@@ -39,6 +39,11 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
+// Database connection pool with Supabase support
+let pgPool = null;
+let dbConnectionType = "none";
+let resolvedDbIPv4 = null; // best-effort record of IPv4 chosen for DB host
+
 // Initialize diagnostics locals with defaults (updated after DB init)
 app.locals.ipv4FirstApplied = ipv4FirstApplied;
 app.locals.dbConnectionType = dbConnectionType;
@@ -46,11 +51,6 @@ app.locals.resolvedDbIPv4 = resolvedDbIPv4;
 app.locals.dbConfigPath = (process.env.USE_SUPABASE_PROD === 'true')
   ? 'supabase_discrete'
   : (process.env.DATABASE_URL ? 'database_url' : 'none');
-
-// Database connection pool with Supabase support
-let pgPool = null;
-let dbConnectionType = "none";
-let resolvedDbIPv4 = null; // best-effort record of IPv4 chosen for DB host
 
 // Initialize database pool with IPv4 preference and optional DNS pre-resolution
 await (async () => {

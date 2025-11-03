@@ -3,10 +3,15 @@
 
 Write-Host "`n=== Supabase Auth Configuration ===" -ForegroundColor Cyan
 
-# Check if .env exists
+# Ensure backend .env exists without relying on .env.example
 if (!(Test-Path "backend\.env")) {
-    Write-Host "Creating backend\.env from template..." -ForegroundColor Yellow
-    Copy-Item "backend\.env.example" "backend\.env"
+    if (Test-Path "backend\.env.example") {
+        Write-Host "Creating backend\.env from template..." -ForegroundColor Yellow
+        Copy-Item "backend\.env.example" "backend\.env"
+    } else {
+        Write-Host "Creating an empty backend\.env (no template found)..." -ForegroundColor Yellow
+        New-Item -Path "backend\.env" -ItemType File -Force | Out-Null
+    }
 }
 
 # Prompt for credentials

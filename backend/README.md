@@ -10,10 +10,8 @@ Your own independent backend infrastructure - no more dependency on Base44!
    ```
 
 2. **Configure environment:**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your database credentials and API keys
-   ```
+   - Ensure `backend/.env` exists and contains your database credentials and API keys.
+   - When using Docker Compose, env vars are loaded from `backend/.env` (service env_file) and/or the compose `environment` block.
 
 3. **Set up PostgreSQL database:**
    ```sql
@@ -29,7 +27,7 @@ Your own independent backend infrastructure - no more dependency on Base44!
    npm run dev
    ```
 
-5. **Verify it's running:**
+5. **Verify it's running (local dev):**
    ```bash
    curl http://localhost:3001/health
    ```

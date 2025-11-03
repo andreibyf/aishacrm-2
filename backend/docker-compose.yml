@@ -3,9 +3,13 @@ services:
     build: .
     image: aishacrm-backend:local
     restart: unless-stopped
+    env_file:
+      - ./.env
+      - ../.env
     environment:
       - NODE_ENV=production
-      - PORT=3001
+      - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
+      - PORT=${PORT:-3001}
       - DATABASE_URL=${DATABASE_URL}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173}
     ports:
