@@ -83,8 +83,8 @@ await (async () => {
       if (supabaseConfig.host) {
         let ipv4 = null;
         try {
-          // Prefer system resolver to honor platform DNS config
-          const looked = await dnsStd.lookup(supabaseConfig.host, { family: 4 });
+          // Prefer promise-based lookup to avoid callback API pitfalls
+          const looked = await dns.lookup(supabaseConfig.host, { family: 4 });
           ipv4 = looked?.address || null;
         } catch {
           // Fallback to DNS query if system lookup fails
@@ -136,7 +136,7 @@ await (async () => {
       // Resolve IPv4-only and build explicit config
       let ipv4 = null;
       try {
-        const looked = await dnsStd.lookup(host, { family: 4 });
+        const looked = await dns.lookup(host, { family: 4 });
         ipv4 = looked?.address || null;
       } catch {
         ipv4 = await dns.resolve4(host).then(a => a[0]).catch(() => null);
