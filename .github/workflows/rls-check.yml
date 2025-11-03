@@ -1,0 +1,40 @@
+name: RLS Verification
+
+on:
+  push:
+    paths:
+      - 'backend/migrations/**'
+      - 'backend/verify-rls.js'
+      - 'backend/scripts/check-rls-ci.js'
+  workflow_dispatch: {}
+
+jobs:
+  check-rls:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Node.js setup
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Bail out if DATABASE_URL is missing
+        if: env.DATABASE_URL == ''
+        run: |
+          echo "DATABASE_URL secret is not configured; skipping RLS check."
+          exit 0
+        shell: bash
+
+      - name: Install backend deps
+        working-directory: backend
+        run: npm ci
+
+      - name: Run CI RLS check
+        working-directory: backend
+        run: npm run ci:check-rls
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

@@ -10,7 +10,9 @@
     "dev:unlimited": "node --watch server.js",
     "test": "node --test \"test/**/*.test.js\"",
     "seed": "node scripts/run_seed.js",
-    "worker:email": "node workers/emailWorker.js"
+    "worker:email": "node workers/emailWorker.js",
+    "verify:rls": "node verify-rls.js",
+    "ci:check-rls": "node scripts/check-rls-ci.js"
   },
   "keywords": [
     "crm",
