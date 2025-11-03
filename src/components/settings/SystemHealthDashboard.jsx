@@ -25,13 +25,23 @@ import { useTenant } from "../shared/tenantContext";
 import { BACKEND_URL } from '@/api/entities';
 
 export default function SystemHealthDashboard({ onViewMore }) {
-  const { errors, getCriticalErrors, clearErrors } = useErrorLog();
+  const { errors, clearErrors } = useErrorLog();
   const { selectedTenantId } = useTenant();
   const [backendStatus, setBackendStatus] = useState("checking");
   const [lastCheck, setLastCheck] = useState(null);
   const [metrics, setMetrics] = useState({ errorRate: 0, errorCount: 0, serverErrorCount: 0, logs: [] });
   const [rangeHours, setRangeHours] = useState(1); // time range for dashboard metrics
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
+
+  const isBenignSqlValidation = (msg = "") => {
+    try {
+      return /requires\s+(SET|WHERE)\s+clause|missing\s+WHERE\s+clause|UPDATE\s+requires\s+SET|DELETE\s+requires\s+WHERE|SQL\s+safety/i.test(
+        String(msg)
+      );
+    } catch {
+      return false;
+    }
+  };
 
   const checkHealth = async () => {
     setBackendStatus("checking");
@@ -77,8 +87,17 @@ export default function SystemHealthDashboard({ onViewMore }) {
     return () => clearInterval(interval);
   }, [selectedTenantId, loadMetrics]);
 
-  // recentErrors derived from server metrics below
-  const criticalErrors = getCriticalErrors();
+  // Derived counts from performance logs to ensure UI stays accurate even if aggregate metrics are missing
+  const errorsFromLogs = (metrics.logs || []).filter(l => (l.status_code || 0) >= 400);
+  const derivedErrorCount = errorsFromLogs.length;
+  // Exclude benign SQL validations from critical count entirely
+  const filteredCriticalCount = (metrics.logs || []).filter(
+    (l) => (l.status_code || 0) >= 500 && !isBenignSqlValidation(l.error_message)
+  ).length;
+
+  // Local runtime critical errors (from ErrorLogger) are tracked elsewhere; card shows server-derived count for accuracy
+
+  const rangeLabel = rangeHours === 1 ? 'last hour' : (rangeHours === 24 ? 'last 24 hours' : (rangeHours === 168 ? 'last 7 days' : `last ${rangeHours} hours`));
 
   const statusIcon = {
     healthy: <CheckCircle2 className="w-5 h-5 text-green-500" />,
@@ -117,6 +136,67 @@ export default function SystemHealthDashboard({ onViewMore }) {
     } catch (e) {
       console.error('Clear errors failed:', e);
       toast.error(e.message || 'Failed to clear logs');
+    }
+  };
+
+  const handleClearSystemLogs = async () => {
+    const confirmed = await confirm({
+      title: "Clear recent system logs?",
+      description: `This will delete system logs from the last ${rangeHours}h${selectedTenantId ? ` for tenant ${selectedTenantId.substring(0,8)}…` : ''}.`,
+      variant: "destructive",
+      confirmText: "Clear System Logs",
+      cancelText: "Cancel",
+    });
+    if (!confirmed) return;
+
+    try {
+      const tenantParam = selectedTenantId ? `&tenant_id=${encodeURIComponent(selectedTenantId)}` : "";
+      const resp = await fetch(`${BACKEND_URL}/api/system-logs?hours=${rangeHours}${tenantParam}`, { method: "DELETE" });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`Failed to clear system logs: ${resp.status} ${resp.statusText}${text ? ` - ${text}` : ""}`);
+      }
+      const data = await resp.json().catch(() => ({}));
+      const deleted = data?.data?.deleted_count;
+      toast.success(typeof deleted === 'number' ? `Deleted ${deleted} system log(s)` : 'System logs cleared');
+    } catch (e) {
+      console.error('Clear system logs failed:', e);
+      toast.error(e.message || 'Failed to clear system logs');
+    }
+  };
+
+  const handleClearAllLogs = async () => {
+    const confirmed = await confirm({
+      title: "Delete ALL recent logs?",
+      description: `This will delete both performance and system logs from the last ${rangeHours}h${selectedTenantId ? ` for tenant ${selectedTenantId.substring(0,8)}…` : ''}.`,
+      variant: "destructive",
+      confirmText: "Delete All Logs",
+      cancelText: "Cancel",
+    });
+    if (!confirmed) return;
+
+    const tenantParam = selectedTenantId ? `&tenant_id=${encodeURIComponent(selectedTenantId)}` : "";
+    try {
+      const [perfResp, sysResp] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/metrics/performance?hours=${rangeHours}${tenantParam}`, { method: "DELETE" }),
+        fetch(`${BACKEND_URL}/api/system-logs?hours=${rangeHours}${tenantParam}`, { method: "DELETE" }),
+      ]);
+
+      if (!perfResp.ok || !sysResp.ok) {
+        const perfText = !perfResp.ok ? await perfResp.text() : '';
+        const sysText = !sysResp.ok ? await sysResp.text() : '';
+        throw new Error(`Failed to delete ${!perfResp.ok ? 'performance ' : ''}${!perfResp.ok && !sysResp.ok ? 'and ' : ''}${!sysResp.ok ? 'system ' : ''}logs. ${perfText} ${sysText}`.trim());
+      }
+
+      const perfData = await perfResp.json().catch(() => ({}));
+      const sysData = await sysResp.json().catch(() => ({}));
+      const perfDeleted = perfData?.data?.deleted_count ?? null;
+      const sysDeleted = sysData?.data?.deleted_count ?? null;
+      toast.success(`Deleted ${perfDeleted ?? '?'} performance and ${sysDeleted ?? '?'} system log(s)`);
+      await loadMetrics();
+    } catch (e) {
+      console.error('Delete all logs failed:', e);
+      toast.error(e.message || 'Failed to delete all logs');
     }
   };
 
@@ -189,10 +269,14 @@ export default function SystemHealthDashboard({ onViewMore }) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-100">
-              {metrics.errorCount}
+              {metrics.errorCount || derivedErrorCount}
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              errors in last hour ({metrics.errorRate}% rate)
+              errors in {rangeLabel} ({
+                (metrics.errorRate && metrics.errorRate > 0)
+                  ? metrics.errorRate
+                  : Math.round((derivedErrorCount / Math.max(1, (metrics.logs || []).length)) * 100)
+              }% rate)
             </p>
           </CardContent>
         </Card>
@@ -206,7 +290,7 @@ export default function SystemHealthDashboard({ onViewMore }) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-400">
-              {criticalErrors.length}
+              {filteredCriticalCount}
             </div>
             <p className="text-xs text-slate-400 mt-1">
               require attention
@@ -216,12 +300,12 @@ export default function SystemHealthDashboard({ onViewMore }) {
       </div>
 
       {/* Critical Errors */}
-      {criticalErrors.length > 0 && (
+      {filteredCriticalCount > 0 && (
         <Alert variant="destructive" className="bg-red-900/20 border-red-700">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Critical Issues Detected</AlertTitle>
           <AlertDescription>
-            {criticalErrors.length}{" "}
+            {filteredCriticalCount}{" "}
             critical error(s) require immediate attention.
           </AlertDescription>
         </Alert>
@@ -244,6 +328,14 @@ export default function SystemHealthDashboard({ onViewMore }) {
                 </Button>
               )}
               <Button
+                variant="outline"
+                size="sm"
+                className="bg-slate-700 border-slate-600 text-slate-200"
+                onClick={handleClearSystemLogs}
+              >
+                Delete System Log Rows
+              </Button>
+              <Button
                 variant="destructive"
                 size="sm"
                 className="bg-red-600 hover:bg-red-700"
@@ -251,6 +343,14 @@ export default function SystemHealthDashboard({ onViewMore }) {
                 disabled={metrics.logs.filter(l => (l.status_code || 0) >= 400).length === 0}
               >
                 Delete Recent Log Rows
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="bg-red-700 hover:bg-red-800"
+                onClick={handleClearAllLogs}
+              >
+                Delete All Logs
               </Button>
               <span className="text-xs text-slate-500 hidden sm:inline">
                 Scope: {selectedTenantId ? `Tenant ${selectedTenantId.substring(0,8)}…` : 'All Clients'}
@@ -287,9 +387,15 @@ export default function SystemHealthDashboard({ onViewMore }) {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <Badge className={(log.status_code || 0) >= 500 ? 'bg-red-600' : 'bg-yellow-600'}>
-                            {(log.status_code || 0) >= 500 ? 'critical' : 'warning'}
-                          </Badge>
+                          {(() => {
+                            const benign = isBenignSqlValidation(log.error_message);
+                            const critical = (log.status_code || 0) >= 500 && !benign;
+                            return (
+                              <Badge className={critical ? 'bg-red-600' : 'bg-yellow-600'}>
+                                {critical ? 'critical' : 'warning'}
+                              </Badge>
+                            );
+                          })()}
                           <span className="text-sm font-medium text-slate-200">{log.method} {log.endpoint}</span>
                         </div>
                         <p className="text-sm text-slate-300">{log.error_message || `HTTP ${log.status_code}`}</p>

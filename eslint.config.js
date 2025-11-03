@@ -73,6 +73,31 @@ export default [
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
+  // Root scripts override: Node environment for maintenance/utility scripts at repo root
+  {
+    files: [
+      '*.js',
+      'scripts/**/*.js',
+    ],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: {
+        ...globals.node,
+      },
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-undef': 'off',
+      'react/jsx-no-target-blank': 'off',
+      'react/prop-types': 'off',
+      'react-refresh/only-export-components': 'off',
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
   // Tests override: Playwright tests run in Node; allow process and test globals
   {
     files: ['tests/**/*.js'],

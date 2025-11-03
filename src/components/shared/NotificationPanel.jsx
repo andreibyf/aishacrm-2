@@ -31,7 +31,7 @@ export default function NotificationPanel() {
       setLoading(true);
       const user = await User.me();
       const fetchedNotifications = await Notification.filter(
-        { recipient_id: user.id },
+        { user_email: user?.email },
         '-created_date',
         50
       );
@@ -59,8 +59,9 @@ export default function NotificationPanel() {
       }
     }
 
-    if (notification.action_url) {
-      window.location.href = notification.action_url;
+    // Use 'link' field defined in Notification schema for navigation
+    if (notification.link) {
+      window.location.href = notification.link;
     }
   };
 
