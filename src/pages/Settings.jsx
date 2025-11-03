@@ -77,6 +77,7 @@ import SyncHealthMonitor from "../components/settings/SyncHealthMonitor";
 import MCPServerMonitor from "../components/settings/MCPServerMonitor";
 import PerformanceMonitor from '../components/settings/PerformanceMonitor';
 import SystemHealthDashboard from "../components/settings/SystemHealthDashboard"; // NEW: SystemHealthDashboard
+import QaConsole from "../components/settings/QaConsole"; // NEW: QA Console (E2E triggers)
 
 export default function SettingsPage() { // Renamed from Settings to SettingsPage as per outline
   const [currentUser, setCurrentUser] = useState(null);
@@ -166,6 +167,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
       // Testing & Diagnostics
       { id: 'unit-tests', label: 'Unit Tests', icon: TestTube2, color: 'blue', roles: ['admin', 'superadmin'] }, // NEW: Unit Tests tab
+      { id: 'qa-console', label: 'QA Console', icon: TestTube2, color: 'blue', roles: ['admin', 'superadmin'] }, // NEW: QA Console tab
       { id: 'external-tools', label: 'External Tools', icon: ExternalLink, color: 'orange', roles: ['admin', 'superadmin'] }, // NEW: External Tools tab
       { id: 'api-health', label: 'API Health', icon: Activity, color: 'red', roles: ['admin', 'superadmin'] }, // NEW: API Health Monitor
     ] : []),
@@ -626,6 +628,11 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                     </p>
                   </CardContent>
                 </Card>
+              )}
+
+              {/* NEW: QA Console (CI-triggered E2E) */}
+              {activeTab === 'qa-console' && isAdmin && (
+                <QaConsole />
               )}
 
               {/* NEW: API Health Monitor tab content */}
