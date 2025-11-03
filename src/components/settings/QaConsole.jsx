@@ -17,7 +17,7 @@ export default function QaConsole() {
   const [busySuite, setBusySuite] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const [runStatus, setRunStatus] = useState(null); // { status, conclusion, html_url, id }
+  const [runHistory, setRunHistory] = useState(null); // { runs: [], total, latest }
   const pollTimerRef = useRef(null);
 
   const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || "http://localhost:3001";
@@ -26,7 +26,7 @@ export default function QaConsole() {
     setBusySuite(suiteId);
     setResult(null);
     setError(null);
-    setRunStatus(null);
+    setRunHistory(null);
     try {
       const dispatchedAt = new Date().toISOString();
       const res = await fetch(`${BACKEND_URL}/api/testing/run-playwright`, {
@@ -44,7 +44,7 @@ export default function QaConsole() {
       } else {
         const data = json?.data || { message: "Dispatched" };
         setResult(data);
-        // Start polling for the latest run after dispatch
+        // Start polling for runs after dispatch
         startPolling({ createdAfter: data.dispatched_at || dispatchedAt });
       }
     } catch (e) {
@@ -60,17 +60,17 @@ export default function QaConsole() {
       try {
         const url = new URL(`${BACKEND_URL}/api/testing/workflow-status`);
         url.searchParams.set("ref", "main");
+        url.searchParams.set("per_page", "5");
         if (createdAfter) url.searchParams.set("created_after", createdAfter);
         const res = await fetch(url.toString());
         const json = await res.json().catch(() => ({}));
-        if (res.ok) {
-          setRunStatus(json?.data || null);
-          // Stop if completed
-          if (json?.data?.status === "completed") {
+        if (res.ok && json?.data) {
+          setRunHistory(json.data);
+          // Stop polling if latest run is completed
+          if (json.data.latest?.status === "completed") {
             clearPolling();
           }
         } else {
-          // Non-fatal: keep polling, but surface a soft error
           console.warn("Workflow status poll failed:", json?.message || res.statusText);
         }
       } catch (e) {
@@ -90,6 +90,59 @@ export default function QaConsole() {
   };
 
   useEffect(() => clearPolling, []);
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case "completed":
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600 text-slate-200">Completed</span>;
+      case "in_progress":
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-600 text-white flex items-center gap-1">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          Running
+        </span>;
+      case "queued":
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-yellow-600 text-white">Queued</span>;
+      default:
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-600 text-gray-200">{status || "Unknown"}</span>;
+    }
+  };
+
+  const getConclusionBadge = (conclusion) => {
+    if (!conclusion) return null;
+    switch (conclusion) {
+      case "success":
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-emerald-600 text-white flex items-center gap-1">
+          <CheckCircle2 className="w-3 h-3" />
+          Success
+        </span>;
+      case "failure":
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-600 text-white flex items-center gap-1">
+          <AlertTriangle className="w-3 h-3" />
+          Failed
+        </span>;
+      case "cancelled":
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-600 text-white">Cancelled</span>;
+      default:
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-600 text-gray-200">{conclusion}</span>;
+    }
+  };
+
+  const formatTimestamp = (iso) => {
+    if (!iso) return "n/a";
+    try {
+      const d = new Date(iso);
+      const now = new Date();
+      const diffMs = now - d;
+      const diffMins = Math.floor(diffMs / 60000);
+      if (diffMins < 1) return "just now";
+      if (diffMins < 60) return `${diffMins}m ago`;
+      const diffHrs = Math.floor(diffMins / 60);
+      if (diffHrs < 24) return `${diffHrs}h ago`;
+      return d.toLocaleDateString();
+    } catch {
+      return "n/a";
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -157,35 +210,44 @@ export default function QaConsole() {
           )}
 
           {/* Live Run Status */}
-          {runStatus && (
+          {runHistory && runHistory.runs && runHistory.runs.length > 0 && (
             <div className="mt-4 p-4 rounded-lg bg-slate-700/40 border border-slate-600/60">
-              <div className="flex items-start gap-3">
-                {runStatus.status === 'completed' ? (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5" />
-                ) : (
-                  <Loader2 className="w-5 h-5 text-blue-400 mt-0.5 animate-spin" />
-                )}
+              <div className="flex items-start gap-3 mb-4">
+                <TestTube2 className="w-5 h-5 text-blue-400 mt-0.5" />
                 <div className="flex-1">
-                  <div className="text-slate-200 font-medium">Latest run</div>
-                  <div className="text-slate-300 text-sm mt-1">
-                    Status: <span className="font-mono">{runStatus.status || 'unknown'}</span>
-                    {runStatus.status === 'completed' && (
-                      <>
-                        {" • "}Conclusion: <span className="font-mono">{runStatus.conclusion || 'n/a'}</span>
-                      </>
-                    )}
-                  </div>
-                  {runStatus.html_url && (
-                    <Button
-                      onClick={() => window.open(runStatus.html_url, "_blank")}
-                      variant="outline"
-                      className="mt-3 bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
-                    >
-                      <ExternalLink className="w-4 h-4 mr-2" />
-                      Open specific run
-                    </Button>
-                  )}
+                  <div className="text-slate-200 font-medium">Recent Runs</div>
+                  <div className="text-slate-400 text-sm">Last {runHistory.total} workflow run{runHistory.total !== 1 ? "s" : ""}</div>
                 </div>
+              </div>
+              
+              <div className="space-y-2">
+                {runHistory.runs.map((run) => (
+                  <div
+                    key={run.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-slate-800/60 border border-slate-600/40 hover:border-slate-500/60 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          {getStatusBadge(run.status)}
+                          {run.status === "completed" && getConclusionBadge(run.conclusion)}
+                        </div>
+                        <div className="text-slate-400 text-xs">
+                          Run #{run.run_number} • {formatTimestamp(run.created_at)}
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => window.open(run.html_url, "_blank")}
+                      variant="outline"
+                      size="sm"
+                      className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
+                    >
+                      <ExternalLink className="w-3 h-3 mr-1" />
+                      View
+                    </Button>
+                  </div>
+                ))}
               </div>
             </div>
           )}

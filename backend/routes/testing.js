@@ -116,7 +116,7 @@ export default function createTestingRoutes(_pgPool) {
     }
   });
 
-  // GET /api/testing/workflow-status - Get latest run status for the workflow
+  // GET /api/testing/workflow-status - Get recent workflow runs with status
   // Query params: ref=main, per_page=5, created_after=ISO8601
   router.get('/workflow-status', async (req, res) => {
     try {
@@ -160,22 +160,29 @@ export default function createTestingRoutes(_pgPool) {
         });
       }
 
-      // Pick the most recent run by created_at
+      // Sort by created_at descending (newest first)
       runs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      const latest = runs[0] || null;
+
+      // Map to consistent shape
+      const mappedRuns = runs.map(run => ({
+        id: run.id,
+        status: run.status, // queued | in_progress | completed
+        conclusion: run.conclusion, // success | failure | cancelled | null
+        html_url: run.html_url,
+        created_at: run.created_at,
+        updated_at: run.updated_at,
+        head_branch: run.head_branch,
+        head_sha: run.head_sha,
+        run_number: run.run_number,
+      }));
 
       return res.json({
         status: 'success',
-        data: latest ? {
-          id: latest.id,
-          status: latest.status, // queued | in_progress | completed
-          conclusion: latest.conclusion, // success | failure | cancelled | null
-          html_url: latest.html_url,
-          created_at: latest.created_at,
-          updated_at: latest.updated_at,
-          head_branch: latest.head_branch,
-          head_sha: latest.head_sha,
-        } : null,
+        data: {
+          runs: mappedRuns,
+          total: mappedRuns.length,
+          latest: mappedRuns[0] || null,
+        },
       });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
