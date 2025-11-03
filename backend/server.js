@@ -44,6 +44,17 @@ let pgPool = null;
 let dbConnectionType = "none";
 let resolvedDbIPv4 = null; // best-effort record of IPv4 chosen for DB host
 
+// Helper to force IPv4 DNS lookups for node-postgres connections
+function forceIPv4Lookup(hostname, options, callback) {
+  try {
+    const merged = { ...(options || {}), family: 4 };
+    return dnsStd.lookup(hostname, merged, callback);
+  } catch {
+    // Fallback: try again with minimal options
+    return dnsStd.lookup(hostname, { family: 4 }, callback);
+  }
+}
+
 // Initialize diagnostics locals with defaults (updated after DB init)
 app.locals.ipv4FirstApplied = ipv4FirstApplied;
 app.locals.dbConnectionType = dbConnectionType;
@@ -86,7 +97,11 @@ await (async () => {
         }
       }
     } catch { /* no-op */ }
-    pgPool = new Pool(supabaseConfig);
+    // Always force IPv4 lookups at connection time as an extra safeguard
+    pgPool = new Pool({
+      ...supabaseConfig,
+      lookup: forceIPv4Lookup,
+    });
     dbConnectionType = "Supabase Production";
     console.log("✓ PostgreSQL connection pool initialized (Supabase Production)");
     // update diagnostics
@@ -142,7 +157,11 @@ await (async () => {
       console.warn("[DB] Could not pre-resolve IPv4:", e.message);
     }
 
-    pgPool = new Pool(poolConfig);
+    // Always force IPv4 lookups at connection time as an extra safeguard
+    pgPool = new Pool({
+      ...poolConfig,
+      lookup: forceIPv4Lookup,
+    });
     console.log(`✓ PostgreSQL connection pool initialized (${dbConnectionType})`);
     // update diagnostics
     app.locals.dbConnectionType = dbConnectionType;
