@@ -6,8 +6,9 @@
 import express from 'express';
 
 // Helper: attempt to count rows from a table safely (optionally by tenant)
-async function safeCount(pgPool, table, tenantId) {
-  if (!pgPool) return 0;
+async function safeCount(_pgPool, table, tenantId) {
+  const { getSupabaseClient } = await import('../lib/supabase-db.js');
+  const supabase = getSupabaseClient();
 
   // Whitelist of allowed table names
   const allowedTables = ['contacts', 'accounts', 'leads', 'opportunities', 'activities'];
@@ -19,54 +20,56 @@ async function safeCount(pgPool, table, tenantId) {
     // Try tenant-scoped count first if a tenantId is provided
     if (tenantId) {
       try {
-        const result = await pgPool.query(
-          `SELECT COUNT(*)::int AS count FROM ${table} WHERE tenant_id = $1`,
-          [tenantId]
-        );
-        return result.rows?.[0]?.count ?? 0;
+        const { count } = await supabase
+          .from(table)
+          .select('*', { count: 'exact', head: true })
+          .eq('tenant_id', tenantId);
+        return count ?? 0;
       } catch {
         // Fall through to global count if tenant_id column doesn't exist
       }
     }
-    const result = await pgPool.query(`SELECT COUNT(*)::int AS count FROM ${table}`);
-    return result.rows?.[0]?.count ?? 0;
+    const { count } = await supabase
+      .from(table)
+      .select('*', { count: 'exact', head: true });
+    return count ?? 0;
   } catch {
     return 0; // table might not exist yet; return 0 as a safe default
   }
 }
 
 // Helper: get recent activities safely (limit 10), optionally by tenant
-async function safeRecentActivities(pgPool, tenantId, limit = 10) {
-  if (!pgPool) return [];
+async function safeRecentActivities(_pgPool, tenantId, limit = 10) {
+  const { getSupabaseClient } = await import('../lib/supabase-db.js');
+  const supabase = getSupabaseClient();
+  const max = Math.max(1, Math.min(100, limit));
   try {
     if (tenantId) {
       try {
-        const result = await pgPool.query(
-          `SELECT id, type, subject, created_at
-           FROM activities
-           WHERE tenant_id = $1
-           ORDER BY created_at DESC NULLS LAST
-           LIMIT ${Math.max(1, Math.min(100, limit))}`,
-          [tenantId]
-        );
-        return result.rows || [];
+        const { data, error } = await supabase
+          .from('activities')
+          .select('id, type, subject, created_at')
+          .eq('tenant_id', tenantId)
+          .order('created_at', { ascending: false })
+          .limit(max);
+        if (error) throw error;
+        return data || [];
       } catch {
         // Fall through to global query if tenant_id column doesn't exist
       }
     }
-    const result = await pgPool.query(
-      `SELECT id, type, subject, created_at
-       FROM activities
-       ORDER BY created_at DESC NULLS LAST
-       LIMIT ${Math.max(1, Math.min(100, limit))}`
-    );
-    return result.rows || [];
+    const { data } = await supabase
+      .from('activities')
+      .select('id, type, subject, created_at')
+      .order('created_at', { ascending: false })
+      .limit(max);
+    return data || [];
   } catch {
     return [];
   }
 }
 
-export default function createReportRoutes(pgPool) {
+export default function createReportRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/reports/dashboard-stats - Get dashboard statistics

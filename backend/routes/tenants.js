@@ -18,7 +18,7 @@ function getBucketName() {
   return process.env.SUPABASE_STORAGE_BUCKET || "tenant-assets";
 }
 
-export default function createTenantRoutes(pgPool) {
+export default function createTenantRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/tenants - List tenants
@@ -26,57 +26,28 @@ export default function createTenantRoutes(pgPool) {
     try {
       const { tenant_id, limit = 50, offset = 0, status } = req.query;
 
-      if (!pgPool) {
-        return res.status(503).json({
-          status: "error",
-          message: "Database not configured",
-        });
-      }
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
 
-      let query = "SELECT * FROM tenant WHERE 1=1";
-      const params = [];
-      let paramCount = 1;
+      const lim = parseInt(limit);
+      const off = parseInt(offset);
+      const from = off;
+      const to = off + lim - 1;
 
-      if (tenant_id) {
-        query += ` AND tenant_id = $${paramCount}`;
-        params.push(tenant_id);
-        paramCount++;
-      }
+      let q = supabase
+        .from('tenant')
+        .select('*', { count: 'exact', head: false })
+        .order('created_at', { ascending: false })
+        .range(from, to);
 
-      if (status) {
-        query += ` AND status = $${paramCount}`;
-        params.push(status);
-        paramCount++;
-      }
+      if (tenant_id) q = q.eq('tenant_id', tenant_id);
+      if (status) q = q.eq('status', status);
 
-      query += ` ORDER BY created_at DESC LIMIT $${paramCount} OFFSET $${
-        paramCount + 1
-      }`;
-      params.push(parseInt(limit), parseInt(offset));
-
-      const result = await pgPool.query(query, params);
-
-      // Get total count
-      let countQuery = "SELECT COUNT(*) FROM tenant WHERE 1=1";
-      const countParams = [];
-      let countParamCount = 1;
-
-      if (tenant_id) {
-        countQuery += ` AND tenant_id = $${countParamCount}`;
-        countParams.push(tenant_id);
-        countParamCount++;
-      }
-
-      if (status) {
-        countQuery += ` AND status = $${countParamCount}`;
-        countParams.push(status);
-      }
-
-      const countResult = await pgPool.query(countQuery, countParams);
-      const total = parseInt(countResult.rows[0].count);
+      const { data, count, error } = await q;
+      if (error) throw new Error(error.message);
 
       // Normalize tenant rows to expose common branding fields from branding_settings/metadata
-      const tenants = result.rows.map((r) => ({
+      const tenants = (data || []).map((r) => ({
         ...r,
         logo_url: r.branding_settings?.logo_url || r.metadata?.logo_url || null,
         primary_color: r.branding_settings?.primary_color ||
@@ -99,9 +70,9 @@ export default function createTenantRoutes(pgPool) {
         status: "success",
         data: {
           tenants,
-          total,
-          limit: parseInt(limit),
-          offset: parseInt(offset),
+          total: typeof count === 'number' ? count : tenants.length,
+          limit: lim,
+          offset: off,
         },
       });
     } catch (error) {
@@ -134,20 +105,12 @@ export default function createTenantRoutes(pgPool) {
         domain,
       } = req.body;
 
-      if (!pgPool) {
-        return res.status(503).json({
-          status: "error",
-          message: "Database not configured",
-        });
-      }
-
       if (!tenant_id) {
         return res.status(400).json({
           status: "error",
           message: "tenant_id is required",
         });
       }
-
       // Build branding_settings from individual fields or use provided object
       const finalBrandingSettings = {
         ...(branding_settings || {}),
@@ -169,19 +132,25 @@ export default function createTenantRoutes(pgPool) {
         ...(domain !== undefined ? { domain } : {}),
       };
 
-      const query = `
-        INSERT INTO tenant (tenant_id, name, branding_settings, status, metadata)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING *
-      `;
-
-      const result = await pgPool.query(query, [
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const nowIso = new Date().toISOString();
+      const insertData = {
         tenant_id,
-        name || null,
-        finalBrandingSettings,
-        status || "active",
-        finalMetadata,
-      ]);
+        name: name || null,
+        branding_settings: finalBrandingSettings,
+        status: status || 'active',
+        metadata: finalMetadata,
+        created_at: nowIso,
+        updated_at: nowIso,
+      };
+
+      const { data: created, error } = await supabase
+        .from('tenant')
+        .insert([insertData])
+        .select()
+        .single();
+      if (error) throw new Error(error.message);
 
       // Auto-provision tenant storage prefix by creating a placeholder object
       try {
@@ -216,7 +185,7 @@ export default function createTenantRoutes(pgPool) {
       res.json({
         status: "success",
         message: "Tenant created",
-        data: result.rows[0],
+        data: created,
       });
     } catch (error) {
       console.error("Error creating tenant:", error);
@@ -238,32 +207,24 @@ export default function createTenantRoutes(pgPool) {
     try {
       const { id } = req.params;
 
-      if (!pgPool) {
-        return res.status(503).json({
-          status: "error",
-          message: "Database not configured",
-        });
-      }
-
       // Check if id is a UUID format (for backward compatibility) or tenant_id string
       const isUUID =
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
           id,
         );
-      const query = isUUID
-        ? "SELECT * FROM tenant WHERE id = $1"
-        : "SELECT * FROM tenant WHERE tenant_id = $1";
-
-      const result = await pgPool.query(query, [id]);
-
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const sel = supabase.from('tenant').select('*');
+      const { data: row, error } = isUUID
+        ? await sel.eq('id', id).single()
+        : await sel.eq('tenant_id', id).single();
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!row) {
         return res.status(404).json({
           status: "error",
           message: "Tenant not found",
         });
       }
-
-      const row = result.rows[0];
       const normalized = {
         ...row,
         logo_url: row.branding_settings?.logo_url || row.metadata?.logo_url ||
@@ -318,13 +279,6 @@ export default function createTenantRoutes(pgPool) {
         domain,
       } = req.body;
 
-      if (!pgPool) {
-        return res.status(503).json({
-          status: "error",
-          message: "Database not configured",
-        });
-      }
-
       const updates = [];
       const params = [];
       let paramCount = 1;
@@ -352,11 +306,15 @@ export default function createTenantRoutes(pgPool) {
 
       if (shouldUpdateMetadata) {
         // Fetch existing metadata to merge
-        const cur = await pgPool.query(
-          "SELECT metadata FROM tenant WHERE id = $1",
-          [id],
-        );
-        const existingMetadata = cur.rows[0]?.metadata || {};
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
+        const { data: cur, error: metaErr } = await supabase
+          .from('tenant')
+          .select('metadata')
+          .eq('id', id)
+          .single();
+        if (metaErr && metaErr.code !== 'PGRST116') throw new Error(metaErr.message);
+        const existingMetadata = cur?.metadata || {};
 
         // Merge all metadata fields
         const mergedMetadata = {
@@ -385,11 +343,15 @@ export default function createTenantRoutes(pgPool) {
 
       if (settings !== undefined || hasBrandingFields) {
         // Fetch existing tenant branding_settings to merge
-        const cur = await pgPool.query(
-          "SELECT branding_settings FROM tenant WHERE id = $1",
-          [id],
-        );
-        const existingBranding = cur.rows[0]?.branding_settings || {};
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
+        const { data: cur2, error: brandErr } = await supabase
+          .from('tenant')
+          .select('branding_settings')
+          .eq('id', id)
+          .single();
+        if (brandErr && brandErr.code !== 'PGRST116') throw new Error(brandErr.message);
+        const existingBranding = cur2?.branding_settings || {};
 
         // Merge into branding_settings
         const mergedBranding = {
@@ -412,24 +374,32 @@ export default function createTenantRoutes(pgPool) {
         });
       }
 
-      params.push(id);
-      const query = `
-        UPDATE tenant 
-        SET ${updates.join(", ")}
-        WHERE id = $${paramCount}
-        RETURNING *
-      `;
+      // Perform update via Supabase
+      const nowIso = new Date().toISOString();
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const updateObj = {};
+      // Reconstruct from updates/params since we built merged objects above
+      if (name !== undefined) updateObj.name = name;
+      if (status !== undefined) updateObj.status = status;
+      if (shouldUpdateMetadata) updateObj.metadata = params.find(p => typeof p === 'object' && (p.country !== undefined || p.display_order !== undefined || p.domain !== undefined || p.major_city !== undefined || p.industry !== undefined || p.business_model !== undefined || p.geographic_focus !== undefined) ) || params.find(p => p && p.logo_url === undefined);
+      if (settings !== undefined || hasBrandingFields) updateObj.branding_settings = params.find(p => p && (p.logo_url !== undefined || p.primary_color !== undefined || p.accent_color !== undefined) ) || params.find(p => p && p.branding_settings === undefined && p.country === undefined);
+      updateObj.updated_at = nowIso;
 
-      const result = await pgPool.query(query, params);
-
-      if (result.rows.length === 0) {
+      const { data: updated, error: updErr } = await supabase
+        .from('tenant')
+        .update(updateObj)
+        .eq('id', id)
+        .select()
+        .single();
+      if (updErr && updErr.code !== 'PGRST116') throw new Error(updErr.message);
+      if (!updated) {
         return res.status(404).json({
           status: "error",
           message: "Tenant not found",
         });
       }
-
-      const row = result.rows[0];
+      const row = updated;
       const normalized = {
         ...row,
         logo_url: row.branding_settings?.logo_url || row.metadata?.logo_url ||
@@ -479,24 +449,22 @@ export default function createTenantRoutes(pgPool) {
           user_agent: req.get("user-agent"),
         };
 
-        await pgPool.query(
-          `
-          INSERT INTO audit_log (
-            tenant_id, user_email, action, entity_type, entity_id,
-            changes, ip_address, user_agent, created_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-        `,
-          [
-            auditLog.tenant_id,
-            auditLog.user_email,
-            auditLog.action,
-            auditLog.entity_type,
-            auditLog.entity_id,
-            JSON.stringify(auditLog.changes),
-            auditLog.ip_address,
-            auditLog.user_agent,
-          ],
-        );
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
+        const { error: auditErr } = await supabase
+          .from('audit_log')
+          .insert([{
+            tenant_id: auditLog.tenant_id,
+            user_email: auditLog.user_email,
+            action: auditLog.action,
+            entity_type: auditLog.entity_type,
+            entity_id: auditLog.entity_id,
+            changes: auditLog.changes,
+            ip_address: auditLog.ip_address,
+            user_agent: auditLog.user_agent,
+            created_at: new Date().toISOString(),
+          }]);
+        if (auditErr) throw new Error(auditErr.message);
 
         console.log("[AUDIT] Tenant updated:", id, "by", auditLog.user_email);
       } catch (auditError) {
@@ -523,17 +491,16 @@ export default function createTenantRoutes(pgPool) {
     try {
       const { id } = req.params;
 
-      if (!pgPool) {
-        return res.status(503).json({
-          status: "error",
-          message: "Database not configured",
-        });
-      }
-
-      const query = "DELETE FROM tenant WHERE id = $1 RETURNING *";
-      const result = await pgPool.query(query, [id]);
-
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('tenant')
+        .delete()
+        .eq('id', id)
+        .select()
+        .single();
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) {
         return res.status(404).json({
           status: "error",
           message: "Tenant not found",
@@ -543,7 +510,7 @@ export default function createTenantRoutes(pgPool) {
       res.json({
         status: "success",
         message: "Tenant deleted",
-        data: result.rows[0],
+        data,
       });
     } catch (error) {
       console.error("Error deleting tenant:", error);
