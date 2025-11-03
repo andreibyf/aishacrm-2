@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Check AishaCRM backend health via direct HTTP requests (Railway-independent).
+    Check AishaCRM backend health via direct HTTP requests (platform-agnostic).
 
 .DESCRIPTION
     Fetches backend health status and recent metrics without requiring Railway CLI.
@@ -11,7 +11,7 @@
     - Performance metrics
 
 .PARAMETER BackendUrl
-    Backend URL (default: production Railway URL)
+    Backend URL (default: http://localhost:3001)
 
 .EXAMPLE
     .\scripts\check-backend-health.ps1
@@ -22,8 +22,11 @@
     # Check local backend
 #>
 
+$defaultUrl = $env:VITE_AISHACRM_BACKEND_URL
+if ([string]::IsNullOrWhiteSpace($defaultUrl)) { $defaultUrl = "http://localhost:3001" }
+
 param(
-    [string]$BackendUrl = "https://aishacrm-backend-production.up.railway.app"
+    [string]$BackendUrl = $defaultUrl
 )
 
 $colors = @{
@@ -163,7 +166,7 @@ Write-ColorOutput ("=" * 60) "Info"
 Write-ColorOutput "Health Check Complete" "Highlight"
 Write-Host ""
 Write-ColorOutput "Next Steps:" "Info"
-Write-Host "  1. Enable DB logging: Railway Dashboard > Backend > Variables > Remove DISABLE_DB_LOGGING"
+Write-Host "  1. Enable DB logging: Set DISABLE_DB_LOGGING=false (or remove) in your deployment env"
 Write-Host "  2. Verify system_logs: Run queries in scripts/check-system-logs.sql (Supabase)"
 Write-Host "  3. Monitor for 3-7 days: Re-run this script daily to track stability"
 Write-Host ""

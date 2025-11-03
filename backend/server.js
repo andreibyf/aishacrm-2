@@ -35,7 +35,7 @@ try {
 }
 
 const app = express();
-// Behind Railway/edge proxies, trust X-Forwarded-* to get real client IPs
+// Behind proxies, trust X-Forwarded-* to get real client IPs
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
@@ -235,11 +235,10 @@ function rateLimiter(req, res, next) {
 app.use('/api', rateLimiter);
 
 // CORS configuration
-// Defaults: allow localhost dev and current staging domain; optionally allow *.up.railway.app
+// Defaults: allow localhost dev; rely on ALLOWED_ORIGINS for anything else
 const defaultAllowed = [
   "http://localhost:5173",
   "https://localhost:5173",
-  "https://aishacrm-2-staging.up.railway.app",
 ];
 const envAllowed = (process.env.ALLOWED_ORIGINS?.split(",") || [])
   .map(s => s.trim())
@@ -257,11 +256,7 @@ app.use(cors({
         return callback(null, true);
       }
 
-      // Allow Railway preview/staging domains by default unless explicitly disabled
-      const allowRailway = process.env.ALLOW_RAILWAY_ORIGINS !== "false";
-      if (allowRailway && /^https?:\/\/.*\.up\.railway\.app$/.test(origin)) {
-        return callback(null, true);
-      }
+      // No platform-specific defaults; configure via ALLOWED_ORIGINS
 
       return callback(new Error("Not allowed by CORS"));
     } catch {
