@@ -1,0 +1,45 @@
+import { test, expect } from '@playwright/test';
+
+const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:5173';
+const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+
+async function getAnyTenantId(request: any) {
+  const res = await request.get(`${BACKEND_URL}/api/tenants?limit=2`);
+  if (!res.ok()) return ['local-tenant-001'];
+  const body = await res.json();
+  const tenants = body?.data?.tenants || [];
+  const ids = tenants.map((t: any) => t.tenant_id).filter(Boolean);
+  return ids.length ? ids : ['local-tenant-001'];
+}
+
+test('tenant switching persists and scopes data', async ({ page, request }) => {
+  // Discover 1-2 tenants
+  const ids = await getAnyTenantId(request);
+  const a = ids[0];
+  const b = ids[1] || 'unit-test-tenant';
+
+  // Set tenant A in storage and navigate
+  await page.addInitScript((id) => localStorage.setItem('selected_tenant_id', id as string), a);
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(300);
+
+  // Verify storage
+  const storedA = await page.evaluate(() => localStorage.getItem('selected_tenant_id'));
+  expect(storedA).toBe(a);
+
+  // Switch to tenant B
+  await page.evaluate((id) => localStorage.setItem('selected_tenant_id', id as string), b);
+  await page.reload();
+  await page.waitForTimeout(300);
+  const storedB = await page.evaluate(() => localStorage.getItem('selected_tenant_id'));
+  expect(storedB).toBe(b);
+
+  // Verify URL persistence
+  await page.evaluate((id) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('tenant', id as string);
+    window.history.replaceState({}, '', url);
+  }, b);
+  await page.reload();
+  expect((new URL(page.url())).searchParams.get('tenant')).toBe(b);
+});

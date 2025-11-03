@@ -63,7 +63,7 @@ export default function createContactRoutes(pgPool) {
         status: 'success',
         data: {
           contacts,
-          total: parseInt(countResult.rows[0].count),
+            total: parseInt(countResult.rows?.[0]?.count || 0),
           limit: parseInt(limit),
           offset: parseInt(offset)
         },

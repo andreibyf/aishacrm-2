@@ -1,0 +1,87 @@
+name: E2E Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Which E2E suite to run (metrics|rls|rate-limit|notifications|tenant|crud|all)"
+        required: true
+        default: metrics
+        type: choice
+        options:
+          - metrics
+          - rls
+          - rate-limit
+          - notifications
+          - tenant
+          - crud
+          - all
+      ref:
+        description: "Git ref to run against"
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Run Playwright (${{ inputs.suite }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VITE_AISHACRM_BACKEND_URL: ${{ vars.BACKEND_URL || secrets.BACKEND_URL || 'http://localhost:3001' }}
+      VITE_AISHACRM_FRONTEND_URL: ${{ vars.FRONTEND_URL || secrets.FRONTEND_URL || 'http://localhost:3000' }}
+      E2E_TENANT_ID: ${{ vars.E2E_TENANT_ID || secrets.E2E_TENANT_ID || 'local-tenant-001' }}
+      E2E_RECIPIENT_ID: ${{ vars.E2E_RECIPIENT_ID || secrets.E2E_RECIPIENT_ID || '00000000-0000-0000-0000-000000000000' }}
+      RATE_LIMIT_SKIP: ${{ vars.RATE_LIMIT_SKIP || '0' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || 'main' }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          npm ci
+
+      - name: Install Playwright Browsers
+        run: |
+          npx playwright install --with-deps
+
+      - name: Determine test target
+        id: target
+        shell: bash
+        run: |
+          case "${{ inputs.suite }}" in
+            metrics) TARGET="tests/e2e/metrics-smoke.spec.ts" ;;
+            rls) TARGET="tests/e2e/rls-enforcement.spec.ts" ;;
+            rate-limit) TARGET="tests/e2e/rate-limit.spec.ts" ;;
+            notifications) TARGET="tests/e2e/notifications.spec.ts" ;;
+            tenant) TARGET="tests/e2e/tenant-switching.spec.ts" ;;
+            crud) TARGET="tests/e2e/crud-operations.spec.js" ;;
+            all) TARGET="tests/e2e/**/*.spec.*" ;;
+            *) TARGET="tests/e2e/**/*.spec.*" ;;
+          esac
+          echo "target=$TARGET" >> $GITHUB_OUTPUT
+          echo "Running E2E target: $TARGET"
+
+      - name: Run Playwright tests
+        run: |
+          npx playwright test "${{ steps.target.outputs.target }}"
+        env:
+          PLAYWRIGHT_BACKEND_URL: ${{ env.VITE_AISHACRM_BACKEND_URL }}
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ inputs.suite }}
+          path: playwright-report
+          if-no-files-found: ignore
