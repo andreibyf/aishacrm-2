@@ -69,7 +69,7 @@ async function safeRecentActivities(_pgPool, tenantId, limit = 10) {
   }
 }
 
-export default function createReportRoutes(_pgPool) {
+export default function createReportRoutes(pgPool) {
   const router = express.Router();
 
   // GET /api/reports/dashboard-stats - Get dashboard statistics
