@@ -433,6 +433,8 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
   // POST /api/users/heartbeat - Update last_seen and live_status
   router.post("/heartbeat", async (req, res) => {
     try {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
       const authHeader = req.headers?.authorization || "";
       const bearer = authHeader.startsWith("Bearer ")
         ? authHeader.substring(7)
@@ -464,34 +466,24 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       // Resolve target user
       let target = null;
       if (userId) {
-        const u = await pgPool.query(
-          "SELECT id FROM users WHERE id = $1",
-          [userId],
-        );
-        if (u.rows.length > 0) {
-          target = { table: "users", id: userId };
+        // Try users by id
+        const userById = await supabase.from('users').select('id').eq('id', userId).single();
+        if (userById.data?.id) {
+          target = { table: 'users', id: userId };
         } else {
-          const e = await pgPool.query(
-            "SELECT id FROM employees WHERE id = $1",
-            [userId],
-          );
-          if (e.rows.length > 0) target = { table: "employees", id: userId };
+          const empById = await supabase.from('employees').select('id').eq('id', userId).single();
+          if (empById.data?.id) target = { table: 'employees', id: userId };
         }
       }
 
       if (!target && email) {
-        const u = await pgPool.query(
-          "SELECT id FROM users WHERE LOWER(email) = LOWER($1)",
-          [email],
-        );
-        if (u.rows.length > 0) {
-          target = { table: "users", id: u.rows[0].id };
+        // Case-insensitive email lookup using ilike
+        const userByEmail = await supabase.from('users').select('id').ilike('email', email).limit(1).maybeSingle();
+        if (userByEmail.data?.id) {
+          target = { table: 'users', id: userByEmail.data.id };
         } else {
-          const e = await pgPool.query(
-            "SELECT id FROM employees WHERE LOWER(email) = LOWER($1)",
-            [email],
-          );
-          if (e.rows.length > 0) target = { table: "employees", id: e.rows[0].id };
+          const empByEmail = await supabase.from('employees').select('id, tenant_id').ilike('email', email).limit(1).maybeSingle();
+          if (empByEmail.data?.id) target = { table: 'employees', id: empByEmail.data.id };
         }
       }
 
@@ -509,30 +501,27 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
               const last_name = meta.last_name || "";
               const display_name = meta.display_name || `${first_name} ${last_name}`.trim();
 
-              if (role === "superadmin" && !normalizedTenantId) {
-                const insert = await pgPool.query(
-                  `INSERT INTO users (email, first_name, last_name, role, metadata, created_at, updated_at)
-                   VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-                   RETURNING id`,
-                  [email, first_name, last_name, "superadmin", { display_name, ...meta }],
-                );
-                target = { table: "users", id: insert.rows[0].id };
-              } else if (role === "admin" && normalizedTenantId) {
-                const insert = await pgPool.query(
-                  `INSERT INTO users (email, first_name, last_name, role, tenant_id, metadata, created_at, updated_at)
-                   VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-                   RETURNING id`,
-                  [email, first_name, last_name, "admin", normalizedTenantId, { display_name, ...meta }],
-                );
-                target = { table: "users", id: insert.rows[0].id };
+              if (role === 'superadmin' && !normalizedTenantId) {
+                const { data, error } = await supabase
+                  .from('users')
+                  .insert([{ email, first_name, last_name, role: 'superadmin', metadata: { display_name, ...meta }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }])
+                  .select('id')
+                  .single();
+                if (!error && data?.id) target = { table: 'users', id: data.id };
+              } else if (role === 'admin' && normalizedTenantId) {
+                const { data, error } = await supabase
+                  .from('users')
+                  .insert([{ email, first_name, last_name, role: 'admin', tenant_id: normalizedTenantId, metadata: { display_name, ...meta }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }])
+                  .select('id')
+                  .single();
+                if (!error && data?.id) target = { table: 'users', id: data.id };
               } else if (normalizedTenantId) {
-                const insert = await pgPool.query(
-                  `INSERT INTO employees (tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-                   RETURNING id`,
-                  [normalizedTenantId, email, first_name, last_name, role, "active", { display_name, ...meta }],
-                );
-                target = { table: "employees", id: insert.rows[0].id };
+                const { data, error } = await supabase
+                  .from('employees')
+                  .insert([{ tenant_id: normalizedTenantId, email, first_name, last_name, role, status: 'active', metadata: { display_name, ...meta }, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }])
+                  .select('id')
+                  .single();
+                if (!error && data?.id) target = { table: 'employees', id: data.id };
               }
             }
           } catch {
@@ -545,25 +534,28 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         }
       }
 
-      const updateSql = target.table === "users"
-        ? `UPDATE users
-             SET metadata = COALESCE(metadata, '{}'::jsonb)
-                             || jsonb_build_object(
-                                  'live_status', 'online',
-                                  'last_seen', to_char((NOW() AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
-                                ),
-                 updated_at = NOW()
-           WHERE id = $1`
-        : `UPDATE employees
-             SET metadata = COALESCE(metadata, '{}'::jsonb)
-                             || jsonb_build_object(
-                                  'live_status', 'online',
-                                  'last_seen', to_char((NOW() AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
-                                ),
-                 updated_at = NOW()
-           WHERE id = $1`;
+      // Merge and update metadata using Supabase API
+      const { data: existing, error: fetchErr } = await supabase
+        .from(target.table)
+        .select('metadata')
+        .eq('id', target.id)
+        .single();
 
-      await pgPool.query(updateSql, [target.id]);
+      if (fetchErr && fetchErr.code !== 'PGRST116') throw new Error(fetchErr.message);
+
+      const nowIso = new Date().toISOString();
+      const mergedMeta = {
+        ...(existing?.metadata || {}),
+        live_status: 'online',
+        last_seen: nowIso,
+      };
+
+      const { error: updErr } = await supabase
+        .from(target.table)
+        .update({ metadata: mergedMeta, updated_at: nowIso })
+        .eq('id', target.id);
+
+      if (updErr) throw new Error(updErr.message);
 
       return res.json({
         status: "success",
@@ -962,31 +954,40 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       } = req.body;
 
       // First, try to find user in users table (superadmin/admin), then employees table
-      let currentUser = await pgPool.query(
-        "SELECT metadata, tenant_id, email, 'users' as table_name FROM users WHERE id = $1",
-        [id],
-      );
-
-      if (currentUser.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      
+      let currentUser = await supabase
+        .from('users')
+        .select('metadata, tenant_id, email')
+        .eq('id', id)
+        .single();
+      
+      let tableName = 'users';
+      
+      if (currentUser.error) {
         // Try employees table
-        currentUser = await pgPool.query(
-          "SELECT metadata, tenant_id, email, 'employees' as table_name FROM employees WHERE id = $1",
-          [id],
-        );
+        currentUser = await supabase
+          .from('employees')
+          .select('metadata, tenant_id, email')
+          .eq('id', id)
+          .single();
+        
+        tableName = 'employees';
       }
 
-      if (currentUser.rows.length === 0) {
+      if (currentUser.error || !currentUser.data) {
         return res.status(404).json({
           status: "error",
           message: "User not found",
         });
       }
-
-      const tableName = currentUser.rows[0].table_name;
+      
+      const userData = currentUser.data;
 
       // Handle password update if provided
       if (new_password && new_password.trim() !== "") {
-        const userEmail = currentUser.rows[0].email;
+        const userEmail = userData.email;
 
         // Get auth user by email
         const { user: authUser } = await getAuthUserByEmail(userEmail);
@@ -1023,11 +1024,21 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       }
 
       // Merge metadata - preserve existing metadata and add/update new fields
-      const currentMetadata = currentUser.rows[0].metadata || {};
+      const currentMetadata = userData.metadata || {};
+      
+      // AUTO-SYNC: Derive display_name from first/last name if not explicitly provided
+      let derivedDisplayName = display_name;
+      if (display_name === undefined && (first_name !== undefined || last_name !== undefined)) {
+        // If first/last are being updated but display_name isn't, auto-compute it
+        const newFirst = first_name !== undefined ? first_name : (currentMetadata.first_name || '');
+        const newLast = last_name !== undefined ? last_name : (currentMetadata.last_name || '');
+        derivedDisplayName = `${newFirst} ${newLast}`.trim() || undefined;
+      }
+      
       const updatedMetadata = {
         ...currentMetadata,
         ...(metadata || {}),
-        ...(display_name !== undefined && { display_name }),
+        ...(derivedDisplayName !== undefined && { display_name: derivedDisplayName }),
         ...(is_active !== undefined && { is_active }),
         ...(tags !== undefined && { tags }),
         ...(employee_role !== undefined && { employee_role }),
@@ -1053,45 +1064,36 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       };
       const finalTenantId = tenant_id !== undefined
         ? normalizeTenant(tenant_id)
-        : currentUser.rows[0].tenant_id;
+        : userData.tenant_id;
 
-      // Update the correct table based on where the user was found
-      const updateQuery = tableName === "users"
-        ? `UPDATE users 
-           SET first_name = COALESCE($1, first_name),
-               last_name = COALESCE($2, last_name),
-               role = COALESCE($3, role),
-               tenant_id = $4,
-               metadata = $5,
-               updated_at = NOW()
-           WHERE id = $6
-           RETURNING id, tenant_id, email, first_name, last_name, role, metadata, updated_at`
-        : `UPDATE employees 
-           SET first_name = COALESCE($1, first_name),
-               last_name = COALESCE($2, last_name),
-               role = COALESCE($3, role),
-               status = COALESCE($4, status),
-               tenant_id = $5,
-               metadata = $6,
-               updated_at = NOW()
-           WHERE id = $7
-           RETURNING id, tenant_id, email, first_name, last_name, role, status, metadata, updated_at`;
-
-      const updateParams = tableName === "users"
-        ? [first_name, last_name, role, finalTenantId, updatedMetadata, id]
-        : [
-          first_name,
-          last_name,
-          role,
-          status,
-          finalTenantId,
-          updatedMetadata,
-          id,
-        ];
-
-      const result = await pgPool.query(updateQuery, updateParams);
-
-      if (result.rows.length === 0) {
+      // Use Supabase client directly to avoid SQL parser limitations
+      const updateData = {
+        ...(first_name !== undefined && { first_name }),
+        ...(last_name !== undefined && { last_name }),
+        ...(role !== undefined && { role }),
+        ...(tableName === "employees" && status !== undefined && { status }),
+        tenant_id: finalTenantId,
+        metadata: updatedMetadata,
+        updated_at: new Date().toISOString(),
+      };
+      
+      const { data, error } = await supabase
+        .from(tableName)
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error(`[User Update] Supabase error:`, error);
+        return res.status(500).json({
+          status: "error",
+          message: "Failed to update user",
+          error: error.message,
+        });
+      }
+      
+      if (!data) {
         return res.status(404).json({
           status: "error",
           message: "User not found",
@@ -1099,7 +1101,45 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       }
 
       // Expand metadata to top-level properties
-      const updatedUser = expandUserMetadata(result.rows[0]);
+      const updatedUser = expandUserMetadata(data);
+
+      // Keep Supabase Auth metadata in sync for name fields to avoid UI mismatches
+      try {
+        const userEmail = userData?.email;
+        if (userEmail && (first_name !== undefined || last_name !== undefined || display_name !== undefined)) {
+          const { user: authUser } = await getAuthUserByEmail(userEmail);
+          if (authUser?.id) {
+            const currentAuthMeta = authUser.user_metadata || {};
+            const nextFirst = (first_name !== undefined) ? first_name : (currentAuthMeta.first_name || undefined);
+            const nextLast = (last_name !== undefined) ? last_name : (currentAuthMeta.last_name || undefined);
+            const nextDisplay = (display_name !== undefined)
+              ? display_name
+              : (currentAuthMeta.display_name || (typeof nextFirst === 'string' || typeof nextLast === 'string' ? `${nextFirst || ''} ${nextLast || ''}`.trim() : undefined));
+
+            const authUpdate = {
+              ...currentAuthMeta,
+              ...(nextFirst !== undefined && { first_name: nextFirst }),
+              ...(nextLast !== undefined && { last_name: nextLast }),
+              ...(nextDisplay !== undefined && { display_name: nextDisplay }),
+              // Maintain full_name for legacy consumers
+              ...(nextFirst !== undefined || nextLast !== undefined || nextDisplay !== undefined)
+                ? { full_name: nextDisplay || `${nextFirst || ''} ${nextLast || ''}`.trim() }
+                : {},
+            };
+
+            const { error: metaErr } = await updateAuthUserMetadata(authUser.id, authUpdate);
+            if (metaErr) {
+              console.warn("[User Update] Could not sync auth metadata:", metaErr);
+            } else {
+              if (process.env.NODE_ENV !== 'test') {
+                console.log(`✓ Synced auth metadata for ${userEmail}`);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("[User Update] Auth metadata sync skipped:", e?.message || e);
+      }
 
       res.json({
         status: "success",

@@ -10,172 +10,57 @@ import morgan from "morgan";
 import compression from "compression";
 import dotenv from "dotenv";
 import { createServer } from "http";
-import dns from "dns/promises";
-import dnsStd from "dns";
-import pkg from "pg";
-const { Pool } = pkg;
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './lib/swagger.js';
+import { initSupabaseDB, pool as supabasePool } from './lib/supabase-db.js';
 
 // Load environment variables
 // Try .env.local first (for local development), then fall back to .env
 dotenv.config({ path: ".env.local" });
 dotenv.config(); // Fallback to .env if .env.local doesn't exist
 
-// Prefer IPv4 for all DNS resolutions to avoid ENETUNREACH on some hosts
+// NOTE: Using Supabase PostgREST API instead of direct PostgreSQL connection
+// Direct connection requires IPv6 which Docker doesn't support well
 let ipv4FirstApplied = false;
-try {
-  if (typeof dnsStd.setDefaultResultOrder === 'function') {
-    dnsStd.setDefaultResultOrder('ipv4first');
-    console.log("[DNS] setDefaultResultOrder('ipv4first') applied");
-    ipv4FirstApplied = true;
-  }
-} catch (e) {
-  console.warn("[DNS] Unable to set default result order:", e?.message || e);
-}
 
 const app = express();
 // Behind proxies, trust X-Forwarded-* to get real client IPs
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
-// Database connection pool with Supabase support
+// Database connection using Supabase PostgREST API (avoids IPv6 issues)
 let pgPool = null;
 let dbConnectionType = "none";
-let resolvedDbIPv4 = null; // best-effort record of IPv4 chosen for DB host
-
-// Helper to force IPv4 DNS lookups for node-postgres connections
-function forceIPv4Lookup(hostname, options, callback) {
-  try {
-    const merged = { ...(options || {}), family: 4 };
-    return dnsStd.lookup(hostname, merged, callback);
-  } catch {
-    // Fallback: try again with minimal options
-    return dnsStd.lookup(hostname, { family: 4 }, callback);
-  }
-}
 
 // Initialize diagnostics locals with defaults (updated after DB init)
 app.locals.ipv4FirstApplied = ipv4FirstApplied;
 app.locals.dbConnectionType = dbConnectionType;
-app.locals.resolvedDbIPv4 = resolvedDbIPv4;
+app.locals.resolvedDbIPv4 = null;
 app.locals.dbConfigPath = (process.env.USE_SUPABASE_PROD === 'true')
-  ? 'supabase_discrete'
-  : (process.env.DATABASE_URL ? 'database_url' : 'none');
+  ? 'supabase_api'
+  : 'none';
 
-// Initialize database pool with IPv4 preference and optional DNS pre-resolution
+// Initialize database using Supabase JS API (HTTP/REST, not direct PostgreSQL)
 await (async () => {
   if (process.env.USE_SUPABASE_PROD === "true") {
-    // Connect to Supabase Production via discrete fields
-    const supabaseConfig = {
-      host: process.env.SUPABASE_DB_HOST,
-      port: parseInt(process.env.SUPABASE_DB_PORT || "5432"),
-      database: process.env.SUPABASE_DB_NAME || "postgres",
-      user: process.env.SUPABASE_DB_USER || "postgres",
-      password: process.env.SUPABASE_DB_PASSWORD,
-      ssl: { rejectUnauthorized: false },
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
-    };
-    try {
-      // Resolve IPv4 for host to avoid IPv6 ENETUNREACH
-      if (supabaseConfig.host) {
-        let ipv4 = null;
-        try {
-          // Prefer promise-based lookup to avoid callback API pitfalls
-          const looked = await dns.lookup(supabaseConfig.host, { family: 4 });
-          ipv4 = looked?.address || null;
-        } catch {
-          // Fallback to DNS query if system lookup fails
-          ipv4 = await dns.resolve4(supabaseConfig.host).then(a => a[0]).catch(() => null);
-        }
-        if (ipv4) {
-          console.log(`[DB] Resolved ${supabaseConfig.host} -> ${ipv4} (IPv4)`);
-          supabaseConfig.host = ipv4;
-          resolvedDbIPv4 = ipv4;
-        }
-      }
-    } catch { /* no-op */ }
-    // Always force IPv4 lookups at connection time as an extra safeguard
-    pgPool = new Pool({
-      ...supabaseConfig,
-      lookup: forceIPv4Lookup,
-    });
-    dbConnectionType = "Supabase Production";
-    console.log("✓ PostgreSQL connection pool initialized (Supabase Production)");
+    // Use Supabase PostgREST API - works over HTTP, avoids IPv6 PostgreSQL issues
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
+    }
+    
+    initSupabaseDB(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    pgPool = supabasePool;
+    dbConnectionType = "Supabase API";
+    console.log("✓ Supabase PostgREST API initialized (HTTP-based, bypassing PostgreSQL IPv6)");
+    
     // update diagnostics
     app.locals.dbConnectionType = dbConnectionType;
-    app.locals.resolvedDbIPv4 = resolvedDbIPv4;
-    app.locals.dbConfigPath = 'supabase_discrete';
+    app.locals.dbConfigPath = 'supabase_api';
     return;
   }
 
-  if (process.env.DATABASE_URL) {
-    // Connect using DATABASE_URL (supports local Docker or Supabase Cloud)
-    const raw = process.env.DATABASE_URL;
-    const isSupabaseCloud = /supabase\.(co|com)/i.test(raw);
-
-    // Try to parse and pre-resolve to IPv4 to avoid IPv6 ENETUNREACH
-    let poolConfig = { connectionString: raw };
-    if (isSupabaseCloud || process.env.DB_SSL === "true") {
-      poolConfig.ssl = { rejectUnauthorized: false };
-      dbConnectionType = "Supabase Cloud DEV/QA";
-    } else {
-      dbConnectionType = "Local Docker";
-    }
-
-    try {
-      const u = new URL(raw);
-      const host = u.hostname;
-      const port = Number(u.port || 5432);
-      const database = decodeURIComponent(u.pathname.replace(/^\//, ""));
-      const user = decodeURIComponent(u.username || "");
-      const password = decodeURIComponent(u.password || "");
-
-      // Resolve IPv4-only and build explicit config
-      let ipv4 = null;
-      try {
-        const looked = await dns.lookup(host, { family: 4 });
-        ipv4 = looked?.address || null;
-      } catch {
-        ipv4 = await dns.resolve4(host).then(a => a[0]).catch(() => null);
-      }
-      if (ipv4) {
-        console.log(`[DB] Resolved ${host} -> ${ipv4} (IPv4)`);
-        poolConfig = {
-          host: ipv4,
-          port,
-          database,
-          user,
-          password,
-          ssl: (isSupabaseCloud || process.env.DB_SSL === "true") ? { rejectUnauthorized: false } : undefined,
-        };
-        resolvedDbIPv4 = ipv4;
-      }
-    } catch (e) {
-      console.warn("[DB] Could not pre-resolve IPv4:", e.message);
-    }
-
-    // Always force IPv4 lookups at connection time as an extra safeguard
-    pgPool = new Pool({
-      ...poolConfig,
-      lookup: forceIPv4Lookup,
-    });
-    console.log(`✓ PostgreSQL connection pool initialized (${dbConnectionType})`);
-    // update diagnostics
-    app.locals.dbConnectionType = dbConnectionType;
-    app.locals.resolvedDbIPv4 = resolvedDbIPv4;
-    app.locals.dbConfigPath = 'database_url';
-    return;
-  }
-
-  console.warn("⚠ No database configured - set DATABASE_URL or USE_SUPABASE_PROD=true");
+  console.warn("⚠ No database configured - set USE_SUPABASE_PROD=true with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
 })();
-
-  // Expose selected runtime diagnostics via app.locals for system routes
-  // These do NOT include secrets
-  // Note: some values are finalized after initialization above
 
 
 // Initialize Supabase Auth

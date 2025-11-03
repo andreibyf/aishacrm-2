@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createEmployeeRoutes(pgPool) {
+export default function createEmployeeRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/employees - List employees
@@ -15,14 +15,21 @@ export default function createEmployeeRoutes(pgPool) {
 
       // Allow lookup by email without tenant_id (for auth user lookup)
       if (email) {
-        const result = await pgPool.query(
-          'SELECT * FROM employees WHERE email = $1 ORDER BY created_at DESC LIMIT 1',
-          [email]
-        );
-        
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
+
+        const { data, error } = await supabase
+          .from('employees')
+          .select('*')
+          .eq('email', email)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (error) throw new Error(error.message);
+
         return res.json({
           status: 'success',
-          data: result.rows,
+          data: data || [],
         });
       }
 
@@ -30,24 +37,30 @@ export default function createEmployeeRoutes(pgPool) {
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id or email is required' });
       }
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
 
-      const result = await pgPool.query(
-        'SELECT * FROM employees WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3',
-        [tenant_id, parseInt(limit), parseInt(offset)]
-      );
+      const lim = parseInt(limit);
+      const off = parseInt(offset);
+      const from = off;
+      const to = off + lim - 1;
 
-      const countResult = await pgPool.query(
-        'SELECT COUNT(*) FROM employees WHERE tenant_id = $1',
-        [tenant_id]
-      );
+      const { data, count, error } = await supabase
+        .from('employees')
+        .select('*', { count: 'exact', head: false })
+        .eq('tenant_id', tenant_id)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (error) throw new Error(error.message);
 
       res.json({
         status: 'success',
         data: {
-          employees: result.rows,
-          total: parseInt(countResult.rows[0].count),
-          limit: parseInt(limit),
-          offset: parseInt(offset),
+          employees: data || [],
+          total: typeof count === 'number' ? count : (data ? data.length : 0),
+          limit: lim,
+          offset: off,
         },
       });
     } catch (error) {
@@ -65,19 +78,27 @@ export default function createEmployeeRoutes(pgPool) {
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
 
-      const result = await pgPool.query(
-        'SELECT * FROM employees WHERE id = $1 AND tenant_id = $2',
-        [id, tenant_id]
-      );
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .single();
 
-      if (result.rows.length === 0) {
+      if (error && error.code !== 'PGRST116') { // PGRST116 is No rows
+        throw new Error(error.message);
+      }
+
+      if (!data) {
         return res.status(404).json({ status: 'error', message: 'Employee not found' });
       }
 
       res.json({
         status: 'success',
-        data: { employee: result.rows[0] },
+        data: { employee: data },
       });
     } catch (error) {
       console.error('Error getting employee:', error);
@@ -93,18 +114,34 @@ export default function createEmployeeRoutes(pgPool) {
       if (!tenant_id || !email) {
         return res.status(400).json({ status: 'error', message: 'tenant_id and email are required' });
       }
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
 
-      const result = await pgPool.query(
-        `INSERT INTO employees (tenant_id, first_name, last_name, email, role, phone, department, metadata, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
-         RETURNING *`,
-        [tenant_id, first_name, last_name, email, role, phone, department, metadata || {}]
-      );
+      const insertData = {
+        tenant_id,
+        first_name,
+        last_name,
+        email,
+        role,
+        phone,
+        department,
+        metadata: metadata || {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data, error } = await supabase
+        .from('employees')
+        .insert([insertData])
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
 
       res.json({
         status: 'success',
         message: 'Employee created',
-        data: { employee: result.rows[0] },
+        data: { employee: data },
       });
     } catch (error) {
       console.error('Error creating employee:', error);
@@ -121,30 +158,40 @@ export default function createEmployeeRoutes(pgPool) {
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
 
-      const result = await pgPool.query(
-        `UPDATE employees 
-         SET first_name = COALESCE($1, first_name),
-             last_name = COALESCE($2, last_name),
-             email = COALESCE($3, email),
-             role = COALESCE($4, role),
-             phone = COALESCE($5, phone),
-             department = COALESCE($6, department),
-             metadata = COALESCE($7, metadata),
-             updated_at = NOW()
-         WHERE id = $8 AND tenant_id = $9
-         RETURNING *`,
-        [first_name, last_name, email, role, phone, department, metadata, id, tenant_id]
-      );
+      const updateData = {
+        ...(first_name !== undefined && { first_name }),
+        ...(last_name !== undefined && { last_name }),
+        ...(email !== undefined && { email }),
+        ...(role !== undefined && { role }),
+        ...(phone !== undefined && { phone }),
+        ...(department !== undefined && { department }),
+        ...(metadata !== undefined && { metadata }),
+        updated_at: new Date().toISOString(),
+      };
 
-      if (result.rows.length === 0) {
+      const { data, error } = await supabase
+        .from('employees')
+        .update(updateData)
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .select()
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        throw new Error(error.message);
+      }
+
+      if (!data) {
         return res.status(404).json({ status: 'error', message: 'Employee not found' });
       }
 
       res.json({
         status: 'success',
         message: 'Employee updated',
-        data: { employee: result.rows[0] },
+        data: { employee: data },
       });
     } catch (error) {
       console.error('Error updating employee:', error);
@@ -161,20 +208,29 @@ export default function createEmployeeRoutes(pgPool) {
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
 
-      const result = await pgPool.query(
-        'DELETE FROM employees WHERE id = $1 AND tenant_id = $2 RETURNING *',
-        [id, tenant_id]
-      );
+      const { data, error } = await supabase
+        .from('employees')
+        .delete()
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .select()
+        .single();
 
-      if (result.rows.length === 0) {
+      if (error && error.code !== 'PGRST116') {
+        throw new Error(error.message);
+      }
+
+      if (!data) {
         return res.status(404).json({ status: 'error', message: 'Employee not found' });
       }
 
       res.json({
         status: 'success',
         message: 'Employee deleted',
-        data: { employee: result.rows[0] },
+        data: { employee: data },
       });
     } catch (error) {
       console.error('Error deleting employee:', error);

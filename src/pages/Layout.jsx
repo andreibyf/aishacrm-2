@@ -425,6 +425,10 @@ const UserNav = ({ user, handleLogout, createPageUrl }) => {
   const getUserDisplayName = () => {
     if (user?.display_name) return user.display_name;
     if (user?.full_name) return user.full_name;
+    if (user?.first_name || user?.last_name) {
+      const fn = `${user.first_name || ""} ${user.last_name || ""}`.trim();
+      if (fn) return fn;
+    }
     if (user?.email) {
       const emailName = user.email.split("@")[0];
       return emailName.charAt(0).toUpperCase() + emailName.slice(1);
@@ -907,7 +911,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   // REMOVED: Client-side AI function-call logger (was wrapping every fetch)
   // This was adding overhead to every single network request
 
-  React.useEffect(() => {
+  const refetchUser = React.useCallback(async () => {
     const loadUser = async () => {
       setUserLoading(true);
       setUserError(null);
@@ -943,8 +947,26 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         setUserLoading(false);
       }
     };
-    loadUser();
+    await loadUser();
   }, []);
+
+  React.useEffect(() => {
+    // initial load
+    refetchUser();
+  }, [refetchUser]);
+
+  // Refresh user when profile data changes in-app (Employee/User updates)
+  React.useEffect(() => {
+    const onEntityModified = (event) => {
+      const { entity } = event.detail || {};
+      if (entity === "Employee" || entity === "User") {
+        // Re-load current user to pick up display_name/first/last changes
+        refetchUser();
+      }
+    };
+    window.addEventListener("entity-modified", onEntityModified);
+    return () => window.removeEventListener("entity-modified", onEntityModified);
+  }, [refetchUser]);
 
   React.useEffect(() => {
     // Persist AI API key (from getOrCreateUserApiKey) for agent/chat usage
@@ -1399,9 +1421,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     const originalEmployeeUpdate = Employee.update;
     const originalEmployeeDelete = Employee.delete;
 
-    const dispatchEntityModifiedEvent = (entityName) => {
+    const dispatchEntityModifiedEvent = (entityName, payload = {}) => {
       window.dispatchEvent(
-        new CustomEvent("entity-modified", { detail: { entity: entityName } }),
+        new CustomEvent("entity-modified", { detail: { entity: entityName, ...payload } }),
       );
     };
 
@@ -1412,7 +1434,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           console.debug("Employee created, refreshing data.");
         }
         if (clearCache) clearCache();
-        dispatchEntityModifiedEvent("Employee");
+        dispatchEntityModifiedEvent("Employee", { id: res?.id });
       } catch (e) {
         console.warn("Data refresh failed after employee create:", e);
       }
@@ -1426,7 +1448,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           console.debug("Employee updated, refreshing data.");
         }
         if (clearCache) clearCache();
-        dispatchEntityModifiedEvent("Employee");
+        dispatchEntityModifiedEvent("Employee", { id });
       } catch (e) {
         console.warn("Data refresh failed after employee update:", e);
       }
@@ -1440,7 +1462,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           console.debug("Employee deleted, refreshing data.");
         }
         if (clearCache) clearCache();
-        dispatchEntityModifiedEvent("Employee");
+        dispatchEntityModifiedEvent("Employee", { id });
       } catch (e) {
         console.warn("Data refresh failed after employee delete:", e);
       }
@@ -1451,6 +1473,37 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       if (originalEmployeeCreate) Employee.create = originalEmployeeCreate;
       if (originalEmployeeUpdate) Employee.update = originalEmployeeUpdate;
       if (originalEmployeeDelete) Employee.delete = originalEmployeeDelete;
+    };
+  }, [user, clearCache]);
+
+  // Patch User.update to dispatch entity-modified event for current user refresh
+  React.useEffect(() => {
+    if (!user || !user.email) return;
+
+    const originalUserUpdate = User.update;
+
+    const dispatchEntityModifiedEvent = (entityName, payload = {}) => {
+      window.dispatchEvent(
+        new CustomEvent("entity-modified", { detail: { entity: entityName, ...payload } }),
+      );
+    };
+
+    User.update = async (id, data) => {
+      const res = await originalUserUpdate(id, data);
+      try {
+        if (import.meta.env.DEV) {
+          console.debug("User updated, refreshing current user.");
+        }
+        if (clearCache) clearCache();
+        dispatchEntityModifiedEvent("User", { id });
+      } catch (e) {
+        console.warn("Data refresh failed after user update:", e);
+      }
+      return res;
+    };
+
+    return () => {
+      if (originalUserUpdate) User.update = originalUserUpdate;
     };
   }, [user, clearCache]);
 

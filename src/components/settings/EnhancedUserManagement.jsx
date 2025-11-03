@@ -548,7 +548,12 @@ export default function EnhancedUserManagement() {
             if (cleanedData.tenant_id === 'no-client') {
                 cleanedData.tenant_id = null;
             }
+            
+            // Parse full_name into first_name/last_name for proper database storage
             if (cleanedData.full_name) {
+                const parts = cleanedData.full_name.trim().split(/\s+/);
+                cleanedData.first_name = parts[0] || '';
+                cleanedData.last_name = parts.slice(1).join(' ') || '';
                 cleanedData.display_name = cleanedData.full_name;
                 delete cleanedData.full_name;
             }
@@ -568,6 +573,8 @@ export default function EnhancedUserManagement() {
 
             const finalUpdateData = {
                 tenant_id: cleanedData.tenant_id,
+                first_name: cleanedData.first_name,
+                last_name: cleanedData.last_name,
                 display_name: cleanedData.display_name,
                 is_active: cleanedData.is_active,
                 tags: cleanedData.tags,

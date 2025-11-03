@@ -1024,31 +1024,36 @@ export const User = {
         }
 
         // Map Supabase user to our User format with database data
+        // IMPORTANT: Merge order ensures DATABASE values override Supabase user_metadata
         return {
           id: user.id,
           email: user.email,
           user_metadata: user.user_metadata,
-          tenant_id: userData?.tenant_id || user.user_metadata?.tenant_id ||
-            null,
           created_at: user.created_at,
           updated_at: user.updated_at,
-          // Include database user data if available
+          // Bring in any custom fields from auth metadata FIRST (lowest priority)
+          ...(user.user_metadata || {}),
+          // Then set tenant_id with DB-first precedence
+          tenant_id: (userData?.tenant_id !== undefined && userData?.tenant_id !== null)
+            ? userData.tenant_id
+            : (user.user_metadata?.tenant_id ?? null),
+          // Finally, include database user data LAST so it overrides metadata
           ...(userData && {
             employee_id: userData.id,
             first_name: userData.first_name,
             last_name: userData.last_name,
+            // Derive full/display names from DB when present
+            full_name: (userData.full_name) || `${userData.first_name || ""} ${userData.last_name || ""}`.trim() || undefined,
+            display_name: userData.display_name || (userData.full_name) || `${userData.first_name || ""} ${userData.last_name || ""}`.trim() || undefined,
             role: (userData.role || "").toLowerCase(), // Normalize role to lowercase
             status: userData.status,
             permissions: userData.metadata?.permissions || [],
             access_level: userData.metadata?.access_level,
             is_superadmin: (userData.role || "").toLowerCase() === "superadmin",
             can_manage_users: userData.metadata?.can_manage_users || false,
-            can_manage_settings: userData.metadata?.can_manage_settings ||
-              false,
+            can_manage_settings: userData.metadata?.can_manage_settings || false,
             crm_access: true, // Grant CRM access to authenticated users with records
           }),
-          // Include any custom fields from user_metadata
-          ...user.user_metadata,
         };
       } catch (err) {
         console.error("[Supabase Auth] Exception in me():", err);
