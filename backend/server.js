@@ -23,10 +23,12 @@ dotenv.config({ path: ".env.local" });
 dotenv.config(); // Fallback to .env if .env.local doesn't exist
 
 // Prefer IPv4 for all DNS resolutions to avoid ENETUNREACH on some hosts
+let ipv4FirstApplied = false;
 try {
   if (typeof dnsStd.setDefaultResultOrder === 'function') {
     dnsStd.setDefaultResultOrder('ipv4first');
     console.log("[DNS] setDefaultResultOrder('ipv4first') applied");
+    ipv4FirstApplied = true;
   }
 } catch (e) {
   console.warn("[DNS] Unable to set default result order:", e?.message || e);
@@ -37,9 +39,18 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
+// Initialize diagnostics locals with defaults (updated after DB init)
+app.locals.ipv4FirstApplied = ipv4FirstApplied;
+app.locals.dbConnectionType = dbConnectionType;
+app.locals.resolvedDbIPv4 = resolvedDbIPv4;
+app.locals.dbConfigPath = (process.env.USE_SUPABASE_PROD === 'true')
+  ? 'supabase_discrete'
+  : (process.env.DATABASE_URL ? 'database_url' : 'none');
+
 // Database connection pool with Supabase support
 let pgPool = null;
 let dbConnectionType = "none";
+let resolvedDbIPv4 = null; // best-effort record of IPv4 chosen for DB host
 
 // Initialize database pool with IPv4 preference and optional DNS pre-resolution
 await (async () => {
@@ -71,12 +82,17 @@ await (async () => {
         if (ipv4) {
           console.log(`[DB] Resolved ${supabaseConfig.host} -> ${ipv4} (IPv4)`);
           supabaseConfig.host = ipv4;
+          resolvedDbIPv4 = ipv4;
         }
       }
     } catch { /* no-op */ }
     pgPool = new Pool(supabaseConfig);
     dbConnectionType = "Supabase Production";
     console.log("✓ PostgreSQL connection pool initialized (Supabase Production)");
+    // update diagnostics
+    app.locals.dbConnectionType = dbConnectionType;
+    app.locals.resolvedDbIPv4 = resolvedDbIPv4;
+    app.locals.dbConfigPath = 'supabase_discrete';
     return;
   }
 
@@ -120,6 +136,7 @@ await (async () => {
           password,
           ssl: (isSupabaseCloud || process.env.DB_SSL === "true") ? { rejectUnauthorized: false } : undefined,
         };
+        resolvedDbIPv4 = ipv4;
       }
     } catch (e) {
       console.warn("[DB] Could not pre-resolve IPv4:", e.message);
@@ -127,11 +144,20 @@ await (async () => {
 
     pgPool = new Pool(poolConfig);
     console.log(`✓ PostgreSQL connection pool initialized (${dbConnectionType})`);
+    // update diagnostics
+    app.locals.dbConnectionType = dbConnectionType;
+    app.locals.resolvedDbIPv4 = resolvedDbIPv4;
+    app.locals.dbConfigPath = 'database_url';
     return;
   }
 
   console.warn("⚠ No database configured - set DATABASE_URL or USE_SUPABASE_PROD=true");
 })();
+
+  // Expose selected runtime diagnostics via app.locals for system routes
+  // These do NOT include secrets
+  // Note: some values are finalized after initialization above
+
 
 // Initialize Supabase Auth
 import { initSupabaseAuth } from "./lib/supabaseAuth.js";

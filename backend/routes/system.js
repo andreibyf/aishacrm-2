@@ -29,6 +29,9 @@ export default function createSystemRoutes(pgPool) {
           database: dbStatus,
           timestamp: new Date().toISOString(),
           version: '1.0.0',
+          environment: process.env.NODE_ENV,
+          node_version: process.version,
+          uptime: process.uptime(),
         },
       });
     } catch (error) {
@@ -36,6 +39,38 @@ export default function createSystemRoutes(pgPool) {
         status: 'error',
         message: error.message,
       });
+    }
+  });
+
+  // GET /api/system/runtime - Runtime diagnostics (non-secret)
+  router.get('/runtime', async (req, res) => {
+    try {
+      const locals = req.app?.locals || {};
+      const usingSupabaseProd = process.env.USE_SUPABASE_PROD === 'true';
+      const runtime = {
+        node: {
+          version: process.version,
+          env: process.env.NODE_ENV,
+          node_options: process.env.NODE_OPTIONS,
+        },
+        dns: {
+          ipv4first_applied: !!locals.ipv4FirstApplied,
+        },
+        database: {
+          configured: !!pgPool,
+          connection_type: locals.dbConnectionType || 'none',
+          using_supabase_prod: usingSupabaseProd,
+          db_config_path: locals.dbConfigPath || (usingSupabaseProd ? 'supabase_discrete' : (process.env.DATABASE_URL ? 'database_url' : 'none')),
+          database_url_present: Boolean(process.env.DATABASE_URL),
+          supabase_host_present: Boolean(process.env.SUPABASE_DB_HOST),
+          resolved_ipv4: locals.resolvedDbIPv4 || null,
+        },
+        timestamp: new Date().toISOString(),
+      };
+
+      res.json({ status: 'success', data: runtime });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
