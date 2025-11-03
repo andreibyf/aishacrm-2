@@ -1,5 +1,7 @@
 services:
   # PostgreSQL Database (local development only)
+  # NOTE: Not currently used - backend connects to Supabase via USE_SUPABASE_PROD=true
+  # Kept for offline development and migration testing
   db:
     image: postgres:15-alpine
     container_name: aishacrm-db
@@ -8,7 +10,7 @@ services:
       - "5432:5432"
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${LOCAL_POSTGRES_PASSWORD:-changeme_local_dev_only}
       POSTGRES_DB: aishacrm
     volumes:
       - postgres_data:/var/lib/postgresql/data

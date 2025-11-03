@@ -154,7 +154,6 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
 
   // GOD MODE: SuperAdmins bypass ALL restrictions
   if (isSuperAdmin(user)) {
-    console.log("[God Mode] SuperAdmin has access to:", pageName);
     return true;
   }
 

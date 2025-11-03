@@ -15,7 +15,6 @@ function hasPageAccess(user, pageName) {
 
   // GOD MODE: SuperAdmins bypass ALL restrictions
   if (isSuperAdmin(user)) {
-    console.log("[RouteGuard God Mode] SuperAdmin has access to:", pageName);
     return true;
   }
 

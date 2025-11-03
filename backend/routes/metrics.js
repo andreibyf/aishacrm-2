@@ -61,7 +61,15 @@ export default function createMetricsRoutes(pgPool) {
         metricsParams
       );
 
-      const metrics = metricsResult.rows[0];
+      const metrics = metricsResult.rows?.[0] || {
+        total_calls: 0,
+        avg_response_time: 0,
+        max_response_time: 0,
+        min_response_time: 0,
+        error_count: 0,
+        server_error_count: 0,
+        success_count: 0
+      };
       const errorRate = metrics.total_calls > 0 
         ? (Number(metrics.error_count) / Number(metrics.total_calls) * 100).toFixed(2)
         : 0;
