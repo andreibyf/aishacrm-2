@@ -19,6 +19,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { useErrorLog } from "../shared/ErrorLogger";
+import { useConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { toast } from "sonner";
 import { useTenant } from "../shared/tenantContext";
 import { BACKEND_URL } from '@/api/entities';
 
@@ -29,6 +31,7 @@ export default function SystemHealthDashboard({ onViewMore }) {
   const [lastCheck, setLastCheck] = useState(null);
   const [metrics, setMetrics] = useState({ errorRate: 0, errorCount: 0, serverErrorCount: 0, logs: [] });
   const [rangeHours, setRangeHours] = useState(1); // time range for dashboard metrics
+  const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
 
   const checkHealth = async () => {
     setBackendStatus("checking");
@@ -87,6 +90,34 @@ export default function SystemHealthDashboard({ onViewMore }) {
     healthy: "bg-green-100 text-green-800 border-green-300",
     checking: "bg-yellow-100 text-yellow-800 border-yellow-300",
     unhealthy: "bg-red-100 text-red-800 border-red-300",
+  };
+
+  const handleClearErrors = async () => {
+    const errorCount = metrics.logs.filter(l => (l.status_code || 0) >= 400).length;
+    const confirmed = await confirm({
+      title: "Clear recent errors?",
+      description: `This will delete performance logs from the last ${rangeHours}h${selectedTenantId ? ` for tenant ${selectedTenantId.substring(0,8)}…` : ''}. ${errorCount} error(s) currently shown may be removed.`,
+      variant: "destructive",
+      confirmText: "Clear Errors",
+      cancelText: "Cancel",
+    });
+    if (!confirmed) return;
+
+    try {
+      const tenantParam = selectedTenantId ? `&tenant_id=${encodeURIComponent(selectedTenantId)}` : "";
+      const resp = await fetch(`${BACKEND_URL}/api/metrics/performance?hours=${rangeHours}${tenantParam}`, { method: "DELETE" });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`Failed to clear logs: ${resp.status} ${resp.statusText}${text ? ` - ${text}` : ""}`);
+      }
+      const data = await resp.json().catch(() => ({}));
+      const deleted = data?.data?.deleted_count;
+      toast.success(typeof deleted === 'number' ? `Deleted ${deleted} log(s)` : 'Logs cleared');
+      await loadMetrics();
+    } catch (e) {
+      console.error('Clear errors failed:', e);
+      toast.error(e.message || 'Failed to clear logs');
+    }
   };
 
   return (
@@ -201,17 +232,26 @@ export default function SystemHealthDashboard({ onViewMore }) {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-slate-100">Recent Errors</CardTitle>
-            {errors.length > 0 && (
-              <Button
-                onClick={clearErrors}
-                variant="outline"
-                size="sm"
-                className="bg-slate-700 border-slate-600 text-slate-200"
-              >
-                Clear All
-              </Button>
-            )}
             <div className="flex items-center gap-2">
+              {errors.length > 0 && (
+                <Button
+                  onClick={clearErrors}
+                  variant="outline"
+                  size="sm"
+                  className="bg-slate-700 border-slate-600 text-slate-200"
+                >
+                  Clear Local
+                </Button>
+              )}
+              <Button
+                variant="destructive"
+                size="sm"
+                className="bg-red-600 hover:bg-red-700"
+                onClick={handleClearErrors}
+                disabled={metrics.logs.filter(l => (l.status_code || 0) >= 400).length === 0}
+              >
+                Delete Recent Log Rows
+              </Button>
               <span className="text-xs text-slate-500 hidden sm:inline">
                 Scope: {selectedTenantId ? `Tenant ${selectedTenantId.substring(0,8)}…` : 'All Clients'}
               </span>
@@ -265,6 +305,7 @@ export default function SystemHealthDashboard({ onViewMore }) {
             )}
         </CardContent>
       </Card>
+      <ConfirmDialogPortal />
     </div>
   );
 }
