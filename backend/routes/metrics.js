@@ -61,14 +61,16 @@ export default function createMetricsRoutes(pgPool) {
         metricsParams
       );
 
-      const metrics = metricsResult.rows?.[0] || {
-        total_calls: 0,
-        avg_response_time: 0,
-        max_response_time: 0,
-        min_response_time: 0,
-        error_count: 0,
-        server_error_count: 0,
-        success_count: 0
+      // Ensure aggregate fields default to 0 instead of null/undefined
+      const metricsRow = metricsResult.rows?.[0] || {};
+      const metrics = {
+        total_calls: metricsRow.total_calls ?? 0,
+        avg_response_time: metricsRow.avg_response_time ?? 0,
+        max_response_time: metricsRow.max_response_time ?? 0,
+        min_response_time: metricsRow.min_response_time ?? 0,
+        error_count: metricsRow.error_count ?? 0,
+        server_error_count: metricsRow.server_error_count ?? 0,
+        success_count: metricsRow.success_count ?? 0,
       };
       const errorRate = metrics.total_calls > 0 
         ? (Number(metrics.error_count) / Number(metrics.total_calls) * 100).toFixed(2)
@@ -80,14 +82,14 @@ export default function createMetricsRoutes(pgPool) {
           logs: logsResult.rows,
           count: logsResult.rows.length,
           metrics: {
-            totalCalls: Number(metrics.total_calls),
-            avgResponseTime: Math.round(Number(metrics.avg_response_time) || 0),
-            maxResponseTime: Number(metrics.max_response_time) || 0,
-            minResponseTime: Number(metrics.min_response_time) || 0,
+            totalCalls: Number(metrics.total_calls ?? 0),
+            avgResponseTime: Math.round(Number(metrics.avg_response_time ?? 0) || 0),
+            maxResponseTime: Number(metrics.max_response_time ?? 0) || 0,
+            minResponseTime: Number(metrics.min_response_time ?? 0) || 0,
             errorRate: Number(errorRate),
-            errorCount: Number(metrics.error_count),
-            serverErrorCount: Number(metrics.server_error_count),
-            successCount: Number(metrics.success_count),
+            errorCount: Number(metrics.error_count ?? 0),
+            serverErrorCount: Number(metrics.server_error_count ?? 0),
+            successCount: Number(metrics.success_count ?? 0),
             uptime: process.uptime(),
             memory: process.memoryUsage(),
             cpu: process.cpuUsage()
