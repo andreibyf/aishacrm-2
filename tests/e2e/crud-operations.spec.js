@@ -223,7 +223,7 @@ test.describe('CRUD Operations - End-to-End', () => {
   });
 
   test.describe('Activities CRUD', () => {
-    test('should delete an activity', async ({ page }) => {
+    test('should create a new activity', async ({ page }) => {
       // Navigate to Activities page
       await navigateTo(page, '/activities');
       
