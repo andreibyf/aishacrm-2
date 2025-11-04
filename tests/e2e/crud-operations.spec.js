@@ -232,7 +232,7 @@ test.describe('CRUD Operations - End-to-End', () => {
       
       // Click Add Activity button
       const addButton = page.locator('button:has-text("Add Activity"), button:has-text("New Activity"), button:has-text("Add")').first();
-      await addButton.waitFor({ timeout: 15000 });
+      await addButton.waitFor({ state: 'visible', timeout: 15000 });
       await addButton.click();
       
       // Wait for form to appear
@@ -277,7 +277,7 @@ test.describe('CRUD Operations - End-to-End', () => {
       await page.waitForSelector('form', { state: 'hidden', timeout: 15000 }).catch(() => {});
       // Force a small reload to ensure the new item is included in the table
       await page.goto(`${BASE_URL}/activities`, { waitUntil: 'domcontentloaded' });
-      await page.waitForSelector('table tbody tr', { timeout: 10000 }).catch(() => {});
+      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
 
       // Narrow down to the created subject using the built-in search to avoid pagination issues
       const searchBox = page.locator('input[placeholder*="Search activities"], input[placeholder*="Search"]');
@@ -695,7 +695,7 @@ test.describe('CRUD Operations - End-to-End', () => {
       
       // Reload page to ensure fresh data (domcontentloaded is faster than networkidle)
       await page.goto(`${BASE_URL}/opportunities`, { waitUntil: 'domcontentloaded' });
-      await page.waitForTimeout(1500); // Extra wait for Firefox to settle
+      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       
       // Try clicking refresh button if available to force data reload
       const refreshBtn = page.locator('button[aria-label*="efresh"], button:has-text("Refresh")').first();
@@ -719,8 +719,8 @@ test.describe('CRUD Operations - End-to-End', () => {
   test.describe('System Logs CRUD', () => {
     test('should create test log and clear all', async ({ page }) => {
       // Navigate to Settings > System Logs
-      // Wait for page to be fully loaded and stable
-      await page.waitForLoadState('networkidle');
+      // Wait for dashboard page to load fully (we're at root after beforeEach)
+      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       
       // Settings is in a dropdown menu - click user menu to open it
       // User menu button contains the user's initial in a circle - get the last one (in header)

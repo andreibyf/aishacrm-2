@@ -51,42 +51,62 @@ export function injectMockUser(email = 'e2e@example.com', role = 'superadmin', t
  * 
  * @param {Page} page - Playwright page object
  * @param {string} email - E2E user email
- * @param {number} timeout - Max wait time in ms (default 20000)
  */
-export async function waitForUserPage(page, email = 'e2e@example.com', timeout = 20000) {
+export async function waitForUserPage(page, email = 'e2e@example.com') {
   // Wait for page to load
   await page.waitForLoadState('domcontentloaded');
   
-  // Re-inject E2E user if missing (page might mount before init script runs)
+  // CRITICAL: Re-inject E2E user IMMEDIATELY before React mounts
   await page.evaluate((userEmail) => {
-    if (!window.__e2eUser) {
-      console.log('[E2E] Re-injecting __e2eUser after navigation');
-      window.__e2eUser = {
-        id: 'e2e-test-user-id',
-        email: userEmail || 'e2e@example.com',
-        role: 'superadmin',
-        tenant_id: 'local-tenant-001'
-      };
-      localStorage.setItem('E2E_TEST_MODE', 'true');
-    }
+    console.log('[E2E] Setting __e2eUser before React checks for it');
+    window.__e2eUser = {
+      id: 'e2e-test-user-id',
+      email: userEmail || 'e2e@example.com',
+      role: 'superadmin',
+      tenant_id: 'local-tenant-001'
+    };
+    localStorage.setItem('E2E_TEST_MODE', 'true');
   }, email);
   
-  // Ensure user is set
-  await page.waitForFunction(() => {
-    return window.__e2eUser && (localStorage.getItem('E2E_TEST_MODE') === 'true');
-  }, { timeout: 5000 });
+  // Small wait for React to process the user
+  await page.waitForTimeout(500);
   
-  // Wait for the spinner to disappear (pages show spinner until user loads)
-  await page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout }).catch(async () => {
-    // If spinner still visible, page might not have picked up the user - try reloading
-    console.log('[E2E] Spinner still visible after timeout, reloading page...');
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000);
-  });
+  // Wait for the spinner to disappear OR main content to appear (race condition)
+  // Try waiting for no spinner first
+  const spinnerGone = await page.waitForSelector('[class*="animate-spin"]', { 
+    state: 'hidden', 
+    timeout: 10000 
+  }).then(() => true).catch(() => false);
   
-  // Wait for main content to appear
-  await page.waitForSelector('table, button, [role="main"]', { timeout: 15000 });
+  if (!spinnerGone) {
+    console.log('[E2E] Spinner still present, checking if content loaded anyway...');
+    // Maybe content is there despite spinner - check for buttons/table
+    const hasContent = await page.locator('table, button:has-text("Add"), button:has-text("New")').first()
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
+    
+    if (!hasContent) {
+      // Last resort - reload page
+      console.log('[E2E] No content found, reloading page...');
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.evaluate((userEmail) => {
+        window.__e2eUser = {
+          id: 'e2e-test-user-id',
+          email: userEmail || 'e2e@example.com',
+          role: 'superadmin',
+          tenant_id: 'local-tenant-001'
+        };
+        localStorage.setItem('E2E_TEST_MODE', 'true');
+      }, email);
+      await page.waitForTimeout(2000);
+      // One more spinner wait attempt
+      await page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 10000 }).catch(() => {});
+    }
+  }
+  
+  // Ensure main content exists
+  await page.waitForSelector('table, button[class*=""], h1, h2', { timeout: 10000 });
   
   // Final settle time
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(1500);
 }
