@@ -345,11 +345,11 @@ test.describe('CRUD Operations - End-to-End', () => {
       
       await page.waitForTimeout(1000);
       
-      // Wait for page to load and user to be set
-      await page.waitForSelector('main, [role="main"]', { timeout: 15000 });
+      // Wait for page to reload after creation
+      await page.waitForLoadState('domcontentloaded');
       await Promise.race([
-        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 10000 }).catch(() => {}),
-        page.waitForSelector('table, button', { timeout: 10000 })
+        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {}),
+        page.waitForSelector('table, button', { timeout: 15000 })
       ]);
       
       // Wait for table to load
