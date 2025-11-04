@@ -3,7 +3,7 @@
  * Tests Create, Read, Update, Delete operations across major entities
  */
 import { test, expect } from '@playwright/test';
-import { suppressAuthErrors, setE2EMode, injectMockUser } from './setup-helpers.js';
+import { suppressAuthErrors, setE2EMode, injectMockUser, waitForUserPage } from './setup-helpers.js';
 
 const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || process.env.PLAYWRIGHT_FRONTEND_URL || 'http://localhost:4000';
 const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL || process.env.PLAYWRIGHT_BACKEND_URL || '';
@@ -227,44 +227,12 @@ test.describe('CRUD Operations - End-to-End', () => {
       // Navigate to Activities page
       await navigateTo(page, '/activities');
       
-      // Wait for React app to mount
-      await page.waitForLoadState('domcontentloaded');
-      await page.waitForTimeout(500);
+      // Wait for page to load user and show content (Activities requires user)
+      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       
-      // Ensure user is set
-      await page.waitForFunction(() => {
-        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
-      }, { timeout: 5000 }).catch(() => {});
-      
-      // Wait for loading spinner to disappear OR for main content to appear
-      await Promise.race([
-        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {}),
-        page.waitForSelector('table, button:has-text("Add")', { timeout: 15000 })
-      ]);
-      
-      await page.waitForTimeout(1000);
-      
-      // Wait for React app to mount (body should always exist)
-      await page.waitForLoadState('domcontentloaded');
-      await page.waitForTimeout(500);
-      
-      // Ensure user is set (Activities requires user before showing content)
-      await page.waitForFunction(() => {
-        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
-      }, { timeout: 5000 }).catch(() => {});
-      
-      // Wait for loading spinner to disappear OR for main content to appear
-      await Promise.race([
-        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {}),
-        page.waitForSelector('table, button:has-text("Add")', { timeout: 15000 })
-      ]);
-      
-      // Small wait for React to hydrate
-      await page.waitForTimeout(1000);
-      
-      // Click Add Activity button - try multiple possible selectors with longer timeout
+      // Click Add Activity button
       const addButton = page.locator('button:has-text("Add Activity"), button:has-text("New Activity"), button:has-text("Add")').first();
-      await addButton.waitFor({ timeout: 10000 });
+      await addButton.waitFor({ timeout: 15000 });
       await addButton.click();
       
       // Wait for form to appear
@@ -328,22 +296,8 @@ test.describe('CRUD Operations - End-to-End', () => {
       // Navigate to Activities page
       await navigateTo(page, '/activities');
       
-      // Wait for React app to mount
-      await page.waitForLoadState('domcontentloaded');
-      await page.waitForTimeout(500);
-      
-      // Ensure user is set
-      await page.waitForFunction(() => {
-        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
-      }, { timeout: 5000 }).catch(() => {});
-      
-      // Wait for loading spinner to disappear OR for main content to appear
-      await Promise.race([
-        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {}),
-        page.waitForSelector('table, button:has-text("Add")', { timeout: 15000 })
-      ]);
-      
-      await page.waitForTimeout(1000);
+      // Wait for page to load user and show content
+      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       
       // Wait for page to reload after creation
       await page.waitForLoadState('domcontentloaded');
@@ -390,22 +344,8 @@ test.describe('CRUD Operations - End-to-End', () => {
       // Navigate to Activities
       await navigateTo(page, '/activities');
       
-      // Wait for React app to mount
-      await page.waitForLoadState('domcontentloaded');
-      await page.waitForTimeout(500);
-      
-      // Ensure user is set
-      await page.waitForFunction(() => {
-        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
-      }, { timeout: 5000 }).catch(() => {});
-      
-      // Wait for loading spinner to disappear OR for main content to appear
-      await Promise.race([
-        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {}),
-        page.waitForSelector('table, button', { timeout: 15000 })
-      ]);
-      
-      await page.waitForTimeout(1000);
+      // Wait for page to load user and show content
+      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       
       // First create an activity to delete
       await page.click('button:has-text("Add Activity"), button:has-text("Add")');
@@ -454,22 +394,8 @@ test.describe('CRUD Operations - End-to-End', () => {
       // Navigate to Activities page
       await navigateTo(page, '/activities');
       
-      // Wait for React app to mount
-      await page.waitForLoadState('domcontentloaded');
-      await page.waitForTimeout(500);
-      
-      // Ensure user is set
-      await page.waitForFunction(() => {
-        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
-      }, { timeout: 5000 }).catch(() => {});
-      
-      // Wait for loading spinner to disappear OR for main content to appear
-      await Promise.race([
-        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {}),
-        page.waitForSelector('table, button:has-text("Add")', { timeout: 15000 })
-      ]);
-      
-      await page.waitForTimeout(1000);
+      // Wait for page to load user and show content
+      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       
       // Click Add Activity
       await page.click('button:has-text("Add Activity"), button:has-text("Add")');
@@ -491,23 +417,8 @@ test.describe('CRUD Operations - End-to-End', () => {
   // Navigate to Leads
   await navigateTo(page, '/leads');
       
-      // Wait for React app to mount
-      await page.waitForLoadState('domcontentloaded');
-      await page.waitForTimeout(500);
-      
-      // Ensure user is set
-      await page.waitForFunction(() => {
-        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
-      }, { timeout: 5000 }).catch(() => {});
-      
-      // Wait for loading spinner to disappear OR for main content to appear
-      await Promise.race([
-        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {}),
-        page.waitForSelector('table, button:has-text("Add Lead"), button:has-text("New Lead")', { timeout: 15000 })
-      ]);
-      
-      // Small wait for React to hydrate
-      await page.waitForTimeout(1000);
+      // Wait for page to load user and show content
+      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       
       // Click Add Lead
       await page.click('button:has-text("Add Lead"), button:has-text("New Lead")');
@@ -536,23 +447,8 @@ test.describe('CRUD Operations - End-to-End', () => {
   // Navigate to Leads
   await navigateTo(page, '/leads');
       
-      // Wait for React app to mount
-      await page.waitForLoadState('domcontentloaded');
-      await page.waitForTimeout(500);
-      
-      // Ensure user is set
-      await page.waitForFunction(() => {
-        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
-      }, { timeout: 5000 }).catch(() => {});
-      
-      // Wait for loading spinner to disappear OR for main content to appear
-      await Promise.race([
-        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {}),
-        page.waitForSelector('table, button:has-text("Add Lead"), button:has-text("New Lead")', { timeout: 15000 })
-      ]);
-      
-      // Small wait for React to hydrate
-      await page.waitForTimeout(1000);
+      // Wait for page to load user and show content
+      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       // First, create a lead to edit
       await page.click('button:has-text("Add Lead"), button:has-text("New Lead")');
       await page.waitForSelector('form', { state: 'visible' });
@@ -619,23 +515,8 @@ test.describe('CRUD Operations - End-to-End', () => {
   // Navigate to Contacts
   await navigateTo(page, '/contacts');
       
-      // Wait for React app to mount
-      await page.waitForLoadState('domcontentloaded');
-      await page.waitForTimeout(500);
-      
-      // Ensure user is set
-      await page.waitForFunction(() => {
-        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
-      }, { timeout: 5000 }).catch(() => {});
-      
-      // Wait for loading spinner to disappear OR for main content to appear
-      await Promise.race([
-        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {}),
-        page.waitForSelector('table, button:has-text("Add Contact"), button:has-text("New Contact")', { timeout: 15000 })
-      ]);
-      
-      // Small wait for React to hydrate
-      await page.waitForTimeout(1000);
+      // Wait for page to load user and show content
+      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       
       // Click Add Contact
       await page.click('button:has-text("Add Contact"), button:has-text("New Contact")');
@@ -687,23 +568,8 @@ test.describe('CRUD Operations - End-to-End', () => {
       // This test verifies the fix for ContactForm tenant_id issue
   await navigateTo(page, '/contacts');
       
-      // Wait for React app to mount
-      await page.waitForLoadState('domcontentloaded');
-      await page.waitForTimeout(500);
-      
-      // Ensure user is set
-      await page.waitForFunction(() => {
-        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
-      }, { timeout: 5000 }).catch(() => {});
-      
-      // Wait for loading spinner to disappear OR for main content to appear
-      await Promise.race([
-        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {}),
-        page.waitForSelector('table, button:has-text("Add Contact"), button:has-text("New Contact")', { timeout: 15000 })
-      ]);
-      
-      // Small wait for React to hydrate
-      await page.waitForTimeout(1000);
+      // Wait for page to load user and show content
+      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       // First, create a contact to edit
       await page.click('button:has-text("Add Contact"), button:has-text("New Contact")');
       await page.waitForSelector('form', { state: 'visible' });
@@ -766,23 +632,8 @@ test.describe('CRUD Operations - End-to-End', () => {
   // Navigate to Opportunities
   await navigateTo(page, '/opportunities');
       
-      // Wait for React app to mount
-      await page.waitForLoadState('domcontentloaded');
-      await page.waitForTimeout(500);
-      
-      // Ensure user is set
-      await page.waitForFunction(() => {
-        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
-      }, { timeout: 5000 }).catch(() => {});
-      
-      // Wait for loading spinner to disappear OR for main content to appear
-      await Promise.race([
-        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {}),
-        page.waitForSelector('table, button:has-text("Add Opportunity"), button:has-text("New Opportunity")', { timeout: 15000 })
-      ]);
-      
-      // Small wait for React to hydrate
-      await page.waitForTimeout(1000);
+      // Wait for page to load user and show content
+      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       // Click Add Opportunity
       await page.click('button:has-text("Add Opportunity"), button:has-text("New Opportunity")');
       await page.waitForSelector('form', { state: 'visible' });
@@ -909,22 +760,8 @@ test.describe('CRUD Operations - End-to-End', () => {
       // Navigate to Activities
       await navigateTo(page, '/activities');
       
-      // Wait for React app to mount
-      await page.waitForLoadState('domcontentloaded');
-      await page.waitForTimeout(500);
-      
-      // Ensure user is set
-      await page.waitForFunction(() => {
-        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
-      }, { timeout: 5000 }).catch(() => {});
-      
-      // Wait for loading spinner to disappear OR for main content to appear
-      await Promise.race([
-        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {}),
-        page.waitForSelector('table, button', { timeout: 15000 })
-      ]);
-      
-      await page.waitForTimeout(1000);
+      // Wait for page to load user and show content
+      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       
       // Create activity with valid priority
       await page.click('button:has-text("Add Activity"), button:has-text("Add")');
