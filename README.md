@@ -85,6 +85,14 @@ Both frontend and backend automatically restart when you save changes:
 - Frontend: `npm run dev` uses Vite with HMR enabled
 - Production: `npm start` (backend) and `npm run build` (frontend)
 
+### Copilot PR reviews
+- This repo auto-requests a GitHub Copilot code review on pull requests to `main` (or the default branch).
+- Workflow: `.github/workflows/copilot-review.yml`
+- Triggers: PR opened, reopened, synchronized, or marked ready for review (not drafts).
+- Skip convention: add label `no-copilot` to a PR to prevent Copilot from being requested.
+- Requirements: Copilot for Pull Requests must be enabled for your org/repo. You can also enable the built-in setting at Settings → Copilot → Pull requests → “Automatically request a review from GitHub Copilot”.
+- Tweaks: adjust the branch condition in the workflow if you want Copilot on other target branches.
+
 ## Building the app
 
 ```bash
