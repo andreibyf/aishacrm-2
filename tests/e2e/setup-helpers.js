@@ -43,3 +43,50 @@ export function injectMockUser(email = 'e2e@example.com', role = 'superadmin', t
     tenant_id: tenantId
   };
 }
+
+/**
+ * Wait for a page that requires user to be loaded (shows spinner until user is set).
+ * Re-injects E2E user if missing and waits for spinner to disappear.
+ * Use this after navigating to pages like Activities, Leads, Contacts, Opportunities.
+ * 
+ * @param {Page} page - Playwright page object
+ * @param {string} email - E2E user email
+ * @param {number} timeout - Max wait time in ms (default 20000)
+ */
+export async function waitForUserPage(page, email = 'e2e@example.com', timeout = 20000) {
+  // Wait for page to load
+  await page.waitForLoadState('domcontentloaded');
+  
+  // Re-inject E2E user if missing (page might mount before init script runs)
+  await page.evaluate((userEmail) => {
+    if (!window.__e2eUser) {
+      console.log('[E2E] Re-injecting __e2eUser after navigation');
+      window.__e2eUser = {
+        id: 'e2e-test-user-id',
+        email: userEmail || 'e2e@example.com',
+        role: 'superadmin',
+        tenant_id: 'local-tenant-001'
+      };
+      localStorage.setItem('E2E_TEST_MODE', 'true');
+    }
+  }, email);
+  
+  // Ensure user is set
+  await page.waitForFunction(() => {
+    return window.__e2eUser && (localStorage.getItem('E2E_TEST_MODE') === 'true');
+  }, { timeout: 5000 });
+  
+  // Wait for the spinner to disappear (pages show spinner until user loads)
+  await page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout }).catch(async () => {
+    // If spinner still visible, page might not have picked up the user - try reloading
+    console.log('[E2E] Spinner still visible after timeout, reloading page...');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2000);
+  });
+  
+  // Wait for main content to appear
+  await page.waitForSelector('table, button, [role="main"]', { timeout: 15000 });
+  
+  // Final settle time
+  await page.waitForTimeout(1000);
+}
