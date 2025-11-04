@@ -437,8 +437,23 @@ test.describe('CRUD Operations - End-to-End', () => {
   // Navigate to Leads
   await navigateTo(page, '/leads');
       
-      // Wait for page to fully load
-      await page.waitForSelector('table, button:has-text("Add Lead"), button:has-text("New Lead")', { timeout: 15000 });
+      // Wait for page to fully load - the page shows a spinner until user is loaded
+      // Check for either the Add button OR the loading spinner, then wait for content
+      await page.waitForSelector('main, [role="main"]', { timeout: 15000 });
+      
+      // Ensure user is set (Leads requires user before showing content)
+      await page.waitForFunction(() => {
+        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
+      }, { timeout: 5000 }).catch(() => {});
+      
+      // Wait for loading spinner to disappear OR for main content to appear
+      await Promise.race([
+        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 10000 }).catch(() => {}),
+        page.waitForSelector('table, button:has-text("Add Lead"), button:has-text("New Lead")', { timeout: 10000 })
+      ]);
+      
+      // Small wait for React to hydrate
+      await page.waitForTimeout(1000);
       
       // Click Add Lead
       await page.click('button:has-text("Add Lead"), button:has-text("New Lead")');
@@ -467,6 +482,22 @@ test.describe('CRUD Operations - End-to-End', () => {
   // Navigate to Leads
   await navigateTo(page, '/leads');
       
+      // Wait for page to fully load - the page shows a spinner until user is loaded
+      await page.waitForSelector('main, [role="main"]', { timeout: 15000 });
+      
+      // Ensure user is set
+      await page.waitForFunction(() => {
+        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
+      }, { timeout: 5000 }).catch(() => {});
+      
+      // Wait for loading spinner to disappear OR for main content to appear
+      await Promise.race([
+        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 10000 }).catch(() => {}),
+        page.waitForSelector('table, button:has-text("Add Lead"), button:has-text("New Lead")', { timeout: 10000 })
+      ]);
+      
+      // Small wait for React to hydrate
+      await page.waitForTimeout(1000);
       // First, create a lead to edit
       await page.click('button:has-text("Add Lead"), button:has-text("New Lead")');
       await page.waitForSelector('form', { state: 'visible' });
@@ -533,8 +564,22 @@ test.describe('CRUD Operations - End-to-End', () => {
   // Navigate to Contacts
   await navigateTo(page, '/contacts');
       
-      // Wait for page to fully load
-      await page.waitForSelector('table, button:has-text("Add Contact"), button:has-text("New Contact")', { timeout: 15000 });
+      // Wait for page to fully load - the page shows a spinner until user is loaded
+      await page.waitForSelector('main, [role="main"]', { timeout: 15000 });
+      
+      // Ensure user is set
+      await page.waitForFunction(() => {
+        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
+      }, { timeout: 5000 }).catch(() => {});
+      
+      // Wait for loading spinner to disappear OR for main content to appear
+      await Promise.race([
+        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 10000 }).catch(() => {}),
+        page.waitForSelector('table, button:has-text("Add Contact"), button:has-text("New Contact")', { timeout: 10000 })
+      ]);
+      
+      // Small wait for React to hydrate
+      await page.waitForTimeout(1000);
       
       // Click Add Contact
       await page.click('button:has-text("Add Contact"), button:has-text("New Contact")');
@@ -586,6 +631,22 @@ test.describe('CRUD Operations - End-to-End', () => {
       // This test verifies the fix for ContactForm tenant_id issue
   await navigateTo(page, '/contacts');
       
+      // Wait for page to fully load - the page shows a spinner until user is loaded
+      await page.waitForSelector('main, [role="main"]', { timeout: 15000 });
+      
+      // Ensure user is set
+      await page.waitForFunction(() => {
+        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
+      }, { timeout: 5000 }).catch(() => {});
+      
+      // Wait for loading spinner to disappear OR for main content to appear
+      await Promise.race([
+        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 10000 }).catch(() => {}),
+        page.waitForSelector('table, button:has-text("Add Contact"), button:has-text("New Contact")', { timeout: 10000 })
+      ]);
+      
+      // Small wait for React to hydrate
+      await page.waitForTimeout(1000);
       // First, create a contact to edit
       await page.click('button:has-text("Add Contact"), button:has-text("New Contact")');
       await page.waitForSelector('form', { state: 'visible' });
@@ -648,6 +709,22 @@ test.describe('CRUD Operations - End-to-End', () => {
   // Navigate to Opportunities
   await navigateTo(page, '/opportunities');
       
+      // Wait for page to fully load - the page shows a spinner until user is loaded
+      await page.waitForSelector('main, [role="main"]', { timeout: 15000 });
+      
+      // Ensure user is set
+      await page.waitForFunction(() => {
+        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
+      }, { timeout: 5000 }).catch(() => {});
+      
+      // Wait for loading spinner to disappear OR for main content to appear
+      await Promise.race([
+        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 10000 }).catch(() => {}),
+        page.waitForSelector('table, button:has-text("Add Opportunity"), button:has-text("New Opportunity")', { timeout: 10000 })
+      ]);
+      
+      // Small wait for React to hydrate
+      await page.waitForTimeout(1000);
       // Click Add Opportunity
       await page.click('button:has-text("Add Opportunity"), button:has-text("New Opportunity")');
       await page.waitForSelector('form', { state: 'visible' });
