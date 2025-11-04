@@ -299,17 +299,14 @@ test.describe('CRUD Operations - End-to-End', () => {
       // Wait for page to load user and show content
       await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       
-      // Wait for page to reload after creation
-      await page.waitForLoadState('domcontentloaded');
-      await Promise.race([
-        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {}),
-        page.waitForSelector('table, button', { timeout: 15000 })
-      ]);
-      
       // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 15000 });      // Find first activity row and click edit button
+      await page.waitForSelector('table tbody tr', { timeout: 15000 });
+      
+      // Find first activity row and click edit button
       const firstRow = page.locator('table tbody tr').first();
-      await firstRow.locator('button[aria-label="Edit"], button:has-text("Edit")').click();
+      const editButton = firstRow.locator('button[aria-label="Edit"], button:has-text("Edit")').first();
+      await editButton.waitFor({ state: 'visible', timeout: 10000 });
+      await editButton.click();
       
       // Wait for form
       await page.waitForSelector('form', { state: 'visible' });
@@ -347,8 +344,10 @@ test.describe('CRUD Operations - End-to-End', () => {
       // Wait for page to load user and show content
       await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       
-      // First create an activity to delete
-      await page.click('button:has-text("Add Activity"), button:has-text("Add")');
+      // First create an activity to delete - wait for Add button to appear
+      const addButton = page.locator('button:has-text("Add Activity"), button:has-text("Add")').first();
+      await addButton.waitFor({ state: 'visible', timeout: 15000 });
+      await addButton.click();
       await page.waitForSelector('input#subject, [data-testid="activity-subject-input"]', { timeout: 10000 });      const timestamp = Date.now();
       const testSubject = `E2E Delete Test Activity ${timestamp}`;
       await page.fill('input#subject, [data-testid="activity-subject-input"]', testSubject);
@@ -397,8 +396,10 @@ test.describe('CRUD Operations - End-to-End', () => {
       // Wait for page to load user and show content
       await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       
-      // Click Add Activity
-      await page.click('button:has-text("Add Activity"), button:has-text("Add")');
+      // Wait for Add Activity button and click it
+      const addButton = page.locator('button:has-text("Add Activity"), button:has-text("Add")').first();
+      await addButton.waitFor({ state: 'visible', timeout: 15000 });
+      await addButton.click();
       await page.waitForSelector('form', { state: 'visible' });      // Try to save without filling required fields
       await page.click('button[type="submit"]:has-text("Save")');
       
@@ -420,8 +421,10 @@ test.describe('CRUD Operations - End-to-End', () => {
       // Wait for page to load user and show content
       await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       
-      // Click Add Lead
-      await page.click('button:has-text("Add Lead"), button:has-text("New Lead")');
+      // Wait for Add Lead button to appear and click it
+      const addLeadButton = page.locator('button:has-text("Add Lead"), button:has-text("New Lead")').first();
+      await addLeadButton.waitFor({ state: 'visible', timeout: 15000 });
+      await addLeadButton.click();
       await page.waitForSelector('form', { state: 'visible' });
       
       // Fill lead form - using ID selectors that match the actual form
@@ -449,8 +452,11 @@ test.describe('CRUD Operations - End-to-End', () => {
       
       // Wait for page to load user and show content
       await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
+      
       // First, create a lead to edit
-      await page.click('button:has-text("Add Lead"), button:has-text("New Lead")');
+      const addLeadBtn = page.locator('button:has-text("Add Lead"), button:has-text("New Lead")').first();
+      await addLeadBtn.waitFor({ state: 'visible', timeout: 15000 });
+      await addLeadBtn.click();
       await page.waitForSelector('form', { state: 'visible' });
       
       const testEmail = `update-lead-${Date.now()}@example.com`;
@@ -472,7 +478,10 @@ test.describe('CRUD Operations - End-to-End', () => {
       // Now find and edit this lead using data-testid
       const leadRow = page.locator(`[data-testid="lead-row-${testEmail}"]`);
       await expect(leadRow).toBeVisible({ timeout: 5000 });
-      await leadRow.locator('td:last-child button').nth(1).click(); // Click Edit button (2nd button)
+      
+      const editBtn = leadRow.locator('td:last-child button').nth(1);
+      await editBtn.waitFor({ state: 'visible', timeout: 5000 });
+      await editBtn.click(); // Click Edit button (2nd button)
       
       await page.waitForSelector('form', { state: 'visible' });
       
@@ -519,7 +528,9 @@ test.describe('CRUD Operations - End-to-End', () => {
       await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       
       // Click Add Contact
-      await page.click('button:has-text("Add Contact"), button:has-text("New Contact")');
+      const addContactBtn = page.locator('button:has-text("Add Contact"), button:has-text("New Contact")').first();
+      await addContactBtn.waitFor({ state: 'visible', timeout: 15000 });
+      await addContactBtn.click();
       await page.waitForSelector('form', { state: 'visible' });
       
       // Fill contact form - using ID selectors that match the actual form
@@ -570,8 +581,11 @@ test.describe('CRUD Operations - End-to-End', () => {
       
       // Wait for page to load user and show content
       await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
+      
       // First, create a contact to edit
-      await page.click('button:has-text("Add Contact"), button:has-text("New Contact")');
+      const addContactBtn = page.locator('button:has-text("Add Contact"), button:has-text("New Contact")').first();
+      await addContactBtn.waitFor({ state: 'visible', timeout: 15000 });
+      await addContactBtn.click();
       await page.waitForSelector('form', { state: 'visible' });
       
       const testEmail = `tag-test-${Date.now()}@example.com`;
@@ -607,7 +621,9 @@ test.describe('CRUD Operations - End-to-End', () => {
       
       // Now open edit form for this contact - use first matching row in table
       // The action buttons are icon buttons with tooltips - click the second button (Edit)
-      await contactRow.locator('td:last-child button').nth(1).click();
+      const editContactBtn = contactRow.locator('td:last-child button').nth(1);
+      await editContactBtn.waitFor({ state: 'visible', timeout: 5000 });
+      await editContactBtn.click();
       
       await page.waitForSelector('form', { state: 'visible' });
       
@@ -634,8 +650,11 @@ test.describe('CRUD Operations - End-to-End', () => {
       
       // Wait for page to load user and show content
       await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
+      
       // Click Add Opportunity
-      await page.click('button:has-text("Add Opportunity"), button:has-text("New Opportunity")');
+      const addOppBtn = page.locator('button:has-text("Add Opportunity"), button:has-text("New Opportunity")').first();
+      await addOppBtn.waitFor({ state: 'visible', timeout: 15000 });
+      await addOppBtn.click();
       await page.waitForSelector('form', { state: 'visible' });
       
       // Fill opportunity form - using ID selectors that match the actual form
@@ -731,7 +750,9 @@ test.describe('CRUD Operations - End-to-End', () => {
       const initialLogCount = parseInt(initialCountText.match(/\d+/)[0]);
       
       // Click Add Test Log
-      await page.click('button:has-text("Add Test Log")');
+      const addLogBtn = page.locator('button:has-text("Add Test Log")').first();
+      await addLogBtn.waitFor({ state: 'visible', timeout: 15000 });
+      await addLogBtn.click();
       
       // Wait for log to appear
       await page.waitForTimeout(1500);
@@ -764,7 +785,9 @@ test.describe('CRUD Operations - End-to-End', () => {
       await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
       
       // Create activity with valid priority
-      await page.click('button:has-text("Add Activity"), button:has-text("Add")');
+      const addActivityBtn = page.locator('button:has-text("Add Activity"), button:has-text("Add")').first();
+      await addActivityBtn.waitFor({ state: 'visible', timeout: 15000 });
+      await addActivityBtn.click();
       await page.waitForSelector('form', { state: 'visible' });      // Fill subject using correct ID selector
       await page.fill('#subject', 'Priority Test');
       
@@ -780,7 +803,9 @@ test.describe('CRUD Operations - End-to-End', () => {
       await expect(page.locator('table tbody tr').filter({ hasText: 'Priority Test' }).first()).toBeVisible({ timeout: 10000 });
       
       // Open another activity form to verify priority options
-      await page.click('button:has-text("Add Activity")');
+      const addAnotherBtn = page.locator('button:has-text("Add Activity")').first();
+      await addAnotherBtn.waitFor({ state: 'visible', timeout: 15000 });
+      await addAnotherBtn.click();
       await page.waitForSelector('form', { state: 'visible' });
       
       // Click on the priority select trigger to open dropdown
