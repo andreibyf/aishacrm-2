@@ -66,8 +66,8 @@ The app should work immediately with mock users. Check console:
 #### Option A: Via Supabase Dashboard
 1. Go to **Authentication** → **Users**
 2. Click **Add User**
-3. Email: `test@aishacrm.com`
-4. Password: (set a password)
+3. Email: (enter your desired test email)
+4. Password: (set a secure password)
 5. User Metadata (JSON):
    ```json
    {
@@ -82,11 +82,11 @@ Use the app's sign-up form (if you have one).
 ### Test 4: Test Sign In
 
 1. Open your app
-2. Try to sign in with: `test@aishacrm.com`
+2. Sign in with the user you created
 3. Check console for:
-   ```
-   [Supabase Auth] Sign in successful: test@aishacrm.com
-   ```
+  ```
+  [Supabase Auth] Sign in successful
+  ```
 
 ### Test 5: Test Session Persistence
 

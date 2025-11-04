@@ -25,18 +25,14 @@ async function createTestUser() {
       console.log('2. Select project: ehjlenywplgyiahgxkfj');
       console.log('3. Go to Authentication → Users');
       console.log('4. Click "Add User" button');
-      console.log('5. Fill in:');
-      console.log('   Email: test@aishacrm.com');
-      console.log('   Password: TestPassword123!');
-      console.log('   User Metadata (JSON):');
+  console.log('5. Fill in your desired Email and Password');
+  console.log('   User Metadata (JSON):');
       console.log('   {');
       console.log('     "tenant_id": "local-tenant-001",');
       console.log('     "name": "Test User"');
       console.log('   }');
-      console.log('\n6. Click "Create User"\n');
-      console.log('Then you can test sign in with:');
-      console.log('   Email: test@aishacrm.com');
-      console.log('   Password: TestPassword123!\n');
+  console.log('\n6. Click "Create User"\n');
+  console.log('Then sign in using the credentials you created.');
     } else {
       console.log('❌ Auth schema not found. Supabase Auth may not be enabled.\n');
     }

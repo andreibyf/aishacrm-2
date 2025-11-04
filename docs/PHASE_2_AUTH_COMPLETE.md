@@ -44,7 +44,7 @@ Successfully migrated from Base44 OAuth authentication to Supabase Email/Passwor
 
 ### 4. SuperAdmin Account Creation
 - ✅ Created employee record in database:
-  - Email: `admin@aishacrm.com`
+  - Email: `your-admin-email@example.com`
   - Role: `SuperAdmin` (normalized to `superadmin`)
   - Access Level: `superadmin`
   - Tenant: `local-tenant-001`
@@ -178,7 +178,7 @@ SUPABASE_ANON_KEY=sb_publishable_P-agiWU11Auw3kUOFKrW6Q_Qs-_PkTi
 
 ### Test Backend Employee Endpoint
 ```bash
-curl "http://localhost:3001/api/employees?email=admin@aishacrm.com"
+curl "http://localhost:3001/api/employees?email=your-admin-email@example.com"
 ```
 
 ### Verify RLS Status
@@ -246,15 +246,15 @@ If continuing Base44 migration:
 ## Credentials
 
 ### SuperAdmin Account
-- **Email**: admin@aishacrm.com
-- **Password**: SuperAdmin123!
+- **Email**: (configure in Supabase Auth)
+- **Password**: (configure in Supabase Auth)
 - **Role**: superadmin
 - **Tenant**: local-tenant-001
 - **Access**: Full system access (god mode)
 
 ### Test User Account (if created)
-- **Email**: test@aishacrm.com
-- **Password**: TestPassword123!
+- **Email**: (your test email)
+- **Password**: (your test password)
 - **Role**: admin
 - **Tenant**: local-tenant-001
 - **Access**: Admin access (no god mode)
@@ -271,7 +271,7 @@ If continuing Base44 migration:
 
 ### If permissions denied:
 1. Check console for `[God Mode]` or `[RouteGuard]` logs
-2. Verify employee record exists: `curl "http://localhost:3001/api/employees?email=admin@aishacrm.com"`
+2. Verify employee record exists: `curl "http://localhost:3001/api/employees?email=your-admin-email@example.com"`
 3. Check that `is_superadmin: true` in employee metadata
 
 ### If tenant not showing:

@@ -7,9 +7,9 @@ import { test, expect } from '@playwright/test';
 const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:5173';
 const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL || process.env.PLAYWRIGHT_BACKEND_URL || '';
 
-// Test user credentials (align with auth.setup defaults)
-const TEST_EMAIL = process.env.SUPERADMIN_EMAIL || 'test@aishacrm.com';
-const TEST_PASSWORD = process.env.SUPERADMIN_PASSWORD || 'TestPassword123!';
+// Test user credentials (must be provided via env; do not hardcode defaults)
+const TEST_EMAIL = process.env.SUPERADMIN_EMAIL || '';
+const TEST_PASSWORD = process.env.SUPERADMIN_PASSWORD || '';
 
 // Helper: Wait for backend to be healthy using Playwright's request fixture
 async function waitForBackendHealth(request) {
@@ -44,6 +44,10 @@ async function loginAsUser(page, email, password) {
   const hasLoginForm = await page.locator('input[type="email"], input[name="email"]').isVisible({ timeout: 2000 }).catch(() => false);
   if (!hasLoginForm) {
     console.log('[Test] Already logged in, skipping login');
+    return;
+  }
+  if (!email || !password) {
+    console.warn('[Test] No credentials provided; skipping login and relying on E2E mock user.');
     return;
   }
   
@@ -166,7 +170,7 @@ test.describe('CRUD Operations - End-to-End', () => {
       // Inject mock user with tenantId for E2E tests (User.me() will fail in headless mode)
       window.__e2eUser = {
         id: 'e2e-test-user-id',
-        email: 'test@aishacrm.com',
+        email: `${TEST_EMAIL || 'e2e@example.com'}`,
         role: 'superadmin',
         tenant_id: 'local-tenant-001'
       };
@@ -184,7 +188,7 @@ test.describe('CRUD Operations - End-to-End', () => {
     }
 
     // Ensure the logged-in user has tenant_id set (ActivityForm requires tenantId)
-    const assigned = await ensureUserTenantAssigned(page, TEST_EMAIL);
+  const assigned = TEST_EMAIL ? await ensureUserTenantAssigned(page, TEST_EMAIL) : false;
     if (assigned) {
       // Refresh app state after assignment
       await page.goto(`${BASE_URL}/`, { waitUntil: 'load' });

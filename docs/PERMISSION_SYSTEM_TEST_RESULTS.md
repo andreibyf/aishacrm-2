@@ -97,7 +97,7 @@ October 26, 2025
 
 2. **Login as SuperAdmin**
    ```
-   Email: admin@aishacrm.com
+   Email: your-admin-email@example.com
    Password: [your password]
    ```
 

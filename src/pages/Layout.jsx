@@ -2232,11 +2232,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             </button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-slate-500">
-            <p>Demo: test@aishacrm.com / TestPassword123!</p>
-            <p className="text-xs mt-1">
-              Create users in Supabase Dashboard → Authentication
-            </p>
+          {/* Hint: Users should be created via Supabase Auth. Removed demo credentials. */}
+          <div className="mt-6 text-center text-xs text-slate-500">
+            <p>Create users in Supabase Dashboard → Authentication</p>
           </div>
         </div>
       </div>

@@ -86,8 +86,8 @@ VITE_SUPABASE_ANON_KEY=your-copied-anon-key-here
 
 In Supabase Dashboard → **Authentication** → **Users** → **Add User**:
 
-- **Email:** `test@aishacrm.com`
-- **Password:** (choose a password)
+- **Email:** (enter your desired test email)
+- **Password:** (choose a secure password)
 - **User Metadata (JSON):**
   ```json
   {
@@ -99,7 +99,7 @@ In Supabase Dashboard → **Authentication** → **Users** → **Add User**:
 ### Step 5: Test Authentication
 
 1. Open your app
-2. Sign in with test credentials
+2. Sign in with the user you created
 3. Check browser console for: `[Supabase Auth] Sign in successful`
 4. Refresh page - should stay logged in
 5. Sign out - should clear session
