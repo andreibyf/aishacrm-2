@@ -49,7 +49,24 @@ Originally powered by Ai-SHA, now transitioning to your own independent infrastr
    npm run dev  # Frontend with hot module replacement
    ```
 
-### Quick Start (All Services)
+### Development vs Docker Ports
+
+To avoid confusion when testing, different ports are used for local development vs Docker containers:
+
+| Service | Local Dev | Docker Container |
+|---------|-----------|-----------------|
+| Frontend | `http://localhost:5173` (Vite default) | `http://localhost:4000` |
+| Backend API | `http://localhost:3001` | `http://localhost:4001` |
+
+**Local Development:**
+- Start with `npm run dev` (frontend) and `cd backend && npm run dev` (backend)
+- Or use `.\start-all.ps1` to start both in background
+
+**Docker Containers:**
+- Start with `docker compose up -d --build`
+- Access frontend at port 4000, backend at port 4001
+
+## Quick Start (All Services)
 
 Use the convenience script to start everything at once:
 ```bash

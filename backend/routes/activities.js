@@ -21,7 +21,14 @@ export default function createActivityRoutes(pgPool) {
 
   // Helper to merge metadata and expose UI-friendly fields
   function normalizeActivity(row) {
-    const meta = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+    let meta = {};
+    if (row.metadata) {
+      if (typeof row.metadata === 'object') {
+        meta = row.metadata;
+      } else if (typeof row.metadata === 'string') {
+        try { meta = JSON.parse(row.metadata); } catch { meta = {}; }
+      }
+    }
     // Map body -> description for the UI and spread metadata back to top-level (non-destructive)
     return {
       ...row,

@@ -32,7 +32,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "3001:3001"
+      - "4001:3001"  # External port 4001 maps to internal 3001
     env_file:
       - ./backend/.env
     environment:
@@ -42,7 +42,7 @@ services:
       # Don't override DATABASE_URL - let backend/.env control Supabase vs local
       # - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@db:5432/aishacrm}
       # Supabase vars loaded from backend/.env via env_file above
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4000}
     # Force IPv4 resolution for Supabase direct connection
     extra_hosts:
       - "db.ehjlenywplgyiahgxkfj.supabase.co:host-gateway"
@@ -71,12 +71,12 @@ services:
     depends_on:
       - backend
     ports:
-      - "3000:3000"
+      - "4000:3000"  # External port 4000 maps to internal 3000
     env_file:
       - ./.env
     environment:
       - PORT=${FRONTEND_PORT:-3000}
-      - VITE_AISHACRM_BACKEND_URL=${VITE_AISHACRM_BACKEND_URL:-http://localhost:3001}
+      - VITE_AISHACRM_BACKEND_URL=${VITE_AISHACRM_BACKEND_URL:-http://localhost:4001}
       - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
       - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
     healthcheck:
