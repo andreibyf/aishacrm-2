@@ -36,7 +36,7 @@ permissions:
 jobs:
   e2e:
     name: Run Playwright (${{ inputs.suite }})
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 30
     env:
       VITE_AISHACRM_BACKEND_URL: ${{ inputs.backend_url || vars.BACKEND_URL || secrets.BACKEND_URL || 'http://localhost:4001' }}
@@ -61,43 +61,55 @@ jobs:
 
       - name: Install Playwright Browsers
         run: |
-          npx playwright install --with-deps
+          npx playwright install
 
       - name: Preflight - Verify targets are reachable
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          echo "Backend URL: $VITE_AISHACRM_BACKEND_URL"
-          echo "Frontend URL: $VITE_AISHACRM_FRONTEND_URL"
-          timeout 10s bash -c "until curl -fsS "$VITE_AISHACRM_BACKEND_URL/health" >/dev/null; do echo 'Waiting for backend...'; sleep 2; done" || {
-            echo "Backend not reachable at $VITE_AISHACRM_BACKEND_URL."
-            echo "Set repository Variables BACKEND_URL/FRONTEND_URL (Settings → Variables) to publicly reachable endpoints,"
-            echo "or pass backend_url/frontend_url when dispatching this workflow."
+          $backend = $env:VITE_AISHACRM_BACKEND_URL
+          $frontend = $env:VITE_AISHACRM_FRONTEND_URL
+          Write-Host "Backend URL: $backend"
+          Write-Host "Frontend URL: $frontend"
+
+          $backendOk = $false
+          for ($i = 0; $i -lt 10; $i++) {
+            try {
+              $resp = Invoke-WebRequest -Uri "$backend/health" -UseBasicParsing -TimeoutSec 10
+              if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 400) { $backendOk = $true; break }
+            } catch {
+              Start-Sleep -Seconds 2
+            }
+          }
+          if (-not $backendOk) {
+            Write-Error "Backend not reachable at $backend"
             exit 1
           }
-          # Frontend may be static; don't require a specific path beyond root
-          curl -fsS "$VITE_AISHACRM_FRONTEND_URL/" >/dev/null || {
-            echo "Frontend not reachable at $VITE_AISHACRM_FRONTEND_URL."
-            echo "Set repository Variables FRONTEND_URL (or workflow input) to a reachable address."
+
+          try {
+            $fresp = Invoke-WebRequest -Uri "$frontend/" -UseBasicParsing -TimeoutSec 10
+            if ($fresp.StatusCode -lt 200 -or $fresp.StatusCode -ge 400) { throw "Unexpected status: $($fresp.StatusCode)" }
+          } catch {
+            Write-Error "Frontend not reachable at $frontend"
             exit 1
           }
 
       - name: Determine test target
         id: target
-        shell: bash
+        shell: pwsh
         run: |
-          case "${{ inputs.suite }}" in
-            metrics) TARGET="tests/e2e/metrics-smoke.spec.ts" ;;
-            rls) TARGET="tests/e2e/rls-enforcement.spec.ts" ;;
-            rate-limit) TARGET="tests/e2e/rate-limit.spec.ts" ;;
-            notifications) TARGET="tests/e2e/notifications.spec.ts" ;;
-            tenant) TARGET="tests/e2e/tenant-switching.spec.ts" ;;
-            crud) TARGET="tests/e2e/crud-operations.spec.js" ;;
-            all) TARGET="tests/e2e/**/*.spec.*" ;;
-            *) TARGET="tests/e2e/**/*.spec.*" ;;
-          esac
-          echo "target=$TARGET" >> $GITHUB_OUTPUT
-          echo "Running E2E target: $TARGET"
+          $suite = "${{ inputs.suite }}"
+          switch ($suite) {
+            "metrics" { $TARGET = "tests/e2e/metrics-smoke.spec.ts" }
+            "rls" { $TARGET = "tests/e2e/rls-enforcement.spec.ts" }
+            "rate-limit" { $TARGET = "tests/e2e/rate-limit.spec.ts" }
+            "notifications" { $TARGET = "tests/e2e/notifications.spec.ts" }
+            "tenant" { $TARGET = "tests/e2e/tenant-switching.spec.ts" }
+            "crud" { $TARGET = "tests/e2e/crud-operations.spec.js" }
+            "all" { $TARGET = "tests/e2e/**/*.spec.*" }
+            Default { $TARGET = "tests/e2e/**/*.spec.*" }
+          }
+          "target=$TARGET" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Running E2E target: $TARGET"
 
       - name: Run Playwright tests
         run: |

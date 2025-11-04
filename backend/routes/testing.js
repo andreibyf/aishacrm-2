@@ -58,7 +58,12 @@ export default function createTestingRoutes(_pgPool) {
   });
 
   // POST /api/testing/run-playwright - Trigger GitHub Actions workflow to run E2E tests
-  // Body: { suite: 'metrics' | 'rls' | 'rate-limit' | 'notifications' | 'tenant' | 'crud', ref?: 'main' }
+  // Body: {
+  //   suite: 'metrics' | 'rls' | 'rate-limit' | 'notifications' | 'tenant' | 'crud' | 'all',
+  //   ref?: 'main',
+  //   backend_url?: 'https://public-backend.example.com',  // Optional: override for public/Tailscale URLs
+  //   frontend_url?: 'https://public-frontend.example.com' // Optional: override for public/Tailscale URLs
+  // }
   router.post('/run-playwright', async (req, res) => {
     try {
       const {
@@ -75,9 +80,21 @@ export default function createTestingRoutes(_pgPool) {
         });
       }
 
-      const { suite = 'metrics', ref = 'main' } = req.body || {};
+      const { suite = 'metrics', ref = 'main', backend_url, frontend_url } = req.body || {};
+
+      // Normalize suite names coming from UI to workflow-expected ids
+      const suiteMap = {
+        'rls-enforcement': 'rls',
+        'tenant-switching': 'tenant',
+      };
+      const normalizedSuite = suiteMap[suite] || suite;
 
       const url = `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/actions/workflows/${GITHUB_WORKFLOW_FILE}/dispatches`;
+
+      // Build workflow inputs - only include URL overrides if provided
+  const inputs = { suite: normalizedSuite };
+      if (backend_url) inputs.backend_url = String(backend_url);
+      if (frontend_url) inputs.frontend_url = String(frontend_url);
 
       const ghRes = await fetch(url, {
         method: 'POST',
@@ -87,7 +104,7 @@ export default function createTestingRoutes(_pgPool) {
           'Content-Type': 'application/json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
-        body: JSON.stringify({ ref, inputs: { suite } }),
+        body: JSON.stringify({ ref, inputs }),
       });
 
       if (!ghRes.ok) {
@@ -103,10 +120,11 @@ export default function createTestingRoutes(_pgPool) {
       res.json({
         status: 'success',
         data: {
-          suite,
+          suite: normalizedSuite,
           workflow: GITHUB_WORKFLOW_FILE,
           repo: `${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}`,
           ref,
+          inputs, // Include all inputs sent to workflow (suite, backend_url, frontend_url if present)
           html_url: htmlUrl,
           dispatched_at: new Date().toISOString(),
         },

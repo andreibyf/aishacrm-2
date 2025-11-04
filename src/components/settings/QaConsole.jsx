@@ -6,10 +6,10 @@ import { getBackendUrl } from "@/api/backendUrl";
 
 const SUITES = [
   { id: "metrics", label: "Metrics Smoke", description: "Verify /api/metrics/performance endpoint and basic charts" },
-  { id: "rls-enforcement", label: "RLS Enforcement", description: "Ensure Supabase RLS blocks cross-tenant access" },
+  { id: "rls", label: "RLS Enforcement", description: "Ensure Supabase RLS blocks cross-tenant access" },
   { id: "rate-limit", label: "Rate Limiter", description: "Hit the rate limiter and assert 429 behavior" },
   { id: "notifications", label: "Notifications", description: "Create and fetch notifications end-to-end" },
-  { id: "tenant-switching", label: "Tenant Switching", description: "Validate admin tenant switch and scoped data" },
+  { id: "tenant", label: "Tenant Switching", description: "Validate admin tenant switch and scoped data" },
   { id: "crud", label: "CRUD Regression", description: "Core create/read/update/delete flows" },
   { id: "all", label: "Run All Suites", description: "Trigger full Playwright run (long)" },
 ];
