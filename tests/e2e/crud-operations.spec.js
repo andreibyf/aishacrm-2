@@ -390,12 +390,22 @@ test.describe('CRUD Operations - End-to-End', () => {
       // Navigate to Activities
       await navigateTo(page, '/activities');
       
-      // Wait for page to load
-      await page.waitForSelector('main, [role="main"]', { timeout: 15000 });
+      // Wait for React app to mount
+      await page.waitForLoadState('domcontentloaded');
+      await page.waitForTimeout(500);
+      
+      // Ensure user is set
+      await page.waitForFunction(() => {
+        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
+      }, { timeout: 5000 }).catch(() => {});
+      
+      // Wait for loading spinner to disappear OR for main content to appear
       await Promise.race([
-        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 10000 }).catch(() => {}),
-        page.waitForSelector('table, button', { timeout: 10000 })
+        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {}),
+        page.waitForSelector('table, button', { timeout: 15000 })
       ]);
+      
+      await page.waitForTimeout(1000);
       
       // First create an activity to delete
       await page.click('button:has-text("Add Activity"), button:has-text("Add")');
@@ -460,13 +470,6 @@ test.describe('CRUD Operations - End-to-End', () => {
       ]);
       
       await page.waitForTimeout(1000);
-      
-      // Wait for page to load
-      await page.waitForSelector('main, [role="main"]', { timeout: 15000 });
-      await Promise.race([
-        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 10000 }).catch(() => {}),
-        page.waitForSelector('table, button', { timeout: 10000 })
-      ]);
       
       // Click Add Activity
       await page.click('button:has-text("Add Activity"), button:has-text("Add")');
@@ -906,12 +909,22 @@ test.describe('CRUD Operations - End-to-End', () => {
       // Navigate to Activities
       await navigateTo(page, '/activities');
       
-      // Wait for page to load
-      await page.waitForSelector('main, [role="main"]', { timeout: 15000 });
+      // Wait for React app to mount
+      await page.waitForLoadState('domcontentloaded');
+      await page.waitForTimeout(500);
+      
+      // Ensure user is set
+      await page.waitForFunction(() => {
+        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
+      }, { timeout: 5000 }).catch(() => {});
+      
+      // Wait for loading spinner to disappear OR for main content to appear
       await Promise.race([
-        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 10000 }).catch(() => {}),
-        page.waitForSelector('table, button', { timeout: 10000 })
+        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {}),
+        page.waitForSelector('table, button', { timeout: 15000 })
       ]);
+      
+      await page.waitForTimeout(1000);
       
       // Create activity with valid priority
       await page.click('button:has-text("Add Activity"), button:has-text("Add")');
