@@ -4,7 +4,7 @@
  */
 import { test, expect } from '@playwright/test';
 
-const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:5173';
+const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || process.env.PLAYWRIGHT_FRONTEND_URL || 'http://localhost:4000';
 const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL || process.env.PLAYWRIGHT_BACKEND_URL || '';
 
 // Test user credentials (must be provided via env; do not hardcode defaults)
@@ -66,6 +66,23 @@ async function loginAsUser(page, email, password) {
   
   // Wait for navigation to settle
   await page.waitForTimeout(1000);
+}
+
+// Helper: Reliable navigation that works with collapsed headers or missing anchors
+async function navigateTo(page, path) {
+  // Prefer direct navigation for stability
+  await page.goto(`${BASE_URL}${path}`, { waitUntil: 'domcontentloaded' });
+  try { await page.waitForURL(`**${path}`, { timeout: 10000 }); } catch { /* ignore */ }
+  // Fallback: click anchor if we're not on the expected route
+  if (!page.url().includes(path)) {
+    const link = page.locator(`a[href="${path}"]`).first();
+    if (await link.count().catch(() => 0)) {
+      await link.click();
+      await page.waitForURL(`**${path}`, { timeout: 10000 });
+    }
+  }
+  // Small settle time
+  await page.waitForTimeout(250);
 }
 
 // Helper: Ensure a tenant is selected for admin/superadmin flows
@@ -270,9 +287,8 @@ test.describe('CRUD Operations - End-to-End', () => {
     });
 
     test('should edit an existing activity', async ({ page }) => {
-      // Navigate to Activities
-      await page.click('a[href="/activities"]');
-      await page.waitForURL('**/activities', { timeout: 30000 });
+  // Navigate to Activities
+  await navigateTo(page, '/activities');
       
       // Wait for table to load
       await page.waitForSelector('table tbody tr', { timeout: 15000 });
@@ -311,9 +327,8 @@ test.describe('CRUD Operations - End-to-End', () => {
     });
 
     test('should delete an activity', async ({ page }) => {
-      // Navigate to Activities
-      await page.click('a[href="/activities"]');
-      await page.waitForURL('**/activities');
+  // Navigate to Activities
+  await navigateTo(page, '/activities');
       
       // First create an activity to delete
       await page.click('button:has-text("Add Activity")');
@@ -361,9 +376,8 @@ test.describe('CRUD Operations - End-to-End', () => {
     });
 
     test('should validate required fields', async ({ page }) => {
-      // Navigate to Activities
-      await page.click('a[href="/activities"]');
-      await page.waitForURL('**/activities');
+  // Navigate to Activities
+  await navigateTo(page, '/activities');
       
       // Click Add Activity
       await page.click('button:has-text("Add Activity")');
@@ -384,9 +398,8 @@ test.describe('CRUD Operations - End-to-End', () => {
 
   test.describe('Leads CRUD', () => {
     test('should create a new lead', async ({ page }) => {
-      // Navigate to Leads
-      await page.click('a[href="/leads"]');
-      await page.waitForURL('**/leads', { timeout: 30000 });
+  // Navigate to Leads
+  await navigateTo(page, '/leads');
       
       // Wait for page to fully load
       await page.waitForSelector('table, button:has-text("Add Lead"), button:has-text("New Lead")', { timeout: 15000 });
@@ -415,9 +428,8 @@ test.describe('CRUD Operations - End-to-End', () => {
     });
 
     test('should update lead job_title without date errors', async ({ page }) => {
-      // Navigate to Leads
-      await page.click('a[href="/leads"]');
-      await page.waitForURL('**/leads');
+  // Navigate to Leads
+  await navigateTo(page, '/leads');
       
       // First, create a lead to edit
       await page.click('button:has-text("Add Lead"), button:has-text("New Lead")');
@@ -482,9 +494,8 @@ test.describe('CRUD Operations - End-to-End', () => {
 
   test.describe('Contacts CRUD', () => {
     test('should create a new contact', async ({ page }) => {
-      // Navigate to Contacts
-      await page.click('a[href="/contacts"]');
-      await page.waitForURL('**/contacts', { timeout: 30000 });
+  // Navigate to Contacts
+  await navigateTo(page, '/contacts');
       
       // Wait for page to fully load
       await page.waitForSelector('table, button:has-text("Add Contact"), button:has-text("New Contact")', { timeout: 15000 });
@@ -537,8 +548,7 @@ test.describe('CRUD Operations - End-to-End', () => {
 
     test('should load contact tags without tenant_id errors', async ({ page }) => {
       // This test verifies the fix for ContactForm tenant_id issue
-      await page.click('a[href="/contacts"]');
-      await page.waitForURL('**/contacts');
+  await navigateTo(page, '/contacts');
       
       // First, create a contact to edit
       await page.click('button:has-text("Add Contact"), button:has-text("New Contact")');
@@ -599,9 +609,8 @@ test.describe('CRUD Operations - End-to-End', () => {
 
   test.describe('Opportunities CRUD', () => {
     test('should create a new opportunity', async ({ page }) => {
-      // Navigate to Opportunities
-      await page.click('a[href="/opportunities"]');
-      await page.waitForURL('**/opportunities');
+  // Navigate to Opportunities
+  await navigateTo(page, '/opportunities');
       
       // Click Add Opportunity
       await page.click('button:has-text("Add Opportunity"), button:has-text("New Opportunity")');
@@ -726,9 +735,8 @@ test.describe('CRUD Operations - End-to-End', () => {
 
   test.describe('Data Type Validation', () => {
     test('should enforce priority ENUM values', async ({ page }) => {
-      // Navigate to Activities
-      await page.click('a[href="/activities"]');
-      await page.waitForURL('**/activities');
+  // Navigate to Activities
+  await navigateTo(page, '/activities');
       
       // Create activity with valid priority
       await page.click('button:has-text("Add Activity")');
