@@ -1,4 +1,18 @@
 {
   "cookies": [],
-  "origins": []
+  "origins": [
+    {
+      "origin": "http://localhost:5173",
+      "localStorage": [
+        {
+          "name": "selected_tenant_id",
+          "value": "local-tenant-001"
+        },
+        {
+          "name": "E2E_TEST_MODE",
+          "value": "true"
+        }
+      ]
+    }
+  ]
 }

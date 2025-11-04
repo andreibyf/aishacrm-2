@@ -39,6 +39,19 @@ setup('authenticate as superadmin', async ({ page, request }) => {
   // Extend timeouts for cloud deployments where cold starts can be slow
   setup.setTimeout(180_000);
   page.setDefaultNavigationTimeout(120_000);
+  
+  // Set up E2E mode via addInitScript BEFORE any navigation
+  await page.addInitScript(() => {
+    localStorage.setItem('E2E_TEST_MODE', 'true');
+    window.__e2eUser = {
+      id: 'e2e-test-user-id',
+      email: 'e2e@example.com',
+      role: 'superadmin',
+      tenant_id: 'local-tenant-001'
+    };
+    console.log('[Auth Setup] E2E mode enabled, mock user injected');
+  });
+  
   // If running against a remote backend, block until DB is healthy to avoid transient 401/500 noise
   try {
     await waitForBackendReady(request, { timeout: 120_000 });

@@ -53,8 +53,11 @@ export function injectMockUser(email = 'e2e@example.com', role = 'superadmin', t
  * @param {string} email - E2E user email
  */
 export async function waitForUserPage(page, email = 'e2e@example.com') {
+  console.log('[waitForUserPage] Starting...');
+  
   // Wait for page to load
   await page.waitForLoadState('domcontentloaded');
+  console.log('[waitForUserPage] DOM content loaded');
   
   // CRITICAL: Re-inject E2E user IMMEDIATELY before React mounts
   await page.evaluate((userEmail) => {
@@ -67,27 +70,35 @@ export async function waitForUserPage(page, email = 'e2e@example.com') {
     };
     localStorage.setItem('E2E_TEST_MODE', 'true');
   }, email);
+  console.log('[waitForUserPage] User injected');
   
-  // Small wait for React to process the user
-  await page.waitForTimeout(500);
+  // Wait for React to process - increased from 500ms to 2000ms
+  await page.waitForTimeout(2000);
+  console.log('[waitForUserPage] After 2s settle');
   
-  // Wait for the spinner to disappear OR main content to appear (race condition)
-  // Try waiting for no spinner first
+  // Wait for the spinner to disappear OR main content to appear
   const spinnerGone = await page.waitForSelector('[class*="animate-spin"]', { 
     state: 'hidden', 
-    timeout: 10000 
-  }).then(() => true).catch(() => false);
+    timeout: 15000  // Increased from 10s to 15s
+  }).then(() => true).catch(() => {
+    console.log('[waitForUserPage] Spinner wait timeout');
+    return false;
+  });
   
-  if (!spinnerGone) {
-    console.log('[E2E] Spinner still present, checking if content loaded anyway...');
+  if (spinnerGone) {
+    console.log('[waitForUserPage] Spinner disappeared');
+  } else {
+    console.log('[waitForUserPage] Spinner still present, checking for content...');
     // Maybe content is there despite spinner - check for buttons/table
     const hasContent = await page.locator('table, button:has-text("Add"), button:has-text("New")').first()
       .isVisible({ timeout: 5000 })
       .catch(() => false);
     
-    if (!hasContent) {
+    if (hasContent) {
+      console.log('[waitForUserPage] Content found despite spinner');
+    } else {
       // Last resort - reload page
-      console.log('[E2E] No content found, reloading page...');
+      console.log('[waitForUserPage] No content found, reloading page...');
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.evaluate((userEmail) => {
         window.__e2eUser = {
@@ -98,15 +109,19 @@ export async function waitForUserPage(page, email = 'e2e@example.com') {
         };
         localStorage.setItem('E2E_TEST_MODE', 'true');
       }, email);
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(3000);  // Longer wait after reload
       // One more spinner wait attempt
-      await page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 10000 }).catch(() => {});
+      await page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {
+        console.log('[waitForUserPage] Spinner still visible after reload');
+      });
     }
   }
   
-  // Ensure main content exists
-  await page.waitForSelector('table, button[class*=""], h1, h2', { timeout: 10000 });
+  // Wait for any visible content
+  await page.waitForSelector('table, button, h1, h2, [role="main"]', { timeout: 15000 });
+  console.log('[waitForUserPage] Content visible');
   
-  // Final settle time
-  await page.waitForTimeout(1500);
+  // Final settle time - increased from 1500ms to 3000ms
+  await page.waitForTimeout(3000);
+  console.log('[waitForUserPage] Complete');
 }

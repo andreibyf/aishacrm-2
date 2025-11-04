@@ -1,0 +1,20 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - img "AI-SHA CRM" [ref=e6]
+    - heading "Welcome to AI-SHA CRM" [level=2] [ref=e7]
+    - paragraph [ref=e8]: Sign in to access your account
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - generic [ref=e11]: Email
+      - textbox "Email" [active] [ref=e12]:
+        - /placeholder: your-email@example.com
+    - generic [ref=e13]:
+      - generic [ref=e14]: Password
+      - textbox "Password" [ref=e15]:
+        - /placeholder: Enter your password
+    - button "Sign In" [ref=e16] [cursor=pointer]
+  - paragraph [ref=e18]: Create users in Supabase Dashboard → Authentication
+```

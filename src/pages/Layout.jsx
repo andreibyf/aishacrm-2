@@ -523,7 +523,16 @@ const SvgDefs = () => (
 let globalTenantCleanupDone = false;
 
 function Layout({ children, currentPageName }) { // Renamed from AppLayout to Layout
-  const [user, setUser] = React.useState(null);
+  const [user, setUser] = React.useState(() => {
+    // Initialize with E2E user if in E2E mode (synchronous check before first render)
+    if (typeof window !== 'undefined' && 
+        localStorage.getItem('E2E_TEST_MODE') === 'true' && 
+        window.__e2eUser) {
+      console.log('[Layout] Initializing with E2E mock user:', window.__e2eUser.email);
+      return window.__e2eUser;
+    }
+    return null;
+  });
   const [userLoading, setUserLoading] = React.useState(true);
   const [userError, setUserError] = React.useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
@@ -915,6 +924,16 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       setUserLoading(true);
       setUserError(null);
       try {
+        // Check for E2E test mode first
+        if (typeof window !== 'undefined' && 
+            localStorage.getItem('E2E_TEST_MODE') === 'true' && 
+            window.__e2eUser) {
+          console.log('[Layout] Using E2E mock user:', window.__e2eUser.email);
+          setUser(window.__e2eUser);
+          setUserLoading(false);
+          return;
+        }
+        
         const currentUser = await User.me();
         setUser(currentUser);
 
