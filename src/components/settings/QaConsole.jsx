@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, TestTube2 } from "lucide-react";
+import { getBackendUrl } from "@/api/backendUrl";
 
 const SUITES = [
   { id: "metrics", label: "Metrics Smoke", description: "Verify /api/metrics/performance endpoint and basic charts" },
@@ -20,7 +21,7 @@ export default function QaConsole() {
   const [runHistory, setRunHistory] = useState(null); // { runs: [], total, latest }
   const pollTimerRef = useRef(null);
 
-  const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || "http://localhost:3001";
+  const BACKEND_URL = getBackendUrl();
 
   const runSuite = async (suiteId) => {
     setBusySuite(suiteId);

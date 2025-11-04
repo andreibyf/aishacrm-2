@@ -21,6 +21,14 @@ on:
         required: false
         default: main
         type: string
+      backend_url:
+        description: "Backend URL to test against (e.g., https://api.example.com)"
+        required: false
+        type: string
+      frontend_url:
+        description: "Frontend URL to test against (e.g., https://app.example.com)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -31,8 +39,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      VITE_AISHACRM_BACKEND_URL: ${{ vars.BACKEND_URL || secrets.BACKEND_URL || 'http://localhost:3001' }}
-      VITE_AISHACRM_FRONTEND_URL: ${{ vars.FRONTEND_URL || secrets.FRONTEND_URL || 'http://localhost:3000' }}
+      VITE_AISHACRM_BACKEND_URL: ${{ inputs.backend_url || vars.BACKEND_URL || secrets.BACKEND_URL || 'http://localhost:4001' }}
+      VITE_AISHACRM_FRONTEND_URL: ${{ inputs.frontend_url || vars.FRONTEND_URL || secrets.FRONTEND_URL || 'http://localhost:4000' }}
       E2E_TENANT_ID: ${{ vars.E2E_TENANT_ID || secrets.E2E_TENANT_ID || 'local-tenant-001' }}
       E2E_RECIPIENT_ID: ${{ vars.E2E_RECIPIENT_ID || secrets.E2E_RECIPIENT_ID || '00000000-0000-0000-0000-000000000000' }}
       RATE_LIMIT_SKIP: ${{ vars.RATE_LIMIT_SKIP || '0' }}
@@ -54,6 +62,25 @@ jobs:
       - name: Install Playwright Browsers
         run: |
           npx playwright install --with-deps
+
+      - name: Preflight - Verify targets are reachable
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Backend URL: $VITE_AISHACRM_BACKEND_URL"
+          echo "Frontend URL: $VITE_AISHACRM_FRONTEND_URL"
+          timeout 10s bash -c "until curl -fsS "$VITE_AISHACRM_BACKEND_URL/health" >/dev/null; do echo 'Waiting for backend...'; sleep 2; done" || {
+            echo "Backend not reachable at $VITE_AISHACRM_BACKEND_URL."
+            echo "Set repository Variables BACKEND_URL/FRONTEND_URL (Settings → Variables) to publicly reachable endpoints,"
+            echo "or pass backend_url/frontend_url when dispatching this workflow."
+            exit 1
+          }
+          # Frontend may be static; don't require a specific path beyond root
+          curl -fsS "$VITE_AISHACRM_FRONTEND_URL/" >/dev/null || {
+            echo "Frontend not reachable at $VITE_AISHACRM_FRONTEND_URL."
+            echo "Set repository Variables FRONTEND_URL (or workflow input) to a reachable address."
+            exit 1
+          }
 
       - name: Determine test target
         id: target
@@ -77,6 +104,7 @@ jobs:
           npx playwright test "${{ steps.target.outputs.target }}"
         env:
           PLAYWRIGHT_BACKEND_URL: ${{ env.VITE_AISHACRM_BACKEND_URL }}
+          PLAYWRIGHT_FRONTEND_URL: ${{ env.VITE_AISHACRM_FRONTEND_URL }}
 
       - name: Upload Playwright report
         if: always()

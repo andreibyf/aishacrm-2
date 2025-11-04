@@ -1,4 +1,5 @@
 import { assert } from './testUtils';
+import { getBackendUrl } from '@/api/backendUrl';
 
 /**
  * CRUD Tests for CRM Entities
@@ -24,7 +25,7 @@ import { assert } from './testUtils';
  * 3. Click "Run All Tests" below
  */
 
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = getBackendUrl();
 const TEST_TENANT_ID = 'unit-test-tenant';
 
 // Helper to generate unique test data

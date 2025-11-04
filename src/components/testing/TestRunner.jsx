@@ -11,9 +11,9 @@ import {
   Play,
   XCircle,
 } from "lucide-react";
+import { getBackendUrl } from "@/api/backendUrl";
 
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-  "http://localhost:3001";
+const BACKEND_URL = getBackendUrl();
 
 export default function TestRunner({ testSuites }) {
   const [results, setResults] = useState([]);

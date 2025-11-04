@@ -514,12 +514,40 @@ async function ensureStorageBucketExists() {
       bucket,
     );
     if (existing && !getErr) {
+      try {
+        // Ensure bucket is public (required for logos to render without signed URLs)
+        if (existing.public !== true) {
+          const { error: updErr } = await supabase.storage.updateBucket(bucket, {
+            public: true,
+          });
+          if (updErr) {
+            console.warn(`⚠️ Could not update bucket '${bucket}' to public:`, updErr.message);
+          } else {
+            console.log(`✓ Updated Supabase storage bucket '${bucket}' to public: true`);
+          }
+        }
+      } catch (e) {
+        console.warn(`⚠️ Failed to verify/update public setting for bucket '${bucket}':`, e.message);
+      }
       console.log(`✓ Supabase storage bucket '${bucket}' exists`);
       return;
     }
     // Fallback via listBuckets when getBucket not available
     const { data: list } = await supabase.storage.listBuckets();
     if (list && Array.isArray(list) && list.find((b) => b.name === bucket)) {
+      try {
+        // We don't have 'public' field from list reliably; attempt to set to public just in case
+        const { error: updErr } = await supabase.storage.updateBucket(bucket, {
+          public: true,
+        });
+        if (updErr) {
+          console.warn(`⚠️ Could not ensure bucket '${bucket}' is public:`, updErr.message);
+        } else {
+          console.log(`✓ Ensured Supabase storage bucket '${bucket}' is public`);
+        }
+      } catch (e) {
+        console.warn(`⚠️ Failed to ensure public setting for bucket '${bucket}':`, e.message);
+      }
       console.log(`✓ Supabase storage bucket '${bucket}' exists`);
       return;
     }

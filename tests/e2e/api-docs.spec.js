@@ -4,7 +4,8 @@
  */
 import { test, expect } from '@playwright/test';
 
-const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:5173';
+const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || process.env.PLAYWRIGHT_FRONTEND_URL || 'http://localhost:5173';
+const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL || process.env.PLAYWRIGHT_BACKEND_URL || 'http://localhost:3001';
 
 test.describe('Settings - API Documentation', () => {
   test('should load Swagger UI iframe and render operations', async ({ page }) => {
@@ -22,7 +23,7 @@ test.describe('Settings - API Documentation', () => {
     expect(src).toContain('/api-docs');
 
     // Validate backend swagger JSON is reachable and well-formed (theme-independent functional check)
-    const resp = await page.request.get('http://localhost:3001/api-docs.json');
+  const resp = await page.request.get(`${BACKEND_URL}/api-docs.json`);
     expect(resp.ok()).toBeTruthy();
     const spec = await resp.json();
     expect(spec).toBeTruthy();

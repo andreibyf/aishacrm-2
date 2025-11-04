@@ -1,6 +1,7 @@
 import { assert } from './testUtils';
+import { getBackendUrl } from '@/api/backendUrl';
 
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = getBackendUrl();
 const TEST_TENANT_ID = 'unit-test-tenant';
 
 // Generate a unique message for this run to find it reliably in listings

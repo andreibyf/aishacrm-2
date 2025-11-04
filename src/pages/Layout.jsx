@@ -1619,6 +1619,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     if (/^https?:\/\//i.test(String(logoUrl))) {
       try {
         const u = new URL(String(logoUrl));
+        // Avoid appending cache-busting params to signed URLs (e.g., Supabase signed URLs)
+        const isSigned = u.pathname.includes('/storage/v1/object/sign') || u.searchParams.has('token');
+        if (isSigned) return u.toString();
         u.searchParams.set("v", String(logoVersionRef.current || 1));
         return u.toString();
       } catch {
@@ -2275,12 +2278,28 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               alt={companyName}
               className="h-32 w-auto max-w-[400px] object-contain"
               onError={(e) => {
-                if (import.meta.env.DEV) {
-                  console.debug("Logo failed to load:", {
-                    raw: logoUrl,
-                    resolved: displayedLogoUrl,
-                  });
+                // Hard fallback to global app logo so branding is always visible
+                try {
+                  const fallbackSrc = "/assets/Ai-SHA-logo-2.png?v=" + Date.now();
+                  if (e?.target && e.target.src !== fallbackSrc) {
+                    e.target.src = fallbackSrc;
+                    e.target.style.display = ""; // ensure it's visible
+                    if (import.meta.env.DEV) {
+                      console.debug("Logo failed to load, swapped to default:", {
+                        raw: logoUrl,
+                        resolved: displayedLogoUrl,
+                        fallback: fallbackSrc,
+                      });
+                    }
+                    return;
+                  }
+                } catch (err) {
+                  if (import.meta.env.DEV) {
+                    console.debug("Logo fallback swap error (safe to ignore):", err?.message || err);
+                  }
                 }
+
+                // If even the fallback fails, show the text-based placeholder
                 e.target.style.display = "none";
                 if (e.target.nextElementSibling) {
                   e.target.nextElementSibling.style.display = "flex";

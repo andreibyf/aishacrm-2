@@ -77,16 +77,30 @@ export default function createStorageRoutes(_pgPool) {
         throw uploadError;
       }
 
-      // Prefer public URL (bucket should be public). If not public, we can sign.
+      // Prefer public URL (bucket should be public). If not accessible, fall back to a signed URL.
       const { data: publicUrlData } = supabase.storage.from(bucket)
         .getPublicUrl(objectKey);
       let fileUrl = publicUrlData?.publicUrl || null;
 
-      if (!fileUrl) {
-        // Fallback: generate a short-lived signed URL (1 day)
+      // Validate public URL accessibility with a lightweight HEAD request.
+      // Some Supabase projects may have a private bucket with a computed public URL that 403s.
+      let isPublicAccessible = false;
+      if (fileUrl) {
+        try {
+          const resp = await fetch(fileUrl, { method: "HEAD" });
+          isPublicAccessible = resp.ok;
+        } catch {
+          isPublicAccessible = false;
+        }
+      }
+
+      if (!fileUrl || !isPublicAccessible) {
+        // Fallback: generate a signed URL. Use the maximum allowed duration (7 days).
+        // Note: The frontend should avoid appending cache-busting params to signed URLs.
+        const expiresIn = 60 * 60 * 24 * 7; // 7 days
         const { data: signed, error: signErr } = await supabase.storage
           .from(bucket)
-          .createSignedUrl(objectKey, 60 * 60 * 24);
+          .createSignedUrl(objectKey, expiresIn);
         if (signErr) throw signErr;
         fileUrl = signed?.signedUrl;
       }
@@ -121,6 +135,47 @@ export default function createStorageRoutes(_pgPool) {
       });
     } catch (error) {
       res.status(500).json({ status: "error", message: error.message });
+    }
+  });
+
+  // GET /api/storage/bucket - Return current bucket info and public status
+  router.get("/bucket", async (req, res) => {
+    try {
+      const supabase = getSupabaseAdmin();
+      const bucket = getBucketName();
+      let info = null;
+      try {
+        const { data, error } = await supabase.storage.getBucket(bucket);
+        if (!error && data) info = data;
+      } catch {
+        // ignore, fall back to listBuckets below
+      }
+      if (!info) {
+        try {
+          const { data: list } = await supabase.storage.listBuckets();
+          info = Array.isArray(list) ? list.find((b) => b.name === bucket) : null;
+        } catch {
+          // ignore
+        }
+      }
+      if (!info) {
+        return res.status(404).json({
+          status: "error",
+          message: `Bucket '${bucket}' not found`,
+        });
+      }
+      return res.json({
+        status: "success",
+        data: {
+          name: info.name,
+          public: info.public === true,
+          created_at: info.created_at || null,
+          file_size_limit: info.file_size_limit || null,
+        },
+      });
+    } catch (error) {
+      console.error("[storage.bucket] Error:", error);
+      return res.status(500).json({ status: "error", message: error.message });
     }
   });
 

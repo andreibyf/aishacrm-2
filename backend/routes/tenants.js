@@ -259,6 +259,10 @@ export default function createTenantRoutes(_pgPool) {
   router.put("/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      const isUUID =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          id,
+        );
       const {
         name,
         settings,
@@ -308,11 +312,10 @@ export default function createTenantRoutes(_pgPool) {
         // Fetch existing metadata to merge
         const { getSupabaseClient } = await import('../lib/supabase-db.js');
         const supabase = getSupabaseClient();
-        const { data: cur, error: metaErr } = await supabase
-          .from('tenant')
-          .select('metadata')
-          .eq('id', id)
-          .single();
+        const selMeta = supabase.from('tenant').select('metadata');
+        const { data: cur, error: metaErr } = isUUID
+          ? await selMeta.eq('id', id).single()
+          : await selMeta.eq('tenant_id', id).single();
         if (metaErr && metaErr.code !== 'PGRST116') throw new Error(metaErr.message);
         const existingMetadata = cur?.metadata || {};
 
@@ -345,11 +348,10 @@ export default function createTenantRoutes(_pgPool) {
         // Fetch existing tenant branding_settings to merge
         const { getSupabaseClient } = await import('../lib/supabase-db.js');
         const supabase = getSupabaseClient();
-        const { data: cur2, error: brandErr } = await supabase
-          .from('tenant')
-          .select('branding_settings')
-          .eq('id', id)
-          .single();
+        const selBrand = supabase.from('tenant').select('branding_settings');
+        const { data: cur2, error: brandErr } = isUUID
+          ? await selBrand.eq('id', id).single()
+          : await selBrand.eq('tenant_id', id).single();
         if (brandErr && brandErr.code !== 'PGRST116') throw new Error(brandErr.message);
         const existingBranding = cur2?.branding_settings || {};
 
@@ -386,12 +388,10 @@ export default function createTenantRoutes(_pgPool) {
       if (settings !== undefined || hasBrandingFields) updateObj.branding_settings = params.find(p => p && (p.logo_url !== undefined || p.primary_color !== undefined || p.accent_color !== undefined) ) || params.find(p => p && p.branding_settings === undefined && p.country === undefined);
       updateObj.updated_at = nowIso;
 
-      const { data: updated, error: updErr } = await supabase
-        .from('tenant')
-        .update(updateObj)
-        .eq('id', id)
-        .select()
-        .single();
+      const upd = supabase.from('tenant').update(updateObj).select();
+      const { data: updated, error: updErr } = isUUID
+        ? await upd.eq('id', id).single()
+        : await upd.eq('tenant_id', id).single();
       if (updErr && updErr.code !== 'PGRST116') throw new Error(updErr.message);
       if (!updated) {
         return res.status(404).json({
