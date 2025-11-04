@@ -116,6 +116,7 @@ export default function OpportunitiesPage() {
   // Ref to track if initial load is done
   const initialLoadDone = useRef(false);
   const supportingDataLoaded = useRef(false); // NEW: Track if supporting data is loaded
+  const [supportingDataReady, setSupportingDataReady] = useState(false); // trigger renders when supporting data completes
 
   // Load user once
   useEffect(() => {
@@ -193,8 +194,8 @@ export default function OpportunitiesPage() {
 
   // Load supporting data (accounts, contacts, users, employees) ONCE - OPTIMIZED WITH CONCURRENT FETCHING
   useEffect(() => {
-    // CRITICAL: Only load once if supportingDataLoaded.current is true or if user is not available yet.
-    if (!user || supportingDataLoaded.current) return;
+  // CRITICAL: Only load once if supportingDataLoaded.current is true or if user is not available yet.
+  if (!user || supportingDataLoaded.current) return;
 
     const loadSupportingData = async () => {
       try {
@@ -253,7 +254,8 @@ export default function OpportunitiesPage() {
         if (import.meta.env.DEV) {
           console.log("[Opportunities] Supporting data loaded successfully");
         }
-        supportingDataLoaded.current = true; // Mark as loaded
+        supportingDataLoaded.current = true; // Mark as loaded (ref)
+        setSupportingDataReady(true); // notify effects to proceed
       } catch (error) {
         if (import.meta.env.DEV) {
           console.error(
@@ -267,6 +269,8 @@ export default function OpportunitiesPage() {
         setContacts([]);
         setLeads([]);
         setUsers([user]); // Fallback to current user if all else fails
+        supportingDataLoaded.current = true;
+        setSupportingDataReady(true);
       }
     };
 
@@ -334,10 +338,10 @@ export default function OpportunitiesPage() {
 
   // Load total stats when dependencies change
   useEffect(() => {
-    if (user && supportingDataLoaded.current) { // Only load total stats after supporting data is loaded
+    if (user && supportingDataReady) { // Only load total stats after supporting data is loaded
       loadTotalStats();
     }
-  }, [user, selectedTenantId, selectedEmail, loadTotalStats, showTestData]); // Removed supportingDataLoaded.current
+  }, [user, selectedTenantId, selectedEmail, loadTotalStats, showTestData, supportingDataReady]);
 
   // Main data loading function with proper pagination
   const loadOpportunities = useCallback(async (page = 1, size = 25) => {
@@ -419,7 +423,7 @@ export default function OpportunitiesPage() {
 
   // Load opportunities when dependencies change
   useEffect(() => {
-    if (user && supportingDataLoaded.current) { // Ensure supporting data is loaded before loading opportunities
+    if (user && supportingDataReady) { // Ensure supporting data is loaded before loading opportunities
       loadOpportunities(currentPage, pageSize);
     }
   }, [
@@ -433,7 +437,8 @@ export default function OpportunitiesPage() {
     selectedTags,
     loadOpportunities,
     showTestData,
-  ]); // Removed supportingDataLoaded.current
+    supportingDataReady,
+  ]);
 
   const handlePageChange = useCallback((newPage) => {
     setCurrentPage(newPage);
@@ -888,6 +893,7 @@ export default function OpportunitiesPage() {
     clearCache("Lead");
     clearCache("User"); // Added clearing User cache
     supportingDataLoaded.current = false; // Force reload supporting data next time
+    setSupportingDataReady(false);
     await Promise.all([
       loadOpportunities(currentPage, pageSize),
       loadTotalStats(),
