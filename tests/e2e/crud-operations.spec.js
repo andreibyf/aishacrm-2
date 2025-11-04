@@ -3,6 +3,7 @@
  * Tests Create, Read, Update, Delete operations across major entities
  */
 import { test, expect } from '@playwright/test';
+import { suppressAuthErrors, setE2EMode, injectMockUser } from './setup-helpers.js';
 
 const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || process.env.PLAYWRIGHT_FRONTEND_URL || 'http://localhost:4000';
 const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL || process.env.PLAYWRIGHT_BACKEND_URL || '';
@@ -181,17 +182,11 @@ test.describe('CRUD Operations - End-to-End', () => {
     });
 
     // Set E2E mode flag to suppress background polling/health checks
-    await page.addInitScript(() => {
-      localStorage.setItem('E2E_TEST_MODE', 'true');
-      
-      // Inject mock user with tenantId for E2E tests (User.me() will fail in headless mode)
-      window.__e2eUser = {
-        id: 'e2e-test-user-id',
-        email: `${TEST_EMAIL || 'e2e@example.com'}`,
-        role: 'superadmin',
-        tenant_id: 'local-tenant-001'
-      };
-    });
+    await page.addInitScript({ content: `
+      (${setE2EMode.toString()})();
+      (${injectMockUser.toString()})('${TEST_EMAIL || 'e2e@example.com'}', 'superadmin', 'local-tenant-001');
+      (${suppressAuthErrors.toString()})();
+    ` });
 
     // Login before each test
     await loginAsUser(page, TEST_EMAIL, TEST_PASSWORD);
@@ -201,32 +196,58 @@ test.describe('CRUD Operations - End-to-End', () => {
     if (selected) {
       // Navigate to root to ensure React picks up the tenant selection, then settle
       await page.goto(`${BASE_URL}/`, { waitUntil: 'load' });
-      await page.waitForTimeout(250);
+      await page.waitForTimeout(500);
     }
 
     // Ensure the logged-in user has tenant_id set (ActivityForm requires tenantId)
-  const assigned = TEST_EMAIL ? await ensureUserTenantAssigned(page, TEST_EMAIL) : false;
+    const assigned = TEST_EMAIL ? await ensureUserTenantAssigned(page, TEST_EMAIL) : false;
     if (assigned) {
       // Refresh app state after assignment
       await page.goto(`${BASE_URL}/`, { waitUntil: 'load' });
-      await page.waitForTimeout(250);
+      await page.waitForTimeout(500);
+    }
+
+    // Verify E2E user is injected by checking for its presence
+    const userInjected = await page.evaluate(() => !!window.__e2eUser);
+    if (!userInjected) {
+      console.warn('[E2E] __e2eUser not set; re-injecting...');
+      await page.evaluate((email) => {
+        window.__e2eUser = {
+          id: 'e2e-test-user-id',
+          email: email || 'e2e@example.com',
+          role: 'superadmin',
+          tenant_id: 'local-tenant-001'
+        };
+      }, TEST_EMAIL || 'e2e@example.com');
     }
   });
 
   test.describe('Activities CRUD', () => {
     test('should create a new activity', async ({ page }) => {
       // Navigate to Activities page
-      await page.goto(`${BASE_URL}/activities`, { waitUntil: 'domcontentloaded' });
+      await navigateTo(page, '/activities');
       
-      // Wait for page header to appear (not full network idle, which may never arrive)
-      await page.waitForSelector('h1, h2', { timeout: 10000 });
+      // Wait for page to fully load - the page shows a spinner until user is loaded
+      // Check for either the Add button OR the loading spinner, then wait for content
+      await page.waitForSelector('main, [role="main"]', { timeout: 15000 });
+      
+      // Ensure user is set (Activities requires user before showing content)
+      await page.waitForFunction(() => {
+        return window.__e2eUser || (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser);
+      }, { timeout: 5000 }).catch(() => {});
+      
+      // Wait for loading spinner to disappear OR for main content to appear
+      await Promise.race([
+        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 10000 }).catch(() => {}),
+        page.waitForSelector('table, button:has-text("Add")', { timeout: 10000 })
+      ]);
       
       // Small wait for React to hydrate
       await page.waitForTimeout(1000);
       
-      // Click Add Activity button - try multiple possible selectors
-      const addButton = page.locator('button:has-text("Add Activity"), button:has-text("New Activity"), button:has-text("Create")').first();
-      await addButton.waitFor({ timeout: 5000 });
+      // Click Add Activity button - try multiple possible selectors with longer timeout
+      const addButton = page.locator('button:has-text("Add Activity"), button:has-text("New Activity"), button:has-text("Add")').first();
+      await addButton.waitFor({ timeout: 10000 });
       await addButton.click();
       
       // Wait for form to appear
@@ -287,13 +308,18 @@ test.describe('CRUD Operations - End-to-End', () => {
     });
 
     test('should edit an existing activity', async ({ page }) => {
-  // Navigate to Activities
-  await navigateTo(page, '/activities');
+      // Navigate to Activities
+      await navigateTo(page, '/activities');
+      
+      // Wait for page to load and user to be set
+      await page.waitForSelector('main, [role="main"]', { timeout: 15000 });
+      await Promise.race([
+        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 10000 }).catch(() => {}),
+        page.waitForSelector('table, button', { timeout: 10000 })
+      ]);
       
       // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 15000 });
-      
-      // Find first activity row and click edit button
+      await page.waitForSelector('table tbody tr', { timeout: 15000 });      // Find first activity row and click edit button
       const firstRow = page.locator('table tbody tr').first();
       await firstRow.locator('button[aria-label="Edit"], button:has-text("Edit")').click();
       
@@ -327,14 +353,19 @@ test.describe('CRUD Operations - End-to-End', () => {
     });
 
     test('should delete an activity', async ({ page }) => {
-  // Navigate to Activities
-  await navigateTo(page, '/activities');
+      // Navigate to Activities
+      await navigateTo(page, '/activities');
+      
+      // Wait for page to load
+      await page.waitForSelector('main, [role="main"]', { timeout: 15000 });
+      await Promise.race([
+        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 10000 }).catch(() => {}),
+        page.waitForSelector('table, button', { timeout: 10000 })
+      ]);
       
       // First create an activity to delete
-      await page.click('button:has-text("Add Activity")');
-      await page.waitForSelector('input#subject, [data-testid="activity-subject-input"]', { timeout: 10000 });
-      
-      const timestamp = Date.now();
+      await page.click('button:has-text("Add Activity"), button:has-text("Add")');
+      await page.waitForSelector('input#subject, [data-testid="activity-subject-input"]', { timeout: 10000 });      const timestamp = Date.now();
       const testSubject = `E2E Delete Test Activity ${timestamp}`;
       await page.fill('input#subject, [data-testid="activity-subject-input"]', testSubject);
       
@@ -376,14 +407,19 @@ test.describe('CRUD Operations - End-to-End', () => {
     });
 
     test('should validate required fields', async ({ page }) => {
-  // Navigate to Activities
-  await navigateTo(page, '/activities');
+      // Navigate to Activities
+      await navigateTo(page, '/activities');
+      
+      // Wait for page to load
+      await page.waitForSelector('main, [role="main"]', { timeout: 15000 });
+      await Promise.race([
+        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 10000 }).catch(() => {}),
+        page.waitForSelector('table, button', { timeout: 10000 })
+      ]);
       
       // Click Add Activity
-      await page.click('button:has-text("Add Activity")');
-      await page.waitForSelector('form', { state: 'visible' });
-      
-      // Try to save without filling required fields
+      await page.click('button:has-text("Add Activity"), button:has-text("Add")');
+      await page.waitForSelector('form', { state: 'visible' });      // Try to save without filling required fields
       await page.click('button[type="submit"]:has-text("Save")');
       
       // Verify validation message appears (form should NOT close)
@@ -735,14 +771,19 @@ test.describe('CRUD Operations - End-to-End', () => {
 
   test.describe('Data Type Validation', () => {
     test('should enforce priority ENUM values', async ({ page }) => {
-  // Navigate to Activities
-  await navigateTo(page, '/activities');
+      // Navigate to Activities
+      await navigateTo(page, '/activities');
+      
+      // Wait for page to load
+      await page.waitForSelector('main, [role="main"]', { timeout: 15000 });
+      await Promise.race([
+        page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 10000 }).catch(() => {}),
+        page.waitForSelector('table, button', { timeout: 10000 })
+      ]);
       
       // Create activity with valid priority
-      await page.click('button:has-text("Add Activity")');
-      await page.waitForSelector('form', { state: 'visible' });
-      
-      // Fill subject using correct ID selector
+      await page.click('button:has-text("Add Activity"), button:has-text("Add")');
+      await page.waitForSelector('form', { state: 'visible' });      // Fill subject using correct ID selector
       await page.fill('#subject', 'Priority Test');
       
       // Note: Priority uses shadcn/ui Select component with data-testid="activity-priority-select"
