@@ -185,11 +185,17 @@ export default function createActivityRoutes(pgPool) {
     }
   });
 
-  // GET /api/activities/:id - Get single activity
+  // GET /api/activities/:id - Get single activity (tenant scoped when tenant_id provided)
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-  const result = await pgPool.query('SELECT * FROM activities WHERE id = $1', [id]);
+      const { tenant_id } = req.query || {};
+      let result;
+      if (tenant_id) {
+        result = await pgPool.query('SELECT * FROM activities WHERE id = $1 AND tenant_id = $2', [id, tenant_id]);
+      } else {
+        result = await pgPool.query('SELECT * FROM activities WHERE id = $1', [id]);
+      }
       
       if (result.rows.length === 0) {
         return res.status(404).json({
