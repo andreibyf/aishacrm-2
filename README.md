@@ -142,6 +142,3 @@ See `backend/README.md` for backend setup details.
 
 See `SECURITY_PERFORMANCE_REVIEW.md` for detailed security and performance guidelines.
 
-## Support
-
-For more information and support, please contact Ai-SHA support at app@base44.com.
