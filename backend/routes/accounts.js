@@ -8,6 +8,7 @@ import {
   enforceEmployeeDataScope,
   validateTenantAccess,
 } from "../middleware/validateTenant.js";
+import { tenantScopedId, buildGetByIdSQL } from "../middleware/tenantScopedId.js";
 
 export default function createAccountRoutes(pgPool) {
   const router = express.Router();
@@ -140,24 +141,11 @@ export default function createAccountRoutes(pgPool) {
     }
   });
 
-  // GET /api/accounts/:id - Get single account (tenant scoped when tenant_id provided)
-  router.get("/:id", async (req, res) => {
+  // GET /api/accounts/:id - Get single account (centralized tenant/id scoping)
+  router.get("/:id", tenantScopedId(), async (req, res) => {
     try {
-      const { id } = req.params;
-      const { tenant_id } = req.query || {};
-
-      let result;
-      if (tenant_id) {
-        result = await pgPool.query(
-          "SELECT * FROM accounts WHERE id = $1 AND tenant_id = $2",
-          [id, tenant_id],
-        );
-      } else {
-        result = await pgPool.query(
-          "SELECT * FROM accounts WHERE id = $1",
-          [id],
-        );
-      }
+      const { text, params } = buildGetByIdSQL("accounts", req.idScope);
+      const result = await pgPool.query(text, params);
 
       if (result.rows.length === 0) {
         return res.status(404).json({
@@ -166,13 +154,8 @@ export default function createAccountRoutes(pgPool) {
         });
       }
 
-      // Expand metadata to top-level properties
       const account = expandMetadata(result.rows[0]);
-
-      res.json({
-        status: "success",
-        data: account,
-      });
+      res.json({ status: "success", data: account });
     } catch (error) {
       console.error("Error fetching account:", error);
       res.status(500).json({ status: "error", message: error.message });
