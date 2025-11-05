@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Run lint to catch syntax errors
+npm run lint -- --max-warnings 0
+
+# Run build to catch compile errors
+npm run build

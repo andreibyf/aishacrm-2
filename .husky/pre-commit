@@ -1,4 +1,2 @@
-#!/usr/bin/env sh
-
-# Run linters on staged files
-npx lint-staged
+# Run lint to catch syntax errors
+npm run lint -- --max-warnings 0
