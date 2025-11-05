@@ -10,8 +10,8 @@
         - paragraph [ref=e8]: "Managing Client: Local Development Tenant"
       - generic [ref=e10]:
         - paragraph [ref=e11]: AI-Powered Business Growth Platform
-        - paragraph [ref=e12]: Nov 04, 2025
-        - paragraph [ref=e13]: 09:27:09 PM
+        - paragraph [ref=e12]: Nov 05, 2025
+        - paragraph [ref=e13]: 10:18:01 AM
       - paragraph [ref=e14]: Navigation
       - navigation [ref=e15]:
         - list [ref=e16]:
@@ -152,75 +152,127 @@
           - generic [ref=e182]: E
           - generic [ref=e183]: E2e
     - main [ref=e184]:
-      - generic [ref=e186]:
-        - generic [ref=e187]:
-          - generic [ref=e188]:
-            - heading "Activities" [level=1] [ref=e189]
-            - paragraph [ref=e190]: Track and manage your team's activities and tasks
-          - generic [ref=e191]:
-            - button [ref=e192] [cursor=pointer]:
-              - img
-            - button [ref=e193] [cursor=pointer]:
-              - img
-            - button "Import" [ref=e194] [cursor=pointer]:
-              - img
-              - text: Import
-            - button "Export" [disabled]:
-              - img
-              - text: Export
-            - button "Add Activity" [ref=e195] [cursor=pointer]:
-              - img
-              - text: Add Activity
-        - generic [ref=e196]:
-          - generic [ref=e197] [cursor=pointer]:
-            - generic [ref=e198]:
-              - paragraph [ref=e199]: Total Activities
-              - img [ref=e201]
-            - paragraph [ref=e204]: "0"
-          - generic [ref=e205] [cursor=pointer]:
-            - generic [ref=e206]:
-              - paragraph [ref=e207]: Scheduled
-              - img [ref=e209]
-            - paragraph [ref=e212]: "0"
-          - generic [ref=e213] [cursor=pointer]:
-            - generic [ref=e214]:
-              - paragraph [ref=e215]: In Progress
-              - img [ref=e217]
-            - paragraph [ref=e220]: "0"
-          - generic [ref=e221] [cursor=pointer]:
-            - generic [ref=e222]:
-              - paragraph [ref=e223]: Overdue
+      - generic [ref=e187]:
+        - generic [ref=e188]:
+          - heading "Settings & Administration" [level=1] [ref=e189]:
+            - img [ref=e191]
+            - text: Settings & Administration
+          - paragraph [ref=e202]: Configure your account, manage users, monitor system health, and optimize performance.
+        - generic [ref=e204]:
+          - tablist [ref=e205]:
+            - tab "My Profile" [selected] [ref=e206] [cursor=pointer]:
+              - img [ref=e207]
+              - generic [ref=e210]: My Profile
+            - tab "Branding" [ref=e211] [cursor=pointer]:
+              - img [ref=e212]
+              - generic [ref=e218]: Branding
+            - tab "Regional" [ref=e219] [cursor=pointer]:
+              - img [ref=e220]
+              - generic [ref=e223]: Regional
+            - tab "Billing" [ref=e224] [cursor=pointer]:
               - img [ref=e225]
-            - paragraph [ref=e228]: "0"
-          - generic [ref=e229] [cursor=pointer]:
-            - generic [ref=e230]:
-              - paragraph [ref=e231]: Completed
+              - generic [ref=e227]: Billing
+            - tab "Global Integrations" [ref=e228] [cursor=pointer]:
+              - img [ref=e229]
+              - generic [ref=e231]: Global Integrations
+            - tab "Tenant Integrations" [ref=e232] [cursor=pointer]:
               - img [ref=e233]
-            - paragraph [ref=e236]: "0"
-          - generic [ref=e237] [cursor=pointer]:
-            - generic [ref=e238]:
-              - paragraph [ref=e239]: Cancelled
+              - generic [ref=e235]: Tenant Integrations
+            - tab "API Documentation" [ref=e236] [cursor=pointer]:
+              - img [ref=e237]
+              - generic [ref=e239]: API Documentation
+            - tab "Data Consistency" [ref=e240] [cursor=pointer]:
               - img [ref=e241]
-            - paragraph [ref=e244]: "0"
-        - generic [ref=e245]:
-          - generic [ref=e246]:
-            - img [ref=e247]
-            - textbox "Search activities by subject, description, or related entity..." [ref=e250]: E2E Delete Test Activity 1762309620075
-          - generic [ref=e251]:
-            - button "Tags" [ref=e253] [cursor=pointer]:
-              - img
-              - text: Tags
-            - button "Clear" [ref=e254] [cursor=pointer]:
-              - img
-              - text: Clear
-        - generic [ref=e255]:
-          - img [ref=e256]
-          - heading "No activities found" [level=3] [ref=e258]
-          - paragraph [ref=e259]: Try adjusting your filters or search term
-    - contentinfo [ref=e260]:
-      - generic [ref=e263]:
-        - img "Ai‑SHA" [ref=e264]
-        - generic [ref=e265]:
-          - generic [ref=e266]: ai-sha crm® is a registered trademark of 4V Data Consulting LLC.
-          - generic [ref=e267]: © 2025 4V Data Consulting LLC. All rights reserved.
+              - generic [ref=e245]: Data Consistency
+            - tab "User Management" [ref=e246] [cursor=pointer]:
+              - img [ref=e247]
+              - generic [ref=e252]: User Management
+            - tab "Client Management" [ref=e253] [cursor=pointer]:
+              - img [ref=e254]
+              - generic [ref=e258]: Client Management
+            - tab "Module Settings" [ref=e259] [cursor=pointer]:
+              - img [ref=e260]
+              - generic [ref=e265]: Module Settings
+            - tab "Cron Jobs" [ref=e266] [cursor=pointer]:
+              - img [ref=e267]
+              - generic [ref=e270]: Cron Jobs
+            - tab "Security" [ref=e271] [cursor=pointer]:
+              - img [ref=e272]
+              - generic [ref=e275]: Security
+            - tab "API Keys" [ref=e276] [cursor=pointer]:
+              - img [ref=e277]
+              - generic [ref=e281]: API Keys
+            - tab "Advanced" [ref=e282] [cursor=pointer]:
+              - img [ref=e283]
+              - generic [ref=e294]: Advanced
+            - tab "Announcements" [ref=e295] [cursor=pointer]:
+              - img [ref=e296]
+              - generic [ref=e299]: Announcements
+            - tab "Test Data" [ref=e300] [cursor=pointer]:
+              - img [ref=e301]
+              - generic [ref=e310]: Test Data
+            - tab "Performance" [ref=e311] [cursor=pointer]:
+              - img [ref=e312]
+              - generic [ref=e314]: Performance
+            - tab "Sync Health" [ref=e315] [cursor=pointer]:
+              - img [ref=e316]
+              - generic [ref=e321]: Sync Health
+            - tab "MCP Monitor" [ref=e322] [cursor=pointer]:
+              - img [ref=e323]
+              - generic [ref=e326]: MCP Monitor
+            - tab "System Health" [ref=e327] [cursor=pointer]:
+              - img [ref=e328]
+              - generic [ref=e330]: System Health
+            - tab "System Logs" [ref=e331] [cursor=pointer]:
+              - img [ref=e332]
+              - generic [ref=e335]: System Logs
+            - tab "Unit Tests" [ref=e336] [cursor=pointer]:
+              - img [ref=e337]
+              - generic [ref=e340]: Unit Tests
+            - tab "QA Console" [ref=e341] [cursor=pointer]:
+              - img [ref=e342]
+              - generic [ref=e345]: QA Console
+            - tab "External Tools" [ref=e346] [cursor=pointer]:
+              - img [ref=e347]
+              - generic [ref=e351]: External Tools
+            - tab "API Health" [ref=e352] [cursor=pointer]:
+              - img [ref=e353]
+              - generic [ref=e355]: API Health
+            - tab "Client Offboarding" [ref=e356] [cursor=pointer]:
+              - img [ref=e357]
+              - generic [ref=e360]: Client Offboarding
+          - generic [ref=e362]:
+            - generic [ref=e363]:
+              - generic [ref=e364]: Personal Information
+              - generic [ref=e365]: Update your profile details and preferences
+            - generic [ref=e367]:
+              - generic [ref=e368]:
+                - generic [ref=e370]:
+                  - img [ref=e371]
+                  - text: My Profile
+                - generic [ref=e374]:
+                  - generic [ref=e375]:
+                    - strong [ref=e376]: "Name:"
+                    - text: Not set
+                  - generic [ref=e377]:
+                    - strong [ref=e378]: "Email:"
+                    - text: e2e@example.com
+                  - generic [ref=e379]:
+                    - strong [ref=e380]: "Role:"
+                    - generic [ref=e381]: superadmin
+              - generic [ref=e382]:
+                - generic [ref=e384]: Data Maintenance
+                - alert [ref=e386]:
+                  - img [ref=e387]
+                  - generic [ref=e393]:
+                    - generic [ref=e394]: "Fix display issues or errors in the base44 dashboard by cleaning your user data:"
+                    - button "Clean My Data" [ref=e395] [cursor=pointer]:
+                      - img
+                      - text: Clean My Data
+    - contentinfo [ref=e396]:
+      - generic [ref=e399]:
+        - img "Ai‑SHA" [ref=e400]
+        - generic [ref=e401]:
+          - generic [ref=e402]: ai-sha crm® is a registered trademark of 4V Data Consulting LLC.
+          - generic [ref=e403]: © 2025 4V Data Consulting LLC. All rights reserved.
 ```
