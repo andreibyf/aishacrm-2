@@ -890,11 +890,16 @@ export const User = {
    * Uses Supabase Auth with local dev fallback
    */
   me: async () => {
+    // 🔒 CRITICAL: E2E Test Mode Override
+    // When running E2E tests, ALWAYS return the mock user immediately.
+    // This prevents E2E tests from querying real user data and potentially
+    // selecting test accounts (audit.test.*, e2e.temp.*) over the real admin account.
+    // DO NOT move or modify this check without updating E2E test documentation.
     // E2E Test Mode: Return mock user without Supabase auth
     if (typeof window !== 'undefined' && 
         localStorage.getItem('E2E_TEST_MODE') === 'true' && 
         window.__e2eUser) {
-      console.log('[User.me] Returning E2E mock user:', window.__e2eUser.email);
+      console.log('[User.me] ⚠️  E2E_TEST_MODE active - Returning mock user:', window.__e2eUser.email);
       return window.__e2eUser;
     }
     
