@@ -1,0 +1,238 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - img
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - img "Local Development Tenant" [ref=e7]
+          - paragraph [ref=e8]: "Managing Client: Local Development Tenant"
+        - generic [ref=e10]:
+          - paragraph [ref=e11]: AI-Powered Business Growth Platform
+          - paragraph [ref=e12]: Nov 04, 2025
+          - paragraph [ref=e13]: 09:28:23 PM
+        - paragraph [ref=e14]: Navigation
+        - navigation [ref=e15]:
+          - list [ref=e16]:
+            - listitem [ref=e17]:
+              - link "Dashboard" [ref=e18] [cursor=pointer]:
+                - /url: /dashboard
+                - img [ref=e19]
+                - generic [ref=e24]: Dashboard
+            - listitem [ref=e25]:
+              - link "Contacts" [ref=e26] [cursor=pointer]:
+                - /url: /contacts
+                - img [ref=e27]
+                - generic [ref=e32]: Contacts
+            - listitem [ref=e33]:
+              - link "Accounts" [ref=e34] [cursor=pointer]:
+                - /url: /accounts
+                - img [ref=e35]
+                - generic [ref=e39]: Accounts
+            - listitem [ref=e40]:
+              - link "Leads" [ref=e41] [cursor=pointer]:
+                - /url: /leads
+                - img [ref=e42]
+                - generic [ref=e46]: Leads
+            - listitem [ref=e47]:
+              - link "Opportunities" [ref=e48] [cursor=pointer]:
+                - /url: /opportunities
+                - img [ref=e49]
+                - generic [ref=e52]: Opportunities
+            - listitem [ref=e53]:
+              - link "Activities" [ref=e54] [cursor=pointer]:
+                - /url: /activities
+                - img [ref=e55]
+                - generic [ref=e58]: Activities
+            - listitem [ref=e59]:
+              - link "Calendar" [ref=e60] [cursor=pointer]:
+                - /url: /calendar
+                - img [ref=e61]
+                - generic [ref=e63]: Calendar
+            - listitem [ref=e64]:
+              - link "BizDev Sources" [ref=e65] [cursor=pointer]:
+                - /url: /bizdevsources
+                - img [ref=e66]
+                - generic [ref=e70]: BizDev Sources
+            - listitem [ref=e71]:
+              - link "Cash Flow" [ref=e72] [cursor=pointer]:
+                - /url: /cashflow
+                - img [ref=e73]
+                - generic [ref=e75]: Cash Flow
+            - listitem [ref=e76]:
+              - link "Document Processing" [ref=e77] [cursor=pointer]:
+                - /url: /documentprocessing
+                - img [ref=e78]
+                - generic [ref=e81]: Document Processing
+            - listitem [ref=e82]:
+              - link "Document Management" [ref=e83] [cursor=pointer]:
+                - /url: /documentmanagement
+                - img [ref=e84]
+                - generic [ref=e86]: Document Management
+            - listitem [ref=e87]:
+              - link "AI Campaigns" [ref=e88] [cursor=pointer]:
+                - /url: /aicampaigns
+                - img [ref=e89]
+                - generic [ref=e92]: AI Campaigns
+            - listitem [ref=e93]:
+              - link "Employees" [ref=e94] [cursor=pointer]:
+                - /url: /employees
+                - img [ref=e95]
+                - generic [ref=e100]: Employees
+            - listitem [ref=e101]:
+              - link "Reports" [ref=e102] [cursor=pointer]:
+                - /url: /reports
+                - img [ref=e103]
+                - generic [ref=e105]: Reports
+            - listitem [ref=e106]:
+              - link "Integrations" [ref=e107] [cursor=pointer]:
+                - /url: /integrations
+                - img [ref=e108]
+                - generic [ref=e110]: Integrations
+            - listitem [ref=e111]:
+              - link "Workflows" [ref=e112] [cursor=pointer]:
+                - /url: /workflows
+                - img [ref=e113]
+                - generic [ref=e115]: Workflows
+            - listitem [ref=e116]:
+              - link "Payment Portal" [ref=e117] [cursor=pointer]:
+                - /url: /paymentportal
+                - img [ref=e118]
+                - generic [ref=e120]: Payment Portal
+            - listitem [ref=e121]:
+              - link "Utilities" [ref=e122] [cursor=pointer]:
+                - /url: /utilities
+                - img [ref=e123]
+                - generic [ref=e125]: Utilities
+            - listitem [ref=e126]:
+              - link "Client Onboarding" [ref=e127] [cursor=pointer]:
+                - /url: /clientonboarding
+                - img [ref=e128]
+                - generic [ref=e131]: Client Onboarding
+        - list [ref=e133]:
+          - listitem [ref=e134]:
+            - link "Workflow Guide" [ref=e135] [cursor=pointer]:
+              - /url: /workflowguide
+              - img [ref=e136]
+              - generic [ref=e138]: Workflow Guide
+          - listitem [ref=e139]:
+            - link "Documentation" [ref=e140] [cursor=pointer]:
+              - /url: /documentation
+              - img [ref=e141]
+              - generic [ref=e143]: Documentation
+          - listitem [ref=e144]:
+            - link "AI Assistant" [ref=e145] [cursor=pointer]:
+              - /url: /agent
+              - img "AI Assistant" [ref=e147]
+          - listitem [ref=e148]:
+            - link "Client Requirements" [ref=e149] [cursor=pointer]:
+              - /url: /clientrequirements
+              - img [ref=e150]
+              - generic [ref=e154]: Client Requirements
+    - generic [ref=e155]:
+      - banner [ref=e156]:
+        - button "Switch to dark mode" [ref=e157] [cursor=pointer]:
+          - img
+        - button "Clear chat" [ref=e158] [cursor=pointer]:
+          - img
+        - generic [ref=e159]:
+          - generic [ref=e160]:
+            - generic [ref=e161]:
+              - img [ref=e162]
+              - combobox [ref=e166] [cursor=pointer]:
+                - img [ref=e167]
+            - generic [ref=e170]: "Managing Client: Unknown Client"
+          - generic [ref=e171]:
+            - img [ref=e172]
+            - generic [ref=e177]: No employees with CRM access
+          - button [ref=e178] [cursor=pointer]:
+            - img
+          - button "E E2e" [ref=e180] [cursor=pointer]:
+            - generic [ref=e182]: E
+            - generic [ref=e183]: E2e
+      - main [ref=e184]:
+        - generic [ref=e186]:
+          - generic [ref=e187]:
+            - generic [ref=e188]:
+              - heading "Contacts" [level=1] [ref=e189]
+              - paragraph [ref=e190]: Track and manage your sales contacts and prospects.
+            - generic [ref=e191]:
+              - button [ref=e192] [cursor=pointer]:
+                - img
+              - button [ref=e193] [cursor=pointer]:
+                - img
+              - button "Export" [disabled]:
+                - img
+                - text: Export
+              - button "Import" [ref=e194] [cursor=pointer]:
+                - img
+                - text: Import
+              - button "Add Contact" [ref=e195] [cursor=pointer]:
+                - img
+                - text: Add Contact
+          - generic [ref=e196]:
+            - generic [ref=e197] [cursor=pointer]:
+              - generic [ref=e198]:
+                - paragraph [ref=e199]: Total Contacts
+                - img [ref=e201]
+              - paragraph [ref=e204]: "0"
+            - generic [ref=e205] [cursor=pointer]:
+              - generic [ref=e206]:
+                - paragraph [ref=e207]: Active
+                - img [ref=e209]
+              - paragraph [ref=e212]: "0"
+            - generic [ref=e213] [cursor=pointer]:
+              - generic [ref=e214]:
+                - paragraph [ref=e215]: Prospects
+                - img [ref=e217]
+              - paragraph [ref=e220]: "0"
+            - generic [ref=e221] [cursor=pointer]:
+              - generic [ref=e222]:
+                - paragraph [ref=e223]: Customers
+                - img [ref=e225]
+              - paragraph [ref=e228]: "0"
+            - generic [ref=e229] [cursor=pointer]:
+              - generic [ref=e230]:
+                - paragraph [ref=e231]: Inactive
+                - img [ref=e233]
+              - paragraph [ref=e236]: "0"
+          - generic [ref=e237]:
+            - generic [ref=e238]:
+              - img [ref=e239]
+              - textbox "Search contacts by name, email, phone, company, or job title..." [active] [ref=e242]: tag-test-1762309689815@example.com
+            - button "Tags" [ref=e244] [cursor=pointer]:
+              - img
+              - text: Tags
+          - table [ref=e247]:
+            - rowgroup [ref=e248]:
+              - row "Name Email Phone Company Job Title Assigned To Status Actions" [ref=e249]:
+                - cell [ref=e250]:
+                  - checkbox [ref=e251] [cursor=pointer]
+                - cell "Name" [ref=e252]
+                - cell "Email" [ref=e253]
+                - cell "Phone" [ref=e254]
+                - cell "Company" [ref=e255]
+                - cell "Job Title" [ref=e256]
+                - cell "Assigned To" [ref=e257]
+                - cell "Status" [ref=e258]
+                - cell "Actions" [ref=e259]
+            - rowgroup
+          - generic [ref=e260]:
+            - img [ref=e261]
+            - heading "No contacts found" [level=3] [ref=e263]
+            - paragraph [ref=e264]: Try adjusting your filters
+      - contentinfo [ref=e265]:
+        - generic [ref=e268]:
+          - img "Ai‑SHA" [ref=e269]
+          - generic [ref=e270]:
+            - generic [ref=e271]: ai-sha crm® is a registered trademark of 4V Data Consulting LLC.
+            - generic [ref=e272]: © 2025 4V Data Consulting LLC. All rights reserved.
+  - generic [ref=e274]:
+    - generic [ref=e275]:
+      - generic [ref=e276]: Success!
+      - generic [ref=e277]: Contact created successfully!
+    - button [ref=e278] [cursor=pointer]:
+      - img [ref=e279]
+```
