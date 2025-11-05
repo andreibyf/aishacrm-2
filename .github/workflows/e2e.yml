@@ -105,8 +105,11 @@ jobs:
             "notifications" { $TARGET = "tests/e2e/notifications.spec.ts" }
             "tenant" { $TARGET = "tests/e2e/tenant-switching.spec.ts" }
             "crud" { $TARGET = "tests/e2e/crud-operations.spec.js" }
-            "all" { $TARGET = "tests/e2e/" }
-            Default { $TARGET = "tests/e2e/" }
+            # IMPORTANT: Playwright treats the path argument as a regex, not a glob.
+            # Using '**' causes an "Invalid regular expression: Nothing to repeat" error.
+            # Use a safe regex matching both JS and TS specs.
+            "all" { $TARGET = "tests/e2e/.*\\.spec\\.(js|ts)$" }
+            Default { $TARGET = "tests/e2e/.*\\.spec\\.(js|ts)$" }
           }
           "target=$TARGET" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           Write-Host "Running E2E target: $TARGET"
