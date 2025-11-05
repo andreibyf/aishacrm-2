@@ -9,12 +9,32 @@
 # Usage:
 #   .\backend\scripts\cleanup-e2e-users.ps1
 #   .\backend\scripts\cleanup-e2e-users.ps1 -DryRun  # Preview only
-#   .\backend\scripts\cleanup-e2e-users.ps1 -BackendUrl "http://localhost:3001"
+#   .\backend\scripts\cleanup-e2e-users.ps1 -BackendUrl "http://localhost:4001"
+#
+# The script auto-detects backend URL from .env file if not specified.
 
 param(
     [switch]$DryRun,
-    [string]$BackendUrl = "http://localhost:3001"
+    [string]$BackendUrl = ""
 )
+
+# Auto-detect backend URL from .env file if not specified
+if ([string]::IsNullOrEmpty($BackendUrl)) {
+    $envFile = Join-Path $PSScriptRoot "..\..\..\.env"
+    if (Test-Path $envFile) {
+        $envContent = Get-Content $envFile -Raw
+        if ($envContent -match "VITE_AISHACRM_BACKEND_URL\s*=\s*[`"']?([^`"'\s]+)[`"']?") {
+            $BackendUrl = $matches[1]
+            Write-Host "📍 Detected backend URL from .env: $BackendUrl" -ForegroundColor Cyan
+        }
+    }
+    
+    # Fallback to common Docker port
+    if ([string]::IsNullOrEmpty($BackendUrl)) {
+        $BackendUrl = "http://localhost:4001"
+        Write-Host "📍 Using default Docker backend URL: $BackendUrl" -ForegroundColor Yellow
+    }
+}
 
 Write-Host "🧹 E2E Test User Cleanup" -ForegroundColor Cyan
 Write-Host "========================`n"
