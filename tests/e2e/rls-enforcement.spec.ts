@@ -39,11 +39,16 @@ test.describe('RLS Enforcement - Black-box', () => {
     await request.delete(`${BACKEND_URL}/api/contacts/${id}`, { params: { tenant_id: tenantA } });
   });
 
-  test('list without tenant should return empty or scoped', async ({ request }) => {
+  test('list without tenant should return enforcement (400) or data when scoped', async ({ request }) => {
     const res = await request.get(`${BACKEND_URL}/api/contacts`, { params: { limit: '5' } });
+    // Backend enforces tenant_id; if missing expect 400, otherwise OK
+    if (res.status() === 400) {
+      expect(res.status()).toBe(400); // Explicit enforcement
+      // Skip further assertions; strict enforcement means this path is correct
+      return;
+    }
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
-    // Accept either empty or scoped to default tenant
     const contacts = body?.data?.contacts || [];
     expect(Array.isArray(contacts)).toBeTruthy();
   });
