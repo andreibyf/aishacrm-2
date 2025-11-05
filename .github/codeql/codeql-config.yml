@@ -1,5 +1,7 @@
 name: aishacrm-codeql
 
+# Trigger CodeQL run on PR: 2025-11-04
+
 # Use default query suite (security + quality) unless we need extended rules
 # queries:
 #   - uses: security-extended
