@@ -1,0 +1,24 @@
+
+# Node / build artifacts
+node_modules/
+dist/
+backup/
+coverage/
+
+# Frontend build/reports
+playwright-report/
+test-results/
+
+# Backend
+backend/node_modules/
+
+# Logs and editor junk
+*.log
+.DS_Store
+logseq/**
+logseq/bak/**
+
+# Env files
+.env
+.env.*
+*.local
