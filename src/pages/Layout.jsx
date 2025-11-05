@@ -2191,8 +2191,28 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-violet-600 to-indigo-700 flex items-center justify-center">
-        <div className="bg-white border border-purple-200 rounded-lg p-8 max-w-md w-full shadow-2xl">
+      <div
+        className="relative min-h-screen flex items-center justify-center overflow-hidden"
+        style={{
+          background: `linear-gradient(135deg, ${primaryColor}, ${accentColor})`,
+        }}
+      >
+        {/* Subtle brand watermark behind the card */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 -z-10 opacity-10"
+          style={{
+            backgroundImage: `url(${logoUrl || "/assets/Ai-SHA-logo-2.png"})`,
+            backgroundSize: "min(70vmin, 720px)",
+            backgroundRepeat: "no-repeat",
+            backgroundPosition: "center",
+            filter: "blur(6px)",
+          }}
+        />
+        <div
+          className="relative bg-white border rounded-lg p-8 max-w-md w-full shadow-2xl"
+          style={{ borderColor: primaryColor }}
+        >
           <div className="text-center mb-6">
             <img
               src="/assets/Ai-SHA-logo-2.png"
@@ -2236,7 +2256,8 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 required
                 autoComplete="email"
                 autoFocus
-                className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-slate-900"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 bg-white text-slate-900"
+                style={{ "--tw-ring-color": accentColor }}
                 placeholder="your-email@example.com"
               />
             </div>
@@ -2254,14 +2275,18 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 name="password"
                 required
                 autoComplete="current-password"
-                className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-slate-900"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 bg-white text-slate-900"
+                style={{ "--tw-ring-color": accentColor }}
                 placeholder="Enter your password"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full bg-gradient-to-r from-purple-600 to-violet-600 text-white px-4 py-2 rounded-md hover:from-purple-700 hover:to-violet-700 transition-all font-semibold shadow-lg"
+              className="w-full text-white px-4 py-2 rounded-md transition-all font-semibold shadow-lg hover:brightness-110"
+              style={{
+                background: `linear-gradient(90deg, ${primaryColor}, ${accentColor})`,
+              }}
             >
               Sign In
             </button>
