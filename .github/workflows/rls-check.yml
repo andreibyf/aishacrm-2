@@ -8,9 +8,15 @@ on:
       - 'backend/scripts/check-rls-ci.js'
   workflow_dispatch: {}
 
+# Explicit least-privilege permissions
+permissions:
+  contents: read
+
 jobs:
   check-rls:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:

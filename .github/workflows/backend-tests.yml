@@ -6,9 +6,15 @@ on:
   pull_request:
     branches: [ main ]
 
+# Least-privilege token permissions for this workflow
+permissions:
+  contents: read
+
 jobs:
   test-backend:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: backend
