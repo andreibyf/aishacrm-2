@@ -2,7 +2,7 @@
   "cookies": [],
   "origins": [
     {
-      "origin": "http://localhost:5173",
+      "origin": "http://localhost:4000",
       "localStorage": [
         {
           "name": "selected_tenant_id",
