@@ -68,16 +68,8 @@ import { initSupabaseAuth } from "./lib/supabaseAuth.js";
 const supabaseAuth = initSupabaseAuth();
 
 // Middleware
-app.use(helmet({
-  // We rely on CSP frame-ancestors instead of legacy X-Frame-Options for embedding Swagger in the frontend
-  frameguard: false,
-  contentSecurityPolicy: {
-    directives: {
-      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-      "frame-ancestors": ["'self'", "http://localhost:5173", "https://localhost:5173"],
-    },
-  },
-})); // Security headers
+// Apply Helmet with secure defaults globally
+app.use(helmet()); // Security headers (no insecure overrides globally)
 app.use(compression()); // Compress responses
 app.use(morgan("combined")); // Logging
 
@@ -190,11 +182,27 @@ app.get("/health", (req, res) => {
 });
 
 // Swagger API Documentation
-// Ensure X-Frame-Options does not block embedding from the frontend origin
-app.use('/api-docs', (req, res, next) => {
-  try { res.removeHeader('X-Frame-Options'); } catch { /* no-op */ }
-  next();
-}, swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+// Restrict framing for docs to known dev origins using CSP frame-ancestors on this route only
+app.use('/api-docs',
+  helmet({
+    frameguard: false, // Use CSP frame-ancestors instead for this route only
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        "frame-ancestors": [
+          "'self'",
+          ...(process.env.ALLOWED_DOCS_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean) || [
+            'http://localhost:5173',
+            'https://localhost:5173'
+          ])
+        ]
+      }
+    },
+    // Swagger UI may load inline styles; relax only here if needed
+    crossOriginEmbedderPolicy: false
+  }),
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerSpec, {
   customCss: `
     body { background-color: #1e293b; }
     .swagger-ui .topbar { display: none }

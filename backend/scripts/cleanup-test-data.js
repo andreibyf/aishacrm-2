@@ -35,9 +35,20 @@ async function hasColumn(table, column) {
   return rows.length > 0;
 }
 
+// Whitelist identifiers to avoid SQL injection via template identifiers
+const ALLOWED_TABLES = new Set(['public.contacts', 'public.leads']);
+const ALLOWED_COLUMNS = new Set(['email']);
+
 async function cleanupTable(table, column, patterns, tenantId) {
+  if (!ALLOWED_TABLES.has(table)) {
+    throw new Error(`Disallowed table identifier: ${table}`);
+  }
+  if (!ALLOWED_COLUMNS.has(column)) {
+    throw new Error(`Disallowed column identifier: ${column}`);
+  }
   const likeClauses = patterns.map((p, i) => `${column} LIKE $${i + 2}`).join(' OR ');
-  const params = [tenantId, ...patterns.map((p) => p.replace('%', '%'))];
+  // No-op replacements can hide issues; pass patterns directly
+  const params = [tenantId, ...patterns];
 
   // Count matches
   const { rows: countRows } = await pool.query(

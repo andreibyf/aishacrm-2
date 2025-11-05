@@ -207,5 +207,127 @@ export default function createTestingRoutes(_pgPool) {
     }
   });
 
+  // POST /api/testing/cleanup-test-data - Delete all records with is_test_data = true
+  // Optional: also delete recent unflagged test data like example.com emails (contacts/leads)
+  // Body: {
+  //   tenant_id?: 'local-tenant-001',             // Optional: clean only specific tenant
+  //   confirm?: true,                              // Required: safety confirmation
+  //   unflagged_cleanup?: {                        // Optional: additional cleanup for legacy/unflagged data
+  //     enabled?: boolean,                         // If true, will run extra passes
+  //     window_days?: number                       // Only delete items created within this window (default 3)
+  //   }
+  // }
+  router.post('/cleanup-test-data', async (req, res) => {
+    try {
+      const { tenant_id, confirm, unflagged_cleanup } = req.body || {};
+
+      if (!confirm) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Cleanup requires explicit confirmation',
+          hint: 'Send { "confirm": true } in request body'
+        });
+      }
+
+      // Tables that have is_test_data flag in metadata
+      const tables = [
+        'activities',
+        'contacts',
+        'leads',
+        'accounts',
+        'opportunities',
+        'system_logs'
+      ];
+
+  const results = {};
+  let totalDeleted = 0;
+
+      for (const table of tables) {
+        try {
+          // Build DELETE query with metadata check
+          let query = `
+            DELETE FROM ${table}
+            WHERE (metadata->>'is_test_data')::boolean = true
+          `;
+          const params = [];
+
+          // Add tenant filter if specified
+          if (tenant_id) {
+            query += ` AND tenant_id = $1`;
+            params.push(tenant_id);
+          }
+
+          query += ` RETURNING id`;
+
+          const result = await _pgPool.query(query, params);
+          const count = result.rowCount || 0;
+          
+          results[table] = {
+            deleted: count,
+            success: true
+          };
+          
+          totalDeleted += count;
+        } catch (error) {
+          console.error(`Error cleaning ${table}:`, error);
+          results[table] = {
+            deleted: 0,
+            success: false,
+            error: error.message
+          };
+        }
+      }
+
+      // Optional follow-up: remove recent unflagged test data (example.com emails) for safety
+      if (unflagged_cleanup?.enabled) {
+        try {
+          const windowDays = Math.max(1, Math.min(parseInt(unflagged_cleanup.window_days || '3', 10) || 3, 90));
+          const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
+
+          const { getSupabaseClient } = await import('../lib/supabase-db.js');
+          const supabase = getSupabaseClient();
+
+          // Contacts and leads typically have email columns; clean those by domain pattern
+          const emailTables = ['contacts', 'leads'];
+          for (const table of emailTables) {
+            try {
+              let q = supabase.from(table)
+                .delete()
+                .ilike('email', '%@example.com')
+                .gte('created_at', cutoff)
+                .select();
+              if (tenant_id) q = q.eq('tenant_id', tenant_id);
+
+              const { data, error } = await q;
+              if (error) throw error;
+              const count = Array.isArray(data) ? data.length : 0;
+              results[`${table}_unflagged`] = { deleted: count, success: true, window_days: windowDays };
+              totalDeleted += count;
+            } catch (err) {
+              console.error(`Unflagged cleanup error for ${table}:`, err);
+              results[`${table}_unflagged`] = { deleted: 0, success: false, error: err.message };
+            }
+          }
+        } catch (err) {
+          console.error('Unflagged cleanup block error:', err);
+          results['unflagged_cleanup'] = { success: false, error: err.message };
+        }
+      }
+
+      res.json({
+        status: 'success',
+        data: {
+          total_deleted: totalDeleted,
+          tenant_id: tenant_id || 'all',
+          results,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      console.error('Cleanup test data error:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   return router;
 }

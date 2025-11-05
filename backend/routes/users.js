@@ -5,6 +5,7 @@
 
 import express from "express";
 import jwt from "jsonwebtoken";
+import { randomUUID, randomBytes } from "crypto";
 import {
   confirmUserEmail,
   createAuthUser,
@@ -18,6 +19,44 @@ import {
 
 export default function createUserRoutes(pgPool, _supabaseAuth) {
   const router = express.Router();
+
+  // Lightweight, per-route in-memory rate limiter (dependency-free)
+  // Use stricter limits for sensitive auth endpoints to satisfy CodeQL
+  const routeBuckets = new Map(); // key: routeId|ip -> { count, ts }
+  const DEFAULT_WINDOW_MS = parseInt(process.env.ROUTE_RATE_WINDOW_MS || '60000', 10);
+  function createRouteLimiter({ windowMs = DEFAULT_WINDOW_MS, max = 10, id = "default" } = {}) {
+    return function routeLimiter(req, res, next) {
+      try {
+        // Allow OPTIONS preflight freely
+        if (req.method === 'OPTIONS') return next();
+        const now = Date.now();
+        const key = `${id}|${req.ip}`;
+        const entry = routeBuckets.get(key);
+        if (!entry || now - entry.ts >= windowMs) {
+          routeBuckets.set(key, { count: 1, ts: now });
+          return next();
+        }
+        if (entry.count < max) {
+          entry.count++;
+          return next();
+        }
+        res.setHeader('Retry-After', Math.ceil((entry.ts + windowMs - now) / 1000));
+        return res.status(429).json({
+          status: 'error',
+          message: 'Too Many Requests',
+          code: 'RATE_LIMITED',
+        });
+      } catch {
+        // Fail open on limiter errors
+        return next();
+      }
+    };
+  }
+
+  // Tuned limiters for specific endpoints
+  const authLimiter = createRouteLimiter({ id: 'auth', windowMs: DEFAULT_WINDOW_MS, max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '5', 10) });
+  const passwordLimiter = createRouteLimiter({ id: 'password', windowMs: DEFAULT_WINDOW_MS, max: parseInt(process.env.PASSWORD_RATE_LIMIT_MAX || '5', 10) });
+  const mutateLimiter = createRouteLimiter({ id: 'user-mutate', windowMs: DEFAULT_WINDOW_MS, max: parseInt(process.env.USER_MUTATE_RATE_LIMIT_MAX || '30', 10) });
 
   // Helper function to expand metadata fields to top-level properties
   const expandUserMetadata = (user) => {
@@ -304,7 +343,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
   });
 
   // POST /api/users/login - User login (basic implementation)
-  router.post("/login", async (req, res) => {
+  router.post("/login", authLimiter, async (req, res) => {
     try {
       const { email, password: _password } = req.body;
 
@@ -572,7 +611,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
   });
 
   // POST /api/users - Create new user (global admin or tenant employee)
-  router.post("/", async (req, res) => {
+  router.post("/", mutateLimiter, async (req, res) => {
     try {
       const {
         email,
@@ -651,8 +690,17 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
           email_confirm: true,
         };
 
-        // Use provided password or generate a strong temporary one
-        const userPassword = password || `TempPass${Date.now()}!Secure#`;
+        // Use provided password or generate a strong temporary one (secure randomness)
+        const userPassword = password || (() => {
+          try {
+            // Prefer UUID for readability, with a random suffix
+            const suffix = randomBytes(6).toString('base64url');
+            return `Temp-${randomUUID()}-${suffix}`;
+          } catch {
+            // Fallback: crypto may be unavailable in rare environments
+            return `Temp-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+          }
+        })();
 
         const { user: authUser, error: authError } = await createAuthUser(
           email,
@@ -848,7 +896,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
   });
 
   // POST /api/users/register - User registration (legacy endpoint)
-  router.post("/register", async (req, res) => {
+  router.post("/register", authLimiter, async (req, res) => {
     try {
       const {
         tenant_id,
@@ -933,7 +981,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
   });
 
   // PUT /api/users/:id - Update user (supports users and employees tables)
-  router.put("/:id", async (req, res) => {
+  router.put("/:id", mutateLimiter, async (req, res) => {
     try {
       const { id } = req.params;
       const {
@@ -1153,7 +1201,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
   });
 
   // DELETE /api/users/:id - Delete user (checks both users and employees tables)
-  router.delete("/:id", async (req, res) => {
+  router.delete("/:id", mutateLimiter, async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query;
@@ -1254,7 +1302,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
   });
 
   // POST /api/users/reset-password - Send password reset email
-  router.post("/reset-password", async (req, res) => {
+  router.post("/reset-password", passwordLimiter, async (req, res) => {
     try {
       const { email } = req.body;
 
@@ -1287,7 +1335,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
   });
 
   // POST /api/users/admin-password-reset - Direct password reset (for dev/admin use)
-  router.post("/admin-password-reset", async (req, res) => {
+  router.post("/admin-password-reset", passwordLimiter, async (req, res) => {
     try {
       const { email, password } = req.body;
 

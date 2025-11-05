@@ -77,7 +77,17 @@ export default function createContactRoutes(pgPool) {
   // POST /api/contacts - Create contact
   router.post('/', async (req, res) => {
     try {
-      const { tenant_id, first_name, last_name, email, phone, account_id, status = 'active' } = req.body;
+      const {
+        tenant_id,
+        first_name,
+        last_name,
+        email,
+        phone,
+        account_id,
+        status = 'active',
+        metadata: incomingMetadata,
+        ...otherFields
+      } = req.body || {};
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -100,9 +110,18 @@ export default function createContactRoutes(pgPool) {
         });
       }
 
+      // Merge all extra fields (including is_test_data, tags, etc.) into metadata JSON
+      const mergedMetadata = {
+        ...(incomingMetadata || {}),
+        ...otherFields,
+      };
+
       const query = `
-        INSERT INTO contacts (tenant_id, first_name, last_name, email, phone, account_id, status, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+        INSERT INTO contacts (
+          tenant_id, first_name, last_name, email, phone, account_id, status, metadata, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()
+        )
         RETURNING *
       `;
       
@@ -113,7 +132,8 @@ export default function createContactRoutes(pgPool) {
         email,
         phone,
         account_id || null,
-        status
+        status,
+        mergedMetadata,
       ]);
 
       res.json({

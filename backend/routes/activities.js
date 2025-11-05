@@ -277,39 +277,61 @@ export default function createActivityRoutes(pgPool) {
 
       // Separate known columns and extra metadata
       const bodyText = payload.description ?? payload.body ?? null;
-      const known = {
-        type: payload.type,
-        subject: payload.subject,
-        body: bodyText,
-        related_id: payload.related_id ?? null,
-      };
-      const { type, subject, body, related_id } = known;
-
+      
       // Merge metadata: load current row's metadata and shallow-merge with incoming extras
-      const current = await pgPool.query('SELECT metadata FROM activities WHERE id = $1', [id]);
+      const current = await pgPool.query('SELECT * FROM activities WHERE id = $1', [id]);
+      if (current.rows.length === 0) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Activity not found'
+        });
+      }
+      
       const currentMeta = current.rows[0]?.metadata && typeof current.rows[0].metadata === 'object' ? current.rows[0].metadata : {};
-      const { tenant_id: _t, description: _d, body: _b, ...extras } = payload; // do not allow tenant change; description/body handled explicitly
+      const { tenant_id: _t, description: _d, body: _b, id: _id, created_at: _ca, updated_at: _ua, ...extras } = payload;
       const newMeta = { ...currentMeta, ...extras, description: bodyText };
+
+      // Build SET clause dynamically to avoid "UPDATE requires SET clause" error
+      const updates = [];
+      const values = [];
+      let paramCount = 1;
+
+      if (payload.type !== undefined) {
+        updates.push(`type = $${paramCount++}`);
+        values.push(payload.type);
+      }
+      if (payload.subject !== undefined) {
+        updates.push(`subject = $${paramCount++}`);
+        values.push(payload.subject);
+      }
+      if (bodyText !== undefined) {
+        updates.push(`body = $${paramCount++}`);
+        values.push(bodyText);
+      }
+      if (payload.related_id !== undefined) {
+        updates.push(`related_id = $${paramCount++}`);
+        values.push(payload.related_id);
+      }
+      
+      // Always update metadata (it contains merged extras)
+      updates.push(`metadata = $${paramCount++}`);
+      values.push(JSON.stringify(newMeta));
+
+      if (updates.length === 0) {
+        // No updates requested, return current record
+        return res.json({
+          status: 'success',
+          data: normalizeActivity(current.rows[0])
+        });
+      }
 
       const query = `
         UPDATE activities SET
-          type = COALESCE($1, type),
-          subject = COALESCE($2, subject),
-          body = COALESCE($3, body),
-          related_id = COALESCE($4, related_id),
-          metadata = COALESCE($5, metadata)
-        WHERE id = $6
+          ${updates.join(', ')}
+        WHERE id = $${paramCount}
         RETURNING *
       `;
-
-      const values = [
-        type,
-        subject,
-        body,
-        related_id,
-        JSON.stringify(newMeta),
-        id
-      ];
+      values.push(id);
       
       const result = await pgPool.query(query, values);
       

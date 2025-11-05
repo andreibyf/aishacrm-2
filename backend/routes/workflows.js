@@ -26,293 +26,38 @@ function normalizeWorkflow(row) {
 
 export default function createWorkflowRoutes(pgPool) {
   const router = express.Router();
-
-  // GET /api/workflows - List workflows
-  router.get('/', async (req, res) => {
-    try {
-      const { tenant_id, limit = 50, offset = 0, is_active } = req.query;
-
-      if (!pgPool) {
-        return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      }
-
-      let query = 'SELECT * FROM workflow WHERE 1=1';
-      const params = [];
-      let paramCount = 1;
-
-      if (tenant_id) {
-        query += ` AND tenant_id = $${paramCount}`;
-        params.push(tenant_id);
-        paramCount++;
-      }
-
-      if (is_active !== undefined) {
-        query += ` AND is_active = $${paramCount}`;
-        params.push(is_active === 'true');
-        paramCount++;
-      }
-
-      query += ` ORDER BY created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
-      params.push(parseInt(limit), parseInt(offset));
-
-  const result = await pgPool.query(query, params);
-
-      // Get total count
-      let countQuery = 'SELECT COUNT(*) FROM workflow WHERE 1=1';
-      const countParams = [];
-      let countParamCount = 1;
-
-      if (tenant_id) {
-        countQuery += ` AND tenant_id = $${countParamCount}`;
-        countParams.push(tenant_id);
-        countParamCount++;
-      }
-
-      if (is_active !== undefined) {
-        countQuery += ` AND is_active = $${countParamCount}`;
-        countParams.push(is_active === 'true');
-      }
-
-      const countResult = await pgPool.query(countQuery, countParams);
-
-      res.json({
-        status: 'success',
-        data: {
-          workflows: result.rows.map(normalizeWorkflow),
-          total: parseInt(countResult.rows[0].count),
-          limit: parseInt(limit),
-          offset: parseInt(offset)
-        }
-      });
-    } catch (error) {
-      console.error('Error fetching workflows:', error);
-      res.status(500).json({ status: 'error', message: error.message });
-    }
-  });
-
-  // GET /api/workflows/:id - Get single workflow
-  router.get('/:id', async (req, res) => {
-    try {
-      const { id } = req.params;
-
-      if (!pgPool) {
-        return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      }
-
-      const result = await pgPool.query('SELECT * FROM workflow WHERE id = $1', [id]);
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({ status: 'error', message: 'Workflow not found' });
-      }
-
-  res.json({ status: 'success', data: normalizeWorkflow(result.rows[0]) });
-    } catch (error) {
-      console.error('Error fetching workflow:', error);
-      res.status(500).json({ status: 'error', message: error.message });
-    }
-  });
-
-  // POST /api/workflows - Create workflow
-  router.post('/', async (req, res) => {
-    try {
-  const workflow = req.body || {};
-
-      if (!workflow.tenant_id || !workflow.name || !workflow.trigger_type) {
-        return res.status(400).json({ 
-          status: 'error', 
-          message: 'tenant_id, name, and trigger_type are required' 
-        });
-      }
-
-      if (!pgPool) {
-        return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      }
-
-      // Merge non-schema fields into metadata for forward compatibility
-      const meta = {
-        ...(workflow.metadata || {}),
-        nodes: workflow.nodes || [],
-        connections: workflow.connections || [],
-        webhook_url: workflow.webhook_url || null,
-        execution_count: workflow.execution_count || 0,
-        last_executed: workflow.last_executed || null,
-      };
-
-      const query = `
-        INSERT INTO workflow (
-          tenant_id, name, description, trigger_type, trigger_config, 
-          actions, is_active, metadata
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        RETURNING *
-      `;
-
-      const values = [
-        workflow.tenant_id,
-        workflow.name,
-        workflow.description || null,
-        workflow.trigger_type || (workflow.trigger?.type ?? 'webhook'),
-        JSON.stringify(workflow.trigger_config || workflow.trigger?.config || {}),
-        JSON.stringify(workflow.actions || []),
-        workflow.is_active !== undefined ? workflow.is_active : true,
-        JSON.stringify(meta)
-      ];
-
-      const result = await pgPool.query(query, values);
-
-      res.status(201).json({
-        status: 'success',
-        message: 'Workflow created successfully',
-        data: normalizeWorkflow(result.rows[0])
-      });
-    } catch (error) {
-      console.error('Error creating workflow:', error);
-      res.status(500).json({ status: 'error', message: error.message });
-    }
-  });
-
-  // PUT /api/workflows/:id - Update workflow
-  router.put('/:id', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const updates = req.body;
-
-      if (!pgPool) {
-        return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      }
-
-      // Load current metadata so we can merge
-      const currentRes = await pgPool.query('SELECT metadata FROM workflow WHERE id = $1', [id]);
-      if (currentRes.rows.length === 0) {
-        return res.status(404).json({ status: 'error', message: 'Workflow not found' });
-      }
-      const currentMeta = currentRes.rows[0]?.metadata && typeof currentRes.rows[0].metadata === 'object'
-        ? currentRes.rows[0].metadata
-        : {};
-
-      // Pick schema fields
-      const schemaUpdates = {
-        name: updates.name,
-        description: updates.description,
-        trigger_type: updates.trigger_type ?? updates.trigger?.type,
-        trigger_config: updates.trigger_config ?? updates.trigger?.config,
-        actions: updates.actions,
-        is_active: updates.is_active,
-      };
-
-      // Merge metadata updates
-      const metaUpdates = {
-        nodes: updates.nodes ?? currentMeta.nodes,
-        connections: updates.connections ?? currentMeta.connections,
-        webhook_url: updates.webhook_url ?? currentMeta.webhook_url,
-        execution_count: updates.execution_count ?? currentMeta.execution_count,
-        last_executed: updates.last_executed ?? currentMeta.last_executed,
-        ...(updates.metadata || {}),
-      };
-
-      const setStatements = [];
-      const values = [];
-      let paramCount = 1;
-
-      if (schemaUpdates.name !== undefined) { setStatements.push(`name = $${paramCount++}`); values.push(schemaUpdates.name); }
-      if (schemaUpdates.description !== undefined) { setStatements.push(`description = $${paramCount++}`); values.push(schemaUpdates.description); }
-      if (schemaUpdates.trigger_type !== undefined) { setStatements.push(`trigger_type = $${paramCount++}`); values.push(schemaUpdates.trigger_type); }
-      if (schemaUpdates.trigger_config !== undefined) { setStatements.push(`trigger_config = $${paramCount++}`); values.push(JSON.stringify(schemaUpdates.trigger_config)); }
-      if (schemaUpdates.actions !== undefined) { setStatements.push(`actions = $${paramCount++}`); values.push(JSON.stringify(schemaUpdates.actions)); }
-      if (schemaUpdates.is_active !== undefined) { setStatements.push(`is_active = $${paramCount++}`); values.push(!!schemaUpdates.is_active); }
-
-      // Always write merged metadata when any update arrives
-      const newMeta = { ...currentMeta, ...metaUpdates };
-      setStatements.push(`metadata = $${paramCount++}`);
-      values.push(JSON.stringify(newMeta));
-
-      setStatements.push(`updated_at = NOW()`);
-      values.push(id);
-
-      const query = `
-        UPDATE workflow 
-        SET ${setStatements.join(', ')} 
-        WHERE id = $${paramCount} 
-        RETURNING *
-      `;
-
-      const result = await pgPool.query(query, values);
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({ status: 'error', message: 'Workflow not found' });
-      }
-
-      res.json({
-        status: 'success',
-        message: 'Workflow updated successfully',
-        data: normalizeWorkflow(result.rows[0])
-      });
-    } catch (error) {
-      console.error('Error updating workflow:', error);
-      res.status(500).json({ status: 'error', message: error.message });
-    }
-  });
-
-  // DELETE /api/workflows/:id - Delete workflow
-  router.delete('/:id', async (req, res) => {
-    try {
-      const { id } = req.params;
-
-      if (!pgPool) {
-        return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      }
-
-      const result = await pgPool.query('DELETE FROM workflow WHERE id = $1 RETURNING id', [id]);
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({ status: 'error', message: 'Workflow not found' });
-      }
-
-      res.json({
-        status: 'success',
-        message: 'Workflow deleted successfully',
-        data: { id: result.rows[0].id }
-      });
-    } catch (error) {
-      console.error('Error deleting workflow:', error);
-      res.status(500).json({ status: 'error', message: error.message });
-    }
-  });
-
-  // POST /api/workflows/execute - Execute workflow (server-side)
-  router.post('/execute', async (req, res) => {
+  
+  // Internal executor used by both /execute and /:id/test to avoid SSRF via internal HTTP
+  async function executeWorkflowById(workflow_id, triggerPayload) {
     const startTime = Date.now();
     const executionLog = [];
     let executionId = null;
     try {
-      const { workflow_id, payload, input_data } = req.body || {};
-      const triggerPayload = payload ?? input_data ?? {};
-
       if (!workflow_id) {
-        return res.status(400).json({ status: 'error', message: 'workflow_id is required' });
+        throw new Error('workflow_id is required');
       }
 
       // Load workflow
       const wfRes = await pgPool.query('SELECT * FROM workflow WHERE id = $1', [workflow_id]);
       if (wfRes.rows.length === 0) {
-        return res.status(404).json({ status: 'error', message: 'Workflow not found' });
+        return { status: 'error', httpStatus: 404, data: { message: 'Workflow not found' } };
       }
       const workflow = normalizeWorkflow(wfRes.rows[0]);
       if (workflow.is_active === false) {
-        return res.status(400).json({ status: 'error', message: 'Workflow is not active' });
+        return { status: 'error', httpStatus: 400, data: { message: 'Workflow is not active' } };
       }
 
       // Create execution record (running)
       const exRes = await pgPool.query(
         `INSERT INTO workflow_execution (workflow_id, tenant_id, status, trigger_data, execution_log, started_at, created_at)
          VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) RETURNING *`,
-        [workflow.id, workflow.tenant_id, 'running', JSON.stringify(triggerPayload), JSON.stringify([])]
+        [workflow.id, workflow.tenant_id, 'running', JSON.stringify(triggerPayload ?? {}), JSON.stringify([])]
       );
       const execution = exRes.rows[0];
       executionId = execution.id;
 
       // Execution context
-      const context = { payload: triggerPayload, variables: {} };
+      const context = { payload: triggerPayload ?? {}, variables: {} };
 
       // Helper: resolve next node
       function getNextNode(currentNodeId) {
@@ -357,64 +102,61 @@ export default function createWorkflowRoutes(pgPool) {
         try {
           switch (node.type) {
             case 'webhook_trigger': {
-              log.output = { payload: triggerPayload };
+              log.output = { payload: context.payload };
               break;
             }
-                case 'send_email': {
-                  // Queue an email by creating an activity with type 'email'
-                  // Supports variable replacement for to/subject/body
-                  const toRaw = cfg.to || '{{email}}';
-                  const subjectRaw = cfg.subject || 'Workflow Email';
-                  const bodyRaw = cfg.body || '';
+            case 'send_email': {
+              const toRaw = cfg.to || '{{email}}';
+              const subjectRaw = cfg.subject || 'Workflow Email';
+              const bodyRaw = cfg.body || '';
 
-                  const toValue = Array.isArray(toRaw)
-                    ? toRaw.map(t => replaceVariables(t))
-                    : String(replaceVariables(toRaw)).replace(/^['"]|['"]$/g, '').trim();
-                  const subject = String(replaceVariables(subjectRaw));
-                  const body = String(replaceVariables(bodyRaw));
+              const toValue = Array.isArray(toRaw)
+                ? toRaw.map(t => replaceVariables(t))
+                : String(replaceVariables(toRaw)).replace(/^['"]|['"]$/g, '').trim();
+              const subject = String(replaceVariables(subjectRaw));
+              const body = String(replaceVariables(bodyRaw));
 
-                  // Relate email to found lead/contact if present
-                  const lead = context.variables.found_lead;
-                  const contact = context.variables.found_contact;
-                  const related_to = lead ? 'lead' : (contact ? 'contact' : null);
-                  const related_id = lead ? lead.id : (contact ? contact.id : null);
+              const lead = context.variables.found_lead;
+              const contact = context.variables.found_contact;
+              const related_to = lead ? 'lead' : (contact ? 'contact' : null);
+              const related_id = lead ? lead.id : (contact ? contact.id : null);
 
-                  const emailMeta = {
-                    created_by_workflow: workflow.id,
-                    email: {
-                      to: toValue,
-                      subject,
-                      cc: cfg.cc ? replaceVariables(cfg.cc) : undefined,
-                      bcc: cfg.bcc ? replaceVariables(cfg.bcc) : undefined,
-                      from: cfg.from ? replaceVariables(cfg.from) : undefined
-                    }
-                  };
-
-                  const q = `
-                    INSERT INTO activities (
-                      tenant_id, type, subject, body, status, related_id,
-                      created_by, location, priority, due_date, due_time,
-                      assigned_to, related_to, metadata, created_date, updated_date
-                    ) VALUES (
-                      $1, $2, $3, $4, $5, $6,
-                      NULL, NULL, NULL, NULL, NULL,
-                      NULL, $7, $8, NOW(), NOW()
-                    ) RETURNING *
-                  `;
-                  const vals = [
-                    workflow.tenant_id,
-                    'email',
-                    subject || null,
-                    body || null,
-                    'queued',
-                    related_id,
-                    related_to,
-                    JSON.stringify(emailMeta)
-                  ];
-                  const r = await pgPool.query(q, vals);
-                  log.output = { email_queued: true, to: toValue, subject, activity_id: r.rows[0]?.id };
-                  break;
+              const emailMeta = {
+                created_by_workflow: workflow.id,
+                email: {
+                  to: toValue,
+                  subject,
+                  cc: cfg.cc ? replaceVariables(cfg.cc) : undefined,
+                  bcc: cfg.bcc ? replaceVariables(cfg.bcc) : undefined,
+                  from: cfg.from ? replaceVariables(cfg.from) : undefined
                 }
+              };
+
+              const q = `
+                INSERT INTO activities (
+                  tenant_id, type, subject, body, status, related_id,
+                  created_by, location, priority, due_date, due_time,
+                  assigned_to, related_to, metadata, created_date, updated_date
+                ) VALUES (
+                  $1, $2, $3, $4, $5, $6,
+                  NULL, NULL, NULL, NULL, NULL,
+                  NULL, $7, $8, NOW(), NOW()
+                ) RETURNING *
+              `;
+              const vals = [
+                workflow.tenant_id,
+                'email',
+                subject || null,
+                body || null,
+                'queued',
+                related_id,
+                related_to,
+                JSON.stringify(emailMeta)
+              ];
+              const r = await pgPool.query(q, vals);
+              log.output = { email_queued: true, to: toValue, subject, activity_id: r.rows[0]?.id };
+              break;
+            }
             case 'find_lead': {
               const field = cfg.search_field || 'email';
               let value = replaceVariables(cfg.search_value || '{{email}}');
@@ -600,7 +342,7 @@ export default function createWorkflowRoutes(pgPool) {
       const newMeta = { ...meta, execution_count: nextCount, last_executed: new Date().toISOString() };
       await pgPool.query('UPDATE workflow SET metadata = $1, updated_at = NOW() WHERE id = $2', [JSON.stringify(newMeta), workflow.id]);
 
-      return res.json({ status: finalStatus, data: { execution_id: execution.id, execution_log: executionLog, duration_ms: duration } });
+      return { status: finalStatus, httpStatus: 200, data: { execution_id: execution.id, execution_log: executionLog, duration_ms: duration } };
     } catch (error) {
       // Try to mark execution as failed if we created one
       if (executionId) {
@@ -613,7 +355,85 @@ export default function createWorkflowRoutes(pgPool) {
           // ignore secondary failure
         }
       }
-      return res.status(500).json({ status: 'error', message: error.message, data: { execution_log: executionLog } });
+      return { status: 'error', httpStatus: 500, data: { message: error.message, execution_log: executionLog } };
+    }
+  }
+
+  // GET /api/workflows - List workflows
+  router.get('/', async (req, res) => {
+    try {
+      const { tenant_id, limit = 50, offset = 0, is_active } = req.query;
+
+      if (!pgPool) {
+        return res.status(503).json({ status: 'error', message: 'Database not configured' });
+      }
+
+      let query = 'SELECT * FROM workflow WHERE 1=1';
+      const params = [];
+      let paramCount = 1;
+
+      if (tenant_id) {
+        query += ` AND tenant_id = $${paramCount}`;
+        params.push(tenant_id);
+        paramCount++;
+      }
+
+      if (is_active !== undefined) {
+        query += ` AND is_active = $${paramCount}`;
+        params.push(is_active === 'true');
+        paramCount++;
+      }
+
+      query += ` ORDER BY created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
+      params.push(parseInt(limit), parseInt(offset));
+
+      const result = await pgPool.query(query, params);
+
+      // Get total count
+      let countQuery = 'SELECT COUNT(*) FROM workflow WHERE 1=1';
+      const countParams = [];
+      let countParamCount = 1;
+
+      if (tenant_id) {
+        countQuery += ` AND tenant_id = $${countParamCount}`;
+        countParams.push(tenant_id);
+        countParamCount++;
+      }
+
+      if (is_active !== undefined) {
+        countQuery += ` AND is_active = $${countParamCount}`;
+        countParams.push(is_active === 'true');
+      }
+
+      const countResult = await pgPool.query(countQuery, countParams);
+
+      res.json({
+        status: 'success',
+        data: {
+          workflows: result.rows.map(normalizeWorkflow),
+          total: parseInt(countResult.rows[0].count),
+          limit: parseInt(limit),
+          offset: parseInt(offset)
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching workflows:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // Execute workflow by ID (no internal HTTP)
+  router.post('/execute', async (req, res) => {
+    try {
+      const { workflow_id, payload, input_data } = req.body || {};
+      const triggerPayload = payload ?? input_data ?? {};
+      if (!workflow_id) {
+        return res.status(400).json({ status: 'error', message: 'workflow_id is required' });
+      }
+      const result = await executeWorkflowById(workflow_id, triggerPayload);
+      return res.status(result.httpStatus).json({ status: result.status, data: result.data });
+    } catch (error) {
+      return res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
@@ -622,15 +442,9 @@ export default function createWorkflowRoutes(pgPool) {
     try {
       const { id } = req.params;
       const payload = req.body?.payload ?? req.body ?? {};
-      // Forward to the executor
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
-      const response = await fetch(`${baseUrl}/api/workflows/execute`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workflow_id: id, payload })
-      });
-      const json = await response.json();
-      return res.status(response.status).json(json);
+      // Directly execute without issuing an internal HTTP request (prevents SSRF)
+      const result = await executeWorkflowById(id, payload);
+      return res.status(result.httpStatus).json({ status: result.status, data: result.data });
     } catch (error) {
       return res.status(500).json({ status: 'error', message: error.message });
     }

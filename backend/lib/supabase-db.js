@@ -130,6 +130,18 @@ async function executeViaSupabaseAPI(sql, params) {
  * Handle SELECT queries
  */
 async function handleSelectQuery(sql, params) {
+  // Safe clause extractor to avoid heavy regex backtracking on uncontrolled input
+  const extractClause = (source, startKeyword, endKeywords = []) => {
+    const lower = source.toLowerCase();
+    const start = lower.indexOf(startKeyword);
+    if (start === -1) return null;
+    let end = source.length;
+    for (const endKw of endKeywords) {
+      const idx = lower.indexOf(endKw, start + startKeyword.length);
+      if (idx !== -1 && idx < end) end = idx;
+    }
+    return source.slice(start + startKeyword.length, end).trim();
+  };
   // Extract table name
   const fromMatch = sql.match(/from\s+([a-z_]+)/i);
   if (!fromMatch) {
@@ -149,9 +161,8 @@ async function handleSelectQuery(sql, params) {
   
   // Parse WHERE with parameter substitution
   // Build WHERE conditions
-  const whereMatch = sql.match(/where\s+(.+?)(?:\s+order\s+by|\s+limit|\s+offset|$)/i);
-  if (whereMatch) {
-    const wherePart = whereMatch[1];
+  const wherePart = extractClause(sql, ' where ', [' order by ', ' limit ', ' offset ']);
+  if (wherePart) {
     // Split on AND while preserving inner commas of IN lists
     const conditions = wherePart.split(/\s+and\s+/i).map(c => c.trim());
     for (const cond of conditions) {
@@ -300,10 +311,15 @@ async function handleSelectQuery(sql, params) {
   }
 
   // Parse ORDER BY
-  const orderMatch = sql.match(/order\s+by\s+([a-z_]+)(\s+desc|\s+asc)?/i);
-  if (orderMatch) {
-    const ascending = !orderMatch[2] || orderMatch[2].trim().toLowerCase() === 'asc';
-    query = query.order(orderMatch[1], { ascending });
+  const orderSegment = extractClause(sql, ' order by ', [' limit ', ' offset ']);
+  if (orderSegment) {
+    const parts = orderSegment.trim().split(/\s+/);
+    const col = parts[0]?.replace(/[,]/g, '');
+    const dir = (parts[1] || 'asc').toLowerCase();
+    if (col) {
+      const ascending = dir !== 'desc';
+      query = query.order(col, { ascending });
+    }
   }
   
   const { data, error, count } = await query;
@@ -352,23 +368,37 @@ async function handleUpdateQuery(sql, params) {
   if (!tableMatch) throw new Error('Could not parse UPDATE');
   
   const table = tableMatch[1];
-  
-  // Parse SET clause
-  const setMatch = sql.match(/set\s+(.+?)\s+where/i);
-  if (!setMatch) throw new Error('UPDATE requires SET clause');
-  
-  // Parse WHERE
-  const whereMatch = sql.match(/where\s+(.+)$/i);
-  if (!whereMatch) throw new Error('UPDATE requires WHERE for safety');
+  // Safe clause extractor
+  const extractClause = (source, startKeyword, endKeywords = []) => {
+    const lower = source.toLowerCase();
+    const start = lower.indexOf(startKeyword);
+    if (start === -1) return null;
+    let end = source.length;
+    for (const endKw of endKeywords) {
+      const idx = lower.indexOf(endKw, start + startKeyword.length);
+      if (idx !== -1 && idx < end) end = idx;
+    }
+    return source.slice(start + startKeyword.length, end).trim();
+  };
+
+  // Parse SET clause and WHERE clause using index-based parsing
+  const setPart = extractClause(sql, ' set ', [' where ']);
+  if (!setPart) throw new Error('UPDATE requires SET clause');
+  const wherePart = extractClause(sql, ' where ');
+  if (!wherePart) throw new Error('UPDATE requires WHERE for safety');
   
   // Build update data
   const updateData = {};
-  let paramIndex = 0;
-  const setFields = setMatch[1].split(',');
+  const setFields = setPart.split(',').map(f => f.trim());
   for (const field of setFields) {
-    const fieldMatch = field.match(/([a-z_]+)\s*=\s*\$/i);
-    if (fieldMatch && paramIndex < params.length) {
-      updateData[fieldMatch[1]] = params[paramIndex++];
+    // Match: column = $N where N is a number
+    const fieldMatch = field.match(/([a-z_]+)\s*=\s*\$(\d+)/i);
+    if (fieldMatch) {
+      const colName = fieldMatch[1];
+      const paramNum = parseInt(fieldMatch[2], 10) - 1; // Convert to 0-indexed
+      if (paramNum >= 0 && paramNum < params.length) {
+        updateData[colName] = params[paramNum];
+      }
     }
   }
   // Parse JSON string payloads for JSON/JSONB columns when possible
@@ -378,11 +408,16 @@ async function handleUpdateQuery(sql, params) {
   
   // Build WHERE
   let query = supabaseClient.from(table).update(updateData);
-  const whereConditions = whereMatch[1].split(/\s+and\s+/i);
+  const whereConditions = wherePart.split(/\s+and\s+/i);
   for (const cond of whereConditions) {
-    const eqMatch = cond.match(/([a-z_]+)\s*=\s*\$/i);
-    if (eqMatch && paramIndex < params.length) {
-      query = query.eq(eqMatch[1], params[paramIndex++]);
+    // Match: column = $N where N is a number
+    const eqMatch = cond.trim().match(/([a-z_]+)\s*=\s*\$(\d+)/i);
+    if (eqMatch) {
+      const colName = eqMatch[1];
+      const paramNum = parseInt(eqMatch[2], 10) - 1; // Convert to 0-indexed
+      if (paramNum >= 0 && paramNum < params.length) {
+        query = query.eq(colName, params[paramNum]);
+      }
     }
   }
   
@@ -400,17 +435,68 @@ async function handleDeleteQuery(sql, params) {
   if (!tableMatch) throw new Error('Could not parse DELETE');
   
   const table = tableMatch[1];
-  const whereMatch = sql.match(/where\s+(.+)$/i);
-  if (!whereMatch) throw new Error('DELETE requires WHERE for safety');
+  // Safe WHERE extractor
+  const lower = sql.toLowerCase();
+  const whereIdx = lower.indexOf(' where ');
+  if (whereIdx === -1) throw new Error('DELETE requires WHERE for safety');
+  const wherePart = sql.slice(whereIdx + 7).trim();
   
   let query = supabaseClient.from(table).delete();
-  let paramIndex = 0;
-  const conditions = whereMatch[1].split(/\s+and\s+/i);
-  for (const cond of conditions) {
-    const eqMatch = cond.match(/([a-z_]+)\s*=\s*\$/i);
-    if (eqMatch && paramIndex < params.length) {
-      query = query.eq(eqMatch[1], params[paramIndex++]);
+  const conditions = wherePart.split(/\s+and\s+/i);
+  let appliedFilters = 0;
+  for (const rawCond of conditions) {
+    const cond = rawCond.trim();
+    // 1) Plain equality: column = $N
+    let m = cond.match(/([a-z_]+)\s*=\s*\$(\d+)/i);
+    if (m) {
+      const colName = m[1];
+      const paramNum = parseInt(m[2], 10) - 1; // Convert to 0-indexed
+      if (paramNum >= 0 && paramNum < params.length) {
+        query = query.eq(colName, params[paramNum]);
+        appliedFilters++;
+        continue;
+      }
     }
+
+    // 2) JSON text equality: metadata->>'field' = $N
+    m = cond.match(/metadata->>'([a-z_]+)'\s*=\s*\$(\d+)/i);
+    if (m) {
+      const field = m[1];
+      const paramNum = parseInt(m[2], 10) - 1;
+      if (paramNum >= 0 && paramNum < params.length) {
+        query = query.filter(`metadata->>${field}`, 'eq', params[paramNum]);
+        appliedFilters++;
+        continue;
+      }
+    }
+
+    // 3) JSON boolean literal: (metadata->>'field')::boolean = true|false
+    m = cond.match(/\(metadata->>'([a-z_]+)'\)::boolean\s*=\s*(true|false)/i);
+    if (m) {
+      const field = m[1];
+      const boolStr = m[2].toLowerCase();
+      query = query.filter(`metadata->>${field}`, 'eq', boolStr);
+      appliedFilters++;
+      continue;
+    }
+
+    // 4) Special cases using COALESCE for is_test_data
+    if (/coalesce\(\(metadata->>'is_test_data'\)::boolean,\s*false\)\s*=\s*true/i.test(cond)) {
+      query = query.filter('metadata->>is_test_data', 'eq', 'true');
+      appliedFilters++;
+      continue;
+    }
+    if (/coalesce\(\(metadata->>'is_test_data'\)::boolean,\s*false\)\s*=\s*false/i.test(cond)) {
+      // Keep rows where is_test_data is null or false - represent as OR in Supabase
+      query = query.or('metadata->>is_test_data.is.null,metadata->>is_test_data.eq.false');
+      appliedFilters++;
+      continue;
+    }
+  }
+
+  // Prevent unsafe full-table deletes when we couldn't translate any filters
+  if (appliedFilters === 0) {
+    throw new Error('Unsafe DELETE without supported filters in API mode');
   }
   
   const { data, error } = await query.select();
