@@ -117,9 +117,10 @@ export async function waitForUserPage(page, email = 'e2e@example.com') {
     }
   }
   
-  // Wait for any visible content
-  await page.waitForSelector('table, button, h1, h2, [role="main"]', { timeout: 15000 });
-  console.log('[waitForUserPage] Content visible');
+  // Wait for the primary content region to be visible (more reliable than a broad selector)
+  // Prefer the main landmark to avoid matching a hidden button as the first element
+  await page.locator('main, [role="main"]').first().waitFor({ state: 'visible', timeout: 15000 });
+  console.log('[waitForUserPage] Main content visible');
   
   // Final settle time - increased from 1500ms to 3000ms
   await page.waitForTimeout(3000);

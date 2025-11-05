@@ -1,6 +1,18 @@
 // @ts-check
 import { defineConfig, devices } from '@playwright/test';
 
+// Normalize runner URLs: prefer explicit PLAYWRIGHT_* envs, then VITE_*, then Docker defaults
+const FRONTEND_URL = process.env.PLAYWRIGHT_FRONTEND_URL
+  || process.env.VITE_AISHACRM_FRONTEND_URL
+  || 'http://localhost:4000';
+const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL
+  || process.env.VITE_AISHACRM_BACKEND_URL
+  || 'http://localhost:4001';
+
+// Expose normalized values so specs that read process.env can rely on them
+process.env.PLAYWRIGHT_FRONTEND_URL = FRONTEND_URL;
+process.env.PLAYWRIGHT_BACKEND_URL = BACKEND_URL;
+
 const authFile = 'playwright/.auth/superadmin.json';
 
 /**
@@ -34,7 +46,7 @@ export default defineConfig({
   /* Shared settings for all the projects below */
   use: {
     /* Base URL to use in actions like `await page.goto('/')` */
-    baseURL: process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:5173',
+    baseURL: FRONTEND_URL,
     
     /* Collect trace when retrying the failed test */
     trace: 'on-first-retry',
