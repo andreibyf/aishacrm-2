@@ -59,8 +59,8 @@ async function navigateToUserManagement(page) {
   await page.goto(`${BASE_URL}/settings`, { waitUntil: 'networkidle' });
   await page.waitForURL('**/settings', { timeout: 10000 });
   
-  // Settings uses Tabs component - click the "User Management" tab button
-  const userMgmtTab = page.locator('button[role="tab"]:has-text("User Management")').first();
+  // Settings uses Tabs component - click the "User Management" tab by value="users"
+  const userMgmtTab = page.locator('button[role="tab"][value="users"]').first();
   await expect(userMgmtTab).toBeVisible({ timeout: 10000 });
   await userMgmtTab.click({ timeout: 5000 });
   
