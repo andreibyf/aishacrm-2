@@ -97,6 +97,17 @@ export default function AIMarketInsights({ tenant }) {
   const [insights, setInsights] = useState(null);
   const [error, setError] = useState(null);
 
+  // Safer HTML-to-text sanitizer than regex tag stripping
+  const sanitizeToText = (html) => {
+    try {
+      const div = document.createElement('div');
+      div.innerHTML = String(html ?? '');
+      return (div.textContent || div.innerText || '').trim();
+    } catch {
+      return String(html ?? '');
+    }
+  };
+
   // Helper function to format large numbers with B/M/K suffixes
   const formatLargeNumber = (num) => {
     if (
@@ -340,7 +351,8 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
         ) => (Array.isArray(arr) && arr.length ? arr : []);
         const majorNews = makeArray(searchResults).slice(0, 5).map((r) => ({
           title: r?.title || "Industry update",
-          description: (r?.snippet || "").replace(/<[^>]*>/g, ""),
+          // Use DOM-based text extraction instead of regex-based tag stripping
+          description: sanitizeToText(r?.snippet || ""),
           date: new Date().toISOString().slice(0, 10),
           impact: "neutral",
         }));

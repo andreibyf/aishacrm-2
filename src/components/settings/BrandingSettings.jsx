@@ -293,9 +293,38 @@ export default function BrandingSettings() {
   const handleGlobalFooterSave = async () => {
     setSavingFooter(true);
     try {
+      // Sanitize HTML to prevent script/style and event handlers
+      const sanitizeLegalHtml = (html) => {
+        try {
+          const div = document.createElement('div');
+          div.innerHTML = String(html || '');
+          // Remove script/style
+          div.querySelectorAll('script, style').forEach((el) => el.remove());
+          // Remove inline event handlers and javascript: URLs
+          div.querySelectorAll('*').forEach((el) => {
+            [...el.attributes].forEach((attr) => {
+              const name = attr.name.toLowerCase();
+              const val = String(attr.value || '').toLowerCase();
+              if (name.startsWith('on')) {
+                el.removeAttribute(attr.name);
+              }
+              if ((name === 'href' || name === 'src') && val.startsWith('javascript:')) {
+                el.removeAttribute(attr.name);
+              }
+              if (name === 'target' && val === '_blank') {
+                el.setAttribute('rel', 'noopener noreferrer');
+              }
+            });
+          });
+          return div.innerHTML;
+        } catch {
+          return String(html || '');
+        }
+      };
+
       const payload = {
         footer_logo_url: footerLogoUrl || null,
-        footer_legal_html: footerLegalHtml || null,
+        footer_legal_html: sanitizeLegalHtml(footerLegalHtml) || null,
         is_active: true,
       };
       if (brandingId) {

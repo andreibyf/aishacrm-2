@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, TestTube2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, TestTube2, Trash2 } from "lucide-react";
 import { getBackendUrl } from "@/api/backendUrl";
+import { useConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { toast } from "sonner";
 
 const SUITES = [
   { id: "metrics", label: "Metrics Smoke", description: "Verify /api/metrics/performance endpoint and basic charts" },
@@ -19,7 +21,11 @@ export default function QaConsole() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [runHistory, setRunHistory] = useState(null); // { runs: [], total, latest }
+  const [cleaningData, setCleaningData] = useState(false);
+  const [aggressiveCleanup, setAggressiveCleanup] = useState(false);
+  const [cleanupWindowDays, setCleanupWindowDays] = useState(7);
   const pollTimerRef = useRef(null);
+  const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
 
   const BACKEND_URL = getBackendUrl();
 
@@ -91,6 +97,61 @@ export default function QaConsole() {
   };
 
   useEffect(() => clearPolling, []);
+
+  const handleCleanupTestData = async () => {
+    const confirmed = await confirm({
+      title: "Clean up test data?",
+      description: "This will permanently delete all records where is_test_data = true across all tables (activities, contacts, leads, accounts, opportunities, system_logs). This action cannot be undone.",
+      variant: "destructive",
+      confirmText: "Delete Test Data",
+      cancelText: "Cancel",
+    });
+
+    if (!confirmed) return;
+
+    setCleaningData(true);
+    setError(null);
+    
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/testing/cleanup-test-data`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirm: true,
+          ...(aggressiveCleanup
+            ? { unflagged_cleanup: { enabled: true, window_days: cleanupWindowDays } }
+            : {}),
+        }),
+      });
+      
+      const json = await res.json();
+      
+      if (!res.ok) {
+        setError({
+          message: json?.message || `Cleanup failed (${res.status})`,
+          details: json?.details || null,
+          status: res.status,
+        });
+        toast.error(`Cleanup failed: ${json?.message || res.statusText}`);
+      } else {
+        const data = json?.data || {};
+        const totalDeleted = data.total_deleted || 0;
+        
+        toast.success(`Successfully deleted ${totalDeleted} test record${totalDeleted !== 1 ? 's' : ''}`);
+        
+        // Show detailed results
+        setResult({
+          ...data,
+          message: `Cleanup completed: ${totalDeleted} records deleted`,
+        });
+      }
+    } catch (e) {
+      setError({ message: e?.message || String(e) });
+      toast.error(`Cleanup error: ${e?.message || 'Unknown error'}`);
+    } finally {
+      setCleaningData(false);
+    }
+  };
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -276,6 +337,85 @@ export default function QaConsole() {
           )}
         </CardContent>
       </Card>
+
+      {/* Data Cleanup Section */}
+      <Card className="bg-slate-800 border-slate-700">
+        <CardHeader>
+          <CardTitle className="text-slate-100 flex items-center gap-2">
+            <Trash2 className="w-5 h-5 text-red-400" />
+            Test Data Cleanup
+          </CardTitle>
+          <CardDescription className="text-slate-400">
+            Remove all test data (records with is_test_data = true) from the database.
+            This affects activities, contacts, leads, accounts, opportunities, and system logs.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-3 mb-3">
+            <label className="flex items-center gap-2 text-slate-300">
+              <input
+                type="checkbox"
+                className="accent-red-500"
+                checked={aggressiveCleanup}
+                onChange={(e) => setAggressiveCleanup(e.target.checked)}
+              />
+              Also purge recent unflagged example.com contacts/leads
+            </label>
+            {aggressiveCleanup && (
+              <div className="flex items-center gap-3 text-sm text-slate-300">
+                <label htmlFor="cleanup-window" className="text-slate-400">Window (days):</label>
+                <input
+                  id="cleanup-window"
+                  type="number"
+                  min={1}
+                  max={90}
+                  value={cleanupWindowDays}
+                  onChange={(e) => setCleanupWindowDays(Math.max(1, Math.min(90, parseInt(e.target.value || '7', 10))))}
+                  className="w-24 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-slate-200"
+                />
+                <span className="text-slate-400">Only deletes contacts/leads with @example.com created within this window.</span>
+              </div>
+            )}
+          </div>
+          <Button
+            onClick={handleCleanupTestData}
+            disabled={cleaningData || !!busySuite}
+            variant="destructive"
+            className="bg-red-600 hover:bg-red-700 text-white"
+          >
+            {cleaningData ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Cleaning up...
+              </>
+            ) : (
+              <>
+                <Trash2 className="w-4 h-4 mr-2" />
+                Clean Up Test Data
+              </>
+            )}
+          </Button>
+          
+          <div className="mt-4 text-sm text-slate-400">
+            <p className="mb-2"><strong className="text-slate-300">What gets deleted:</strong></p>
+            <ul className="list-disc list-inside space-y-1 ml-2">
+              <li>All activities marked as test data</li>
+              <li>All contacts marked as test data</li>
+              <li>All leads marked as test data</li>
+              <li>All accounts marked as test data</li>
+              <li>All opportunities marked as test data</li>
+              <li>All system logs marked as test data</li>
+              {aggressiveCleanup && (
+                <li>Contacts and leads with @example.com created in the last {cleanupWindowDays} day(s)</li>
+              )}
+            </ul>
+            <p className="mt-3 text-yellow-400">
+              ⚠️ This action cannot be undone. A confirmation dialog will appear before deletion.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+        <ConfirmDialogPortal />
     </div>
   );
 }

@@ -362,27 +362,22 @@ test.describe('CRUD Operations - End-to-End', () => {
           const body = await putResp.json();
           updatedId = body?.data?.id || body?.data?.activity?.id || null;
         } catch { /* ignore */ }
+      } else {
+        // Backend update failed - this should not happen now that we fixed the bug
+        throw new Error(`Activity update failed with status ${putResp?.status() || 'unknown'}`);
       }
 
-      // If we have the updated id, poll the backend until the subject reflects the new value
-      if (updatedId) {
-        await expect
-          .poll(async () => {
-            try {
-              const res = await page.request.get(`${BACKEND_URL}/api/activities/${updatedId}`, { timeout: 5000 });
-              if (!res.ok()) return 'pending';
-              const data = await res.json();
-              return data?.data?.subject && data.data.subject.includes(updatedSubject) ? 'ok' : 'pending';
-            } catch { return 'pending'; }
-          }, { timeout: 30000, intervals: [500, 750, 1000] })
-          .toBe('ok');
-      } else {
-        // PUT failed in some CI runs; at minimum verify the UI flow set the save flag and the dialog closed
-        const flag = await page.evaluate(() => window.__activitySaveSuccess === true).catch(() => false);
-        expect(flag).toBe(true);
-        // Skip strict UI verification when backend update failed
-        return;
-      }
+      // Poll the backend until the subject reflects the new value
+      await expect
+        .poll(async () => {
+          try {
+            const res = await page.request.get(`${BACKEND_URL}/api/activities/${updatedId}`, { timeout: 5000 });
+            if (!res.ok()) return 'pending';
+            const data = await res.json();
+            return data?.data?.subject && data.data.subject.includes(updatedSubject) ? 'ok' : 'pending';
+          } catch { return 'pending'; }
+        }, { timeout: 30000, intervals: [500, 750, 1000] })
+        .toBe('ok');
 
       // Hard refresh the Activities page to avoid stale table state
       await page.goto(`${BASE_URL}/Activities`, { waitUntil: 'domcontentloaded' });

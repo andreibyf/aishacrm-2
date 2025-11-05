@@ -1105,7 +1105,6 @@ export default function ActivitiesPage() {
                 <Table>
                   <TableHeader className="bg-slate-700/50">
                     <TableRow>
-                      <TableHead className="text-left p-3 font-medium text-slate-300">Activity</TableHead>
                       <TableHead className="w-12 p-3">
                         <Checkbox
                           checked={selectedActivities.size === activities.length && activities.length > 0 && !selectAllMode}
@@ -1113,6 +1112,7 @@ export default function ActivitiesPage() {
                           className="border-slate-600"
                         />
                       </TableHead>
+                      <TableHead className="text-left p-3 font-medium text-slate-300">Activity</TableHead>
                       <TableHead className="text-left p-3 font-medium text-slate-300">Type</TableHead>
                       <TableHead className="text-left p-3 font-medium text-slate-300">Status</TableHead>
                       <TableHead className="text-left p-3 font-medium text-slate-300">Due Date</TableHead>
@@ -1124,16 +1124,16 @@ export default function ActivitiesPage() {
                   <TableBody>
                     {activities.map((activity) => (
                       <TableRow key={activity.id} className="hover:bg-slate-700/30 transition-colors border-b border-slate-800">
-                        <TableCell className="font-medium text-slate-200 cursor-pointer p-3" onClick={() => handleViewDetails(activity)}>
-                          <div className="font-semibold">{activity.subject}</div>
-                          {activity.description && <div className="text-xs text-slate-400 truncate max-w-xs">{activity.description}</div>}
-                        </TableCell>
                         <TableCell className="text-center p-3">
                           <Checkbox
                             checked={selectedActivities.has(activity.id) || selectAllMode}
                             onCheckedChange={() => toggleSelection(activity.id)}
                             className="border-slate-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                           />
+                        </TableCell>
+                        <TableCell className="font-medium text-slate-200 cursor-pointer p-3" onClick={() => handleViewDetails(activity)}>
+                          <div className="font-semibold">{activity.subject}</div>
+                          {activity.description && <div className="text-xs text-slate-400 truncate max-w-xs">{activity.description}</div>}
                         </TableCell>
                         <TableCell className="cursor-pointer p-3" onClick={() => handleViewDetails(activity)}>
                           <Badge className={`${typeColors[activity.type]} capitalize text-xs`}>

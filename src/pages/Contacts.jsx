@@ -548,6 +548,161 @@ export default function ContactsPage() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    const count = selectedContacts.size;
+    const confirmed = await confirm({
+      title: `Delete ${count} contact${count !== 1 ? 's' : ''}?`,
+      description: `This will permanently delete ${count} contact${count !== 1 ? 's' : ''}. This action cannot be undone.`,
+      variant: "destructive",
+      confirmText: "Delete",
+      cancelText: "Cancel",
+    });
+
+    if (!confirmed) {
+      logger.warning("Bulk contact deletion cancelled by user", "ContactsPage", {
+        count,
+        userId: user?.id || user?.email,
+      });
+      return;
+    }
+
+    logger.info("Attempting to bulk delete contacts", "ContactsPage", {
+      count,
+      userId: user?.id || user?.email,
+    });
+
+    let successCount = 0;
+    let failCount = 0;
+    const contactIds = Array.from(selectedContacts);
+
+    for (const id of contactIds) {
+      try {
+        await Contact.delete(id);
+        successCount++;
+      } catch (error) {
+        console.error(`Error deleting contact ${id}:`, error);
+        failCount++;
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(`Successfully deleted ${successCount} contact${successCount !== 1 ? 's' : ''}`);
+      logger.info("Bulk contact deletion completed", "ContactsPage", {
+        successCount,
+        failCount,
+        userId: user?.id || user?.email,
+      });
+    }
+
+    if (failCount > 0) {
+      toast.error(`Failed to delete ${failCount} contact${failCount !== 1 ? 's' : ''}`);
+      logger.error("Some bulk deletions failed", "ContactsPage", {
+        successCount,
+        failCount,
+        userId: user?.id || user?.email,
+      });
+    }
+
+    setSelectedContacts(new Set());
+    clearCache("Contact");
+    loadContacts();
+    loadTotalStats();
+  };
+
+  const handleBulkStatusChange = async (newStatus) => {
+    const count = selectedContacts.size;
+    logger.info("Attempting to bulk update contact status", "ContactsPage", {
+      count,
+      newStatus,
+      userId: user?.id || user?.email,
+    });
+
+    let successCount = 0;
+    let failCount = 0;
+    const contactIds = Array.from(selectedContacts);
+
+    for (const id of contactIds) {
+      try {
+        await Contact.update(id, { status: newStatus });
+        successCount++;
+      } catch (error) {
+        console.error(`Error updating contact ${id}:`, error);
+        failCount++;
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(`Successfully updated ${successCount} contact${successCount !== 1 ? 's' : ''}`);
+      logger.info("Bulk status update completed", "ContactsPage", {
+        successCount,
+        failCount,
+        newStatus,
+        userId: user?.id || user?.email,
+      });
+    }
+
+    if (failCount > 0) {
+      toast.error(`Failed to update ${failCount} contact${failCount !== 1 ? 's' : ''}`);
+      logger.error("Some bulk status updates failed", "ContactsPage", {
+        successCount,
+        failCount,
+        userId: user?.id || user?.email,
+      });
+    }
+
+    setSelectedContacts(new Set());
+    clearCache("Contact");
+    loadContacts();
+    loadTotalStats();
+  };
+
+  const handleBulkAssign = async (assigneeId) => {
+    const count = selectedContacts.size;
+    logger.info("Attempting to bulk assign contacts", "ContactsPage", {
+      count,
+      assigneeId,
+      userId: user?.id || user?.email,
+    });
+
+    let successCount = 0;
+    let failCount = 0;
+    const contactIds = Array.from(selectedContacts);
+
+    for (const id of contactIds) {
+      try {
+        await Contact.update(id, { assigned_to: assigneeId || null });
+        successCount++;
+      } catch (error) {
+        console.error(`Error assigning contact ${id}:`, error);
+        failCount++;
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(`Successfully assigned ${successCount} contact${successCount !== 1 ? 's' : ''}`);
+      logger.info("Bulk assignment completed", "ContactsPage", {
+        successCount,
+        failCount,
+        assigneeId,
+        userId: user?.id || user?.email,
+      });
+    }
+
+    if (failCount > 0) {
+      toast.error(`Failed to assign ${failCount} contact${failCount !== 1 ? 's' : ''}`);
+      logger.error("Some bulk assignments failed", "ContactsPage", {
+        successCount,
+        failCount,
+        userId: user?.id || user?.email,
+      });
+    }
+
+    setSelectedContacts(new Set());
+    clearCache("Contact");
+    loadContacts();
+    loadTotalStats();
+  };
+
   const handleRefresh = () => {
     logger.info("Refreshing all contacts data", "ContactsPage", {
       userId: user?.id || user?.email,
@@ -890,20 +1045,12 @@ export default function ContactsPage() {
               </span>
             </div>
             <BulkActionsMenu
-              selectedIds={Array.from(selectedContacts)}
-              onActionComplete={() => {
-                setSelectedContacts(new Set());
-                loadContacts();
-                loadTotalStats();
-                logger.info(
-                  "Bulk action completed, contacts refreshed",
-                  "ContactsPage",
-                  {
-                    count: selectedContacts.size,
-                    userId: user?.id || user?.email,
-                  },
-                );
-              }}
+              selectedCount={selectedContacts.size}
+              onBulkDelete={handleBulkDelete}
+              onBulkStatusChange={handleBulkStatusChange}
+              onBulkAssign={handleBulkAssign}
+              selectAllMode={false}
+              totalCount={totalItems}
             />
           </div>
         )}

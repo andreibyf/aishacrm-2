@@ -990,8 +990,21 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     // Persist AI API key (from getOrCreateUserApiKey) for agent/chat usage
     if (elevenLabsApiKey) {
       try {
-        localStorage.setItem("ai_sdk_api_key", elevenLabsApiKey);
-        // Also expose minimal context for components that can't import Layout state
+        const persistAllowed = (import.meta.env.VITE_ALLOW_PERSIST_API_KEYS === 'true');
+
+        // Prefer ephemeral storage to avoid long-lived secrets in the browser
+        try {
+          sessionStorage.setItem("ai_sdk_api_key", elevenLabsApiKey);
+        } catch { /* ignore */ }
+
+        if (persistAllowed) {
+          try { localStorage.setItem("ai_sdk_api_key", elevenLabsApiKey); } catch { /* ignore */ }
+        } else {
+          // Clean up any legacy persistent copy
+          try { localStorage.removeItem("ai_sdk_api_key"); } catch { /* ignore */ }
+        }
+
+        // Also expose minimal context for components that can't import Layout state (in-memory only)
         window.__AI_CONTEXT = {
           ...(window.__AI_CONTEXT || {}),
           apiKey: elevenLabsApiKey,
