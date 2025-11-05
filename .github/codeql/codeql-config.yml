@@ -20,3 +20,5 @@ paths-ignore:
   - public/**
   - supabase/**
   - pages/**
+  # Deno-style/browser function stubs that are not valid Node/Vite modules and trigger parser noise
+  - src/functions/**

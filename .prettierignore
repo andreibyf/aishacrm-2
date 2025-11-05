@@ -18,6 +18,9 @@ backend/node_modules/
 logseq/**
 logseq/bak/**
 
+# Generated or deno-style function stubs (not formatted by Prettier)
+src/functions/**
+
 # Env files
 .env
 .env.*
