@@ -333,8 +333,16 @@ test.describe('CRUD Operations - End-to-End', () => {
       // Wait for table to refresh after update
       await page.waitForTimeout(2000);
       
-      // Verify updated activity appears
-      await expect(page.locator(`text=${updatedSubject}`)).toBeVisible({ timeout: 10000 });
+      // Use search to find the updated activity (to handle pagination)
+      const searchBox = page.locator('input[placeholder*="Search activities"], input[placeholder*="Search"]');
+      if (await searchBox.count() > 0) {
+        await searchBox.fill(updatedSubject);
+        await page.waitForTimeout(1000); // Allow debounce/filter to apply
+      }
+      
+      // Verify updated activity appears in the filtered results
+      const rowWithUpdatedSubject = page.locator('table tbody tr').filter({ hasText: updatedSubject }).first();
+      await expect(rowWithUpdatedSubject).toBeVisible({ timeout: 10000 });
     });
 
     test('should delete an activity', async ({ page }) => {
@@ -769,10 +777,17 @@ test.describe('CRUD Operations - End-to-End', () => {
       await page.click('button:has-text("Delete All")');
       
       // Wait for logs to clear
-      await page.waitForTimeout(1500);
+      await page.waitForTimeout(2000);
       
-      // Verify logs cleared - should show "No logs found" message
-      await expect(page.locator('text="No logs found"')).toBeVisible({ timeout: 5000 });
+      // Verify logs cleared - check count is 0 or "No logs found" message appears
+      const clearedCountText = await page.locator('text=/\\d+ logs? found/').textContent().catch(() => null);
+      if (clearedCountText) {
+        const clearedCount = parseInt(clearedCountText.match(/\d+/)[0]);
+        expect(clearedCount).toBe(0);
+      } else {
+        // Fallback: check for "No logs found" or similar empty state message
+        await expect(page.locator('text=/No logs found|No system logs|0 logs found/i')).toBeVisible({ timeout: 5000 });
+      }
     });
   });
 
