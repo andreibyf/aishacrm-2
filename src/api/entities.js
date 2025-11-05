@@ -926,16 +926,17 @@ export const User = {
             const users = result.data?.users || result.data || result;
             if (Array.isArray(users) && users.length > 0) {
               // Prefer the global (superadmin/admin) record when duplicates exist for the same email
-              // Backend returns a mixed list of global users and employees for email lookups
+              // Global users have tenant_id === null, employees have a tenant_id
               const preferred =
-                users.find((u) => (u.user_type === 'global')) ||
-                users.find((u) => (typeof u.role === 'string' && ['superadmin','admin'].includes(u.role.toLowerCase()))) ||
+                users.find((u) => u.tenant_id === null && ['superadmin','admin'].includes((u.role || '').toLowerCase())) ||
+                users.find((u) => u.tenant_id === null) ||
+                users.find((u) => ['superadmin','admin'].includes((u.role || '').toLowerCase())) ||
                 users[0];
 
               userData = preferred;
               console.log(
                 "[Supabase Auth] User record selected:",
-                { role: userData.role, user_type: userData.user_type, access_level: userData.metadata?.access_level }
+                { email: userData.email, role: userData.role, tenant_id: userData.tenant_id, access_level: userData.metadata?.access_level }
               );
             }
           }
