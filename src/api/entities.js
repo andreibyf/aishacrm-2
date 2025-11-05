@@ -890,6 +890,14 @@ export const User = {
    * Uses Supabase Auth with local dev fallback
    */
   me: async () => {
+    // E2E Test Mode: Return mock user without Supabase auth
+    if (typeof window !== 'undefined' && 
+        localStorage.getItem('E2E_TEST_MODE') === 'true' && 
+        window.__e2eUser) {
+      console.log('[User.me] Returning E2E mock user:', window.__e2eUser.email);
+      return window.__e2eUser;
+    }
+    
     // Production: Use Supabase Auth
     if (isSupabaseConfigured()) {
       try {
