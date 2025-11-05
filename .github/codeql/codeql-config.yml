@@ -1,0 +1,22 @@
+name: aishacrm-codeql
+
+# Use default query suite (security + quality) unless we need extended rules
+# queries:
+#   - uses: security-extended
+
+paths:
+  - backend
+  - src
+
+paths-ignore:
+  # Non-source content and generated reports
+  - logseq/**
+  - journals/**
+  - playwright-report/**
+  - test-results/**
+  - backend/test-results/**
+  - InputStream/**
+  - whiteboards/**
+  - public/**
+  - supabase/**
+  - pages/**
