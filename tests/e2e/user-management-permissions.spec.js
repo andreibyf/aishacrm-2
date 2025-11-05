@@ -314,6 +314,12 @@ test.describe('User Management - Permission System', () => {
   });
 
   test('Backend API creates user with correct CRM access metadata', async () => {
+    // Safety guard: only allow backend mutations on local backends or when explicitly enabled
+    const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/)?.*/i.test(BACKEND_URL || '');
+    const allow = process.env.ALLOW_E2E_MUTATIONS === 'true' || isLocal;
+    if (!allow) {
+      test.skip(true, `Skipping mutation test against non-local backend: ${BACKEND_URL}`);
+    }
     // Direct backend API test
     const timestamp = Date.now();
     const testEmail = `api.test.${timestamp}@example.com`;
@@ -357,6 +363,12 @@ test.describe('User Management - Permission System', () => {
   });
 
   test('Audit logs are created for user creation', async () => {
+    // Safety guard: only allow backend mutations on local backends or when explicitly enabled
+    const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/)?.*/i.test(BACKEND_URL || '');
+    const allow = process.env.ALLOW_E2E_MUTATIONS === 'true' || isLocal;
+    if (!allow) {
+      test.skip(true, `Skipping mutation test against non-local backend: ${BACKEND_URL}`);
+    }
     // Create a user via API
     const timestamp = Date.now();
     const testEmail = `audit.test.${timestamp}@example.com`;

@@ -143,6 +143,9 @@ async function ensureTenantSelected(page) {
 
 // Helper: Ensure the logged-in user has a tenant_id assigned (needed for some forms)
 async function ensureUserTenantAssigned(page, email) {
+  // Guard: never mutate global superadmin in cloud unless explicitly allowed
+  const isLocalBackend = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/)?.*/i.test(BACKEND_URL || '');
+  const allowMutations = process.env.ALLOW_E2E_MUTATIONS === 'true' || isLocalBackend;
   try {
     // Determine selected tenant id (from storage) or fetch one
     let tenantId = await page.evaluate(() => localStorage.getItem('selected_tenant_id'));
@@ -166,9 +169,11 @@ async function ensureUserTenantAssigned(page, email) {
     if (userRec.tenant_id) return true;
 
     // Assign tenant_id to this user
-    const put = await page.request.put(`${BACKEND_URL}/api/users/${userRec.id}`, {
-      data: { tenant_id: tenantId }
-    });
+    if (!allowMutations) {
+      console.warn(`[E2E] Skipping tenant assignment mutation for ${email} on non-local backend (${BACKEND_URL}).`);
+      return true; // Treat as success to avoid cascading test failures
+    }
+    const put = await page.request.put(`${BACKEND_URL}/api/users/${userRec.id}`, { data: { tenant_id: tenantId } });
     return put.ok();
   } catch (e) {
     console.warn('[Test] ensureUserTenantAssigned error:', e?.message || e);
