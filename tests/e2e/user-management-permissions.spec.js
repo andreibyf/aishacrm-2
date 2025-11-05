@@ -4,8 +4,8 @@
  */
 import { test, expect } from '@playwright/test';
 
-const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:5173';
-const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+const BASE_URL = process.env.PLAYWRIGHT_FRONTEND_URL || process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:4000';
+const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
 
 // Test user credentials
 const SUPERADMIN_EMAIL = 'admin@aishacrm.com';
@@ -74,6 +74,17 @@ test.describe('User Management - Permission System', () => {
   });
 
   test.beforeEach(async ({ page }) => {
+    // Inject E2E mock user before any navigation
+    await page.addInitScript(() => {
+      window.__e2eUser = {
+        id: 'e2e-test-user-id',
+        email: 'e2e@example.com',
+        role: 'superadmin',
+        tenant_id: 'local-tenant-001'
+      };
+      console.log('[E2E Test] Mock user injected:', window.__e2eUser.email);
+    });
+    
     // Auto-accept dialogs
     page.on('dialog', dialog => dialog.accept());
     
