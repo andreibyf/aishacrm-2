@@ -2209,6 +2209,22 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             filter: "blur(6px)",
           }}
         />
+        {/* 4V Data Consulting logo watermark (top left) */}
+        <img
+          src="/assets/uploads/ai360logo.png"
+          alt="4V Data Consulting Logo"
+          style={{
+            position: 'absolute',
+            top: 24,
+            left: 24,
+            width: 80,
+            height: 'auto',
+            opacity: 0.13,
+            filter: 'grayscale(100%) blur(0.5px)',
+            zIndex: 2,
+            pointerEvents: 'none',
+          }}
+        />
         <div
           className="relative bg-white border rounded-lg p-8 max-w-md w-full shadow-2xl"
           style={{ borderColor: primaryColor }}
