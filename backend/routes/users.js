@@ -625,6 +625,25 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         ...otherFields
       } = req.body;
 
+      // 🔒 CRITICAL: Block E2E test user creation that pollutes production login
+      // These test patterns MUST NOT be created in the production database
+      const testEmailPatterns = [
+        /^audit\.test\./i,
+        /^e2e\.temp\./i,
+        /@playwright\.test$/i,
+        /@example\.com$/i, // Block all example.com emails (test domain)
+      ];
+      
+      if (testEmailPatterns.some(pattern => pattern.test(email))) {
+        console.warn(`[POST /api/users] BLOCKED test email pattern: ${email}`);
+        return res.status(403).json({
+          status: "error",
+          message: "Test email patterns are not allowed in production database",
+          code: "TEST_EMAIL_BLOCKED",
+          hint: "E2E tests should use mock users exclusively without creating real database records"
+        });
+      }
+
       console.log("[POST /api/users] Creating user:", {
         email,
         first_name,
