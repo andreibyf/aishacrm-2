@@ -151,8 +151,19 @@ export default function createContactRoutes(pgPool) {
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      const { tenant_id } = req.query || {};
 
-      const result = await pgPool.query('SELECT * FROM contacts WHERE id = $1', [id]);
+      let result;
+      if (tenant_id) {
+        // Enforce tenant scoping when tenant_id is supplied
+        result = await pgPool.query(
+          'SELECT * FROM contacts WHERE id = $1 AND tenant_id = $2',
+          [id, tenant_id]
+        );
+      } else {
+        // Legacy behavior: fetch by id only (consider requiring tenant_id in production)
+        result = await pgPool.query('SELECT * FROM contacts WHERE id = $1', [id]);
+      }
       
       if (result.rows.length === 0) {
         return res.status(404).json({ status: 'error', message: 'Contact not found' });
