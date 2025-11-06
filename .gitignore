@@ -30,5 +30,10 @@ dist-ssr
 .env.*.local
 backend/.env
 
+# Test artifacts (Playwright reports, coverage, etc.)
+playwright-report/
+coverage/
+test-results/
+
 # Lock files (should be committed but listed here for reference)
 # package-lock.json should be committed for security audits

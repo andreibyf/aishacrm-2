@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
+# Husky v10+ pre-push hook (no husky.sh)
 
 # Run lint to catch syntax errors
-npm run lint -- --max-warnings 0
+npm run lint -- --max-warnings 0 || exit 1
 
 # Run build to catch compile errors
-npm run build
+npm run build || exit 1
