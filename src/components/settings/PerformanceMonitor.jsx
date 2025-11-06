@@ -107,11 +107,47 @@ export default function PerformanceMonitor() {
         return logDate >= cutoffTime;
       });
 
-      // Group logs dynamically by hour/6hour/day
+      // Pre-populate buckets for entire time range to show proper X-axis
       const buckets = {};
+      const msPerBucket = groupBy === 'hour' ? 3600000 : groupBy === '6hour' ? 21600000 : 86400000;
+      let currentTs = cutoffTime.getTime();
+      // Snap to bucket boundary
+      if (groupBy === 'hour') {
+        const d = new Date(currentTs);
+        currentTs = new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), 0, 0, 0).getTime();
+      } else if (groupBy === '6hour') {
+        const d = new Date(currentTs);
+        const hour6 = Math.floor(d.getHours() / 6) * 6;
+        currentTs = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hour6, 0, 0, 0).getTime();
+      } else {
+        const d = new Date(currentTs);
+        currentTs = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
+      }
+      
+      while (currentTs <= now.getTime()) {
+        const d = new Date(currentTs);
+        let bucketLabel;
+        if (groupBy === 'hour') {
+          bucketLabel = `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:00`;
+        } else if (groupBy === '6hour') {
+          bucketLabel = `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:00`;
+        } else {
+          bucketLabel = `${d.getMonth() + 1}/${d.getDate()}`;
+        }
+        buckets[currentTs] = {
+          ts: currentTs,
+          time: bucketLabel,
+          calls: 0,
+          totalTime: 0,
+          errors: 0
+        };
+        currentTs += msPerBucket;
+      }
+
+      // Fill buckets with actual data
       recentLogs.forEach(log => {
         const logDate = new Date(log.created_at);
-        let bucketTs, bucketLabel;
+        let bucketTs;
         
         if (groupBy === 'hour') {
           bucketTs = new Date(
@@ -120,7 +156,6 @@ export default function PerformanceMonitor() {
             logDate.getDate(),
             logDate.getHours(), 0, 0, 0
           ).getTime();
-          bucketLabel = `${logDate.getMonth() + 1}/${logDate.getDate()} ${logDate.getHours()}:00`;
         } else if (groupBy === '6hour') {
           // Snap to nearest 6-hour window (0, 6, 12, 18)
           const hour6 = Math.floor(logDate.getHours() / 6) * 6;
@@ -130,30 +165,20 @@ export default function PerformanceMonitor() {
             logDate.getDate(),
             hour6, 0, 0, 0
           ).getTime();
-          bucketLabel = `${logDate.getMonth() + 1}/${logDate.getDate()} ${hour6}:00`;
         } else {
           bucketTs = new Date(
             logDate.getFullYear(),
             logDate.getMonth(),
             logDate.getDate(), 0, 0, 0, 0
           ).getTime();
-          bucketLabel = `${logDate.getMonth() + 1}/${logDate.getDate()}`;
         }
 
-        if (!buckets[bucketTs]) {
-          buckets[bucketTs] = {
-            ts: bucketTs,
-            time: bucketLabel,
-            calls: 0,
-            totalTime: 0,
-            errors: 0
-          };
-        }
-
-        buckets[bucketTs].calls++;
-        buckets[bucketTs].totalTime += Number(log.duration_ms) || 0;
-        if (log.status_code >= 400) {
-          buckets[bucketTs].errors++;
+        if (buckets[bucketTs]) {
+          buckets[bucketTs].calls++;
+          buckets[bucketTs].totalTime += Number(log.duration_ms) || 0;
+          if (log.status_code >= 400) {
+            buckets[bucketTs].errors++;
+          }
         }
       });
 
@@ -277,7 +302,7 @@ export default function PerformanceMonitor() {
                 <Clock className="w-4 h-4 text-blue-400" />
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-slate-100">{metrics.avgResponseTime}</span>
+                <span className="text-3xl font-bold text-slate-100">{Math.round(metrics.avgResponseTime)}</span>
                 <span className="text-sm text-slate-400">ms</span>
               </div>
               <div className={`text-xs mt-1 ${getChangeColor(trends.avgResponseTime)}`}>
@@ -291,7 +316,7 @@ export default function PerformanceMonitor() {
                 <Zap className="w-4 h-4 text-purple-400" />
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-slate-100">{metrics.functionExecutionTime}</span>
+                <span className="text-3xl font-bold text-slate-100">{Math.round(metrics.functionExecutionTime)}</span>
                 <span className="text-sm text-slate-400">ms</span>
               </div>
               <div className={`text-xs mt-1 ${getChangeColor(trends.functionExecutionTime)}`}>
@@ -305,7 +330,7 @@ export default function PerformanceMonitor() {
                 <Database className="w-4 h-4 text-green-400" />
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-slate-100">{metrics.databaseQueryTime}</span>
+                <span className="text-3xl font-bold text-slate-100">{Math.round(metrics.databaseQueryTime)}</span>
                 <span className="text-sm text-slate-400">ms</span>
               </div>
               <div className={`text-xs mt-1 ${getChangeColor(trends.databaseQueryTime)}`}>
@@ -319,7 +344,7 @@ export default function PerformanceMonitor() {
                 <AlertCircle className="w-4 h-4 text-red-400" />
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-slate-100">{metrics.errorRate}</span>
+                <span className="text-3xl font-bold text-slate-100">{metrics.errorRate.toFixed(2)}</span>
                 <span className="text-sm text-slate-400">%</span>
               </div>
               <div className={`text-xs mt-1 ${getChangeColor(trends.errorRate)}`}>
