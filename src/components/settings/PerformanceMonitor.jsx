@@ -20,7 +20,7 @@ const formatTrend = (trend) => {
   return `${sign}${trend}%`;
 };
 
-export default function PerformanceMonitor({ user }) {
+export default function PerformanceMonitor() {
   const [metrics, setMetrics] = useState({
     avgResponseTime: 0,
     functionExecutionTime: 0,
@@ -45,16 +45,13 @@ export default function PerformanceMonitor({ user }) {
     try {
       setLoading(true);
       
-      // Get tenant_id from user context
-      const tenantId = user?.tenant_id || 'local-tenant-001';
-      
       // Calculate hours based on time range
       const days = parseInt(timeRange) || 1;
       const hours = days * 24;
       
-      // Load performance logs from backend metrics API (more complete than Base44 function)
+      // Load ALL performance logs (system-wide monitoring, no tenant filter)
       const limit =  Math.min(5000, Math.max(500, days * 200));
-  const resp = await fetch(`${BACKEND_URL}/api/metrics/performance?tenant_id=${tenantId}&limit=${limit}&hours=${hours}`);
+      const resp = await fetch(`${BACKEND_URL}/api/metrics/performance?limit=${limit}&hours=${hours}`);
       const response = await resp.json();
 
       const logs = Array.isArray(response?.data?.logs) ? response.data.logs : [];
@@ -96,7 +93,12 @@ export default function PerformanceMonitor({ user }) {
       setMetrics(newMetrics);
 
       // Group by time buckets for chart (reuse days variable from above)
-      const groupBy = days <= 2 ? 'hour' : 'day';
+      // hour: <= 2 days, 6hour: 3-10 days, day: > 10 days
+      let groupBy;
+      if (days <= 2) groupBy = 'hour';
+      else if (days <= 10) groupBy = '6hour';
+      else groupBy = 'day';
+      
       const now = new Date();
       const cutoffTime = new Date(now.getTime() - (days * 24 * 60 * 60 * 1000));
       
@@ -105,26 +107,38 @@ export default function PerformanceMonitor({ user }) {
         return logDate >= cutoffTime;
       });
 
-      // Group logs dynamically by hour (<=2 days) or by day (>2 days)
+      // Group logs dynamically by hour/6hour/day
       const buckets = {};
       recentLogs.forEach(log => {
         const logDate = new Date(log.created_at);
-        const bucketTs = groupBy === 'hour'
-          ? new Date(
-              logDate.getFullYear(),
-              logDate.getMonth(),
-              logDate.getDate(),
-              logDate.getHours(), 0, 0, 0
-            ).getTime()
-          : new Date(
-              logDate.getFullYear(),
-              logDate.getMonth(),
-              logDate.getDate(), 0, 0, 0, 0
-            ).getTime();
-
-        const bucketLabel = groupBy === 'hour'
-          ? `${logDate.getMonth() + 1}/${logDate.getDate()} ${logDate.getHours()}:00`
-          : `${logDate.getMonth() + 1}/${logDate.getDate()}`;
+        let bucketTs, bucketLabel;
+        
+        if (groupBy === 'hour') {
+          bucketTs = new Date(
+            logDate.getFullYear(),
+            logDate.getMonth(),
+            logDate.getDate(),
+            logDate.getHours(), 0, 0, 0
+          ).getTime();
+          bucketLabel = `${logDate.getMonth() + 1}/${logDate.getDate()} ${logDate.getHours()}:00`;
+        } else if (groupBy === '6hour') {
+          // Snap to nearest 6-hour window (0, 6, 12, 18)
+          const hour6 = Math.floor(logDate.getHours() / 6) * 6;
+          bucketTs = new Date(
+            logDate.getFullYear(),
+            logDate.getMonth(),
+            logDate.getDate(),
+            hour6, 0, 0, 0
+          ).getTime();
+          bucketLabel = `${logDate.getMonth() + 1}/${logDate.getDate()} ${hour6}:00`;
+        } else {
+          bucketTs = new Date(
+            logDate.getFullYear(),
+            logDate.getMonth(),
+            logDate.getDate(), 0, 0, 0, 0
+          ).getTime();
+          bucketLabel = `${logDate.getMonth() + 1}/${logDate.getDate()}`;
+        }
 
         if (!buckets[bucketTs]) {
           buckets[bucketTs] = {
@@ -153,7 +167,7 @@ export default function PerformanceMonitor({ user }) {
           errorRate: bucket.calls > 0 ? Math.round((bucket.errors / bucket.calls) * 100) : 0
         }))
         .sort((a, b) => a.ts - b.ts)
-        .slice(-(groupBy === 'hour' ? days * 24 : days));
+        .slice(-(groupBy === 'hour' ? days * 24 : groupBy === '6hour' ? days * 4 : days));
 
       setChartData(chartDataArray);
       setLastUpdate(new Date());
@@ -163,7 +177,7 @@ export default function PerformanceMonitor({ user }) {
     } finally {
       setLoading(false);
     }
-  }, [timeRange, user]); // Dependencies: timeRange and user only (previousMetricsRef doesn't need to be a dependency)
+  }, [timeRange]); // Only timeRange is a dependency now
 
   useEffect(() => {
     loadRealPerformanceData();

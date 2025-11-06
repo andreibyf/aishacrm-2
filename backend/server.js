@@ -62,6 +62,37 @@ await (async () => {
   console.warn("⚠ No database configured - set USE_SUPABASE_PROD=true with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
 })();
 
+// Create dedicated pg.Pool for performance logging (direct PostgreSQL connection)
+// This is separate from Supabase API and works even when USE_SUPABASE_PROD=true
+import pg from 'pg';
+const { Pool } = pg;
+let perfLogPool = null;
+if (process.env.DATABASE_URL) {
+  // Mask password in log
+  const dbUrlForLog = process.env.DATABASE_URL.replace(/:([^@]+)@/, ':****@');
+  console.log(`[Performance Logging] DATABASE_URL: ${dbUrlForLog}`);
+  
+  // Use direct parameter specification (more reliable)
+  perfLogPool = new Pool({
+    host: 'db',
+    port: 5432,
+    database: 'aishacrm',
+    user: 'postgres',
+    password: 'changeme_local_dev_only',
+    max: 5,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
+  });
+  console.log("✓ Performance logging pool initialized (PostgreSQL direct connection)");
+  
+  // Test connection
+  perfLogPool.query('SELECT 1')
+    .then(() => console.log("✓ Performance logging pool connection verified"))
+    .catch(err => {
+      console.error("✗ Performance logging pool connection failed:", err.message);
+    });
+}
+
 
 // Initialize Supabase Auth
 import { initSupabaseAuth } from "./lib/supabaseAuth.js";
@@ -149,9 +180,11 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // Performance logging middleware (must be after body parsers, before routes)
 import { performanceLogger } from "./middleware/performanceLogger.js";
 import { productionSafetyGuard } from "./middleware/productionSafetyGuard.js";
-if (pgPool) {
-  app.use(performanceLogger(pgPool));
+if (perfLogPool) {
+  app.use(performanceLogger(perfLogPool));
   console.log("✓ Performance logging middleware enabled");
+} else {
+  console.warn("⚠ Performance logging disabled - DATABASE_URL not configured");
 }
 
 // Block mutating requests in production Supabase unless explicitly allowed
@@ -329,7 +362,7 @@ app.use("/api/documents", createDocumentRoutes(pgPool));
 app.use("/api/reports", createReportRoutes(pgPool));
 app.use("/api/cashflow", createCashflowRoutes(pgPool));
 app.use("/api/cron", createCronRoutes(pgPool));
-app.use("/api/metrics", createMetricsRoutes(pgPool));
+app.use("/api/metrics", createMetricsRoutes(perfLogPool)); // Use perfLogPool for performance_logs table
 app.use("/api/utils", createUtilsRoutes(pgPool));
 app.use("/api/bizdev", createBizdevRoutes(pgPool));
 app.use("/api/bizdevsources", createBizDevSourceRoutes(pgPool));

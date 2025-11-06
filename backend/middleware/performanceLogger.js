@@ -4,6 +4,7 @@
  */
 
 export function performanceLogger(pgPool) {
+  console.log('[Performance Logger] Middleware initialized with pgPool:', !!pgPool);
   return async (req, res, next) => {
     const startTime = Date.now();
     const originalSend = res.send;
@@ -22,6 +23,7 @@ export function performanceLogger(pgPool) {
 
     // Wait for response to complete
     res.on('finish', async () => {
+      console.log(`[Performance Logger] Finish event for ${req.method} ${req.originalUrl || req.url}`);
       try {
         const duration = Date.now() - startTime;
         
@@ -72,9 +74,9 @@ export function performanceLogger(pgPool) {
             );
           } catch (dbError) {
             // Don't throw - logging failure shouldn't break the app
-            if (process.env.NODE_ENV !== 'production') {
-              console.error('[Performance Logger] Failed to log:', dbError.message);
-            }
+            // Always log errors so we can debug
+            console.error('[Performance Logger] Failed to log:', dbError.message);
+            console.error('[Performance Logger] Stack:', dbError.stack);
           }
         });
       } catch (error) {
