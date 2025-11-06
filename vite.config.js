@@ -58,8 +58,8 @@ export default defineConfig({
         manualChunks: (id) => {
           // Split large vendor libraries into separate chunks
           if (id.includes('node_modules')) {
-            // React ecosystem
-            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
+            // CRITICAL: Keep React core together (react, react-dom, scheduler must be in same chunk)
+            if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler') || id.includes('react-router')) {
               return 'vendor-react';
             }
             // Radix UI components
@@ -80,18 +80,6 @@ export default defineConfig({
             }
             // Other vendors
             return 'vendor-other';
-          }
-          // Split app code by domain
-          if (id.includes('/src/components/')) {
-            if (id.includes('/ai/')) return 'app-ai';
-            if (id.includes('/shared/')) return 'app-shared';
-            return 'app-components';
-          }
-          if (id.includes('/src/pages/')) {
-            return 'app-pages';
-          }
-          if (id.includes('/src/api/')) {
-            return 'app-api';
           }
         }
       }
