@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import { validateTenantScopedId } from '../lib/validation.js';
 
 export default function createNoteRoutes(pgPool) {
   const router = express.Router();
@@ -45,7 +46,7 @@ export default function createNoteRoutes(pgPool) {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query || {};
-      if (!tenant_id) return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
       if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
       const result = await pgPool.query('SELECT * FROM note WHERE tenant_id = $1 AND id = $2 LIMIT 1', [tenant_id, id]);
       if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
@@ -77,16 +78,19 @@ export default function createNoteRoutes(pgPool) {
     }
   });
 
-  // PUT /api/notes/:id - Update note
+  // PUT /api/notes/:id - Update note (tenant scoped)
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      const { tenant_id } = req.query || {};
       const u = req.body;
+
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
       if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
       const allowed = ['title', 'content', 'related_type', 'related_id', 'metadata'];
-      const sets = [], vals = [];
-      let pc = 1;
+      const sets = [], vals = [tenant_id];
+      let pc = 2;
       Object.entries(u).forEach(([k, v]) => {
         if (allowed.includes(k)) {
           sets.push(`${k} = $${pc}`);
@@ -97,7 +101,7 @@ export default function createNoteRoutes(pgPool) {
       if (sets.length === 0) return res.status(400).json({ status: 'error', message: 'No valid fields' });
       sets.push(`updated_at = NOW()`);
       vals.push(id);
-      const result = await pgPool.query(`UPDATE note SET ${sets.join(', ')} WHERE id = $${pc} RETURNING *`, vals);
+      const result = await pgPool.query(`UPDATE note SET ${sets.join(', ')} WHERE tenant_id = $1 AND id = $${pc} RETURNING *`, vals);
       if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
       res.json({ status: 'success', message: 'Updated', data: { note: result.rows[0] } });
     } catch (error) {
@@ -105,12 +109,19 @@ export default function createNoteRoutes(pgPool) {
     }
   });
 
-  // DELETE /api/notes/:id - Delete note
+  // DELETE /api/notes/:id - Delete note (tenant scoped)
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      const { tenant_id } = req.query || {};
+
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
       if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      const result = await pgPool.query('DELETE FROM note WHERE id = $1 RETURNING id', [id]);
+
+      const result = await pgPool.query(
+        'DELETE FROM note WHERE tenant_id = $1 AND id = $2 RETURNING id',
+        [tenant_id, id]
+      );
       if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
       res.json({ status: 'success', message: 'Deleted', data: { id: result.rows[0].id } });
     } catch (error) {

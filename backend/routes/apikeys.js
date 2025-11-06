@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import { validateTenantScopedId } from '../lib/validation.js';
 
 export default function createApikeyRoutes(pgPool) {
   const router = express.Router();
@@ -74,9 +75,7 @@ export default function createApikeyRoutes(pgPool) {
       const { id } = req.params;
       const { tenant_id } = req.query;
 
-      if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
-      }
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
 
       if (!pgPool) {
         // In non-DB mode, echo back request context
@@ -98,15 +97,20 @@ export default function createApikeyRoutes(pgPool) {
     }
   });
 
-  // DELETE /api/apikeys/:id - Delete an API key
+  // DELETE /api/apikeys/:id - Delete an API key (tenant scoped)
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      const { tenant_id } = req.query;
+
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
+
       if (!pgPool) {
         return res.json({ status: 'success', message: 'Deleted (local)', data: { id } });
       }
-      const q = 'DELETE FROM apikey WHERE id = $1 RETURNING id';
-      const { rows } = await pgPool.query(q, [id]);
+
+      const q = 'DELETE FROM apikey WHERE tenant_id = $1 AND id = $2 RETURNING id';
+      const { rows } = await pgPool.query(q, [tenant_id, id]);
       if (rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
       return res.json({ status: 'success', message: 'Deleted', data: { id: rows[0].id } });
     } catch (error) {

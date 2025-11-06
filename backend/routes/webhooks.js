@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import { validateTenantScopedId } from '../lib/validation.js';
 
 export default function createWebhookRoutes(pgPool) {
   const router = express.Router();
@@ -77,9 +78,7 @@ export default function createWebhookRoutes(pgPool) {
       const { id } = req.params;
       const { tenant_id } = req.query;
 
-      if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
-      }
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
 
       if (!pgPool) {
         return res.status(503).json({ status: 'error', message: 'Database not configured' });
@@ -147,11 +146,14 @@ export default function createWebhookRoutes(pgPool) {
     }
   });
 
-  // PUT /api/webhooks/:id - Update webhook
+  // PUT /api/webhooks/:id - Update webhook (tenant scoped)
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      const { tenant_id } = req.query;
       const updates = req.body;
+
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
 
       if (!pgPool) {
         return res.status(503).json({ status: 'error', message: 'Database not configured' });
@@ -159,8 +161,8 @@ export default function createWebhookRoutes(pgPool) {
 
       const allowedFields = ['url', 'event_types', 'is_active', 'secret', 'metadata'];
       const setStatements = [];
-      const values = [];
-      let paramCount = 1;
+      const values = [tenant_id];
+      let paramCount = 2;
 
       Object.entries(updates).forEach(([key, value]) => {
         if (allowedFields.includes(key)) {
@@ -185,7 +187,7 @@ export default function createWebhookRoutes(pgPool) {
       const query = `
         UPDATE webhook 
         SET ${setStatements.join(', ')} 
-        WHERE id = $${paramCount} 
+        WHERE tenant_id = $1 AND id = $${paramCount}
         RETURNING *
       `;
 
@@ -206,16 +208,22 @@ export default function createWebhookRoutes(pgPool) {
     }
   });
 
-  // DELETE /api/webhooks/:id - Delete webhook
+  // DELETE /api/webhooks/:id - Delete webhook (tenant scoped)
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      const { tenant_id } = req.query;
+
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
 
       if (!pgPool) {
         return res.status(503).json({ status: 'error', message: 'Database not configured' });
       }
 
-      const result = await pgPool.query('DELETE FROM webhook WHERE id = $1 RETURNING id', [id]);
+      const result = await pgPool.query(
+        'DELETE FROM webhook WHERE tenant_id = $1 AND id = $2 RETURNING id',
+        [tenant_id, id]
+      );
 
       if (result.rows.length === 0) {
         return res.status(404).json({ status: 'error', message: 'Webhook not found' });

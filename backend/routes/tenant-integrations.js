@@ -1,4 +1,5 @@
 import express from 'express';
+import { validateTenantScopedId } from '../lib/validation.js';
 
 export default function createTenantIntegrationRoutes(pool) {
   const router = express.Router();
@@ -42,9 +43,7 @@ export default function createTenantIntegrationRoutes(pool) {
       const { id } = req.params;
       const { tenant_id } = req.query;
 
-      if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
-      }
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
 
       const result = await pool.query(
         'SELECT * FROM tenant_integrations WHERE tenant_id = $1 AND id = $2 LIMIT 1',
@@ -94,20 +93,19 @@ export default function createTenantIntegrationRoutes(pool) {
     }
   });
 
-  // PUT /api/tenantintegrations/:id - Update tenant integration
+  // PUT /api/tenantintegrations/:id - Update tenant integration (tenant scoped)
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id, integration_type, integration_name, is_active, api_credentials, config, metadata } = req.body;
+      const { tenant_id } = req.query;
+      const { integration_type, integration_name, is_active, api_credentials, config, metadata } = req.body;
+
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
       
       const updates = [];
-      const params = [];
-      let paramIndex = 1;
+      const params = [tenant_id];
+      let paramIndex = 2;
       
-      if (tenant_id !== undefined) {
-        params.push(tenant_id);
-        updates.push(`tenant_id = $${paramIndex++}`);
-      }
       if (integration_type !== undefined) {
         params.push(integration_type);
         updates.push(`integration_type = $${paramIndex++}`);
@@ -140,7 +138,7 @@ export default function createTenantIntegrationRoutes(pool) {
       updates.push(`updated_at = now()`);
       params.push(id);
       
-      const query = `UPDATE tenant_integrations SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+      const query = `UPDATE tenant_integrations SET ${updates.join(', ')} WHERE tenant_id = $1 AND id = $${paramIndex} RETURNING *`;
       const result = await pool.query(query, params);
       
       if (result.rows.length === 0) {
@@ -154,11 +152,18 @@ export default function createTenantIntegrationRoutes(pool) {
     }
   });
 
-  // DELETE /api/tenantintegrations/:id - Delete tenant integration
+  // DELETE /api/tenantintegrations/:id - Delete tenant integration (tenant scoped)
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const result = await pool.query('DELETE FROM tenant_integrations WHERE id = $1 RETURNING *', [id]);
+      const { tenant_id } = req.query;
+
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
+
+      const result = await pool.query(
+        'DELETE FROM tenant_integrations WHERE tenant_id = $1 AND id = $2 RETURNING *',
+        [tenant_id, id]
+      );
       
       if (result.rows.length === 0) {
         return res.status(404).json({ status: 'error', message: 'Integration not found' });
