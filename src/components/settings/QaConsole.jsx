@@ -41,7 +41,13 @@ export default function QaConsole() {
       const res = await fetch(`${BACKEND_URL}/api/testing/run-playwright`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ suite: suiteId, ref: currentBranch }),
+        body: JSON.stringify({
+          suite: suiteId,
+          ref: currentBranch,
+          // Send explicit URLs so the workflow targets the same environment as this UI
+          backend_url: BACKEND_URL,
+          frontend_url: window.location.origin,
+        }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
