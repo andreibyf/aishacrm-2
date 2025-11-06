@@ -7,8 +7,9 @@ const shouldSkip = process.env.RATE_LIMIT_SKIP === '1';
 
 (test.skip(shouldSkip, 'Skipping rate limit test when RATE_LIMIT_SKIP=1') ? test.skip : test)('Rate limiting returns 429 after threshold', async ({ request }) => {
   // Send a burst of requests to a real API endpoint subject to rate limiting
-  // /api/leads is used instead of /api/health since health checks are typically exempt
-  const max = 120; // above default 100/min
+  // /api/leads is used instead of /api/health since health checks are exempt from rate limiting
+  // Backend default: RATE_LIMIT_MAX=120, so we need 121+ requests to trigger 429
+  const max = 125; // above default 120/min threshold
   let got429 = false;
 
   for (let i = 0; i < max; i++) {
