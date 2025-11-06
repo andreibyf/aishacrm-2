@@ -9,11 +9,13 @@ Originally powered by Ai-SHA, now transitioning to your own independent infrastr
 **Before running ANY commands, read:**
 - [TERMINAL_RULES.md](./TERMINAL_RULES.md) - **MANDATORY** terminal & directory rules
 - [DEV_QUICK_START.md](./DEV_QUICK_START.md) - Development workflow guide
+- [GIT_CONFLICT_RESOLUTION.md](./GIT_CONFLICT_RESOLUTION.md) - Fix merge conflicts & clean up branches
 
 **TL;DR:**
 1. ALWAYS run `Get-Location` before executing commands
 2. Use separate terminals for backend, frontend, and your work
 3. Verify directory location - never assume where you are
+4. Having git issues? Use `.\cleanup-branches.ps1` or `./cleanup-branches.sh`
 
 ## Getting Started
 
@@ -101,11 +103,18 @@ npm run build
 
 ## Scripts
 
+### Development Scripts
 - `npm run dev` - Start development server
 - `npm run build` - Build for production
 - `npm run preview` - Preview production build locally
 - `npm run lint` - Run ESLint
 - `npm audit` - Check for security vulnerabilities
+
+### Utility Scripts
+- `.\start-all.ps1` - Start both frontend and backend (PowerShell)
+- `.\cleanup-branches.ps1` - Clean up git branches (PowerShell)
+- `./cleanup-branches.sh` - Clean up git branches (Bash)
+- `.\stop-all.ps1` - Stop all background processes
 
 ## Project Structure
 
