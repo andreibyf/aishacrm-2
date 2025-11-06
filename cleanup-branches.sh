@@ -2,7 +2,7 @@
 # Branch Cleanup Helper Script
 # Helps clean up local and remote branches safely
 
-set -e
+# Note: Not using 'set -e' to allow graceful handling of expected failures
 
 # Colors
 RED='\033[0;31m'
@@ -35,6 +35,21 @@ current_branch=$(git branch --show-current)
 echo -e "${GREEN}Current branch: $current_branch${NC}"
 echo ""
 
+# Detect default branch (main, master, etc.)
+default_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
+if [ -z "$default_branch" ]; then
+    # Fallback to common names if symbolic-ref fails
+    if git show-ref --verify --quiet refs/remotes/origin/main; then
+        default_branch="main"
+    elif git show-ref --verify --quiet refs/remotes/origin/master; then
+        default_branch="master"
+    else
+        default_branch="main"  # Last resort default
+    fi
+fi
+echo -e "${GREEN}Default branch: $default_branch${NC}"
+echo ""
+
 # Check for uncommitted changes
 if ! git diff-index --quiet HEAD -- 2>/dev/null; then
     echo -e "${YELLOW}⚠️  Warning: You have uncommitted changes!${NC}"
@@ -43,7 +58,7 @@ if ! git diff-index --quiet HEAD -- 2>/dev/null; then
     
     if confirm "Do you want to stash these changes?"; then
         echo -e "${CYAN}Stashing changes...${NC}"
-        git stash save "Cleanup script auto-stash $(date '+%Y-%m-%d %H:%M:%S')"
+        git stash push -m "Cleanup script auto-stash $(date '+%Y-%m-%d %H:%M:%S')"
         echo -e "${GREEN}✓ Changes stashed. Use 'git stash pop' to restore them.${NC}"
         echo ""
     fi
@@ -80,8 +95,8 @@ done < <(git branch)
 echo ""
 
 # Offer to delete merged branches
-echo -e "${CYAN}=== Branches Merged into Main ===${NC}"
-merged_branches=$(git branch --merged main | grep -v "^\*" | grep -v "main" | sed 's/^[[:space:]]*//')
+echo -e "${CYAN}=== Branches Merged into $default_branch ===${NC}"
+merged_branches=$(git branch --merged "$default_branch" | grep -v "^\*" | grep -v "$default_branch" | sed 's/^[[:space:]]*//')
 if [ -n "$merged_branches" ]; then
     echo "$merged_branches" | while read -r branch; do
         echo -e "${GRAY}  $branch${NC}"

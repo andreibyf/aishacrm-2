@@ -38,6 +38,23 @@ $currentBranch = git branch --show-current
 Write-ColorOutput "Current branch: $currentBranch" "Green"
 Write-Host ""
 
+# Detect default branch (main, master, etc.)
+$defaultBranch = git symbolic-ref refs/remotes/origin/HEAD 2>$null
+if ($defaultBranch) {
+    $defaultBranch = $defaultBranch -replace '^refs/remotes/origin/', ''
+} else {
+    # Fallback to common names if symbolic-ref fails
+    if (git show-ref --verify --quiet refs/remotes/origin/main 2>$null) {
+        $defaultBranch = "main"
+    } elseif (git show-ref --verify --quiet refs/remotes/origin/master 2>$null) {
+        $defaultBranch = "master"
+    } else {
+        $defaultBranch = "main"  # Last resort default
+    }
+}
+Write-ColorOutput "Default branch: $defaultBranch" "Green"
+Write-Host ""
+
 # Check for uncommitted changes
 $status = git status --porcelain
 if ($status) {
@@ -47,7 +64,7 @@ if ($status) {
     
     if (Get-Confirmation "Do you want to stash these changes?") {
         Write-ColorOutput "Stashing changes..." "Cyan"
-        git stash save "Cleanup script auto-stash $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+        git stash push -m "Cleanup script auto-stash $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
         Write-ColorOutput "✓ Changes stashed. Use 'git stash pop' to restore them." "Green"
         Write-Host ""
     }
@@ -91,15 +108,15 @@ foreach ($branch in $localBranches) {
 Write-Host ""
 
 # Offer to delete merged branches
-$mergedBranches = git branch --merged main | Where-Object { 
-    $_.Trim() -ne "main" -and 
-    $_.Trim() -ne "*main" -and 
+$mergedBranches = git branch --merged $defaultBranch | Where-Object { 
+    $_.Trim() -ne $defaultBranch -and 
+    $_.Trim() -ne "*$defaultBranch" -and 
     $_.Trim() -ne $currentBranch -and
     $_.Trim() -ne "*$currentBranch"
 } | ForEach-Object { $_.Trim() }
 
 if ($mergedBranches) {
-    Write-ColorOutput "=== Branches Merged into Main ===" "Cyan"
+    Write-ColorOutput "=== Branches Merged into $defaultBranch ===" "Cyan"
     $mergedBranches | ForEach-Object { Write-ColorOutput "  $_" "Gray" }
     Write-Host ""
     
