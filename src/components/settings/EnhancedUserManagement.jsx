@@ -152,6 +152,12 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        
+        // Prevent double-submission
+        if (saving) {
+            return;
+        }
+        
         setSaving(true);
         try {
             // 1) Persist employee manager relationship
