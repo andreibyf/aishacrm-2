@@ -22,3 +22,78 @@ tasks:
       permissions:
         - read
         - write
+
+  - name: Fix Bugs and Issues
+    description: >
+      Identify and fix bugs, errors, or issues in the codebase. Focus on improving
+      stability, handling edge cases, and fixing broken functionality.
+    goals:
+      - Fix runtime errors and exceptions
+      - Address logical errors in business logic
+      - Improve error handling and validation
+      - Add defensive programming practices
+      - Fix failing tests
+    scope:
+      include:
+        - "**/*.js"
+        - "**/*.jsx"
+        - "**/*.ts"
+        - "**/*.tsx"
+      exclude:
+        - "node_modules/**"
+        - "dist/**"
+        - "build/**"
+    agent:
+      name: copilot-code-agent
+      permissions:
+        - read
+        - write
+
+  - name: Improve Test Coverage
+    description: >
+      Add or improve tests for components, functions, and API endpoints. Focus on
+      critical paths and edge cases to ensure code reliability.
+    goals:
+      - Write unit tests for components and functions
+      - Add integration tests for API endpoints
+      - Improve E2E test coverage
+      - Test edge cases and error scenarios
+      - Achieve better code coverage metrics
+    scope:
+      include:
+        - "src/**/*.js"
+        - "src/**/*.jsx"
+        - "backend/**/*.js"
+        - "tests/**/*.js"
+      exclude:
+        - "node_modules/**"
+        - "dist/**"
+    agent:
+      name: copilot-code-agent
+      permissions:
+        - read
+        - write
+
+  - name: Update Documentation
+    description: >
+      Improve or create documentation for code, APIs, and user guides. Ensure
+      documentation is clear, accurate, and up-to-date.
+    goals:
+      - Update README files
+      - Add JSDoc comments to functions
+      - Document API endpoints
+      - Create usage examples
+      - Update inline code comments where helpful
+    scope:
+      include:
+        - "**/*.md"
+        - "**/*.js"
+        - "**/*.jsx"
+        - "docs/**"
+      exclude:
+        - "node_modules/**"
+    agent:
+      name: copilot-code-agent
+      permissions:
+        - read
+        - write
