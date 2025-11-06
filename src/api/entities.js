@@ -928,21 +928,26 @@ export const User = {
           );
           if (response.ok) {
             const result = await response.json();
-            const users = result.data?.users || result.data || result;
-            if (Array.isArray(users) && users.length > 0) {
-              // Prefer the global (superadmin/admin) record when duplicates exist for the same email
-              // Global users have tenant_id === null, employees have a tenant_id
+            const rawUsers = result.data?.users || result.data || result;
+            const users = Array.isArray(rawUsers) ? rawUsers.filter(u => (u.email || '').toLowerCase() === user.email.toLowerCase()) : [];
+
+            // Defensive: filter out test-pattern identities unless in E2E mode
+            const isE2EMode = (typeof window !== 'undefined' && localStorage.getItem('E2E_TEST_MODE') === 'true');
+            const testEmailPatterns = [ /audit\.test\./i, /e2e\.temp\./i, /@playwright\.test$/i, /@example\.com$/i ];
+            const safeUsers = isE2EMode ? users : users.filter(u => !testEmailPatterns.some(re => re.test(u.email || '')));
+
+            if (safeUsers.length > 0) {
+              // Prefer a global superadmin/admin record
               const preferred =
-                users.find((u) => u.tenant_id === null && ['superadmin','admin'].includes((u.role || '').toLowerCase())) ||
-                users.find((u) => u.tenant_id === null) ||
-                users.find((u) => ['superadmin','admin'].includes((u.role || '').toLowerCase())) ||
-                users[0];
+                safeUsers.find(u => u.tenant_id === null && ['superadmin','admin'].includes((u.role || '').toLowerCase())) ||
+                safeUsers.find(u => u.tenant_id === null) ||
+                safeUsers.find(u => ['superadmin','admin'].includes((u.role || '').toLowerCase())) ||
+                safeUsers[0];
 
               userData = preferred;
-              console.log(
-                "[Supabase Auth] User record selected:",
-                { email: userData.email, role: userData.role, tenant_id: userData.tenant_id, access_level: userData.metadata?.access_level }
-              );
+              console.log('[Supabase Auth] User record selected (exact match filtering):', { email: userData.email, role: userData.role, tenant_id: userData.tenant_id });
+            } else if (rawUsers && rawUsers.length > 0) {
+              console.warn('[Supabase Auth] Raw users returned but none passed filtering; possible test-pattern suppression or mismatch.', { requested: user.email, rawCount: rawUsers.length });
             }
           }
 
@@ -1002,9 +1007,13 @@ export const User = {
                 );
                 if (retry.ok) {
                   const r = await retry.json();
-                  const list = r.data?.users || r.data || r;
-                  if (list && list.length > 0) {
-                    userData = list[0];
+                  const listRaw = r.data?.users || r.data || r;
+                  const list = Array.isArray(listRaw) ? listRaw.filter(u => (u.email || '').toLowerCase() === user.email.toLowerCase()) : [];
+                  const isE2EMode = (typeof window !== 'undefined' && localStorage.getItem('E2E_TEST_MODE') === 'true');
+                  const testEmailPatterns = [ /audit\.test\./i, /e2e\.temp\./i, /@playwright\.test$/i, /@example\.com$/i ];
+                  const safe = isE2EMode ? list : list.filter(u => !testEmailPatterns.some(re => re.test(u.email || '')));
+                  if (safe && safe.length > 0) {
+                    userData = safe[0];
                   }
                 }
                 if (!userData) {
@@ -1015,9 +1024,13 @@ export const User = {
                   );
                   if (retry.ok) {
                     const r2 = await retry.json();
-                    const list2 = r2.data || r2;
-                    if (list2 && list2.length > 0) {
-                      userData = list2[0];
+                    const list2Raw = r2.data || r2;
+                    const list2 = Array.isArray(list2Raw) ? list2Raw.filter(u => (u.email || '').toLowerCase() === user.email.toLowerCase()) : [];
+                    const isE2EMode = (typeof window !== 'undefined' && localStorage.getItem('E2E_TEST_MODE') === 'true');
+                    const testEmailPatterns = [ /audit\.test\./i, /e2e\.temp\./i, /@playwright\.test$/i, /@example\.com$/i ];
+                    const safe2 = isE2EMode ? list2 : list2.filter(u => !testEmailPatterns.some(re => re.test(u.email || '')));
+                    if (safe2 && safe2.length > 0) {
+                      userData = safe2[0];
                     }
                   }
                 }

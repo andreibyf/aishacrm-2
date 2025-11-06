@@ -114,6 +114,21 @@ export default function createEmployeeRoutes(_pgPool) {
       if (!tenant_id || !email) {
         return res.status(400).json({ status: 'error', message: 'tenant_id and email are required' });
       }
+
+      // HARD BLOCK: prevent creation of test-pattern emails to avoid E2E pollution
+      const testEmailPatterns = [
+        /audit\.test\./i,
+        /e2e\.temp\./i,
+        /@playwright\.test$/i,
+        /@example\.com$/i,
+      ];
+      if (testEmailPatterns.some((re) => re.test(String(email)))) {
+        return res.status(403).json({
+          status: 'error',
+          code: 'TEST_EMAIL_BLOCKED',
+          message: 'Employee creation blocked for test email patterns',
+        });
+      }
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
