@@ -318,6 +318,14 @@ export default function createActivityRoutes(pgPool) {
         updates.push(`related_id = $${paramCount++}`);
         values.push(payload.related_id);
       }
+      if (payload.status !== undefined) {
+        updates.push(`status = $${paramCount++}`);
+        values.push(payload.status);
+      }
+      if (payload.due_date !== undefined) {
+        updates.push(`due_date = $${paramCount++}`);
+        values.push(payload.due_date);
+      }
       
       // Always update metadata (it contains merged extras)
       updates.push(`metadata = $${paramCount++}`);

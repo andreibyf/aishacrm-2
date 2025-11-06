@@ -368,8 +368,15 @@ test.describe('CRUD Operations - End-to-End', () => {
           updatedId = body?.data?.id || body?.data?.activity?.id || null;
         } catch { /* ignore */ }
       } else {
-        // Backend update failed - this should not happen now that we fixed the bug
-        throw new Error(`Activity update failed with status ${putResp?.status() || 'unknown'}`);
+        // Backend update failed - log details and throw
+        let errorDetails = `status ${putResp?.status() || 'unknown'}`;
+        if (putResp) {
+          try {
+            const errorBody = await putResp.json();
+            errorDetails += `, message: ${errorBody?.message || JSON.stringify(errorBody)}`;
+          } catch { /* ignore parse error */ }
+        }
+        throw new Error(`Activity update failed with ${errorDetails}`);
       }
 
       // Poll the backend until the subject reflects the new value
