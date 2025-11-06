@@ -339,9 +339,10 @@ export default function createActivityRoutes(pgPool) {
         });
       }
 
+      // Keep SET on the same line as fields to satisfy the Supabase SQL parser (expects ' set ' token)
       const query = `
-        UPDATE activities SET
-          ${updates.join(', ')}
+        UPDATE activities
+        SET ${updates.join(', ')}
         WHERE id = $${paramCount}
         RETURNING *
       `;

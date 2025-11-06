@@ -131,10 +131,11 @@ export default function createNotificationRoutes(pgPool) {
         ...otherFields,
       };
       
+      // Keep SET on the same line as fields to satisfy the Supabase SQL parser (expects ' set ' token)
       const query = `
-        UPDATE notifications SET
-          is_read = COALESCE($1, is_read),
-          metadata = $2
+        UPDATE notifications
+        SET is_read = COALESCE($1, is_read),
+            metadata = $2
         WHERE id = $3
         RETURNING *
       `;

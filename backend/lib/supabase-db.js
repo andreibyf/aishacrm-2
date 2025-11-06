@@ -130,17 +130,13 @@ async function executeViaSupabaseAPI(sql, params) {
  * Handle SELECT queries
  */
 async function handleSelectQuery(sql, params) {
-  // Safe clause extractor to avoid heavy regex backtracking on uncontrolled input
-  const extractClause = (source, startKeyword, endKeywords = []) => {
-    const lower = source.toLowerCase();
-    const start = lower.indexOf(startKeyword);
-    if (start === -1) return null;
-    let end = source.length;
-    for (const endKw of endKeywords) {
-      const idx = lower.indexOf(endKw, start + startKeyword.length);
-      if (idx !== -1 && idx < end) end = idx;
-    }
-    return source.slice(start + startKeyword.length, end).trim();
+  // Robust clause extractor tolerant of newlines/extra whitespace
+  // startPattern and endPatterns are regex source strings (without flags)
+  const extractClause = (source, startPattern, endPatterns = []) => {
+    const end = endPatterns.length ? '(?:' + endPatterns.join('|') + ')' : '$';
+    const re = new RegExp(startPattern + '([\\s\\S]*?)' + end, 'i');
+    const m = source.match(re);
+    return m ? m[1].trim() : null;
   };
   // Extract table name
   const fromMatch = sql.match(/from\s+([a-z_]+)/i);
@@ -161,7 +157,7 @@ async function handleSelectQuery(sql, params) {
   
   // Parse WHERE with parameter substitution
   // Build WHERE conditions
-  const wherePart = extractClause(sql, ' where ', [' order by ', ' limit ', ' offset ']);
+  const wherePart = extractClause(sql, '\\bwhere\\b\\s+', ['\\border\\s+by\\b', '\\blimit\\b', '\\boffset\\b']);
   if (wherePart) {
     // Split on AND while preserving inner commas of IN lists
     const conditions = wherePart.split(/\s+and\s+/i).map(c => c.trim());
@@ -311,7 +307,7 @@ async function handleSelectQuery(sql, params) {
   }
 
   // Parse ORDER BY
-  const orderSegment = extractClause(sql, ' order by ', [' limit ', ' offset ']);
+  const orderSegment = extractClause(sql, '\\border\\s+by\\b\\s+', ['\\blimit\\b', '\\boffset\\b']);
   if (orderSegment) {
     const parts = orderSegment.trim().split(/\s+/);
     const col = parts[0]?.replace(/[,]/g, '');
@@ -368,23 +364,40 @@ async function handleUpdateQuery(sql, params) {
   if (!tableMatch) throw new Error('Could not parse UPDATE');
   
   const table = tableMatch[1];
-  // Safe clause extractor
-  const extractClause = (source, startKeyword, endKeywords = []) => {
-    const lower = source.toLowerCase();
-    const start = lower.indexOf(startKeyword);
-    if (start === -1) return null;
-    let end = source.length;
-    for (const endKw of endKeywords) {
-      const idx = lower.indexOf(endKw, start + startKeyword.length);
-      if (idx !== -1 && idx < end) end = idx;
+  // Robustly capture SET and WHERE parts allowing newlines / arbitrary whitespace.
+  // Example patterns handled:
+  // UPDATE table\nSET col = $1,\n    other = $2\nWHERE id = $3 RETURNING *
+  // UPDATE table SET col=$1 WHERE id=$2
+  const normalized = sql.replace(/\s+/g, ' '); // for simpler fallbacks if regex fails
+  const setRegex = /update\s+[a-z_]+\s+set\s+([\s\S]+?)\s+where\s+/i;
+  const setMatch = sql.match(setRegex);
+  let setPart = setMatch ? setMatch[1].trim() : null;
+  if (!setPart) {
+    // Fallback: try normalized string
+    const fallback = normalized.match(/update\s+[a-z_]+\s+set\s+(.+?)\s+where\s+/i);
+    if (fallback) {
+      // Use comma separation heuristic before WHERE
+      setPart = fallback[1].trim();
     }
-    return source.slice(start + startKeyword.length, end).trim();
-  };
-
-  // Parse SET clause and WHERE clause using index-based parsing
-  const setPart = extractClause(sql, ' set ', [' where ']);
+  }
   if (!setPart) throw new Error('UPDATE requires SET clause');
-  const wherePart = extractClause(sql, ' where ');
+
+  // Capture WHERE (up to RETURNING / ORDER / LIMIT if present)
+  let whereMatch = sql.match(/\swhere\s+([\s\S]+)/i);
+  let wherePart = whereMatch ? whereMatch[1] : null;
+  if (wherePart) {
+    const terminatorIdx = [/\sreturning\s/i, /\sorder\s+/i, /\slimit\s+/i]
+      .map(r => {
+        const m = wherePart.match(r);
+        return m ? wherePart.indexOf(m[0]) : -1;
+      })
+      .filter(i => i !== -1)
+      .sort((a,b) => a-b)[0];
+    if (terminatorIdx !== undefined) {
+      if (terminatorIdx > -1) wherePart = wherePart.slice(0, terminatorIdx).trim();
+    }
+    wherePart = wherePart.trim();
+  }
   if (!wherePart) throw new Error('UPDATE requires WHERE for safety');
   
   // Build update data
