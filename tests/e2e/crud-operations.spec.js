@@ -398,10 +398,11 @@ test.describe('CRUD Operations - End-to-End', () => {
       }
 
       // Poll the backend until the subject reflects the new value
+      const tenantIdForPoll = process.env.E2E_TENANT_ID || 'local-tenant-001';
       await expect
         .poll(async () => {
           try {
-            const res = await page.request.get(`${BACKEND_URL}/api/activities/${updatedId}`, { timeout: 5000 });
+            const res = await page.request.get(`${BACKEND_URL}/api/activities/${updatedId}?tenant_id=${tenantIdForPoll}`, { timeout: 5000 });
             if (!res.ok()) return 'pending';
             const data = await res.json();
             return data?.data?.subject && data.data.subject.includes(updatedSubject) ? 'ok' : 'pending';

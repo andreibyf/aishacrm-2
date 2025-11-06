@@ -161,6 +161,7 @@ async function handleSelectQuery(sql, params) {
   if (wherePart) {
     // Split on AND while preserving inner commas of IN lists
     const conditions = wherePart.split(/\s+and\s+/i).map(c => c.trim());
+    console.log('[Supabase Adapter] WHERE conditions:', conditions);
     for (const cond of conditions) {
       // Handle OR groups by applying each supported predicate inside the group
       // subject ILIKE $n
@@ -266,6 +267,7 @@ async function handleSelectQuery(sql, params) {
       if (m) {
         const col = m[1];
         const idx = parseInt(m[2], 10) - 1;
+        console.log(`[Supabase Adapter] Applying .eq('${col}', '${params[idx]}')`);
         query = query.eq(col, params[idx]);
         continue;
       }

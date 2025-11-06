@@ -190,24 +190,43 @@ export default function createActivityRoutes(pgPool) {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query || {};
-      let result;
-      if (tenant_id) {
-        result = await pgPool.query('SELECT * FROM activities WHERE id = $1 AND tenant_id = $2', [id, tenant_id]);
-      } else {
-        result = await pgPool.query('SELECT * FROM activities WHERE id = $1', [id]);
-      }
       
-      if (result.rows.length === 0) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'Activity not found'
+        console.log(`[Activities GET /:id] Requested ID: ${id}, Tenant: ${tenant_id}`);
+      
+      // Require tenant_id for proper RLS enforcement
+        if (!tenant_id) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'tenant_id is required'
+          });
+        }
+
+        // Query with tenant_id scoping first, then id, and limit 1 for safety
+        const sql = 'SELECT * FROM activities WHERE tenant_id = $1 AND id = $2 LIMIT 1';
+        const params = [tenant_id, id];
+        const result = await pgPool.query(sql, params);
+
+        if (result.rows.length === 0) {
+          return res.status(404).json({
+            status: 'error',
+            message: 'Activity not found'
+          });
+        }
+
+        const row = result.rows[0];
+        // Final safety check to ensure the adapter returned the correct record
+        if (row.id !== id || row.tenant_id !== tenant_id) {
+          console.error('[Activities GET /:id] Mismatched row returned from adapter', { expected: { id, tenant_id }, got: { id: row.id, tenant_id: row.tenant_id } });
+          return res.status(404).json({
+            status: 'error',
+            message: 'Activity not found'
+          });
+        }
+
+        res.json({
+          status: 'success',
+          data: normalizeActivity(row)
         });
-      }
-      
-      res.json({
-        status: 'success',
-        data: normalizeActivity(result.rows[0])
-      });
     } catch (error) {
       console.error('Error fetching activity:', error);
       res.status(500).json({
