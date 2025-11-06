@@ -1,4 +1,5 @@
 import express from 'express';
+import { validateTenantScopedId } from '../lib/validation.js';
 
 export default function createAuditLogRoutes(pgPool) {
   const router = express.Router();
@@ -119,9 +120,7 @@ export default function createAuditLogRoutes(pgPool) {
       const { id } = req.params;
       const { tenant_id } = req.query;
 
-      if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
-      }
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
 
       const query = 'SELECT * FROM audit_log WHERE tenant_id = $1 AND id = $2 LIMIT 1';
       const values = [tenant_id, id];
@@ -153,21 +152,17 @@ export default function createAuditLogRoutes(pgPool) {
     }
   });
 
-  // DELETE /api/audit-logs/:id - Delete a specific audit log
+  // DELETE /api/audit-logs/:id - Delete a specific audit log (tenant scoped)
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query;
+
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
       
-      let query = 'DELETE FROM audit_log WHERE id = $1';
-      const values = [id];
+      const query = 'DELETE FROM audit_log WHERE tenant_id = $1 AND id = $2 RETURNING *';
+      const values = [tenant_id, id];
 
-      if (tenant_id) {
-        query += ' AND tenant_id = $2';
-        values.push(tenant_id);
-      }
-
-      query += ' RETURNING *';
       const result = await pgPool.query(query, values);
       
       if (result.rows.length === 0) {
