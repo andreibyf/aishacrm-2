@@ -253,19 +253,17 @@ test.describe('CRUD Operations - End-to-End', () => {
     const userInjected = await page.evaluate(() => !!window.__e2eUser);
     if (!userInjected) {
       console.warn('[E2E] __e2eUser not set; re-injecting...');
-      await page.evaluate((email, tId) => {
+      await page.evaluate(({ email, tId }) => {
         window.__e2eUser = {
           id: 'e2e-test-user-id',
           email: email || 'e2e@example.com',
           role: 'superadmin',
           tenant_id: tId
         };
-  try { localStorage.setItem('selected_tenant_id', tId); } catch { /* ignore */ }
-      }, TEST_EMAIL || 'e2e@example.com', process.env.E2E_TENANT_ID || 'local-tenant-001');
+        try { localStorage.setItem('selected_tenant_id', tId); } catch { /* ignore */ }
+      }, { email: TEST_EMAIL || 'e2e@example.com', tId: process.env.E2E_TENANT_ID || 'local-tenant-001' });
     }
-  });
-
-  test.describe('Activities CRUD', () => {
+  });  test.describe('Activities CRUD', () => {
     test('should create a new activity', async ({ page }) => {
       // Navigate to Activities page
       await navigateTo(page, '/activities');
