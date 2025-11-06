@@ -36,10 +36,18 @@ export default function QaConsole() {
     setRunHistory(null);
     try {
       const dispatchedAt = new Date().toISOString();
+      // Use current branch from env or default to main
+      const currentBranch = import.meta.env.VITE_CURRENT_BRANCH || 'main'; // Use current branch from env or default to main
       const res = await fetch(`${BACKEND_URL}/api/testing/run-playwright`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ suite: suiteId, ref: "main" }),
+        body: JSON.stringify({
+          suite: suiteId,
+          ref: currentBranch,
+          // Send explicit URLs so the workflow targets the same environment as this UI
+          backend_url: BACKEND_URL,
+          frontend_url: window.location.origin,
+        }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -52,7 +60,7 @@ export default function QaConsole() {
         const data = json?.data || { message: "Dispatched" };
         setResult(data);
         // Start polling for runs after dispatch
-        startPolling({ createdAfter: data.dispatched_at || dispatchedAt });
+        startPolling({ createdAfter: data.dispatched_at || dispatchedAt, ref: data.ref || currentBranch });
       }
     } catch (e) {
       setError({ message: e?.message || String(e) });
@@ -61,12 +69,13 @@ export default function QaConsole() {
     }
   };
 
-  const startPolling = ({ createdAfter }) => {
+  const startPolling = ({ createdAfter, ref }) => {
     clearPolling();
     const poll = async () => {
       try {
         const url = new URL(`${BACKEND_URL}/api/testing/workflow-status`);
-        url.searchParams.set("ref", "main");
+        // Poll the same ref we dispatched to (fallback to main if unknown)
+        url.searchParams.set("ref", (ref || 'main'));
         url.searchParams.set("per_page", "5");
         if (createdAfter) url.searchParams.set("created_after", createdAfter);
         const res = await fetch(url.toString());

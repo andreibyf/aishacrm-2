@@ -4,8 +4,8 @@
  */
 import { test, expect } from '@playwright/test';
 
-const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:5173';
-const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+const BASE_URL = process.env.PLAYWRIGHT_FRONTEND_URL || process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:4000';
+const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
 
 // Test user credentials
 const SUPERADMIN_EMAIL = 'admin@aishacrm.com';
@@ -59,8 +59,8 @@ async function navigateToUserManagement(page) {
   await page.goto(`${BASE_URL}/settings`, { waitUntil: 'networkidle' });
   await page.waitForURL('**/settings', { timeout: 10000 });
   
-  // Settings uses Tabs component - click the "User Management" tab button
-  const userMgmtTab = page.locator('button[role="tab"]:has-text("User Management")').first();
+  // Settings uses Tabs component - click the "User Management" tab by value="users"
+  const userMgmtTab = page.locator('button[role="tab"][value="users"]').first();
   await expect(userMgmtTab).toBeVisible({ timeout: 10000 });
   await userMgmtTab.click({ timeout: 5000 });
   
@@ -74,6 +74,17 @@ test.describe('User Management - Permission System', () => {
   });
 
   test.beforeEach(async ({ page }) => {
+    // Inject E2E mock user before any navigation
+    await page.addInitScript(() => {
+      window.__e2eUser = {
+        id: 'e2e-test-user-id',
+        email: 'e2e@example.com',
+        role: 'superadmin',
+        tenant_id: 'local-tenant-001'
+      };
+      console.log('[E2E Test] Mock user injected:', window.__e2eUser.email);
+    });
+    
     // Auto-accept dialogs
     page.on('dialog', dialog => dialog.accept());
     
@@ -303,6 +314,12 @@ test.describe('User Management - Permission System', () => {
   });
 
   test('Backend API creates user with correct CRM access metadata', async () => {
+    // Safety guard: only allow backend mutations on local backends or when explicitly enabled
+    const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/)?.*/i.test(BACKEND_URL || '');
+    const allow = process.env.ALLOW_E2E_MUTATIONS === 'true' || isLocal;
+    if (!allow) {
+      test.skip(true, `Skipping mutation test against non-local backend: ${BACKEND_URL}`);
+    }
     // Direct backend API test
     const timestamp = Date.now();
     const testEmail = `api.test.${timestamp}@example.com`;
@@ -346,48 +363,76 @@ test.describe('User Management - Permission System', () => {
   });
 
   test('Audit logs are created for user creation', async () => {
-    // Create a user via API
+    // Safety guard: only allow backend mutations on local backends or when explicitly enabled
+    const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/)?.*/i.test(BACKEND_URL || '');
+    const allow = process.env.ALLOW_E2E_MUTATIONS === 'true' || isLocal;
+    if (!allow) {
+      test.skip(true, `Skipping mutation test against non-local backend: ${BACKEND_URL}`);
+    }
+    
+    // Create a user via API with E2E-specific email pattern for easy cleanup
     const timestamp = Date.now();
-    const testEmail = `audit.test.${timestamp}@example.com`;
+    const testEmail = `e2e.temp.${timestamp}@playwright.test`;
+    let createdUserId = null;
     
-    await fetch(`${BACKEND_URL}/api/users`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: testEmail,
-        first_name: 'Audit',
-        last_name: 'Test',
-        role: 'employee',
-        tenant_id: 'test-tenant',
-        status: 'active',
-        metadata: {
-          crm_access: true,
-          access_level: 'read_write'
+    try {
+      const createResponse = await fetch(`${BACKEND_URL}/api/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: testEmail,
+          first_name: 'E2E',
+          last_name: 'TempUser',
+          role: 'employee',
+          tenant_id: 'e2e-test-tenant-001', // Dedicated E2E tenant, NOT global
+          status: 'active',
+          metadata: {
+            crm_access: true,
+            access_level: 'read_write',
+            is_e2e_test_data: true // Mark as test data
+          }
+        })
+      });
+      
+      if (createResponse.ok) {
+        const createData = await createResponse.json();
+        createdUserId = createData.data?.id;
+      }
+      
+      // Wait for audit log to be written
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Fetch recent audit logs
+      const logsResponse = await fetch(`${BACKEND_URL}/api/system-logs?limit=10`);
+      expect(logsResponse.ok).toBeTruthy();
+      
+      const logsData = await logsResponse.json();
+      const logs = logsData.data['system-logs'];
+      
+      // Verify audit log exists for user creation
+      const userCreationLog = logs.find(log => 
+        log.source === 'user_management' && 
+        log.message?.includes(testEmail)
+      );
+      
+      // Note: This might not pass if audit logging isn't fully integrated yet
+      // It's here as a placeholder for when frontend passes currentUser to inviteUser
+      if (userCreationLog) {
+        expect(userCreationLog.level).toBe('INFO');
+        expect(userCreationLog.metadata).toBeDefined();
+      }
+    } finally {
+      // CLEANUP: Always delete the test user to avoid polluting the database
+      if (createdUserId) {
+        try {
+          await fetch(`${BACKEND_URL}/api/users/${createdUserId}`, {
+            method: 'DELETE'
+          });
+          console.log(`[Cleanup] Deleted test user: ${testEmail} (${createdUserId})`);
+        } catch (cleanupError) {
+          console.warn(`[Cleanup Warning] Failed to delete test user ${testEmail}:`, cleanupError);
         }
-      })
-    });
-    
-    // Wait for audit log to be written
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Fetch recent audit logs
-    const logsResponse = await fetch(`${BACKEND_URL}/api/system-logs?limit=10`);
-    expect(logsResponse.ok).toBeTruthy();
-    
-    const logsData = await logsResponse.json();
-    const logs = logsData.data['system-logs'];
-    
-    // Verify audit log exists for user creation
-    const userCreationLog = logs.find(log => 
-      log.source === 'user_management' && 
-      log.message?.includes(testEmail)
-    );
-    
-    // Note: This might not pass if audit logging isn't fully integrated yet
-    // It's here as a placeholder for when frontend passes currentUser to inviteUser
-    if (userCreationLog) {
-      expect(userCreationLog.level).toBe('INFO');
-      expect(userCreationLog.metadata).toBeDefined();
+      }
     }
   });
 });

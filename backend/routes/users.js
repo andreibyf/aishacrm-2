@@ -75,12 +75,16 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
   // Supports lookup by email without tenant filter
   router.get("/", async (req, res) => {
     try {
-      const { tenant_id, email, limit = 50, offset = 0 } = req.query;
+      // Normalize email param case-insensitively and support alternate casing
+      const rawEmailKey = Object.keys(req.query).find(k => k.toLowerCase() === 'email');
+      const email = rawEmailKey ? (req.query[rawEmailKey] || '').trim() : '';
+      const { tenant_id, limit = 50, offset = 0, strict_email, debug } = req.query;
 
       let allUsers = [];
 
-      // Fast path: lookup by email across users and employees
+      // Fast path: lookup by email across users and employees (exact match only)
       if (email) {
+        const t0 = Date.now();
         const usersByEmail = await pgPool.query(
           `SELECT id, NULL as tenant_id, email, first_name, last_name, role, 'active' as status, metadata, created_at, updated_at, 'global' as user_type
            FROM users WHERE LOWER(email) = LOWER($1)`,
@@ -93,14 +97,46 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
           [email],
         );
 
-        allUsers = [...usersByEmail.rows, ...employeesByEmail.rows].map(
-          expandUserMetadata,
-        );
+        // Combine + expand metadata
+        allUsers = [...usersByEmail.rows, ...employeesByEmail.rows].map(expandUserMetadata);
 
-        // Sort newest first
-        allUsers.sort((a, b) =>
-          new Date(b.created_at) - new Date(a.created_at)
-        );
+        // Post-filter safeguard: ensure only exact matches remain (defensive)
+        const beforeFilterCount = allUsers.length;
+        allUsers = allUsers.filter(u => (u.email || '').toLowerCase() === email.toLowerCase());
+        const afterFilterCount = allUsers.length;
+
+        // HARD suppression of test-pattern emails when not in E2E mode and strict_email requested
+        const testEmailPatterns = [
+          /audit\.test\./i,
+          /e2e\.temp\./i,
+          /@playwright\.test$/i,
+          /@example\.com$/i,
+        ];
+  const suppressedTestUsers = [];
+  // Server-side E2E detection via header or env only (no window/localStorage on server)
+  const isE2EMode = (req.headers['x-e2e-test-mode'] === 'true') || (process.env.E2E_TEST_MODE === 'true');
+        if (!isE2EMode) {
+          allUsers = allUsers.filter(u => {
+            const isTest = testEmailPatterns.some(re => re.test(u.email || ''));
+            if (isTest) suppressedTestUsers.push(u);
+            return !isTest;
+          });
+        }
+
+        if (strict_email && parseInt(strict_email) === 1) {
+          // If any pre-filter rows existed that didn't match, log warning; enforce strictness
+          if (beforeFilterCount !== afterFilterCount) {
+            console.warn('[Users.get] strict_email mismatch: non-matching rows suppressed', { email, beforeFilterCount, afterFilterCount });
+          }
+        }
+
+        // Sort newest first (after suppression)
+        allUsers.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        const durationMs = Date.now() - t0;
+        if (debug === '1') {
+          console.log('[Users.get] DEBUG email lookup', { email, durationMs, returned: allUsers.length, suppressedTestUsers: suppressedTestUsers.length });
+        }
 
         return res.json({
           status: "success",
@@ -109,6 +145,15 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
             total: allUsers.length,
             limit: parseInt(limit),
             offset: parseInt(offset),
+            debug: debug === '1' ? {
+              email,
+              strict: !!strict_email,
+              beforeFilterCount,
+              afterFilterCount,
+              suppressedTestUsersCount: suppressedTestUsers.length,
+              suppressedTestUsers: debug === '1' ? suppressedTestUsers.map(u => ({ id: u.id, email: u.email })) : undefined,
+              durationMs,
+            } : undefined,
           },
         });
       }
@@ -625,6 +670,25 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         ...otherFields
       } = req.body;
 
+      // 🔒 CRITICAL: Block E2E test user creation that pollutes production login
+      // These test patterns MUST NOT be created in the production database
+      const testEmailPatterns = [
+        /^audit\.test\./i,
+        /^e2e\.temp\./i,
+        /@playwright\.test$/i,
+        /@example\.com$/i, // Block all example.com emails (test domain)
+      ];
+      
+      if (testEmailPatterns.some(pattern => pattern.test(email))) {
+        console.warn(`[POST /api/users] BLOCKED test email pattern: ${email}`);
+        return res.status(403).json({
+          status: "error",
+          message: "Test email patterns are not allowed in production database",
+          code: "TEST_EMAIL_BLOCKED",
+          hint: "E2E tests should use mock users exclusively without creating real database records"
+        });
+      }
+
       console.log("[POST /api/users] Creating user:", {
         email,
         first_name,
@@ -637,6 +701,33 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         return res.status(400).json({
           status: "error",
           message: "email and first_name are required",
+        });
+      }
+
+      // 🔒 CRITICAL: Enforce global email uniqueness across users AND employees tables
+      // Check both tables to prevent duplicate accounts with same email
+      const existingInUsers = await pgPool.query(
+        "SELECT id, email, role FROM users WHERE LOWER(email) = LOWER($1)",
+        [email]
+      );
+      const existingInEmployees = await pgPool.query(
+        "SELECT id, email, tenant_id FROM employees WHERE LOWER(email) = LOWER($1)",
+        [email]
+      );
+
+      if (existingInUsers.rows.length > 0 || existingInEmployees.rows.length > 0) {
+        const existingRecord = existingInUsers.rows[0] || existingInEmployees.rows[0];
+        console.warn(`[POST /api/users] Duplicate email rejected: ${email}`);
+        return res.status(409).json({
+          status: "error",
+          message: "An account with this email already exists",
+          code: "DUPLICATE_EMAIL",
+          hint: "Email addresses must be unique across all users and employees",
+          existing: {
+            id: existingRecord.id,
+            email: existingRecord.email,
+            table: existingInUsers.rows.length > 0 ? "users" : "employees",
+          },
         });
       }
 
@@ -668,7 +759,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
 
       if (isGlobalUser) {
         // Create global superadmin in users table (no tenant_id)
-        // Check if user already exists
+        // NOTE: Global email uniqueness already checked above
         const existingUser = await pgPool.query(
           "SELECT id FROM users WHERE email = $1",
           [email],
@@ -744,7 +835,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         });
       } else if (role === "admin" && normalizedTenantId) {
         // Create tenant-scoped admin in users table WITH tenant_id
-        // Check if user already exists
+        // NOTE: Global email uniqueness already checked above
         const existingUser = await pgPool.query(
           "SELECT id FROM users WHERE email = $1",
           [email],
@@ -820,7 +911,8 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
           });
         }
 
-        // Check if employees already exists for this tenant
+        // NOTE: Global email uniqueness already checked above
+        // Also check for same email in same tenant (defensive redundancy)
         const existingEmployee = await pgPool.query(
           "SELECT id FROM employees WHERE email = $1 AND tenant_id = $2",
           [email, normalizedTenantId],
@@ -1001,13 +1093,19 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         ...otherFields // Capture any unknown fields
       } = req.body;
 
+      // 🔒 CRITICAL: Define immutable superadmin accounts that cannot be modified via API
+      // These accounts can ONLY be changed directly in Supabase Auth dashboard
+      const IMMUTABLE_SUPERADMINS = [
+        'abyfield@4vdataconsulting.com', // Primary system owner
+      ];
+
       // First, try to find user in users table (superadmin/admin), then employees table
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       
       let currentUser = await supabase
         .from('users')
-        .select('metadata, tenant_id, email')
+        .select('metadata, tenant_id, email, role')
         .eq('id', id)
         .single();
       
@@ -1017,7 +1115,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         // Try employees table
         currentUser = await supabase
           .from('employees')
-          .select('metadata, tenant_id, email')
+          .select('metadata, tenant_id, email, role')
           .eq('id', id)
           .single();
         
@@ -1032,6 +1130,18 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       }
       
       const userData = currentUser.data;
+
+      // 🔒 IMMUTABLE PROTECTION: Block ANY changes to protected superadmin accounts
+      if (IMMUTABLE_SUPERADMINS.some(email => email.toLowerCase() === (userData.email || '').toLowerCase())) {
+        console.warn(`[PUT /api/users/:id] BLOCKED attempt to modify immutable superadmin: ${userData.email}`);
+        return res.status(403).json({
+          status: "error",
+          message: "This superadmin account is immutable and cannot be modified via API",
+          code: "IMMUTABLE_ACCOUNT",
+          hint: "Protected superadmin accounts can only be modified directly in Supabase Auth dashboard",
+          protected_email: userData.email,
+        });
+      }
 
       // Handle password update if provided
       if (new_password && new_password.trim() !== "") {
@@ -1236,6 +1346,25 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         });
       }
 
+      const userEmail = userResult.rows[0].email;
+
+      // 🔒 CRITICAL: Define immutable superadmin accounts that cannot be deleted via API
+      const IMMUTABLE_SUPERADMINS = [
+        'abyfield@4vdataconsulting.com', // Primary system owner
+      ];
+
+      // 🔒 IMMUTABLE PROTECTION: Block deletion of protected superadmin accounts
+      if (IMMUTABLE_SUPERADMINS.some(email => email.toLowerCase() === (userEmail || '').toLowerCase())) {
+        console.warn(`[DELETE /api/users/:id] BLOCKED attempt to delete immutable superadmin: ${userEmail}`);
+        return res.status(403).json({
+          status: "error",
+          message: "This superadmin account is immutable and cannot be deleted",
+          code: "IMMUTABLE_ACCOUNT",
+          hint: "Protected superadmin accounts can only be removed directly in Supabase Auth dashboard",
+          protected_email: userEmail,
+        });
+      }
+
       // Stopper: prevent deleting the last remaining superadmin
       if (tableName === "users" && (userResult.rows[0].role || "").toLowerCase() === "superadmin") {
         const countRes = await pgPool.query(
@@ -1251,8 +1380,6 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
           });
         }
       }
-
-      const userEmail = userResult.rows[0].email;
 
       // Delete from Supabase Auth
       try {

@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { BACKEND_URL } from '@/api/entities';
 import {
   Cog, // Renamed from Settings to avoid conflict
   Loader2,
@@ -377,17 +378,17 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                           <strong>Full API documentation available at:</strong>
                         </p>
                         <a 
-                          href="http://localhost:3001/api-docs" 
+                          href={`${BACKEND_URL}/api-docs`} 
                           target="_blank" 
                           rel="noopener noreferrer"
                           className="text-blue-400 hover:text-blue-300 underline flex items-center gap-2"
                         >
-                          http://localhost:3001/api-docs
+                          {BACKEND_URL}/api-docs
                           <ExternalLink className="w-4 h-4" />
                         </a>
                       </div>
                       <iframe
-                        src="http://localhost:3001/api-docs"
+                        src={`${BACKEND_URL}/api-docs`}
                         className="w-full border-0 rounded-lg bg-white"
                         style={{ height: '800px' }}
                         title="API Documentation"

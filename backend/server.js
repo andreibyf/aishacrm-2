@@ -148,10 +148,20 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // Performance logging middleware (must be after body parsers, before routes)
 import { performanceLogger } from "./middleware/performanceLogger.js";
+import { productionSafetyGuard } from "./middleware/productionSafetyGuard.js";
 if (pgPool) {
   app.use(performanceLogger(pgPool));
   console.log("✓ Performance logging middleware enabled");
 }
+
+// Block mutating requests in production Supabase unless explicitly allowed
+// Exempt non-DB-mutating CI endpoints (GitHub Actions dispatch) from the guard
+app.use(productionSafetyGuard({
+  exemptPaths: [
+    '/api/testing/run-playwright', // POST triggers GitHub workflow, no DB writes
+  ],
+}));
+console.log("✓ Production safety guard enabled");
 
 // Root endpoint - provides API information
 app.get("/", (req, res) => {

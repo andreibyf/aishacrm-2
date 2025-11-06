@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Check Login State</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e293b; color: #e2e8f0; }
+        .info { background: #334155; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .warning { background: #7c2d12; color: #fef3c7; }
+        .good { background: #064e3b; color: #d1fae5; }
+        button { padding: 10px 20px; margin: 10px 5px 0 0; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Login State Checker</h1>
+    
+    <div class="info">
+        <h3>localStorage State:</h3>
+        <pre id="localStorage-state"></pre>
+    </div>
+    
+    <div class="info">
+        <h3>sessionStorage State:</h3>
+        <pre id="sessionStorage-state"></pre>
+    </div>
+    
+    <div class="info">
+        <h3>Supabase Session:</h3>
+        <pre id="supabase-session"></pre>
+    </div>
+    
+    <button onclick="clearE2EMode()">Clear E2E Test Mode</button>
+    <button onclick="clearAllStorage()">Clear All Storage</button>
+    <button onclick="location.reload()">Refresh</button>
+    
+    <script>
+        // Display localStorage
+        const localStorageData = {};
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            localStorageData[key] = localStorage.getItem(key);
+        }
+        document.getElementById('localStorage-state').textContent = JSON.stringify(localStorageData, null, 2);
+        
+        // Display sessionStorage
+        const sessionStorageData = {};
+        for (let i = 0; i < sessionStorage.length; i++) {
+            const key = sessionStorage.key(i);
+            sessionStorageData[key] = sessionStorage.getItem(key);
+        }
+        document.getElementById('sessionStorage-state').textContent = JSON.stringify(sessionStorageData, null, 2);
+        
+        // Check for Supabase session
+        const supabaseKeys = Object.keys(localStorageData).filter(k => k.includes('supabase'));
+        document.getElementById('supabase-session').textContent = supabaseKeys.length > 0 
+            ? JSON.stringify(supabaseKeys.reduce((acc, k) => { acc[k] = localStorageData[k]; return acc; }, {}), null, 2)
+            : 'No Supabase session found';
+        
+        // Highlight E2E mode if active
+        const e2eMode = localStorage.getItem('E2E_TEST_MODE');
+        if (e2eMode === 'true') {
+            const div = document.createElement('div');
+            div.className = 'info warning';
+            div.innerHTML = '<h2>⚠️ WARNING: E2E_TEST_MODE is ACTIVE!</h2><p>This will cause the app to use mock user data instead of your real account.</p>';
+            document.body.insertBefore(div, document.body.firstChild);
+        }
+        
+        function clearE2EMode() {
+            localStorage.removeItem('E2E_TEST_MODE');
+            if (window.__e2eUser) {
+                delete window.__e2eUser;
+            }
+            alert('E2E Test Mode cleared! Refresh the page.');
+        }
+        
+        function clearAllStorage() {
+            if (confirm('This will log you out. Continue?')) {
+                localStorage.clear();
+                sessionStorage.clear();
+                alert('All storage cleared! Close this tab and log in again.');
+            }
+        }
+    </script>
+</body>
+</html>

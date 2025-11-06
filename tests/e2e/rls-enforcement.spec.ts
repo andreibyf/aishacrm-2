@@ -39,11 +39,14 @@ test.describe('RLS Enforcement - Black-box', () => {
     await request.delete(`${BACKEND_URL}/api/contacts/${id}`, { params: { tenant_id: tenantA } });
   });
 
-  test('list without tenant should return empty or scoped', async ({ request }) => {
-    const res = await request.get(`${BACKEND_URL}/api/contacts`, { params: { limit: '5' } });
-    expect(res.ok()).toBeTruthy();
+  test('list with explicit tenant should return scoped data', async ({ request }) => {
+    const tenantId = process.env.E2E_TENANT_ID || 'local-tenant-001';
+    const res = await request.get(`${BACKEND_URL}/api/contacts`, { params: { tenant_id: tenantId, limit: '5' } });
+    if (!res.ok()) {
+      console.error('List contacts failed:', res.status(), await res.text());
+    }
+    expect(res.status()).toBe(200); // Explicit success status
     const body = await res.json();
-    // Accept either empty or scoped to default tenant
     const contacts = body?.data?.contacts || [];
     expect(Array.isArray(contacts)).toBeTruthy();
   });

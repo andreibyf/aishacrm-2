@@ -492,6 +492,79 @@ async function handleDeleteQuery(sql, params) {
       appliedFilters++;
       continue;
     }
+
+    // 5) Time-based filter: created_at > NOW() - $N::INTERVAL (for bulk delete operations)
+    m = cond.match(/([a-z_]+)\s*>\s*now\(\)\s*-\s*\$(\d+)::interval/i);
+    if (m) {
+      const colName = m[1];
+      const paramNum = parseInt(m[2], 10) - 1;
+      if (paramNum >= 0 && paramNum < params.length) {
+        // Parse interval like "24 hours" or "7 days"
+        const intervalStr = String(params[paramNum]);
+        const intervalMatch = intervalStr.match(/^(\d+)\s+(hour|day|minute|week)s?$/i);
+        if (intervalMatch) {
+          const amount = parseInt(intervalMatch[1], 10);
+          const unit = intervalMatch[2].toLowerCase();
+          // Calculate timestamp: NOW - interval
+          const now = new Date();
+          let cutoffDate;
+          switch (unit) {
+            case 'minute':
+              cutoffDate = new Date(now.getTime() - amount * 60 * 1000);
+              break;
+            case 'hour':
+              cutoffDate = new Date(now.getTime() - amount * 60 * 60 * 1000);
+              break;
+            case 'day':
+              cutoffDate = new Date(now.getTime() - amount * 24 * 60 * 60 * 1000);
+              break;
+            case 'week':
+              cutoffDate = new Date(now.getTime() - amount * 7 * 24 * 60 * 60 * 1000);
+              break;
+            default:
+              cutoffDate = now;
+          }
+          query = query.gt(colName, cutoffDate.toISOString());
+          appliedFilters++;
+          continue;
+        }
+      }
+    }
+
+    // 6) Time-based filter: created_at < NOW() - INTERVAL 'N days/hours' (for older_than filters)
+    m = cond.match(/([a-z_]+)\s*<\s*now\(\)\s*-\s*interval\s*'(\d+)\s+(hour|day|minute|week)s?'/i);
+    if (m) {
+      const colName = m[1];
+      const amount = parseInt(m[2], 10);
+      const unit = m[3].toLowerCase();
+      const now = new Date();
+      let cutoffDate;
+      switch (unit) {
+        case 'minute':
+          cutoffDate = new Date(now.getTime() - amount * 60 * 1000);
+          break;
+        case 'hour':
+          cutoffDate = new Date(now.getTime() - amount * 60 * 60 * 1000);
+          break;
+        case 'day':
+          cutoffDate = new Date(now.getTime() - amount * 24 * 60 * 60 * 1000);
+          break;
+        case 'week':
+          cutoffDate = new Date(now.getTime() - amount * 7 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          cutoffDate = now;
+      }
+      query = query.lt(colName, cutoffDate.toISOString());
+      appliedFilters++;
+      continue;
+    }
+
+    // 7) Simple 1=1 always-true condition (used for base WHERE clause)
+    if (/^1\s*=\s*1$/i.test(cond)) {
+      // Skip - this is just a placeholder for building dynamic WHERE clauses
+      continue;
+    }
   }
 
   // Prevent unsafe full-table deletes when we couldn't translate any filters

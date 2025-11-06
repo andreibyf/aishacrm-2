@@ -165,12 +165,18 @@ export default function createLeadRoutes(pgPool) {
     }
   });
 
-  // GET /api/leads/:id - Get single lead
+  // GET /api/leads/:id - Get single lead (tenant scoped when tenant_id provided)
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      const { tenant_id } = req.query || {};
 
-      const result = await pgPool.query('SELECT * FROM leads WHERE id = $1', [id]);
+      let result;
+      if (tenant_id) {
+        result = await pgPool.query('SELECT * FROM leads WHERE id = $1 AND tenant_id = $2', [id, tenant_id]);
+      } else {
+        result = await pgPool.query('SELECT * FROM leads WHERE id = $1', [id]);
+      }
       
       if (result.rows.length === 0) {
         return res.status(404).json({ status: 'error', message: 'Lead not found' });
