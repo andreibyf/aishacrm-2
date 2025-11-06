@@ -48,6 +48,8 @@ export default defineConfig({
     sourcemap: false,
     cssCodeSplit: true,
     rollupOptions: {
+      // Treat runtime env.js as external to avoid Vite/Rollup trying to resolve it at build time
+      external: ['/env.js'],
       output: {
         chunkFileNames: 'assets/chunk-[hash].js',
         entryFileNames: 'assets/entry-[hash].js',

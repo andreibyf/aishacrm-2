@@ -8,8 +8,15 @@
   </head>
   <body>
     <div id="root"></div>
-    <!-- Runtime environment injection: populated by frontend entrypoint as /env.js -->
-    <script src="/env.js"></script>
-    <script type="module" src="/src/main.jsx"></script>
+    <!-- Runtime environment injection + app bootstrap -->
+    <script type="module">
+      // Load runtime env.js at runtime (generated in Docker container). In dev, this may not exist.
+      import(/* @vite-ignore */ '/env.js')
+        .catch(() => { /* env.js optional outside container */ })
+        .finally(() => {
+          // After env is (attempted) loaded, start the app
+          import('/src/main.jsx');
+        });
+    </script>
   </body>
 </html>
