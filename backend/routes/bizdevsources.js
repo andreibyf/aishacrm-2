@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import { validateTenantScopedId } from '../lib/validation.js';
 
 export default function createBizDevSourceRoutes(pgPool) {
   const router = express.Router();
@@ -64,9 +65,7 @@ export default function createBizDevSourceRoutes(pgPool) {
       const { id } = req.params;
       const { tenant_id } = req.query || {};
 
-      if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
-      }
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
       
       const result = await pgPool.query(
         'SELECT * FROM bizdev_sources WHERE tenant_id = $1 AND id = $2 LIMIT 1',
@@ -158,10 +157,11 @@ export default function createBizDevSourceRoutes(pgPool) {
     }
   });
 
-  // Update bizdev source
+  // Update bizdev source (tenant scoped)
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      const { tenant_id } = req.query || {};
       const {
         source_name,
         source_type,
@@ -179,6 +179,8 @@ export default function createBizDevSourceRoutes(pgPool) {
         metadata,
         is_test_data
       } = req.body;
+
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
 
       const result = await pgPool.query(
         `UPDATE bizdev_sources SET
@@ -198,7 +200,7 @@ export default function createBizDevSourceRoutes(pgPool) {
           metadata = COALESCE($14, metadata),
           is_test_data = COALESCE($15, is_test_data),
           updated_at = now()
-        WHERE id = $16
+        WHERE tenant_id = $16 AND id = $17
         RETURNING *`,
         [
           source_name, source_type, source_url, contact_person,
@@ -206,7 +208,7 @@ export default function createBizDevSourceRoutes(pgPool) {
           leads_generated, opportunities_created, revenue_generated,
           notes, tags ? JSON.stringify(tags) : null,
           metadata ? JSON.stringify(metadata) : null,
-          is_test_data, id
+          is_test_data, tenant_id, id
         ]
       );
 
@@ -230,14 +232,17 @@ export default function createBizDevSourceRoutes(pgPool) {
     }
   });
 
-  // Delete bizdev source
+  // Delete bizdev source (tenant scoped)
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      const { tenant_id } = req.query || {};
+
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
       
       const result = await pgPool.query(
-        'DELETE FROM bizdev_sources WHERE id = $1 RETURNING *',
-        [id]
+        'DELETE FROM bizdev_sources WHERE tenant_id = $1 AND id = $2 RETURNING *',
+        [tenant_id, id]
       );
 
       if (result.rows.length === 0) {
