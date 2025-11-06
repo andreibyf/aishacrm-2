@@ -79,6 +79,7 @@ services:
       - VITE_AISHACRM_BACKEND_URL=${VITE_AISHACRM_BACKEND_URL:-http://localhost:4001}
       - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
       - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+      - VITE_CURRENT_BRANCH=${VITE_CURRENT_BRANCH:-main}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
       interval: 30s

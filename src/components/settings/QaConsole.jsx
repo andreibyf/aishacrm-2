@@ -36,10 +36,12 @@ export default function QaConsole() {
     setRunHistory(null);
     try {
       const dispatchedAt = new Date().toISOString();
+      // Use current branch from env or default to main
+      const currentBranch = import.meta.env.VITE_CURRENT_BRANCH || 'main';
       const res = await fetch(`${BACKEND_URL}/api/testing/run-playwright`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ suite: suiteId, ref: "main" }),
+        body: JSON.stringify({ suite: suiteId, ref: currentBranch }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
