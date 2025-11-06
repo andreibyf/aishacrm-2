@@ -9,14 +9,18 @@ Originally powered by Ai-SHA, now transitioning to your own independent infrastr
 **Before running ANY commands, read:**
 - [TERMINAL_RULES.md](./TERMINAL_RULES.md) - **MANDATORY** terminal & directory rules
 - [DEV_QUICK_START.md](./DEV_QUICK_START.md) - Development workflow guide
+
+**Having Git Issues?**
+- [GIT_SOLUTION_SUMMARY.md](./GIT_SOLUTION_SUMMARY.md) - **START HERE** for all git help
 - [GIT_QUICK_REFERENCE.md](./GIT_QUICK_REFERENCE.md) - Common git commands & fixes
 - [GIT_CONFLICT_RESOLUTION.md](./GIT_CONFLICT_RESOLUTION.md) - Fix merge conflicts & clean up branches
+- [EXAMPLE_CONFLICT_RESOLUTION.md](./EXAMPLE_CONFLICT_RESOLUTION.md) - Step-by-step walkthrough
 
 **TL;DR:**
 1. ALWAYS run `Get-Location` before executing commands
 2. Use separate terminals for backend, frontend, and your work
 3. Verify directory location - never assume where you are
-4. Having git issues? Use `.\cleanup-branches.ps1` or `./cleanup-branches.sh`
+4. Having git issues? Run `.\cleanup-branches.ps1` or `./cleanup-branches.sh`
 
 ## Getting Started
 
