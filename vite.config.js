@@ -53,35 +53,7 @@ export default defineConfig({
       output: {
         chunkFileNames: 'assets/chunk-[hash].js',
         entryFileNames: 'assets/entry-[hash].js',
-        assetFileNames: 'assets/[name]-[hash][extname]',
-        // Manual chunking to reduce the 2.9MB bundle size
-        manualChunks: (id) => {
-          // Split large vendor libraries into separate chunks
-          if (id.includes('node_modules')) {
-            // CRITICAL: Keep React core together (react, react-dom, scheduler must be in same chunk)
-            if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler') || id.includes('react-router')) {
-              return 'vendor-react';
-            }
-            // Radix UI components
-            if (id.includes('@radix-ui')) {
-              return 'vendor-radix';
-            }
-            // Supabase client
-            if (id.includes('@supabase')) {
-              return 'vendor-supabase';
-            }
-            // Lucide icons
-            if (id.includes('lucide-react')) {
-              return 'vendor-icons';
-            }
-            // Date/time libraries
-            if (id.includes('date-fns') || id.includes('dayjs')) {
-              return 'vendor-date';
-            }
-            // Other vendors
-            return 'vendor-other';
-          }
-        }
+        assetFileNames: 'assets/[name]-[hash][extname]'
       }
     }
   }
