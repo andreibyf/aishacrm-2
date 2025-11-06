@@ -40,19 +40,17 @@ export default function createNoteRoutes(pgPool) {
     }
   });
 
-  // GET /api/notes/:id - Get single note (tenant scoped when tenant_id provided)
+  // GET /api/notes/:id - Get single note (tenant scoped)
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query || {};
+      if (!tenant_id) return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      let result;
-      if (tenant_id) {
-        result = await pgPool.query('SELECT * FROM note WHERE id = $1 AND tenant_id = $2', [id, tenant_id]);
-      } else {
-        result = await pgPool.query('SELECT * FROM note WHERE id = $1', [id]);
-      }
+      const result = await pgPool.query('SELECT * FROM note WHERE tenant_id = $1 AND id = $2 LIMIT 1', [tenant_id, id]);
       if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
+      // Safety check
+      if (result.rows[0].tenant_id !== tenant_id) return res.status(404).json({ status: 'error', message: 'Not found' });
       res.json({ status: 'success', data: { note: result.rows[0] } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });

@@ -63,17 +63,17 @@ export default function createOpportunityRoutes(pgPool) {
     }
   });
 
-  // GET /api/opportunities/:id - Get single opportunity (tenant scoped when tenant_id provided)
+  // GET /api/opportunities/:id - Get single opportunity (tenant required)
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query || {};
-      let result;
-      if (tenant_id) {
-        result = await pgPool.query('SELECT * FROM opportunities WHERE id = $1 AND tenant_id = $2', [id, tenant_id]);
-      } else {
-        result = await pgPool.query('SELECT * FROM opportunities WHERE id = $1', [id]);
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
+
+      const result = await pgPool.query('SELECT * FROM opportunities WHERE tenant_id = $1 AND id = $2 LIMIT 1', [tenant_id, id]);
       
       if (result.rows.length === 0) {
         return res.status(404).json({
@@ -82,7 +82,13 @@ export default function createOpportunityRoutes(pgPool) {
         });
       }
       
-      const opportunity = expandMetadata(result.rows[0]);
+      const row = result.rows[0];
+      if (row.id !== id || row.tenant_id !== tenant_id) {
+        console.error('[Opportunities GET /:id] Mismatched row returned', { expected: { id, tenant_id }, got: { id: row.id, tenant_id: row.tenant_id } });
+        return res.status(404).json({ status: 'error', message: 'Opportunity not found' });
+      }
+
+      const opportunity = expandMetadata(row);
       
       res.json({
         status: 'success',

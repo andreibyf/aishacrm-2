@@ -68,16 +68,29 @@ export default function createApikeyRoutes(pgPool) {
     }
   });
 
-  // GET /api/apikeys/:id - Get a single API key
+  // GET /api/apikeys/:id - Get a single API key (tenant scoped)
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      if (!pgPool) {
-        return res.json({ status: 'success', data: { id } });
+      const { tenant_id } = req.query;
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
-      const q = 'SELECT id, tenant_id, key_name, key_value, description, is_active, created_at, created_date, created_by FROM apikey WHERE id = $1';
-      const { rows } = await pgPool.query(q, [id]);
+
+      if (!pgPool) {
+        // In non-DB mode, echo back request context
+        return res.json({ status: 'success', data: { id, tenant_id } });
+      }
+
+      const q = `SELECT id, tenant_id, key_name, key_value, description, is_active, created_at, created_date, created_by
+                 FROM apikey
+                 WHERE tenant_id = $1 AND id = $2
+                 LIMIT 1`;
+      const { rows } = await pgPool.query(q, [tenant_id, id]);
       if (rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
+      // Safety check
+      if (rows[0].tenant_id !== tenant_id) return res.status(404).json({ status: 'error', message: 'Not found' });
       return res.json({ status: 'success', data: rows[0] });
     } catch (error) {
       console.error('apikeys:get error', error);

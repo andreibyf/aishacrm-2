@@ -145,8 +145,12 @@ app.use('/api', rateLimiter);
 // CORS configuration
 // Defaults: allow localhost dev; rely on ALLOWED_ORIGINS for anything else
 const defaultAllowed = [
+  // Vite default
   "http://localhost:5173",
   "https://localhost:5173",
+  // Dockerized frontend dev server
+  "http://localhost:4000",
+  "https://localhost:4000",
 ];
 const envAllowed = (process.env.ALLOWED_ORIGINS?.split(",") || [])
   .map(s => s.trim())

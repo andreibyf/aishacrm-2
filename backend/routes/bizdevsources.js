@@ -58,14 +58,19 @@ export default function createBizDevSourceRoutes(pgPool) {
     }
   });
 
-  // Get single bizdev source by ID
+  // Get single bizdev source by ID (tenant scoped)
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      const { tenant_id } = req.query || {};
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
       
       const result = await pgPool.query(
-        'SELECT * FROM bizdev_sources WHERE id = $1',
-        [id]
+        'SELECT * FROM bizdev_sources WHERE tenant_id = $1 AND id = $2 LIMIT 1',
+        [tenant_id, id]
       );
 
       if (result.rows.length === 0) {
@@ -73,6 +78,11 @@ export default function createBizDevSourceRoutes(pgPool) {
           status: 'error',
           message: 'BizDev source not found'
         });
+      }
+
+      // Safety check
+      if (result.rows[0].tenant_id !== tenant_id) {
+        return res.status(404).json({ status: 'error', message: 'BizDev source not found' });
       }
 
       res.json({

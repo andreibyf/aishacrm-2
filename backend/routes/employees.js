@@ -84,8 +84,8 @@ export default function createEmployeeRoutes(_pgPool) {
       const { data, error } = await supabase
         .from('employees')
         .select('*')
-        .eq('id', id)
         .eq('tenant_id', tenant_id)
+        .eq('id', id)
         .single();
 
       if (error && error.code !== 'PGRST116') { // PGRST116 is No rows

@@ -147,30 +147,33 @@ export default function createContactRoutes(pgPool) {
     }
   });
 
-  // GET /api/contacts/:id - Get single contact
+  // GET /api/contacts/:id - Get single contact (tenant required)
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query || {};
 
-      let result;
-      if (tenant_id) {
-        // Enforce tenant scoping when tenant_id is supplied
-        result = await pgPool.query(
-          'SELECT * FROM contacts WHERE id = $1 AND tenant_id = $2',
-          [id, tenant_id]
-        );
-      } else {
-        // Legacy behavior: fetch by id only (consider requiring tenant_id in production)
-        result = await pgPool.query('SELECT * FROM contacts WHERE id = $1', [id]);
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
+
+      const result = await pgPool.query(
+        'SELECT * FROM contacts WHERE tenant_id = $1 AND id = $2 LIMIT 1',
+        [tenant_id, id]
+      );
       
       if (result.rows.length === 0) {
         return res.status(404).json({ status: 'error', message: 'Contact not found' });
       }
 
+      const row = result.rows[0];
+      if (row.id !== id || row.tenant_id !== tenant_id) {
+        console.error('[Contacts GET /:id] Mismatched row returned', { expected: { id, tenant_id }, got: { id: row.id, tenant_id: row.tenant_id } });
+        return res.status(404).json({ status: 'error', message: 'Contact not found' });
+      }
+
       // Expand metadata to top-level properties
-      const contact = expandMetadata(result.rows[0]);
+      const contact = expandMetadata(row);
 
       res.json({
         status: 'success',

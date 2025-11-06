@@ -36,16 +36,30 @@ export default function createTenantIntegrationRoutes(pool) {
     }
   });
 
-  // GET /api/tenantintegrations/:id - Get single tenant integration
+  // GET /api/tenantintegrations/:id - Get single tenant integration (tenant scoped)
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const result = await pool.query('SELECT * FROM tenant_integrations WHERE id = $1', [id]);
+      const { tenant_id } = req.query;
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const result = await pool.query(
+        'SELECT * FROM tenant_integrations WHERE tenant_id = $1 AND id = $2 LIMIT 1',
+        [tenant_id, id]
+      );
       
       if (result.rows.length === 0) {
         return res.status(404).json({ status: 'error', message: 'Integration not found' });
       }
       
+      // Safety check
+      if (result.rows[0].tenant_id !== tenant_id) {
+        return res.status(404).json({ status: 'error', message: 'Integration not found' });
+      }
+
       res.json({ status: 'success', data: result.rows[0] });
     } catch (error) {
       console.error('Error fetching tenant integration:', error);

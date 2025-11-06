@@ -48,8 +48,9 @@ export function tenantScopedId(opts = {}) {
     req[attachAs] = {
       id,
       tenant_id: tenant_id ?? undefined,
-      where: tenant_id ? `id = $1 AND ${tenantQueryKey} = $2` : 'id = $1',
-      params: tenant_id ? [id, tenant_id] : [id],
+      // IMPORTANT: Apply tenant filter first to avoid any adapter order quirks
+      where: tenant_id ? `${tenantQueryKey} = $1 AND id = $2` : 'id = $1',
+      params: tenant_id ? [tenant_id, id] : [id],
     };
 
     next();
@@ -67,7 +68,7 @@ export function tenantScopedId(opts = {}) {
 export function buildGetByIdSQL(table, idScope, columns = '*') {
   const cols = Array.isArray(columns) ? columns.join(', ') : columns;
   return {
-    text: `SELECT ${cols} FROM ${table} WHERE ${idScope.where}`,
+    text: `SELECT ${cols} FROM ${table} WHERE ${idScope.where} LIMIT 1`,
     params: idScope.params,
   };
 }
