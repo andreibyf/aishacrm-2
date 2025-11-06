@@ -9,6 +9,7 @@ Originally powered by Ai-SHA, now transitioning to your own independent infrastr
 **Before running ANY commands, read:**
 - [TERMINAL_RULES.md](./TERMINAL_RULES.md) - **MANDATORY** terminal & directory rules
 - [DEV_QUICK_START.md](./DEV_QUICK_START.md) - Development workflow guide
+- [GIT_QUICK_REFERENCE.md](./GIT_QUICK_REFERENCE.md) - Common git commands & fixes
 - [GIT_CONFLICT_RESOLUTION.md](./GIT_CONFLICT_RESOLUTION.md) - Fix merge conflicts & clean up branches
 
 **TL;DR:**
