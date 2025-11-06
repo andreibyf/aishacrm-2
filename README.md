@@ -129,12 +129,13 @@ npm run build
 - `src/entities/` - 47 data entity schemas
 - `src/components/` - Reusable React components organized by domain
 - `src/pages/` - Page-level components and routes
-- `src/utils/` - Utility functions and helpers
+- `src/utils/` - **NEW:** Shared utility modules (logging, validation, permissions) - See `src/utils/README.md`
 - `src/hooks/` - Custom React hooks
 
 ### Backend
 - `backend/server.js` - Express server with 197 API endpoints
 - `backend/routes/` - API route handlers (26 categories)
+- `backend/utils/` - **NEW:** Backend utility modules (logging, error handling)
 - `backend/.env` - Backend configuration
 
 ## 🎯 Why Your Own Backend?
