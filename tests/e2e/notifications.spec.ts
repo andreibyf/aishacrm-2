@@ -18,16 +18,16 @@ test.describe('Notifications API', () => {
 
   test('create → list → mark as read', async ({ request }) => {
     const tenantId = process.env.E2E_TENANT_ID || 'local-tenant-001';
-    const recipient = process.env.E2E_RECIPIENT_ID || '00000000-0000-0000-0000-000000000000';
+    const userEmail = process.env.E2E_USER_EMAIL || 'e2e.test@aishacrm.com';
 
     // Create
     const create = await request.post(`${BACKEND_URL}/api/notifications`, {
-      data: { tenant_id: tenantId, recipient_id: recipient, title: `E2E Test ${rid()}`, body: 'Hello', type: 'info' }
+      data: { tenant_id: tenantId, user_email: userEmail, title: `E2E Test ${rid()}`, message: 'Hello', type: 'info' }
     });
     expect(create.ok()).toBeTruthy();
 
     // List
-    const list = await request.get(`${BACKEND_URL}/api/notifications`, { params: { tenant_id: tenantId, recipient_id: recipient, limit: '10' } });
+    const list = await request.get(`${BACKEND_URL}/api/notifications`, { params: { tenant_id: tenantId, user_email: userEmail, limit: '10' } });
     expect(list.ok()).toBeTruthy();
     const data = await list.json();
     const note = (data?.data?.notifications || [])[0];
@@ -36,7 +36,7 @@ test.describe('Notifications API', () => {
     // Mark read (if supported)
     const id = note.id || note.notification_id || note.uuid;
     if (id) {
-      const mark = await request.put(`${BACKEND_URL}/api/notifications/${id}`, { data: { read: true } });
+      const mark = await request.put(`${BACKEND_URL}/api/notifications/${id}`, { data: { is_read: true } });
       expect([200, 204]).toContain(mark.status());
     }
   });
