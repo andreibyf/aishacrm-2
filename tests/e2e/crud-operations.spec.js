@@ -1,6 +1,10 @@
 /**
  * End-to-End CRUD Tests for Aisha CRM
  * Tests Create, Read, Update, Delete operations across major entities
+ * 
+ * NOTE: User Management CRUD tests are in separate files:
+ * - user-management-crud.spec.js (basic CRUD operations)
+ * - user-management-permissions.spec.js (permissions & role testing)
  */
 import { test, expect } from '@playwright/test';
 import { suppressAuthErrors, setE2EMode, injectMockUser, waitForUserPage } from './setup-helpers.js';
