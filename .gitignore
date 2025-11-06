@@ -32,3 +32,23 @@ backend/.env
 
 # Lock files (should be committed but listed here for reference)
 # package-lock.json should be committed for security audits
+
+# Git merge conflict artifacts
+*.orig
+*.rej
+*_BACKUP_*
+*_BASE_*
+*_LOCAL_*
+*_REMOTE_*
+*-merge
+
+# Test artifacts
+playwright-report/
+coverage/
+test-results/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

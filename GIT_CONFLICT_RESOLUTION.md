@@ -210,6 +210,8 @@ This script will:
 2. View recent commits: `git log --oneline -10`
 3. See branch relationships: `git log --oneline --graph --all -20`
 4. Get out of trouble: `git reflog` (shows history of HEAD positions)
+5. **Step-by-step walkthrough**: See [EXAMPLE_CONFLICT_RESOLUTION.md](./EXAMPLE_CONFLICT_RESOLUTION.md)
+6. **Quick commands**: See [GIT_QUICK_REFERENCE.md](./GIT_QUICK_REFERENCE.md)
 
 ## Emergency Recovery
 

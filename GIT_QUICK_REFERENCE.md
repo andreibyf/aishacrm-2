@@ -168,6 +168,7 @@ git clean -fd
 
 ## 📖 Need More Help?
 
+- **Step-by-Step Example**: See `EXAMPLE_CONFLICT_RESOLUTION.md`
 - **Detailed Guide**: See `GIT_CONFLICT_RESOLUTION.md`
 - **Cleanup Script**: Run `.\cleanup-branches.ps1` or `./cleanup-branches.sh`
 - **Development Guide**: See `DEV_QUICK_START.md`
