@@ -56,11 +56,42 @@
 - UI Patterns: AI widgets in `src/components/ai/`; bulk actions/detail panels common; Tailwind utility classes.
 - Performance: Use `performanceCache` from `src/components/shared/PerformanceCache.jsx`.
 
+## Code Style and Formatting
+- **Linting:** Run `npm run lint` before committing; fix all errors and warnings when possible.
+- **Formatting:** Use Prettier for consistent formatting; run `npm run format` or enable format-on-save.
+- **React:** Functional components only; use hooks for state and effects; PropTypes or TypeScript for type safety.
+- **Naming:** camelCase for variables/functions, PascalCase for components, UPPER_SNAKE_CASE for constants.
+- **Files:** One component per file; co-locate tests, styles if applicable; max ~300 lines per file.
+- **Imports:** Group by: React → external libs → internal modules → styles; sort alphabetically within groups.
+
+## Git and PR Conventions
+- **Branches:** Use descriptive names like `feature/add-export` or `fix/login-bug`.
+- **Commits:** Write clear, concise messages in present tense: "Add export feature" not "Added export feature".
+- **PRs:** Reference issue numbers; describe what changed and why; keep PRs focused and small.
+- **Reviews:** Address all comments; use GitHub suggestions when applicable; ask for clarification if needed.
+- **Merging:** Squash commits for cleaner history; delete branch after merge.
+
 ## Integration Points
 - **Database:** Supabase PostgreSQL; configure via `DATABASE_URL` or Supabase prod settings; see `backend/DATABASE_UUID_vs_TENANT_ID.md` for critical UUID vs tenant_id distinction.
 - **External API:** Base44 SDK for migration/sync; local backend for independence.
 - **AI Features:** Custom assistants in `src/components/ai/`; MCP server example in `src/functions/mcpServer.js`.
 - **Security:** Helmet.js, CORS, rate limiting in backend; never commit `.env`.
+
+## Testing Best Practices
+- **Frontend:** Custom tests in `src/pages/UnitTests.jsx`; add tests for new components when possible.
+- **Backend:** Run `npm test` in backend directory; test API endpoints and business logic.
+- **E2E:** Use Playwright for end-to-end tests; run with `npm run test:e2e`.
+- **Coverage:** Aim for critical paths; don't let perfect be the enemy of good.
+- **CI/CD:** All tests must pass before merging; check GitHub Actions workflows.
+
+## Common Pitfalls and Solutions
+- **Backend exits immediately:** Check ESM syntax errors; see `backend/TROUBLESHOOTING_NODE_ESM.md`.
+- **Database connection fails:** Verify `.env` credentials; check Supabase console for issues.
+- **Frontend shows "undefined" errors:** Check for null/undefined values; add optional chaining (`?.`).
+- **API failover not working:** Verify `VITE_AISHACRM_BACKEND_URL` is set; check `fallbackFunctions.js` logic.
+- **Git conflicts:** See `GIT_SOLUTION_SUMMARY.md`; run `.\cleanup-branches.ps1` or `./cleanup-branches.sh`.
+- **Terminal issues:** ALWAYS verify directory with `Get-Location` or `pwd` before commands.
+- **Dependencies:** Run `npm install` in both root and `backend/` after pulling changes.
 
 ## Backend Route Categories
 The backend exposes 197 API endpoints across 26 categories:

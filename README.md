@@ -100,6 +100,13 @@ Both frontend and backend automatically restart when you save changes:
 - Requirements: Copilot for Pull Requests must be enabled for your org/repo. You can also enable the built-in setting at Settings → Copilot → Pull requests → “Automatically request a review from GitHub Copilot”.
 - Tweaks: adjust the branch condition in the workflow if you want Copilot on other target branches.
 
+### Copilot Instructions & Tasks
+This repository includes comprehensive configuration for GitHub Copilot coding agent:
+
+- **Instructions:** `.github/copilot-instructions.md` - Project-specific guidance covering architecture, workflows, conventions, testing practices, and common pitfalls
+- **Tasks:** `.copilot/tasks.yml` - Pre-defined task templates for code refactoring, bug fixes, test improvements, and documentation updates
+- **Usage:** Assign issues to Copilot with clear descriptions and it will follow these instructions to maintain code quality and consistency
+
 ## Building the app
 
 ```bash
