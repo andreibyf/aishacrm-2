@@ -50,4 +50,16 @@ test.describe('RLS Enforcement - Black-box', () => {
     const contacts = body?.data?.contacts || [];
     expect(Array.isArray(contacts)).toBeTruthy();
   });
+
+  test('list without tenant_id should be rejected', async ({ request }) => {
+    // Negative test: verify that requests without tenant_id are properly rejected
+    const res = await request.get(`${BACKEND_URL}/api/contacts`, { params: { limit: '5' } }); // No tenant_id
+    
+    // Should receive 400 (Bad Request) or 401 (Unauthorized)
+    expect([400, 401]).toContain(res.status());
+    
+    const body = await res.json();
+    // Verify error message indicates missing tenant_id
+    expect(body?.error || body?.message || '').toMatch(/tenant/i);
+  });
 });
