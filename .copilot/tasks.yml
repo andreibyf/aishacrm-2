@@ -1,0 +1,28 @@
+tasks:
+  - name: Refactor Codebase for Standards and Security
+    description: >
+      Analyze and refactor the entire codebase to improve structure, naming consistency,
+      modularity, and security. Ensure code follows best practices and is well-documented.
+    goals:
+      - Enforce consistent naming conventions across files, functions, and variables
+      - Modularize large files and split long functions into reusable components
+      - Remove dead, duplicate, or unreachable code
+      - Apply security best practices (e.g., input validation, safe API usage)
+      - Add missing documentation and comments for public functions and modules
+    scope:
+      include:
+        - "**/*.js"
+        - "**/*.jsx"
+        - "**/*.ts"
+        - "**/*.py"
+        - "**/*.go"
+        - "**/*.java"
+      exclude:
+        - "node_modules/**"
+        - "dist/**"
+        - "build/**"
+    agent:
+      name: copilot-code-agent
+      permissions:
+        - read
+        - write
