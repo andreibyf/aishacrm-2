@@ -61,7 +61,7 @@ export async function waitForUserPage(page, email = 'e2e@example.com', tenantId)
   
   // CRITICAL: Re-inject E2E user IMMEDIATELY before React mounts
   const effectiveTenantId = tenantId || process.env.E2E_TENANT_ID || 'local-tenant-001';
-  await page.evaluate((userEmail, tId) => {
+  await page.evaluate(({ userEmail, tId }) => {
     console.log('[E2E] Setting __e2eUser before React checks for it');
     window.__e2eUser = {
       id: 'e2e-test-user-id',
@@ -70,8 +70,8 @@ export async function waitForUserPage(page, email = 'e2e@example.com', tenantId)
       tenant_id: tId
     };
     localStorage.setItem('E2E_TEST_MODE', 'true');
-  try { localStorage.setItem('selected_tenant_id', tId); } catch { /* ignore */ }
-  }, email, effectiveTenantId);
+    try { localStorage.setItem('selected_tenant_id', tId); } catch { /* ignore */ }
+  }, { userEmail: email, tId: effectiveTenantId });
   console.log('[waitForUserPage] User injected');
   
   // Wait for React to process - increased from 500ms to 2000ms
@@ -102,7 +102,7 @@ export async function waitForUserPage(page, email = 'e2e@example.com', tenantId)
       // Last resort - reload page
       console.log('[waitForUserPage] No content found, reloading page...');
       await page.reload({ waitUntil: 'domcontentloaded' });
-      await page.evaluate((userEmail, tId) => {
+      await page.evaluate(({ userEmail, tId }) => {
         window.__e2eUser = {
           id: 'e2e-test-user-id',
           email: userEmail || 'e2e@example.com',
@@ -110,8 +110,8 @@ export async function waitForUserPage(page, email = 'e2e@example.com', tenantId)
           tenant_id: tId
         };
         localStorage.setItem('E2E_TEST_MODE', 'true');
-  try { localStorage.setItem('selected_tenant_id', tId); } catch { /* ignore */ }
-      }, email, effectiveTenantId);
+        try { localStorage.setItem('selected_tenant_id', tId); } catch { /* ignore */ }
+      }, { userEmail: email, tId: effectiveTenantId });
       await page.waitForTimeout(3000);  // Longer wait after reload
       // One more spinner wait attempt
       await page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {
