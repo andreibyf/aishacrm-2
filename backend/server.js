@@ -155,7 +155,12 @@ if (pgPool) {
 }
 
 // Block mutating requests in production Supabase unless explicitly allowed
-app.use(productionSafetyGuard());
+// Exempt non-DB-mutating CI endpoints (GitHub Actions dispatch) from the guard
+app.use(productionSafetyGuard({
+  exemptPaths: [
+    '/api/testing/run-playwright', // POST triggers GitHub workflow, no DB writes
+  ],
+}));
 console.log("✓ Production safety guard enabled");
 
 // Root endpoint - provides API information
