@@ -111,6 +111,19 @@ async function navigateTo(page, path) {
 // Helper: Ensure a tenant is selected for admin/superadmin flows
 async function ensureTenantSelected(page) {
   try {
+    // If an explicit E2E tenant is provided, force-select it
+    const envTenant = process.env.E2E_TENANT_ID;
+    if (envTenant) {
+      await page.evaluate((id) => {
+        try {
+          localStorage.setItem('selected_tenant_id', id);
+          const url = new URL(window.location.href);
+          url.searchParams.set('tenant', id);
+          window.history.replaceState({}, '', url);
+  } catch { /* ignore */ }
+      }, envTenant);
+      return envTenant;
+    }
     // If a tenant is already selected in localStorage, keep it
     const existing = await page.evaluate(() => localStorage.getItem('selected_tenant_id'));
     if (existing && existing !== 'null' && existing !== 'undefined') {
@@ -210,8 +223,10 @@ test.describe('CRUD Operations - End-to-End', () => {
 
     // Set E2E mode flag to suppress background polling/health checks
     await page.addInitScript({ content: `
+      const TENANT_ID = '${process.env.E2E_TENANT_ID || 'local-tenant-001'}';
       (${setE2EMode.toString()})();
-      (${injectMockUser.toString()})('${TEST_EMAIL || 'e2e@example.com'}', 'superadmin', 'local-tenant-001');
+      (${injectMockUser.toString()})('${TEST_EMAIL || 'e2e@example.com'}', 'superadmin', TENANT_ID);
+      try { localStorage.setItem('selected_tenant_id', TENANT_ID); } catch {}
       (${suppressAuthErrors.toString()})();
     ` });
 
@@ -238,14 +253,15 @@ test.describe('CRUD Operations - End-to-End', () => {
     const userInjected = await page.evaluate(() => !!window.__e2eUser);
     if (!userInjected) {
       console.warn('[E2E] __e2eUser not set; re-injecting...');
-      await page.evaluate((email) => {
+      await page.evaluate((email, tId) => {
         window.__e2eUser = {
           id: 'e2e-test-user-id',
           email: email || 'e2e@example.com',
           role: 'superadmin',
-          tenant_id: 'local-tenant-001'
+          tenant_id: tId
         };
-      }, TEST_EMAIL || 'e2e@example.com');
+  try { localStorage.setItem('selected_tenant_id', tId); } catch { /* ignore */ }
+      }, TEST_EMAIL || 'e2e@example.com', process.env.E2E_TENANT_ID || 'local-tenant-001');
     }
   });
 
@@ -255,7 +271,7 @@ test.describe('CRUD Operations - End-to-End', () => {
       await navigateTo(page, '/activities');
       
       // Wait for page to load user and show content (Activities requires user)
-      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
+  await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com', process.env.E2E_TENANT_ID);
       
       // Click Add Activity button
       const addButton = page.locator('button:has-text("Add Activity"), button:has-text("New Activity"), button:has-text("Add")').first();
@@ -304,7 +320,7 @@ test.describe('CRUD Operations - End-to-End', () => {
       await page.waitForSelector('form', { state: 'hidden', timeout: 15000 }).catch(() => {});
       // Force a small reload to ensure the new item is included in the table
       await page.goto(`${BASE_URL}/activities`, { waitUntil: 'domcontentloaded' });
-      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
+  await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com', process.env.E2E_TENANT_ID);
 
       // Narrow down to the created subject using the built-in search to avoid pagination issues
       const searchBox = page.locator('input[placeholder*="Search activities"], input[placeholder*="Search"]');
@@ -324,7 +340,7 @@ test.describe('CRUD Operations - End-to-End', () => {
       await navigateTo(page, '/activities');
       
       // Wait for page to load user and show content
-      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
+  await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com', process.env.E2E_TENANT_ID);
       
       // Wait for table to load
       await page.waitForSelector('table tbody tr', { timeout: 15000 });
@@ -397,7 +413,7 @@ test.describe('CRUD Operations - End-to-End', () => {
 
       // Hard refresh the Activities page to avoid stale table state
       await page.goto(`${BASE_URL}/Activities`, { waitUntil: 'domcontentloaded' });
-      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
+  await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com', process.env.E2E_TENANT_ID);
 
       // Use search to find the updated activity (to handle pagination)
       const searchBox = page.locator('input[placeholder*="Search activities" i], input[placeholder*="Search" i], input[type="search"]').first();
@@ -417,7 +433,7 @@ test.describe('CRUD Operations - End-to-End', () => {
       await navigateTo(page, '/activities');
       
       // Wait for page to load user and show content
-      await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com');
+  await waitForUserPage(page, TEST_EMAIL || 'e2e@example.com', process.env.E2E_TENANT_ID);
       
       // First create an activity to delete - wait for Add button to appear
       const addButton = page.locator('button:has-text("Add Activity"), button:has-text("Add")').first();

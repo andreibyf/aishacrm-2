@@ -369,6 +369,7 @@ app.use("/api/bizdevsources", createBizDevSourceRoutes(pgPool));
 app.use("/api/clients", createClientRoutes(pgPool));
 app.use("/api/workflows", createWorkflowRoutes(pgPool));
 app.use("/api/workflowexecutions", createWorkflowExecutionRoutes(pgPool));
+// Route activities through Supabase API (primary test target)
 app.use("/api/activities", createActivityRoutes(pgPool));
 app.use("/api/opportunities", createOpportunityRoutes(pgPool));
 app.use("/api/notifications", createNotificationRoutes(pgPool));

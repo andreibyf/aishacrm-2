@@ -11,7 +11,8 @@ const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || process.env.VITE_AISHA
 // Test user credentials
 const SUPERADMIN_EMAIL = 'admin@aishacrm.com';
 const SUPERADMIN_PASSWORD = process.env.SUPERADMIN_PASSWORD || 'SuperAdmin123!';
-const TENANT_ID = 'local-tenant-001';
+// Prefer environment-driven tenant ID for cloud E2E; fallback retained for local dev
+const TENANT_ID = process.env.E2E_TENANT_ID || 'local-tenant-001';
 
 // Helper: Wait for backend health
 async function waitForBackendHealth() {
@@ -251,7 +252,7 @@ test.describe('User Management - Basic CRUD Operations', () => {
   });
 
   test('Backend API: Can fetch users via API', async () => {
-    const response = await fetch(`${BACKEND_URL}/api/users?tenant_id=${TENANT_ID}`);
+  const response = await fetch(`${BACKEND_URL}/api/users?tenant_id=${TENANT_ID}`);
     expect(response.ok).toBe(true);
     
     const data = await response.json();
