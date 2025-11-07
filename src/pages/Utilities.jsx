@@ -74,7 +74,7 @@ export default function UtilitiesPage() {
       description:
         "Removes records without a tenant_id, ensuring data integrity.",
       icon: Database,
-      page: "CleanupOrphanedData",
+      // No page route - executes directly via API call (see handleClick below)
     },
     {
       id: "data-diagnostics",

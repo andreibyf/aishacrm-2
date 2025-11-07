@@ -197,6 +197,7 @@ app.use(productionSafetyGuard({
   exemptPaths: [
     '/api/testing/run-playwright', // POST triggers GitHub workflow, no DB writes
   ],
+  pgPool, // Pass database connection for security event logging
 }));
 console.log("✓ Production safety guard enabled");
 
