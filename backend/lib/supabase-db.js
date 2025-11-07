@@ -176,12 +176,15 @@ async function handleSelectQuery(sql, params) {
       }
 
       // Case-insensitive equality: LOWER(column) = LOWER($n)
-      // Support LOWER("column") = LOWER($n) with optional quotes and varied whitespace
+      // NOTE: This pattern is DEPRECATED - emails should be normalized to lowercase before queries
+      // Kept for backward compatibility but prefer using exact match with pre-normalized values
       g = cond.match(/lower\(\s*"?([a-z_]+)"?\s*\)\s*=\s*lower\(\s*\$(\d+)\s*\)/i);
       if (g) {
         const col = g[1];
         const idx = parseInt(g[2], 10) - 1;
-        query = query.ilike(col, params[idx]);
+        // Use .eq() with lowercased value for exact case-insensitive match
+        const value = typeof params[idx] === 'string' ? params[idx].toLowerCase() : params[idx];
+        query = query.eq(col, value);
         continue;
       }
       const ilikeSubjectMatches = [...cond.matchAll(/subject\s+ilike\s*\$(\d+)/ig)];

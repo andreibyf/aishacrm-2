@@ -20,7 +20,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Send, ShieldCheck } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { inviteUser } from "@/api/functions";
+import { inviteUser } from "@/functions/users/inviteUser";
 import {
   canAssignCRMAccess,
   getAssignableRoles,
@@ -114,6 +114,8 @@ export default function InviteUserDialog(
 
       const response = await inviteUser(payload, currentUser);
 
+      console.log("[InviteUserDialog] Response:", response);
+
       if (response?.status === 200 && response?.data?.success) {
         const data = response.data;
 
@@ -121,6 +123,7 @@ export default function InviteUserDialog(
           title: "User Created Successfully",
           description: data.message ||
             `${formData.email} has been added to the system.`,
+          duration: 5000, // Auto-dismiss after 5 seconds
         });
 
         onOpenChange(false);
@@ -128,10 +131,12 @@ export default function InviteUserDialog(
       } else {
         const errorMsg = response?.data?.error || response?.data?.message ||
           "Failed to create user";
+        console.error("[InviteUserDialog] Error response:", response);
         toast({
           variant: "destructive",
           title: "User Creation Failed",
           description: errorMsg,
+          duration: 5000, // Auto-dismiss after 5 seconds
         });
       }
     } catch (error) {
@@ -140,6 +145,7 @@ export default function InviteUserDialog(
         variant: "destructive",
         title: "Error",
         description: error?.message || "An error occurred",
+        duration: 5000, // Auto-dismiss after 5 seconds
       });
     } finally {
       setSubmitting(false);

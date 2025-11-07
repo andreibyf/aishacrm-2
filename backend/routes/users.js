@@ -5,10 +5,8 @@
 
 import express from "express";
 import jwt from "jsonwebtoken";
-import { randomUUID, randomBytes } from "crypto";
 import {
   confirmUserEmail,
-  createAuthUser,
   deleteAuthUser,
   getAuthUserByEmail,
   inviteUserByEmail,
@@ -661,7 +659,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
     try {
       const {
         email,
-        password,
+        password: _password, // Renamed to indicate intentionally unused (for future use with invitation endpoint)
         first_name,
         last_name,
         role,
@@ -690,15 +688,18 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         });
       }
 
+      // 🔒 CRITICAL: Normalize email to lowercase for consistent storage and lookups
+      const normalizedEmail = email ? email.toLowerCase().trim() : email;
+
       console.log("[POST /api/users] Creating user:", {
-        email,
+        email: normalizedEmail,
         first_name,
         last_name,
         role,
         tenant_id,
       });
 
-      if (!email || !first_name) {
+      if (!normalizedEmail || !first_name) {
         return res.status(400).json({
           status: "error",
           message: "email and first_name are required",
@@ -707,16 +708,17 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
 
       // 🔒 CRITICAL: Enforce global email uniqueness across users AND employees tables
       // Check both tables to prevent duplicate accounts with same email
+      // Using exact match since emails are stored in lowercase
       const existingInUsers = await pgPool.query(
-        "SELECT id, email, role FROM users WHERE LOWER(email) = LOWER($1)",
-        [email]
+        "SELECT id, email, role FROM users WHERE email = $1",
+        [normalizedEmail]
       );
       const existingInEmployees = await pgPool.query(
-        "SELECT id, email, tenant_id FROM employees WHERE LOWER(email) = LOWER($1)",
-        [email]
+        "SELECT id, email, tenant_id FROM employees WHERE email = $1",
+        [normalizedEmail]
       );
 
-      console.log(`[POST /api/users] Duplicate check for ${email}:`, {
+      console.log(`[POST /api/users] Duplicate check for ${normalizedEmail}:`, {
         usersCount: existingInUsers.rows.length,
         employeesCount: existingInEmployees.rows.length,
         usersRows: existingInUsers.rows,
@@ -725,7 +727,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
 
       if (existingInUsers.rows.length > 0 || existingInEmployees.rows.length > 0) {
         const existingRecord = existingInUsers.rows[0] || existingInEmployees.rows[0];
-        console.warn(`[POST /api/users] Duplicate email rejected: ${email}`);
+        console.warn(`[POST /api/users] Duplicate email rejected: ${normalizedEmail}`);
         return res.status(409).json({
           status: "error",
           message: "An account with this email already exists",
@@ -770,7 +772,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         // NOTE: Global email uniqueness already checked above
         const existingUser = await pgPool.query(
           "SELECT id FROM users WHERE email = $1",
-          [email],
+          [normalizedEmail],
         );
 
         if (existingUser.rows.length > 0) {
@@ -780,48 +782,14 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
           });
         }
 
-        // Create Supabase Auth user with immediate activation
-        const authMetadata = {
-          first_name,
-          last_name,
-          role,
-          display_name: `${first_name} ${last_name || ""}`.trim(),
-          email_confirm: true,
-        };
-
-        // Use provided password or generate a strong temporary one (secure randomness)
-        const userPassword = password || (() => {
-          try {
-            // Prefer UUID for readability, with a random suffix
-            const suffix = randomBytes(6).toString('base64url');
-            return `Temp-${randomUUID()}-${suffix}`;
-          } catch {
-            // Fallback: crypto may be unavailable in rare environments
-            return `Temp-${Math.random().toString(36).slice(2)}-${Date.now()}`;
-          }
-        })();
-
-        const { user: authUser, error: authError } = await createAuthUser(
-          email,
-          userPassword,
-          authMetadata,
-        );
-
-        if (authError) {
-          console.error("[User Creation] Supabase Auth error:", authError);
-          return res.status(500).json({
-            status: "error",
-            message: `Failed to create user: ${authError.message}`,
-          });
-        }
-
-        authUserId = authUser?.id;
+        // Skip Supabase Auth creation - invitation will be sent separately via /api/users/:id/invite
+        // This allows user record to be created first, then invitation sent as a separate action
 
         const result = await pgPool.query(
           `INSERT INTO users (email, first_name, last_name, role, metadata, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
            RETURNING id, email, first_name, last_name, role, metadata, created_at, updated_at`,
-          [email, first_name, last_name, role, combinedMetadata],
+          [normalizedEmail, first_name, last_name, role, combinedMetadata],
         );
 
         const user = expandUserMetadata(result.rows[0]);
@@ -851,16 +819,12 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
 
         res.json({
           status: "success",
-          message: "Global superadmin created and ready to login.",
+          message: "User created successfully. Use the 'Send Invitation' button to send login credentials.",
           data: {
             user,
             auth: {
-              created: !!authUserId,
-              email_confirmed: true,
-              email_address: email,
-              note: password
-                ? "User can login immediately with provided password"
-                : "User can login with temporary password (change on first login)",
+              created: false,
+              note: "Invitation not sent yet. Use /api/users/:id/invite to send invitation email.",
             },
           },
         });
@@ -869,7 +833,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         // NOTE: Global email uniqueness already checked above
         const existingUser = await pgPool.query(
           "SELECT id FROM users WHERE email = $1",
-          [email],
+          [normalizedEmail],
         );
 
         if (existingUser.rows.length > 0) {
@@ -889,7 +853,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         };
 
         const { user: authUser, error: authError } = await inviteUserByEmail(
-          email,
+          normalizedEmail,
           authMetadata,
         );
 
@@ -908,7 +872,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
            VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
            RETURNING id, email, first_name, last_name, role, tenant_id, metadata, created_at, updated_at`,
           [
-            email,
+            normalizedEmail,
             first_name,
             last_name,
             "admin",
@@ -951,7 +915,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
             auth: {
               created: !!authUserId,
               invitation_queued: true,
-              email_address: email,
+              email_address: normalizedEmail,
               note:
                 "Check Supabase Dashboard → Auth → Logs to verify email delivery",
             },
@@ -970,7 +934,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         // Also check for same email in same tenant (defensive redundancy)
         const existingEmployee = await pgPool.query(
           "SELECT id FROM employees WHERE email = $1 AND tenant_id = $2",
-          [email, normalizedTenantId],
+          [normalizedEmail, normalizedTenantId],
         );
 
         if (existingEmployee.rows.length > 0) {
@@ -990,7 +954,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         };
 
         const { user: authUser, error: authError } = await inviteUserByEmail(
-          email,
+          normalizedEmail,
           authMetadata,
         );
 
@@ -1010,7 +974,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
            RETURNING id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at`,
           [
             normalizedTenantId,
-            email,
+            normalizedEmail,
             first_name,
             last_name,
             role || "employee",
@@ -1664,6 +1628,101 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
     } catch (error) {
       console.error("Error in admin password reset:", error);
       res.status(500).json({ status: "error", message: error.message });
+    }
+  });
+
+  // POST /api/users/:id/invite - Send Supabase Auth invitation to existing user
+  router.post("/:id/invite", mutateLimiter, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { redirect_url } = req.body;
+
+      console.log(`[POST /api/users/${id}/invite] Sending invitation`);
+
+      // Fetch user from database
+      const userResult = await pgPool.query(
+        "SELECT id, email, first_name, last_name, role, tenant_id, metadata FROM users WHERE id = $1",
+        [id]
+      );
+
+      if (userResult.rows.length === 0) {
+        // Try employees table
+        const employeeResult = await pgPool.query(
+          "SELECT id, email, first_name, last_name, role, tenant_id, metadata FROM employees WHERE id = $1",
+          [id]
+        );
+
+        if (employeeResult.rows.length === 0) {
+          return res.status(404).json({
+            status: "error",
+            message: "User not found",
+          });
+        }
+
+        const employee = employeeResult.rows[0];
+
+        // Send Supabase Auth invitation
+        const { data, error } = await inviteUserByEmail(
+          employee.email,
+          {
+            first_name: employee.first_name,
+            last_name: employee.last_name,
+            role: employee.role || "employee",
+            tenant_id: employee.tenant_id,
+            display_name: `${employee.first_name} ${employee.last_name || ""}`.trim(),
+          },
+          redirect_url
+        );
+
+        if (error) {
+          console.error("[User Invite] Supabase Auth error:", error);
+          return res.status(500).json({
+            status: "error",
+            message: `Failed to send invitation: ${error.message}`,
+          });
+        }
+
+        return res.json({
+          status: "success",
+          message: `Invitation sent to ${employee.email}`,
+          data: { email: employee.email, auth_user: data },
+        });
+      }
+
+      const user = userResult.rows[0];
+
+      // Send Supabase Auth invitation
+      const { data, error } = await inviteUserByEmail(
+        user.email,
+        {
+          first_name: user.first_name,
+          last_name: user.last_name,
+          role: user.role,
+          tenant_id: user.tenant_id,
+          display_name: `${user.first_name} ${user.last_name || ""}`.trim(),
+        },
+        redirect_url
+      );
+
+      if (error) {
+        console.error("[User Invite] Supabase Auth error:", error);
+        return res.status(500).json({
+          status: "error",
+          message: `Failed to send invitation: ${error.message}`,
+        });
+      }
+
+      res.json({
+        status: "success",
+        message: `Invitation sent to ${user.email}`,
+        data: { email: user.email, auth_user: data },
+      });
+    } catch (error) {
+      console.error("[POST /api/users/:id/invite] Error:", error);
+      res.status(500).json({
+        status: "error",
+        message: error.message,
+      });
     }
   });
 

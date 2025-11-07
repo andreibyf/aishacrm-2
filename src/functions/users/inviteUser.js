@@ -35,7 +35,7 @@ export async function inviteUser(userData, currentUser) {
     
     if (isSystemUser) {
       // Create in users table (superadmin or admin)
-      const response = await callBackendAPI('users', 'POST', {
+      const payload = {
         email: userData.email,
         first_name: userData.full_name?.split(' ')[0] || '',
         last_name: userData.full_name?.split(' ').slice(1).join(' ') || '',
@@ -47,7 +47,11 @@ export async function inviteUser(userData, currentUser) {
           crm_access: userData.crm_access !== undefined ? userData.crm_access : true,
           navigation_permissions: userData.permissions?.navigation_permissions || {}
         }
-      });
+      };
+      
+      console.log('[inviteUser] Calling backend with payload:', payload);
+      
+      const response = await callBackendAPI('users', 'POST', payload);
 
       // Log user creation
       if (currentUser && response) {
