@@ -4,6 +4,7 @@
  */
 
 import { callBackendAPI } from '../../api/entities.js';
+import { getBackendUrl } from '../../api/backendUrl.js';
 import { logUserDeleted } from '../../utils/auditLog.js';
 
 export async function deleteUser(userId, tenantId, currentUser) {
@@ -17,12 +18,13 @@ export async function deleteUser(userId, tenantId, currentUser) {
     // tenantId is optional for superadmins (they can delete users without tenants)
     // For regular admins, tenantId is required
 
-    // Delete user from backend
-    // callBackendAPI signature: (entityName, method, data, id)
-    // For DELETE, we need to pass the id as the 4th parameter
-    // and tenant_id needs to be in query params, but callBackendAPI handles this differently
-    // We'll use a direct fetch call for more control
-    const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+  // Delete user from backend
+  // callBackendAPI signature: (entityName, method, data, id)
+  // For DELETE, we need to pass the id as the 4th parameter
+  // and tenant_id needs to be in query params, but callBackendAPI handles this differently
+  // We'll use a direct fetch call for more control
+  // IMPORTANT: Use centralized resolver to avoid hardcoded port defaults
+  const BACKEND_URL = getBackendUrl();
     const url = tenantId 
       ? `${BACKEND_URL}/api/users/${userId}?tenant_id=${tenantId}`
       : `${BACKEND_URL}/api/users/${userId}`;

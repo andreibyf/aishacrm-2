@@ -163,37 +163,54 @@ async function handleSelectQuery(sql, params) {
     const conditions = wherePart.split(/\s+and\s+/i).map(c => c.trim());
     console.log('[Supabase Adapter] WHERE conditions:', conditions);
     for (const cond of conditions) {
-      // Handle OR groups by applying each supported predicate inside the group
-      // subject ILIKE $n
       let g;
-      // Generic ILIKE for simple columns: column ILIKE $n
-      g = cond.match(/([a-z_]+)\s+ilike\s*\$(\d+)/i);
-      if (g) {
-        const col = g[1];
-        const idx = parseInt(g[2], 10) - 1;
-        query = query.ilike(col, params[idx]);
-        // continue parsing for additional predicates within the same condition
+      let m;
+      
+      // 1) EQUALITY (highest priority - check exact match first)
+      m = cond.match(/([a-z_]+)\s*=\s*\$(\d+)/i);
+      if (m) {
+        const col = m[1];
+        const idx = parseInt(m[2], 10) - 1;
+        console.log(`[Supabase Adapter] Exact equality match: column='${col}', value='${params[idx]}', condition='${cond}'`);
+        console.log(`[Supabase Adapter] Applying .eq('${col}', '${params[idx]}')`);
+        query = query.eq(col, params[idx]);
+        continue; // CRITICAL: ensure no fall-through
       }
-
-      // Case-insensitive equality: LOWER(column) = LOWER($n)
-      // NOTE: This pattern is DEPRECATED - emails should be normalized to lowercase before queries
-      // Kept for backward compatibility but prefer using exact match with pre-normalized values
+      
+      // 2) CASE-INSENSITIVE EQUALITY (LOWER(column) = LOWER($n))
       g = cond.match(/lower\(\s*"?([a-z_]+)"?\s*\)\s*=\s*lower\(\s*\$(\d+)\s*\)/i);
       if (g) {
         const col = g[1];
         const idx = parseInt(g[2], 10) - 1;
-        // Use .eq() with lowercased value for exact case-insensitive match
         const value = typeof params[idx] === 'string' ? params[idx].toLowerCase() : params[idx];
         query = query.eq(col, value);
-        continue;
+        continue; // CRITICAL: ensure no fall-through
       }
+      
+      // 3) PATTERN MATCHING (lower priority)
+      // Generic ILIKE: column ILIKE $n
+      g = cond.match(/([a-z_]+)\s+ilike\s*\$(\d+)/i);
+      if (g) {
+        const col = g[1];
+        const idx = parseInt(g[2], 10) - 1;
+        const val = typeof params[idx] === 'string'
+          ? params[idx].replace(/[%_]/g, '\\$&') // escape % and _ to prevent wildcards
+          : params[idx];
+        query = query.ilike(col, val);
+        continue; // CRITICAL: prevent fall-through
+      }
+      
+      // Subject ILIKE (specific case)
       const ilikeSubjectMatches = [...cond.matchAll(/subject\s+ilike\s*\$(\d+)/ig)];
       if (ilikeSubjectMatches.length > 0) {
         for (const mIlike of ilikeSubjectMatches) {
           const idx = parseInt(mIlike[1], 10) - 1;
-          query = query.ilike('subject', params[idx]);
+          const val = typeof params[idx] === 'string'
+            ? params[idx].replace(/[%_]/g, '\\$&') // escape % and _
+            : params[idx];
+          query = query.ilike('subject', val);
         }
-        // continue parsing for additional predicates within the same condition
+        continue; // CRITICAL: required to prevent stacking with other handlers
       }
 
       // JSON text equality: metadata->>'field' = $n
@@ -244,7 +261,7 @@ async function handleSelectQuery(sql, params) {
         query = query.lte('metadata->>due_date', params[idx]);
       }
       // NOT IN: column NOT IN ($3,$4,...)
-      let m = cond.match(/([a-z_]+)\s+not\s+in\s*\(([^)]+)\)/i);
+      m = cond.match(/([a-z_]+)\s+not\s+in\s*\(([^)]+)\)/i);
       if (m) {
         const col = m[1];
         const placeholders = m[2].split(',').map(s => s.trim());
@@ -283,15 +300,6 @@ async function handleSelectQuery(sql, params) {
         continue;
       }
 
-      // Equals: column = $n
-      m = cond.match(/([a-z_]+)\s*=\s*\$(\d+)/i);
-      if (m) {
-        const col = m[1];
-        const idx = parseInt(m[2], 10) - 1;
-        console.log(`[Supabase Adapter] Applying .eq('${col}', '${params[idx]}')`);
-        query = query.eq(col, params[idx]);
-        continue;
-      }
       // Unhandled condition types (JSON operators, functions) are ignored in API fallback
     }
   }

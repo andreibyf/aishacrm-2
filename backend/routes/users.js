@@ -159,26 +159,33 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
 
       if (tenant_id) {
         // Filter by specific tenant - only return employees for that tenant
-        const employeeQuery =
+        // NOTE: Previous implementation returned ONLY employees, which hid tenant-scoped admins
+        // We now include admins from users table that have tenant_id = $1
+        const tenantAdminsQuery =
+          "SELECT id, tenant_id, email, first_name, last_name, role, 'active' as status, metadata, created_at, updated_at, 'admin' as user_type FROM users WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3";
+        const employeesQuery =
           "SELECT id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at, 'employee' as user_type FROM employees WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3";
-        const employeeResult = await pgPool.query(employeeQuery, [
-          tenant_id,
-          parseInt(limit),
-          parseInt(offset),
+
+        const [tenantAdminsResult, employeeResult] = await Promise.all([
+          pgPool.query(tenantAdminsQuery, [tenant_id, parseInt(limit), parseInt(offset)]),
+          pgPool.query(employeesQuery, [tenant_id, parseInt(limit), parseInt(offset)]),
         ]);
 
-        const countQuery =
-          "SELECT COUNT(*) FROM employees WHERE tenant_id = $1";
-        const countResult = await pgPool.query(countQuery, [tenant_id]);
+        // Count total (admins + employees) for this tenant (separate COUNTs for accuracy without LIMIT)
+        const [adminsCountResult, employeesCountResult] = await Promise.all([
+          pgPool.query("SELECT COUNT(*) FROM users WHERE tenant_id = $1", [tenant_id]),
+          pgPool.query("SELECT COUNT(*) FROM employees WHERE tenant_id = $1", [tenant_id]),
+        ]);
 
-        // Expand metadata fields for each user
-        allUsers = employeeResult.rows.map(expandUserMetadata);
+        allUsers = [...tenantAdminsResult.rows, ...employeeResult.rows]
+          .map(expandUserMetadata)
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
         res.json({
           status: "success",
           data: {
             users: allUsers,
-            total: parseInt(countResult.rows[0].count),
+            total: parseInt(adminsCountResult.rows[0].count) + parseInt(employeesCountResult.rows[0].count),
             limit: parseInt(limit),
             offset: parseInt(offset),
           },
@@ -186,9 +193,11 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       } else {
         // No tenant filter - return global users (superadmins/admins) + all employees
         // Get global users from users table (superadmins, admins with no tenant assignment)
+        // Preserve actual tenant_id for tenant-scoped admins while marking user_type appropriately
         const globalUsersQuery =
-          "SELECT id, NULL as tenant_id, email, first_name, last_name, role, 'active' as status, metadata, created_at, updated_at, 'global' as user_type FROM users WHERE role IN ('superadmin', 'admin') ORDER BY created_at DESC";
+          "SELECT id, tenant_id, email, first_name, last_name, role, 'active' as status, metadata, created_at, updated_at, CASE WHEN tenant_id IS NULL THEN 'global' ELSE 'admin' END as user_type FROM users WHERE LOWER(role) IN ('superadmin', 'admin') ORDER BY created_at DESC";
         const globalUsersResult = await pgPool.query(globalUsersQuery);
+        console.log(`[GET /api/users] No tenant filter - found ${globalUsersResult.rows.length} users from users table`);
 
         // Get all employees FROM employees table
         const employeesQuery =
@@ -560,12 +569,13 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       }
 
       if (!target && email) {
-        // Case-insensitive email lookup using ilike
-        const userByEmail = await supabase.from('users').select('id').ilike('email', email).limit(1).maybeSingle();
+        // Exact match email lookup (emails are stored in lowercase)
+        const normalizedEmail = email.toLowerCase().trim();
+        const userByEmail = await supabase.from('users').select('id').eq('email', normalizedEmail).limit(1).maybeSingle();
         if (userByEmail.data?.id) {
           target = { table: 'users', id: userByEmail.data.id };
         } else {
-          const empByEmail = await supabase.from('employees').select('id, tenant_id').ilike('email', email).limit(1).maybeSingle();
+          const empByEmail = await supabase.from('employees').select('id, tenant_id').eq('email', normalizedEmail).limit(1).maybeSingle();
           if (empByEmail.data?.id) target = { table: 'employees', id: empByEmail.data.id };
         }
       }
@@ -707,16 +717,27 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       }
 
       // 🔒 CRITICAL: Enforce global email uniqueness across users AND employees tables
-      // Check both tables to prevent duplicate accounts with same email
-      // Using exact match since emails are stored in lowercase
-      const existingInUsers = await pgPool.query(
-        "SELECT id, email, role FROM users WHERE email = $1",
-        [normalizedEmail]
-      );
-      const existingInEmployees = await pgPool.query(
-        "SELECT id, email, tenant_id FROM employees WHERE email = $1",
-        [normalizedEmail]
-      );
+      // BYPASS ADAPTER: Use direct Supabase client to avoid wildcard issues with .eq()
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      
+      console.log("[POST /api/users] Running direct Supabase duplicate check for:", normalizedEmail);
+      
+      const { data: existingUsers, error: usersError } = await supabase
+        .from('users')
+        .select('id, email, role')
+        .eq('email', normalizedEmail);
+      
+      const { data: existingEmployees, error: employeesError } = await supabase
+        .from('employees')
+        .select('id, email, tenant_id')
+        .eq('email', normalizedEmail);
+      
+      if (usersError) console.error("[POST /api/users] Users query error:", usersError);
+      if (employeesError) console.error("[POST /api/users] Employees query error:", employeesError);
+      
+      const existingInUsers = { rows: existingUsers || [], rowCount: existingUsers?.length || 0 };
+      const existingInEmployees = { rows: existingEmployees || [], rowCount: existingEmployees?.length || 0 };
 
       console.log(`[POST /api/users] Duplicate check for ${normalizedEmail}:`, {
         usersCount: existingInUsers.rows.length,
@@ -725,7 +746,10 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         employeesRows: existingInEmployees.rows
       });
 
+      console.log(`[POST /api/users] Checking if condition: usersLength=${existingInUsers.rows.length}, employeesLength=${existingInEmployees.rows.length}`);
+
       if (existingInUsers.rows.length > 0 || existingInEmployees.rows.length > 0) {
+        console.error(`[POST /api/users] ⚠️ ENTERING DUPLICATE BLOCK - THIS SHOULD NOT HAPPEN!`);
         const existingRecord = existingInUsers.rows[0] || existingInEmployees.rows[0];
         console.warn(`[POST /api/users] Duplicate email rejected: ${normalizedEmail}`);
         return res.status(409).json({
@@ -740,6 +764,8 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
           },
         });
       }
+
+      console.log(`[POST /api/users] No duplicates found, continuing... Role: ${role}, Tenant: ${tenant_id}`);
 
       // ⚠️ CRITICAL: Admin role MUST be assigned to a tenant (not global)
       if (role === "admin" && !tenant_id) {
@@ -767,15 +793,20 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       const isGlobalUser = role === "superadmin" && !normalizedTenantId;
       let authUserId = null;
 
+      console.log(`[POST /api/users] Role branching - isGlobalUser: ${isGlobalUser}, role: ${role}, normalizedTenantId: ${normalizedTenantId}`);
+
       if (isGlobalUser) {
         // Create global superadmin in users table (no tenant_id)
         // NOTE: Global email uniqueness already checked above
-        const existingUser = await pgPool.query(
-          "SELECT id FROM users WHERE email = $1",
-          [normalizedEmail],
-        );
+        // BYPASS ADAPTER: Use direct Supabase to avoid wildcard bug
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
+        const { data: existingUser } = await supabase
+          .from('users')
+          .select('id')
+          .eq('email', normalizedEmail);
 
-        if (existingUser.rows.length > 0) {
+        if (existingUser && existingUser.length > 0) {
           return res.status(409).json({
             status: "error",
             message: "User already exists",
@@ -831,17 +862,24 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       } else if (role === "admin" && normalizedTenantId) {
         // Create tenant-scoped admin in users table WITH tenant_id
         // NOTE: Global email uniqueness already checked above
-        const existingUser = await pgPool.query(
-          "SELECT id FROM users WHERE email = $1",
-          [normalizedEmail],
-        );
+        // BYPASS ADAPTER: Use direct Supabase to avoid wildcard bug
+        console.log(`[POST /api/users] Admin path - checking users table for ${normalizedEmail}`);
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
+        const { data: existingUser } = await supabase
+          .from('users')
+          .select('id')
+          .eq('email', normalizedEmail);
 
-        if (existingUser.rows.length > 0) {
+        console.log(`[POST /api/users] Admin duplicate check result:`, existingUser);
+        if (existingUser && existingUser.length > 0) {
+          console.warn(`[POST /api/users] DUPLICATE FOUND in users table for ${normalizedEmail}`);
           return res.status(409).json({
             status: "error",
             message: "User already exists",
           });
         }
+        console.log(`[POST /api/users] No duplicate found, proceeding to create auth user`);
 
         // Create Supabase Auth user - send invitation email
         const authMetadata = {
@@ -932,12 +970,16 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
 
         // NOTE: Global email uniqueness already checked above
         // Also check for same email in same tenant (defensive redundancy)
-        const existingEmployee = await pgPool.query(
-          "SELECT id FROM employees WHERE email = $1 AND tenant_id = $2",
-          [normalizedEmail, normalizedTenantId],
-        );
+        // BYPASS ADAPTER: Use direct Supabase to avoid wildcard bug
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
+        const { data: existingEmployee } = await supabase
+          .from('employees')
+          .select('id')
+          .eq('email', normalizedEmail)
+          .eq('tenant_id', normalizedTenantId);
 
-        if (existingEmployee.rows.length > 0) {
+        if (existingEmployee && existingEmployee.length > 0) {
           return res.status(409).json({
             status: "error",
             message: "Employee already exists for this tenant",
@@ -1026,7 +1068,14 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         });
       }
     } catch (error) {
-      console.error("Error creating user:", error);
+      console.error("[POST /api/users] EXCEPTION caught:", error);
+      console.error("[POST /api/users] Error stack:", error.stack);
+      console.error("[POST /api/users] Error details:", {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        status: error.status
+      });
       res.status(500).json({ status: "error", message: error.message });
     }
   });

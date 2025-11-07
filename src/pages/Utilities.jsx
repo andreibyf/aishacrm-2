@@ -9,13 +9,17 @@ import {
 } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Database, Loader2, Wrench } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { useToast } from "@/components/ui/use-toast";
+import { cleanupOrphanedData } from "@/api/functions";
 
 export default function UtilitiesPage() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [testDataMode, setTestDataMode] = useState(false);
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
   // REMOVED: Local module permission check
   // Module visibility is now controlled centrally by ModuleSettings in Layout
@@ -136,31 +140,52 @@ export default function UtilitiesPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {utilities.map((utility) => (
-              <Link
-                key={utility.id}
-                to={createPageUrl(utility.page)}
-                className="block"
-              >
-                <Card className="bg-slate-700/50 border-slate-600 hover:bg-slate-700 hover:border-blue-500 transition-all cursor-pointer h-full">
-                  <CardHeader>
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-blue-600/20 flex items-center justify-center flex-shrink-0">
-                        <utility.icon className="w-5 h-5 text-blue-400" />
+            {utilities.map((utility) => {
+              const handleClick = async (e) => {
+                // Special-case cleanup-orphaned-data to run directly instead of routing
+                if (utility.id === 'cleanup-orphaned-data') {
+                  e.preventDefault();
+                  try {
+                    toast({ title: 'Starting orphan cleanup…', description: 'Removing records without tenant_id' });
+                    const { data } = await cleanupOrphanedData();
+                    if (data?.success) {
+                      const total = data.total_deleted ?? 0;
+                      toast({ title: 'Cleanup complete', description: `Deleted ${total} orphan record(s).` });
+                    } else {
+                      toast({ variant: 'destructive', title: 'Cleanup failed', description: data?.message || 'Unknown error' });
+                    }
+                  } catch (err) {
+                    toast({ variant: 'destructive', title: 'Cleanup failed', description: err?.message || String(err) });
+                  }
+                  return;
+                }
+                // Default behavior: navigate to page if defined
+                if (utility.page) {
+                  navigate(createPageUrl(utility.page));
+                }
+              };
+              return (
+                <a key={utility.id} href={createPageUrl(utility.page)} onClick={handleClick} className="block">
+                  <Card className="bg-slate-700/50 border-slate-600 hover:bg-slate-700 hover:border-blue-500 transition-all cursor-pointer h-full">
+                    <CardHeader>
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-blue-600/20 flex items-center justify-center flex-shrink-0">
+                          <utility.icon className="w-5 h-5 text-blue-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <CardTitle className="text-slate-100 text-base">
+                            {utility.name}
+                          </CardTitle>
+                          <CardDescription className="text-slate-400 text-sm mt-1">
+                            {utility.description}
+                          </CardDescription>
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <CardTitle className="text-slate-100 text-base">
-                          {utility.name}
-                        </CardTitle>
-                        <CardDescription className="text-slate-400 text-sm mt-1">
-                          {utility.description}
-                        </CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                </Card>
-              </Link>
-            ))}
+                    </CardHeader>
+                  </Card>
+                </a>
+              );
+            })}
           </div>
         </CardContent>
       </Card>

@@ -161,5 +161,60 @@ export default function createSystemRoutes(pgPool) {
     }
   });
 
+  // POST /api/system/cleanup-orphans - Remove records with tenant_id IS NULL across entities
+  // Safeguards:
+  // - Does NOT touch users table (global superadmins/admins may be tenant-less by design)
+  // - Deletes from employees and business entities only where tenant_id IS NULL
+  // - Returns per-table counts
+  router.post('/cleanup-orphans', async (req, res) => {
+    try {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+
+      const tables = [
+        'contacts',
+        'leads',
+        'accounts',
+        'opportunities',
+        'activities',
+        'notes',
+        'employees', // employees without tenant assignment are considered orphan records
+      ];
+
+      const summary = {};
+      let totalDeleted = 0;
+
+      for (const table of tables) {
+        try {
+          const { data, error } = await supabase
+            .from(table)
+            .delete()
+            .is('tenant_id', null)
+            .select('id');
+          if (error) {
+            summary[table] = { error: error.message };
+            continue;
+          }
+          const count = Array.isArray(data) ? data.length : 0;
+          summary[table] = { deleted: count };
+          totalDeleted += count;
+        } catch (e) {
+          summary[table] = { error: e.message };
+        }
+      }
+
+      return res.json({
+        status: 'success',
+        data: {
+          total_deleted: totalDeleted,
+          summary,
+        },
+        message: `Cleanup complete. Deleted ${totalDeleted} orphan record(s).`,
+      });
+    } catch (error) {
+      return res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   return router;
 }

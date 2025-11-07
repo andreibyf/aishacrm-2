@@ -322,7 +322,8 @@ const createFunctionProxy = (functionName) => {
           data: {
             success: true,
             message: 'Orphaned data cleanup (local-dev mock)',
-            deleted: 0
+            deleted: 0,
+            summary: {}
           }
         };
       }
@@ -562,6 +563,24 @@ const createFunctionProxy = (functionName) => {
     }
 
     // Not local-dev: call the real function if present on base44.functions
+    // Special-case orphan cleanup to use backend maintenance endpoint when base44 lacks function
+    if (functionName === 'cleanupOrphanedData') {
+      try {
+        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+        const response = await fetch(`${BACKEND_URL}/api/system/cleanup-orphans`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include'
+        });
+        const json = await response.json();
+        if (!response.ok) {
+          return { data: { success: false, message: json.message || 'Cleanup failed', error: json.message } };
+        }
+        return { data: { success: true, message: json.message, summary: json.data?.summary || {}, total_deleted: json.data?.total_deleted || 0 } };
+      } catch (err) {
+        return { data: { success: false, message: err?.message || 'Cleanup failed', error: err?.message } };
+      }
+    }
     return base44.functions?.[functionName]?.(...args);
   };
 };

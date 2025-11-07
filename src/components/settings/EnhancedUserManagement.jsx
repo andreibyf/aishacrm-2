@@ -663,8 +663,9 @@ export default function EnhancedUserManagement() {
     };
 
     const filteredUsers = users.filter(user => {
-        // Only show global users (from users table), not employees
-        if (user.user_type !== 'global') {
+        // Show both global users (superadmins) and tenant-scoped admins from users table
+        // Exclude employees (they should be managed via tenant-specific employee management)
+        if (user.user_type === 'employee') {
             return false;
         }
 
