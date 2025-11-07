@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Trash2, ShieldCheck, Edit, Search, RefreshCw, Plus, X, Copy } from "lucide-react";
+import { Loader2, Trash2, ShieldCheck, Edit, Search, RefreshCw, Plus, X, Copy, Mail } from "lucide-react";
 // Reserved for future use: Users, AlertTriangle
 import { User as _UserEntity } from "@/api/entities";
 import { User } from "@/api/entities";
@@ -22,6 +22,7 @@ import { Switch } from "@/components/ui/switch";
 import { format } from 'date-fns';
 import { updateEmployeeSecure } from "@/api/functions";
 import { deleteUser } from "@/functions/users/deleteUser";
+import { resendInvite } from "@/functions/users/resendInvite";
 import { canDeleteUser } from "@/utils/permissions";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
@@ -644,6 +645,22 @@ export default function EnhancedUserManagement() {
         }
     };
 
+    // Handler for resending invite
+    const handleResendInvite = async (user) => {
+        try {
+            const result = await resendInvite(user.id);
+            
+            if (result.success) {
+                toast.success(`Invitation email sent to ${user.email}`);
+            } else {
+                toast.error(result.message || "Failed to resend invitation");
+            }
+        } catch (error) {
+            console.error("Error resending invite:", error);
+            toast.error(`Failed to resend invitation: ${error.message}`);
+        }
+    };
+
     // Simplified role display
     const getRoleDisplay = (user) => {
         const role = user.role?.toLowerCase();
@@ -897,6 +914,17 @@ export default function EnhancedUserManagement() {
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     <div className="flex gap-2 justify-end">
+                                                        {statusText === 'Invited' && (
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() => handleResendInvite(user)}
+                                                                className="bg-blue-700 border-blue-600 text-blue-100 hover:bg-blue-600"
+                                                            >
+                                                                <Mail className="w-4 h-4 mr-1" />
+                                                                Resend Invite
+                                                            </Button>
+                                                        )}
                                                         <Button
                                                             variant="outline"
                                                             size="sm"

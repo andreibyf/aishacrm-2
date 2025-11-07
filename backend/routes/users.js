@@ -1690,13 +1690,19 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       const { id } = req.params;
       const { redirect_url } = req.body;
 
-      console.log(`[POST /api/users/${id}/invite] Sending invitation`);
+      console.log(`[POST /api/users/${id}/invite] Sending invitation for user ID: ${id}`);
 
       // Fetch user from database
       const userResult = await pgPool.query(
         "SELECT id, email, first_name, last_name, role, tenant_id, metadata FROM users WHERE id = $1",
         [id]
       );
+      
+      console.log(`[POST /api/users/${id}/invite] Query result:`, {
+        found: userResult.rows.length > 0,
+        email: userResult.rows[0]?.email,
+        name: `${userResult.rows[0]?.first_name} ${userResult.rows[0]?.last_name}`
+      });
 
       if (userResult.rows.length === 0) {
         // Try employees table
@@ -1714,7 +1720,31 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
 
         const employee = employeeResult.rows[0];
 
-        // Send Supabase Auth invitation
+        // Check if user already exists in Supabase Auth
+        const existingAuthUser = await getAuthUserByEmail(employee.email);
+        
+        if (existingAuthUser) {
+          // User already exists in Auth - send password reset instead
+          console.log(`[User Invite] User ${employee.email} already registered, sending password reset`);
+          
+          const { error: resetError } = await sendPasswordResetEmail(employee.email);
+          
+          if (resetError) {
+            console.error("[User Invite] Password reset error:", resetError);
+            return res.status(500).json({
+              status: "error",
+              message: `Failed to send password reset: ${resetError.message}`,
+            });
+          }
+          
+          return res.json({
+            status: "success",
+            message: `Password reset email sent to ${employee.email}`,
+            data: { email: employee.email, type: "password_reset" },
+          });
+        }
+
+        // User doesn't exist in Auth - send invitation
         const { data, error } = await inviteUserByEmail(
           employee.email,
           {
@@ -1744,7 +1774,38 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
 
       const user = userResult.rows[0];
 
-      // Send Supabase Auth invitation
+      // Check if user already exists in Supabase Auth
+      console.log(`[User Invite] Checking if ${user.email} exists in Supabase Auth...`);
+      const authResult = await getAuthUserByEmail(user.email);
+      console.log(`[User Invite] Auth check result:`, { 
+        user: authResult?.user ? 'found' : 'not found',
+        email: authResult?.user?.email,
+        error: authResult?.error 
+      });
+      const existingAuthUser = authResult?.user;
+      
+      if (existingAuthUser) {
+        // User already exists in Auth - send password reset instead
+        console.log(`[User Invite] User ${user.email} already registered, sending password reset`);
+        
+        const { error: resetError } = await sendPasswordResetEmail(user.email);
+        
+        if (resetError) {
+          console.error("[User Invite] Password reset error:", resetError);
+          return res.status(500).json({
+            status: "error",
+            message: `Failed to send password reset: ${resetError.message}`,
+          });
+        }
+        
+        return res.json({
+          status: "success",
+          message: `Password reset email sent to ${user.email}`,
+          data: { email: user.email, type: "password_reset" },
+        });
+      }
+
+      // User doesn't exist in Auth - send invitation
       const { data, error } = await inviteUserByEmail(
         user.email,
         {

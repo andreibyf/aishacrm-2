@@ -683,6 +683,18 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     }
   }, [setSelectedTenantId]);
 
+  // NEW: Auto-select tenant from user profile on login
+  React.useEffect(() => {
+    // Only auto-select if:
+    // 1. User is logged in and has a tenant_id
+    // 2. No tenant is currently selected in context
+    // 3. User is not a global super admin (tenant_id=null for global access)
+    if (user?.tenant_id && selectedTenantId === null && setSelectedTenantId) {
+      console.log("[Layout] Auto-selecting tenant from user profile:", user.tenant_id);
+      setSelectedTenantId(user.tenant_id);
+    }
+  }, [user?.tenant_id, selectedTenantId, setSelectedTenantId]);
+
   // NEW: Reset failed tenants when user changes
   React.useEffect(() => {
     if (user?.id && lastModuleSettingsUserId.current !== user.id) {

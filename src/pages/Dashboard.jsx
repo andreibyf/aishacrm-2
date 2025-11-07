@@ -235,14 +235,31 @@ export default function DashboardPage() {
         // Guard: ensure we have a valid tenant_id before loading data
         if (!tenantFilter || !tenantFilter.tenant_id) {
           logger.warning(
-            "Waiting for tenant context before loading dashboard data",
+            "No tenant selected - cannot load dashboard data",
             "Dashboard",
             {
               userId: user.email,
               selectedTenantId,
               tenantFilter,
+              userRole: user.role,
             },
           );
+          
+          // Set loading false and show empty stats to render the "select tenant" message
+          setStats({
+            totalContacts: 0,
+            newLeads: 0,
+            activeOpportunities: 0,
+            pipelineValue: 0,
+            activitiesLogged: 0,
+            trends: {
+              contacts: null,
+              newLeads: null,
+              activeOpportunities: null,
+              pipelineValue: null,
+              activitiesLogged: null,
+            },
+          });
           setLoading(false);
           return;
         }
