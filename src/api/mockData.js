@@ -68,23 +68,26 @@ export const createMockTenant = () => ({
 });
 
 export const isLocalDevMode = () => {
-  // Use local backend mode if the backend URL is configured
-  const hasBackendUrl = !!import.meta.env.VITE_AISHACRM_BACKEND_URL;
-  
-  // If backend URL is set, use local backend (even with Supabase auth)
-  if (hasBackendUrl) {
-    return true;
-  }
-  
-  // Otherwise, fallback to original logic:
-  // Use local dev mode (mock users) if:
-  // 1. Base44 auth is disabled AND
-  // 2. Supabase is not configured
-  const useBase44 = import.meta.env.VITE_USE_BASE44_AUTH === 'true';
-  const hasSupabase = !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
-  
-  // If Supabase is configured, use it (not local dev mode)
-  // If Base44 is enabled, use it (not local dev mode)
-  // Otherwise, use local dev mode with mock users
-  return !useBase44 && !hasSupabase;
+  // Local dev mode means: no real auth/backends are configured
+  // IMPORTANT: In containers/prod, runtime env comes from window.__ENV, not import.meta.env
+
+  // Prefer runtime env injected by entrypoint over build-time env
+  const runtimeEnv = (typeof window !== 'undefined' && window.__ENV) || {};
+
+  const useBase44 = (
+    runtimeEnv.VITE_USE_BASE44_AUTH ?? import.meta.env.VITE_USE_BASE44_AUTH
+  ) === 'true';
+
+  const supabaseUrl =
+    runtimeEnv.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey =
+    runtimeEnv.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  const hasSupabase = !!(supabaseUrl && supabaseAnonKey);
+
+  // If Supabase or Base44 auth is configured, we're NOT in local dev mode
+  if (hasSupabase || useBase44) return false;
+
+  // Otherwise, fall back to mock/local dev mode
+  return true;
 };

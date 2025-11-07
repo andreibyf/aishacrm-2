@@ -172,7 +172,43 @@ export default function BrandingSettings() {
       // Check if upload was successful
       if (result?.file_url) {
         setBrandingData((prev) => ({ ...prev, [key]: result.file_url }));
-        setMessage("Image uploaded successfully.");
+        // Auto-save immediately after successful upload
+        try {
+          const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+          if (isAdmin && (tenant?.id || selectedTenantId || user?.tenant_id)) {
+            // Save to tenant immediately (partial update)
+            const tenantIdToUpdate = tenant?.id || selectedTenantId || user?.tenant_id;
+            // Build minimal payload depending on which field was uploaded
+            const payload = {};
+            if (key === "logoUrl") {
+              payload.logo_url = result.file_url;
+            }
+            if (key === "footerLogoUrl") {
+              payload.branding_settings = {
+                ...(tenant?.branding_settings || {}),
+                footerLogoUrl: result.file_url,
+              };
+            }
+            if (Object.keys(payload).length > 0) {
+              await Tenant.update(tenantIdToUpdate, payload);
+              setMessage("Logo uploaded and saved. Refreshing to apply…");
+              // Refresh to ensure CSS vars and images update everywhere
+              setTimeout(() => window.location.reload(), 600);
+            } else {
+              // Fallback: nothing to persist (unexpected key)
+              setMessage("Image uploaded successfully.");
+            }
+          } else {
+            // Non-admin: persist to user profile branding_settings immediately
+            const next = { ...brandingData, [key]: result.file_url };
+            await User.updateMyUserData({ branding_settings: next });
+            setMessage("Image uploaded and saved. Refreshing to apply…");
+            setTimeout(() => window.location.reload(), 600);
+          }
+        } catch (saveErr) {
+          console.error("[BrandingSettings] Autosave after upload failed:", saveErr);
+          setMessage("Image uploaded, but save failed: " + (saveErr?.message || "Unknown error"));
+        }
       } else {
         // Local dev or integration unavailable: inline the image as data URL for preview and save
         const toDataUrl = (f) =>
@@ -207,38 +243,7 @@ export default function BrandingSettings() {
     }
   };
 
-  // NEW: handleUpload for global footer logo
-  const handleGlobalFooterUpload = async (file) => {
-    if (!file) return;
-    if (file.size > 3 * 1024 * 1024) {
-      setMessage("File size must be less than 3MB");
-      setTimeout(() => setMessage(""), 3000);
-      return;
-    }
-    setUploading(true);
-    try {
-      const result = await UploadFile({ file });
-
-      // Check if upload was successful
-      if (result?.file_url) {
-        setFooterLogoUrl(result.file_url);
-        setMessage("Footer logo uploaded successfully.");
-      } else if (result?.success === false) {
-        // Local dev mode - show helpful message
-        setMessage(
-          "File upload not available in local dev mode. Please paste an image URL instead.",
-        );
-      } else {
-        setMessage("Upload failed: Unexpected response format");
-      }
-      setTimeout(() => setMessage(""), 3000);
-    } catch (e) {
-      setMessage(e?.message || "Global footer logo upload failed");
-      setTimeout(() => setMessage(""), 3000);
-    } finally {
-      setUploading(false);
-    }
-  };
+  // Global footer logo is static - no upload needed
 
   const handleSave = async () => { // This is for tenant/user branding
     setSaving(true);
@@ -541,39 +546,13 @@ export default function BrandingSettings() {
                             </span>
                           )}
                       </div>
-                      {canEdit && (
-                        <div>
-                          <Input
-                            id="footer-logo-file"
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) =>
-                              handleGlobalFooterUpload(e.target.files?.[0])}
-                            disabled={uploading}
-                          />
-                          <Button
-                            asChild
-                            variant="outline"
-                            className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
-                            disabled={uploading}
-                          >
-                            <label
-                              htmlFor="footer-logo-file"
-                              className="cursor-pointer"
-                            >
-                              Upload
-                            </label>
-                          </Button>
-                        </div>
-                      )}
                     </div>
                     <p className="text-xs text-slate-500">
                       Recommended: transparent PNG or SVG, height ~64px.
                     </p>
                     {canEdit && (
                       <Input
-                        placeholder="Or paste a direct image URL…"
+                        placeholder="Paste a direct image URL…"
                         value={footerLogoUrl || ""}
                         onChange={(e) => setFooterLogoUrl(e.target.value)}
                         className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400"

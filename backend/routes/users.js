@@ -16,6 +16,7 @@ import {
   updateAuthUserMetadata,
   updateAuthUserPassword,
 } from "../lib/supabaseAuth.js";
+import { createAuditLog, getUserEmailFromRequest, getClientIP } from "../lib/auditLogger.js";
 
 export default function createUserRoutes(pgPool, _supabaseAuth) {
   const router = express.Router();
@@ -715,6 +716,13 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         [email]
       );
 
+      console.log(`[POST /api/users] Duplicate check for ${email}:`, {
+        usersCount: existingInUsers.rows.length,
+        employeesCount: existingInEmployees.rows.length,
+        usersRows: existingInUsers.rows,
+        employeesRows: existingInEmployees.rows
+      });
+
       if (existingInUsers.rows.length > 0 || existingInEmployees.rows.length > 0) {
         const existingRecord = existingInUsers.rows[0] || existingInEmployees.rows[0];
         console.warn(`[POST /api/users] Duplicate email rejected: ${email}`);
@@ -818,6 +826,29 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
 
         const user = expandUserMetadata(result.rows[0]);
 
+        // Create audit log for superadmin creation
+        try {
+          const { getSupabaseClient } = await import('../lib/supabase-db.js');
+          const supabase = getSupabaseClient();
+          await createAuditLog(supabase, {
+            tenant_id: 'system',
+            user_email: getUserEmailFromRequest(req),
+            action: 'create',
+            entity_type: 'user',
+            entity_id: user.id,
+            changes: {
+              email: user.email,
+              role: user.role,
+              first_name: user.first_name,
+              last_name: user.last_name,
+            },
+            ip_address: getClientIP(req),
+            user_agent: req.headers['user-agent'],
+          });
+        } catch (auditError) {
+          console.warn('[AUDIT] Failed to log user creation:', auditError.message);
+        }
+
         res.json({
           status: "success",
           message: "Global superadmin created and ready to login.",
@@ -887,6 +918,30 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         );
 
         const user = expandUserMetadata(result.rows[0]);
+
+        // Create audit log for admin creation
+        try {
+          const { getSupabaseClient } = await import('../lib/supabase-db.js');
+          const supabase = getSupabaseClient();
+          await createAuditLog(supabase, {
+            tenant_id: normalizedTenantId || 'system',
+            user_email: getUserEmailFromRequest(req),
+            action: 'create',
+            entity_type: 'user',
+            entity_id: user.id,
+            changes: {
+              email: user.email,
+              role: user.role,
+              first_name: user.first_name,
+              last_name: user.last_name,
+              tenant_id: normalizedTenantId,
+            },
+            ip_address: getClientIP(req),
+            user_agent: req.headers['user-agent'],
+          });
+        } catch (auditError) {
+          console.warn('[AUDIT] Failed to log admin creation:', auditError.message);
+        }
 
         res.json({
           status: "success",
@@ -965,6 +1020,31 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         );
 
         const user = expandUserMetadata(result.rows[0]);
+
+        // Create audit log for employee creation
+        try {
+          const { getSupabaseClient } = await import('../lib/supabase-db.js');
+          const supabase = getSupabaseClient();
+          await createAuditLog(supabase, {
+            tenant_id: normalizedTenantId || 'system',
+            user_email: getUserEmailFromRequest(req),
+            action: 'create',
+            entity_type: 'user',
+            entity_id: user.id,
+            changes: {
+              email: user.email,
+              role: user.role,
+              first_name: user.first_name,
+              last_name: user.last_name,
+              tenant_id: normalizedTenantId,
+              status: user.status,
+            },
+            ip_address: getClientIP(req),
+            user_agent: req.headers['user-agent'],
+          });
+        } catch (auditError) {
+          console.warn('[AUDIT] Failed to log employee creation:', auditError.message);
+        }
 
         res.json({
           status: "success",
@@ -1261,6 +1341,25 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       // Expand metadata to top-level properties
       const updatedUser = expandUserMetadata(data);
 
+      // Create audit log for user update
+      try {
+        await createAuditLog(supabase, {
+          tenant_id: updatedUser.tenant_id || 'system',
+          user_email: getUserEmailFromRequest(req),
+          action: 'update',
+          entity_type: 'user',
+          entity_id: id,
+          changes: {
+            ...updateData,
+            table: tableName,
+          },
+          ip_address: getClientIP(req),
+          user_agent: req.headers['user-agent'],
+        });
+      } catch (auditError) {
+        console.warn('[AUDIT] Failed to log user update:', auditError.message);
+      }
+
       // Keep Supabase Auth metadata in sync for name fields to avoid UI mismatches
       try {
         const userEmail = userData?.email;
@@ -1416,6 +1515,26 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       const result = await pgPool.query(query, params);
 
       console.log(`✓ Deleted user from ${tableName} table: ${userEmail}`);
+
+      // Create audit log for user deletion
+      try {
+        await createAuditLog(supabase, {
+          tenant_id: userResult.rows[0].tenant_id || 'system',
+          user_email: getUserEmailFromRequest(req),
+          action: 'delete',
+          entity_type: 'user',
+          entity_id: id,
+          changes: { 
+            deleted_email: userEmail,
+            deleted_from_table: tableName,
+            role: userResult.rows[0].role 
+          },
+          ip_address: getClientIP(req),
+          user_agent: req.headers['user-agent'],
+        });
+      } catch (auditError) {
+        console.warn('[AUDIT] Failed to log user deletion:', auditError.message);
+      }
 
       res.json({
         status: "success",

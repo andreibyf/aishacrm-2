@@ -166,6 +166,24 @@ async function handleSelectQuery(sql, params) {
       // Handle OR groups by applying each supported predicate inside the group
       // subject ILIKE $n
       let g;
+      // Generic ILIKE for simple columns: column ILIKE $n
+      g = cond.match(/([a-z_]+)\s+ilike\s*\$(\d+)/i);
+      if (g) {
+        const col = g[1];
+        const idx = parseInt(g[2], 10) - 1;
+        query = query.ilike(col, params[idx]);
+        // continue parsing for additional predicates within the same condition
+      }
+
+      // Case-insensitive equality: LOWER(column) = LOWER($n)
+      // Support LOWER("column") = LOWER($n) with optional quotes and varied whitespace
+      g = cond.match(/lower\(\s*"?([a-z_]+)"?\s*\)\s*=\s*lower\(\s*\$(\d+)\s*\)/i);
+      if (g) {
+        const col = g[1];
+        const idx = parseInt(g[2], 10) - 1;
+        query = query.ilike(col, params[idx]);
+        continue;
+      }
       const ilikeSubjectMatches = [...cond.matchAll(/subject\s+ilike\s*\$(\d+)/ig)];
       if (ilikeSubjectMatches.length > 0) {
         for (const mIlike of ilikeSubjectMatches) {
@@ -344,6 +362,15 @@ async function handleInsertQuery(sql, params) {
   columns.forEach((col, i) => {
     if (i < params.length) data[col] = params[i];
   });
+  // Sanitize common columns
+  if (Object.prototype.hasOwnProperty.call(data, 'message')) {
+    const v = data.message;
+    if (v === null || v === undefined || (typeof v === 'string' && v.trim() === '')) {
+      data.message = '(no message)';
+    } else if (typeof v !== 'string') {
+      try { data.message = JSON.stringify(v); } catch { data.message = String(v); }
+    }
+  }
     // Best-effort: parse JSON string payloads for JSON/JSONB columns like metadata
     if (typeof data.metadata === 'string') {
       try { data.metadata = JSON.parse(data.metadata); } catch { /* keep as-is */ }

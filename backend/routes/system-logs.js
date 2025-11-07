@@ -53,10 +53,15 @@ export default function createSystemLogRoutes(pgPool) {
         ) RETURNING *
       `;
 
+      // Ensure message is a non-empty string
+      const safeMessage = (typeof message === 'string' && message.trim() !== '')
+        ? message
+        : (message == null ? '(no message)' : (() => { try { return JSON.stringify(message); } catch { return String(message); } })());
+
       const values = [
         effectiveTenantId,
         level || "INFO",
-        message,
+        safeMessage,
         source,
         JSON.stringify(combinedMetadata), // Ensure metadata is stringified
         stack_trace,

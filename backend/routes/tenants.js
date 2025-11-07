@@ -5,6 +5,7 @@
 
 import express from "express";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createAuditLog, getUserEmailFromRequest, getClientIP } from "../lib/auditLogger.js";
 
 function getSupabaseAdmin() {
   const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -84,6 +85,8 @@ export default function createTenantRoutes(_pgPool) {
   // POST /api/tenants - Create tenant
   router.post("/", async (req, res) => {
     try {
+      console.log("[Tenants POST] Received request body:", JSON.stringify(req.body, null, 2));
+      
       const {
         tenant_id,
         name,
@@ -105,7 +108,10 @@ export default function createTenantRoutes(_pgPool) {
         domain,
       } = req.body;
 
+      console.log("[Tenants POST] Parsed tenant_id:", tenant_id, "name:", name);
+
       if (!tenant_id) {
+        console.warn("[Tenants POST] Missing tenant_id in request");
         return res.status(400).json({
           status: "error",
           message: "tenant_id is required",
@@ -145,12 +151,40 @@ export default function createTenantRoutes(_pgPool) {
         updated_at: nowIso,
       };
 
+      console.log("[Tenants POST] Attempting to insert:", JSON.stringify(insertData, null, 2));
+      
       const { data: created, error } = await supabase
         .from('tenant')
         .insert([insertData])
         .select()
         .single();
-      if (error) throw new Error(error.message);
+      
+      if (error) {
+        console.error("[Tenants POST] Database error:", error);
+        throw new Error(error.message);
+      }
+      
+      console.log("[Tenants POST] Tenant created successfully:", created?.id);
+
+      // Create audit log for tenant creation
+      try {
+        await createAuditLog(supabase, {
+          tenant_id: created?.tenant_id || 'system',
+          user_email: getUserEmailFromRequest(req),
+          action: 'create',
+          entity_type: 'tenant',
+          entity_id: created?.id,
+          changes: {
+            name: created?.name,
+            status: created?.status,
+            tenant_id: created?.tenant_id,
+          },
+          ip_address: getClientIP(req),
+          user_agent: req.headers['user-agent'],
+        });
+      } catch (auditError) {
+        console.warn('[AUDIT] Failed to log tenant creation:', auditError.message);
+      }
 
       // Auto-provision tenant storage prefix by creating a placeholder object
       try {
@@ -505,6 +539,25 @@ export default function createTenantRoutes(_pgPool) {
           status: "error",
           message: "Tenant not found",
         });
+      }
+
+      // Create audit log for tenant deletion
+      try {
+        await createAuditLog(supabase, {
+          tenant_id: data?.tenant_id || 'system',
+          user_email: getUserEmailFromRequest(req),
+          action: 'delete',
+          entity_type: 'tenant',
+          entity_id: id,
+          changes: {
+            name: data?.name,
+            tenant_id: data?.tenant_id,
+          },
+          ip_address: getClientIP(req),
+          user_agent: req.headers['user-agent'],
+        });
+      } catch (auditError) {
+        console.warn('[AUDIT] Failed to log tenant deletion:', auditError.message);
       }
 
       res.json({

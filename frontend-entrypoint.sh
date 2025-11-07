@@ -18,5 +18,9 @@ window.__ENV = {
 };
 EOF
 
+# Inject env.js script tag into index.html (before the closing </head> tag)
+# This ensures env.js loads before the Vite bundle without interfering with Vite's build process
+sed -i 's|</head>|  <script src="/env.js"></script>\n  </head>|' /app/dist/index.html
+
 # Start static server
 exec sh -c "serve -s dist -l ${PORT}"
