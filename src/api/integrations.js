@@ -1,5 +1,6 @@
 import { base44 } from "./base44Client";
 import { isLocalDevMode } from "./mockData";
+import { getBackendUrl } from "./backendUrl";
 
 // Create mock integration functions for local dev mode
 const createMockIntegration = (name) => () => {
@@ -18,20 +19,24 @@ const createMockIntegration = (name) => () => {
 /**
  * UploadFile - Upload file to backend storage
  * Works in both local dev and production
+ * @param {Object} params
+ * @param {File} params.file - The file to upload
+ * @param {string} [params.tenant_id] - Optional tenant ID to scope the upload
  */
-export const UploadFile = async ({ file }) => {
-  const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-    "http://localhost:3001";
+export const UploadFile = async ({ file, tenant_id }) => {
+  const backendUrl = getBackendUrl();
 
-  // Attempt to infer tenant id from URL or localStorage
-  let tenantId = null;
-  try {
-    const urlTenant = new URL(window.location.href).searchParams.get("tenant");
-    const storedTenant = localStorage.getItem("selected_tenant_id");
-    tenantId = urlTenant || storedTenant || null;
-  } catch (err) {
-    // ignore access errors in non-browser contexts
-    void err;
+  // Use explicitly provided tenant_id, or attempt to infer from URL/localStorage
+  let tenantId = tenant_id;
+  if (!tenantId) {
+    try {
+      const urlTenant = new URL(window.location.href).searchParams.get("tenant");
+      const storedTenant = localStorage.getItem("selected_tenant_id");
+      tenantId = urlTenant || storedTenant || null;
+    } catch (err) {
+      // ignore access errors in non-browser contexts
+      void err;
+    }
   }
 
   try {

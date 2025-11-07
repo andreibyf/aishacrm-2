@@ -167,7 +167,24 @@ export default function BrandingSettings() {
     }
     setUploading(true);
     try {
-      const result = await UploadFile({ file });
+      // Determine target tenant_id for upload scoping
+      const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+      const uploadTenantId = isAdmin 
+        ? (tenant?.id || selectedTenantId || user?.tenant_id)
+        : user?.tenant_id;
+      
+      console.log("[BrandingSettings] Upload context:", {
+        isAdmin,
+        tenantId: tenant?.id,
+        selectedTenantId,
+        userTenantId: user?.tenant_id,
+        uploadTenantId,
+        fileName: file.name,
+      });
+      
+      const result = await UploadFile({ file, tenant_id: uploadTenantId });
+
+      console.log("[BrandingSettings] Upload result:", result);
 
       // Check if upload was successful
       if (result?.file_url) {

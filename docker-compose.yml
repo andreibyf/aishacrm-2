@@ -1,11 +1,16 @@
 services:
-  # PostgreSQL Database (local development only)
-  # NOTE: Not currently used - backend connects to Supabase via USE_SUPABASE_PROD=true
-  # Kept for offline development and migration testing
+  # PostgreSQL Database (DISABLED - Using Supabase Cloud)
+  # ⚠️ CRITICAL: This local database is NOT USED for development/production
+  # ALL data operations use Supabase Cloud (see DATABASE_CONFIGURATION.md)
+  # This service is kept for migration testing only and must remain STOPPED
+  # To start for migration testing: docker compose start db
+  # To stop again: docker compose stop db
   db:
     image: postgres:15-alpine
     container_name: aishacrm-db
-    restart: unless-stopped
+    restart: "no"  # Changed from "unless-stopped" - DO NOT auto-restart
+    profiles:
+      - migration-testing  # Requires explicit profile to start: docker compose --profile migration-testing up db
     ports:
       - "5432:5432"
     environment:
@@ -22,15 +27,15 @@ services:
       retries: 5
 
   # Backend API
+  # ⚠️ CRITICAL: Uses Supabase Cloud database ONLY (see DATABASE_CONFIGURATION.md)
+  # DATABASE_URL points to Supabase Cloud, NOT local PostgreSQL
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: aishacrm-backend
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
+    # REMOVED db dependency - we use Supabase Cloud, not local PostgreSQL
     ports:
       - "4001:3001"  # External port 4001 maps to internal 3001
     env_file:
@@ -39,8 +44,7 @@ services:
       - NODE_ENV=development
       - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
       - PORT=${PORT:-3001}
-      # DATABASE_URL for performance logging (direct PostgreSQL connection)
-      - DATABASE_URL=postgresql://postgres:${LOCAL_POSTGRES_PASSWORD:-changeme_local_dev_only}@db:5432/aishacrm
+      # DATABASE_URL loaded from backend/.env (points to Supabase for performance logging)
       # Supabase vars loaded from backend/.env via env_file above
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4000}
     # Force IPv4 resolution for Supabase direct connection

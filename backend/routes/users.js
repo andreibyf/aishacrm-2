@@ -1428,9 +1428,13 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       const { id } = req.params;
       const { tenant_id } = req.query;
 
+      // Initialize Supabase client for audit logging
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+
       // Try to find user in users table first (for SuperAdmins/Admins)
       let userResult = await pgPool.query(
-        "SELECT id, email, role FROM users WHERE id = $1",
+        "SELECT id, email, role, tenant_id FROM users WHERE id = $1",
         [id],
       );
       let tableName = "users";
@@ -1439,12 +1443,12 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
       if (userResult.rows.length === 0) {
         if (tenant_id !== undefined && tenant_id !== "null") {
           userResult = await pgPool.query(
-            "SELECT id, email FROM employees WHERE id = $1 AND tenant_id = $2",
+            "SELECT id, email, tenant_id FROM employees WHERE id = $1 AND tenant_id = $2",
             [id, tenant_id],
           );
         } else {
           userResult = await pgPool.query(
-            "SELECT id, email FROM employees WHERE id = $1",
+            "SELECT id, email, tenant_id FROM employees WHERE id = $1",
             [id],
           );
         }

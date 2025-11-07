@@ -58,11 +58,25 @@ export default function createStorageRoutes(_pgPool) {
         req.body?.tenant_id?.toString() ||
         null;
 
+      console.log("[storage.upload] Upload request:", {
+        originalName: req.file.originalname,
+        size: req.file.size,
+        mimetype: req.file.mimetype,
+        tenantId,
+        headers: req.headers["x-tenant-id"],
+      });
+
       const supabase = getSupabaseAdmin();
       const bucket = getBucketName();
       const objectKey = buildObjectKey({
         tenantId,
         originalName: req.file.originalname,
+      });
+
+      console.log("[storage.upload] Uploading to:", {
+        bucket,
+        objectKey,
+        tenantId,
       });
 
       // Upload buffer to Supabase Storage
@@ -74,8 +88,11 @@ export default function createStorageRoutes(_pgPool) {
         });
 
       if (uploadError) {
+        console.error("[storage.upload] Supabase upload error:", uploadError);
         throw uploadError;
       }
+
+      console.log("[storage.upload] Upload successful:", objectKey);
 
       // Prefer public URL (bucket should be public). If not accessible, fall back to a signed URL.
       const { data: publicUrlData } = supabase.storage.from(bucket)
