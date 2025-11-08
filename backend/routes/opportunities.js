@@ -9,13 +9,36 @@ export default function createOpportunityRoutes(pgPool) {
   router.use(enforceEmployeeDataScope);
 
 // Helper function to expand metadata fields to top-level properties
+// IMPORTANT: Do not let metadata keys override persisted columns (e.g., stage, amount)
   const expandMetadata = (record) => {
     if (!record) return record;
     const { metadata = {}, ...rest } = record;
+
+    // Remove any keys from metadata that would shadow real columns
+    // This prevents stale values (like metadata.stage) from overriding the updated column
+    const shadowKeys = [
+      'stage',
+      'amount',
+      'probability',
+      'close_date',
+      'name',
+      'account_id',
+      'contact_id',
+      'tenant_id',
+      'id',
+      'created_at',
+      'updated_at',
+    ];
+
+    const sanitizedMetadata = { ...metadata };
+    for (const key of shadowKeys) {
+      if (key in sanitizedMetadata) delete sanitizedMetadata[key];
+    }
+
     return {
       ...rest,
-      ...metadata,
-      metadata,
+      ...sanitizedMetadata,
+      metadata: sanitizedMetadata,
     };
   };
 
@@ -38,13 +61,19 @@ export default function createOpportunityRoutes(pgPool) {
         LIMIT $2 OFFSET $3
       `;
       
-      const result = await pgPool.query(query, [tenant_id, parseInt(limit), parseInt(offset)]);
+  const result = await pgPool.query(query, [tenant_id, parseInt(limit), parseInt(offset)]);
       
       const countQuery = 'SELECT COUNT(*) FROM opportunities WHERE tenant_id = $1';
       const countResult = await pgPool.query(countQuery, [tenant_id]);
       
       const opportunities = result.rows.map(expandMetadata);
       
+      // Disable caching for dynamic list to avoid stale 304 during rapid updates
+      res.set({
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      });
       res.json({
         status: 'success',
         data: {
@@ -88,6 +117,12 @@ export default function createOpportunityRoutes(pgPool) {
         return res.status(404).json({ status: 'error', message: 'Opportunity not found' });
       }
 
+      // Disable caching for single record as well
+      res.set({
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      });
       const opportunity = expandMetadata(row);
       
       res.json({
@@ -164,9 +199,33 @@ export default function createOpportunityRoutes(pgPool) {
     try {
       const { id } = req.params;
       const { name, account_id, contact_id, amount, stage, probability, close_date, metadata, ...otherFields } = req.body;
+      const requestedTenantId = req.body?.tenant_id || req.query?.tenant_id || null;
+
+      if (!requestedTenantId) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required for update' });
+      }
+
+      console.log('[Opportunities PUT]', {
+        id,
+        requestedTenantId,
+        payload: {
+          name,
+          account_id,
+          contact_id,
+          amount,
+          stage,
+          probability,
+          close_date,
+          metadataKeys: metadata ? Object.keys(metadata) : [],
+          extraKeys: Object.keys(otherFields || {}),
+        },
+      });
       
-      // Fetch current metadata
-      const currentOpp = await pgPool.query('SELECT metadata FROM opportunities WHERE id = $1', [id]);
+      // Fetch current metadata (strictly tenant-scoped)
+      const currentOpp = await pgPool.query(
+        'SELECT id, tenant_id, stage, metadata FROM opportunities WHERE id = $1 AND tenant_id = $2',
+        [id, requestedTenantId]
+      );
       
       if (currentOpp.rows.length === 0) {
         return res.status(404).json({
@@ -175,6 +234,20 @@ export default function createOpportunityRoutes(pgPool) {
         });
       }
 
+      const before = currentOpp.rows[0];
+      if (before.id !== id || before.tenant_id !== requestedTenantId) {
+        console.warn('[Opportunities PUT] Row mismatch from pre-fetch – proceeding with provided id/tenant', {
+          requested: { id, tenant_id: requestedTenantId },
+          got: { id: before.id, tenant_id: before.tenant_id }
+        });
+        // Proceed without aborting; rely on WHERE clause for correct target row.
+      }
+      console.log('[Opportunities PUT] Before update', {
+        id: before.id,
+        tenant_id: before.tenant_id,
+        stage_before: before.stage,
+      });
+
       // Merge metadata
       const currentMetadata = currentOpp.rows[0].metadata || {};
       const updatedMetadata = {
@@ -182,6 +255,8 @@ export default function createOpportunityRoutes(pgPool) {
         ...(metadata || {}),
         ...otherFields,
       };
+      // Normalize stage to lowercase (pipeline stages are lowercase in UI)
+      const normalizedStage = typeof stage === 'string' ? stage.toLowerCase() : null;
       
       const query = `
         UPDATE opportunities SET
@@ -189,12 +264,12 @@ export default function createOpportunityRoutes(pgPool) {
           account_id = COALESCE($2, account_id),
           contact_id = COALESCE($3, contact_id),
           amount = COALESCE($4, amount),
-          stage = COALESCE($5, stage),
+          stage = CASE WHEN $5 IS NOT NULL THEN $5 ELSE stage END,
           probability = COALESCE($6, probability),
           close_date = COALESCE($7, close_date),
           metadata = $8,
           updated_at = NOW()
-        WHERE id = $9
+        WHERE id = $9 AND tenant_id = $10
         RETURNING *
       `;
       
@@ -203,23 +278,49 @@ export default function createOpportunityRoutes(pgPool) {
         account_id,
         contact_id,
         amount,
-        stage,
+        normalizedStage,
         probability,
         close_date,
         updatedMetadata,
-        id
+        id,
+        requestedTenantId
       ];
+
+      console.log('[Opportunities PUT] Update SQL params', {
+        id,
+        tenant_id: requestedTenantId,
+        stageParam: normalizedStage,
+      });
       
       const result = await pgPool.query(query, values);
       
       if (result.rows.length === 0) {
         return res.status(404).json({
           status: 'error',
-          message: 'Opportunity not found'
+          message: 'Opportunity not found for tenant'
         });
       }
       
-      const updatedOpportunity = expandMetadata(result.rows[0]);
+      const afterRow = result.rows[0];
+      console.log('[Opportunities PUT] After update (DB row)', {
+        id: afterRow.id,
+        tenant_id: afterRow.tenant_id,
+        stage_after: afterRow.stage,
+      });
+
+      if (normalizedStage !== null && afterRow.stage !== normalizedStage) {
+        console.warn('[Opportunities PUT] Stage mismatch after update', {
+          expected: normalizedStage,
+          actual: afterRow.stage,
+        });
+      }
+
+      const updatedOpportunity = expandMetadata(afterRow);
+      console.log('[Opportunities PUT] After update (response)', {
+        id: updatedOpportunity.id,
+        tenant_id: updatedOpportunity.tenant_id,
+        stage: updatedOpportunity.stage,
+      });
       
       res.json({
         status: 'success',

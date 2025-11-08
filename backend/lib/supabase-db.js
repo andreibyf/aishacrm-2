@@ -400,64 +400,132 @@ async function handleInsertQuery(sql, params) {
  * Handle UPDATE queries
  */
 async function handleUpdateQuery(sql, params) {
-  const tableMatch = sql.match(/update\s+([a-z_]+)/i);
-  if (!tableMatch) throw new Error('Could not parse UPDATE');
-  
-  const table = tableMatch[1];
-  // Robustly capture SET and WHERE parts allowing newlines / arbitrary whitespace.
-  // Example patterns handled:
-  // UPDATE table\nSET col = $1,\n    other = $2\nWHERE id = $3 RETURNING *
-  // UPDATE table SET col=$1 WHERE id=$2
-  const normalized = sql.replace(/\s+/g, ' '); // for simpler fallbacks if regex fails
-  const setRegex = /update\s+[a-z_]+\s+set\s+([\s\S]+?)\s+where\s+/i;
-  const setMatch = sql.match(setRegex);
-  let setPart = setMatch ? setMatch[1].trim() : null;
-  if (!setPart) {
-    // Fallback: try normalized string
-    const fallback = normalized.match(/update\s+[a-z_]+\s+set\s+(.+?)\s+where\s+/i);
-    if (fallback) {
-      // Use comma separation heuristic before WHERE
-      setPart = fallback[1].trim();
+  console.log('[Supabase Adapter UPDATE start]', { rawSQL: sql, paramsCount: params.length });
+  // Robust extraction of table, SET, WHERE allowing newlines
+  let updMatch = sql.match(/update\s+([a-z_][a-z0-9_]*)\s+set\s+([\s\S]*?)\s+where\s+([\s\S]*)/i);
+  let table, setPart, wherePart;
+  if (!updMatch) {
+    // Fallback attempt: collapse whitespace and retry (some environments may introduce \r or unusual spacing)
+    const collapsed = sql.replace(/[\t\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    updMatch = collapsed.match(/update\s+([a-z_][a-z0-9_]*)\s+set\s+(.+?)\s+where\s+(.+)/i);
+    if (updMatch) {
+      console.warn('[Supabase Adapter UPDATE] Primary regex failed; succeeded after collapsing whitespace');
+      table = updMatch[1];
+      setPart = updMatch[2].trim();
+      wherePart = updMatch[3].trim();
+    } else {
+      // Final fallback: manual index slicing (very defensive)
+      const lower = sql.toLowerCase();
+      const uIdx = lower.indexOf('update ');
+      const setIdx = lower.indexOf(' set ');
+      const whereIdx = lower.indexOf(' where ');
+      if (uIdx !== -1 && setIdx !== -1 && whereIdx !== -1 && setIdx > uIdx && whereIdx > setIdx) {
+        table = sql.slice(uIdx + 7, setIdx).trim().split(/\s+/)[0].replace(/[^a-z0-9_]/gi, '');
+        setPart = sql.slice(setIdx + 5, whereIdx).trim();
+        wherePart = sql.slice(whereIdx + 7).trim();
+        console.warn('[Supabase Adapter UPDATE] Using manual index-based fallback parser');
+      } else {
+        console.error('[Supabase Adapter UPDATE] FAILED TO PARSE UPDATE', {
+          preview: sql.slice(0, 300),
+          length: sql.length,
+          hasSet: /\bset\b/i.test(sql),
+          hasWhere: /\bwhere\b/i.test(sql),
+        });
+        throw new Error('Malformed UPDATE (missing SET/WHERE)');
+      }
     }
+  } else {
+    table = updMatch[1];
+    setPart = updMatch[2].trim();
+    wherePart = updMatch[3].trim();
   }
-  if (!setPart) throw new Error('UPDATE requires SET clause');
 
-  // Capture WHERE (up to RETURNING / ORDER / LIMIT if present)
-  let whereMatch = sql.match(/\swhere\s+([\s\S]+)/i);
-  let wherePart = whereMatch ? whereMatch[1] : null;
-  if (wherePart) {
-    const terminatorIdx = [/\sreturning\s/i, /\sorder\s+/i, /\slimit\s+/i]
-      .map(r => {
-        const m = wherePart.match(r);
-        return m ? wherePart.indexOf(m[0]) : -1;
-      })
-      .filter(i => i !== -1)
-      .sort((a,b) => a-b)[0];
-    if (terminatorIdx !== undefined) {
-      if (terminatorIdx > -1) wherePart = wherePart.slice(0, terminatorIdx).trim();
+  // Split SET part by commas not enclosed in parentheses
+  const rawAssignments = [];
+  let buf = '';
+  let depth = 0;
+  for (let i = 0; i < setPart.length; i++) {
+    const ch = setPart[i];
+    if (ch === '(') depth++;
+    else if (ch === ')') depth = Math.max(0, depth - 1);
+    if (ch === ',' && depth === 0) {
+      if (buf.trim()) rawAssignments.push(buf.trim());
+      buf = '';
+    } else {
+      buf += ch;
     }
-    wherePart = wherePart.trim();
   }
-  if (!wherePart) throw new Error('UPDATE requires WHERE for safety');
-  
-  // Build update data
+  if (buf.trim()) rawAssignments.push(buf.trim());
+
   const updateData = {};
-  const setFields = setPart.split(',').map(f => f.trim());
-  // (reserved) track missing columns if we later add telemetry – prefix with _ to satisfy lint
-  const _missingColumns = [];
-  for (const field of setFields) {
-    const fieldMatch = field.match(/([a-z_]+)\s*=\s*\$(\d+)/i);
-    if (!fieldMatch) continue;
-    const colName = fieldMatch[1];
-    const paramNum = parseInt(fieldMatch[2], 10) - 1; // 0-indexed
+  for (const assign of rawAssignments) {
+    const colMatch = assign.match(/^(\w+)\s*=\s*/i);
+    if (!colMatch) continue;
+    const col = colMatch[1];
+    const rhs = assign.slice(colMatch[0].length).trim();
+    if (/now\s*\(\s*\)/i.test(rhs)) continue;
+    const paramMatch = rhs.match(/\$(\d+)/);
+    if (!paramMatch) continue;
+    const paramNum = parseInt(paramMatch[1], 10) - 1;
     if (paramNum < 0 || paramNum >= params.length) continue;
-    // Optimistically assign; Supabase will error if truly invalid.
-    updateData[colName] = params[paramNum];
+    let value = params[paramNum];
+    if (value === undefined) continue;
+    if (col === 'stage' && typeof value === 'string') {
+      const normalized = value.toLowerCase();
+      if (normalized !== value) console.log('[Supabase Adapter UPDATE] Normalizing stage:', value, '→', normalized);
+      value = normalized;
+    }
+    updateData[col] = value;
+  }
+
+  // If stage appears in SQL but not captured (e.g., all params null except stage), attempt secondary detection
+  if (!('stage' in updateData) && /stage\s*=\s*case\s+when\s*\$(\d+)/i.test(setPart)) {
+    const mStage = setPart.match(/stage\s*=\s*case\s+when\s*\$(\d+)/i);
+    if (mStage) {
+      const idx = parseInt(mStage[1], 10) - 1;
+      if (idx >= 0 && idx < params.length && params[idx] !== undefined) {
+        const raw = params[idx];
+        if (typeof raw === 'string') {
+          updateData.stage = raw.toLowerCase();
+          console.log('[Supabase Adapter UPDATE] Late-captured stage (CASE WHEN):', raw, '→', updateData.stage);
+        } else {
+          updateData.stage = raw;
+        }
+      }
+    }
+  }
+
+  // Capture COALESCE patterns missed if first param was not stage (defensive for other columns)
+  const coalesceMatches = [...setPart.matchAll(/(\w+)\s*=\s*coalesce\(\$(\d+),\s*\1\)/ig)];
+  for (const m of coalesceMatches) {
+    const c = m[1];
+    const idx = parseInt(m[2], 10) - 1;
+    if (!(c in updateData) && idx >= 0 && idx < params.length && params[idx] !== undefined) {
+      updateData[c] = params[idx];
+    }
+  }
+  // Defensive: capture CASE WHEN param pattern for any column (not just stage) if still missing
+  const caseWhenMatches = [...setPart.matchAll(/(\w+)\s*=\s*case\s+when\s*\$(\d+)\s+is\s+not\s+null\s+then\s*\$(\d+)\s+else\s*\1\s+end/ig)];
+  for (const m of caseWhenMatches) {
+    const col = m[1];
+    const idx = parseInt(m[2], 10) - 1; // Both param indexes should be same pattern ($n ... then $n)
+    if (!(col in updateData) && idx >= 0 && idx < params.length && params[idx] !== undefined) {
+      updateData[col] = params[idx];
+      if (col === 'stage' && typeof updateData[col] === 'string') {
+        updateData[col] = updateData[col].toLowerCase();
+      }
+      console.log('[Supabase Adapter UPDATE] Late-captured CASE WHEN column:', col);
+    }
   }
   // Parse JSON string payloads for JSON/JSONB columns when possible
   if (typeof updateData.metadata === 'string') {
     try { updateData.metadata = JSON.parse(updateData.metadata); } catch { /* noop */ }
   }
+  
+  if (!('stage' in updateData) && /\bstage\b/i.test(setPart)) {
+    console.warn('[Supabase Adapter UPDATE] Stage referenced in SQL but not captured', { setPartPreview: setPart.slice(0,200), paramsPreview: params.slice(0,12) });
+  }
+  console.log('[Supabase Adapter UPDATE]', { table, updateData, wherePart, params });
   
   // Build WHERE
   let query = supabaseClient.from(table).update(updateData);

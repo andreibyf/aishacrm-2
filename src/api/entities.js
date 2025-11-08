@@ -89,6 +89,8 @@ const makeDevFallback = (entityName, method, data, id) => {
 
 // Helper to call independent backend API
 const callBackendAPI = async (entityName, method, data = null, id = null) => {
+  // Diagnostic logging for Opportunity stage update debugging
+  const isOpportunity = entityName === 'Opportunity';
   const entityPath = pluralize(entityName);
   let url = `${BACKEND_URL}/api/${entityPath}`;
 
@@ -153,6 +155,12 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
         : { ...data, tenant_id: tenantId };
       options.body = JSON.stringify(bodyData);
     }
+
+    // Special-case Opportunity PUT: also append tenant_id as query param to avoid any body parsing ambiguity
+    if (entityName === 'Opportunity' && method === 'PUT' && tenantId !== undefined) {
+      const delimiter = url.includes('?') ? '&' : '?';
+      url += `${delimiter}tenant_id=${encodeURIComponent(tenantId)}`;
+    }
   } else if (data && method !== "GET") {
     // POST and other methods - include data in body, no ID in URL
     const bodyData = data.tenant_id !== undefined
@@ -161,9 +169,38 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     options.body = JSON.stringify(bodyData);
   }
 
+  if (isOpportunity) {
+    console.log('[API Debug] Preparing request', {
+      entity: entityName,
+      method,
+      id,
+      initialUrl: url,
+      incomingDataKeys: data ? Object.keys(data) : [],
+    });
+  }
+
+  if (isOpportunity) {
+    console.log('[API Debug] Final request configuration', {
+      entity: entityName,
+      method,
+      url,
+      hasBody: !!options.body,
+      bodyPreview: options.body ? (() => { try { const parsed = JSON.parse(options.body); return { keys: Object.keys(parsed), stage: parsed.stage, tenant_id: parsed.tenant_id }; } catch { return 'unparseable'; } })() : null,
+    });
+  }
+
   let response;
   try {
     response = await fetch(url, options);
+    if (isOpportunity) {
+      console.log('[API Debug] Fetch completed', {
+        url,
+        status: response.status,
+        statusText: response.statusText,
+        method,
+        id,
+      });
+    }
   } catch (error) {
     // Network errors (connection refused, DNS failure, etc)
     apiHealthMonitor.reportNetworkError(url, {
@@ -211,10 +248,41 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       );
       return makeDevFallback(entityName, method, data, id);
     }
+    // Enhanced Opportunity-specific logging
+    if (entityName === 'Opportunity') {
+      console.error('[API Debug] Opportunity request failed', {
+        url,
+        method,
+        id,
+        status: response.status,
+        statusText: response.statusText,
+        errorSnippet: errorText?.slice(0,300),
+        tenantId,
+      });
+    }
     throw new Error(`Backend API error: ${response.statusText} - ${errorText}`);
   }
 
-  const result = await response.json();
+  let result;
+  try {
+    result = await response.json();
+  } catch (e) {
+    if (isOpportunity) {
+      console.warn('[API Debug] Failed to parse JSON response', { url, error: e.message });
+    }
+    throw e;
+  }
+
+  if (isOpportunity) {
+    // Log stage-related fields if present
+    const stageVal = result?.data?.stage || result?.stage;
+    console.log('[API Debug] Parsed response JSON', {
+      url,
+      hasData: !!result?.data,
+      topLevelKeys: Object.keys(result || {}),
+      stage: stageVal,
+    });
+  }
 
   // Backend returns { status: "success", data: { entityName: [...] } }
   // Extract the actual data array/object
@@ -256,6 +324,11 @@ const createEntity = (entityName) => {
     },
     // Update
     update: async (id, data) => {
+      // For Opportunities explicitly append tenant_id as query param to avoid body-only ambiguity
+      if (entityName === 'Opportunity') {
+        const enriched = { ...data };
+        return await callBackendAPI(entityName, "PUT", enriched, id);
+      }
       return callBackendAPI(entityName, "PUT", data, id);
     },
     // Delete
