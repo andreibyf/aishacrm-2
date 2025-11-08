@@ -921,12 +921,12 @@ export default function OpportunitiesPage() {
 
   const handleStageChange = async (opportunityId, newStage) => {
     try {
-      console.log('[Opportunities] handleStageChange:', { opportunityId, newStage, tenant: user?.tenant_id });
+      console.log('[Opportunities] handleStageChange:', { opportunityId, newStage, tenant: selectedTenantId });
       
-      // Include tenant_id in the update
+      // Include tenant_id in the update - use selectedTenantId from useTenant hook
       const updateData = {
         stage: newStage,
-        tenant_id: user?.tenant_id
+        tenant_id: selectedTenantId
       };
       
       await Opportunity.update(opportunityId, updateData);
