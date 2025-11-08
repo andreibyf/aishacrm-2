@@ -56,36 +56,53 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
 
   const onDragEnd = async (result) => {
     const { destination, source, draggableId } = result;
-    
     if (!destination) return;
+
+    // If moving within same column and position changed, reorder locally (no persistence server-side)
+    if (destination.droppableId === source.droppableId && destination.index !== source.index) {
+      setLocalOpportunities(prev => {
+        const stageId = source.droppableId;
+        const stageItems = prev.filter(o => o.stage === stageId);
+        const otherItems = prev.filter(o => o.stage !== stageId);
+
+        // Remove dragged item from stage list
+        const fromIndex = source.index;
+        const [moved] = stageItems.splice(fromIndex, 1);
+        // Insert at new index
+        stageItems.splice(destination.index, 0, moved);
+
+        // Rebuild list preserving order inside the stage
+        return [
+          ...otherItems,
+          ...stageItems
+        ];
+      });
+      return; // Done - no backend call for ordering yet
+    }
+
+    // If dropped back to original spot, do nothing
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
-    
-    // Stage changed - optimistic update
+
+    // Moving to a different stage
     if (destination.droppableId !== source.droppableId) {
       const newStage = destination.droppableId;
-      
-      // OPTIMISTIC UPDATE: Update UI immediately
-      setLocalOpportunities(prev => 
-        prev.map(opp => 
-          opp.id === draggableId 
-            ? { ...opp, stage: newStage }
-            : opp
-        )
-      );
-      
+
+      // OPTIMISTIC UPDATE: ensure id comparison uses same type
+      setLocalOpportunities(prev => prev.map(opp => (
+        String(opp.id) === String(draggableId)
+          ? { ...opp, stage: newStage }
+          : opp
+      )));
+
       try {
-        // Make the API call in the background
         await onStageChange(draggableId, newStage);
-        
-        // Refresh to ensure data is in sync
         if (onDataRefresh) {
           await onDataRefresh();
         }
       } catch (error) {
         console.error('[Kanban] Error updating stage:', error);
         toast.error('Failed to move opportunity');
-        
-        // REVERT on error: restore original data
+        // REVERT on error: restore original opportunities list from props
         setLocalOpportunities(opportunities);
       }
     }
