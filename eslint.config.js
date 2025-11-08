@@ -6,7 +6,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import prettier from 'eslint-config-prettier'
 
 export default [
-  { ignores: ['dist', 'logseq/**', 'scripts/**', 'backend/node_modules/**', 'src/functions/**', 'node_modules/**', '.DS_Store', '*.local', '.env.*', '*.env', 'logseq/bak/**', 'playwright-report/**', 'test-results/**'] },
+  { ignores: ['dist', 'logseq/**', 'scripts/**', 'backend/node_modules/**', 'src/functions/**', 'src/functions.archived/**', 'node_modules/**', '.DS_Store', '*.local', '.env.*', '*.env', 'logseq/bak/**', 'playwright-report/**', 'test-results/**'] },
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {
