@@ -19,6 +19,57 @@ function getBucketName() {
   return process.env.SUPABASE_STORAGE_BUCKET || "tenant-assets";
 }
 
+/**
+ * Generate a unique tenant_id slug from a company name
+ * If the base slug exists, appends a counter: acme-corp-2, acme-corp-3, etc.
+ */
+async function generateUniqueTenantId(supabase, name) {
+  // Create base slug: lowercase, alphanumeric + hyphens only
+  let slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '') // Remove special chars except spaces and hyphens
+    .trim()
+    .replace(/\s+/g, '-') // Replace spaces with hyphens
+    .replace(/-+/g, '-'); // Collapse multiple hyphens
+
+  // Check if base slug is available
+  const { data: existing } = await supabase
+    .from('tenant')
+    .select('tenant_id')
+    .eq('tenant_id', slug)
+    .maybeSingle();
+
+  if (!existing) {
+    console.log(`[generateUniqueTenantId] Generated slug: ${slug}`);
+    return slug;
+  }
+
+  // Base slug exists, append counter
+  let counter = 2;
+  let candidate = `${slug}-${counter}`;
+  
+  while (true) {
+    const { data: check } = await supabase
+      .from('tenant')
+      .select('tenant_id')
+      .eq('tenant_id', candidate)
+      .maybeSingle();
+    
+    if (!check) {
+      console.log(`[generateUniqueTenantId] Generated slug with counter: ${candidate}`);
+      return candidate;
+    }
+    
+    counter++;
+    candidate = `${slug}-${counter}`;
+    
+    // Safety check to prevent infinite loops
+    if (counter > 1000) {
+      throw new Error(`Unable to generate unique tenant_id for name: ${name}`);
+    }
+  }
+}
+
 export default function createTenantRoutes(_pgPool) {
   const router = express.Router();
 
@@ -87,7 +138,7 @@ export default function createTenantRoutes(_pgPool) {
     try {
       console.log("[Tenants POST] Received request body:", JSON.stringify(req.body, null, 2));
       
-      const {
+      let {
         tenant_id,
         name,
         branding_settings,
@@ -110,11 +161,19 @@ export default function createTenantRoutes(_pgPool) {
 
       console.log("[Tenants POST] Parsed tenant_id:", tenant_id, "name:", name);
 
+      // Auto-generate tenant_id from name if not provided
+      if (!tenant_id && name) {
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
+        tenant_id = await generateUniqueTenantId(supabase, name);
+        console.log("[Tenants POST] Auto-generated tenant_id:", tenant_id);
+      }
+
       if (!tenant_id) {
-        console.warn("[Tenants POST] Missing tenant_id in request");
+        console.warn("[Tenants POST] Missing tenant_id and name in request");
         return res.status(400).json({
           status: "error",
-          message: "tenant_id is required",
+          message: "Either tenant_id or name is required",
         });
       }
       // Build branding_settings from individual fields or use provided object
