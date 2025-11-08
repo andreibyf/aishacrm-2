@@ -606,9 +606,38 @@ const createFunctionProxy = (functionName) => {
         return { data: { success: false, message: err?.message || 'Cleanup failed', error: err?.message } };
       }
     }
+    // Non-local: call backend validate-and-import directly when Base44 doesn't expose it
+    if (functionName === 'validateAndImport') {
+      console.log('[validateAndImport] Non-local mode handler called');
+      try {
+        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+        const payload = args[0] || {};
+        console.log('[validateAndImport] Calling', `${BACKEND_URL}/api/validation/validate-and-import`, 'with payload:', payload);
+        const response = await fetch(`${BACKEND_URL}/api/validation/validate-and-import`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+        const json = await response.json();
+        console.log('[validateAndImport] Response status:', response.status, 'json:', json);
+        if (!response.ok) {
+          return { data: { status: 'error', error: json?.message || response.statusText } };
+        }
+        return { data: json.data || json };
+      } catch (err) {
+        console.error('[validateAndImport] Error:', err);
+        return { data: { status: 'error', error: err?.message || String(err) } };
+      }
+    }
     return base44.functions?.[functionName]?.(...args);
   };
 };
+
+// Functions we always override with our proxy implementation even if Base44 exposes them.
+// Rationale: We need custom logic (e.g., direct backend call + logging + response shape normalization)
+// that the Base44 stub either doesn't provide or returns in a different shape.
+const OVERRIDE_FUNCTIONS = new Set(['validateAndImport']);
 
 // Create a Proxy handler that wraps all function access
 const functionsProxy = new Proxy({}, {
@@ -631,6 +660,11 @@ const functionsProxy = new Proxy({}, {
 
     // Local dev mode: use function proxy (mock/no-op implementations)
     if (isLocalDevMode()) {
+      return createFunctionProxy(prop);
+    }
+
+    // Always override certain functions even if Base44 provides them
+    if (OVERRIDE_FUNCTIONS.has(String(prop))) {
       return createFunctionProxy(prop);
     }
 
