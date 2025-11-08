@@ -3,7 +3,7 @@ import { Opportunity } from "@/api/entities";
 import { Account } from "@/api/entities";
 import { Contact } from "@/api/entities";
 import { Lead } from "@/api/entities";
-import { User } from "@/api/entities";
+// User entity not needed here; user comes from context
 import { Employee } from "@/api/entities";
 import { useApiManager } from "../components/shared/ApiManager";
 import OpportunityCard from "../components/opportunities/OpportunityCard";
@@ -57,6 +57,7 @@ import SimpleModal from "../components/shared/SimpleModal";
 import StatusHelper from "../components/shared/StatusHelper";
 import { loadUsersSafely } from "../components/shared/userLoader";
 import { useConfirmDialog } from "../components/shared/ConfirmDialog";
+import { useUser } from "@/components/shared/useUser.js";
 
 const stageColors = {
   prospecting: "bg-blue-900/20 text-blue-300 border-blue-700",
@@ -85,7 +86,7 @@ export default function OpportunitiesPage() {
   );
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
   const { selectedTenantId } = useTenant();
   const [detailOpportunity, setDetailOpportunity] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -118,80 +119,40 @@ export default function OpportunitiesPage() {
   const supportingDataLoaded = useRef(false); // NEW: Track if supporting data is loaded
   const [supportingDataReady, setSupportingDataReady] = useState(false); // trigger renders when supporting data completes
 
-  // Load user once
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        // In E2E mode, use injected mock user to avoid failed User.me() calls
-        if (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser) {
-          if (import.meta.env.DEV) {
-            console.log("[Opportunities] E2E mock user loaded:", {
-              email: window.__e2eUser.email,
-              role: window.__e2eUser.role,
-              tenant_id: window.__e2eUser.tenant_id,
-            });
-          }
-          setUser(window.__e2eUser);
-          return;
-        }
-        
-        const currentUser = await User.me();
-        if (import.meta.env.DEV) {
-          console.log("[Opportunities] User loaded:", {
-            email: currentUser.email,
-            role: currentUser.role,
-            employee_role: currentUser.employee_role,
-            tenant_id: currentUser.tenant_id,
-          });
-        }
-        setUser(currentUser);
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.error("Failed to load user:", error);
-        }
-        toast.error("Failed to load user information");
-      }
-    };
-    loadUser();
-  }, []);
-
+  // Centralized tenant filter builder
   const getTenantFilter = useCallback(() => {
     if (!user) return {};
 
     let filter = {};
 
     // Tenant filtering
-    if (user.role === "superadmin" || user.role === "admin") {
+    if (user.role === 'superadmin' || user.role === 'admin') {
       if (selectedTenantId) {
         filter.tenant_id = selectedTenantId;
       }
+      // If no tenant selected (admin views all), backend may enforce scope; callers guard accordingly
     } else if (user.tenant_id) {
       filter.tenant_id = user.tenant_id;
     }
 
-    // Employee scope filtering from context
-    if (selectedEmail && selectedEmail !== "all") {
-      if (selectedEmail === "unassigned") {
-        filter.$or = [{ assigned_to: null }, { assigned_to: "" }];
+    // Employee scope
+    if (selectedEmail && selectedEmail !== 'all') {
+      if (selectedEmail === 'unassigned') {
+        filter.$or = [{ assigned_to: null }, { assigned_to: '' }];
       } else {
         filter.assigned_to = selectedEmail;
       }
-    } else if (
-      user.employee_role === "employee" && user.role !== "admin" &&
-      user.role !== "superadmin"
-    ) {
-      // Regular employees only see their own data
+    } else if (user.employee_role === 'employee' && user.role !== 'admin' && user.role !== 'superadmin') {
       filter.assigned_to = user.email;
     }
 
-    // Test data filtering - only add if we want to EXCLUDE test data
-    // When showTestData is true, we omit this filter to see all data
+    // Test data filtering (only exclude when toggled off)
     if (!showTestData) {
-      filter.is_test_data = false; // Simple boolean, not complex operator
+      filter.is_test_data = false;
     }
 
     return filter;
-  }, [user, selectedTenantId, showTestData, selectedEmail]);
+  }, [user, selectedTenantId, selectedEmail, showTestData]);
 
   // Load supporting data (accounts, contacts, users, employees) ONCE - OPTIMIZED WITH CONCURRENT FETCHING
   useEffect(() => {

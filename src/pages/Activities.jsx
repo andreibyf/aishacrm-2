@@ -6,6 +6,7 @@ import { Contact } from "@/api/entities";
 import { Lead } from "@/api/entities";
 import { Opportunity } from "@/api/entities";
 import { User } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import { Employee } from "@/api/entities";
 import { useApiManager } from "../components/shared/ApiManager";
 import ActivityCard from "../components/activities/ActivityCard";
@@ -73,7 +74,8 @@ export default function ActivitiesPage() {
   const [selectedActivities, setSelectedActivities] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [user, setUser] = useState(null);
+  // Use global user context instead of per-page fetch
+  const { user } = useUser();
   const { selectedTenantId } = useTenant();
   const [detailActivity, setDetailActivity] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -103,24 +105,7 @@ export default function ActivitiesPage() {
   
   const initialLoadDone = useRef(false);
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        // In E2E mode, use injected mock user to avoid failed User.me() calls
-        if (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser) {
-          setUser(window.__e2eUser);
-          return;
-        }
-        
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Failed to load user:", error);
-        toast.error("Failed to load user information");
-      }
-    };
-    loadUser();
-  }, []);
+  // Removed per-page user fetch; context handles loading and E2E override
 
   const buildFilter = useCallback(() => {
     if (!user) return {};

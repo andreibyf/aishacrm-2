@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Lead } from "@/api/entities";
 import { Account } from "@/api/entities";
-import { User } from "@/api/entities";
+// User entity no longer needed here; user comes from context
+import { useUser } from "@/components/shared/useUser.js";
 import { Employee } from "@/api/entities";
 import { useApiManager } from "../components/shared/ApiManager";
 import LeadCard from "../components/leads/LeadCard";
@@ -63,6 +64,7 @@ import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
 export default function LeadsPage() {
+  const { user } = useUser();
   const [leads, setLeads] = useState([]);
   const [users, setUsers] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -77,7 +79,7 @@ export default function LeadsPage() {
   const [selectedLeads, setSelectedLeads] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [user, setUser] = useState(null);
+  // Removed local user state; using global context
   const { selectedTenantId } = useTenant();
   const [detailLead, setDetailLead] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -180,24 +182,7 @@ export default function LeadsPage() {
   const supportingDataLoaded = useRef(false);
 
   // Load user once
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        // In E2E mode, use injected mock user to avoid failed User.me() calls
-        if (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser) {
-          setUser(window.__e2eUser);
-          return;
-        }
-        
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Failed to load user:", error);
-        toast.error("Failed to load user information");
-      }
-    };
-    loadUser();
-  }, []);
+  // Removed per-page user fetch; user comes from global context
 
   // New getTenantFilter function, moved here from tenantContext
   const getTenantFilter = useCallback(() => {

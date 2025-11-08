@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { User } from "@/api/entities";
 import { Lead } from "@/api/entities";
 import { Contact } from "@/api/entities";
@@ -19,6 +19,7 @@ import LeadAgeReport from "../components/dashboard/LeadAgeReport";
 import { Loader2 } from "lucide-react";
 import WidgetPickerModal from "../components/dashboard/WidgetPickerModal";
 import { toast } from "sonner";
+import { useUser } from "@/components/shared/useUser.js";
 import { useLogger } from "../components/shared/Logger";
 
 const ALL_WIDGETS = [
@@ -55,7 +56,8 @@ const ALL_WIDGETS = [
 ];
 
 export default function DashboardPage() {
-  const [user, setUser] = useState(null);
+  // Use global user context (centralized User.me())
+  const { user, reloadUser } = useUser();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalContacts: 0,
@@ -81,40 +83,7 @@ export default function DashboardPage() {
   const { selectedEmail } = useEmployeeScope();
   const logger = useLogger();
 
-  const userLoadAttempted = useRef(false);
-
-  // Load user (only once) - Use cache to prevent race with Layout
-  useEffect(() => {
-    if (userLoadAttempted.current) return;
-    userLoadAttempted.current = true;
-
-    const loadUser = async () => {
-      try {
-        // Use cachedRequest - Layout already called User.me(), so this will be cached
-        const currentUser = await cachedRequest(
-          "User",
-          "me",
-          {},
-          () => User.me(),
-        );
-        setUser(currentUser);
-        logger.info("User loaded successfully for Dashboard", "Dashboard", {
-          userId: currentUser?.email,
-        });
-      } catch (error) {
-        logger.error("Failed to load user for Dashboard", "Dashboard", {
-          error: error.message,
-          stack: error.stack,
-        });
-        console.error("User load failed:", error);
-        setUser(null);
-      }
-    };
-
-    // Small delay to let Layout's User.me() populate cache first
-    const timer = setTimeout(loadUser, 50);
-    return () => clearTimeout(timer);
-  }, [cachedRequest, logger]);
+  // Removed per-page user loading; user comes from context
 
   // Load widget preferences (only after user is loaded)
   useEffect(() => {
@@ -399,13 +368,14 @@ export default function DashboardPage() {
         return;
       }
 
-      const updatedUser = await User.updateMyUserData({
+      await User.updateMyUserData({
         permissions: {
           ...user.permissions,
           dashboard_widgets: newPreferences,
         },
       });
-      setUser(updatedUser);
+      // Reload global user (non-blocking)
+      reloadUser?.();
       setWidgetPreferences(newPreferences);
       logger.info("Dashboard preferences saved!", "Dashboard", {
         userId: user.email,
