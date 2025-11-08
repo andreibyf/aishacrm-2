@@ -26,11 +26,27 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingOpportunity, setEditingOpportunity] = useState(null);
   const [localOpportunities, setLocalOpportunities] = useState(opportunities);
+  // Track ids with an in-flight stage update to prevent premature reversion from parent prop sync
+  const [pendingStageIds, setPendingStageIds] = useState(new Set());
 
-  // Sync local state with props
+  // Sync local state with props unless an optimistic stage change is pending for specific ids.
   React.useEffect(() => {
-    setLocalOpportunities(opportunities);
-  }, [opportunities]);
+    if (!pendingStageIds.size) {
+      setLocalOpportunities(opportunities);
+      return;
+    }
+    // Merge: keep optimistic versions for pending ids, use fresh data for the rest
+    setLocalOpportunities(prev => {
+      const prevById = new Map(prev.map(o => [String(o.id), o]));
+      return opportunities.map(o => {
+        const idStr = String(o.id);
+        if (pendingStageIds.has(idStr) && prevById.has(idStr)) {
+          return prevById.get(idStr);
+        }
+        return o;
+      });
+    });
+  }, [opportunities, pendingStageIds]);
 
   const getDisplayInfo = (opp) => {
     if (opp.account_id) {
@@ -86,24 +102,35 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
     // Moving to a different stage
     if (destination.droppableId !== source.droppableId) {
       const newStage = destination.droppableId;
+      const idStr = String(draggableId);
 
-      // OPTIMISTIC UPDATE: ensure id comparison uses same type
+      // Mark id as pending so parent prop sync won't overwrite optimistic state
+      setPendingStageIds(prev => new Set(prev).add(idStr));
+
+      // OPTIMISTIC UPDATE
       setLocalOpportunities(prev => prev.map(opp => (
-        String(opp.id) === String(draggableId)
+        String(opp.id) === idStr
           ? { ...opp, stage: newStage }
           : opp
       )));
 
       try {
         await onStageChange(draggableId, newStage);
+        // Refresh (optional) - keep small delay to let backend commit fully
         if (onDataRefresh) {
           await onDataRefresh();
         }
       } catch (error) {
         console.error('[Kanban] Error updating stage:', error);
         toast.error('Failed to move opportunity');
-        // REVERT on error: restore original opportunities list from props
-        setLocalOpportunities(opportunities);
+        setLocalOpportunities(opportunities); // revert
+      } finally {
+        // Remove id from pending so future prop syncs include updated record
+        setPendingStageIds(prev => {
+          const next = new Set(prev);
+            next.delete(idStr);
+            return next;
+        });
       }
     }
   };
