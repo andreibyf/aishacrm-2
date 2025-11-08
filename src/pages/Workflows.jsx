@@ -19,14 +19,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Workflow } from "@/api/entities";
-import { User } from "@/api/entities";
+import { useUser } from "../components/shared/useUser.js";
 import WorkflowBuilder from "../components/workflows/WorkflowBuilder";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
 export default function WorkflowsPage() {
   const [workflows, setWorkflows] = useState([]);
-  const [, setUser] = useState(null);
+  const { loading: userLoading } = useUser();
   const [loading, setLoading] = useState(true);
   const [showBuilder, setShowBuilder] = useState(false);
   const [editingWorkflow, setEditingWorkflow] = useState(null);
@@ -37,11 +37,9 @@ export default function WorkflowsPage() {
 
   const loadData = async () => {
     try {
-      const [currentUser, workflowsData] = await Promise.all([
-        User.me(),
+      const [workflowsData] = await Promise.all([
         Workflow.list("-created_date"),
       ]);
-      setUser(currentUser);
       setWorkflows(workflowsData || []);
     } catch (error) {
       if (import.meta.env.DEV) {
@@ -98,7 +96,7 @@ export default function WorkflowsPage() {
     loadData();
   };
 
-  if (loading) {
+  if (loading || userLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-slate-400">Loading workflows...</div>

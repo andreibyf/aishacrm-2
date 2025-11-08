@@ -1,4 +1,5 @@
-import { User, Employee } from "@/api/entities";
+import { Employee } from "@/api/entities";
+import { useUser } from "../components/shared/useUser.js";
 import { useTenant } from "../components/shared/tenantContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,7 +35,8 @@ export default function Employees() {
   const [totalItems, setTotalItems] = useState(0);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
+  // User now provided by global context (eliminates duplicate User.me() calls)
+  const { user: currentUser, loading: userLoading } = useUser();
   const [isPermissionsOpen, setIsPermissionsOpen] = useState(false);
   const [permissionsEmployee, setPermissionsEmployee] = useState(null);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
@@ -42,18 +44,7 @@ export default function Employees() {
 
   const { selectedTenantId } = useTenant();
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const user = await User.me();
-        console.log('[Employees] Current user loaded:', user);
-        setCurrentUser(user);
-      } catch (error) {
-        console.error("Failed to load current user:", error);
-      }
-    };
-    fetchUser();
-  }, []);
+  // Removed local User.me() fetch; currentUser provided by context
 
   const loadEmployees = useCallback(async () => {
     setLoading(true);
@@ -119,10 +110,10 @@ export default function Employees() {
   }, [selectedTenantId, searchTerm, currentPage, pageSize, currentUser]);
 
   useEffect(() => {
-    if (currentUser) {
+    if (!userLoading && currentUser) {
       loadEmployees();
     }
-  }, [loadEmployees, currentUser]);
+  }, [loadEmployees, currentUser, userLoading]);
 
   const handleSave = async () => {
     setIsFormOpen(false);
@@ -316,10 +307,10 @@ export default function Employees() {
               className="pl-10 bg-slate-800 border-slate-700 text-slate-200"
             />
           </div>
-          <Button 
-            onClick={() => { setEditingEmployee(null); setIsFormOpen(true); }} 
+          <Button
+            onClick={() => { setEditingEmployee(null); setIsFormOpen(true); }}
             className="bg-blue-600 hover:bg-blue-700"
-            disabled={!currentUser}
+            disabled={!currentUser || userLoading}
           >
             <Plus className="mr-2 h-4 w-4" /> Add Employee
           </Button>
@@ -357,7 +348,7 @@ export default function Employees() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                {loading || userLoading ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-10">
                       <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500" />
