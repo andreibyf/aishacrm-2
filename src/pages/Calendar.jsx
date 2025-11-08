@@ -37,6 +37,15 @@ export default function CalendarPage() {
     const tenantFilter = getTenantFilterHelper(currentUser, selectedTenantId);
     let filter = { ...tenantFilter };
 
+    // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
+    if ((currentUser.role === 'superadmin' || currentUser.role === 'admin') && !filter.tenant_id) {
+      if (import.meta.env.DEV) {
+        console.log("[Calendar] Skipping data load - no tenant selected");
+      }
+      setActivities([]);
+      return;
+    }
+
     const isAdminLike = currentUser.role === "admin" || currentUser.role === "superadmin";
     const isManager = currentUser.employee_role === "manager";
     const seeAll = isAdminLike || isManager;

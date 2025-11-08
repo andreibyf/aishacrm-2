@@ -96,6 +96,12 @@ export default function AICampaigns() {
 
   const loadCampaigns = useCallback(async () => {
     if (!currentUser) return;
+    // Guard: superadmin/admin must select tenant before loading campaigns
+    if ((currentUser.role === 'superadmin' || currentUser.role === 'admin') && !selectedTenantId) {
+      setCampaigns([]);
+      setAllCounts({ all: 0, draft: 0, scheduled: 0, running: 0, paused: 0, completed: 0, cancelled: 0 });
+      return;
+    }
 
     setLoading(true);
     try {
@@ -104,6 +110,15 @@ export default function AICampaigns() {
       let baseFilter = { ...tenantFilter };
       if (searchTerm) {
         baseFilter._search = searchTerm;
+      }
+
+      // Avoid hitting backend if tenant filter is empty (prevents 404 spam before route exists)
+      if (!baseFilter.tenant_id) {
+        setCampaigns([]);
+        setAllCounts({ all: 0, draft: 0, scheduled: 0, running: 0, paused: 0, completed: 0, cancelled: 0 });
+        setTotalItems(0);
+        setLoading(false);
+        return;
       }
 
       const allFilteredCampaigns = await AICampaign.filter(baseFilter);

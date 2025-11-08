@@ -135,7 +135,7 @@ export default function AccountsPage() {
 
     // Test data filtering
     if (!showTestData) {
-      filter.is_test_data = { $ne: true };
+      filter.is_test_data = false; // Simple boolean, not complex operator
     }
 
     return filter;
@@ -173,6 +173,15 @@ export default function AccountsPage() {
           }
         } else if (user.tenant_id) {
           baseTenantFilter.tenant_id = user.tenant_id;
+        }
+
+        // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
+        if ((user.role === 'superadmin' || user.role === 'admin') && !baseTenantFilter.tenant_id) {
+          if (import.meta.env.DEV) {
+            console.log("[Accounts] Skipping data load - no tenant selected");
+          }
+          supportingDataLoaded.current = true;
+          return;
         }
 
         // Load contacts
@@ -243,6 +252,19 @@ export default function AccountsPage() {
 
     try {
       const currentTenantFilter = getTenantFilter();
+      
+      // Guard: Don't load stats if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !currentTenantFilter.tenant_id) {
+        setTotalStats({
+          total: 0,
+          customer: 0,
+          prospect: 0,
+          partner: 0,
+          inactive: 0,
+        });
+        return;
+      }
+      
       const allAccounts = await cachedRequest(
         "Account",
         "filter",
@@ -271,6 +293,14 @@ export default function AccountsPage() {
     setLoading(true);
     try {
       const currentTenantFilter = getTenantFilter();
+
+      // Guard: Don't load accounts if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !currentTenantFilter.tenant_id) {
+        setAccounts([]);
+        setTotalItems(0);
+        setLoading(false);
+        return;
+      }
 
       const allAccounts = await cachedRequest(
         "Account",

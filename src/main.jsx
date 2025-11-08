@@ -2,6 +2,7 @@ import ReactDOM from 'react-dom/client'
 import App from '@/App.jsx'
 import '@/index.css'
 import ErrorBoundary from '@/components/shared/ErrorBoundary'
+import { UserProvider } from '@/components/shared/UserContext.jsx'
 
 // Add loading indicator
 if (import.meta.env.DEV) {
@@ -11,6 +12,8 @@ if (import.meta.env.DEV) {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
     <ErrorBoundary>
-      <App />
+      <UserProvider>
+        <App />
+      </UserProvider>
     </ErrorBoundary>
 ) 

@@ -231,7 +231,7 @@ export default function LeadsPage() {
 
     // Test data filtering
     if (!showTestData) {
-      filter.is_test_data = { $ne: true };
+      filter.is_test_data = false; // Simple boolean, not complex operator
     }
 
     return filter;
@@ -251,6 +251,15 @@ export default function LeadsPage() {
           }
         } else if (user.tenant_id) {
           baseTenantFilter.tenant_id = user.tenant_id;
+        }
+
+        // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
+        if ((user.role === 'superadmin' || user.role === 'admin') && !baseTenantFilter.tenant_id) {
+          if (import.meta.env.DEV) {
+            console.log("[Leads] Skipping data load - no tenant selected");
+          }
+          supportingDataLoaded.current = true;
+          return;
         }
 
         // Load accounts
@@ -294,6 +303,20 @@ export default function LeadsPage() {
       // Use the new getTenantFilter which includes employee scope and test data filter
       let filter = getTenantFilter();
 
+      // Guard: Don't load stats if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !filter.tenant_id) {
+        setTotalStats({
+          total: 0,
+          new: 0,
+          contacted: 0,
+          qualified: 0,
+          unqualified: 0,
+          converted: 0,
+          lost: 0,
+        });
+        return;
+      }
+
       // Get up to 10000 leads for stats calculation
       const allLeads = await Lead.filter(filter, "id", 10000);
 
@@ -332,6 +355,14 @@ export default function LeadsPage() {
     setLoading(true);
     try {
       let currentFilter = getTenantFilter();
+
+      // Guard: Don't load leads if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !currentFilter.tenant_id) {
+        setLeads([]);
+        setTotalItems(0);
+        setLoading(false);
+        return;
+      }
 
       if (statusFilter !== "all") {
         currentFilter = { ...currentFilter, status: statusFilter };

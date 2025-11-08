@@ -116,6 +116,11 @@ export default function ReportsPage() {
       baseFilter.tenant_id = currentUser.tenant_id;
     }
 
+    // Guard: For superadmin/admin without a selected tenant, do not load data
+    if ((currentUser.role === 'superadmin' || currentUser.role === 'admin') && !baseFilter.tenant_id) {
+      return {};
+    }
+
     let filter = {};
     if (canViewAllRecords) {
       filter = { ...baseFilter };
@@ -123,8 +128,9 @@ export default function ReportsPage() {
       filter = getFilter(baseFilter);
     }
 
+    // Use boolean filter instead of Mongo-style operators
     if (!('is_test_data' in filter)) {
-      filter.is_test_data = { $ne: true };
+      filter.is_test_data = false;
     }
     return filter;
   }, [currentUser, selectedTenantId, canViewAllRecords, getFilter]);

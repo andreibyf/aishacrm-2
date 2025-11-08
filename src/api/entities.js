@@ -94,13 +94,87 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   const entityPath = pluralize(entityName);
   let url = `${BACKEND_URL}/api/${entityPath}`;
 
-  // Get tenant_id from mock user for local dev
+  // Determine tenant_id preference order:
+  // 1) Explicit data.tenant_id (including null to indicate cross-tenant reads for superadmin)
+  // 2) URL param (?tenant=...)
+  // 3) Persisted TenantContext selection (localStorage: selected_tenant_id)
+  // 4) Local dev mock user (when isLocalDevMode())
+  // 5) Otherwise: null (do NOT fall back to "local-tenant-001" in production)
+
+  const getSelectedTenantFromClient = () => {
+    try {
+      if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href);
+        const urlTenant = url.searchParams.get('tenant');
+        if (urlTenant) return urlTenant;
+        const stored = localStorage.getItem('selected_tenant_id');
+        if (stored) return stored;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  };
+
   const mockUser = isLocalDevMode() ? createMockUser() : null;
-  const defaultTenantId = mockUser?.tenant_id || "local-tenant-001";
+
+  // Resolve tenant_id with robust fallbacks and cache
+  const resolveTenantId = async () => {
+    // 1) Explicit in data (including null)
+    if (data && Object.prototype.hasOwnProperty.call(data, 'tenant_id')) {
+      return data.tenant_id;
+    }
+    // 2) URL/localStorage selection
+    const clientSelected = getSelectedTenantFromClient();
+    if (clientSelected) return clientSelected;
+    // 3) Cached effective user tenant (set after first lookup)
+    try {
+      if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem('effective_user_tenant_id');
+        if (cached !== null && cached !== undefined) {
+          // Allow empty string to represent null if previously cached incorrectly
+          return cached === '' ? null : cached;
+        }
+      }
+    } catch { /* noop */ }
+
+    // 4) Supabase-authenticated user profile lookup (production)
+    if (isSupabaseConfigured()) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && user.email) {
+          const resp = await fetch(`${BACKEND_URL}/api/users?email=${encodeURIComponent(user.email)}`);
+          if (resp.ok) {
+            const json = await resp.json();
+            const rawUsers = json.data?.users || json.data || json;
+            const users = Array.isArray(rawUsers) ? rawUsers : [];
+            // Prefer record with non-null tenant_id for non-superadmin
+            const exact = users.find(u => (u.email || '').toLowerCase() === user.email.toLowerCase());
+            const tenant = exact?.tenant_id ?? null;
+            try {
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('effective_user_tenant_id', tenant ?? '');
+              }
+            } catch { /* noop */ }
+            return tenant;
+          }
+        }
+      } catch {
+        // Ignore auth lookup errors and continue fallbacks
+      }
+    }
+
+    // 5) Local dev mock user
+    if (mockUser?.tenant_id) return mockUser.tenant_id;
+    // 6) Final fallback: null (no forced default)
+    return null;
+  };
+
+  const defaultTenantId = await resolveTenantId();
 
   // Use provided tenant_id from data, or fall back to default
   // This allows explicit tenant_id values (including 'none') to be preserved
-  const tenantId = data?.tenant_id !== undefined
+  const tenantId = (data && Object.prototype.hasOwnProperty.call(data, 'tenant_id'))
     ? data.tenant_id
     : defaultTenantId;
 
@@ -236,6 +310,8 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       apiHealthMonitor.reportMissingEndpoint(url, errorContext);
     } else if (response.status === 401 || response.status === 403) {
       apiHealthMonitor.reportAuthError(url, response.status, errorContext);
+     } else if (response.status === 400) {
+       apiHealthMonitor.reportValidationError(url, errorContext);
     } else if (response.status === 429) {
       apiHealthMonitor.reportRateLimitError(url, errorContext);
     } else if (response.status >= 500 && response.status < 600) {
@@ -910,6 +986,32 @@ export const BizDevSource = {
     // Import and return the full BizDevSource schema
     const { BizDevSourceSchema } = await import('../entities/BizDevSource.js');
     return BizDevSourceSchema;
+  },
+  /**
+   * Promote a BizDev source to an Account
+   * @param {string} id - BizDev source ID
+   * @param {string} tenant_id - Tenant ID
+   * @returns {Promise<{account: Object, contact: Object|null, bizdev_source_id: string}>}
+   */
+  promote: async (id, tenant_id) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/bizdevsources/${id}/promote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenant_id }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to promote bizdev source: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.data;
+    } catch (error) {
+      console.error('[BizDevSource.promote] Error:', error);
+      throw error;
+    }
   },
 };
 

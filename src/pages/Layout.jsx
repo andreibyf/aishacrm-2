@@ -59,6 +59,7 @@ import { TimezoneProvider } from "../components/shared/TimezoneContext";
 import TenantSwitcher from "../components/shared/TenantSwitcher";
 import SystemStatusIndicator from "../components/shared/SystemStatusIndicator";
 import Clock from "../components/shared/Clock";
+import { useUser } from "@/components/shared/useUser.js";
 import RouteGuard from "../components/shared/RouteGuard";
 import { getOrCreateUserApiKey } from "@/api/functions";
 import { createAuditLog } from "@/api/functions";
@@ -537,17 +538,8 @@ const SvgDefs = () => (
 let globalTenantCleanupDone = false;
 
 function Layout({ children, currentPageName }) { // Renamed from AppLayout to Layout
-  const [user, setUser] = React.useState(() => {
-    // Initialize with E2E user if in E2E mode (synchronous check before first render)
-    if (typeof window !== 'undefined' && 
-        localStorage.getItem('E2E_TEST_MODE') === 'true' && 
-        window.__e2eUser) {
-      console.log('[Layout] Initializing with E2E mock user:', window.__e2eUser.email);
-      return window.__e2eUser;
-    }
-    return null;
-  });
-  const [userLoading, setUserLoading] = React.useState(true);
+  // Source user from global UserContext to avoid duplicate fetches/logs
+  const { user, loading: userLoading, reloadUser } = useUser();
   const [userError, setUserError] = React.useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
   const [selectedTenant, setSelectedTenant] = React.useState(null);
@@ -737,6 +729,43 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       ensureLink("dns-prefetch", o);
     });
   }, []);
+
+  // Display Effective client badge in header for clarity
+  const EffectiveClientBadge = () => {
+    try {
+      let effectiveTenant = selectedTenantId || (user?.tenant_id ?? null);
+      // Fall back to cached effective_user_tenant_id if present
+      if (!effectiveTenant && typeof window !== 'undefined') {
+        const cached = localStorage.getItem('effective_user_tenant_id');
+        effectiveTenant = cached || effectiveTenant;
+      }
+      if (!effectiveTenant) return null;
+      return (
+        <div style={{
+          position: 'fixed', 
+          top: 0,
+          right: 0,
+          height: '64px', // match header height
+          display: 'flex',
+          alignItems: 'center',
+          padding: '0 24px',
+          zIndex: 45, // just above header z-40
+          background: 'transparent',
+          color: 'rgb(203 213 225)', // text-slate-300
+          fontSize: 12
+        }}>
+          <div className="flex items-center gap-2">
+            <strong className="text-slate-400">Tenant:</strong> 
+            <span className="text-slate-300">{String(effectiveTenant).split('-')[0]}</span>
+          </div>
+        </div>
+      );
+    } catch {
+      return null;
+    }
+  };
+
+  // Inject badge just before returning main layout (search for the primary return below)
 
   // NEW: Auto-apply loading="lazy" to images and observe future inserts
   React.useEffect(() => {
@@ -946,53 +975,28 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   // This was adding overhead to every single network request
 
   const refetchUser = React.useCallback(async () => {
-    const loadUser = async () => {
-      setUserLoading(true);
+    try {
       setUserError(null);
-      try {
-        // Check for E2E test mode first
-        if (typeof window !== 'undefined' && 
-            localStorage.getItem('E2E_TEST_MODE') === 'true' && 
-            window.__e2eUser) {
-          console.log('[Layout] Using E2E mock user:', window.__e2eUser.email);
-          setUser(window.__e2eUser);
-          setUserLoading(false);
-          return;
-        }
-        
-        const currentUser = await User.me();
-        setUser(currentUser);
-
-        if (currentUser) {
-          // MAKE API KEY FETCHING SILENT - don't crash if it fails
-          getOrCreateUserApiKey()
-            .then((response) => {
-              if (response.data?.apiKey) {
-                setElevenLabsApiKey(response.data.apiKey);
-              }
-            })
-            .catch((err) => {
-              // SILENT FAILURE - just log, don't show to user
-              if (import.meta.env.DEV) {
-                console.debug("AI API key fetch skipped:", err.message);
-              }
-              // This is non-critical, user can still use the app without it
-            });
-
-          // Note: last_login is now handled automatically by:
-          // 1. Backend /api/users/login endpoint on login
-          // 2. UserPresenceHeartbeat component for session updates
-        }
-      } catch (error) {
-        console.error("User load failed:", error);
-        setUserError(error.message);
-        setUser(null);
-      } finally {
-        setUserLoading(false);
+      await reloadUser();
+      // Fetch AI API key silently for the (new) current user context
+      getOrCreateUserApiKey()
+        .then((response) => {
+          if (response?.data?.apiKey) {
+            setElevenLabsApiKey(response.data.apiKey);
+          }
+        })
+        .catch((err) => {
+          if (import.meta.env.DEV) {
+            console.debug("AI API key fetch skipped:", err.message);
+          }
+        });
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.debug("User reload error (ignored):", error?.message || error);
       }
-    };
-    await loadUser();
-  }, []);
+      setUserError(error?.message || "Failed to reload user");
+    }
+  }, [reloadUser]);
 
   React.useEffect(() => {
     // initial load
@@ -2347,6 +2351,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   if (user && user.user_metadata?.password_change_required) {
     return (
       <>
+        <EffectiveClientBadge />
         <PasswordChangeModal
           user={user}
           onPasswordChanged={() => {
@@ -3270,6 +3275,8 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         }
       `}
       </style>
+      {/* Always-visible effective tenant badge in the top-right */}
+      <EffectiveClientBadge />
       {/* Light Theme Alert Background Lightening Styles */}
       <style>
         {`

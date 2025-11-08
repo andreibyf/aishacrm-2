@@ -34,7 +34,6 @@ import CsvImportDialog from "../components/shared/CsvImportDialog";
 import CsvExportButton from "../components/shared/CsvExportButton";
 import Pagination from "../components/shared/Pagination";
 import RefreshButton from "../components/shared/RefreshButton";
-import { promoteBizDevSourceToAccount } from "@/api/functions";
 import BulkArchiveDialog from "../components/bizdev/BulkArchiveDialog";
 import ArchiveIndexViewer from "../components/bizdev/ArchiveIndexViewer";
 import BulkDeleteDialog from "../components/bizdev/BulkDeleteDialog";
@@ -250,9 +249,11 @@ export default function BizDevSourcesPage() {
     }
 
     try {
-      const { data } = await promoteBizDevSourceToAccount({ bizdev_source_id: sourceToPromote.id });
+      const result = await BizDevSource.promote(sourceToPromote.id, selectedTenantId);
 
-      toast.success(data.message);
+      toast.success('BizDev source promoted to account', {
+        description: `Created account: ${result.account.name}`
+      });
 
       handleRefresh();
       setShowDetailPanel(false);

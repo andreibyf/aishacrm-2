@@ -204,22 +204,6 @@ export default function createOpportunityRoutes(pgPool) {
       if (!requestedTenantId) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required for update' });
       }
-
-      console.log('[Opportunities PUT]', {
-        id,
-        requestedTenantId,
-        payload: {
-          name,
-          account_id,
-          contact_id,
-          amount,
-          stage,
-          probability,
-          close_date,
-          metadataKeys: metadata ? Object.keys(metadata) : [],
-          extraKeys: Object.keys(otherFields || {}),
-        },
-      });
       
       // Fetch current metadata (strictly tenant-scoped)
       const currentOpp = await pgPool.query(
@@ -236,17 +220,12 @@ export default function createOpportunityRoutes(pgPool) {
 
       const before = currentOpp.rows[0];
       if (before.id !== id || before.tenant_id !== requestedTenantId) {
-        console.warn('[Opportunities PUT] Row mismatch from pre-fetch – proceeding with provided id/tenant', {
-          requested: { id, tenant_id: requestedTenantId },
-          got: { id: before.id, tenant_id: before.tenant_id }
+        console.warn('[Opportunities PUT] ⚠️  Row mismatch from pre-fetch', {
+          expected: { id, tenant_id: requestedTenantId },
+          actual: { id: before.id, tenant_id: before.tenant_id },
+          action: 'proceeding with WHERE clause enforcement'
         });
-        // Proceed without aborting; rely on WHERE clause for correct target row.
       }
-      console.log('[Opportunities PUT] Before update', {
-        id: before.id,
-        tenant_id: before.tenant_id,
-        stage_before: before.stage,
-      });
 
       // Merge metadata
       const currentMetadata = currentOpp.rows[0].metadata || {};
@@ -286,12 +265,6 @@ export default function createOpportunityRoutes(pgPool) {
         requestedTenantId
       ];
 
-      console.log('[Opportunities PUT] Update SQL params', {
-        id,
-        tenant_id: requestedTenantId,
-        stageParam: normalizedStage,
-      });
-      
       const result = await pgPool.query(query, values);
       
       if (result.rows.length === 0) {
@@ -302,25 +275,16 @@ export default function createOpportunityRoutes(pgPool) {
       }
       
       const afterRow = result.rows[0];
-      console.log('[Opportunities PUT] After update (DB row)', {
-        id: afterRow.id,
-        tenant_id: afterRow.tenant_id,
-        stage_after: afterRow.stage,
-      });
 
       if (normalizedStage !== null && afterRow.stage !== normalizedStage) {
-        console.warn('[Opportunities PUT] Stage mismatch after update', {
+        console.warn('[Opportunities PUT] ⚠️  Stage mismatch', {
           expected: normalizedStage,
-          actual: afterRow.stage,
+          persisted: afterRow.stage,
+          id: afterRow.id
         });
       }
 
       const updatedOpportunity = expandMetadata(afterRow);
-      console.log('[Opportunities PUT] After update (response)', {
-        id: updatedOpportunity.id,
-        tenant_id: updatedOpportunity.tenant_id,
-        stage: updatedOpportunity.stage,
-      });
       
       res.json({
         status: 'success',

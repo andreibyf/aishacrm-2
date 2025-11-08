@@ -59,10 +59,24 @@ function CashFlowPage() {
 
   useEffect(() => {
     const loadStaticData = async () => {
+      if (!currentUser) return;
+      
       try {
+        const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
+        
+        // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
+        if ((currentUser.role === 'superadmin' || currentUser.role === 'admin') && !tenantFilter?.tenant_id) {
+          if (import.meta.env.DEV) {
+            console.log("[CashFlow] Skipping data load - no tenant selected");
+          }
+          setAccounts([]);
+          setOpportunities([]);
+          return;
+        }
+        
         const [accountsData, opportunitiesData] = await Promise.all([
-          Account.list(),
-          Opportunity.list(),
+          Account.filter(tenantFilter),
+          Opportunity.filter(tenantFilter),
         ]);
         setAccounts(accountsData || []);
         setOpportunities(opportunitiesData || []);
@@ -75,7 +89,7 @@ function CashFlowPage() {
       }
     };
     loadStaticData();
-  }, [logger]);
+  }, [currentUser, selectedTenantId, logger]);
 
   const fetchTransactions = useCallback(async () => {
     if (!currentUser) return;

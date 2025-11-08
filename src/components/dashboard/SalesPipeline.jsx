@@ -61,12 +61,22 @@ export default function SalesPipeline(props) {
         }
 
         const tenantFilter = props?.tenantFilter || {};
+        
+        // Guard: Don't fetch if no tenant_id is present
+        if (!tenantFilter.tenant_id) {
+          if (mounted) {
+            setPipelineData([]);
+            setLoading(false);
+          }
+          return;
+        }
+        
         const showTestData = props?.showTestData; // Access showTestData from props
 
         // Re-introduce the effectiveFilter logic from original code, now using props.showTestData
         const effectiveFilter = showTestData
           ? { ...tenantFilter }
-          : { ...tenantFilter, is_test_data: { $ne: true } };
+          : { ...tenantFilter, is_test_data: false };
         
         // Determine if we need to call filter or list based on effectiveFilter
         const hasFilter = Object.keys(effectiveFilter).length > 0;

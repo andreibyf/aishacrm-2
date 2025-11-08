@@ -164,8 +164,11 @@ export default function UtilitiesPage() {
                   navigate(createPageUrl(utility.page));
                 }
               };
+              // Use safe href for action-only utilities (no page)
+              const href = utility.page ? createPageUrl(utility.page) : '#';
+              const isActionOnly = !utility.page;
               return (
-                <a key={utility.id} href={createPageUrl(utility.page)} onClick={handleClick} className="block">
+                <a key={utility.id} href={href} onClick={handleClick} aria-disabled={isActionOnly} className="block">
                   <Card className="bg-slate-700/50 border-slate-600 hover:bg-slate-700 hover:border-blue-500 transition-all cursor-pointer h-full">
                     <CardHeader>
                       <div className="flex items-start gap-3">

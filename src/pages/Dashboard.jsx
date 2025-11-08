@@ -162,6 +162,7 @@ export default function DashboardPage() {
       if (selectedTenantId) {
         filter.tenant_id = selectedTenantId;
       }
+      // If no tenant selected, superadmin/admin sees all data (no tenant filter)
     } else if (user.tenant_id) {
       filter.tenant_id = user.tenant_id;
     }
@@ -181,9 +182,10 @@ export default function DashboardPage() {
       filter.assigned_to = user.email;
     }
 
-    // Test data filtering
+    // Test data filtering - only add if we want to EXCLUDE test data
+    // When showTestData is true, we omit this filter to see all data
     if (!showTestData) {
-      filter.is_test_data = { $ne: true };
+      filter.is_test_data = false; // Simple boolean, not complex operator
     }
 
     return filter;

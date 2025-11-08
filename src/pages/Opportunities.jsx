@@ -184,9 +184,10 @@ export default function OpportunitiesPage() {
       filter.assigned_to = user.email;
     }
 
-    // Test data filtering
+    // Test data filtering - only add if we want to EXCLUDE test data
+    // When showTestData is true, we omit this filter to see all data
     if (!showTestData) {
-      filter.is_test_data = { $ne: true };
+      filter.is_test_data = false; // Simple boolean, not complex operator
     }
 
     return filter;
@@ -200,6 +201,16 @@ export default function OpportunitiesPage() {
     const loadSupportingData = async () => {
       try {
         const tenantFilter = getTenantFilter();
+
+        // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
+        if ((user.role === 'superadmin' || user.role === 'admin') && !tenantFilter.tenant_id) {
+          if (import.meta.env.DEV) {
+            console.log("[Opportunities] Skipping data load - no tenant selected");
+          }
+          supportingDataLoaded.current = true;
+          setSupportingDataReady(true);
+          return;
+        }
 
         if (import.meta.env.DEV) {
           console.log(
@@ -290,6 +301,20 @@ export default function OpportunitiesPage() {
     try {
       const effectiveFilter = getTenantFilter();
 
+      // Guard: Don't load stats if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !effectiveFilter.tenant_id) {
+        setTotalStats({
+          total: 0,
+          prospecting: 0,
+          qualification: 0,
+          proposal: 0,
+          negotiation: 0,
+          closed_won: 0,
+          closed_lost: 0,
+        });
+        return;
+      }
+
       console.log(
         "[Opportunities] Loading stats with filter:",
         effectiveFilter,
@@ -350,6 +375,14 @@ export default function OpportunitiesPage() {
     setLoading(true);
     try {
       let effectiveFilter = getTenantFilter();
+
+      // Guard: Don't load opportunities if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !effectiveFilter.tenant_id) {
+        setOpportunities([]);
+        setTotalItems(0);
+        setLoading(false);
+        return;
+      }
 
       // Apply stage filter
       if (stageFilter !== "all") {

@@ -168,7 +168,7 @@ export default function ActivitiesPage() {
     }
 
     if (!showTestData) {
-      filter.is_test_data = { $ne: true };
+      filter.is_test_data = false; // Simple boolean, not complex operator
     }
 
     return filter;
@@ -187,6 +187,14 @@ export default function ActivitiesPage() {
           }
         } else if (user.tenant_id) {
           supportingDataTenantFilter.tenant_id = user.tenant_id;
+        }
+        
+        // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
+        if ((user.role === 'superadmin' || user.role === 'admin') && !supportingDataTenantFilter.tenant_id) {
+          if (import.meta.env.DEV) {
+            console.log("[Activities] Skipping data load - no tenant selected");
+          }
+          return;
         }
         
         const [usersData, employeesData, accountsData, contactsData, leadsData, opportunitiesData] = await Promise.all([
@@ -217,6 +225,19 @@ export default function ActivitiesPage() {
 
     try {
       const baseFilter = buildFilter();
+      
+      // Guard: Don't load stats if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !baseFilter.tenant_id) {
+        setTotalStats({
+          total: 0,
+          scheduled: 0,
+          in_progress: 0,
+          overdue: 0,
+          completed: 0,
+          cancelled: 0
+        });
+        return;
+      }
       
       const allActivities = await Activity.filter(baseFilter, 'id', 10000);
       
@@ -252,6 +273,14 @@ export default function ActivitiesPage() {
     setLoading(true);
     try {
       let currentFilter = buildFilter();
+      
+      // Guard: Don't load activities if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !currentFilter.tenant_id) {
+        setActivities([]);
+        setTotalItems(0);
+        setLoading(false);
+        return;
+      }
       
       if (searchTerm) {
         const searchRegex = { $regex: searchTerm, $options: 'i' };

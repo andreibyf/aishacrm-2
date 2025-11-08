@@ -73,24 +73,66 @@ if (process.env.DATABASE_URL) {
   console.log(`[Performance Logging] DATABASE_URL: ${dbUrlForLog}`);
   
   // Use direct parameter specification (more reliable)
-  perfLogPool = new Pool({
-    host: 'db',
-    port: 5432,
-    database: 'aishacrm',
-    user: 'postgres',
-    password: 'changeme_local_dev_only',
-    max: 5,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
-  });
+  // Prefer using connection string when provided (e.g., Supabase). Enable SSL for cloud Postgres.
+  // Fallback to local dev settings only if explicitly requested.
+  if (process.env.PERF_DB_USE_LOCAL === 'true') {
+    perfLogPool = new Pool({
+      host: 'db',
+      port: 5432,
+      database: 'aishacrm',
+      user: 'postgres',
+      password: 'changeme_local_dev_only',
+      max: 5,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+    });
+  } else {
+    // Supabase sometimes requires 'require' vs custom rejectUnauthorized; fallback without SSL if server rejects
+    const useSSL = process.env.PERF_DB_DISABLE_SSL === 'true' ? false : true;
+    const baseConfig = {
+      connectionString: process.env.DATABASE_URL,
+      max: 5,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+    };
+    if (useSSL) {
+      baseConfig.ssl = { rejectUnauthorized: false };
+    }
+    perfLogPool = new Pool(baseConfig);
+  }
   console.log("✓ Performance logging pool initialized (PostgreSQL direct connection)");
   
-  // Test connection
-  perfLogPool.query('SELECT 1')
-    .then(() => console.log("✓ Performance logging pool connection verified"))
-    .catch(err => {
-      console.error("✗ Performance logging pool connection failed:", err.message);
-    });
+  // Test connection with auto SSL fallback if necessary
+  const testPerfPool = async () => {
+    try {
+      await perfLogPool.query('SELECT 1');
+      console.log("✓ Performance logging pool connection verified");
+    } catch (err) {
+      if (/does not support SSL connections/i.test(err.message) && !process.env.PERF_DB_DISABLE_SSL) {
+        // Auto-retry without SSL; suppress initial error
+        try {
+          perfLogPool.end().catch(() => { /* ignore end error */ });
+        } catch {
+          /* ignore */
+        }
+        perfLogPool = new Pool({
+          connectionString: process.env.DATABASE_URL,
+          max: 5,
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 5000,
+        });
+        try {
+          await perfLogPool.query('SELECT 1');
+          console.log("✓ Performance logging pool connection verified (no SSL)");
+        } catch (e2) {
+          console.error("✗ Performance logging pool connection failed:", e2.message);
+        }
+      } else {
+        console.error("✗ Performance logging pool connection failed:", err.message);
+      }
+    }
+  };
+  testPerfPool();
 }
 
 
@@ -344,6 +386,7 @@ import createApikeyRoutes from "./routes/apikeys.js";
 import createNoteRoutes from "./routes/notes.js";
 import createSystemBrandingRoutes from "./routes/systembrandings.js";
 import createSyncHealthRoutes from "./routes/synchealths.js";
+import createAICampaignRoutes from "./routes/aicampaigns.js";
 
 // Mount routers with database pool
 app.use("/api/database", createDatabaseRoutes(pgPool));
@@ -388,6 +431,7 @@ app.use("/api/apikeys", createApikeyRoutes(pgPool));
 app.use("/api/notes", createNoteRoutes(pgPool));
 app.use("/api/systembrandings", createSystemBrandingRoutes(pgPool));
 app.use("/api/synchealths", createSyncHealthRoutes(pgPool));
+app.use("/api/aicampaigns", createAICampaignRoutes(pgPool));
 
 // 404 handler
 app.use((req, res) => {

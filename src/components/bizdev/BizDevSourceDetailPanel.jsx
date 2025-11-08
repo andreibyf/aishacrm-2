@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { promoteBizDevSourceToAccount } from "@/api/functions";
+import { BizDevSource } from "@/api/entities";
 import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
 import { Opportunity } from "@/api/entities";
@@ -95,36 +95,26 @@ export default function BizDevSourceDetailPanel({
     setShowPromoteConfirm(false);
 
     try {
-      const { data, status } = await promoteBizDevSourceToAccount({
-        bizdev_source_id: currentSource.id
-      });
+      const result = await BizDevSource.promote(currentSource.id, currentSource.tenant_id);
 
-      if (status === 200 && data.success) {
-        const updatedSource = {
-          ...currentSource,
-          status: 'Promoted',
-          account_id: data.account_id,
-          account_name: data.account_name
-        };
-
-        setCurrentSource(updatedSource);
-
-        if (onUpdate) onUpdate(updatedSource);
-        if (onPromote) onPromote(updatedSource);
-        if (onRefresh) onRefresh();
-
-        if (data.already_promoted) {
-          toast.info(data.message, {
-            description: "This source is already linked to an account"
-          });
-        } else {
-          toast.success(data.message, {
-            description: `Promoted to Account: ${data.account_name}`
-          });
+      const updatedSource = {
+        ...currentSource,
+        status: 'converted',
+        metadata: {
+          ...currentSource.metadata,
+          converted_to_account_id: result.account.id
         }
-      } else {
-        toast.error(data.error || 'Failed to promote BizDev Source');
-      }
+      };
+
+      setCurrentSource(updatedSource);
+
+      if (onUpdate) onUpdate(updatedSource);
+      if (onPromote) onPromote(updatedSource);
+      if (onRefresh) onRefresh();
+
+      toast.success('BizDev source promoted to account', {
+        description: `Created account: ${result.account.name}`
+      });
     } catch (error) {
       console.error('Promote error:', error);
       
