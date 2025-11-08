@@ -921,16 +921,30 @@ export default function OpportunitiesPage() {
 
   const handleStageChange = async (opportunityId, newStage) => {
     try {
-      await Opportunity.update(opportunityId, { stage: newStage });
+      console.log('[Opportunities] handleStageChange:', { opportunityId, newStage, tenant: user?.tenant_id });
+      
+      // Include tenant_id in the update
+      const updateData = {
+        stage: newStage,
+        tenant_id: user?.tenant_id
+      };
+      
+      await Opportunity.update(opportunityId, updateData);
+      console.log('[Opportunities] Stage update successful, clearing cache and reloading...');
+      
       clearCache("Opportunity");
       await Promise.all([
         loadOpportunities(currentPage, pageSize),
         loadTotalStats(),
       ]);
-      toast.success(`Opportunity moved to ${newStage.replace(/_/g, " ")}`); // Updated toast message as per outline
-      return await Opportunity.filter({ id: opportunityId }, "id", 1).then(
+      
+      toast.success(`Opportunity moved to ${newStage.replace(/_/g, " ")}`);
+      
+      const updated = await Opportunity.filter({ id: opportunityId }, "id", 1).then(
         (r) => r[0],
       );
+      console.log('[Opportunities] Retrieved updated opportunity:', updated);
+      return updated;
     } catch (error) {
       console.error("Error updating opportunity stage:", error);
       toast.error("Failed to update opportunity stage");

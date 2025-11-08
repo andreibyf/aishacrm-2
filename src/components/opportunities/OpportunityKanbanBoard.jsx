@@ -31,20 +31,28 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
 
   // Sync local state with props unless an optimistic stage change is pending for specific ids.
   React.useEffect(() => {
+    console.log('[Kanban] Prop sync triggered. Pending IDs:', Array.from(pendingStageIds));
+    console.log('[Kanban] Incoming opportunities count:', opportunities.length);
+    
     if (!pendingStageIds.size) {
+      console.log('[Kanban] No pending - replacing all local state with props');
       setLocalOpportunities(opportunities);
       return;
     }
+    
     // Merge: keep optimistic versions for pending ids, use fresh data for the rest
     setLocalOpportunities(prev => {
       const prevById = new Map(prev.map(o => [String(o.id), o]));
-      return opportunities.map(o => {
+      const merged = opportunities.map(o => {
         const idStr = String(o.id);
         if (pendingStageIds.has(idStr) && prevById.has(idStr)) {
+          console.log('[Kanban] Preserving optimistic stage for ID:', idStr, 'stage:', prevById.get(idStr).stage);
           return prevById.get(idStr);
         }
         return o;
       });
+      console.log('[Kanban] Merged opportunities count:', merged.length);
+      return merged;
     });
   }, [opportunities, pendingStageIds]);
 
@@ -73,6 +81,8 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
   const onDragEnd = async (result) => {
     const { destination, source, draggableId } = result;
     if (!destination) return;
+
+    console.log('[Kanban] Drag ended:', { draggableId, from: source.droppableId, to: destination.droppableId });
 
     // If moving within same column and position changed, reorder locally (no persistence server-side)
     if (destination.droppableId === source.droppableId && destination.index !== source.index) {
@@ -104,21 +114,36 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
       const newStage = destination.droppableId;
       const idStr = String(draggableId);
 
+      console.log('[Kanban] Stage change:', { id: idStr, oldStage: source.droppableId, newStage });
+
       // Mark id as pending so parent prop sync won't overwrite optimistic state
-      setPendingStageIds(prev => new Set(prev).add(idStr));
+      setPendingStageIds(prev => {
+        const next = new Set(prev).add(idStr);
+        console.log('[Kanban] Pending IDs after add:', Array.from(next));
+        return next;
+      });
 
       // OPTIMISTIC UPDATE
-      setLocalOpportunities(prev => prev.map(opp => (
-        String(opp.id) === idStr
-          ? { ...opp, stage: newStage }
-          : opp
-      )));
+      setLocalOpportunities(prev => {
+        const updated = prev.map(opp => (
+          String(opp.id) === idStr
+            ? { ...opp, stage: newStage }
+            : opp
+        ));
+        console.log('[Kanban] Optimistic update applied for', idStr);
+        return updated;
+      });
 
       try {
-        await onStageChange(draggableId, newStage);
+        console.log('[Kanban] Calling onStageChange...');
+        const result = await onStageChange(draggableId, newStage);
+        console.log('[Kanban] onStageChange result:', result);
+        
         // Refresh (optional) - keep small delay to let backend commit fully
         if (onDataRefresh) {
+          console.log('[Kanban] Calling onDataRefresh...');
           await onDataRefresh();
+          console.log('[Kanban] onDataRefresh complete');
         }
       } catch (error) {
         console.error('[Kanban] Error updating stage:', error);
@@ -128,8 +153,9 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
         // Remove id from pending so future prop syncs include updated record
         setPendingStageIds(prev => {
           const next = new Set(prev);
-            next.delete(idStr);
-            return next;
+          next.delete(idStr);
+          console.log('[Kanban] Pending IDs after remove:', Array.from(next));
+          return next;
         });
       }
     }
