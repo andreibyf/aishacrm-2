@@ -1,7 +1,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { AICampaign } from "@/api/entities";
-import { User } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,7 +67,7 @@ export default function AICampaigns() {
   const [showForm, setShowForm] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState(null);
   const [selectedCampaign, setSelectedCampaign] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -82,17 +82,7 @@ export default function AICampaigns() {
     loadCampaigns();
   };
 
-  useEffect(() => {
-    const fetchCurrentUser = async () => {
-      try {
-        const user = await User.me();
-        setCurrentUser(user);
-      } catch (error) {
-        console.error("Error fetching current user:", error);
-      }
-    };
-    fetchCurrentUser();
-  }, []);
+  // User provided by global context
 
   const loadCampaigns = useCallback(async () => {
     if (!currentUser) return;

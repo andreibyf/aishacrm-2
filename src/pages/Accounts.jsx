@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Account } from "@/api/entities";
 import { Contact } from "@/api/entities";
-import { User } from "@/api/entities";
 import { Employee } from "@/api/entities";
 import { useApiManager } from "../components/shared/ApiManager";
-import { loadUsersSafely } from "../components/shared/userLoader";
+import { loadUsersSafely } from "../components/shared/userLoader"; // TODO: remove after refactor if unused
+import { useUser } from "@/components/shared/useUser.js";
 import AccountCard from "../components/accounts/AccountCard";
 import AccountForm from "../components/accounts/AccountForm";
 import AccountDetailPanel from "../components/accounts/AccountDetailPanel";
@@ -65,7 +65,7 @@ export default function AccountsPage() {
   const [selectedAccounts, setSelectedAccounts] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
   const { selectedTenantId } = useTenant();
   const [detailAccount, setDetailAccount] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -141,19 +141,7 @@ export default function AccountsPage() {
     return filter;
   }, [user, selectedTenantId, showTestData, selectedEmail]);
 
-  // Load user once
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Failed to load user:", error);
-        toast.error("Failed to load user information");
-      }
-    };
-    loadUser();
-  }, []);
+  // User provided by global context
 
   // Load supporting data (contacts, users, employees) ONCE with delays and error handling
   useEffect(() => {

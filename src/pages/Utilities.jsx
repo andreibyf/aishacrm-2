@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { User } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import {
   Card,
   CardContent,
@@ -15,8 +15,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { cleanupOrphanedData } from "@/api/functions";
 
 export default function UtilitiesPage() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { user, loading: userLoading } = useUser();
   const [testDataMode, setTestDataMode] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -24,21 +23,7 @@ export default function UtilitiesPage() {
   // REMOVED: Local module permission check
   // Module visibility is now controlled centrally by ModuleSettings in Layout
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.error("Error loading user:", error);
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadUser();
-  }, []);
+  // User is provided by global context
 
   useEffect(() => {
     // Initialize toggle from localStorage
@@ -94,7 +79,7 @@ export default function UtilitiesPage() {
     // },
   ];
 
-  if (loading) {
+  if (userLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="w-8 h-8 animate-spin text-blue-500" />

@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { User } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import { Lead } from "@/api/entities";
 import { Contact } from "@/api/entities";
 import { Opportunity } from "@/api/entities";
@@ -37,8 +37,7 @@ import { exportReportToCSV } from "@/api/functions";
 
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState("overview");
-  const [currentUser, setCurrentUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { user: currentUser, loading: userLoading } = useUser();
   const [loadingStats, setLoadingStats] = useState(false);
   const [stats, setStats] = useState(null);
   const { selectedTenantId } = useTenant();
@@ -46,24 +45,7 @@ export default function ReportsPage() {
   const [isExporting, setIsExporting] = useState(false);
   const { cachedRequest } = useApiManager();
   const [currentTenantData, setCurrentTenantData] = useState(null);
-
-  useEffect(() => {
-    const loadUser = async () => {
-      setLoading(true);
-      try {
-        const user = await User.me();
-        setCurrentUser(user);
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.error('Reports: Failed to load user:', error);
-        }
-        setCurrentUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadUser();
-  }, []);
+  // User provided by global context
 
   // NEW: Load current tenant data
   useEffect(() => {
@@ -194,7 +176,7 @@ export default function ReportsPage() {
     loadStats();
   }, [currentUser, currentScopedFilter, cachedRequest]);
 
-  if (loading) {
+  if (userLoading) {
     return (
       <div className="p-4 lg:p-8 text-center text-slate-400 bg-slate-900 min-h-screen">
         <div className="flex items-center justify-center h-[50vh]">

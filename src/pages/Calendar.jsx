@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { Activity, User } from "@/api/entities";
+import { Activity } from "@/api/entities";
 import { getTenantFilter as getTenantFilterHelper } from "../components/shared/tenantUtils";
 import { useTenant } from "../components/shared/tenantContext";
 import { useApiManager } from "../components/shared/ApiManager";
+import { useUser } from "@/components/shared/useUser.js";
 import CalendarToolbar from "../components/calendar/CalendarToolbar";
 import MonthGrid from "../components/calendar/MonthGrid";
 import WeekView from "../components/calendar/WeekView";
@@ -15,7 +16,7 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, ad
 import CalendarQuickActions from "../components/calendar/CalendarQuickActions";
 
 export default function CalendarPage() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
   const [view, setView] = useState("month");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [activities, setActivities] = useState([]);
@@ -24,12 +25,7 @@ export default function CalendarPage() {
   const { selectedTenantId } = useTenant();
   const { cachedRequest } = useApiManager();
 
-  useEffect(() => {
-    (async () => {
-      const u = await User.me();
-      setCurrentUser(u);
-    })();
-  }, []);
+  // User provided by context
 
   const loadActivities = useCallback(async () => {
     if (!currentUser) return;

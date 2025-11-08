@@ -84,14 +84,9 @@ export default function EmployeeScopeFilter({ user, selectedTenantId }) {
     );
   }
 
-  // If no employees found, show a message
+  // If no employees found, hide the filter to avoid noisy banner
   if (employees.length === 0) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-slate-400">
-        <Users className="w-4 h-4" />
-        <span>No employees with CRM access</span>
-      </div>
-    );
+    return null;
   }
 
   return (

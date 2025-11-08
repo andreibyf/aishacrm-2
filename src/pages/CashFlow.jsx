@@ -3,7 +3,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { CashFlow } from '@/api/entities';
 import { Account } from '@/api/entities';
 import { Opportunity } from '@/api/entities';
-import { User } from '@/api/entities';
+// User comes from global context
+import { useUser } from '@/components/shared/useUser.js';
 import CashFlowSummary from '../components/cashflow/CashFlowSummary';
 import CashFlowChart from '../components/cashflow/CashFlowChart';
 import CashFlowForm from '../components/cashflow/CashFlowForm';
@@ -41,21 +42,10 @@ function CashFlowPage() {
   });
   const [showForm, setShowForm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
   const logger = useLogger();
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const user = await User.me();
-        setCurrentUser(user);
-        logger.info('Current user loaded', 'CashFlowPage', { userId: user.id, email: user.email });
-      } catch (error) {
-        logger.error('Failed to load user', 'CashFlowPage', { error: error.message });
-      }
-    };
-    loadUser();
-  }, [logger]);
+  // User provided by global context
 
   useEffect(() => {
     const loadStaticData = async () => {
