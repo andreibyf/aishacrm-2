@@ -20,12 +20,14 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Send, ShieldCheck } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { inviteUser } from "@/functions/users/inviteUser";
 import {
   canAssignCRMAccess,
   getAssignableRoles,
   validateUserPermissions,
 } from "@/utils/permissions";
+
+// Backend API URL
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
 
 export default function InviteUserDialog(
   { open, onOpenChange, onSuccess, tenants, currentUser },
@@ -112,13 +114,17 @@ export default function InviteUserDialog(
         },
       };
 
-      const response = await inviteUser(payload, currentUser);
+      const response = await fetch(`${BACKEND_URL}/api/users/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload)
+      });
 
-      console.log("[InviteUserDialog] Response:", response);
+      const data = await response.json();
+      console.log("[InviteUserDialog] Response:", { status: response.status, data });
 
-      if (response?.status === 200 && response?.data?.success) {
-        const data = response.data;
-
+      if (response.ok && data?.success) {
         toast({
           title: "User Created Successfully",
           description: data.message ||
@@ -129,9 +135,9 @@ export default function InviteUserDialog(
         onOpenChange(false);
         if (onSuccess) onSuccess();
       } else {
-        const errorMsg = response?.data?.error || response?.data?.message ||
+        const errorMsg = data?.error || data?.message ||
           "Failed to create user";
-        console.error("[InviteUserDialog] Error response:", response);
+        console.error("[InviteUserDialog] Error response:", { status: response.status, data });
         toast({
           variant: "destructive",
           title: "User Creation Failed",

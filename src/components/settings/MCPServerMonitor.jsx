@@ -28,7 +28,8 @@ import { mcpServerPublic } from "@/api/functions";
 
 export default function MCPServerMonitor() {
   const MCP_URL = import.meta.env.VITE_MCP_SERVER_URL || null;
-  const localDev = import.meta.env.VITE_USE_BASE44_AUTH !== "true";
+  const hasSupabase = !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
+  const localDev = !hasSupabase; // Local dev mode when Supabase not configured
   const usingRealMCP = !!MCP_URL; // If an MCP URL is configured we'll call it directly
   const [isTesting, setIsTesting] = useState(false);
   const [testResults, setTestResults] = useState(null);

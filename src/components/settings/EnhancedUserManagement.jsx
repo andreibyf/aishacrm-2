@@ -21,9 +21,10 @@ import InviteUserDialog from './InviteUserDialog';
 import { Switch } from "@/components/ui/switch";
 import { format } from 'date-fns';
 import { updateEmployeeSecure } from "@/api/functions";
-import { deleteUser } from "@/functions/users/deleteUser";
-import { resendInvite } from "@/functions/users/resendInvite";
 import { canDeleteUser } from "@/utils/permissions";
+
+// Backend API URL
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
@@ -639,15 +640,21 @@ export default function EnhancedUserManagement() {
         if (!userToDelete) return;
 
         try {
-            const response = await deleteUser(userToDelete.id, userToDelete.tenant_id, currentUser);
+            const response = await fetch(`${BACKEND_URL}/api/users/${userToDelete.id}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ tenant_id: userToDelete.tenant_id })
+            });
             
-            if (response.status === 200) {
+            if (response.ok) {
                 toast.success(`User ${userToDelete.email} has been deleted`);
                 setDeleteConfirmOpen(false);
                 setUserToDelete(null);
                 await loadData(); // Refresh user list
             } else {
-                toast.error(`Failed to delete user: ${response.data?.error || 'Unknown error'}`);
+                const data = await response.json();
+                toast.error(`Failed to delete user: ${data?.error || 'Unknown error'}`);
             }
         } catch (error) {
             console.error("Error deleting user:", error);
@@ -658,9 +665,14 @@ export default function EnhancedUserManagement() {
     // Handler for resending invite
     const handleResendInvite = async (user) => {
         try {
-            const result = await resendInvite(user.id);
+            const response = await fetch(`${BACKEND_URL}/api/users/${user.id}/resend-invite`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include'
+            });
+            const result = await response.json();
             
-            if (result.success) {
+            if (response.ok && result.success) {
                 toast.success(`Invitation email sent to ${user.email}`);
             } else {
                 toast.error(result.message || "Failed to resend invitation");

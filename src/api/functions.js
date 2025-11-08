@@ -380,11 +380,15 @@ const createFunctionProxy = (functionName) => {
       // User & Tenant Management
       // ========================================
       
-      // inviteUser: Call the REAL implementation instead of mocking
+      // inviteUser: Route to backend (this function should be called directly via backend API)
       if (functionName === 'inviteUser') {
-        // Import and call the actual backend function
-        const { inviteUser: actualInviteUser } = await import('../functions/users/inviteUser.js');
-        return actualInviteUser(args[0], args[1]);
+        console.warn('[Functions] inviteUser should be called directly via backend API at /api/users/invite');
+        return {
+          data: {
+            success: false,
+            message: 'inviteUser should be called directly via backend API'
+          }
+        };
       }
       
       if (functionName === 'cleanupUserData') {

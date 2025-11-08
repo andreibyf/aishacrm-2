@@ -69,20 +69,15 @@ export const createMockTenant = () => ({
 
 export const isLocalDevMode = () => {
   // Local dev mode means: no real auth/backends are configured
+  // Only check for Supabase (Base44 removed)
 
-  const useBase44 = (
-    import.meta.env.VITE_USE_BASE44_AUTH
-  ) === 'true';
-
-  const supabaseUrl =
-  import.meta.env.VITE_SUPABASE_URL;
-  const supabaseAnonKey =
-  import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   const hasSupabase = !!(supabaseUrl && supabaseAnonKey);
 
-  // If Supabase or Base44 auth is configured, we're NOT in local dev mode
-  if (hasSupabase || useBase44) return false;
+  // If Supabase auth is configured, we're NOT in local dev mode
+  if (hasSupabase) return false;
 
   // Otherwise, fall back to mock/local dev mode
   return true;
