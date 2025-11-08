@@ -557,6 +557,31 @@ const createFunctionProxy = (functionName) => {
         };
       }
 
+      // ========================================
+      // CSV Import & Validation
+      // ========================================
+      
+      if (functionName === 'validateAndImport') {
+        try {
+          const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+          const payload = args[0] || {};
+          const response = await fetch(`${BACKEND_URL}/api/validation/validate-and-import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(payload),
+          });
+          const json = await response.json();
+          if (!response.ok) {
+            return { data: { status: 'error', error: json?.message || response.statusText } };
+          }
+          return { data: json.data || json };
+        } catch (err) {
+          console.warn(`[Local Dev Mode] validateAndImport backend call failed: ${err?.message || err}`);
+          return { data: { status: 'error', error: err?.message || String(err) } };
+        }
+      }
+
       // Default behavior for other functions in local dev mode: warn + no-op
       console.warn(`[Local Dev Mode] Function '${functionName}' called but not available in local dev mode.`);
       return Promise.resolve({ data: { success: false, message: 'Function not available in local dev mode' } });

@@ -5,6 +5,13 @@ import path from 'path'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), splitVendorChunkPlugin()],
+  // Inject environment variables at build time
+  define: {
+    'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(process.env.VITE_SUPABASE_URL || ''),
+    'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(process.env.VITE_SUPABASE_ANON_KEY || ''),
+    'import.meta.env.VITE_AISHACRM_BACKEND_URL': JSON.stringify(process.env.VITE_AISHACRM_BACKEND_URL || ''),
+    'import.meta.env.VITE_CURRENT_BRANCH': JSON.stringify(process.env.VITE_CURRENT_BRANCH || 'main'),
+  },
   server: {
     allowedHosts: true,
     proxy: {
@@ -48,8 +55,6 @@ export default defineConfig({
     sourcemap: false,
     cssCodeSplit: true,
     rollupOptions: {
-      // Treat runtime env.js as external to avoid Vite/Rollup trying to resolve it at build time
-      external: ['/env.js'],
       output: {
         chunkFileNames: 'assets/chunk-[hash].js',
         entryFileNames: 'assets/entry-[hash].js',

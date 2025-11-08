@@ -69,19 +69,15 @@ export const createMockTenant = () => ({
 
 export const isLocalDevMode = () => {
   // Local dev mode means: no real auth/backends are configured
-  // IMPORTANT: In containers/prod, runtime env comes from window.__ENV, not import.meta.env
-
-  // Prefer runtime env injected by entrypoint over build-time env
-  const runtimeEnv = (typeof window !== 'undefined' && window.__ENV) || {};
 
   const useBase44 = (
-    runtimeEnv.VITE_USE_BASE44_AUTH ?? import.meta.env.VITE_USE_BASE44_AUTH
+    import.meta.env.VITE_USE_BASE44_AUTH
   ) === 'true';
 
   const supabaseUrl =
-    runtimeEnv.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+  import.meta.env.VITE_SUPABASE_URL;
   const supabaseAnonKey =
-    runtimeEnv.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+  import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   const hasSupabase = !!(supabaseUrl && supabaseAnonKey);
 

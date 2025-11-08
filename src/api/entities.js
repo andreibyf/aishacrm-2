@@ -21,11 +21,9 @@ const normalizeBackendUrl = (url) => {
 };
 
 // Exported so other modules (CronHeartbeat, AuditLog, etc.) can consume the same normalized URL
-// In production, prefer runtime env (window.__ENV) over build-time env for containerized deployments
 export const BACKEND_URL = import.meta.env.DEV
   ? ''
   : normalizeBackendUrl(
-      (typeof window !== 'undefined' && window.__ENV?.VITE_AISHACRM_BACKEND_URL) ||
       import.meta.env.VITE_AISHACRM_BACKEND_URL ||
       "http://localhost:3001"
     );
@@ -836,17 +834,9 @@ export const ImportLog = createEntity("ImportLog");
 export const BizDevSource = {
   ...createEntity("BizDevSource"),
   schema: async () => {
-    // Return default schema structure
-    return {
-      properties: {
-        name: { type: "string" },
-        description: { type: "string" },
-        url: { type: "string" },
-        category: { type: "string" },
-        tenant_id: { type: "string" },
-      },
-      required: ["name"],
-    };
+    // Import and return the full BizDevSource schema
+    const { BizDevSourceSchema } = await import('../entities/BizDevSource.js');
+    return BizDevSourceSchema;
   },
 };
 
