@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
-import { User } from "@/api/entities";
+import { useCallback, useState } from "react";
 import {
   Card,
   CardContent,
@@ -22,24 +21,13 @@ import DocumentExtractor from "../components/documents/DocumentExtractor";
 import ProcessingHistory from "../components/documents/ProcessingHistory";
 import CashFlowExtractor from "../components/documents/CashFlowExtractor"; // New import
 import { ArrowRightLeft } from "lucide-react"; // New icon import
+import { useUser } from "../components/shared/useUser.js";
 
 export default function DocumentProcessing() {
   const [activeProcessor, setActiveProcessor] = useState(null);
   const [, setUploadMode] = useState(null); // 'extract' or 'storage'
   const [isProcessing, setIsProcessing] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
-
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const user = await User.me();
-        setCurrentUser(user);
-      } catch (error) {
-        console.error("Failed to load user in DocumentProcessing:", error);
-      }
-    };
-    loadUser();
-  }, []);
+  const { user: currentUser } = useUser();
 
   const handleCancel = useCallback(() => {
     setActiveProcessor(null);

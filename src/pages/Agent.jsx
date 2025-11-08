@@ -3,17 +3,13 @@ import AgentChat from "../components/agents/AgentChat";
 import { Sparkles, AlertCircle } from "lucide-react";
 import { useTenant } from "../components/shared/tenantContext";
 import { isValidId } from "../components/shared/tenantUtils";
-import { User } from "@/api/entities";
+import { useUser } from "../components/shared/useUser.js";
 
 export default function Agent() {
   const { selectedTenantId } = useTenant();
-  const [user, setUser] = React.useState(null);
+  const { user } = useUser();
   const [currentTenantData, setCurrentTenantData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    User.me().then(setUser).catch(console.error);
-  }, []);
 
   React.useEffect(() => {
     if (!selectedTenantId) {
