@@ -940,7 +940,7 @@ export default function OpportunitiesPage() {
       
       toast.success(`Opportunity moved to ${newStage.replace(/_/g, " ")}`);
       
-      const updated = await Opportunity.filter({ id: opportunityId }, "id", 1).then(
+      const updated = await Opportunity.filter({ id: opportunityId, tenant_id: selectedTenantId }, "id", 1).then(
         (r) => r[0],
       );
       console.log('[Opportunities] Retrieved updated opportunity:', updated);
