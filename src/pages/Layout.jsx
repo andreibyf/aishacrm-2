@@ -20,7 +20,6 @@ import {
   LogOut,
   Megaphone, // NEW: Added for AI Campaigns
   Menu,
-  Monitor,
   Moon,
   Plug, // NEW: Added for Integrations
   Settings,
@@ -152,9 +151,27 @@ function isAdminOrSuperAdmin(user) {
 function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
   if (!user) return false;
 
+  // DEBUG: Always log what we receive for troubleshooting
+  console.log("[hasPageAccess] Called with:", {
+    pageName,
+    userEmail: user.email,
+    userRole: user.role,
+    hasNavigationPermissions: !!user.navigation_permissions,
+    navigationPermissionsType: typeof user.navigation_permissions,
+    navigationPermissions: user.navigation_permissions
+  });
+
   // GOD MODE: SuperAdmins bypass ALL restrictions
   if (isSuperAdmin(user)) {
     return true;
+  }
+
+  // TENANT ADMIN RESTRICTIONS: Hide system-wide pages
+  const superadminOnlyPages = new Set([
+    "Tenants", // Only superadmins can manage tenants
+  ]);
+  if (superadminOnlyPages.has(pageName) && user.role !== 'superadmin') {
+    return false;
   }
 
   // CRM access gating: if CRM access is disabled, restrict all CRM pages
@@ -223,14 +240,28 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     user.navigation_permissions &&
     typeof user.navigation_permissions === "object"
   ) {
+    // DEBUG: Log user permissions for troubleshooting (ALWAYS enabled for debugging)
+    if (pageName === "Dashboard") {
+      console.log("[hasPageAccess] User navigation_permissions:", {
+        userEmail: user.email,
+        role: user.role,
+        permissions: user.navigation_permissions,
+        pageName
+      });
+    }
+
     const hasCustomPermission = Object.prototype.hasOwnProperty.call(
       user.navigation_permissions,
       pageName,
     );
 
     if (hasCustomPermission) {
-      // Explicit setting takes precedence - return immediately
-      return user.navigation_permissions[pageName] === true;
+      // Explicit setting takes precedence - deny or allow immediately
+      const explicit = user.navigation_permissions[pageName];
+      console.log(`[hasPageAccess] Explicit permission for ${pageName}:`, explicit);
+      if (explicit === false) return false; // explicit deny
+      if (explicit === true) return true; // explicit allow
+      // If value is neither true nor false, fall through to defaults
     }
   }
 
@@ -475,24 +506,7 @@ const UserNav = ({ user, handleLogout, createPageUrl }) => {
         </DropdownMenuItem>
         {isAdmin && (
           <>
-            <DropdownMenuItem asChild>
-              <Link
-                to={createPageUrl("AuditLog")}
-                className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-              >
-                <Monitor className="mr-2 h-4 w-4" />
-                Audit Log
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link
-                to={createPageUrl("UnitTests")}
-                className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-              >
-                <Wrench className="mr-2 h-4 w-4" />
-                Unit Tests
-              </Link>
-            </DropdownMenuItem>
+            
           </>
         )}
         <DropdownMenuSeparator className="border-slate-700" />

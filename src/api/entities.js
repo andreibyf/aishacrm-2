@@ -928,6 +928,7 @@ export const User = {
           );
           if (response.ok) {
             const result = await response.json();
+            console.log('[User.me] RAW API response:', result); // DEBUG: See what backend actually returns
             const rawUsers = result.data?.users || result.data || result;
             const users = Array.isArray(rawUsers) ? rawUsers.filter(u => (u.email || '').toLowerCase() === user.email.toLowerCase()) : [];
 
@@ -1086,6 +1087,7 @@ export const User = {
             can_manage_users: userData.metadata?.can_manage_users || false,
             can_manage_settings: userData.metadata?.can_manage_settings || false,
             crm_access: true, // Grant CRM access to authenticated users with records
+            navigation_permissions: userData.navigation_permissions || {}, // CRITICAL: Include navigation_permissions from backend
           }),
         };
       } catch (err) {

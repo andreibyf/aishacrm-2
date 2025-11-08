@@ -259,25 +259,27 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
                         </p>
                     </div>
 
-                    {/* Client */}
-                    <div>
-                        <Label htmlFor="tenant_id" className="text-slate-200">Client</Label>
-                        <Select
-                            value={formData.tenant_id}
-                            onValueChange={(value) => setFormData(prev => ({ ...prev, tenant_id: value }))}
-                        >
-                            <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
-                                <SelectValue placeholder="Select client" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                                {tenants.map(tenant => (
-                                    <SelectItem key={tenant.id} value={tenant.tenant_id}>
-                                        {tenant.name}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
+                    {/* Client - Only superadmins can change tenant assignment */}
+                    {currentUser?.role === 'superadmin' && (
+                        <div>
+                            <Label htmlFor="tenant_id" className="text-slate-200">Client</Label>
+                            <Select
+                                value={formData.tenant_id}
+                                onValueChange={(value) => setFormData(prev => ({ ...prev, tenant_id: value }))}
+                            >
+                                <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
+                                    <SelectValue placeholder="Select client" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                                    {tenants.map(tenant => (
+                                        <SelectItem key={tenant.id} value={tenant.tenant_id}>
+                                            {tenant.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
 
                     {/* SIMPLIFIED: Only Employee Role - No confusing "Role/Status" field */}
                     {/* Hide CRM Role for Admins/SuperAdmins - they have full access automatically */}
@@ -518,14 +520,22 @@ export default function EnhancedUserManagement() {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [usersData, tenantsData, userData] = await Promise.all([
-                User.list({ tenant_id: null }), // Pass null to get ALL users across all tenants
-                Tenant.list(),
-                User.me()
+            const userData = await User.me();
+            setCurrentUser(userData);
+            
+            // Tenant admins can only see users from their own tenant
+            // Superadmins can see all users
+            const userFilter = userData.role === 'superadmin' 
+                ? { tenant_id: null } // null = get ALL users across all tenants
+                : { tenant_id: userData.tenant_id }; // Filter by admin's tenant
+            
+            const [usersData, tenantsData] = await Promise.all([
+                User.list(userFilter),
+                userData.role === 'superadmin' ? Tenant.list() : Promise.resolve([])
             ]);
+            
             setUsers(usersData);
             setAllTenants(tenantsData);
-            setCurrentUser(userData);
         } catch (error) {
             console.error("Failed to load data:", error);
             toast.error("Failed to load user and tenant data.");
