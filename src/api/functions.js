@@ -1,4 +1,3 @@
-import { base44 } from './base44Client';
 import { isLocalDevMode } from './mockData';
 
 // Optional direct MCP server URL (useful for connecting your own MCP instance)
@@ -587,8 +586,7 @@ const createFunctionProxy = (functionName) => {
       return Promise.resolve({ data: { success: false, message: 'Function not available in local dev mode' } });
     }
 
-    // Not local-dev: call the real function if present on base44.functions
-    // Special-case orphan cleanup to use backend maintenance endpoint when base44 lacks function
+    // Non-local mode: Use backend routes for all functions
     if (functionName === 'cleanupOrphanedData') {
       try {
         const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
@@ -630,7 +628,10 @@ const createFunctionProxy = (functionName) => {
         return { data: { status: 'error', error: err?.message || String(err) } };
       }
     }
-    return base44.functions?.[functionName]?.(...args);
+
+    // Fallback: warn if function not found
+    console.warn(`[Production Mode] Function '${functionName}' not available. Use backend routes.`);
+    return Promise.reject(new Error(`Function '${functionName}' not available. Use backend routes.`));
   };
 };
 
@@ -663,17 +664,12 @@ const functionsProxy = new Proxy({}, {
       return createFunctionProxy(prop);
     }
 
-    // Always override certain functions even if Base44 provides them
+    // Always override certain functions with custom implementation
     if (OVERRIDE_FUNCTIONS.has(String(prop))) {
       return createFunctionProxy(prop);
     }
 
-    // If Base44 provides the function, use it
-    if (base44.functions && base44.functions[prop]) {
-      return base44.functions[prop];
-    }
-
-    // Fallback: return the local dev proxy (no-op) if function not present
+    // Production mode: all functions use backend routes
     return createFunctionProxy(prop);
   }
 });

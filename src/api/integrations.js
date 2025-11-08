@@ -1,4 +1,3 @@
-import { base44 } from "./base44Client";
 import { isLocalDevMode } from "./mockData";
 import { getBackendUrl } from "./backendUrl";
 
@@ -79,9 +78,8 @@ const mockCore = {
   UploadPrivateFile: createMockIntegration("UploadPrivateFile"),
 };
 
-export const Core = isLocalDevMode() || !base44.integrations?.Core
-  ? mockCore
-  : base44.integrations.Core;
+// Export mock Core integration - all functionality moved to backend
+export const Core = mockCore;
 
 export const InvokeLLM = Core.InvokeLLM;
 export const SendEmail = Core.SendEmail;
