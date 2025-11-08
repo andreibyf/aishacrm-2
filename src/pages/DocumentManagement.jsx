@@ -7,12 +7,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Loader2, FolderOpen, Search, Trash2, Eye, RefreshCw, FileText, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { DocumentationFile } from "@/api/entities";
-import { User } from "@/api/entities";
 import { getTenantFilter } from "@/components/shared/tenantUtils";
 import { useTenant } from "@/components/shared/tenantContext";
 import { CreateFileSignedUrl } from "@/api/integrations";
 import { format } from 'date-fns';
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useUser } from "../components/shared/useUser.js";
 
 export default function DocumentManagement() {
   const [documents, setDocuments] = useState([]);
@@ -21,6 +21,7 @@ export default function DocumentManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const { selectedTenantId } = useTenant();
+  const { user } = useUser();
   const [error, setError] = useState(null);
 
   const categories = [
@@ -36,17 +37,11 @@ export default function DocumentManagement() {
   ];
 
   const loadDocuments = useCallback(async () => {
+    if (!user) return;
+    
     setLoading(true);
     setError(null);
     try {
-      const user = await User.me();
-      
-      // Check if user has access to document management
-      if (!user) {
-        setError("You must be logged in to access document management.");
-        return;
-      }
-
       const filter = getTenantFilter(user, selectedTenantId);
       const allDocs = await DocumentationFile.filter(filter, '-created_date');
       setDocuments(allDocs);
@@ -56,7 +51,7 @@ export default function DocumentManagement() {
     } finally {
       setLoading(false);
     }
-  }, [selectedTenantId]);
+  }, [user, selectedTenantId]);
 
   useEffect(() => {
     loadDocuments();

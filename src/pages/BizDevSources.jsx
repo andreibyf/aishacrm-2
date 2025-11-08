@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { BizDevSource } from "@/api/entities";
 import { Account } from "@/api/entities";
-import { User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,6 +37,7 @@ import BulkArchiveDialog from "../components/bizdev/BulkArchiveDialog";
 import ArchiveIndexViewer from "../components/bizdev/ArchiveIndexViewer";
 import BulkDeleteDialog from "../components/bizdev/BulkDeleteDialog";
 import StatusHelper from "../components/shared/StatusHelper";
+import { useUser } from "../components/shared/useUser.js";
 
 export default function BizDevSourcesPage() {
   const [sources, setSources] = useState([]);
@@ -62,22 +62,13 @@ export default function BizDevSourcesPage() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
   const [bizdevSchema, setBizdevSchema] = useState(null);
 
   const { selectedTenantId } = useTenant();
   const { cachedRequest, clearCache } = useApiManager();
   const { logError } = useErrorLog();
   const loadingRef = useRef(false);
-
-  useEffect(() => {
-    User.me()
-      .then(setUser)
-      .catch((error) => {
-        console.error("Failed to load user:", error);
-        toast.error("Failed to load user data");
-      });
-  }, []);
 
   useEffect(() => {
     const loadSchema = async () => {

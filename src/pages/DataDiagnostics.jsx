@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
-import { User } from "@/api/entities";
+import { useState } from "react";
 import { Account, Contact, Lead, Opportunity } from "@/api/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Database, Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ActivityVisibilityDebug from "../components/settings/ActivityVisibilityDebug"; // New import for ActivityVisibilityDebug
+import { useUser } from "../components/shared/useUser.js";
 
 /**
  * Component for General Database Diagnostics tab.
@@ -341,24 +341,8 @@ function LeadVisibilityDebug() {
 }
 
 export default function DataDiagnosticsPage() {
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
   const [activeTab, setActiveTab] = useState("activity-visibility"); // Changed default to activity-visibility
-
-  useEffect(() => {
-    const loadUser = async () => {
-      const currentUser = await User.me();
-      setUser(currentUser);
-    };
-    loadUser();
-  }, []);
-
-  if (!user) {
-    return (
-      <div className="p-8 min-h-screen bg-slate-900 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-slate-900 p-6">

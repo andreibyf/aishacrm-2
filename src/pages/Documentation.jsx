@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 // Tabs are not used here
@@ -24,27 +24,11 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
-import { User } from "@/api/entities";
 import ReactMarkdown from "react-markdown";
 
 export default function DocumentationPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeSection, setActiveSection] = useState("overview");
-  const [, setUser] = useState(null);
-
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Failed to load user:", error);
-      }
-    };
-    loadUser();
-  }, []);
-
-  // isAdmin removed (unused)
 
   const documentationSections = [
     {
