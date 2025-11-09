@@ -7,13 +7,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Save, AlertCircle } from "lucide-react";
-import { useTenant } from "../shared/tenantContext"; // Fixed `useTenant` import
-import { isValidId } from "../shared/tenantUtils"; // Import shared validation
+import { useTenant } from "../shared/tenantContext";
+import { isValidId } from "../shared/tenantUtils";
 import PhoneInput from "../shared/PhoneInput";
 import AddressFields from "../shared/AddressFields";
 import EmployeeSelector from "../shared/EmployeeSelector";
-import { User } from "@/api/entities";
+import { User, Account } from "@/api/entities";
 import { generateUniqueId } from "@/api/functions";
+import { useEntityForm } from "@/hooks/useEntityForm";
+import { toast } from "sonner";
 
 const industries = [
     { value: "aerospace_and_defense", label: "Aerospace & Defense" },
@@ -55,15 +57,18 @@ const typeOptions = [
     { value: "vendor", label: "Vendor" },
 ];
 
+// Standardized props: supports both legacy (account, onSubmit) and new (initialData, onSubmit) patterns
 export default function AccountForm({ 
-  account: propAccount, 
+  account: legacyAccount,
+  initialData,
   onSubmit, 
   onCancel, 
 }) {
-  // CRITICAL: Defensive defaults for ALL props - never undefined/null
-  const account = propAccount ?? null;
-
+  // Prefer initialData if provided; fall back to legacy 'account' prop
+  const account = initialData || legacyAccount || null;
+  
   const { selectedTenantId } = useTenant();
+  const { sanitizeNumbers, normalizeError } = useEntityForm();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -161,90 +166,82 @@ export default function AccountForm({
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const cleanFormData = (data) => {
-    const cleaned = { ...data };
-    
-    if (cleaned.annual_revenue === '' || cleaned.annual_revenue === undefined) {
-      cleaned.annual_revenue = null;
-    } else if (cleaned.annual_revenue !== null) {
-      cleaned.annual_revenue = parseFloat(cleaned.annual_revenue) || null;
-    }
-    
-    if (cleaned.employee_count === '' || cleaned.employee_count === undefined) {
-      cleaned.employee_count = null;
-    } else if (cleaned.employee_count !== null) {
-      cleaned.employee_count = parseInt(cleaned.employee_count) || null;
-    }
-
-    Object.keys(cleaned).forEach(key => {
-      if (cleaned[key] === '' && typeof cleaned[key] === 'string') {
-        cleaned[key] = null;
-      }
-    });
-
-    return cleaned;
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    console.log('[ACCOUNT_FORM_DEBUG] handleSubmit called');
-    console.log('[ACCOUNT_FORM_DEBUG] onSubmit prop:', typeof onSubmit, onSubmit);
-
     if (!onSubmit || typeof onSubmit !== 'function') {
-      console.error('[ACCOUNT_FORM_DEBUG] onSubmit is not a function!');
-      alert("Form error: onSubmit handler is missing");
+      console.error('[AccountForm] onSubmit is not a function!');
+      toast.error("Form error: onSubmit handler is missing");
       return;
     }
 
     if (!currentUser) {
-      alert("Cannot save account: User not loaded. Please refresh the page.");
+      toast.error("Cannot save account: User not loaded. Please refresh the page.");
       return;
     }
     
     setIsSubmitting(true);
-    let submissionData = { ...formData };
 
     try {
+      // Resolve tenant_id
       let currentTenantId;
       if (currentUser.role === 'superadmin' && selectedTenantId) {
         currentTenantId = selectedTenantId;
       } else if (currentUser.tenant_id) {
         currentTenantId = currentUser.tenant_id;
       } else {
-         alert("Cannot save account: Your account is not configured with a tenant. Please contact your administrator.");
-         setIsSubmitting(false);
-         return;
-      }
-
-      if (!isValidId(currentTenantId)) {
-        alert("Invalid tenant ID format. Please contact your administrator.");
+        toast.error("Cannot save account: Your account is not configured with a tenant. Please contact your administrator.");
         setIsSubmitting(false);
         return;
       }
 
-      submissionData.tenant_id = currentTenantId;
+      if (!isValidId(currentTenantId)) {
+        toast.error("Invalid tenant ID format. Please contact your administrator.");
+        setIsSubmitting(false);
+        return;
+      }
 
+      // Build clean payload with sanitized numeric fields
+      let payload = sanitizeNumbers(
+        { ...formData, tenant_id: currentTenantId },
+        ['annual_revenue', 'employee_count']
+      );
+
+      // Clean empty strings to null
+      Object.keys(payload).forEach(key => {
+        if (payload[key] === '' && typeof payload[key] === 'string') {
+          payload[key] = null;
+        }
+      });
+
+      // Generate unique_id for new accounts
       if (!account?.id) {
         try {
           const idResponse = await generateUniqueId({ entity_type: 'Account', tenant_id: currentTenantId });
           if (idResponse.data?.unique_id) {
-            submissionData.unique_id = idResponse.data.unique_id;
-            console.log('[ACCOUNT_FORM_DEBUG] Generated unique ID for new account:', submissionData.unique_id);
+            payload.unique_id = idResponse.data.unique_id;
           }
         } catch (error) {
-          console.warn('[ACCOUNT_FORM_DEBUG] Failed to generate unique ID for new account, proceeding without:', error);
+          console.warn('[AccountForm] Failed to generate unique ID, proceeding without:', error);
         }
       }
 
-      submissionData = cleanFormData(submissionData);
+      // Call Account.create or Account.update directly
+      let result;
+      if (account?.id) {
+        result = await Account.update(account.id, payload);
+        toast.success('Account updated successfully');
+      } else {
+        result = await Account.create(payload);
+        toast.success('Account created successfully');
+      }
 
-      console.log('[ACCOUNT_FORM_DEBUG] Calling onSubmit with:', submissionData);
-      await onSubmit(submissionData);
-      console.log('[ACCOUNT_FORM_DEBUG] onSubmit completed successfully');
+      // Call parent's onSubmit with the result
+      await onSubmit(result);
     } catch (error) {
-      console.error("[ACCOUNT_FORM_DEBUG] Error submitting account:", error);
-      alert("Failed to save account. Please try again.");
+      console.error("[AccountForm] Error submitting account:", error);
+      const errorMsg = normalizeError(error);
+      toast.error(errorMsg);
     } finally {
       setIsSubmitting(false);
     }

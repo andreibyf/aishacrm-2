@@ -5,9 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch"; // Added import for Switch
-import { User } from "@/api/entities";
-import { Tenant } from "@/api/entities";
-import { Employee } from "@/api/entities";
+import { User, Tenant, Employee, Opportunity } from "@/api/entities";
 import { useTenant } from "../shared/tenantContext";
 import { Plus } from 'lucide-react'
 import SearchableAccountSelector from "../shared/SearchableAccountSelector";
@@ -15,8 +13,20 @@ import SearchableContactSelector from "../shared/SearchableContactSelector";
 import TagInput from "../shared/TagInput";
 import CreateAccountDialog from "../accounts/CreateAccountDialog";
 import LinkContactDialog from "../shared/LinkContactDialog";
+import { toast } from "sonner";
 
-export default function OpportunityForm({ opportunity, onSubmit, onCancel, contacts: propContacts, accounts: propAccounts, users: _propUsers, leads: propLeads }) {
+export default function OpportunityForm({ 
+  opportunity: opportunityProp, 
+  initialData, 
+  onSubmit, 
+  onCancel, 
+  contacts: propContacts, 
+  accounts: propAccounts, 
+  users: _propUsers, 
+  leads: propLeads 
+}) {
+  // Unified contract: support both new and legacy prop names
+  const opportunity = initialData || opportunityProp;
   const { selectedTenantId } = useTenant();
   const [formData, setFormData] = useState({
     name: "",
@@ -183,7 +193,7 @@ export default function OpportunityForm({ opportunity, onSubmit, onCancel, conta
     
     if (!formData.name || !formData.amount || !formData.close_date) {
       if (isE2E) console.log('[E2E] OpportunityForm validation failed: missing required fields');
-      alert("Please fill in all required fields: Name, Amount, and Close Date");
+      toast.error("Please fill in all required fields: Name, Amount, and Close Date");
       return;
     }
 
@@ -202,7 +212,25 @@ export default function OpportunityForm({ opportunity, onSubmit, onCancel, conta
       };
 
       if (isE2E) console.log('[E2E] OpportunityForm submitting with payload:', payload);
-      await onSubmit(payload);
+      
+      // Perform persistence internally (unified contract pattern)
+      let result;
+      if (opportunity) {
+        // Update existing opportunity
+        result = await Opportunity.update(opportunity.id, payload);
+        if (isE2E) console.log('[E2E] OpportunityForm updated:', result);
+        toast.success("Opportunity updated successfully");
+      } else {
+        // Create new opportunity
+        result = await Opportunity.create(payload);
+        if (isE2E) console.log('[E2E] OpportunityForm created:', result);
+        toast.success("Opportunity created successfully");
+      }
+      
+      // Call success callback with result object
+      if (onSubmit && typeof onSubmit === 'function') {
+        await onSubmit(result);
+      }
       
       // Set success flag for E2E tests
       if (isE2E) {
@@ -212,7 +240,7 @@ export default function OpportunityForm({ opportunity, onSubmit, onCancel, conta
     } catch (error) {
       console.error("Error submitting opportunity:", error);
       if (isE2E) console.log('[E2E] OpportunityForm save error:', error);
-      alert("Failed to save opportunity. Please try again.");
+      toast.error("Failed to save opportunity. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

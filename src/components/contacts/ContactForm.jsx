@@ -44,7 +44,18 @@ const statusOptions = [
   { value: "inactive", label: "Inactive" },
 ];
 
-export default function ContactForm({ contact, onSuccess, onCancel, user: userProp }) {
+export default function ContactForm({ 
+  contact: contactProp,      // Legacy prop
+  initialData,               // New unified prop
+  onSuccess: onSuccessProp,  // Legacy callback
+  onSubmit,                  // New unified callback
+  onCancel, 
+  user: userProp 
+}) {
+  // Unified contract: Support both old and new prop names
+  const contact = initialData || contactProp;
+  const onSuccess = onSubmit || onSuccessProp;
+  
   console.log('[ContactForm] === COMPONENT MOUNT ===');
   console.log('[ContactForm] contact:', contact?.id, contact?.first_name, contact?.last_name);
   console.log('[ContactForm] userProp:', userProp?.email, userProp?.role);

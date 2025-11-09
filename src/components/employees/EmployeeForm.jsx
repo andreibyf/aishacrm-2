@@ -11,12 +11,15 @@ import { Card, CardContent } from "@/components/ui/card";
 
 import { useTenant } from "../shared/tenantContext";
 
-import { saveEmployee } from "@/api/functions";
+import { Employee } from "@/api/entities";
 import { toast } from "sonner";
 // Removed: ResendInviteButton is removed from this form's outline
 // import ResendInviteButton from "./ResendInviteButton"; // This import is no longer needed
 
-export default function EmployeeForm({ employee, onSave, onCancel, tenantId }) {
+// Standardized props: { initialData, onSubmit, onCancel, tenantId } while retaining backward compat for existing parent usage.
+export default function EmployeeForm({ employee: legacyEmployee, initialData, onSubmit, onSave, onCancel, tenantId }) {
+  // Prefer initialData if provided; fall back to legacy 'employee' prop.
+  const employee = initialData || legacyEmployee || null;
   const isEdit = !!(employee && employee.id);
   const { _selectedTenantId } = useTenant(); // Kept for potential future use or context check
 
@@ -94,58 +97,58 @@ export default function EmployeeForm({ employee, onSave, onCancel, tenantId }) {
     setSaving(true);
 
     try {
-      const payload = {
-        employeeId: employee?.id || null, // Pass employee ID if editing, otherwise null for new
-        employeeData: {
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          email: formData.email || null,
-          phone: formData.phone || null,
-          mobile: formData.mobile || null,
-          department: formData.department,
-          job_title: formData.job_title,
-          manager_employee_id: formData.manager_employee_id,
-          hire_date: formData.hire_date || null,
-          employment_status: formData.employment_status,
-          employment_type: formData.employment_type,
-          // Ensure numeric fields are numbers or null
-          hourly_rate: formData.hourly_rate ? Number(formData.hourly_rate) : null,
-          skills: formData.skills,
-          address_1: formData.address_1 || null,
-          address_2: formData.address_2 || null,
-          city: formData.city || null,
-          state: formData.state || null,
-          zip: formData.zip || null,
-          emergency_contact_name: formData.emergency_contact_name || null,
-          emergency_contact_phone: formData.emergency_contact_phone || null,
-          notes: formData.notes || null,
-          tags: formData.tags,
-          is_active: formData.is_active,
-          // CRM fields are included conditionally, matching original logic
-          has_crm_access: formData.has_crm_access,
-          crm_user_employee_role: formData.has_crm_access ? formData.crm_user_employee_role : null,
-        },
-        tenantId: tenantId
+      // Assemble normalized entity payload for standardized onSubmit callback.
+      const entityPayload = {
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        email: formData.email || null,
+        phone: formData.phone || null,
+        mobile: formData.mobile || null,
+        department: formData.department,
+        job_title: formData.job_title,
+        manager_employee_id: formData.manager_employee_id,
+        hire_date: formData.hire_date || null,
+        employment_status: formData.employment_status,
+        employment_type: formData.employment_type,
+        hourly_rate: formData.hourly_rate ? Number(formData.hourly_rate) : null,
+        skills: formData.skills,
+        address_1: formData.address_1 || null,
+        address_2: formData.address_2 || null,
+        city: formData.city || null,
+        state: formData.state || null,
+        zip: formData.zip || null,
+        emergency_contact_name: formData.emergency_contact_name || null,
+        emergency_contact_phone: formData.emergency_contact_phone || null,
+        notes: formData.notes || null,
+        tags: formData.tags,
+        is_active: formData.is_active,
+        has_crm_access: formData.has_crm_access,
+        crm_user_employee_role: formData.has_crm_access ? formData.crm_user_employee_role : null,
+        tenant_id: tenantId || null,
       };
 
-      console.log('[EmployeeForm] Submitting payload:', payload);
-
-      const response = await saveEmployee(payload);
-
-      console.log('[EmployeeForm] Save response:', response);
-
-      if (response?.data?.success) {
+      let result;
+      try {
+        if (employee?.id) {
+          result = await Employee.update(employee.id, entityPayload);
+        } else {
+          result = await Employee.create(entityPayload);
+        }
         toast.success(employee?.id ? 'Employee updated successfully' : 'Employee created successfully');
-        setTimeout(() => {
-          if (onSave) {
-            onSave(); // Call onSave without argument as per outline
-          }
-        }, 1500); // Retained setTimeout for UX
-      } else {
-        const errorMsg = response?.data?.error || 'Failed to save employee';
-        console.error('[EmployeeForm] Save failed:', errorMsg);
-        toast.error(errorMsg);
+      } catch (err) {
+        const msg = err?.response?.data?.error || err?.message || 'Failed to save employee';
+        toast.error(msg);
+        throw err;
       }
+
+      // Prefer new standardized onSubmit(data) signature; fallback to legacy onSave() if provided.
+      setTimeout(() => {
+        if (onSubmit) {
+          onSubmit(result);
+        } else if (onSave) {
+          onSave();
+        }
+      }, 500);
     } catch (error) {
       console.error('[EmployeeForm] Save error:', error);
       // More robust error message extraction

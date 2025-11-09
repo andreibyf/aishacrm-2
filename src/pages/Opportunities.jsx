@@ -501,11 +501,6 @@ export default function OpportunitiesPage() {
       loadOpportunities(wasCreating ? 1 : currentPage, pageSize),
       loadTotalStats(),
     ]);
-    toast.success(
-      editingOpportunity
-        ? "Opportunity updated successfully"
-        : "Opportunity created successfully",
-    );
   };
 
   const handleDelete = async (id) => {
@@ -980,22 +975,9 @@ export default function OpportunitiesPage() {
             contacts={contacts}
             users={users}
             leads={leads}
-            onSubmit={async (payload) => {
-              try {
-                console.log("[Opportunities] Form submitted:", {
-                  isEdit: !!editingOpportunity,
-                  payload,
-                });
-                if (editingOpportunity) {
-                  await Opportunity.update(editingOpportunity.id, payload);
-                } else {
-                  await Opportunity.create(payload);
-                }
-                await handleSave();
-              } catch (error) {
-                console.error("Error saving opportunity:", error);
-                toast.error("Failed to save opportunity");
-              }
+            onSubmit={async (result) => {
+              console.log("[Opportunities] Form submitted with result:", result);
+              await handleSave();
             }}
             onCancel={() => {
               console.log("[Opportunities] Form cancelled");

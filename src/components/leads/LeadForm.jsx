@@ -65,7 +65,19 @@ const statusOptions = [
   { value: "lost", label: "Lost" }
 ];
 
-export default function LeadForm({ lead, onSave, onCancel, user, employees = [], isManager }) {
+export default function LeadForm({ 
+  lead: leadProp, 
+  initialData, 
+  onSave: onSaveProp, 
+  onSubmit, 
+  onCancel, 
+  user, 
+  employees = [], 
+  isManager 
+}) {
+  // Unified contract: support both new and legacy prop names
+  const lead = initialData || leadProp;
+  const onSuccess = onSubmit || onSaveProp;
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -301,13 +313,6 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
       return;
     }
 
-    // Guard: Ensure onSave callback exists
-    if (!onSave || typeof onSave !== 'function') {
-      console.error('LeadForm.Submit: onSave callback is not a function', { onSave });
-      toast.error("Cannot save lead: Invalid save handler. Please refresh the page.");
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
@@ -392,19 +397,26 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
       submissionData.do_not_call = !!submissionData.do_not_call;
       submissionData.do_not_text = !!submissionData.do_not_text;
 
-
-      console.log('LeadForm.Submit: Passing data to parent for submission:', submissionData);
+      console.log('LeadForm.Submit: Saving lead to database:', submissionData);
       
-      // Pass the prepared data to the parent for submission
-      await onSave(submissionData);
+      // Perform persistence internally (unified contract pattern)
+      let result;
+      if (lead) {
+        // Update existing lead
+        result = await Lead.update(lead.id, submissionData);
+        console.log('LeadForm.Submit: Lead updated successfully:', result);
+      } else {
+        // Create new lead
+        result = await Lead.create(submissionData);
+        console.log('LeadForm.Submit: Lead created successfully:', result);
+      }
 
-      console.log('LeadForm.Submit: Save completed successfully');
+      // Call success callback with result object
+      if (onSuccess && typeof onSuccess === 'function') {
+        await onSuccess(result);
+      }
 
-      toast({
-        title: "Success!",
-        description: lead ? "Lead updated successfully!" : "Lead created successfully!",
-        variant: "default",
-      });
+      toast.success(lead ? "Lead updated successfully!" : "Lead created successfully!");
 
     } catch (error) {
       console.error("LeadForm.Submit: Error during form submission:", {

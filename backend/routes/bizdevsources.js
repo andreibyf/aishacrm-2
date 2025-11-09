@@ -383,18 +383,20 @@ export default function createBizDevSourceRoutes(pgPool) {
         newContact = contactResult.rows[0];
       }
 
-      // Update bizdev source status to 'converted'
+      // Update bizdev source status to 'Promoted' and store linkage
       await pgPool.query(
         `UPDATE bizdev_sources SET
-          status = 'converted',
+          status = 'Promoted',
+          account_id = $1,
+          account_name = $2,
           metadata = jsonb_set(
             COALESCE(metadata, '{}'::jsonb),
             '{converted_to_account_id}',
             to_jsonb($1::text)
           ),
           updated_at = NOW()
-        WHERE id = $2 AND tenant_id = $3`,
-        [newAccount.id, id, tenant_id]
+        WHERE id = $3 AND tenant_id = $4`,
+        [newAccount.id, newAccount.name, id, tenant_id]
       );
 
       // Link any opportunities created from this BizDev Source (by metadata) to the new Account

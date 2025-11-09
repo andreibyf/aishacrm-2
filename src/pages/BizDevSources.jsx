@@ -167,26 +167,23 @@ export default function BizDevSourcesPage() {
     setShowForm(true);
   };
 
-  const handleFormSubmit = async (data) => {
+  // Updated to unified form contract: form now persists record directly and passes result
+  const handleFormSubmit = async (result) => {
     try {
-      if (editingSource) {
-        await BizDevSource.update(editingSource.id, data);
-        toast.success("BizDev source updated successfully");
-      } else {
-        await BizDevSource.create({
-          ...data,
-          tenant_id: user.tenant_id || selectedTenantId,
+      // Optimistically update sources list if editing
+      if (result?.id) {
+        setSources(prev => {
+          const exists = prev.some(s => s.id === result.id);
+            return exists ? prev.map(s => s.id === result.id ? result : s) : [result, ...prev];
         });
-        toast.success("BizDev source created successfully");
       }
+      toast.success(`BizDev source ${editingSource ? 'updated' : 'created'} successfully`);
+    } catch (error) {
+      if (logError) logError(handleApiError('BizDev Source Form (post-submit)', error));
+    } finally {
       setShowForm(false);
       setEditingSource(null);
       handleRefresh();
-    } catch (error) {
-      if (logError) {
-        logError(handleApiError('BizDev Source Form', error));
-      }
-      toast.error(`Failed to ${editingSource ? 'update' : 'create'} BizDev source`);
     }
   };
 
@@ -349,7 +346,7 @@ export default function BizDevSourcesPage() {
   const stats = {
     total: sources.length,
     active: sources.filter(s => s.status === "Active").length,
-    promoted: sources.filter(s => s.status === "Promoted").length,
+    promoted: sources.filter(s => s.status === "Promoted" || s.status === 'converted').length,
     archived: sources.filter(s => s.status === "Archived").length,
   };
 
@@ -652,7 +649,7 @@ export default function BizDevSourcesPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <BizDevSourceForm
-              source={editingSource}
+              initialData={editingSource}
               onSubmit={handleFormSubmit}
               onCancel={() => {
                 setShowForm(false);

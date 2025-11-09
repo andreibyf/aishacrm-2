@@ -401,72 +401,39 @@ export default function ContactsPage() {
     }
   }, [searchTerm, statusFilter, selectedTags, selectedEmail]);
 
-  const handleCreate = async (contactData) => {
+  const handleCreate = async (result) => {
+    // ContactForm now handles persistence internally, we just receive the result
     const tenantIdentifier = user?.tenant_id || selectedTenantId;
-    logger.info("Attempting to create new contact", "ContactsPage", {
-      contactData: { ...contactData, tenant_id: tenantIdentifier },
+    logger.info("Contact created by form", "ContactsPage", {
+      contactId: result?.id,
+      contactName: `${result?.first_name} ${result?.last_name}`,
       userId: user?.id || user?.email,
+      tenantId: tenantIdentifier,
     });
-    try {
-      const newContact = await Contact.create({
-        ...contactData,
-        tenant_id: tenantIdentifier,
-      });
-      toast.success("Contact created successfully");
-      setIsFormOpen(false);
-      setEditingContact(null);
-      setCurrentPage(1); // Reset to page 1 to show the newly created contact
-      clearCache("Contact");
-      loadContacts();
-      loadTotalStats();
-      logger.info("Contact created successfully", "ContactsPage", {
-        contactId: newContact.id,
-        contactName: `${newContact.first_name} ${newContact.last_name}`,
-        userId: user?.id || user?.email,
-        tenantId: tenantIdentifier,
-      });
-    } catch (error) {
-      console.error("Error creating contact:", error);
-      toast.error("Failed to create contact");
-      logger.error("Error creating contact", "ContactsPage", {
-        error: error.message,
-        stack: error.stack,
-        contactData: { ...contactData, tenant_id: tenantIdentifier },
-        userId: user?.id || user?.email,
-      });
-    }
+    
+    // Just handle post-save actions
+    setIsFormOpen(false);
+    setEditingContact(null);
+    setCurrentPage(1); // Reset to page 1 to show the newly created contact
+    clearCache("Contact");
+    loadContacts();
+    loadTotalStats();
   };
 
-  const handleUpdate = async (contactData) => {
-    logger.info("Attempting to update contact", "ContactsPage", {
-      contactId: editingContact.id,
-      contactData,
+  const handleUpdate = async (result) => {
+    // ContactForm now handles persistence internally, we just receive the result
+    logger.info("Contact updated by form", "ContactsPage", {
+      contactId: result?.id,
+      contactName: `${result?.first_name} ${result?.last_name}`,
       userId: user?.id || user?.email,
     });
-    try {
-      await Contact.update(editingContact.id, contactData);
-      toast.success("Contact updated successfully");
-      setIsFormOpen(false);
-      setEditingContact(null);
-      clearCache("Contact");
-      loadContacts();
-      loadTotalStats();
-      logger.info("Contact updated successfully", "ContactsPage", {
-        contactId: editingContact.id,
-        contactName: `${contactData.first_name} ${contactData.last_name}`,
-        userId: user?.id || user?.email,
-      });
-    } catch (error) {
-      console.error("Error updating contact:", error);
-      toast.error("Failed to update contact");
-      logger.error("Error updating contact", "ContactsPage", {
-        error: error.message,
-        stack: error.stack,
-        contactId: editingContact.id,
-        contactData,
-        userId: user?.id || user?.email,
-      });
-    }
+    
+    // Just handle post-save actions
+    setIsFormOpen(false);
+    setEditingContact(null);
+    clearCache("Contact");
+    loadContacts();
+    loadTotalStats();
   };
 
   const handleDelete = async (id) => {

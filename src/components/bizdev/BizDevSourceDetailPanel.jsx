@@ -99,7 +99,9 @@ export default function BizDevSourceDetailPanel({
 
       const updatedSource = {
         ...currentSource,
-        status: 'converted',
+        status: 'Promoted',
+        account_id: result.account.id,
+        account_name: result.account.name,
         metadata: {
           ...currentSource.metadata,
           converted_to_account_id: result.account.id
@@ -165,7 +167,7 @@ export default function BizDevSourceDetailPanel({
     return colors[status] || 'bg-gray-100 text-gray-800 border-gray-300';
   };
 
-  const isPromoted = currentSource.status === 'Promoted';
+  const isPromoted = currentSource.status === 'Promoted' || currentSource.status === 'converted';
   const isArchived = currentSource.status === 'Archived';
   const canPromote = !isPromoted && !isArchived;
 

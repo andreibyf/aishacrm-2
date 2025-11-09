@@ -503,40 +503,10 @@ export default function LeadsPage() {
     }, {});
   }, [employees]);
 
-  const handleSave = async (leadData) => {
-    console.log("[Leads.handleSave] Starting save with data:", leadData);
+  const handleSave = async (result) => {
+    console.log("[Leads.handleSave] Received result from LeadForm:", result);
 
     try {
-      // Guard: Ensure user is available
-      if (!user) {
-        console.error("[Leads.handleSave] User is undefined");
-        toast.error(
-          "Cannot save lead: User not loaded. Please refresh the page.",
-        );
-        return;
-      }
-
-      // Ensure tenant_id is set based on user
-      const dataWithTenant = {
-        ...leadData,
-        tenant_id: user.role === "superadmin" && selectedTenantId
-          ? selectedTenantId
-          : user.tenant_id,
-      };
-
-      console.log("[Leads.handleSave] Data with tenant:", dataWithTenant);
-
-      if (editingLead) {
-        console.log("[Leads.handleSave] Updating lead:", editingLead.id);
-        await Lead.update(editingLead.id, dataWithTenant);
-        toast.success("Lead updated successfully");
-      } else {
-        console.log("[Leads.handleSave] Creating new lead");
-        const result = await Lead.create(dataWithTenant);
-        console.log("[Leads.handleSave] Lead created:", result);
-        toast.success("Lead created successfully");
-      }
-
       // Close form and clear editing state
       setIsFormOpen(false);
       setEditingLead(null);
@@ -555,15 +525,12 @@ export default function LeadsPage() {
       ]);
       console.log("[Leads.handleSave] Data reloaded successfully");
     } catch (error) {
-      console.error("[Leads.handleSave] Failed to save lead:", {
+      console.error("[Leads.handleSave] Failed to reload data after save:", {
         error,
         message: error?.message,
         stack: error?.stack,
-        leadData,
+        result,
       });
-      toast.error(
-        editingLead ? "Failed to update lead" : "Failed to create lead",
-      );
     }
   };
 
