@@ -109,38 +109,45 @@ export default function createEmployeeRoutes(_pgPool) {
   // POST /api/employees - Create employee
   router.post('/', async (req, res) => {
     try {
-      const { tenant_id, first_name, last_name, email, role, phone, department, metadata } = req.body;
+      const { tenant_id, first_name, last_name, email, role, status, ...additionalFields } = req.body;
 
-      if (!tenant_id || !email) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id and email are required' });
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      
+      if (!first_name || !last_name) {
+        return res.status(400).json({ status: 'error', message: 'first_name and last_name are required' });
       }
 
       // HARD BLOCK: prevent creation of test-pattern emails to avoid E2E pollution
-      const testEmailPatterns = [
-        /audit\.test\./i,
-        /e2e\.temp\./i,
-        /@playwright\.test$/i,
-        /@example\.com$/i,
-      ];
-      if (testEmailPatterns.some((re) => re.test(String(email)))) {
-        return res.status(403).json({
-          status: 'error',
-          code: 'TEST_EMAIL_BLOCKED',
-          message: 'Employee creation blocked for test email patterns',
-        });
+      if (email) {
+        const testEmailPatterns = [
+          /audit\.test\./i,
+          /e2e\.temp\./i,
+          /@playwright\.test$/i,
+          /@example\.com$/i,
+        ];
+        if (testEmailPatterns.some((re) => re.test(String(email)))) {
+          return res.status(403).json({
+            status: 'error',
+            code: 'TEST_EMAIL_BLOCKED',
+            message: 'Employee creation blocked for test email patterns',
+          });
+        }
       }
+      
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
+      // Store all additional fields (department, phone, job_title, etc.) in metadata JSONB column
       const insertData = {
         tenant_id,
         first_name,
         last_name,
-        email,
-        role,
-        phone,
-        department,
-        metadata: metadata || {},
+        email: email || null,
+        role: role || null,
+        status: status || 'active',
+        metadata: additionalFields || {},
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };

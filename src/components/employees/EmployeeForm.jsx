@@ -66,36 +66,35 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log('[EmployeeForm] handleSubmit called', { tenantId, isEdit, formData });
+    
     // Removed setMessage(null) as message state is removed
 
-    // Validation
+    // Validation - only required fields
     if (!formData.first_name?.trim()) {
+      console.log('[EmployeeForm] Validation failed: first_name missing');
       toast.error('First name is required');
       return;
     }
     if (!formData.last_name?.trim()) {
+      console.log('[EmployeeForm] Validation failed: last_name missing');
       toast.error('Last name is required');
       return;
     }
-    if (!formData.department) {
-      toast.error('Department is required');
-      return;
-    }
-    if (!formData.job_title?.trim()) {
-      toast.error('Job title is required');
-      return;
-    }
 
-    // Existing validation for CRM access email
-    if (formData.has_crm_access && !formData.email) {
+    // Validation for CRM access - email is required only if enabling CRM access
+    if (formData.has_crm_access && !formData.email?.trim()) {
+      console.log('[EmployeeForm] Validation failed: CRM access requires email');
       toast.error("Email is required for CRM access requests.");
       return;
     }
     if (!tenantId && !isEdit) {
+      console.log('[EmployeeForm] Validation failed: tenant_id missing');
       toast.error("Cannot save employee. Tenant information is missing.");
       return;
     }
 
+    console.log('[EmployeeForm] Validation passed, starting save...');
     setSaving(true);
 
     try {
@@ -129,15 +128,21 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
         tenant_id: tenantId || null,
       };
 
+      console.log('[EmployeeForm] Entity payload prepared:', entityPayload);
+
       let result;
       try {
         if (employee?.id) {
+          console.log('[EmployeeForm] Calling Employee.update...', employee.id);
           result = await Employee.update(employee.id, entityPayload);
         } else {
+          console.log('[EmployeeForm] Calling Employee.create...');
           result = await Employee.create(entityPayload);
         }
+        console.log('[EmployeeForm] API call successful:', result);
         toast.success(employee?.id ? 'Employee updated successfully' : 'Employee created successfully');
       } catch (err) {
+        console.error('[EmployeeForm] API call failed:', err);
         const msg = err?.response?.data?.error || err?.message || 'Failed to save employee';
         toast.error(msg);
         throw err;
@@ -173,8 +178,11 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
       <Card className="bg-slate-800 border-slate-700">
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
           <div>
-            <Label className="text-slate-200">First name</Label>
+            <Label className="text-slate-200">
+              First name <span className="text-red-400">*</span>
+            </Label>
             <Input
+              required
               value={formData.first_name}
               onChange={(e) => onChange("first_name", e.target.value)}
               className="bg-slate-900 border-slate-700 text-slate-100"
@@ -182,8 +190,11 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
             />
           </div>
           <div>
-            <Label className="text-slate-200">Last name</Label>
+            <Label className="text-slate-200">
+              Last name <span className="text-red-400">*</span>
+            </Label>
             <Input
+              required
               value={formData.last_name}
               onChange={(e) => onChange("last_name", e.target.value)}
               className="bg-slate-900 border-slate-700 text-slate-100"
@@ -191,14 +202,22 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
             />
           </div>
           <div>
-            <Label className="text-slate-200">Email</Label>
+            <Label className="text-slate-200">
+              Email {formData.has_crm_access && <span className="text-red-400">*</span>}
+            </Label>
             <Input
               type="email"
+              required={formData.has_crm_access}
               value={formData.email}
               onChange={(e) => onChange("email", e.target.value)}
               className="bg-slate-900 border-slate-700 text-slate-100"
               placeholder="work@example.com"
             />
+            {formData.has_crm_access && (
+              <p className="text-xs text-amber-400 mt-1">
+                Email is required for CRM access
+              </p>
+            )}
           </div>
           <div>
             <Label className="text-slate-200">Phone</Label>
@@ -301,13 +320,18 @@ export default function EmployeeForm({ employee: legacyEmployee, initialData, on
         )}
       </div>
 
-      <div className="flex justify-end gap-3 pt-4">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={saving} className="bg-slate-700 border-slate-600 text-slate-200">
-          Cancel
-        </Button>
-        <Button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700">
-          {saving ? "Saving..." : isEdit ? "Update Employee" : "Create Employee"}
-        </Button>
+      <div className="flex items-center justify-between pt-4 border-t border-slate-700">
+        <p className="text-xs text-slate-400">
+          <span className="text-red-400">*</span> Required fields
+        </p>
+        <div className="flex gap-3">
+          <Button type="button" variant="outline" onClick={onCancel} disabled={saving} className="bg-slate-700 border-slate-600 text-slate-200">
+            Cancel
+          </Button>
+          <Button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700">
+            {saving ? "Saving..." : isEdit ? "Update Employee" : "Create Employee"}
+          </Button>
+        </div>
       </div>
     </form>
   );
