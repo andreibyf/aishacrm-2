@@ -25,15 +25,18 @@ import { Tenant } from "@/api/entities";
 import { SystemBranding } from "@/api/entities"; // NEW
 import { UploadFile } from "@/api/integrations";
 import { useTenant } from "../shared/tenantContext";
+import { useUser } from "@/components/shared/useUser.js";
 
 export default function BrandingSettings() {
-  const [user, setUser] = useState(null);
   const [tenant, setTenant] = useState(null); // NEW: active tenant being edited (if admin)
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
   const { selectedTenantId } = useTenant(); // NEW: from header switcher
+  
+  // Use global user context instead of direct User.me()
+  const { user } = useUser();
 
   const [brandingData, setBrandingData] = useState({
     companyName: "Ai-SHA CRM",
@@ -92,22 +95,21 @@ export default function BrandingSettings() {
   useEffect(() => {
     let mounted = true;
     (async () => {
+      if (!user) return;
       try {
-        const u = await User.me();
         if (!mounted) return;
-        setUser(u);
 
-        const isAdmin = u?.role === "admin" || u?.role === "superadmin";
+        const isAdmin = user?.role === "admin" || user?.role === "superadmin";
         // Determine which tenant to load for admins; regular users will only view their own if any
         const targetTenantId = (isAdmin && selectedTenantId)
           ? selectedTenantId
-          : (isAdmin && u?.tenant_id)
-          ? u.tenant_id
+          : (isAdmin && user?.tenant_id)
+          ? user.tenant_id
           : null;
 
-        if (isAdmin && (targetTenantId || u?.tenant_id)) {
+        if (isAdmin && (targetTenantId || user?.tenant_id)) {
           // Admin editing tenant branding
-          const t = await Tenant.get(targetTenantId || u.tenant_id);
+          const t = await Tenant.get(targetTenantId || user.tenant_id);
           if (!mounted) return;
           setTenant(t);
           const bs = t?.branding_settings || {};
@@ -119,9 +121,9 @@ export default function BrandingSettings() {
             footerLogoUrl: bs.footerLogoUrl || "",
           });
           setMessage(`Editing tenant branding: ${t?.name || "Tenant"}`);
-        } else if (u?.tenant_id && !isAdmin) {
+        } else if (user?.tenant_id && !isAdmin) {
           // Non-admin users: view personal overrides only (user-level)
-          const bs = u?.branding_settings || {};
+          const bs = user?.branding_settings || {};
           setBrandingData({
             companyName: bs.companyName || "Ai-SHA CRM",
             logoUrl: bs.logoUrl || "",
@@ -132,7 +134,7 @@ export default function BrandingSettings() {
           setMessage("Personal branding (does not override tenant theme)");
         } else {
           // No tenant context; fall back to user-level
-          const bs = u?.branding_settings || {};
+          const bs = user?.branding_settings || {};
           setBrandingData({
             companyName: bs.companyName || "Ai-SHA CRM",
             logoUrl: bs.logoUrl || "",
@@ -151,7 +153,7 @@ export default function BrandingSettings() {
     return () => {
       mounted = false;
     };
-  }, [selectedTenantId]);
+  }, [user, selectedTenantId]);
 
   const onChange = (key, val) => {
     setBrandingData((prev) => ({ ...prev, [key]: val }));
