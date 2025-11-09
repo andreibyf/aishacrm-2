@@ -8,12 +8,14 @@ import { apiHealthMonitorTests } from '../components/testing/apiHealthMonitorTes
 import { crudTests } from '../components/testing/crudTests';
 import { systemLogsTests } from '../components/testing/systemLogsTests';
 import { userContextTests } from '../components/testing/userContextTests.jsx';
+import { userMigrationIntegrationTests } from '../components/testing/userMigrationIntegrationTests.jsx';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Info, TestTube } from "lucide-react";
 
   const testSuites = [
     userContextTests,
+    userMigrationIntegrationTests,
     errorLoggerTests,
     formValidationTests,
     dataIntegrityTests,
