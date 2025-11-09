@@ -7,21 +7,21 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, FileText, Check } from "lucide-react";
 import { getTenantFilter } from './tenantUtils';
 import { useTenant } from './tenantContext';
-import { User } from '@/api/entities';
+import { useUser } from '@/components/shared/useUser.js';
 
 export default function DocumentPicker({ open, onOpenChange, onSelect, selectedDocs = [] }) {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [localSelection, setLocalSelection] = useState(selectedDocs);
   const { selectedTenantId } = useTenant();
+  const { user: currentUser } = useUser();
 
   useEffect(() => {
-    if (open) {
+    if (open && currentUser) {
       const loadDocs = async () => {
         setLoading(true);
         try {
-          const user = await User.me();
-          const filter = getTenantFilter(user, selectedTenantId);
+          const filter = getTenantFilter(currentUser, selectedTenantId);
           const docs = await DocumentationFile.filter(filter);
           setDocuments(docs);
           setLocalSelection(selectedDocs);
@@ -33,7 +33,7 @@ export default function DocumentPicker({ open, onOpenChange, onSelect, selectedD
       };
       loadDocs();
     }
-  }, [open, selectedTenantId, selectedDocs]);
+  }, [open, selectedTenantId, selectedDocs, currentUser]);
 
   const handleSelect = (doc) => {
     setLocalSelection(prev => 
@@ -71,7 +71,7 @@ export default function DocumentPicker({ open, onOpenChange, onSelect, selectedD
               </TableHeader>
               <TableBody>
                 {documents.map(doc => (
-                  <TableRow key={doc.id} className="border-b-slate-700/50 hover:bg-slate-700/30">
+                  <TableRow key={doc.id} className="hover:bg-slate-700/50">
                     <TableCell>
                       <Checkbox
                         checked={localSelection.some(d => d.id === doc.id)}
@@ -83,7 +83,9 @@ export default function DocumentPicker({ open, onOpenChange, onSelect, selectedD
                       <FileText className="w-4 h-4 text-slate-400" />
                       {doc.title}
                     </TableCell>
-                    <TableCell className="capitalize text-slate-400">{doc.category?.replace(/_/g, ' ')}</TableCell>
+                    <TableCell className="text-slate-400 text-sm">
+                      {doc.category || 'Uncategorized'}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -95,7 +97,7 @@ export default function DocumentPicker({ open, onOpenChange, onSelect, selectedD
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">Cancel</Button>
-          <Button onClick={handleConfirm} className="bg-blue-600 hover:bg-blue-700 text-white">
+          <Button onClick={handleConfirm} className="bg-blue-600 hover:bg-blue-700 text-white" disabled={localSelection.length === 0}>
             <Check className="w-4 h-4 mr-2" />
             Attach Selected ({localSelection.length})
           </Button>

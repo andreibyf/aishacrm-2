@@ -10,10 +10,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Upload, File, CheckCircle, AlertCircle, AlertTriangle, XCircle, CheckCircle2, Link2 } from "lucide-react";
-import { User, Employee } from "@/api/entities";
+import { Employee } from "@/api/entities";
 import { validateAndImport } from "@/api/functions";
 import { toast } from "@/components/ui/use-toast";
 import { Progress } from "@/components/ui/progress"; // NEW: Import Progress component
+import { useUser } from '@/components/shared/useUser.js';
 
 const formatPhoneNumber = (phoneNumber) => {
   if (!phoneNumber || typeof phoneNumber !== 'string') return phoneNumber;
@@ -30,6 +31,7 @@ const formatPhoneNumber = (phoneNumber) => {
 
 // Adjusted props based on user's original component structure
 export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess }) {
+  const { user: currentUser } = useUser();
   const [file, setFile] = useState(null);
   const [step, setStep] = useState('upload');
   const [headers, setHeaders] = useState([]);
@@ -40,7 +42,6 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
   const [assignedTo, setAssignedTo] = useState('');
   const [employees, setEmployees] = useState([]);
   const [accountLinkColumn, setAccountLinkColumn] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
   const [previewData, setPreviewData] = useState([]);
   const [showDetailedResults, setShowDetailedResults] = useState(false); // New state for the detailed results dialog
   
@@ -52,10 +53,9 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
 
   useEffect(() => {
     const loadData = async () => {
+      if (!currentUser) return;
       try {
-        const user = await User.me();
-        setCurrentUser(user);
-        const empList = await Employee.filter({ tenant_id: user.tenant_id });
+        const empList = await Employee.filter({ tenant_id: currentUser.tenant_id });
         setEmployees(empList);
       } catch (error) {
         console.error("Failed to load data:", error);
@@ -70,7 +70,7 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
     if (open) {
       loadData();
     }
-  }, [open]);
+  }, [open, currentUser]);
 
   useEffect(() => {
     if (schema?.properties) {
@@ -107,7 +107,6 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
     setAssignedTo('');
     setEmployees([]); // Reset employees
     setAccountLinkColumn(null);
-    setCurrentUser(null); // Reset current user
     setPreviewData([]);
     setShowDetailedResults(false);
     // Reset batching state

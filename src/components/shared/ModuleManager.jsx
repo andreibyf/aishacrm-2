@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ModuleSettings } from "@/api/entities";
-import { User } from "@/api/entities";
+import { useUser } from '@/components/shared/useUser.js';
 import {
   Card,
   CardContent,
@@ -279,17 +279,18 @@ const defaultModules = [
 export default function ModuleManager() {
   const [moduleSettings, setModuleSettings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (user) {
+      loadData();
+    }
+  }, [user, loadData]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [currentUser] = await Promise.all([User.me()]);
-      setUser(currentUser);
+      const currentUser = user;
 
       let currentModuleSettings = [];
       try {
@@ -328,7 +329,7 @@ export default function ModuleManager() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]); // Added dependency array
 
   const toggleModule = async (moduleId, currentStatus) => {
     if (!user) return;
