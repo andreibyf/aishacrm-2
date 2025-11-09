@@ -9,12 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, KeyRound, CheckCircle, AlertCircle, Save, Plug } from 'lucide-react';
-import { User } from '@/api/entities';
 import { testSystemOpenAI } from '@/api/functions';
 import { toast } from "sonner";
+import { useUser } from "@/hooks/useUser";
 
 export default function AdminOpenAISettings() {
-  const [, setUser] = useState(null);
+  const { user, loading: userLoading, refetch } = useUser();
   const [loading, setLoading] = useState(true);
   const [localSettings, setLocalSettings] = useState({
     openai_api_key: '',
@@ -29,21 +29,13 @@ export default function AdminOpenAISettings() {
   const [showKey, setShowKey] = useState(false);
 
   useEffect(() => {
-    async function loadUser() {
-      try {
-        const userData = await User.me();
-        setUser(userData);
-        if (userData.system_openai_settings) {
-          setLocalSettings(userData.system_openai_settings);
-        }
-      } catch (error) {
-        console.error("Failed to load user:", error);
-      } finally {
-        setLoading(false);
+    if (!userLoading) {
+      if (user?.system_openai_settings) {
+        setLocalSettings(user.system_openai_settings);
       }
+      setLoading(false);
     }
-    loadUser();
-  }, []);
+  }, [userLoading, user]);
 
   const handleSettingChange = (field, value) => {
     setLocalSettings(prev => ({ ...prev, [field]: value }));
@@ -52,7 +44,10 @@ export default function AdminOpenAISettings() {
   const handleSaveSettings = async () => {
     setIsSaving(true);
     try {
+      // Persist settings to the backend for the current user
+      const { User } = await import('@/api/entities');
       await User.updateMyUserData({ system_openai_settings: localSettings });
+      await refetch();
       toast.success("OpenAI settings saved successfully!");
     } catch (error) {
       toast.error("Failed to save settings.");

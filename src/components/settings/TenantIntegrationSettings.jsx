@@ -8,7 +8,6 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TenantIntegration } from "@/api/entities";
-import { User } from "@/api/entities";
 import { Loader2, Save, Trash2, AlertCircle, Plus, Edit, Cloud, Bot, Mail, Zap, Key, Link } from 'lucide-react';
 import { toast } from "sonner";
 import {
@@ -28,24 +27,23 @@ import {
 import WebhookEmailSettings from './WebhookEmailSettings';
 import { getTenantFilter } from "../shared/tenantUtils";
 import { useTenant } from "../shared/tenantContext";
+import { useUser } from "@/hooks/useUser";
 
 export default function TenantIntegrationSettings() {
   const [integrations, setIntegrations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
   const [editingIntegration, setEditingIntegration] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [testingIntegration, setTestingIntegration] = useState(null);
   const { selectedTenantId } = useTenant(); // Add this line
 
   const loadIntegrations = useCallback(async () => {
+    if (!currentUser) return;
     setLoading(true);
     try {
-      const user = await User.me();
-      setCurrentUser(user);
-
       // Use getTenantFilter for proper tenant isolation
-      const tenantFilter = getTenantFilter(user, selectedTenantId);
+      const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
 
       console.log('Loading integrations with filter:', tenantFilter);
 
@@ -64,7 +62,7 @@ export default function TenantIntegrationSettings() {
     } finally {
       setLoading(false);
     }
-  }, [selectedTenantId]); // Add selectedTenantId as dependency for useCallback
+  }, [currentUser, selectedTenantId]); // Depend on currentUser and selectedTenantId
 
   useEffect(() => {
     loadIntegrations();

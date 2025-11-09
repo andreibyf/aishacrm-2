@@ -1,30 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { User } from "@/api/entities";
 import { User as UserIcon, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cleanupUserData } from "@/api/functions";
+import { useUser } from "@/hooks/useUser";
 
 export default function UserInfo() {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { user: currentUser, loading, refetch } = useUser();
   const [cleaning, setCleaning] = useState(false);
-
-  useEffect(() => {
-    loadCurrentUser();
-  }, []);
-
+  
+  // Helper to refresh user context after cleanup
   const loadCurrentUser = async () => {
-    setLoading(true);
     try {
-      const user = await User.me();
-      setCurrentUser(user);
+      await refetch();
     } catch (error) {
-      console.error("Error loading user:", error);
-    } finally {
-      setLoading(false);
+      console.error("Error refetching user:", error);
     }
   };
 
@@ -39,8 +31,8 @@ export default function UserInfo() {
       const result = response.data;
 
       if (result.status === 'success') {
-        alert("User data cleaned successfully! Please refresh the page.");
-        loadCurrentUser();
+        alert("User data cleaned successfully! User context refreshed.");
+        await loadCurrentUser();
       } else {
         alert("Error cleaning user data: " + result.message);
       }

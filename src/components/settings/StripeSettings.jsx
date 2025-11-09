@@ -4,7 +4,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TenantIntegration } from '@/api/entities';
-import { User } from '@/api/entities';
 import { testStripeConnection } from '@/api/functions';
 import { toast } from "sonner";
 import {
@@ -16,9 +15,10 @@ import {
   Eye,
   EyeOff
 } from 'lucide-react';
+import { useUser } from "@/hooks/useUser";
 
 export default function StripeSettings() {
-  const [user, setUser] = useState(null);
+  const { user, loading: userLoading } = useUser();
   const [apiKey, setApiKey] = useState('');
   const [integration, setIntegration] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -30,14 +30,12 @@ export default function StripeSettings() {
 
   useEffect(() => {
     const loadData = async () => {
+      if (!user || userLoading) return;
       setLoading(true);
       try {
-        const currentUser = await User.me();
-        setUser(currentUser);
-
-        if (currentUser.tenant_id) {
+        if (user.tenant_id) {
           const integrations = await TenantIntegration.filter({
-            tenant_id: currentUser.tenant_id,
+            tenant_id: user.tenant_id,
             integration_type: 'stripe'
           });
 
@@ -59,7 +57,7 @@ export default function StripeSettings() {
       }
     };
     loadData();
-  }, []);
+  }, [user, userLoading]);
 
   const handleSave = async () => {
     if (!user?.tenant_id) {

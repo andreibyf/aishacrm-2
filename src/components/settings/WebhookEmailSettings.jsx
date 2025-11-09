@@ -4,13 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TenantIntegration } from "@/api/entities";
-import { User } from "@/api/entities";
 import { Loader2, Save, CheckCircle, AlertTriangle, Mail, Info, TestTube, AlertCircle } from 'lucide-react';
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 // WebhookSetupGuide is removed as per outline
 import { getTenantFilter } from "../shared/tenantUtils";
 import { useTenant } from "../shared/tenantContext";
+import { useUser } from "@/hooks/useUser";
 
 export default function WebhookEmailSettings() {
   const [integration, setIntegration] = useState(null);
@@ -19,7 +19,7 @@ export default function WebhookEmailSettings() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false); // New state for testing
   const [testResult, setTestResult] = useState(null); // New state for test result
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
   const { selectedTenantId } = useTenant();
 
   // New state for event settings, defaulting to all enabled
@@ -37,14 +37,12 @@ export default function WebhookEmailSettings() {
   });
 
   const loadIntegration = useCallback(async () => {
+    if (!currentUser) return;
     setLoading(true);
     setTestResult(null); // Clear previous test result when loading new integration
     try {
-      const user = await User.me();
-      setCurrentUser(user);
-
       // Use getTenantFilter for proper tenant isolation
-      const tenantFilter = getTenantFilter(user, selectedTenantId);
+      const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
 
       if (import.meta.env.DEV) {
         console.log('Loading webhook email integration with filter:', tenantFilter);
@@ -89,7 +87,7 @@ export default function WebhookEmailSettings() {
     } finally {
       setLoading(false);
     }
-  }, [selectedTenantId, eventSettings]); // Reload when tenant or event settings shape changes
+  }, [currentUser, selectedTenantId, eventSettings]); // Reload when tenant, user, or event settings change
 
   useEffect(() => {
     loadIntegration();
