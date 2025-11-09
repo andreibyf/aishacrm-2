@@ -15,7 +15,7 @@ import {
   Eye,
   EyeOff
 } from 'lucide-react';
-import { useUser } from "@/hooks/useUser";
+import { useUser } from "@/components/shared/useUser.js";
 
 export default function StripeSettings() {
   const { user, loading: userLoading } = useUser();

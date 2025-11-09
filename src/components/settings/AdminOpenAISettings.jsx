@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, KeyRound, CheckCircle, AlertCircle, Save, Plug } from 'lucide-react';
 import { testSystemOpenAI } from '@/api/functions';
 import { toast } from "sonner";
-import { useUser } from "@/hooks/useUser";
+import { useUser } from "@/components/shared/useUser.js";
 
 export default function AdminOpenAISettings() {
   const { user, loading: userLoading, refetch } = useUser();

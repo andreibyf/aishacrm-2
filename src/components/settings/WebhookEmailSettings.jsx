@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 // WebhookSetupGuide is removed as per outline
 import { getTenantFilter } from "../shared/tenantUtils";
 import { useTenant } from "../shared/tenantContext";
-import { useUser } from "@/hooks/useUser";
+import { useUser } from "@/components/shared/useUser.js";
 
 export default function WebhookEmailSettings() {
   const [integration, setIntegration] = useState(null);

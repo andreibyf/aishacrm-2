@@ -33,7 +33,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { checkBackendStatus } from "@/api/functions"; // Added direct import for checkBackendStatus
-import { useUser } from "@/hooks/useUser";
+import { useUser } from "@/components/shared/useUser.js";
 
 // Construct the correct, clean base URL for webhooks (remove preview subdomain)
 const WEBHOOK_BASE_URL = (() => {

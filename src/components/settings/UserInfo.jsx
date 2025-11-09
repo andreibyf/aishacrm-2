@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { User as UserIcon, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cleanupUserData } from "@/api/functions";
-import { useUser } from "@/hooks/useUser";
+import { useUser } from "@/components/shared/useUser.js";
 
 export default function UserInfo() {
   const { user: currentUser, loading, refetch } = useUser();

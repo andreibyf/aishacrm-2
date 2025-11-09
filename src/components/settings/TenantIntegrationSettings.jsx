@@ -27,7 +27,7 @@ import {
 import WebhookEmailSettings from './WebhookEmailSettings';
 import { getTenantFilter } from "../shared/tenantUtils";
 import { useTenant } from "../shared/tenantContext";
-import { useUser } from "@/hooks/useUser";
+import { useUser } from "@/components/shared/useUser.js";
 
 export default function TenantIntegrationSettings() {
   const [integrations, setIntegrations] = useState([]);
