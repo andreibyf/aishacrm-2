@@ -397,6 +397,42 @@ export default function createBizDevSourceRoutes(pgPool) {
         [newAccount.id, id, tenant_id]
       );
 
+      // Link any opportunities created from this BizDev Source (by metadata) to the new Account
+      // Primary linking: metadata.origin_bizdev_source_id
+      // Backward compatibility: description contains marker [BizDevSource:<id>]
+      try {
+        const linkByMetadata = await pgPool.query(
+          `UPDATE opportunities
+             SET account_id = $1,
+                 updated_at = NOW()
+           WHERE tenant_id = $2
+             AND account_id IS NULL
+             AND (metadata ->> 'origin_bizdev_source_id') = $3
+          `,
+          [newAccount.id, tenant_id, id]
+        );
+
+        const linkByDescription = await pgPool.query(
+          `UPDATE opportunities
+             SET account_id = $1,
+                 updated_at = NOW()
+           WHERE tenant_id = $2
+             AND account_id IS NULL
+             AND description ILIKE $3
+          `,
+          [newAccount.id, tenant_id, `%[BizDevSource:${id}]%`]
+        );
+
+        console.log('[Promote BizDev Source] Linked opportunities to new account', {
+          linked_by_metadata: linkByMetadata.rowCount,
+          linked_by_description: linkByDescription.rowCount,
+          new_account_id: newAccount.id,
+          bizdev_source_id: id,
+        });
+      } catch (linkErr) {
+        console.warn('[Promote BizDev Source] Failed to link opportunities by origin metadata/description', linkErr);
+      }
+
       res.json({
         status: 'success',
         message: 'BizDev source promoted to account',

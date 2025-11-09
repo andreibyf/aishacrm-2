@@ -819,7 +819,20 @@ export default function AccountsPage() {
             </DialogHeader>
             <AccountForm
               account={editingAccount}
-              onSuccess={handleSave}
+              // Provide concrete onSubmit handler expected by AccountForm
+              onSubmit={async (data) => {
+                try {
+                  if (editingAccount?.id) {
+                    await Account.update(editingAccount.id, data);
+                  } else {
+                    await Account.create(data);
+                  }
+                  await handleSave();
+                } catch (err) {
+                  console.error('[Accounts] Failed to save account:', err);
+                  toast.error('Failed to save account');
+                }
+              }}
               onCancel={() => {
                 setIsFormOpen(false);
                 setEditingAccount(null);

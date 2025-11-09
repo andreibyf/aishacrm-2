@@ -200,6 +200,13 @@ export default function BizDevSourceDetailPanel({
         probability: 10,
         is_test_data: false,
         // Don't set account_id yet - that happens after we win the business
+        // Store stable origin metadata so promotion can later link this opportunity
+        metadata: {
+          origin_bizdev_source_id: currentSource.id,
+          origin_bizdev_source_company: currentSource.company_name,
+          origin_bizdev_source_batch_id: currentSource.batch_id || null,
+          origin_bizdev_source_created_at: currentSource.created_at || currentSource.created_date || null,
+        },
       };
 
       console.log('[BizDevSource] Creating opportunity with payload:', oppPayload);
