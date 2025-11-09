@@ -668,40 +668,10 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     });
   }, []);
 
-  // Display Effective client badge in header for clarity
-  const EffectiveClientBadge = () => {
-    try {
-      let effectiveTenant = selectedTenantId || (user?.tenant_id ?? null);
-      // Fall back to cached effective_user_tenant_id if present
-      if (!effectiveTenant && typeof window !== 'undefined') {
-        const cached = localStorage.getItem('effective_user_tenant_id');
-        effectiveTenant = cached || effectiveTenant;
-      }
-      if (!effectiveTenant) return null;
-      return (
-        <div style={{
-          position: 'fixed', 
-          top: 0,
-          right: 0,
-          height: '64px', // match header height
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 24px',
-          zIndex: 45, // just above header z-40
-          background: 'transparent',
-          color: 'rgb(203 213 225)', // text-slate-300
-          fontSize: 12
-        }}>
-          <div className="flex items-center gap-2">
-            <strong className="text-slate-400">Tenant:</strong> 
-            <span className="text-slate-300">{String(effectiveTenant).split('-')[0]}</span>
-          </div>
-        </div>
-      );
-    } catch {
-      return null;
-    }
-  };
+  // Display Effective client badge in header for clarity (REMOVED per user request)
+  // The tenant identifier should no longer be exposed in the UI.
+  // Keeping the component stub to avoid runtime/JSX reference changes elsewhere.
+  const EffectiveClientBadge = () => null;
 
   // Inject badge just before returning main layout (search for the primary return below)
 
