@@ -22,6 +22,7 @@ import { Switch } from "@/components/ui/switch";
 import { format } from 'date-fns';
 import { updateEmployeeSecure } from "@/api/functions";
 import { canDeleteUser } from "@/utils/permissions";
+import { useUser } from '@/components/shared/useUser.js';
 
 // Backend API URL
 const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
@@ -505,7 +506,6 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
 export default function EnhancedUserManagement() {
     const [users, setUsers] = useState([]);
     const [allTenants, setAllTenants] = useState([]);
-    const [currentUser, setCurrentUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [editingUser, setEditingUser] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -513,26 +513,29 @@ export default function EnhancedUserManagement() {
     const [isInviteModalOpen, setInviteModalOpen] = useState(false);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [userToDelete, setUserToDelete] = useState(null);
+    
+    // Use global user context instead of local User.me()
+    const { user: currentUser } = useUser();
 
     useEffect(() => {
+        if (!currentUser) return;
         loadData();
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentUser]);
 
     const loadData = async () => {
+        if (!currentUser) return;
         setLoading(true);
         try {
-            const userData = await User.me();
-            setCurrentUser(userData);
-            
             // Tenant admins can only see users from their own tenant
             // Superadmins can see all users
-            const userFilter = userData.role === 'superadmin' 
+            const userFilter = currentUser.role === 'superadmin' 
                 ? { tenant_id: null } // null = get ALL users across all tenants
-                : { tenant_id: userData.tenant_id }; // Filter by admin's tenant
+                : { tenant_id: currentUser.tenant_id }; // Filter by admin's tenant
             
             const [usersData, tenantsData] = await Promise.all([
                 User.list(userFilter),
-                userData.role === 'superadmin' ? Tenant.list() : Promise.resolve([])
+                currentUser.role === 'superadmin' ? Tenant.list() : Promise.resolve([])
             ]);
             
             setUsers(usersData);

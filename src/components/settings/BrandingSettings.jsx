@@ -56,17 +56,12 @@ export default function BrandingSettings() {
 
   const canEdit = !!me && (me.role === "admin" || me.role === "superadmin");
 
-  // NEW: Fetch current user for permissions
+  // NEW: Fetch current user for permissions from global context
   React.useEffect(() => {
-    (async () => {
-      try {
-        const u = await User.me();
-        setMe(u);
-      } catch (e) {
-        console.error("Failed to fetch current user for permissions:", e);
-      }
-    })();
-  }, []);
+    if (user) {
+      setMe(user);
+    }
+  }, [user]);
 
   // NEW: Fetch global footer branding data
   React.useEffect(() => {
