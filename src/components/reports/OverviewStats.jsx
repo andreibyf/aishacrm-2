@@ -23,7 +23,7 @@ import {
 } from "recharts";
 import { Account, Lead, Opportunity } from "@/api/entities";
 import TrendIndicator from "./TrendIndicator";
-import { getDashboardStats } from "@/api/functions";
+import { getDashboardStats } from "@/api/fallbackFunctions";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 

@@ -218,5 +218,49 @@ export default function createStorageRoutes(_pgPool) {
     }
   });
 
+  // POST /api/storage/signed-url - Generate a signed URL for a private file
+  router.post("/signed-url", async (req, res) => {
+    try {
+      const { file_uri, expires_in = 3600 } = req.body;
+
+      if (!file_uri) {
+        return res.status(400).json({
+          status: "error",
+          message: "file_uri is required",
+        });
+      }
+
+      const supabase = getSupabaseAdmin();
+      const bucket = getBucketName();
+
+      // Generate signed URL (expires_in is in seconds)
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .createSignedUrl(file_uri, expires_in);
+
+      if (error) {
+        console.error("[storage.signed-url] Error:", error);
+        return res.status(500).json({
+          status: "error",
+          message: error.message || "Failed to create signed URL",
+        });
+      }
+
+      return res.json({
+        status: "success",
+        data: {
+          signed_url: data.signedUrl,
+          expires_at: new Date(Date.now() + expires_in * 1000).toISOString(),
+        },
+      });
+    } catch (error) {
+      console.error("[storage.signed-url] Error:", error);
+      return res.status(500).json({
+        status: "error",
+        message: error.message || "Failed to create signed URL",
+      });
+    }
+  });
+
   return router;
 }

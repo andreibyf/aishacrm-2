@@ -74,16 +74,39 @@ const mockCore = {
   ExtractDataFromUploadedFile: createMockIntegration(
     "ExtractDataFromUploadedFile",
   ),
-  CreateFileSignedUrl: createMockIntegration("CreateFileSignedUrl"),
   UploadPrivateFile: createMockIntegration("UploadPrivateFile"),
 };
 
+// Real implementation for CreateFileSignedUrl using backend API
+async function CreateFileSignedUrl({ file_uri, expires_in = 3600 }) {
+  try {
+    const response = await fetch(`${getBackendUrl()}/api/storage/signed-url`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ file_uri, expires_in }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result.data; // Returns { signed_url, expires_at }
+  } catch (error) {
+    console.error('[CreateFileSignedUrl] Error:', error);
+    throw error;
+  }
+}
+
 // Export mock Core integration - all functionality moved to backend
-export const Core = mockCore;
+export const Core = { ...mockCore, CreateFileSignedUrl };
 
 export const InvokeLLM = Core.InvokeLLM;
 export const SendEmail = Core.SendEmail;
 export const GenerateImage = Core.GenerateImage;
 export const ExtractDataFromUploadedFile = Core.ExtractDataFromUploadedFile;
-export const CreateFileSignedUrl = Core.CreateFileSignedUrl;
+export { CreateFileSignedUrl };
 export const UploadPrivateFile = Core.UploadPrivateFile;
