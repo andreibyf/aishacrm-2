@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: "Which E2E suite to run (metrics|rls|rate-limit|notifications|tenant|crud|all)"
+        description: "Which E2E suite to run (metrics|rls|rate-limit|notifications|tenant|crud|schema-validation|all)"
         required: true
         default: metrics
         type: choice
@@ -15,6 +15,7 @@ on:
           - notifications
           - tenant
           - crud
+          - schema-validation
           - all
       ref:
         description: "Git ref to run against"
@@ -105,6 +106,7 @@ jobs:
             "notifications" { $TARGET = "tests/e2e/notifications.spec.ts" }
             "tenant" { $TARGET = "tests/e2e/tenant-switching.spec.ts" }
             "crud" { $TARGET = "tests/e2e/crud-operations.spec.js" }
+            "schema-validation" { $TARGET = "tests/api-schema-validation.spec.js" }
             # Use directory-only target and rely on Playwright test discovery.
             # This avoids any regex/glob parsing differences across shells/versions.
             "all" { $TARGET = "tests/e2e/" }
