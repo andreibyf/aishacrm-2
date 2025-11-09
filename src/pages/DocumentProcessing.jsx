@@ -247,30 +247,35 @@ function StorageUploader({ onCancel, onProcessingChange }) {
     onProcessingChange(true);
 
     try {
-      const { UploadPrivateFile } = await import("@/api/integrations");
+      const { UploadFile } = await import("@/api/integrations");
       const { DocumentationFile } = await import("@/api/entities");
       const { User } = await import("@/api/entities");
-
-      // Upload file to private storage
-      const uploadResult = await UploadPrivateFile({ file: selectedFile });
-
-      if (!uploadResult.file_uri) {
-        throw new Error("File upload failed - no URI returned");
-      }
 
       // Get current user for tenant info
       const currentUser = await User.me();
 
+      // Upload file to storage
+      const uploadResult = await UploadFile({ 
+        file: selectedFile,
+        tenant_id: currentUser.tenant_id 
+      });
+
+      if (!uploadResult.file_url) {
+        throw new Error("File upload failed - no URL returned");
+      }
+
       // Create document record for storage
       const documentRecord = await DocumentationFile.create({
         title: selectedFile.name,
-        description: "Document uploaded for storage only",
-        file_name: selectedFile.name,
-        file_uri: uploadResult.file_uri,
-        file_type: selectedFile.type.split("/")[1] || "unknown",
+        filename: selectedFile.name,
+        filepath: uploadResult.filename, // Storage path from upload
+        file_uri: uploadResult.file_url,  // Public/signed URL
+        filesize: selectedFile.size,
+        mimetype: selectedFile.type,
         category: "other",
         tenant_id: currentUser.tenant_id,
         tags: ["storage-upload"],
+        uploaded_by: currentUser.email || currentUser.username,
       });
 
       setUploadResult({

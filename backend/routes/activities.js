@@ -72,11 +72,21 @@ export default function createActivityRoutes(pgPool) {
       const simpleEq = [
         { key: 'status', column: 'status' },
         { key: 'type', column: 'type' },
+        { key: 'related_id', column: 'related_id' }, // Filter by related entity ID
       ];
       for (const { key, column } of simpleEq) {
         if (req.query[key]) {
           params.push(req.query[key]);
           where.push(`${column} = $${params.length}`);
+        }
+      }
+
+      // related_to lives in metadata
+      if (req.query.related_to) {
+        const v = parseMaybeJson(req.query.related_to);
+        if (typeof v === 'string') {
+          params.push(v);
+          where.push(`metadata->>'related_to' = $${params.length}`);
         }
       }
 
