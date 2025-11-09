@@ -9,11 +9,13 @@ import { crudTests } from '../components/testing/crudTests';
 import { systemLogsTests } from '../components/testing/systemLogsTests';
 import { userContextTests } from '../components/testing/userContextTests.jsx';
 import { userMigrationIntegrationTests } from '../components/testing/userMigrationIntegrationTests.jsx';
+import { schemaValidationTests } from '../components/testing/schemaValidationTests';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Info, TestTube } from "lucide-react";
 
   const testSuites = [
+    schemaValidationTests, // New comprehensive schema validation tests
     userContextTests,
     userMigrationIntegrationTests,
     errorLoggerTests,
@@ -42,8 +44,9 @@ import { Info, TestTube } from "lucide-react";
           <Info className="h-4 w-4 text-blue-400" />
           <AlertTitle className="text-blue-300">Testing Information</AlertTitle>
           <AlertDescription className="text-blue-400">
-            This test suite validates core functionality including CRUD operations, error logging, form validation,
-            data integrity, utility functions, employee scope filtering, and API health monitoring. Click &quot;Run All Tests&quot; to execute the full suite.
+            This test suite validates core functionality including schema validation (minimal required fields),
+            CRUD operations, error logging, form validation, data integrity, utility functions, employee scope filtering,
+            and API health monitoring. Click &quot;Run All Tests&quot; to execute the full suite.
           </AlertDescription>
         </Alert>
 
@@ -82,6 +85,15 @@ import { Info, TestTube } from "lucide-react";
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-3 bg-slate-700 rounded-lg">
+                <div className="font-medium text-slate-200 mb-1 flex items-center gap-2">
+                  ✅ Schema Validation
+                  <span className="text-xs px-2 py-0.5 bg-green-900/40 text-green-300 border border-green-700/60 rounded">30+ Tests</span>
+                </div>
+                <div className="text-sm text-slate-400">
+                  Validates minimal required fields, optional fields, metadata storage, email uniqueness, and UI indicators for all entities (Employees, Accounts, Contacts, Leads, Opportunities).
+                </div>
+              </div>
               <div className="p-3 bg-slate-700 rounded-lg">
                 <div className="font-medium text-slate-200 mb-1 flex items-center gap-2">
                   🔧 CRUD Operations

@@ -172,9 +172,9 @@ export default function OpportunityForm({
     const isE2E = localStorage.getItem('E2E_TEST_MODE') === 'true';
     if (isE2E) console.log('[E2E] OpportunityForm handleSubmit called');
     
-    if (!formData.name || !formData.amount || !formData.close_date) {
-      if (isE2E) console.log('[E2E] OpportunityForm validation failed: missing required fields');
-      toast.error("Please fill in all required fields: Name, Amount, and Close Date");
+    if (!formData.name?.trim()) {
+      if (isE2E) console.log('[E2E] OpportunityForm validation failed: missing required name');
+      toast.error("Please fill in the required field: Name");
       return;
     }
 
@@ -262,7 +262,7 @@ export default function OpportunityForm({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="opp-amount" className="text-slate-300">
-                Amount <span className="text-red-400">*</span>
+                Amount
               </Label>
               <Input 
                 id="opp-amount" 
@@ -271,7 +271,6 @@ export default function OpportunityForm({
                 step="0.01"
                 value={formData.amount} 
                 onChange={e => handleChange('amount', e.target.value)} 
-                required 
                 className="bg-slate-700 border-slate-600 text-white" 
                 placeholder="0.00"
               />
@@ -279,7 +278,7 @@ export default function OpportunityForm({
 
             <div>
               <Label htmlFor="opp-close-date" className="text-slate-300">
-                Expected Close Date <span className="text-red-400">*</span>
+                Expected Close Date
               </Label>
               <Input 
                 id="opp-close-date" 
@@ -287,7 +286,6 @@ export default function OpportunityForm({
                 type="date" 
                 value={formData.close_date} 
                 onChange={e => handleChange('close_date', e.target.value)} 
-                required 
                 className="bg-slate-700 border-slate-600 text-white" 
               />
             </div>

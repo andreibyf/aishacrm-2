@@ -291,18 +291,12 @@ export default function LeadForm({
       last_name: ''
     };
 
-    if (!formData.first_name?.trim()) {
-      errors.first_name = 'First name is required';
-    }
-
-    if (!formData.last_name?.trim()) {
-      errors.last_name = 'Last name is required';
-    }
-
-    // If there are validation errors, set them and stop submission
-    if (errors.first_name || errors.last_name) {
+    // Require at least first name OR last name (not both mandatory)
+    if (!formData.first_name?.trim() && !formData.last_name?.trim()) {
+      errors.first_name = 'First name or last name is required';
+      errors.last_name = 'First name or last name is required';
       setFieldErrors(errors);
-      toast.error("First name and last name are required.");
+      toast.error("At least first name or last name is required.");
       return;
     }
 
@@ -464,12 +458,14 @@ export default function LeadForm({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="first_name" className="text-slate-200">First Name *</Label>
+                <Label htmlFor="first_name" className="text-slate-200">
+                  First Name <span className="text-red-400">*</span>
+                  <span className="text-xs text-slate-400 ml-2">(or Last Name required)</span>
+                </Label>
                 <Input
                   id="first_name"
                   value={formData.first_name || ""}
                   onChange={(e) => handleChange('first_name', e.target.value)}
-                  required
                   aria-invalid={!!fieldErrors.first_name}
                   aria-describedby={fieldErrors.first_name ? "first_name-error" : undefined}
                   className={`mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500 ${
@@ -483,12 +479,14 @@ export default function LeadForm({
                 )}
               </div>
               <div>
-                <Label htmlFor="last_name" className="text-slate-200">Last Name *</Label>
+                <Label htmlFor="last_name" className="text-slate-200">
+                  Last Name <span className="text-red-400">*</span>
+                  <span className="text-xs text-slate-400 ml-2">(or First Name required)</span>
+                </Label>
                 <Input
                   id="last_name"
                   value={formData.last_name || ""}
                   onChange={(e) => handleChange('last_name', e.target.value)}
-                  required
                   aria-invalid={!!fieldErrors.last_name}
                   aria-describedby={fieldErrors.last_name ? "last_name-error" : undefined}
                   className={`mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500 ${

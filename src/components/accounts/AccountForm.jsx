@@ -309,13 +309,12 @@ export default function AccountForm({
             showPrefixPicker={true}
           />
           <div>
-            <Label htmlFor="email" className="text-slate-200">Email *</Label>
+            <Label htmlFor="email" className="text-slate-200">Email</Label>
             <Input 
               id="email" 
               type="email" 
               value={formData.email} 
               onChange={(e) => handleChange('email', e.target.value)} 
-              required 
               className="mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500" 
             />
           </div>
@@ -376,18 +375,23 @@ export default function AccountForm({
           </div>
         )}
 
-        <div className="flex justify-end gap-3 pt-6 border-t border-slate-600">
-          <Button type="button" variant="outline" onClick={onCancel} className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
-            Cancel
-          </Button>
-          <Button 
-            type="submit" 
-            disabled={isSubmitting || loading || (!currentUser?.tenant_id && !selectedTenantId && currentUser?.role !== 'superadmin')}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            <Save className="w-4 h-4 mr-2" />
-            {isSubmitting ? 'Saving...' : account?.id ? 'Update Account' : 'Create Account'}
-          </Button>
+        <div className="flex items-center justify-between pt-6 border-t border-slate-600">
+          <p className="text-xs text-slate-400">
+            <span className="text-red-400">*</span> Required fields
+          </p>
+          <div className="flex gap-3">
+            <Button type="button" variant="outline" onClick={onCancel} className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
+              Cancel
+            </Button>
+            <Button 
+              type="submit" 
+              disabled={isSubmitting || loading || (!currentUser?.tenant_id && !selectedTenantId && currentUser?.role !== 'superadmin')}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {isSubmitting ? 'Saving...' : account?.id ? 'Update Account' : 'Create Account'}
+            </Button>
+          </div>
         </div>
       </form>
     </div>
