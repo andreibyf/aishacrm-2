@@ -45,7 +45,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
   // NEW: User state and loading for admin check
   const [user, setUser] = useState(null);
   const effectiveUser = propsUser || user;
-  const isAdmin = effectiveUser?.role === 'admin' || effectiveUser?.role === 'superadmin';
+  const isSuperadmin = effectiveUser?.role === 'superadmin';
 
   // NEW: State for notes section
   const [notes, setNotes] = useState([]);
@@ -940,8 +940,8 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
             </div>
           )}
 
-          {/* ONLY show test data toggle to admins */}
-          {isAdmin && (
+          {/* ONLY show test data toggle to Superadmin */}
+          {isSuperadmin && (
             <div className="flex items-center space-x-2 p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
               <Switch
                 id="is_test_data"
@@ -954,7 +954,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
                 Mark as Test Data
               </Label>
               <span className="text-xs text-amber-400 ml-2">
-                (For admin cleanup purposes)
+                (For Superadmin cleanup purposes)
               </span>
             </div>
           )}

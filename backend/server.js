@@ -170,6 +170,13 @@ function rateLimiter(req, res, next) {
       entry.count++;
       return next();
     }
+    // Prepare CORS headers early if not already set (ensures browser can read 429)
+    if (!res.getHeader('Access-Control-Allow-Origin')) {
+      const origin = req.headers.origin || '*';
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
     res.setHeader('Retry-After', Math.ceil((entry.ts + RATE_LIMIT_WINDOW_MS - now) / 1000));
     return res.status(429).json({
       error: 'Too Many Requests',
@@ -180,9 +187,6 @@ function rateLimiter(req, res, next) {
     return next();
   }
 }
-
-// Apply limiter to API routes; keep health/docs unthrottled
-app.use('/api', rateLimiter);
 
 // CORS configuration
 // Defaults: allow localhost dev; rely on ALLOWED_ORIGINS for anything else
@@ -219,6 +223,9 @@ app.use(cors({
   },
   credentials: true,
 }));
+
+// Apply limiter to API routes AFTER CORS so 429 responses include CORS headers
+app.use('/api', rateLimiter);
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));

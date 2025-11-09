@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   Select,
   SelectContent,
@@ -14,7 +14,8 @@ import { Button } from "@/components/ui/button";
 
 export default function LazyAccountSelector({
   value,
-  onValueChange,
+  onChange,
+  onValueChange, // Support both prop names for backward compatibility
   onCreateNew,
   placeholder = "Select account...",
   className = "",
@@ -22,6 +23,8 @@ export default function LazyAccountSelector({
   itemClassName = "",
   disabled = false
 }) {
+  // Use onChange if provided, otherwise fall back to onValueChange (memoized to prevent race conditions)
+  const handleChange = useMemo(() => onChange || onValueChange, [onChange, onValueChange]);
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -87,7 +90,7 @@ export default function LazyAccountSelector({
   return (
     <Select
       value={value || ''}
-      onValueChange={onValueChange}
+      onValueChange={handleChange}
       disabled={disabled}
       open={open}
       onOpenChange={handleOpenChange}

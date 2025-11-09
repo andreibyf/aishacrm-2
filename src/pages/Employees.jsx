@@ -15,6 +15,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import EmployeeForm from "../components/employees/EmployeeForm";
 import EmployeeDetailPanel from "../components/employees/EmployeeDetailPanel";
@@ -43,6 +44,15 @@ export default function Employees() {
   const [inviteEmployee, setInviteEmployee] = useState(null);
 
   const { selectedTenantId } = useTenant();
+
+  // Debug: Log user state
+  useEffect(() => {
+    console.log('[Employees] User state changed:', { currentUser: currentUser?.email, userLoading });
+  }, [currentUser, userLoading]);
+
+  useEffect(() => {
+    console.log('[Employees] isFormOpen changed:', isFormOpen);
+  }, [isFormOpen]);
 
   // Removed local User.me() fetch; currentUser provided by context
 
@@ -214,6 +224,9 @@ export default function Employees() {
         <DialogContent className="max-w-4xl bg-slate-800 border-slate-700 text-slate-200">
           <DialogHeader>
             <DialogTitle className="text-slate-100">{editingEmployee ? 'Edit Employee' : 'Add New Employee'}</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              {editingEmployee ? 'Update employee information' : 'Add a new employee to your team'}
+            </DialogDescription>
           </DialogHeader>
           <EmployeeForm
             employee={editingEmployee}
@@ -308,7 +321,11 @@ export default function Employees() {
             />
           </div>
           <Button
-            onClick={() => { setEditingEmployee(null); setIsFormOpen(true); }}
+            onClick={() => { 
+              console.log('[Employees] Add Employee clicked', { currentUser, userLoading, isFormOpen });
+              setEditingEmployee(null); 
+              setIsFormOpen(true); 
+            }}
             className="bg-blue-600 hover:bg-blue-700"
             disabled={!currentUser || userLoading}
           >

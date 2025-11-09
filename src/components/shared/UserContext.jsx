@@ -1,4 +1,4 @@
-import { createContext, useEffect, useState } from 'react';
+import { createContext, useEffect, useState, useCallback } from 'react';
 import { User } from '@/api/entities';
 
 // Internal context object for user data
@@ -12,7 +12,7 @@ export function UserProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const loadUser = async () => {
+  const loadUser = useCallback(async () => {
     setLoading(true);
     try {
       // E2E mode: use injected mock user if present
@@ -36,11 +36,11 @@ export function UserProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // Empty deps - stable function reference
 
   useEffect(() => {
     loadUser();
-  }, []);
+  }, [loadUser]);
 
   return (
     <UserContextInternal.Provider value={{ user, loading, reloadUser: loadUser }}>

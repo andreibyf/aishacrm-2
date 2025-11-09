@@ -152,10 +152,10 @@ export default function LeadsPage() {
       user.employee_role === "manager";
   }, [user]);
 
-  // Derived state for admin role for controlling test data visibility
-  const isAdmin = useMemo(() => {
+  // Derived state for Superadmin role for controlling test data visibility
+  const isSuperadmin = useMemo(() => {
     if (!user) return false;
-    return user.role === "admin" || user.role === "superadmin";
+    return user.role === "superadmin";
   }, [user]);
 
   // Stats for ALL leads (not just current page)
@@ -1061,7 +1061,7 @@ export default function LeadsPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {isAdmin && (
+            {isSuperadmin && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button

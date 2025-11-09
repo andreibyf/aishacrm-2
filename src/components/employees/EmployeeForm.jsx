@@ -18,6 +18,8 @@ import { toast } from "sonner";
 
 // Standardized props: { initialData, onSubmit, onCancel, tenantId } while retaining backward compat for existing parent usage.
 export default function EmployeeForm({ employee: legacyEmployee, initialData, onSubmit, onSave, onCancel, tenantId }) {
+  console.log('[EmployeeForm] Rendering with props:', { legacyEmployee, initialData, tenantId });
+  
   // Prefer initialData if provided; fall back to legacy 'employee' prop.
   const employee = initialData || legacyEmployee || null;
   const isEdit = !!(employee && employee.id);

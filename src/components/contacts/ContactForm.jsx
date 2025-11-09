@@ -151,9 +151,9 @@ export default function ContactForm({
   const { cachedRequest, clearCache } = useApiManager();
   const { logError } = useErrorLog();
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  const isSuperadmin = user?.role === 'superadmin';
 
-  console.log('[ContactForm] Initial state set, isAdmin:', isAdmin);
+  console.log('[ContactForm] Initial state set, isSuperadmin:', isSuperadmin);
   console.log('[ContactForm] Current user state:', user?.email, 'Loading:', userLoading);
 
   const checkForDuplicates = useCallback(async (data) => {
@@ -889,7 +889,7 @@ export default function ContactForm({
             </div>
           </div>
 
-          {isAdmin && (
+          {isSuperadmin && (
             <div className="flex items-center space-x-2 p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
               <Switch
                 id="is_test_data"
@@ -901,7 +901,7 @@ export default function ContactForm({
                 Mark as Test Data
               </Label>
               <span className="text-xs text-amber-400 ml-2">
-                (For admin cleanup purposes)
+                (For Superadmin cleanup purposes)
               </span>
             </div>
           )}

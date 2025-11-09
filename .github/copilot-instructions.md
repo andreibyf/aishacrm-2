@@ -6,6 +6,28 @@
 - Backend: Node.js Express server with 197 API endpoints across 26 categories, using PostgreSQL (Supabase).
 - Focus: Zero vendor dependency with automatic Base44 → local backend failover.
 
+## 🐳 CRITICAL: Docker Development Environment
+**THIS PROJECT RUNS IN DOCKER CONTAINERS - ALWAYS REMEMBER THIS:**
+
+- **Frontend Container:** Runs on `http://localhost:4000` (NOT 5173 or 3000)
+- **Backend Container:** Runs on `http://localhost:4001` (NOT 3001)
+- **Port Configuration:** NEVER suggest changing ports - they are fixed in Docker setup
+- **Environment Files:**
+  - Root `.env`: `VITE_AISHACRM_BACKEND_URL=http://localhost:4001`
+  - Backend `.env`: `ALLOWED_ORIGINS` includes `http://localhost:4000`, `FRONTEND_URL=http://localhost:4000`
+- **Starting Services:** Use `docker-compose up -d` to start both containers (runs in background)
+- **Code Changes:** 
+  - Frontend changes require rebuild: `docker-compose up -d --build frontend`
+  - Backend changes require rebuild: `docker-compose up -d --build backend`
+  - Rebuild both: `docker-compose up -d --build`
+- **Debugging:** Check `docker ps` for container status; use `docker logs aishacrm-frontend` or `docker logs aishacrm-backend` for output
+- **Common Mistakes to Avoid:**
+  - ❌ DON'T assume standard Vite port (5173) or Express port (3001)
+  - ❌ DON'T suggest `npm run dev` without Docker context
+  - ❌ DON'T modify port configuration without explicit user request
+  - ✅ DO verify Docker containers are running before troubleshooting
+  - ✅ DO use container ports (4000/4001) in all URLs and CORS config
+
 ## Architecture & Data Flow
 - **Frontend:** Components in `src/components/` by domain; pages in `src/pages/`; API clients in `src/api/` with fallback logic.
 - **Backend:** Express server in `backend/server.js`; routes in `backend/routes/` (26 categories); database via Supabase PostgreSQL.
@@ -40,12 +62,16 @@
    ```
 
 ### Standard Workflows
-- **Setup:** `npm install` (root & backend); copy `.env.example` to `.env`; configure `VITE_AISHACRM_BACKEND_URL` and database credentials.
-- **Dev Server:** `.\start-all.ps1` (starts both in background) OR `npm run dev` (frontend); `cd backend && npm run dev` (backend) in separate terminals.
+- **Setup:** `npm install` (root & backend); copy `.env.example` to `.env`; configure `VITE_AISHACRM_BACKEND_URL=http://localhost:4001` (Docker backend port) and database credentials.
+- **Dev Server (Docker):** `docker-compose up -d --build` starts both containers on ports 4000 (frontend) and 4001 (backend). Runs in background.
+- **Dev Server (Alternative):** `npm run dev` (frontend) and `cd backend && npm run dev` (backend) in separate terminals if NOT using Docker.
+- **Rebuild After Changes:** `docker-compose up -d --build` (both) or `docker-compose up -d --build frontend` (frontend only) or `docker-compose up -d --build backend` (backend only)
+- **Accessing App:** Frontend at `http://localhost:4000`, backend API at `http://localhost:4001/api/*`
 - **Build:** `npm run build` (frontend); backend runs via `npm start`.
 - **Linting:** `npm run lint` (frontend); check `eslint-results.json` for issues.
 - **Database:** Use Supabase; run migrations from `backend/migrations/`; seed with `npm run seed`.
 - **Testing:** Custom tests in `src/pages/UnitTests.jsx`; backend tests via `npm test`.
+- **Docker Status:** Check `docker ps` to see running containers; `docker logs aishacrm-frontend` or `docker logs aishacrm-backend` for debugging.
 - **Backend Issues:** If server exits immediately, see `backend/TROUBLESHOOTING_NODE_ESM.md` for ESM-specific debugging.
 
 ## Project-Specific Conventions

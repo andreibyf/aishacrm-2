@@ -130,7 +130,7 @@ export default function LeadForm({
     return employees.filter(e => e.user_email === user.email && e.has_crm_access);
   }, [employees, user, isManager]);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  const isSuperadmin = user?.role === 'superadmin';
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -710,7 +710,7 @@ export default function LeadForm({
               />
             </div>
 
-            {isAdmin && (
+            {isSuperadmin && (
               <div className="flex items-center space-x-2 p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
                 <Switch
                   id="is_test_data"

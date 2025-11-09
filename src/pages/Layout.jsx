@@ -144,156 +144,94 @@ function isSuperAdmin(user) {
  */
 function isAdminOrSuperAdmin(user) {
   if (!user) return false;
-  return user.role === "admin" ||
-    user.role === "superadmin" ||
-    user.is_superadmin === true;
+  return user.role === 'admin' || user.role === 'superadmin' || user.is_superadmin === true;
 }
 
 function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
   if (!user) return false;
 
-  // DEBUG: Always log what we receive for troubleshooting
   console.log("[hasPageAccess] Called with:", {
     pageName,
     userEmail: user.email,
     userRole: user.role,
     hasNavigationPermissions: !!user.navigation_permissions,
     navigationPermissionsType: typeof user.navigation_permissions,
-    navigationPermissions: user.navigation_permissions
+    navigationPermissions: user.navigation_permissions,
   });
 
-  // GOD MODE: SuperAdmins bypass ALL restrictions
-  if (isSuperAdmin(user)) {
-    return true;
-  }
+  if (isSuperAdmin(user)) return true;
 
-  // TENANT ADMIN RESTRICTIONS: Hide system-wide pages
-  const superadminOnlyPages = new Set([
-    "Tenants", // Only superadmins can manage tenants
-  ]);
-  if (superadminOnlyPages.has(pageName) && user.role !== 'superadmin') {
-    return false;
-  }
+  const superadminOnlyPages = new Set(["Tenants"]);
+  if (superadminOnlyPages.has(pageName) && user.role !== 'superadmin') return false;
 
-  // CRM access gating: if CRM access is disabled, restrict all CRM pages
   const pagesAllowedWithoutCRM = new Set([
-    "Documentation",
-    "Agent",
-    "Settings",
-    "AuditLog",
-    "UnitTests",
-    "WorkflowGuide",
-    "ClientRequirements",
-    "Workflows",
-  ]); // Added Workflows
-  if (user.crm_access === false) {
-    return pagesAllowedWithoutCRM.has(pageName);
-  }
+    "Documentation","Agent","Settings","AuditLog","UnitTests","WorkflowGuide","ClientRequirements","Workflows",
+  ]);
+  if (user.crm_access === false) return pagesAllowedWithoutCRM.has(pageName);
 
-  // Map page names to module IDs
   const moduleMapping = {
-    "Dashboard": "dashboard",
-    "Contacts": "contacts",
-    "Accounts": "accounts",
-    "Leads": "leads",
-    "Opportunities": "opportunities",
-    "Activities": "activities",
-    "Calendar": "calendar",
-    "BizDevSources": "bizdev_sources",
-    "CashFlow": "cash_flow",
-    "DocumentProcessing": "document_processing",
-    "DocumentManagement": "document_processing",
-    "Employees": "employees",
-    "Reports": "reports",
-    "Integrations": "integrations",
-    "PaymentPortal": "payment_portal",
-    "AICampaigns": "ai_campaigns",
-    "Agent": "ai_agent",
-    "Utilities": "utilities",
-    "ClientOnboarding": "client_onboarding",
-    "Workflows": "workflows", // NEW: Added Workflows module ID
-    "DuplicateContacts": null,
-    "DuplicateAccounts": null,
-    "DuplicateLeads": null,
-    "Tenants": null,
-    "Settings": null,
-    "Documentation": null,
-    "AuditLog": null,
-    "UnitTests": null,
-    "WorkflowGuide": null,
-    "ClientRequirements": null, // NEW: Added ClientRequirements
+    Dashboard: 'dashboard',
+    Contacts: 'contacts',
+    Accounts: 'accounts',
+    Leads: 'leads',
+    Opportunities: 'opportunities',
+    Activities: 'activities',
+    Calendar: 'calendar',
+    BizDevSources: 'bizdev_sources',
+    CashFlow: 'cash_flow',
+    DocumentProcessing: 'document_processing',
+    DocumentManagement: 'document_processing',
+    Employees: 'employees',
+    Reports: 'reports',
+    Integrations: 'integrations',
+    PaymentPortal: 'payment_portal',
+    AICampaigns: 'ai_campaigns',
+    Agent: 'ai_agent',
+    Utilities: 'utilities',
+    ClientOnboarding: 'client_onboarding',
+    Workflows: 'workflows',
+    DuplicateContacts: null,
+    DuplicateAccounts: null,
+    DuplicateLeads: null,
+    Tenants: null,
+    Settings: null,
+    Documentation: null,
+    AuditLog: null,
+    UnitTests: null,
+    WorkflowGuide: null,
+    ClientRequirements: null,
   };
 
-  // CRITICAL: ModuleSettings check FIRST - if module is disabled, hide immediately
   const requiredModuleId = moduleMapping[pageName];
   if (requiredModuleId && moduleSettings.length > 0) {
-    const moduleSetting = moduleSettings.find((m) =>
-      m.module_id === requiredModuleId
-    );
-    if (moduleSetting && moduleSetting.is_active === false) {
-      return false;
-    }
+    const moduleSetting = moduleSettings.find(m => m.module_id === requiredModuleId);
+    if (moduleSetting && moduleSetting.is_active === false) return false;
   }
 
-  // CRITICAL FIX: Check user-specific navigation_permissions FIRST before any defaults
-  // Read from TOP LEVEL user.navigation_permissions (not nested in user.permissions.navigation_permissions)
-  if (
-    user.navigation_permissions &&
-    typeof user.navigation_permissions === "object"
-  ) {
-    // DEBUG: Log user permissions for troubleshooting (ALWAYS enabled for debugging)
-    if (pageName === "Dashboard") {
-      console.log("[hasPageAccess] User navigation_permissions:", {
+  if (user.navigation_permissions && typeof user.navigation_permissions === 'object') {
+    if (pageName === 'Dashboard') {
+      console.log('[hasPageAccess] User navigation_permissions:', {
         userEmail: user.email,
         role: user.role,
         permissions: user.navigation_permissions,
-        pageName
+        pageName,
       });
     }
-
-    const hasCustomPermission = Object.prototype.hasOwnProperty.call(
-      user.navigation_permissions,
-      pageName,
-    );
-
+    const hasCustomPermission = Object.prototype.hasOwnProperty.call(user.navigation_permissions, pageName);
     if (hasCustomPermission) {
-      // Explicit setting takes precedence - deny or allow immediately
       const explicit = user.navigation_permissions[pageName];
       console.log(`[hasPageAccess] Explicit permission for ${pageName}:`, explicit);
-      if (explicit === false) return false; // explicit deny
-      if (explicit === true) return true; // explicit allow
-      // If value is neither true nor false, fall through to defaults
+      if (explicit === false) return false;
+      if (explicit === true) return true;
     }
   }
 
-  // For system pages, admins and superadmins have access (only if no explicit permission set above)
-  // Settings: ONLY superadmin and admin roles
-  // Documentation, AuditLog, Agent, etc.: admin and superadmin
-  if (
-    pageName === "Settings" &&
-    (user.role === "superadmin" || user.role === "admin")
-  ) {
-    return true;
-  }
+  if (pageName === 'Settings' && (user.role === 'superadmin' || user.role === 'admin')) return true;
+  if ((user.role === 'admin' || user.role === 'superadmin') && (
+      pageName === 'Documentation' || pageName === 'AuditLog' || pageName === 'Tenants' || pageName === 'Agent' ||
+      pageName === 'UnitTests' || pageName === 'WorkflowGuide' || pageName === 'ClientRequirements' || pageName === 'Workflows')) return true;
+  if ((user.role === 'superadmin' || user.role === 'admin') && !selectedTenantId) return true;
 
-  if (
-    (user.role === "admin" || user.role === "superadmin") &&
-    (pageName === "Documentation" || pageName === "AuditLog" ||
-      pageName === "Tenants" || pageName === "Agent" ||
-      pageName === "UnitTests" || pageName === "WorkflowGuide" ||
-      pageName === "ClientRequirements" || pageName === "Workflows")
-  ) { // NEW: Added ClientRequirements, Workflows
-    return true;
-  }
-
-  // For superadmins not managing a specific tenant, they have full access
-  if (
-    (user.role === "superadmin" || user.role === "admin") && !selectedTenantId
-  ) {
-    return true;
-  }
-
-  // Fall back to default role-based permissions only if no explicit permission was set
   const defaultPermissions = getDefaultNavigationPermissions(user.role);
   return defaultPermissions[pageName] || false;
 }
@@ -1917,81 +1855,6 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     );
   }, [user]);
 
-  // NEW: Hard-remove any legacy green "Chat" launcher (e.g., node 8887240F246926E4F1729CB77247BF71:787)
-  React.useEffect(() => {
-    const GREEN_REGEX =
-      /#0f0|#00ff00|rgb\(\s*0\s*,\s*128\s*,\s*0\s*\)|rgba\(\s*0\s*,\s*128\s*,\s*0/i;
-
-    const purgeInRoot = (root) => {
-      const nodes = Array.from(
-        root.querySelectorAll('button, a, div[role="button"], div, span'),
-      );
-      nodes.forEach((el) => {
-        try {
-          const text = (el.textContent || "").trim().toLowerCase();
-          const aria = (el.getAttribute("aria-label") || "").trim()
-            .toLowerCase();
-          const style = window.getComputedStyle(el);
-          const rect = el.getBoundingClientRect();
-
-          const isFixedLike = style.position === "fixed" ||
-            style.position === "sticky" || style.position === "absolute";
-          const nearBottomRight = isFixedLike &&
-            rect.right >= (window.innerWidth - 160) &&
-            rect.bottom >= (window.innerHeight - 160);
-
-          const looksGreenBG = GREEN_REGEX.test(style.backgroundColor) ||
-            /green/i.test(style.backgroundColor);
-          const looksGreenColor = GREEN_REGEX.test(style.color);
-
-          const likelyChat = aria === "chat" ||
-            aria === "open chat" ||
-            text === "chat" ||
-            text === "open chat" ||
-            text.includes("chat");
-
-          // Avoid touching our avatar launcher
-          const isOurAvatar = el.id === "ai-avatar-launcher" ||
-            el.closest("#ai-avatar-launcher");
-
-          if (
-            !isOurAvatar && nearBottomRight &&
-            (likelyChat || looksGreenBG || looksGreenColor)
-          ) {
-            el.remove();
-          }
-        } catch {
-          // ignore
-        }
-      });
-    };
-
-    const purgeAll = () => {
-      purgeInRoot(document);
-      // Also inspect shadow roots if present
-      const all = document.querySelectorAll("*");
-      all.forEach((el) => {
-        if (el.shadowRoot) {
-          purgeInRoot(el.shadowRoot);
-        }
-      });
-    };
-
-    // Initial purge + observe future injections
-    purgeAll();
-    const mo = new MutationObserver(() => purgeAll());
-    mo.observe(document.body, { childList: true, subtree: true });
-
-    // Safety periodic sweep (handles elements injected outside body mutations)
-    const interval = setInterval(purgeAll, 1200);
-
-    return () => {
-      try {
-        mo.disconnect();
-      } catch { /* ignore */ }
-      clearInterval(interval);
-    };
-  }, []);
 
   // NEW: Reposition any softphone/call widgets so they sit to the left of the Avatar launcher
   React.useEffect(() => {

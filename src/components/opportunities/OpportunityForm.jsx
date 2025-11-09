@@ -60,7 +60,7 @@ export default function OpportunityForm({
   const [showLinkContact, setShowLinkContact] = useState(false);
 
   const isB2C = currentTenant?.business_model === 'b2c';
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin'; // Define isAdmin here
+  const isSuperadmin = currentUser?.role === 'superadmin';
 
   // Load current user and tenant
   useEffect(() => {
@@ -530,7 +530,7 @@ export default function OpportunityForm({
           </div>
 
           {/* Test Data Toggle (Admin only) */}
-          {isAdmin && (
+          {isSuperadmin && (
             <div className="flex items-center space-x-2 p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
               <Switch
                 id="is_test_data"
@@ -542,7 +542,7 @@ export default function OpportunityForm({
                 Mark as Test Data
               </Label>
               <span className="text-xs text-amber-400 ml-2">
-                (For admin cleanup purposes)
+                (For Superadmin cleanup purposes)
               </span>
             </div>
           )}

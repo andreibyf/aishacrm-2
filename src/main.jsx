@@ -3,6 +3,10 @@ import App from '@/App.jsx'
 import '@/index.css'
 import ErrorBoundary from '@/components/shared/ErrorBoundary'
 import { UserProvider } from '@/components/shared/UserContext.jsx'
+import { initRateLimitBackoff } from '@/utils/fetchWithBackoff.js'
+
+// Install global 429 backoff early to prevent hammering during initial mount
+initRateLimitBackoff();
 
 // Add loading indicator
 if (import.meta.env.DEV) {

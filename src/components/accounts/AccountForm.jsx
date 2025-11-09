@@ -95,7 +95,7 @@ export default function AccountForm({
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+  const isSuperadmin = currentUser?.role === 'superadmin';
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -384,7 +384,7 @@ export default function AccountForm({
           />
         </div>
 
-        {isAdmin && (
+        {isSuperadmin && (
           <div className="flex items-center space-x-2 p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
             <Switch
               id="is_test_data"
@@ -395,7 +395,7 @@ export default function AccountForm({
               Mark as Test Data
             </Label>
             <span className="text-xs text-amber-400 ml-2">
-              (For admin cleanup purposes)
+              (For Superadmin cleanup purposes)
             </span>
           </div>
         )}
