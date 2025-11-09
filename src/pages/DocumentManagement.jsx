@@ -43,7 +43,7 @@ export default function DocumentManagement() {
     setError(null);
     try {
       const filter = getTenantFilter(user, selectedTenantId);
-      const allDocs = await DocumentationFile.filter(filter, '-created_date');
+      const allDocs = await DocumentationFile.filter(filter, '-created_at');
       setDocuments(allDocs);
     } catch (error) {
       console.error("Failed to load documents:", error);
@@ -206,7 +206,9 @@ export default function DocumentManagement() {
                       </TableCell>
                       <TableCell className="text-slate-300 hidden md:table-cell capitalize">{doc.category?.replace(/_/g, ' ')}</TableCell>
                       <TableCell className="text-slate-300 hidden lg:table-cell">{doc.file_type}</TableCell>
-                      <TableCell className="text-slate-300 hidden lg:table-cell">{format(new Date(doc.created_date), 'MM/dd/yyyy')}</TableCell>
+                      <TableCell className="text-slate-300 hidden lg:table-cell">
+                        {doc.created_at ? format(new Date(doc.created_at), 'MM/dd/yyyy') : '-'}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex gap-2 justify-end">
                           <Button variant="ghost" size="icon" onClick={() => handlePreview(doc.file_uri)} title="Preview">
