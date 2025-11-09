@@ -17,7 +17,8 @@ import {
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Contact, Lead } from "@/api/entities";
-import { User } from "@/api/entities";
+// Replaced direct User.me() usage with global user context hook
+import { useUser } from "@/components/shared/useUser.js";
 import { getTenantFilter } from "../shared/tenantUtils";
 import { useTenant } from "../shared/tenantContext";
 
@@ -73,17 +74,18 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
 
   const [availableContacts, setAvailableContacts] = useState([]);
   const [selectedContacts, setSelectedContacts] = useState([]);
-  const [currentUser, setCurrentUser] = useState(null);
+  // Global user context (replaces prior local fetch via User.me())
+  const { user: currentUser } = useUser();
   const [previewPrompt, setPreviewPrompt] = useState("");
   const { selectedTenantId } = useTenant();
 
   useEffect(() => {
+    // Wait until user context is available
+    if (!currentUser) return;
+
     const loadData = async () => {
       try {
-        const user = await User.me();
-        setCurrentUser(user);
-
-        const tenantFilter = getTenantFilter(user, selectedTenantId);
+        const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
 
         const contactsData = await Contact.filter(tenantFilter);
         const leadsData = await Lead.filter(tenantFilter);
@@ -146,7 +148,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
     };
 
     loadData();
-  }, [campaign, selectedTenantId]);
+  }, [campaign, selectedTenantId, currentUser]);
 
   useEffect(() => {
     if (!formData.ai_prompt_template) {

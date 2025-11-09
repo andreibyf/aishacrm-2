@@ -13,12 +13,13 @@ import {
   Trash2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { User } from "@/api/entities";
+// Replaced direct User.me() usage with global user context hook
 import { Tenant } from "@/api/entities";
 import { UploadFile } from "@/api/integrations";
 import * as conversations from "@/api/conversations";
 import MicButton from "./MicButton";
 import MessageBubble from "./MessageBubble";
+import { useUser } from "@/components/shared/useUser.js";
 
 const INDUSTRY_LABELS = {
   aerospace_and_defense: "Aerospace & Defense",
@@ -68,6 +69,7 @@ const wrapMessage = (msg) => {
 };
 
 export default function ChatWindow() {
+  const { user: currentUser } = useUser();
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -85,11 +87,11 @@ export default function ChatWindow() {
 
   useEffect(() => {
     loadTenantContext();
-  }, []);
+  }, [loadTenantContext]);
 
-  const loadTenantContext = async () => {
+  const loadTenantContext = useCallback(async () => {
     try {
-      const user = await User.me();
+      const user = currentUser;
       if (user?.tenant_id) {
         const tenant = await Tenant.get(user.tenant_id);
         setTenantInfo(tenant);
@@ -120,7 +122,7 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
     } catch (error) {
       console.error("Error loading tenant context:", error);
     }
-  };
+  }, [currentUser]);
 
   useEffect(() => {
     scrollToBottom();

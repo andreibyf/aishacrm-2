@@ -8,7 +8,8 @@ import { Loader2, Send, MessageSquare, ExternalLink, Sparkles, RefreshCw, Trash2
 import ReactMarkdown from "react-markdown";
 import { isValidId } from "../shared/tenantUtils";
 
-import { User } from "@/api/entities";
+// Replaced direct User.me() usage with global user context hook
+import { useUser } from "@/components/shared/useUser.js";
 import { Lead } from "@/api/entities";
 import { Opportunity } from "@/api/entities";
 import { Activity } from "@/api/entities";
@@ -73,6 +74,7 @@ function Bubble({ role, content }) {
 }
 
 export default function AgentChat({ agentName = "crm_assistant", tenantId, tenantName, voiceEnabled = true }) {
+  const { user: currentUser } = useUser();
   const [conversation, setConversation] = useState(null);
   const [messages, setMessages] = useState([]);
   const [sending, setSending] = useState(false);
@@ -120,7 +122,7 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
     
     try {
       setContextLoading(true);
-      const me = await User.me().catch(() => null);
+      const me = currentUser || null;
       if (!me) {
         console.error('[AgentChat] User not authenticated, cannot inject context');
         return;
@@ -205,7 +207,7 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
     } finally {
       setContextLoading(false);
     }
-  }, [tenantId, tenantName]);
+  }, [tenantId, tenantName, currentUser]);
 
   const handleSend = useCallback(async (messageText) => {
     // Allow passing message directly (for voice input) or use state

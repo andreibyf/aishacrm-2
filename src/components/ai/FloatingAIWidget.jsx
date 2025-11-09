@@ -3,10 +3,11 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Brain, MessageSquare, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User } from "@/api/entities";
+// Replaced direct User.me() usage with global user context hook
 import { Tenant } from "@/api/entities";
 import { useTenant } from "../shared/tenantContext";
 import { checkBackendStatus } from "@/api/functions";
+import { useUser } from "@/components/shared/useUser.js";
 
 export default function FloatingAIWidget() {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -14,6 +15,7 @@ export default function FloatingAIWidget() {
   const selectedTenantId = tenantCtx?.selectedTenantId || null;
   const [logoUrl, setLogoUrl] = useState(null);
   const [status, setStatus] = useState("checking");
+  const { user: currentUser } = useUser();
 
   useEffect(() => {
     let mounted = true;
@@ -21,7 +23,7 @@ export default function FloatingAIWidget() {
 
     const loadBranding = async () => {
       try {
-        const me = await User.me();
+        const me = currentUser;
         let tenantId = null;
         if ((me?.role === "superadmin" || me?.role === "admin") && selectedTenantId) {
           tenantId = selectedTenantId;
@@ -65,7 +67,7 @@ export default function FloatingAIWidget() {
       mounted = false;
       clearInterval(id);
     };
-  }, [selectedTenantId]);
+  }, [selectedTenantId, currentUser]);
 
   const statusColor =
     status === "healthy" ? "bg-green-500" :
