@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Contact, Account, Opportunity, Lead, User } from "@/api/entities";
+import { Contact, Account, Opportunity, Lead } from "@/api/entities";
+import { useUser } from '@/components/shared/useUser.js';
 import {
   Dialog,
   DialogContent,
@@ -25,7 +26,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
   const [accountName, setAccountName] = useState("");
   const [opportunityName, setOpportunityName] = useState("");
   const [opportunityAmount, setOpportunityAmount] = useState("");
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
 
   const { cachedRequest } = useApiManager();
 
@@ -46,17 +47,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
     }
   }, [lead]);
 
-  React.useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const user = await User.me();
-        setCurrentUser(user);
-      } catch (error) {
-        console.error("Failed to load current user:", error);
-      }
-    };
-    loadUser();
-  }, []);
+  // User now provided by global context (useUser)
 
   const handleConvert = async () => {
     if (!currentUser?.tenant_id) {
