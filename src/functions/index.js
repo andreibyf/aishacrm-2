@@ -4,6 +4,7 @@
  */
 
 export { getDashboardStats } from './getDashboardStats.js';
+export { analyzeDataQuality } from './analyzeDataQuality.js';
 
 // Placeholder exports for other functions referenced in fallbackFunctions.js
 // These will be implemented as needed
@@ -13,10 +14,6 @@ export async function getDashboardBundle() {
 }
 
 export async function findDuplicates() {
-  return { status: 'error', message: 'Not implemented', data: null };
-}
-
-export async function analyzeDataQuality() {
   return { status: 'error', message: 'Not implemented', data: null };
 }
 
