@@ -7,7 +7,8 @@ import { Switch } from "@/components/ui/switch";
 import { X, Save, AlertCircle, AlertTriangle, Loader2 } from "lucide-react";
 import PhoneInput from "../shared/PhoneInput";
 import AddressFields from "../shared/AddressFields";
-import { User, Contact, Lead } from "@/api/entities";
+import { Contact, Lead } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useTenant } from "../shared/tenantContext";
 import { generateUniqueId } from "@/api/functions";
@@ -60,54 +61,14 @@ export default function ContactForm({
   console.log('[ContactForm] contact:', contact?.id, contact?.first_name, contact?.last_name);
   console.log('[ContactForm] userProp:', userProp?.email, userProp?.role);
   
-  // CRITICAL FIX: Load our own user if parent doesn't provide one
-  const [internalUser, setInternalUser] = useState(null);
-  const [userLoading, setUserLoading] = useState(!userProp); // Start loading if no user prop provided
-  
-  // Use either the prop user or our internally loaded user
-  const user = userProp || internalUser;
+  // Use global user unless an explicit override is provided via props
+  const { user: contextUser, loading: contextUserLoading } = useUser();
+  const user = userProp || contextUser;
+  const userLoading = userProp ? false : contextUserLoading;
   
   const { toast } = useToast();
 
-  // Load user if not provided via props
-  useEffect(() => {
-    if (!userProp) {
-      console.log('[ContactForm] No user prop provided, loading user ourselves...');
-      const loadUser = async () => {
-        setUserLoading(true);
-        try {
-          const currentUser = await User.me();
-          console.log('[ContactForm] Successfully loaded user:', currentUser?.email);
-          setInternalUser(currentUser);
-        } catch (error) {
-          console.error('[ContactForm] Failed to load user:', error);
-          if (error.response && error.response.status === 401) {
-            // User not logged in, or session expired, handle accordingly
-            toast({
-              title: "Authentication Error",
-              description: "Your session has expired or you are not logged in. Please log in again.",
-              variant: "destructive",
-            });
-            // Optionally redirect to login
-            // window.location.href = '/login'; 
-          } else {
-            toast({
-              title: "Error",
-              description: "Failed to load user information. Please refresh the page.",
-              variant: "destructive",
-            });
-          }
-        } finally {
-          setUserLoading(false);
-        }
-      };
-      loadUser();
-    } else {
-      console.log('[ContactForm] User provided via props, using it');
-      setInternalUser(userProp); // Ensure internalUser is set if userProp exists for consistency, though 'user' var handles it
-      setUserLoading(false); // If prop is provided, no loading needed
-    }
-  }, [userProp, toast]);
+  // User is now provided by global context (no local User.me() calls)
 
   const [formData, setFormData] = useState({
     first_name: contact?.first_name || "",

@@ -5,7 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch"; // Added import for Switch
-import { User, Tenant, Employee, Opportunity } from "@/api/entities";
+import { Tenant, Employee, Opportunity } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import { useTenant } from "../shared/tenantContext";
 import { Plus } from 'lucide-react'
 import SearchableAccountSelector from "../shared/SearchableAccountSelector";
@@ -46,7 +47,7 @@ export default function OpportunityForm({
     lead_id: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
   const [currentTenant, setCurrentTenant] = useState(null);
 
   const [accounts, setAccounts] = useState(Array.isArray(propAccounts) ? propAccounts : []);
@@ -64,53 +65,33 @@ export default function OpportunityForm({
 
   // Load current user and tenant
   useEffect(() => {
-    const loadUserAndTenant = async () => {
+    const hydrateTenantAndEmployees = async () => {
       try {
-        const user = await User.me();
-        setCurrentUser(user);
-        
-        const tenantId = selectedTenantId || user.tenant_id;
+        if (!currentUser) return; // wait for user
+        const tenantId = selectedTenantId || currentUser.tenant_id;
         if (tenantId) {
           const tenants = await Tenant.list();
           const tenant = tenants.find(t => t.id === tenantId);
           setCurrentTenant(tenant);
         }
-
-        // CRITICAL FIX: Load employees filtered by tenant
         const tenantFilter = {};
-        
-        // Determine which tenant to filter by
-        if (user.role === 'superadmin' || user.role === 'admin') {
-          // Admins can see employees from selected tenant or their own
-          if (selectedTenantId) {
-            tenantFilter.tenant_id = selectedTenantId;
-          } else if (user.tenant_id) {
-            tenantFilter.tenant_id = user.tenant_id;
-          }
-        } else {
-          // Regular users only see employees from their own tenant
-          if (user.tenant_id) {
-            tenantFilter.tenant_id = user.tenant_id;
-          }
+        if (currentUser.role === 'superadmin' || currentUser.role === 'admin') {
+          if (selectedTenantId) tenantFilter.tenant_id = selectedTenantId; else if (currentUser.tenant_id) tenantFilter.tenant_id = currentUser.tenant_id;
+        } else if (currentUser.tenant_id) {
+          tenantFilter.tenant_id = currentUser.tenant_id;
         }
-
-        console.log('[OpportunityForm] Loading employees with filter:', tenantFilter);
-
-        // Load employees with tenant filter and only those with CRM access
         const empList = await Employee.filter({
           ...tenantFilter,
           has_crm_access: true,
           is_active: true
         });
-        
-        console.log('[OpportunityForm] Loaded employees:', empList?.length || 0);
         setEmployees(empList || []);
       } catch (error) {
-        console.error("Failed to load user/tenant/employees:", error);
+        console.error('[OpportunityForm] Tenant/employee hydrate failed:', error);
       }
     };
-    loadUserAndTenant();
-  }, [selectedTenantId]);
+    hydrateTenantAndEmployees();
+  }, [selectedTenantId, currentUser]);
 
   // Update local state when props change
   useEffect(() => {

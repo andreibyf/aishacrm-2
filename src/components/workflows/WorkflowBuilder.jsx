@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Workflow } from '@/api/entities';
-import { User } from '@/api/entities';
+import { useUser } from '@/components/shared/useUser.js';
 import { BACKEND_URL } from '@/api/entities';
 import { Webhook, Search, Save, Plus, X, Copy, Check, RefreshCw } from 'lucide-react';
 import WorkflowCanvas from './WorkflowCanvas';
@@ -18,7 +18,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   const [description, setDescription] = useState(workflow?.description || '');
   const [nodes, setNodes] = useState(workflow?.nodes || []);
   const [connections, setConnections] = useState(workflow?.connections || []);
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
   const [saving, setSaving] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [testPayload, setTestPayload] = useState(null);
@@ -34,9 +34,6 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   const [executionLimit, setExecutionLimit] = useState(10);
   const [executionOffset, setExecutionOffset] = useState(0);
 
-  useEffect(() => {
-    User.me().then(setUser);
-  }, []);
 
   useEffect(() => {
     if (!workflow && nodes.length === 0) {

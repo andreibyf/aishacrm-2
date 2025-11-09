@@ -233,6 +233,7 @@ function StorageUploader({ onCancel, onProcessingChange }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
+  const { user: currentUser } = useUser();
 
   const handleFileSelect = (event) => {
     const file = event.target.files[0];
@@ -249,10 +250,11 @@ function StorageUploader({ onCancel, onProcessingChange }) {
     try {
       const { UploadFile } = await import("@/api/integrations");
       const { DocumentationFile } = await import("@/api/entities");
-      const { User } = await import("@/api/entities");
 
-      // Get current user for tenant info
-      const currentUser = await User.me();
+      // Current user provided by global context
+      if (!currentUser) {
+        throw new Error("User not loaded");
+      }
 
       // Upload file to storage
       const uploadResult = await UploadFile({ 

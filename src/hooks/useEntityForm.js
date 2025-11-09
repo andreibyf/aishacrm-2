@@ -1,7 +1,7 @@
 // Lightweight shared form hook to standardize submission flow, tenant resolution,
 // number sanitation, and error normalization across entity forms.
 import { useState, useCallback } from 'react';
-import { User } from '@/api/entities';
+import { useUser } from '@/components/shared/useUser.js';
 
 /**
  * useEntityForm
@@ -19,6 +19,7 @@ import { User } from '@/api/entities';
  */
 export function useEntityForm(options = {}) {
   const { resolveTenant = 'auto' } = options;
+  const { user } = useUser();
 
   const [tenantId, setTenantId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -26,15 +27,11 @@ export function useEntityForm(options = {}) {
   const ensureTenantId = useCallback(async () => {
     if (resolveTenant !== 'auto') return null;
     if (tenantId) return tenantId;
-    try {
-      const me = await User.me();
-      const resolved = me?.tenant_id || me?.tenantId || null;
-      if (resolved) setTenantId(resolved);
-      return resolved;
-    } catch {
-      return null;
-    }
-  }, [resolveTenant, tenantId]);
+    // Use global user context instead of User.me()
+    const resolved = user?.tenant_id || null;
+    if (resolved) setTenantId(resolved);
+    return resolved;
+  }, [resolveTenant, tenantId, user]);
 
   const normalizeError = useCallback((error) => {
     if (!error) return 'Unknown error occurred';

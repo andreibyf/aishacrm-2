@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { User } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import {
   Select,
   SelectContent,
@@ -15,17 +16,13 @@ export default function UserSelector(
 ) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser, loading: globalUserLoading } = useUser();
   const [error, setError] = useState(null);
 
   useEffect(() => {
     const loadUsers = async () => {
       setLoading(true);
       try {
-        // First get current user
-        const current = await User.me();
-        setCurrentUser(current);
-
         // Try to get users list, but handle permission errors gracefully
         try {
           const usersData = await User.list();
@@ -37,7 +34,7 @@ export default function UserSelector(
             userListError,
           );
           // If can't access full list, just show current user
-          setUsers([current]);
+          if (currentUser) setUsers([currentUser]);
           setError("Limited user access");
         }
       } catch (error) {
@@ -48,10 +45,12 @@ export default function UserSelector(
         setLoading(false);
       }
     };
-    loadUsers();
-  }, []);
+    if (!globalUserLoading) {
+      loadUsers();
+    }
+  }, [currentUser, globalUserLoading]);
 
-  if (loading) {
+  if (loading || globalUserLoading) {
     return (
       <Select disabled>
         <SelectTrigger>

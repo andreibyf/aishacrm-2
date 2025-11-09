@@ -1,5 +1,6 @@
 import { createContext, useEffect, useState, useCallback } from 'react';
 import { User } from '@/api/entities';
+import { normalizeUser } from '@/utils/normalizeUser.js';
 
 // Internal context object for user data
 const UserContextInternal = createContext({
@@ -27,7 +28,30 @@ export function UserProvider({ children }) {
       }
 
       const u = await User.me();
-      setUser(u);
+      const normalized = normalizeUser(u);
+      if (import.meta.env.DEV && u && normalized && u !== normalized) {
+        // Lightweight diff logging for debugging schema alignment
+        try {
+          const snapshot = {
+            in: {
+              email: u?.email,
+              role: u?.role,
+              tenant_id: u?.tenant_id,
+              meta_role: u?.user_metadata?.role,
+              meta_tenant: u?.user_metadata?.tenant_id,
+            },
+            out: {
+              email: normalized.email,
+              role: normalized.role,
+              tenant_id: normalized.tenant_id,
+            }
+          };
+          console.log('[UserContext] normalizeUser snapshot:', snapshot);
+        } catch {
+          /* swallow debug logging error */
+        }
+      }
+      setUser(normalized);
     } catch (err) {
       if (import.meta.env.DEV) {
         console.error('[UserContext] Failed to load user:', err);

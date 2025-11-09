@@ -7,11 +7,13 @@ import { employeeScopeTests } from '../components/testing/employeeScopeTests';
 import { apiHealthMonitorTests } from '../components/testing/apiHealthMonitorTests';
 import { crudTests } from '../components/testing/crudTests';
 import { systemLogsTests } from '../components/testing/systemLogsTests';
+import { userContextTests } from '../components/testing/userContextTests.jsx';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Info, TestTube } from "lucide-react";
 
   const testSuites = [
+    userContextTests,
     errorLoggerTests,
     formValidationTests,
     dataIntegrityTests,

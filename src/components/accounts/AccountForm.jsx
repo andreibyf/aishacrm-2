@@ -12,7 +12,8 @@ import { isValidId } from "../shared/tenantUtils";
 import PhoneInput from "../shared/PhoneInput";
 import AddressFields from "../shared/AddressFields";
 import EmployeeSelector from "../shared/EmployeeSelector";
-import { User, Account } from "@/api/entities";
+import { Account } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import { generateUniqueId } from "@/api/functions";
 import { useEntityForm } from "@/hooks/useEntityForm";
 import { toast } from "sonner";
@@ -92,75 +93,50 @@ export default function AccountForm({
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser, loading: userLoading } = useUser();
   const [loading, setLoading] = useState(true);
 
   const isSuperadmin = currentUser?.role === 'superadmin';
 
   useEffect(() => {
-    const loadInitialData = async () => {
-      setLoading(true);
-      try {
-        const user = await User.me();
-        setCurrentUser(user);
-
-        if (account?.id) {
-          setFormData({
-            name: account.name || "",
-            type: account.type || "prospect",
-            industry: account.industry || "",
-            website: account.website || "",
-            phone: account.phone || "",
-            email: account.email || "",
-            annual_revenue: account.annual_revenue || "",
-            employee_count: account.employee_count || "",
-            address_1: account.address_1 || "",
-            address_2: account.address_2 || "",
-            city: account.city || "",
+    // Wait for user to be available
+    if (userLoading) return;
+    setLoading(true);
+    try {
+      if (!currentUser) return; // user failed to load; keep minimal state
+      if (account?.id) {
+        setFormData({
+          name: account.name || "",
+          type: account.type || "prospect",
+          industry: account.industry || "",
+          website: account.website || "",
+          phone: account.phone || "",
+          email: account.email || "",
+          annual_revenue: account.annual_revenue || "",
+          employee_count: account.employee_count || "",
+          address_1: account.address_1 || "",
+          address_2: account.address_2 || "",
+          city: account.city || "",
             state: account.state || "",
-            zip: account.zip || "",
-            country: account.country || "United States",
-            description: account.description || "",
-            tags: Array.isArray(account.tags) ? account.tags : [],
-            assigned_to: account.assigned_to || user.email,
-            is_test_data: account.is_test_data || false
-          });
-        } else {
-          setFormData(prev => ({
-            ...prev,
-            assigned_to: user.email
-          }));
-        }
-      } catch (error) {
-        console.error("[ACCOUNT_FORM_DEBUG] Error loading user or initial account data:", error);
-      } finally {
-        setLoading(false);
+          zip: account.zip || "",
+          country: account.country || "United States",
+          description: account.description || "",
+          tags: Array.isArray(account.tags) ? account.tags : [],
+          assigned_to: account.assigned_to || currentUser.email,
+          is_test_data: account.is_test_data || false
+        });
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          assigned_to: currentUser.email
+        }));
       }
-    };
-
-    loadInitialData();
-  }, [
-    account?.id,
-    account?.address_1,
-    account?.address_2,
-    account?.annual_revenue,
-    account?.assigned_to,
-    account?.city,
-    account?.country,
-    account?.description,
-    account?.email,
-    account?.employee_count,
-    account?.industry,
-    account?.is_test_data,
-    account?.name,
-    account?.phone,
-    account?.state,
-    account?.tags,
-    account?.type,
-    account?.website,
-    account?.zip,
-    onSubmit
-  ]);
+    } catch (error) {
+      console.error("[AccountForm] Initialization error:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [userLoading, currentUser, account]);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -258,7 +234,7 @@ export default function AccountForm({
         </Alert>
       )}
       
-      <form onSubmit={handleSubmit} className="space-y-6">
+  <form onSubmit={handleSubmit} className="space-y-6">
       
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
