@@ -431,7 +431,7 @@ app.use("/api/aicampaigns", createAICampaignRoutes(pgPool));
 console.log("→ Loading Braid modules...");
 try {
   const braidModules = loadBraidModules();
-  registerBraidRoutes(app, braidModules);
+  await registerBraidRoutes(app, braidModules);
   console.log("✓ Braid modules initialized");
 } catch (err) {
   console.error("⚠️ Failed to load Braid modules:", err.message);

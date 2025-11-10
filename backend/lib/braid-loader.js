@@ -1,19 +1,21 @@
 /**
  * Braid Module Loader
- * Scans backend/modules/*.braid, validates, extracts HIR, and registers Express routes
+ * Scans backend/modules/*.braid, validates, extracts HIR, transpiles to JS, and registers Express routes
  */
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
+import { pathToFileURL } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const modulesDir = path.join(__dirname, '../modules');
 const adapterPath = path.resolve(__dirname, '../../braid-llm-kit/tools/braid-adapter.js');
+const transpilerPath = path.resolve(__dirname, '../../braid-llm-kit/tools/braid-transpile.js');
 
 /**
- * Load all Braid modules and return HIR metadata
- * @returns {Array<{file: string, hir: object, error?: string}>}
+ * Load all Braid modules and return HIR metadata + transpiled code
+ * @returns {Array<{file: string, hir: object, jsModule: object, error?: string}>}
  */
 export function loadBraidModules() {
   if (!fs.existsSync(modulesDir)) {
@@ -42,7 +44,22 @@ export function loadBraidModules() {
 
     try {
       const hir = JSON.parse(result.stdout);
-      modules.push({ file, hir });
+      
+      // Transpile to JavaScript
+      const jsPath = filePath.replace('.braid', '.transpiled.js');
+      const transpileResult = spawnSync('node', [transpilerPath, '--file', filePath, '--output', jsPath], {
+        encoding: 'utf8',
+        cwd: path.resolve(__dirname, '../../braid-llm-kit')
+      });
+      
+      if (transpileResult.status !== 0) {
+        console.error(`[Braid Loader] Transpilation failed for ${file}:`, transpileResult.stderr);
+        modules.push({ file, hir, error: `Transpilation failed: ${transpileResult.stderr}` });
+        continue;
+      }
+      
+      // Dynamically import transpiled module (async, but we'll handle it in registerBraidRoutes)
+      modules.push({ file, hir, jsPath });
       console.log(`[Braid Loader] ✓ Loaded ${file}: ${hir.functions.length} functions, ${hir.routes.length} routes`);
     } catch (err) {
       console.error(`[Braid Loader] Invalid HIR output for ${file}:`, err.message);
@@ -54,15 +71,26 @@ export function loadBraidModules() {
 }
 
 /**
- * Register Braid routes in Express app
+ * Register Braid routes in Express app with transpiled function handlers
  * @param {import('express').Application} app - Express app
- * @param {Array} modules - Array of loaded modules with HIR
+ * @param {Array} modules - Array of loaded modules with HIR and jsPath
  */
-export function registerBraidRoutes(app, modules) {
+export async function registerBraidRoutes(app, modules) {
   let routeCount = 0;
 
   for (const mod of modules) {
     if (mod.error || !mod.hir || !mod.hir.routes) continue;
+
+    // Import transpiled JS module
+    let jsModule;
+    if (mod.jsPath) {
+      try {
+        jsModule = await import(pathToFileURL(mod.jsPath).href);
+      } catch (err) {
+        console.error(`[Braid Loader] Failed to import ${mod.jsPath}:`, err.message);
+        continue;
+      }
+    }
 
     for (const route of mod.hir.routes) {
       const method = (route.method || 'GET').toLowerCase();
@@ -74,20 +102,40 @@ export function registerBraidRoutes(app, modules) {
         continue;
       }
 
-      // Register stub route (501 Not Implemented until transpiler ready)
-      app[method](routePath, (req, res) => {
-        res.status(501).json({
-          error: 'Not Implemented',
-          message: `Braid function '${route.function}' from ${mod.file} is registered but not yet executable`,
-          function: route.function,
-          effects: fn?.effects || [],
-          params: fn?.params || '',
-          module: mod.file
+      // Check if transpiled function exists
+      const transpiledFn = jsModule?.[route.function];
+      
+      if (transpiledFn) {
+        // Register working route with transpiled function
+        app[method](routePath, async (req, res) => {
+          try {
+            const result = await transpiledFn(req.body, req.query, req.params);
+            res.json({ result });
+          } catch (err) {
+            res.status(500).json({
+              error: 'Execution Error',
+              message: err.message,
+              function: route.function
+            });
+          }
         });
-      });
+        console.log(`[Braid Loader] ✓ Registered ${method.toUpperCase()} ${routePath} → ${route.function}() [TRANSPILED]`);
+      } else {
+        // Fallback to 501 stub if transpilation failed
+        app[method](routePath, (req, res) => {
+          res.status(501).json({
+            error: 'Not Implemented',
+            message: `Braid function '${route.function}' from ${mod.file} is registered but not yet executable`,
+            function: route.function,
+            effects: fn?.effects || [],
+            params: fn?.params || '',
+            module: mod.file
+          });
+        });
+        console.log(`[Braid Loader] ✓ Registered ${method.toUpperCase()} ${routePath} → ${route.function}() [STUB]`);
+      }
 
       routeCount++;
-      console.log(`[Braid Loader] ✓ Registered ${method.toUpperCase()} ${routePath} → ${route.function}()`);
     }
   }
 
