@@ -31,8 +31,8 @@ services:
   # DATABASE_URL points to Supabase Cloud, NOT local PostgreSQL
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .  # Changed from ./backend to access braid-llm-kit
+      dockerfile: ./backend/Dockerfile
     container_name: aishacrm-backend
     restart: unless-stopped
     # REMOVED db dependency - we use Supabase Cloud, not local PostgreSQL
