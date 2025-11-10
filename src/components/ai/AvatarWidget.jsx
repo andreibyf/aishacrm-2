@@ -98,7 +98,7 @@ export default function AvatarWidget({
         }}
       >
         <img
-          src="/assets/Ai-SHA-logo-2.png"
+          src="/assets/aisha-avatar.jpeg"
           alt="AI Assistant"
           style={{
             width: '100%',

@@ -120,7 +120,7 @@ const secondaryNavItems = [
     icon: Bot,
     label: "AI Agent",
     isAvatar: true,
-    avatarUrl: "/assets/Ai-SHA-logo-2.png",
+    avatarUrl: "/assets/aisha-avatar.jpeg",
   },
   {
     href: "ClientRequirements",
@@ -2375,17 +2375,8 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                     >
                       <img
                         src={item.avatarUrl}
-                        alt="AI Assistant"
-                        style={{
-                          width: "0.75in",
-                          height: "0.75in",
-                          borderRadius: "50%",
-                        }}
-                        className={`object-cover sidebar-avatar-border ${
-                          currentPageName === item.href
-                            ? "opacity-100"
-                            : "opacity-90 hover:opacity-100"
-                        }`}
+                        alt={item.label}
+                        className="w-full h-full object-cover rounded-full"
                       />
                     </div>
                   )
