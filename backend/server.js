@@ -13,6 +13,7 @@ import { createServer } from "http";
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './lib/swagger.js';
 import { initSupabaseDB, pool as supabasePool } from './lib/supabase-db.js';
+import { loadBraidModules, registerBraidRoutes } from './lib/braid-loader.js';
 
 // Load environment variables
 // Try .env.local first (for local development), then fall back to .env
@@ -692,6 +693,16 @@ server.listen(PORT, '0.0.0.0', () => {
   `);
 
   console.log("✓ Server listening on port", PORT);
+
+  // Load and register Braid modules (dynamic route registration)
+  console.log("→ Loading Braid modules...");
+  try {
+    const braidModules = loadBraidModules();
+    registerBraidRoutes(app, braidModules);
+    console.log("✓ Braid modules initialized");
+  } catch (err) {
+    console.error("⚠️ Failed to load Braid modules:", err.message);
+  }
 
   // Kick off storage bucket provisioning (non-blocking)
   ensureStorageBucketExists().catch((err) =>

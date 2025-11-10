@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "fs";
+import { parse } from "./braid-parse.js";
 
 const file = process.argv[2];
 if (!file) {
@@ -8,29 +9,77 @@ if (!file) {
 }
 const src = fs.readFileSync(file, "utf8");
 
-const functions = [...src.matchAll(/fn\s+(\w+)\s*\(([^)]*)\)\s*->\s*([^!{]+)(?:!\s*([^{}]+))?/g)]
-  .map(m=>({
-    kind: "fn",
-    name: m[1],
-    params: m[2].trim(),
-    ret: m[3].trim(),
-    effects: (m[4]? m[4].split(',').map(s=>s.trim()).filter(Boolean) : [])
-  }));
+// Parse AST using PEG parser
+let ast;
+try {
+  ast = parse(src, file);
+} catch (err) {
+  process.stderr.write(err.message + "\n");
+  process.exit(1);
+}
 
-// Actor extraction (naive): actor Name { state { field: Type ... } ... }
-const actors = [...src.matchAll(/actor\s+(\w+)\s*{[^}]*state\s*{([^}]*)}/g)].map(m=>{
-  const actorName = m[1];
-  const stateBlock = m[2];
-  const stateFields = [...stateBlock.matchAll(/(\w+)\s*:\s*([\w\[\]<>]+)/g)].map(sf=>({ name: sf[1], type: sf[2] }));
-  return { kind: "actor", name: actorName, state: stateFields };
-});
+// Extract HIR from AST
+const functions = [];
+const actors = [];
+const attributes = [];
+const routes = [];
 
-const attributes = [...src.matchAll(/@(\w+)\s*(\([^)]*\))?/g)]
-  .map(m=>({ name: m[1], args: (m[2]||"").slice(1,-1) }));
+for (const item of ast.items) {
+  if (item.type === 'FnDecl') {
+    functions.push({
+      kind: "fn",
+      name: item.name,
+      params: item.params.map(p => `${p.name}: ${formatType(p.type)}`).join(', '),
+      ret: formatType(item.ret),
+      effects: item.effects,
+      attributes: item.attributes
+    });
+    
+    // Extract @route attributes
+    for (const attr of item.attributes) {
+      if (attr.name === 'route') {
+        routes.push({
+          function: item.name,
+          method: attr.args.method || 'GET',
+          path: attr.args.path || '/'
+        });
+      }
+    }
+    
+    // Collect all attributes
+    attributes.push(...item.attributes.map(a => ({ 
+      target: item.name, 
+      name: a.name, 
+      args: a.args 
+    })));
+  }
+  
+  if (item.type === 'ActorDecl') {
+    actors.push({
+      kind: "actor",
+      name: item.name,
+      state: item.state.map(f => ({ name: f.name, type: formatType(f.type) })),
+      attributes: item.attributes
+    });
+    
+    attributes.push(...item.attributes.map(a => ({ 
+      target: item.name, 
+      name: a.name, 
+      args: a.args 
+    })));
+  }
+}
 
-// naive route sniff placeholder (adjust to your conventions later)
-const routes = [...src.matchAll(/route\s+\(\s*"(GET|POST|PUT|DELETE)\s+([^\"]+)"\s*\)/g)]
-  .map(m=>({ method: m[1], path: m[2] }));
+function formatType(type) {
+  if (typeof type === 'string') return type;
+  if (type.type === 'RecordType') {
+    return `{${type.fields.map(f => `${f.name}:${formatType(f.type)}`).join(',')}}`;
+  }
+  if (type.base && type.generics) {
+    return `${type.base}[${type.generics.map(formatType).join(',')}]`;
+  }
+  return JSON.stringify(type);
+}
 
 const hir = { file, functions, actors, attributes, routes };
 process.stdout.write(JSON.stringify(hir, null, 2) + "\n");

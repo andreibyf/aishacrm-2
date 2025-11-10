@@ -1,0 +1,11 @@
+// Test Braid module with route registration
+@route(method: "GET", path: "/api/braid/test")
+fn test_endpoint() -> String {
+  let msg: String = "Hello from Braid!";
+  msg
+}
+
+@route(method: "POST", path: "/api/braid/echo")
+fn echo_message(input: String) -> String {
+  input
+}
