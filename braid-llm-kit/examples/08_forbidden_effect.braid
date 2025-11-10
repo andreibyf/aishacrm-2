@@ -1,0 +1,6 @@
+@ai(intent: {"service":"crm","action":"test_forbidden"})
+fn forbidden_clock() -> u64 !clock {
+  // Pretend to call clock; checker will see declared effect
+  let t = 0; // placeholder
+  t
+}

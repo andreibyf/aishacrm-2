@@ -1,0 +1,12 @@
+{
+  "file": "examples/08_forbidden_effect.braid",
+  "policy": {
+    "allow": ["net"],
+    "deny": ["clock"]
+  },
+  "expect": {
+    "errors": [
+      { "code": "BRAD201" }
+    ]
+  }
+}
