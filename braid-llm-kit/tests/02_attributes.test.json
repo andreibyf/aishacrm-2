@@ -1,0 +1,4 @@
+{
+  "file": "examples/06_attributes_policy.braid",
+  "expect": { "errors": [] }
+}

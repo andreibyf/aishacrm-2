@@ -86,6 +86,29 @@ Notes
 - Export HIR JSON (functions/attributes/routes):
 	- `node tools/braid-hir examples/03_result_effects.braid > /tmp/hir.json`
 
+### Adapter pipeline (check + HIR)
+
+Use `braid-adapter` to run the checker (with optional policy) and, only if it passes, emit HIR JSON to stdout. Non‑zero exit codes propagate diagnostics from the checker.
+
+Basic usage:
+
+```bash
+node tools/braid-adapter --file examples/06_attributes_policy.braid > /tmp/hir.json
+```
+
+With a policy (for effect allowlist / denylist):
+
+```bash
+node tools/braid-adapter --file examples/06_attributes_policy.braid --policy templates/web-service/policy.json > /tmp/hir.json
+```
+
+Exit codes:
+- 0: success, HIR JSON written to stdout
+- 2: bad invocation (missing --file)
+- other: checker or HIR extraction failed; diagnostics written to stderr
+
+This script is intended for backend integration pipelines: first enforce safety/policy, then consume structured HIR for routing, intent indexing, or AI planning.
+
 Existing code should continue to parse. If you implemented your own parser from the earlier EBNF:
 - Add support for `async`/`await`, postfix `?`, actor/state/spawn forms
 - Allow compound assignments and member access/method calls

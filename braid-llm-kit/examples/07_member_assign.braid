@@ -1,0 +1,6 @@
+fn adjust_stats(stats: { count: u64, total: u64 }) -> { count: u64, total: u64 } {
+  let mut s: { count: u64, total: u64 } = stats;
+  s.count += 1;
+  s.total += 100;
+  { count: s.count, total: s.total }
+}

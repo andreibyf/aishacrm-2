@@ -25,6 +25,18 @@
     {
       "name": "meta.annotation.braid",
       "match": "@[a-zA-Z_]\\w*(\\([^)]*\\))?"
+    },
+    {
+      "name": "keyword.operator.assignment.braid",
+      "match": "\\+=|-=|\\*=|/=|="
+    },
+    {
+      "name": "keyword.operator.result-propagation.braid",
+      "match": "\\?"
+    },
+    {
+      "name": "punctuation.accessor.braid",
+      "match": "\\."
     }
   ]
 }

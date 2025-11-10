@@ -123,6 +123,28 @@ export default [
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
+  // Braid kit tools override: enable Node globals (process, fs) for language tooling scripts
+  {
+    files: ['braid-llm-kit/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      globals: {
+        ...globals.node,
+      },
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-undef': 'off',
+      'react/jsx-no-target-blank': 'off',
+      'react/prop-types': 'off',
+      'react-refresh/only-export-components': 'off',
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
   // Functions override: parse Deno-style / ESM worker files and allow Deno global
   {
     files: ['src/functions/**'],
