@@ -1,4 +1,5 @@
 import Layout from "./Layout.jsx";
+import { useEffect } from 'react';
 
 import Dashboard from "./Dashboard";
 
@@ -164,9 +165,14 @@ function PagesContent() {
     const location = useLocation();
     const currentPage = _getCurrentPage(location.pathname);
     
+    // Force re-render when location changes
+    useEffect(() => {
+        console.log('[PagesContent] Route changed to:', location.pathname);
+    }, [location.pathname]);
+    
     return (
         <Layout currentPageName={currentPage}>
-            <Routes>            
+            <Routes location={location}>            
                 
                     <Route path="/" element={<Dashboard />} />
                 

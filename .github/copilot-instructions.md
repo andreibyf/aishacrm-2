@@ -12,9 +12,12 @@
 - **Frontend Container:** Runs on `http://localhost:4000` (NOT 5173 or 3000)
 - **Backend Container:** Runs on `http://localhost:4001` (NOT 3001)
 - **Port Configuration:** NEVER suggest changing ports - they are fixed in Docker setup
-- **Environment Files:**
-  - Root `.env`: `VITE_AISHACRM_BACKEND_URL=http://localhost:4001`
-  - Backend `.env`: `ALLOWED_ORIGINS` includes `http://localhost:4000`, `FRONTEND_URL=http://localhost:4000`
+- **Environment Files (CRITICAL - NO OTHER FILES EXIST):**
+  - **Root `.env`**: Frontend-only variables (e.g., `VITE_AISHACRM_BACKEND_URL=http://localhost:4001`)
+  - **`backend/.env`**: Backend-only variables (e.g., `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ALLOWED_ORIGINS`, `FRONTEND_URL=http://localhost:4000`)
+  - ⚠️ **NEVER reference `.env.local`, `.env.production`, or any other .env variants - they do NOT exist in this project**
+  - ⚠️ **Backend scripts MUST use `backend/.env` (not `.env.local`)**
+  - ⚠️ **Frontend uses root `.env` (loaded by Vite automatically)**
 - **Starting Services:** Use `docker-compose up -d` to start both containers (runs in background)
 - **Code Changes:** 
   - Frontend changes require rebuild: `docker-compose up -d --build frontend`
@@ -84,9 +87,31 @@
 
 ## Integration Points
 - **Database:** Supabase PostgreSQL; configure via `DATABASE_URL` or Supabase prod settings; see `backend/DATABASE_UUID_vs_TENANT_ID.md` for critical UUID vs tenant_id distinction.
+- **Database Access Pattern (CRITICAL - NEW STANDARD):**
+  - ✅ **PREFERRED:** Use Supabase Client API directly (e.g., `supabase.from('table').select()`)
+  - ⚠️ **LEGACY:** SQL adapter (`pgPool.query()`) has limitations and should be avoided for new code
+  - See `backend/SUPABASE_MIGRATION_GUIDE.md` for migration patterns
 - **External API:** Base44 SDK for migration/sync; local backend for independence.
 - **AI Features:** Custom assistants in `src/components/ai/`; MCP server example in `src/functions/mcpServer.js`.
 - **Security:** Helmet.js, CORS, rate limiting in backend; never commit `.env`.
+
+## 🗄️ Database Migrations
+**CRITICAL: How to apply database schema changes:**
+
+1. **Environment Setup:**
+   - Database connection uses `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from `backend/.env`
+   - The `DATABASE_URL` variable is typically COMMENTED OUT (using Supabase SDK instead)
+   - ⚠️ NEVER reference `.env.local` for migrations - use `backend/.env` only
+
+2. **Running Migrations:**
+   - **Supabase Dashboard (RECOMMENDED):** Go to Supabase Dashboard → SQL Editor → Run SQL directly
+   - **Automated (if DATABASE_URL is set):** `node backend/apply-supabase-migrations.js`
+   - Migration files are in `backend/migrations/` directory
+
+3. **Creating New Tables:**
+   - Write SQL in `backend/migrations/XXXX_table_name.sql`
+   - Apply via Supabase Dashboard SQL Editor
+   - Backend uses Supabase SDK (not direct PostgreSQL) for queries
 
 ## Backend Route Categories
 The backend exposes 197 API endpoints across 26 categories:
