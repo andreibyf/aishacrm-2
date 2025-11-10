@@ -427,6 +427,16 @@ app.use("/api/systembrandings", createSystemBrandingRoutes(pgPool));
 app.use("/api/synchealths", createSyncHealthRoutes(pgPool));
 app.use("/api/aicampaigns", createAICampaignRoutes(pgPool));
 
+// Load and register Braid modules (dynamic route registration)
+console.log("→ Loading Braid modules...");
+try {
+  const braidModules = loadBraidModules();
+  registerBraidRoutes(app, braidModules);
+  console.log("✓ Braid modules initialized");
+} catch (err) {
+  console.error("⚠️ Failed to load Braid modules:", err.message);
+}
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
@@ -693,16 +703,6 @@ server.listen(PORT, '0.0.0.0', () => {
   `);
 
   console.log("✓ Server listening on port", PORT);
-
-  // Load and register Braid modules (dynamic route registration)
-  console.log("→ Loading Braid modules...");
-  try {
-    const braidModules = loadBraidModules();
-    registerBraidRoutes(app, braidModules);
-    console.log("✓ Braid modules initialized");
-  } catch (err) {
-    console.error("⚠️ Failed to load Braid modules:", err.message);
-  }
 
   // Kick off storage bucket provisioning (non-blocking)
   ensureStorageBucketExists().catch((err) =>
