@@ -11,6 +11,31 @@ export default function createMetricsRoutes(pgPool) {
   // GET /api/metrics/performance - system-wide or tenant-scoped performance metrics
   router.get('/performance', async (req, res) => {
     const { tenant_id, limit = 500, hours = 24 } = req.query;
+
+    // Check if pool is available
+    if (!pgPool) {
+      console.warn('[Metrics] Performance logging pool not available');
+      return res.json({
+        status: 'success',
+        data: {
+          logs: [],
+          count: 0,
+          metrics: {
+            totalCalls: 0,
+            avgResponseTime: 0,
+            maxResponseTime: 0,
+            minResponseTime: 0,
+            errorRate: 0,
+            errorCount: 0,
+            serverErrorCount: 0,
+            successCount: 0,
+            uptime: process.uptime()
+          },
+          warning: 'Performance logging pool not configured or unavailable'
+        }
+      });
+    }
+
     try {
       // 1. Load recent logs (always needed for chart + JS fallback)
       const logConditions = ['created_at > NOW() - $1::INTERVAL'];

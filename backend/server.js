@@ -102,34 +102,16 @@ if (process.env.DATABASE_URL) {
   }
   console.log("✓ Performance logging pool initialized (PostgreSQL direct connection)");
   
-  // Test connection with auto SSL fallback if necessary
+  // Test connection (async, non-blocking)
   const testPerfPool = async () => {
     try {
       await perfLogPool.query('SELECT 1');
       console.log("✓ Performance logging pool connection verified");
     } catch (err) {
-      if (/does not support SSL connections/i.test(err.message) && !process.env.PERF_DB_DISABLE_SSL) {
-        // Auto-retry without SSL; suppress initial error
-        try {
-          perfLogPool.end().catch(() => { /* ignore end error */ });
-        } catch {
-          /* ignore */
-        }
-        perfLogPool = new Pool({
-          connectionString: process.env.DATABASE_URL,
-          max: 5,
-          idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 5000,
-        });
-        try {
-          await perfLogPool.query('SELECT 1');
-          console.log("✓ Performance logging pool connection verified (no SSL)");
-        } catch (e2) {
-          console.error("✗ Performance logging pool connection failed:", e2.message);
-        }
-      } else {
-        console.error("✗ Performance logging pool connection failed:", err.message);
-      }
+      // Log error but don't set pool to null - keep it for future requests
+      // The pool will auto-reconnect on next query
+      console.warn("⚠️  Performance logging pool initial connection failed:", err.message);
+      console.warn("   Pool will retry on next request");
     }
   };
   testPerfPool();
@@ -511,9 +493,16 @@ process.on("SIGTERM", async () => {
   );
   if (heartbeatTimer) clearInterval(heartbeatTimer);
 
-  if (pgPool) {
-    pgPool.end(() => {
-      console.log("PostgreSQL pool closed");
+  // Close both pools on shutdown
+  const pools = [];
+  if (pgPool) pools.push(pgPool.end());
+  if (perfLogPool) pools.push(perfLogPool.end());
+
+  if (pools.length > 0) {
+    Promise.all(pools).then(() => {
+      console.log("Database pools closed");
+      process.exit(0);
+    }).catch(() => {
       process.exit(0);
     });
   } else {
