@@ -8,13 +8,13 @@ if (!file) {
 }
 const src = fs.readFileSync(file, "utf8");
 
-const functions = [...src.matchAll(/fn\s+(\w+)\s*\(([^)]*)\)\s*->\s*([^!{]+)(?:!([^\s{]+))?/g)]
+const functions = [...src.matchAll(/fn\s+(\w+)\s*\(([^)]*)\)\s*->\s*([^!{]+)(?:!\s*([^{}]+))?/g)]
   .map(m=>({
     kind: "fn",
     name: m[1],
     params: m[2].trim(),
     ret: m[3].trim(),
-    effects: (m[4]? m[4].split(',').map(s=>s.trim()) : [])
+    effects: (m[4]? m[4].split(',').map(s=>s.trim()).filter(Boolean) : [])
   }));
 
 // Actor extraction (naive): actor Name { state { field: Type ... } ... }
