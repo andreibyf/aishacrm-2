@@ -2,6 +2,7 @@ import React, { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom"; // Import useNavigate
 import { createPageUrl } from "@/utils";
 import PasswordChangeModal from "@/components/auth/PasswordChangeModal";
+import ForgotPasswordDialog from "@/components/auth/ForgotPasswordDialog";
 import {
   BarChart3,
   BookOpen, // NEW: Added for Documentation and WorkflowGuide
@@ -484,6 +485,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   const [moduleSettings, setModuleSettings] = React.useState([]);
   const [currentTenantData, setCurrentTenantData] = React.useState(null);
   const [elevenLabsApiKey, setElevenLabsApiKey] = useState(null);
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
 
   // CRITICAL: Access tenant context safely WITHOUT destructuring
   const tenantContext = useTenant();
@@ -2142,12 +2144,21 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             </div>
 
             <div className="mb-6">
-              <label
-                className="block text-slate-800 text-sm font-semibold mb-2"
-                htmlFor="password"
-              >
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label
+                  className="block text-slate-800 text-sm font-semibold"
+                  htmlFor="password"
+                >
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setForgotPasswordOpen(true)}
+                  className="text-xs text-purple-600 hover:text-purple-700 font-medium"
+                >
+                  Forgot Password?
+                </button>
+              </div>
               <input
                 type="password"
                 id="password"
@@ -2170,6 +2181,11 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               Sign In
             </button>
           </form>
+
+          <ForgotPasswordDialog 
+            open={forgotPasswordOpen} 
+            onOpenChange={setForgotPasswordOpen}
+          />
 
           {/* Hint: Users should be created via Supabase Auth. Removed demo credentials. */}
           <div className="mt-6 text-center text-xs text-slate-500">

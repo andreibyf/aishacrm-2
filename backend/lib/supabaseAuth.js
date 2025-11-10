@@ -294,6 +294,47 @@ export async function confirmUserEmail(userId) {
   }
 }
 
+/**
+ * Update password using access token from reset email
+ * @param {string} accessToken - Access token from password reset email
+ * @param {string} newPassword - New password
+ * @returns {Promise<{user, error}>}
+ */
+export async function updatePasswordWithToken(accessToken, newPassword) {
+  if (!supabaseAdmin) {
+    throw new Error("Supabase Auth not initialized");
+  }
+
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
+    // Create a client with the access token to update the password
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+    });
+
+    const { data, error } = await supabaseClient.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (error) {
+      console.error("[Supabase Auth] Error updating password with token:", error);
+      return { user: null, error };
+    }
+
+    console.log(`✓ Password updated for user: ${data.user?.email}`);
+    return { user: data.user, error: null };
+  } catch (error) {
+    console.error("[Supabase Auth] Exception updating password with token:", error);
+    return { user: null, error };
+  }
+}
+
 export default {
   initSupabaseAuth,
   createAuthUser,
@@ -304,4 +345,5 @@ export default {
   getAuthUserByEmail,
   updateAuthUserMetadata,
   confirmUserEmail,
+  updatePasswordWithToken,
 };

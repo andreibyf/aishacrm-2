@@ -71,6 +71,8 @@ import SystemLogs from "./SystemLogs";
 
 import Workflows from "./Workflows";
 
+import ResetPassword from "./ResetPassword";
+
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 
 const PAGES = {
@@ -170,12 +172,19 @@ function PagesContent() {
         console.log('[PagesContent] Route changed to:', location.pathname);
     }, [location.pathname]);
     
+    // Check if this is the reset password route (no Layout needed)
+    if (location.pathname === '/reset-password') {
+        return <ResetPassword />;
+    }
+    
     return (
         <Layout currentPageName={currentPage}>
             <Routes location={location}>            
                 
                     <Route path="/" element={<Dashboard />} />
                 
+                
+                <Route path="/reset-password" element={<ResetPassword />} />
                 
                 <Route path="/Dashboard" element={<Dashboard />} />
                 
