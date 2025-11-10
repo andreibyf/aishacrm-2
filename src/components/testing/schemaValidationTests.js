@@ -12,7 +12,7 @@ export const schemaValidationTests = {
     // ==================== EMPLOYEE TESTS ====================
     {
       name: 'Employee: should accept minimal required fields (first_name, last_name)',
-      async run() {
+      fn: async () => {
         const employee = await Employee.create({
           tenant_id: 'local-tenant-001',
           first_name: 'Test',
@@ -28,7 +28,7 @@ export const schemaValidationTests = {
     },
     {
       name: 'Employee: should accept employee without email',
-      async run() {
+      fn: async () => {
         const employee = await Employee.create({
           tenant_id: 'local-tenant-001',
           first_name: 'NoEmail',
@@ -46,7 +46,7 @@ export const schemaValidationTests = {
     },
     {
       name: 'Employee: should store additional fields in metadata',
-      async run() {
+      fn: async () => {
         const employee = await Employee.create({
           tenant_id: 'local-tenant-001',
           first_name: 'Metadata',
@@ -67,7 +67,7 @@ export const schemaValidationTests = {
     },
     {
       name: 'Employee: should reject without tenant_id',
-      async run() {
+      fn: async () => {
         try {
           await Employee.create({
             first_name: 'Test',
@@ -85,7 +85,7 @@ export const schemaValidationTests = {
     },
     {
       name: 'Employee: should reject without first_name',
-      async run() {
+      fn: async () => {
         try {
           await Employee.create({
             tenant_id: 'local-tenant-001',

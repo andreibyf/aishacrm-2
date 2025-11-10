@@ -61,7 +61,7 @@ import SystemStatusIndicator from "../components/shared/SystemStatusIndicator";
 import Clock from "../components/shared/Clock";
 import { useUser } from "@/components/shared/useUser.js";
 import RouteGuard from "../components/shared/RouteGuard";
-import { getOrCreateUserApiKey } from "@/api/functions";
+import { getOrCreateUserApiKey } from "@/api/fallbackFunctions";
 import { createAuditLog } from "@/api/functions";
 import { MCPManager } from "../components/shared/MCPClient";
 import GlobalDetailViewer from "../components/shared/GlobalDetailViewer";
