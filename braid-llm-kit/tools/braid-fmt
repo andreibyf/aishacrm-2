@@ -1,0 +1,4 @@
+#!/usr/bin/env node
+import fs from "fs";
+import { format } from "./formatter.js";
+process.stdout.write(format(fs.readFileSync(0,"utf8")));

@@ -1,0 +1,7 @@
+fn main(http: Http, clock: Clock) !net,clock {
+  let app = http.app();
+  app.get("/health", |req| -> Result[Response, HttpError] {
+    Ok(Response::json({ "ok": true }))
+  });
+  http.serve(app, Addr::ipv4(0,0,0,0,8080))?
+}

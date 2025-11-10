@@ -1,0 +1,66 @@
+{
+  "$id": "diag.schema.json",
+  "type": "object",
+  "required": [
+    "code",
+    "severity",
+    "message",
+    "span"
+  ],
+  "properties": {
+    "code": {
+      "type": "string"
+    },
+    "severity": {
+      "enum": [
+        "error",
+        "warning",
+        "info"
+      ]
+    },
+    "message": {
+      "type": "string"
+    },
+    "span": {
+      "type": "object",
+      "required": [
+        "file",
+        "start",
+        "end"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "start": {
+          "type": "integer"
+        },
+        "end": {
+          "type": "integer"
+        }
+      }
+    },
+    "fixes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "edit": {
+            "type": "object",
+            "properties": {
+              "insert": {
+                "type": "string"
+              },
+              "at": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

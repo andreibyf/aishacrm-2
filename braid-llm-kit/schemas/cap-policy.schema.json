@@ -1,0 +1,33 @@
+{
+  "$id": "cap-policy.schema.json",
+  "type": "object",
+  "properties": {
+    "caps": {
+      "type": "object",
+      "properties": {
+        "fs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "net": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "time": {
+          "type": "boolean"
+        },
+        "rng": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "caps"
+  ]
+}

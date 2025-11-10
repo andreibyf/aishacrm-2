@@ -1,0 +1,8 @@
+[package]
+name = "web-service"
+version = "0.1.0"
+target = "wasm32-wasi"
+
+[caps]
+net = ["tcp:80","tcp:443"]
+time = true
