@@ -7,7 +7,7 @@
     },
     {
       "name": "keyword.control.braid",
-      "match": "\\b(fn|type|enum|trait|impl|match|actor|async|await|let|mut|requires|ensures|Ok|Err)\\b"
+      "match": "\\b(fn|type|enum|trait|impl|match|actor|state|spawn|async|await|let|mut|requires|ensures|Ok|Err)\\b"
     },
     {
       "name": "storage.type.braid",
@@ -21,6 +21,10 @@
       "name": "string.quoted.double.braid",
       "begin": "\\\"",
       "end": "\\\""
+    },
+    {
+      "name": "meta.annotation.braid",
+      "match": "@[a-zA-Z_]\\w*(\\([^)]*\\))?"
     }
   ]
 }

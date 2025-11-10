@@ -1,5 +1,7 @@
 // Minimal validator that enforces a few "Braid rules" for deterministic feedback.
-export function validate(src, filename="input.braid") {
+// no fs needed here; keep module self-contained
+
+export function validate(src, filename="input.braid", policy=null) {
   const diags = [];
   const push=(code,severity,message,start,end,fixes=[])=>diags.push({code,severity,message,span:{file:filename,start,end},fixes});
 
@@ -12,7 +14,7 @@ export function validate(src, filename="input.braid") {
     push("BRAD002","error","'null' is not allowed; use Option[T]", nullIdx, nullIdx+4,[]);
   }
 
-  // crude effect check for fs
+  // crude effect check for fs and policy
   const fnRegex = /fn\s+(\w+)\s*\([^)]*\)\s*->[^!{]*(![^\s{]+)?/g;
   let m;
   while ((m = fnRegex.exec(src)) !== null) {
@@ -26,6 +28,28 @@ export function validate(src, filename="input.braid") {
       push("BRAD104","error","unhandled effect: fs", fnStart, fnStart + (m[0].length), [
         {"label":"propagate with !fs","edit":{"insert":" !fs","at": insertAt + 2}}
       ]);
+    }
+
+    // policy enforcement on declared effects
+    if (policy) {
+      const effDecl = m[0].match(/!([^\s{]+)/);
+      const effs = new Set();
+      if (effDecl && effDecl[1]) {
+        effDecl[1].split(",").map(s=>s.trim()).filter(Boolean).forEach(e=>effs.add(e));
+      }
+      // build allowed effects from policy
+      const allowed = new Set();
+      if (policy.caps) {
+        if (policy.caps.fs !== undefined) allowed.add("fs");
+        if (policy.caps.net !== undefined) allowed.add("net");
+        if (policy.caps.time || policy.caps.clock !== undefined) allowed.add("clock");
+        if (policy.caps.rng !== undefined) allowed.add("rng");
+      }
+      for (const e of effs) {
+        if (allowed.size>0 && !allowed.has(e)) {
+          push("BRAD201","error",`effect '${e}' not permitted by policy`, fnStart, fnStart+(m[0].length), []);
+        }
+      }
     }
   }
   return diags;

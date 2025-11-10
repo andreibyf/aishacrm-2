@@ -3,7 +3,10 @@ Letter      = "A"…"Z" | "a"…"z" ;
 Digit       = "0"…"9" ;
 
 Program     = { Item } ;
-Item        = TypeDecl | EnumDecl | TraitDecl | ImplDecl | FnDecl | ActorDecl ;
+Attribute   = "@" Ident [ "(" [ AttrArgs ] ")" ] ;
+AttrArgs    = AttrArg { "," AttrArg } ;
+AttrArg     = Ident ":" ( StringLiteral | TypeExpr | Literal ) ;
+Item        = { Attribute } ( TypeDecl | EnumDecl | TraitDecl | ImplDecl | FnDecl | ActorDecl ) ;
 
 TypeDecl    = "type" Ident "=" TypeExpr ";" ;
 EnumDecl    = "enum" Ident "{" { Variant } "}" ;
@@ -13,7 +16,8 @@ TraitDecl   = "trait" Ident "{" { FnSig ";" } "}" ;
 ImplDecl    = "impl" Ident "for" TypeExpr "{" { FnDecl } "}" ;
 
 FnDecl      = FnSig Block ;
-FnSig       = [ "async" ] "fn" Ident "(" [ Params ] ")" "->" TypeExpr [ "!" EffectList ] ;
+(* Allow async before or after for flexibility while stabilizing spec *)
+FnSig       = ( [ "async" ] "fn" | "fn" ) Ident "(" [ Params ] ")" "->" TypeExpr [ "!" EffectList ] [ "async" ] ;
 Params      = Param { "," Param } ;
 Param       = Ident ":" TypeExpr ;
 
@@ -69,10 +73,11 @@ Lambda      = "|" Ident "|" "->" TypeExpr Block ;
 RecordLit   = "{" { Ident ":" Expr } "}" ;
 
 (* Actors *)
-ActorDecl   = "actor" Ident "{" StateDecl { FnDecl } "}" ;
+ActorDecl   = "actor" Ident "{" "state" "{" { Field { "," Field } } "}" { FnDecl } "}" ;
 StateDecl   = "state" RecordType ;
 RecordType  = "{" { Field } "}" ;
 Spawn       = "spawn" Ident RecordLit ;
+Await       = "await" Expr ;
 
 Literal     = Int | StringLiteral | Bool ;
 Int         = Digit { Digit } ;

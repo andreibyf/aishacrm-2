@@ -1,0 +1,27 @@
+#!/usr/bin/env node
+import fs from "fs";
+
+const file = process.argv[2];
+if (!file) {
+  console.error("usage: braid-hir <file.braid>");
+  process.exit(2);
+}
+const src = fs.readFileSync(file, "utf8");
+
+const functions = [...src.matchAll(/fn\s+(\w+)\s*\(([^)]*)\)\s*->\s*([^!{]+)(?:!([^\s{]+))?/g)]
+  .map(m=>({
+    name: m[1],
+    params: m[2].trim(),
+    ret: m[3].trim(),
+    effects: (m[4]? m[4].split(',').map(s=>s.trim()) : [])
+  }));
+
+const attributes = [...src.matchAll(/@(\w+)\s*(\([^)]*\))?/g)]
+  .map(m=>({ name: m[1], args: (m[2]||"").slice(1,-1) }));
+
+// naive route sniff placeholder (adjust to your conventions later)
+const routes = [...src.matchAll(/route\s+\(\s*"(GET|POST|PUT|DELETE)\s+([^\"]+)"\s*\)/g)]
+  .map(m=>({ method: m[1], path: m[2] }));
+
+const hir = { file, functions, attributes, routes };
+process.stdout.write(JSON.stringify(hir, null, 2) + "\n");

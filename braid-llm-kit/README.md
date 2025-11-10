@@ -1,6 +1,6 @@
 # Braid LLM Kit (Extended)
 
-Language version: 0.2.0
+Language version: 0.3.0
 
 This kit gives LLMs rails to generate consistent Braid code: grammar, specs, schemas,
 mock CLI tools with deterministic JSON diagnostics, a VS Code extension scaffold,
@@ -41,6 +41,13 @@ python3 tools/llm_autofix.py examples/time.braid
 
 We follow semantic versioning for the language and kit materials. Minor bumps (0.x → 0.(x+1)) are backward-compatible additions or clarifications; patch bumps fix bugs/omissions in specs/grammar without changing meaning.
 
+- 0.3.0
+	- Add formal attributes syntax (`@name(...)`) parsed and surfaced to HIR
+	- Policy enforcement in checker: `braid-check --policy policy.json` errors on forbidden effects (BRAD201)
+	- HIR extractor tool: `tools/braid-hir` emits functions, attributes, routes as JSON
+	- VS Code grammar: add `state`, `spawn` keywords and `@attribute` highlighting
+	- Grammar tweaks: allow `async` before or after `fn` temporarily; actor state inline form
+
 - 0.2.0
 	- Align formal grammar with existing examples/docs:
 		- Added `async` on function signatures and `await` as a unary expression
@@ -65,12 +72,19 @@ We follow semantic versioning for the language and kit materials. Minor bumps (0
 	- Spawn: `let c = spawn Counter { value: 0 };`
 	- Messages: `await c.inc(1); let v = await c.get();`
 - Holes: `?? "explain what belongs here"`
+- Attributes: `@ai(intent: {"service":"crm","action":"lead_create"})` on `fn`, `actor`, etc. (inert in mock tools)
 
 Notes
 - Capabilities and effects are explicit (`!fs, net, clock`); the checker validates declared usage
 - Contracts/holes/intents exist in docs; enforcement is stubbed in mock tools
 
 ## Migration notes (0.2.0)
+## Tools
+
+- Check with optional policy:
+	- `node tools/braid-check examples/03_result_effects.braid --policy templates/web-service/policy.json`
+- Export HIR JSON (functions/attributes/routes):
+	- `node tools/braid-hir examples/03_result_effects.braid > /tmp/hir.json`
 
 Existing code should continue to parse. If you implemented your own parser from the earlier EBNF:
 - Add support for `async`/`await`, postfix `?`, actor/state/spawn forms
