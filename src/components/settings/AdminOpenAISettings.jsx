@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,13 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, KeyRound, CheckCircle, AlertCircle, Save, Plug } from 'lucide-react';
-import { testOpenAIConnection } from '@/api/integrations';
+import { testSystemOpenAI } from '@/api/functions';
 import { toast } from "sonner";
 import { useUser } from "@/components/shared/useUser.js";
-import { getBackendUrl } from '@/api/backendUrl';
 
 export default function AdminOpenAISettings() {
-  const { loading: userLoading, user } = useUser(); // include user so we can role-check
+  const { user, loading: userLoading, refetch } = useUser();
   const [loading, setLoading] = useState(true);
   const [localSettings, setLocalSettings] = useState({
     openai_api_key: '',
@@ -28,41 +27,15 @@ export default function AdminOpenAISettings() {
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [showKey, setShowKey] = useState(false);
-  const isMountedRef = useRef(true);
 
   useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    console.log('[AdminOpenAISettings] isTesting state changed:', isTesting);
-  }, [isTesting]);
-
-  useEffect(() => {
-    const loadSystemSettings = async () => {
-      try {
-        const backendUrl = getBackendUrl();
-        const response = await fetch(`${backendUrl}/api/system-settings`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.data?.system_openai_settings) {
-            setLocalSettings(data.data.system_openai_settings);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to load system settings:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (!userLoading) {
-      loadSystemSettings();
+      if (user?.system_openai_settings) {
+        setLocalSettings(user.system_openai_settings);
+      }
+      setLoading(false);
     }
-  }, [userLoading]);
+  }, [userLoading, user]);
 
   const handleSettingChange = (field, value) => {
     setLocalSettings(prev => ({ ...prev, [field]: value }));
@@ -71,20 +44,10 @@ export default function AdminOpenAISettings() {
   const handleSaveSettings = async () => {
     setIsSaving(true);
     try {
-      // This is a system-wide setting, not a user-specific one.
-      // We will call a new endpoint to save this.
-      const backendUrl = getBackendUrl();
-      const response = await fetch(`${backendUrl}/api/system-settings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ system_openai_settings: localSettings }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to save settings');
-      }
-
+      // Persist settings to the backend for the current user
+      const { User } = await import('@/api/entities');
+      await User.updateMyUserData({ system_openai_settings: localSettings });
+      await refetch();
       toast.success("OpenAI settings saved successfully!");
     } catch (error) {
       toast.error("Failed to save settings.");
@@ -99,66 +62,29 @@ export default function AdminOpenAISettings() {
       toast.error("Please enter an OpenAI API key to test.");
       return;
     }
-    
-    console.log('[AdminOpenAISettings] Starting test connection...');
     setIsTesting(true);
     setTestResult(null);
-    
     try {
-      const response = await testOpenAIConnection({
+      const response = await testSystemOpenAI({
         api_key: localSettings.openai_api_key,
         model: localSettings.model
       });
-      
-      console.log('[AdminOpenAISettings] Test connection response received:', response);
-      
-      // Reset isTesting IMMEDIATELY after response, before any other state updates
-      setIsTesting(false);
-      console.log('[AdminOpenAISettings] isTesting reset to false IMMEDIATELY');
-      
-      // Only update state if component is still mounted
-      if (!isMountedRef.current) {
-        console.log('[AdminOpenAISettings] Component unmounted, skipping state update');
-        return;
-      }
-      
       setTestResult(response.data);
-      
       if (response.data.success) {
-        toast.success(response.data.message || "OpenAI connection successful!");
+        toast.success("OpenAI connection successful!");
         setLocalSettings(prev => ({ ...prev, enabled: true }));
-
-        // NEW: Superadmin-only hard refresh to reset any lingering navigation state
-        // We delay slightly so the success toast is visible before reload.
-        if (!userLoading && user?.role === 'superadmin') {
-          setTimeout(() => {
-            // Use full page reload to guarantee fresh router state.
-            window.location.reload();
-          }, 800);
-        }
       } else {
         toast.error(`Test failed: ${response.data.error}`);
       }
     } catch (error) {
-      console.error('[AdminOpenAISettings] Test connection error:', error);
-      
-      // Reset isTesting IMMEDIATELY on error too
-      setIsTesting(false);
-      console.log('[AdminOpenAISettings] isTesting reset to false after ERROR');
-      
-      // Only update state if component is still mounted
-      if (!isMountedRef.current) {
-        console.log('[AdminOpenAISettings] Component unmounted, skipping error state update');
-        return;
-      }
-      
       // Improved error handling to show specific backend message
-      const errorMessage = error.response?.data?.error || error.message || "The request failed. Please check the function logs.";
+      const errorMessage = error.response?.data?.error || "The request failed. Please check the function logs.";
       setTestResult({ success: false, error: errorMessage });
-      
       toast.error(errorMessage, {
         description: error.response?.data?.details || "No further details available.",
       });
+    } finally {
+      setIsTesting(false);
     }
   };
 
