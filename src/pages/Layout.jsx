@@ -1064,7 +1064,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           lastTenantRequestIdRef.current = null;
 
           // For admins, clear the bad selection so they can pick a valid tenant
+          // IMPORTANT: Only reset if we have valid user data (role is set)
           if (
+            user?.role && // Guard: only proceed if we have user role loaded
             (user.role === "admin" || user.role === "superadmin") &&
             setSelectedTenantId && selectedTenantId &&
             effectiveTenantId === selectedTenantId
@@ -1109,7 +1111,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           setSelectedTenant(null);
           lastTenantRequestIdRef.current = null;
 
+          // IMPORTANT: Only reset if we have valid user data (role is set)
           if (
+            user?.role && // Guard: only proceed if we have user role loaded
             (user.role === "admin" || user.role === "superadmin") &&
             setSelectedTenantId && selectedTenantId &&
             effectiveTenantId === selectedTenantId
@@ -1147,11 +1151,12 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           setSelectedTenant(null);
 
           // CRITICAL FIX: Clear invalid tenant from localStorage for ALL users
+          // IMPORTANT: Only reset if we have valid user data (role is set)
           try {
             const storedTenantId = localStorage.getItem("selected_tenant_id");
             if (storedTenantId === attemptedTenantId) {
               localStorage.removeItem("selected_tenant_id");
-              if (setSelectedTenantId) {
+              if (setSelectedTenantId && user?.role) { // Guard: only proceed if we have user role loaded
                 setSelectedTenantId(null);
               }
             }

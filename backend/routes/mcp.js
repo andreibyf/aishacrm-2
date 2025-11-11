@@ -6,7 +6,7 @@
 import express from "express";
 import fetch from "node-fetch";
 
-export default function createMCPRoutes(pgPool) {
+export default function createMCPRoutes(pgPool, braidModules = []) {
   const router = express.Router();
 
   // GET /api/mcp/servers - List available MCP servers
@@ -88,6 +88,36 @@ export default function createMCPRoutes(pgPool) {
         configured: true,
         healthy: true,
         capabilities: ["web.search_wikipedia", "web.get_wikipedia_page"],
+      });
+
+      // Add Braid MCP server - exposes all loaded Braid functions
+      const braidTools = [];
+      const braidFunctions = [];
+      for (const mod of braidModules) {
+        if (mod.error || !mod.hir || !mod.hir.functions) continue;
+        for (const fn of mod.hir.functions) {
+          const toolName = `braid.${fn.name}`;
+          braidTools.push(toolName);
+          braidFunctions.push({
+            name: fn.name,
+            params: fn.params,
+            returnType: fn.returnType,
+            effects: fn.effects || [],
+            module: mod.file
+          });
+        }
+      }
+      
+      servers.push({
+        id: "braid",
+        name: "Braid MCP",
+        type: "mcp",
+        transport: "proxy",
+        configured: true,
+        healthy: true,
+        capabilities: braidTools,
+        functions: braidFunctions,
+        modules: braidModules.length
       });
 
       res.json({ status: "success", data: { servers } });
@@ -328,6 +358,79 @@ export default function createMCPRoutes(pgPool) {
           status: "error",
           message: `Unknown Web tool: ${tool_name}`,
         });
+      }
+
+      // Braid MCP - Execute transpiled Braid functions
+      if (server_id === "braid") {
+        // Extract function name from tool_name (e.g., "braid.score_lead" -> "score_lead")
+        const functionName = tool_name.replace(/^braid\./, '');
+        
+        // Find the module containing this function
+        let targetModule = null;
+        let targetFunction = null;
+        
+        for (const mod of braidModules) {
+          if (mod.error || !mod.hir || !mod.hir.functions) continue;
+          const fn = mod.hir.functions.find(f => f.name === functionName);
+          if (fn) {
+            targetModule = mod;
+            targetFunction = fn;
+            break;
+          }
+        }
+        
+        if (!targetModule || !targetFunction) {
+          return res.status(404).json({
+            status: "error",
+            message: `Braid function not found: ${functionName}`,
+          });
+        }
+        
+        // Import the transpiled module
+        try {
+          const { pathToFileURL } = await import('url');
+          const jsModule = await import(pathToFileURL(targetModule.jsPath).href);
+          const transpiledFn = jsModule[functionName];
+          
+          if (!transpiledFn) {
+            return res.status(501).json({
+              status: "error",
+              message: `Braid function '${functionName}' not transpiled`,
+            });
+          }
+          
+          // Parse parameters and call function
+          const args = [];
+          if (targetFunction.params && targetFunction.params.length > 0) {
+            const paramNames = targetFunction.params
+              .split(',')
+              .map(p => p.trim().split(':')[0].trim())
+              .filter(name => name.length > 0);
+            
+            for (const paramName of paramNames) {
+              const value = parameters?.[paramName];
+              args.push(value);
+            }
+          }
+          
+          console.log(`[MCP Braid] Calling ${functionName} with args:`, args);
+          const result = await transpiledFn(...args);
+          console.log(`[MCP Braid] Result from ${functionName}:`, result);
+          
+          return res.json({
+            status: "success",
+            data: result,
+            function: functionName,
+            module: targetModule.file
+          });
+        } catch (err) {
+          console.error(`[MCP Braid] Error executing ${functionName}:`, err);
+          return res.status(500).json({
+            status: "error",
+            message: err.message,
+            function: functionName
+          });
+        }
       }
 
       // Default stub

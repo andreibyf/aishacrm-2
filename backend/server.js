@@ -379,12 +379,22 @@ import createSystemBrandingRoutes from "./routes/systembrandings.js";
 import createSyncHealthRoutes from "./routes/synchealths.js";
 import createAICampaignRoutes from "./routes/aicampaigns.js";
 
+// Load Braid modules early (needed by AI routes)
+console.log("→ Loading Braid modules...");
+let braidModules = [];
+try {
+  braidModules = loadBraidModules();
+  console.log(`✓ Loaded ${braidModules.length} Braid module(s)`);
+} catch (err) {
+  console.error("⚠️ Failed to load Braid modules:", err.message);
+}
+
 // Mount routers with database pool
 app.use("/api/database", createDatabaseRoutes(pgPool));
 app.use("/api/integrations", createIntegrationRoutes(pgPool));
 app.use("/api/telephony", createTelephonyRoutes(pgPool));
-app.use("/api/ai", createAiRoutes(pgPool));
-app.use("/api/mcp", createMcpRoutes(pgPool));
+app.use("/api/ai", createAiRoutes(pgPool, braidModules));
+app.use("/api/mcp", createMcpRoutes(pgPool, braidModules));
 app.use("/api/assistant", createAssistantRoutes(pgPool));
 app.use("/api/accounts", createAccountRoutes(pgPool));
 app.use("/api/leads", createLeadRoutes(pgPool));
@@ -427,14 +437,13 @@ app.use("/api/systembrandings", createSystemBrandingRoutes(pgPool));
 app.use("/api/synchealths", createSyncHealthRoutes(pgPool));
 app.use("/api/aicampaigns", createAICampaignRoutes(pgPool));
 
-// Load and register Braid modules (dynamic route registration)
-console.log("→ Loading Braid modules...");
+// Register Braid HTTP routes (already loaded above before AI routes)
+console.log("→ Registering Braid HTTP routes...");
 try {
-  const braidModules = loadBraidModules();
   await registerBraidRoutes(app, braidModules);
-  console.log("✓ Braid modules initialized");
+  console.log("✓ Braid routes registered");
 } catch (err) {
-  console.error("⚠️ Failed to load Braid modules:", err.message);
+  console.error("⚠️ Failed to register Braid routes:", err.message);
 }
 
 // 404 handler

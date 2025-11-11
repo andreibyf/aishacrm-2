@@ -1,7 +1,12 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-// import { agentSDK } from "@/agents"; // TODO: Create src/agents file or remove this dependency
-const agentSDK = null; // Temporary stub to fix build
+// Replace deprecated agentSDK with local backend conversations API
+import {
+  createConversation as apiCreateConversation,
+  getConversation as apiGetConversation,
+  addMessage as apiAddMessage,
+  subscribeToConversation as apiSubscribeToConversation,
+} from "@/api/conversations";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Send, MessageSquare, ExternalLink, Sparkles, RefreshCw, Trash2 } from "lucide-react";
@@ -93,16 +98,14 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
       console.error('[AgentChat] Invalid or missing tenant ID:', tenantId);
     } else {
       console.log('[AgentChat] Active tenant context:', { tenantId, tenantName });
+      try {
+        localStorage.setItem('selected_tenant_id', tenantId);
+      } catch { /* ignore storage errors */ }
     }
   }, [tenantId, tenantName]);
 
-  const whatsappUrl = useMemo(() => {
-    try {
-      return agentSDK.getWhatsAppConnectURL(agentName);
-    } catch {
-      return null;
-    }
-  }, [agentName]);
+  // WhatsApp integration not implemented in local backend yet
+  const whatsappUrl = useMemo(() => null, []);
 
   // DEBUG: Log mic state changes in parent component
   useEffect(() => {
@@ -132,16 +135,17 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
       
       console.log('[AgentChat] Loading context with STRICT tenant filter:', filter);
       
-      const [recentActivities, openOpps, hotLeads, keyAccounts] = await Promise.all([
-        Activity.filter({ ...filter, status: { $in: ["completed", "in-progress", "scheduled"] } }, "-created_date", 5).catch((e) => {
+      // Fetch recent data for context - filter client-side to avoid backend operator issues
+      const [allActivities, allOpps, allLeads, keyAccounts] = await Promise.all([
+        Activity.filter(filter, "-created_date", 20).catch((e) => {
           console.error('[AgentChat] Failed to fetch activities for tenant:', tenantId, e);
           return [];
         }),
-        Opportunity.filter({ ...filter, stage: { $nin: ["closed_won", "closed_lost"] } }, "-updated_date", 5).catch((e) => {
+        Opportunity.filter(filter, "-updated_date", 20).catch((e) => {
           console.error('[AgentChat] Failed to fetch opportunities for tenant:', tenantId, e);
           return [];
         }),
-        Lead.filter({ ...filter, status: { $in: ["new", "contacted", "qualified"] } }, "-created_date", 5).catch((e) => {
+        Lead.filter(filter, "-created_date", 20).catch((e) => {
           console.error('[AgentChat] Failed to fetch leads for tenant:', tenantId, e);
           return [];
         }),
@@ -150,6 +154,17 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
           return [];
         }),
       ]);
+      
+      // Filter client-side to avoid backend query operator issues
+      const recentActivities = allActivities
+        .filter(a => ['completed', 'in-progress', 'scheduled'].includes(a.status))
+        .slice(0, 5);
+      const openOpps = allOpps
+        .filter(o => !['closed_won', 'closed_lost'].includes(o.stage))
+        .slice(0, 5);
+      const hotLeads = allLeads
+        .filter(l => ['new', 'contacted', 'qualified'].includes(l.status))
+        .slice(0, 5);
 
       console.log('[AgentChat] Context loaded:', {
         tenant: tenantId,
@@ -220,23 +235,67 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
     }
     
     setSending(true);
+    
+    // Optimistically add user message to UI immediately
+    const optimisticMessage = {
+      role: 'user',
+      content: text,
+      created_date: new Date().toISOString(),
+      id: `temp-${Date.now()}`
+    };
+    setMessages(prev => [...prev, optimisticMessage]);
+    setInput("");
+    
     try {
       // Add tenant context for the agent but it will be hidden in display
       const messageWithContext = `[Client ID: ${tenantId}${tenantName ? ` | Client Name: ${tenantName}` : ''}]\n${text}`;
       
       console.log('[AgentChat] Sending message with client context:', { tenantId, tenantName });
       
-      await agentSDK.addMessage(conversation, { 
+      await apiAddMessage(conversation, { 
         role: "user", 
         content: messageWithContext
       });
-      setInput("");
+      
+      // Poll for AI response (fallback if SSE isn't connected)
+      console.log('[AgentChat] Polling for AI response...');
+      let pollAttempts = 0;
+      const maxPolls = 20; // Poll for up to 10 seconds
+      
+      const pollInterval = setInterval(async () => {
+        pollAttempts++;
+        
+        try {
+          const updated = await apiGetConversation(conversation.id);
+          const currentMessageCount = messages.length;
+          const newMessageCount = updated.messages.length;
+          
+          if (newMessageCount > currentMessageCount) {
+            console.log('[AgentChat] New messages detected via polling:', newMessageCount - currentMessageCount);
+            setMessages(updated.messages);
+            clearInterval(pollInterval);
+          }
+          
+          if (pollAttempts >= maxPolls) {
+            console.log('[AgentChat] Polling timeout - no new messages');
+            clearInterval(pollInterval);
+          }
+        } catch (pollError) {
+          console.error('[AgentChat] Polling error:', pollError);
+          clearInterval(pollInterval);
+        }
+      }, 500); // Poll every 500ms
+      
+      // Server will also broadcast via SSE, which will update messages
     } catch (e) {
       console.error("[AgentChat] Send failed:", e);
+      // Remove optimistic message on error
+      setMessages(prev => prev.filter(m => m.id !== optimisticMessage.id));
+      setInput(text); // Restore input
     } finally {
       setSending(false);
     }
-  }, [input, conversation, sending, tenantId, tenantName]);
+  }, [input, conversation, sending, tenantId, tenantName, messages.length]);
 
   // Listen for voice input results from MicButton
   useEffect(() => {
@@ -396,7 +455,7 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
         
         if (savedConvId) {
           try {
-            convo = await agentSDK.getConversation(savedConvId);
+            convo = await apiGetConversation(savedConvId);
             console.log('[AgentChat] Loaded saved conversation:', savedConvId);
           } catch (error) {
             console.warn('[AgentChat] Saved conversation not found, creating new one:', error);
@@ -405,7 +464,7 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
         }
         
         if (!convo) {
-          convo = await agentSDK.createConversation({
+          convo = await apiCreateConversation({
             agent_name: agentName,
             metadata: {
               name: "Ai-SHA Executive Assistant",
@@ -418,7 +477,7 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
           console.log('[AgentChat] Created new conversation:', convo.id, 'for tenant:', tenantId);
           
           try {
-            await agentSDK.addMessage(convo, {
+            await apiAddMessage(convo, {
               role: "assistant",
               content: "Hi, how may I help?"
             });
@@ -439,8 +498,10 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
         }
         lastMessageCountRef.current = conversationMessages.length || 1; // Initialize for existing messages
 
-        unsubRef.current = agentSDK.subscribeToConversation(convo.id, (data) => {
-          setMessages((data.messages || []).filter(m => m.role !== 'system'));
+        unsubRef.current = apiSubscribeToConversation(convo.id, (data) => {
+          // data is full conversation object from callback, ensure messages present
+          const msgs = (data?.messages || []).filter(m => m.role !== 'system');
+          setMessages(msgs);
         });
 
         if (!didContextRef.current) {
@@ -511,7 +572,7 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
                   try {
                     if (unsubRef.current) unsubRef.current();
                     
-                    const newConvo = await agentSDK.createConversation({
+                    const newConvo = await apiCreateConversation({
                       agent_name: agentName,
                       metadata: {
                         name: "Ai-SHA Executive Assistant",
@@ -530,7 +591,7 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
                     lastMessageCountRef.current = 0; // Reset message count after clear
                     
                     try {
-                      await agentSDK.addMessage(newConvo, {
+                      await apiAddMessage(newConvo, {
                         role: "assistant",
                         content: "Hi, how may I help?"
                       });
@@ -541,7 +602,7 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
                     }
                     lastMessageCountRef.current = 1; // For the initial greeting message
 
-                    unsubRef.current = agentSDK.subscribeToConversation(newConvo.id, (data) => {
+                    unsubRef.current = apiSubscribeToConversation(newConvo.id, (data) => {
                       setMessages((data.messages || []).filter(m => m.role !== 'system'));
                     });
                     

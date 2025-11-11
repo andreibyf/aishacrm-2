@@ -1,0 +1,7 @@
+{
+  "server_id": "crm",
+  "tool_name": "crm.get_tenant_stats",
+  "parameters": {
+    "tenant_id": "labor-depot"
+  }
+}
