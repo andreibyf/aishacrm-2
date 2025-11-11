@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Loader2, Mail } from "lucide-react";
 import { toast } from "sonner";
 
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
 
 export default function ForgotPasswordDialog({ open, onOpenChange }) {
   const [email, setEmail] = useState('');

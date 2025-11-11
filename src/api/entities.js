@@ -25,7 +25,7 @@ export const BACKEND_URL = import.meta.env.DEV
   ? ''
   : normalizeBackendUrl(
       import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-      "http://localhost:3001"
+      "http://localhost:4001"
     );
 
 // Helper to properly pluralize entity names for API endpoints

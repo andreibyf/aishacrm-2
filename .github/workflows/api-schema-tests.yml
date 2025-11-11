@@ -55,8 +55,8 @@ jobs:
       PORT: 4001
       NODE_ENV: test
       USE_SUPABASE_PROD: ${{ inputs.use_supabase && 'true' || 'false' }}
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL || '' }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || '' }}
       ALLOWED_ORIGINS: http://localhost:4000,http://localhost:5173
       PLAYWRIGHT_BACKEND_URL: ${{ inputs.backend_url || 'http://localhost:4001' }}
 

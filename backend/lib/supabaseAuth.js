@@ -118,7 +118,7 @@ export async function sendPasswordResetEmail(email) {
       email,
       {
         redirectTo: `${
-          process.env.FRONTEND_URL || "http://localhost:5173"
+          process.env.FRONTEND_URL || "http://localhost:4000"
         }/reset-password`,
       },
     );
@@ -156,7 +156,7 @@ export async function inviteUserByEmail(email, metadata = {}) {
           password_change_required: true,
         },
         redirectTo: `${
-          process.env.FRONTEND_URL || "http://localhost:5173"
+          process.env.FRONTEND_URL || "http://localhost:4000"
         }/accept-invite`,
       },
     );

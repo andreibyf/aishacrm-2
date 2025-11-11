@@ -15,10 +15,8 @@ import { swaggerSpec } from './lib/swagger.js';
 import { initSupabaseDB, pool as supabasePool } from './lib/supabase-db.js';
 import { loadBraidModules, registerBraidRoutes } from './lib/braid-loader.js';
 
-// Load environment variables
-// Try .env.local first (for local development), then fall back to .env
-dotenv.config({ path: ".env.local" });
-dotenv.config(); // Fallback to .env if .env.local doesn't exist
+// Load environment variables from backend/.env only (project standard)
+dotenv.config({ path: "./.env" });
 
 // NOTE: Using Supabase PostgREST API instead of direct PostgreSQL connection
 // Direct connection requires IPv6 which Docker doesn't support well
@@ -27,7 +25,7 @@ let ipv4FirstApplied = false;
 const app = express();
 // Behind proxies, trust X-Forwarded-* to get real client IPs
 app.set('trust proxy', 1);
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 4001;
 
 // Database connection using Supabase PostgREST API (avoids IPv6 issues)
 let pgPool = null;
@@ -340,6 +338,7 @@ import createIntegrationRoutes from "./routes/integrations.js";
 import createTelephonyRoutes from "./routes/telephony.js";
 import createAiRoutes from "./routes/ai.js";
 import createMcpRoutes from "./routes/mcp.js";
+import createAssistantRoutes from "./routes/assistant.js";
 import createAccountRoutes from "./routes/accounts.js";
 import createLeadRoutes from "./routes/leads.js";
 import createContactRoutes from "./routes/contacts.js";
@@ -386,6 +385,7 @@ app.use("/api/integrations", createIntegrationRoutes(pgPool));
 app.use("/api/telephony", createTelephonyRoutes(pgPool));
 app.use("/api/ai", createAiRoutes(pgPool));
 app.use("/api/mcp", createMcpRoutes(pgPool));
+app.use("/api/assistant", createAssistantRoutes(pgPool));
 app.use("/api/accounts", createAccountRoutes(pgPool));
 app.use("/api/leads", createLeadRoutes(pgPool));
 app.use("/api/contacts", createContactRoutes(pgPool));

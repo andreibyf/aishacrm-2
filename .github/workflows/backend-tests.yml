@@ -15,6 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      CI_BACKEND_TESTS: ${{ secrets.CI_BACKEND_TESTS || 'false' }}
+      BACKEND_URL: http://localhost:4001
+      TEST_TENANT_ID: local-tenant-001
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL || '' }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || '' }}
     defaults:
       run:
         working-directory: backend
@@ -40,11 +46,6 @@ jobs:
       - name: Run unit tests (skip API route tests by default)
         env:
           CI: true
-          CI_BACKEND_TESTS: ${{ secrets.CI_BACKEND_TESTS || 'false' }}
-          BACKEND_URL: http://localhost:3001
-          TEST_TENANT_ID: local-tenant-001
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: npm test --silent
 
       # Optional: spin up backend to run route tests if secrets provided
@@ -52,17 +53,20 @@ jobs:
         if: ${{ env.CI_BACKEND_TESTS == 'true' && env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' }}
         run: |
           npm run dev &
-          sleep 5
-          curl -sSf http://localhost:3001/health
+          for i in {1..30}; do
+            if curl -sSf http://localhost:4001/health > /dev/null 2>&1; then
+              echo "Backend is ready"
+              break
+            fi
+            echo "Waiting for backend... ($i/30)"
+            sleep 2
+          done
+          curl -sSf http://localhost:4001/health
 
       - name: Run API route tests (if enabled)
         if: ${{ env.CI_BACKEND_TESTS == 'true' && env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' }}
         env:
           CI: true
           CI_BACKEND_TESTS: true
-          BACKEND_URL: http://localhost:3001
-          TEST_TENANT_ID: local-tenant-001
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           USE_SUPABASE_PROD: true
         run: npm test --silent
