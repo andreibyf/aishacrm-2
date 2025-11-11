@@ -233,11 +233,15 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // Performance logging middleware (must be after body parsers, before routes)
 import { performanceLogger } from "./middleware/performanceLogger.js";
 import { productionSafetyGuard } from "./middleware/productionSafetyGuard.js";
-if (perfLogPool) {
-  app.use(performanceLogger(perfLogPool));
-  console.log("✓ Performance logging middleware enabled");
+// Prefer dedicated Postgres pool for performance logs; fallback to Supabase API pool when unavailable
+const perfDb = perfLogPool || pgPool;
+if (perfDb) {
+  app.use(performanceLogger(perfDb));
+  console.log(
+    `✓ Performance logging middleware enabled (${perfLogPool ? "PostgreSQL direct" : "Supabase API"})`
+  );
 } else {
-  console.warn("⚠ Performance logging disabled - DATABASE_URL not configured");
+  console.warn("⚠ Performance logging disabled - no database connection available");
 }
 
 // Block mutating requests in production Supabase unless explicitly allowed
@@ -419,7 +423,8 @@ app.use("/api/documentationfiles", createDocumentationFileRoutes(pgPool));
 app.use("/api/reports", createReportRoutes(pgPool));
 app.use("/api/cashflow", createCashflowRoutes(pgPool));
 app.use("/api/cron", createCronRoutes(pgPool));
-app.use("/api/metrics", createMetricsRoutes(perfLogPool)); // Use perfLogPool for performance_logs table
+// Metrics routes read from performance_logs; use direct Postgres when available, otherwise Supabase API
+app.use("/api/metrics", createMetricsRoutes(perfLogPool || pgPool));
 app.use("/api/utils", createUtilsRoutes(pgPool));
 app.use("/api/bizdev", createBizdevRoutes(pgPool));
 app.use("/api/bizdevsources", createBizDevSourceRoutes(pgPool));

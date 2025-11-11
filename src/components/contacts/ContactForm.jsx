@@ -245,8 +245,14 @@ export default function ContactForm({
           is_test_data: false,
           tags: [],
         };
-        setFormData(newContactInitialState);
-        console.log('[ContactForm] New contact form initialized');
+        // IMPORTANT: Do NOT overwrite user-entered names if the user started typing before context user finished loading.
+        // Preserve existing first_name / last_name if they are already populated in formData.
+        setFormData(prev => ({
+          ...newContactInitialState,
+          first_name: prev.first_name || newContactInitialState.first_name,
+          last_name: prev.last_name || newContactInitialState.last_name,
+        }));
+        console.log('[ContactForm] New contact form initialized (preserving existing name fields if present)');
         
         // Only check for duplicates if we have email or phone and user is available
         if (user && (newContactInitialState.email || newContactInitialState.phone)) {
@@ -323,6 +329,11 @@ export default function ContactForm({
     
     setFormData(prev => {
       const updated = { ...prev, [field]: value };
+
+      // FUTURE: Potential enhancement - if email is entered and first/last names are blank,
+      // attempt to infer names from the local-part of the email (e.g., john.doe@ -> John Doe)
+      // but DO NOT overwrite existing names. This addresses prior user report of names clearing
+      // while preserving manual input. (Not implemented yet; just documenting rationale.)
 
       if (!contact && user && (field === 'email' || field === 'phone')) {
         console.log('[ContactForm] Email/phone changed, checking for duplicates...');
