@@ -37,10 +37,13 @@ function transpileFunction(func) {
     .map(p => p.name)
     .join(', ');
   
-  // For MVP: Only handle string literals in body
-  const body = transpileBlock(func.body);
+  // Handle async functions
+  const asyncKeyword = func.async ? 'async ' : '';
   
-  return `export function ${func.name}(${params}) {\n${body}\n}`;
+  // For MVP: Only handle string literals in body
+  const body = transpileBlock(func.body, func.async);
+  
+  return `export ${asyncKeyword}function ${func.name}(${params}) {\n${body}\n}`;
 }
 
 /**
@@ -174,12 +177,18 @@ function hasFunctionCall(text) {
  * Transpile a block expression
  * Supports: string literals, identifiers, numeric literals, arithmetic, string concatenation, let bindings, conditionals, function calls
  */
-function transpileBlock(block) {
+function transpileBlock(block, isAsync = false) {
   const bodyText = (block.raw || '').trim();
   const processed = transformBuiltins(bodyText);
   
   if (!processed) {
     return '  return "";';
+  }
+  
+  // Check for await expressions (only valid in async functions)
+  if (isAsync && processed.includes('await ')) {
+    // Pass through await expressions directly
+    return `  return ${processed};`;
   }
   
   // Check for conditional expressions FIRST (most complex pattern)

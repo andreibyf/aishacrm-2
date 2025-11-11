@@ -1,0 +1,20 @@
+// Async/Effects demonstration module
+// Shows async functions with effects annotation
+
+// Simple async function
+@route(method: "GET", path: "/api/braid/async_hello")
+async fn async_hello() -> String {
+  "Hello from async!"
+}
+
+// Async with computed value
+@route(method: "GET", path: "/api/braid/async_compute")
+async fn async_compute() -> i32 {
+  21 + 21
+}
+
+// Async with parameter
+@route(method: "POST", path: "/api/braid/async_echo")
+async fn async_echo(msg: String) -> String {
+  msg
+}
