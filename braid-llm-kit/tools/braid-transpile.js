@@ -124,13 +124,23 @@ function extractValue(text) {
     return trimmed;
   }
   
-  // Expression (arithmetic, comparison, etc.)
+  // Expression (arithmetic, comparison, function calls, etc.)
   return trimmed;
 }
 
 /**
+ * Check if text contains a function call
+ * Pattern: identifier followed by parentheses
+ */
+function hasFunctionCall(text) {
+  // Look for pattern: word characters followed by (
+  // This matches: double(x), format_greeting("World"), etc.
+  return /[a-zA-Z_][a-zA-Z0-9_]*\s*\(/.test(text);
+}
+
+/**
  * Transpile a block expression
- * Supports: string literals, identifiers, numeric literals, arithmetic, string concatenation, let bindings, conditionals
+ * Supports: string literals, identifiers, numeric literals, arithmetic, string concatenation, let bindings, conditionals, function calls
  */
 function transpileBlock(block) {
   const bodyText = (block.raw || '').trim();
@@ -143,6 +153,15 @@ function transpileBlock(block) {
   // Handles: if/else, else if chains
   if (bodyText.startsWith('if ')) {
     return transpileConditional(bodyText);
+  }
+  
+  // Check for function calls
+  // Pattern: functionName(args) or expressions containing function calls
+  // This is deliberately broad - if it has parentheses and looks like a call, pass it through
+  // Examples: double(x), format_greeting("World"), double(n) + double(n)
+  if (hasFunctionCall(bodyText)) {
+    // Function calls in JavaScript have the same syntax as Braid, so pass through
+    return `  return ${bodyText};`;
   }
   
   // Check for multiple let bindings (before checking for string concat)
@@ -202,9 +221,10 @@ function transpileBlock(block) {
     return `  return ${bodyText};`;
   }
   
-  // Check if it's a simple arithmetic expression (identifiers with operators)
-  // Supports: a + b, x * y, x - y, x / y, etc.
-  const arithmeticMatch = bodyText.match(/^[a-zA-Z_][a-zA-Z0-9_]*\s*[+\-*/%]\s*[a-zA-Z_][a-zA-Z0-9_]*$/);
+  // Check if it's an arithmetic expression
+  // Supports: a + b, x * y, x * 2, 5 + n, etc.
+  // More general pattern: includes arithmetic operators
+  const arithmeticMatch = bodyText.match(/^[a-zA-Z0-9_\s]+\s*[+\-*/%]\s*[a-zA-Z0-9_\s]+$/);
   if (arithmeticMatch) {
     return `  return ${bodyText};`;
   }

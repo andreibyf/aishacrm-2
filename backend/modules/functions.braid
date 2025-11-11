@@ -1,0 +1,39 @@
+// Function calls module
+
+// Helper function: double a number
+fn double(x: i32) -> i32 {
+  x * 2
+}
+
+// Helper function: format greeting
+fn format_greeting(name: String) -> String {
+  "Hello, " + name + "!"
+}
+
+// Call another function
+@route(method: "POST", path: "/api/braid/double_value")
+fn double_value(input: i32) -> i32 {
+  double(input)
+}
+
+// Call function with literal
+@route(method: "GET", path: "/api/braid/greet_world")
+fn greet_world() -> String {
+  format_greeting("World")
+}
+
+// Call function in expression
+@route(method: "POST", path: "/api/braid/quadruple")
+fn quadruple(n: i32) -> i32 {
+  double(n) + double(n)
+}
+
+// Call function in conditional
+@route(method: "POST", path: "/api/braid/check_double")
+fn check_double(value: i32) -> String {
+  if double(value) > 10 {
+    "Large"
+  } else {
+    "Small"
+  }
+}
