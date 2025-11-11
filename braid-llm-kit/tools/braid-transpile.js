@@ -44,8 +44,93 @@ function transpileFunction(func) {
 }
 
 /**
+ * Transpile a conditional expression (if/else/else-if)
+ * Handles nested blocks with proper indentation
+ */
+function transpileConditional(bodyText) {
+  // Strategy: Convert Braid if/else to JavaScript if/else
+  // Pattern: if condition { trueExpr } else { falseExpr }
+  // Or: if cond1 { expr1 } else if cond2 { expr2 } else { expr3 }
+  
+  // Remove Windows line endings and normalize whitespace
+  const normalized = bodyText.replace(/\r\n/g, '\n').trim();
+  
+  // Parse the condition and blocks
+  // Simple approach: regex to extract condition and branches
+  const result = parseIfExpression(normalized);
+  
+  if (!result) {
+    console.warn('[Transpiler] Failed to parse conditional:', bodyText);
+    return '  return "";';
+  }
+  
+  return result;
+}
+
+/**
+ * Recursively parse if/else-if/else chains
+ */
+function parseIfExpression(text, indent = '  ') {
+  // Match: if condition { body } [else ...]
+  const ifMatch = text.match(/^if\s+([^{]+)\s*\{([^}]*)\}\s*(.*)/s);
+  
+  if (!ifMatch) {
+    return null;
+  }
+  
+  const [, condition, thenBody, rest] = ifMatch;
+  const cleanThen = thenBody.trim();
+  
+  // Extract the value from thenBody (handle string literals, identifiers, etc.)
+  const thenValue = extractValue(cleanThen);
+  
+  let jsCode = `${indent}if (${condition.trim()}) {\n${indent}  return ${thenValue};\n${indent}}`;
+  
+  // Check if there's an else clause
+  const restTrimmed = rest.trim();
+  if (restTrimmed.startsWith('else if')) {
+    // Handle else-if chain
+    const elseIfText = restTrimmed.substring(4).trim(); // Remove "else"
+    const elseIfCode = parseIfExpression(elseIfText, indent);
+    if (elseIfCode) {
+      jsCode += ` else ${elseIfCode.trim()}`;
+    }
+  } else if (restTrimmed.startsWith('else')) {
+    // Handle final else
+    const elseMatch = restTrimmed.match(/^else\s*\{([^}]*)\}/);
+    if (elseMatch) {
+      const elseBody = elseMatch[1].trim();
+      const elseValue = extractValue(elseBody);
+      jsCode += ` else {\n${indent}  return ${elseValue};\n${indent}}`;
+    }
+  }
+  
+  return jsCode;
+}
+
+/**
+ * Extract a value from a block body (handles strings, identifiers, numbers, expressions)
+ */
+function extractValue(text) {
+  const trimmed = text.trim();
+  
+  // String literal
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed;
+  }
+  
+  // Numeric literal
+  if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+    return trimmed;
+  }
+  
+  // Expression (arithmetic, comparison, etc.)
+  return trimmed;
+}
+
+/**
  * Transpile a block expression
- * Supports: string literals, identifiers, numeric literals, arithmetic, string concatenation, let bindings
+ * Supports: string literals, identifiers, numeric literals, arithmetic, string concatenation, let bindings, conditionals
  */
 function transpileBlock(block) {
   const bodyText = (block.raw || '').trim();
@@ -54,7 +139,13 @@ function transpileBlock(block) {
     return '  return "";';
   }
   
-  // Check for multiple let bindings FIRST (before checking for string concat)
+  // Check for conditional expressions FIRST (most complex pattern)
+  // Handles: if/else, else if chains
+  if (bodyText.startsWith('if ')) {
+    return transpileConditional(bodyText);
+  }
+  
+  // Check for multiple let bindings (before checking for string concat)
   // More robust: look for any number of let statements followed by a final expression
   if (bodyText.includes('let ') && bodyText.includes(';')) {
     // Split by semicolons to find individual statements
