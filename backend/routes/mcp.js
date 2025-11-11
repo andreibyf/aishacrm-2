@@ -5,9 +5,16 @@
 
 import express from "express";
 import fetch from "node-fetch";
+import { createClient } from "@supabase/supabase-js";
 
 export default function createMCPRoutes(pgPool, braidModules = []) {
   const router = express.Router();
+
+  // Initialize Supabase client for direct DB queries
+  const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
 
   // GET /api/mcp/servers - List available MCP servers
   router.get("/servers", async (req, res) => {
@@ -273,37 +280,23 @@ export default function createMCPRoutes(pgPool, braidModules = []) {
         }
 
         if (tool_name === "crm.get_tenant_stats") {
+          // Use Supabase client API for accurate counts (bypasses pgPool RLS issues)
           const [accounts, contacts, leads, opps, activities] = await Promise
             .all([
-              pgPool.query(
-                `SELECT COUNT(*)::int AS c FROM accounts WHERE tenant_id = $1`,
-                [tenant_id],
-              ),
-              pgPool.query(
-                `SELECT COUNT(*)::int AS c FROM contacts WHERE tenant_id = $1`,
-                [tenant_id],
-              ),
-              pgPool.query(
-                `SELECT COUNT(*)::int AS c FROM leads WHERE tenant_id = $1`,
-                [tenant_id],
-              ),
-              pgPool.query(
-                `SELECT COUNT(*)::int AS c FROM opportunities WHERE tenant_id = $1`,
-                [tenant_id],
-              ),
-              pgPool.query(
-                `SELECT COUNT(*)::int AS c FROM activities WHERE tenant_id = $1`,
-                [tenant_id],
-              ),
+              supabase.from('accounts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
+              supabase.from('contacts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
+              supabase.from('leads').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
+              supabase.from('opportunities').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
+              supabase.from('activities').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
             ]);
           return res.json({
             status: "success",
             data: {
-              accounts: accounts.rows?.[0]?.c || 0,
-              contacts: contacts.rows?.[0]?.c || 0,
-              leads: leads.rows?.[0]?.c || 0,
-              opportunities: opps.rows?.[0]?.c || 0,
-              activities: activities.rows?.[0]?.c || 0,
+              accounts: accounts.count || 0,
+              contacts: contacts.count || 0,
+              leads: leads.count || 0,
+              opportunities: opps.count || 0,
+              activities: activities.count || 0,
             },
           });
         }
