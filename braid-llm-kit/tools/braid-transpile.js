@@ -155,6 +155,13 @@ function transpileBlock(block) {
     return transpileConditional(bodyText);
   }
   
+  // Check for array literals
+  // Pattern: [1, 2, 3] or ["a", "b"] or [x, y, z] or []
+  // JavaScript arrays have the same syntax as Braid
+  if (bodyText.startsWith('[') && bodyText.endsWith(']')) {
+    return `  return ${bodyText};`;
+  }
+  
   // Check for function calls
   // Pattern: functionName(args) or expressions containing function calls
   // This is deliberately broad - if it has parentheses and looks like a call, pass it through
