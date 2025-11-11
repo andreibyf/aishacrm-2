@@ -5,6 +5,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { addDbTime } from './requestContext.js';
 
 let supabaseClient = null;
 let postgresClient = null;
@@ -16,7 +17,18 @@ export function initSupabaseDB(url, serviceRoleKey) {
   if (!url || !serviceRoleKey) {
     throw new Error('Supabase URL and Service Role Key are required');
   }
-  
+  // Wrap fetch to time all Supabase HTTP calls and accumulate into per-request DB time
+  const baseFetch = globalThis.fetch?.bind(globalThis);
+  const timedFetch = async (input, init) => {
+    const t0 = Number(process.hrtime.bigint()) / 1e6;
+    try {
+      return await (baseFetch ? baseFetch(input, init) : fetch(input, init));
+    } finally {
+      const t1 = Number(process.hrtime.bigint()) / 1e6;
+      addDbTime(Math.max(0, t1 - t0));
+    }
+  };
+
   supabaseClient = createClient(url, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
@@ -24,6 +36,9 @@ export function initSupabaseDB(url, serviceRoleKey) {
     },
     db: {
       schema: 'public'
+    },
+    global: {
+      fetch: timedFetch
     }
   });
   
@@ -76,17 +91,25 @@ export async function query(sql, params = []) {
   }
 
   try {
+    // High-resolution timing for direct Postgres path only (Supabase API calls are timed via fetch wrapper)
     // If we have direct postgres client, use it for raw SQL
     if (postgresClient) {
-      const result = await postgresClient.unsafe(sql, params);
-      return {
-        rows: Array.isArray(result) ? result : [result],
-        rowCount: Array.isArray(result) ? result.length : 1
-      };
+      const t0 = Number(process.hrtime.bigint()) / 1e6;
+      try {
+        const result = await postgresClient.unsafe(sql, params);
+        return {
+          rows: Array.isArray(result) ? result : [result],
+          rowCount: Array.isArray(result) ? result.length : 1
+        };
+      } finally {
+        const t1 = Number(process.hrtime.bigint()) / 1e6;
+        addDbTime(Math.max(0, t1 - t0));
+      }
     }
     
     // Otherwise, use Supabase API with SQL parsing
-    return await executeViaSupabaseAPI(sql, params);
+    const res = await executeViaSupabaseAPI(sql, params);
+    return res;
     
   } catch (error) {
     // Convert errors to pg-like format

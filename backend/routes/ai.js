@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import { createChatCompletion, buildSystemPrompt } from '../lib/aiProvider.js';
 
 export default function createAIRoutes(pgPool) {
   const router = express.Router();
@@ -192,12 +193,50 @@ export default function createAIRoutes(pgPool) {
   // POST /api/ai/chat - AI chat completion
   router.post('/chat', async (req, res) => {
     try {
-      const { messages, model = 'gpt-4', temperature = 0.7 } = req.body;
+      const { messages = [], model = process.env.DEFAULT_OPENAI_MODEL || 'gpt-4o-mini', temperature = 0.7, tenantName } = req.body || {};
 
-      res.json({
+      // Basic validation
+      if (!Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({ status: 'error', message: 'messages array is required' });
+      }
+
+      // Ensure we have a system message at the start
+      let msgs = messages;
+      const hasSystem = msgs[0]?.role === 'system';
+      if (!hasSystem) {
+        msgs = [{ role: 'system', content: buildSystemPrompt({ tenantName }) }, ...messages];
+      }
+
+      const result = await createChatCompletion({ messages: msgs, model, temperature });
+      if (result.status === 'error') {
+        const http = /OPENAI_API_KEY/.test(result.error || '') ? 501 : 500; // 501 Not Implemented if key missing
+        return res.status(http).json({ status: 'error', message: result.error });
+      }
+
+      // Optional: persist assistant reply if a conversation_id was provided
+      const { conversation_id } = req.body || {};
+      let savedMessage = null;
+      if (conversation_id && result.content) {
+        try {
+          const insert = await pgPool.query(
+            `INSERT INTO conversation_messages (conversation_id, role, content, metadata)
+             VALUES ($1, 'assistant', $2, $3) RETURNING *`,
+            [conversation_id, result.content, JSON.stringify({ model })]
+          );
+          savedMessage = insert.rows?.[0] || null;
+        } catch (err) {
+          console.warn('[ai.chat] Failed to persist assistant message:', err.message || err);
+        }
+      }
+
+      return res.json({
         status: 'success',
-        message: 'AI chat not yet implemented',
-        data: { model, temperature, message_count: messages?.length || 0 },
+        data: {
+          response: result.content,
+          usage: result.usage,
+          model: result.model,
+          savedMessage
+        }
       });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });

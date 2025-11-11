@@ -13,6 +13,7 @@ import { createServer } from "http";
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './lib/swagger.js';
 import { initSupabaseDB, pool as supabasePool } from './lib/supabase-db.js';
+import { attachRequestContext } from './lib/requestContext.js';
 
 // Load environment variables
 // Try .env.local first (for local development), then fall back to .env
@@ -145,6 +146,8 @@ const supabaseAuth = initSupabaseAuth();
 app.use(helmet()); // Security headers (no insecure overrides globally)
 app.use(compression()); // Compress responses
 app.use(morgan("combined")); // Logging
+// Attach request-scoped context for accumulating DB timing
+app.use(attachRequestContext);
 
 // Simple, in-memory rate limiter (dependency-free)
 // Configure via ENV: RATE_LIMIT_WINDOW_MS (default 60000), RATE_LIMIT_MAX (default 120)
@@ -233,10 +236,31 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // Performance logging middleware (must be after body parsers, before routes)
 import { performanceLogger } from "./middleware/performanceLogger.js";
 import { productionSafetyGuard } from "./middleware/productionSafetyGuard.js";
-// Prefer dedicated Postgres pool for performance logs; fallback to Supabase API pool when unavailable
-const perfDb = perfLogPool || pgPool;
-if (perfDb) {
-  app.use(performanceLogger(perfDb));
+// Build a resilient perf DB wrapper that falls back to Supabase API pool if the direct pool was ended
+const resilientPerfDb = {
+  query: async (...args) => {
+    const directAlive = perfLogPool && !perfLogPool.ended;
+    const db = directAlive ? perfLogPool : pgPool;
+    try {
+      return await db.query(...args);
+    } catch (e) {
+      // Fallback broadly to Supabase API pool when direct connection fails for any reason
+      if (directAlive && pgPool && db === perfLogPool) {
+        try {
+          return await pgPool.query(...args);
+        } catch (e2) {
+          // Log fallback error and re-throw original
+          console.error('[ResilientPerfDb] Fallback query failed:', e2?.message || e2);
+          throw e;
+        }
+      }
+      throw e;
+    }
+  }
+};
+
+if (perfLogPool || pgPool) {
+  app.use(performanceLogger(resilientPerfDb));
   console.log(
     `✓ Performance logging middleware enabled (${perfLogPool ? "PostgreSQL direct" : "Supabase API"})`
   );
@@ -400,52 +424,55 @@ import createSystemBrandingRoutes from "./routes/systembrandings.js";
 import createSyncHealthRoutes from "./routes/synchealths.js";
 import createAICampaignRoutes from "./routes/aicampaigns.js";
 
-// Mount routers with database pool
-app.use("/api/database", createDatabaseRoutes(pgPool));
-app.use("/api/integrations", createIntegrationRoutes(pgPool));
-app.use("/api/telephony", createTelephonyRoutes(pgPool));
-app.use("/api/ai", createAiRoutes(pgPool));
-app.use("/api/mcp", createMcpRoutes(pgPool));
-app.use("/api/accounts", createAccountRoutes(pgPool));
-app.use("/api/leads", createLeadRoutes(pgPool));
-app.use("/api/contacts", createContactRoutes(pgPool));
-app.use("/api/validation", createValidationRoutes(pgPool));
-app.use("/api/billing", createBillingRoutes(pgPool));
-app.use("/api/storage", createStorageRoutes(pgPool));
-app.use("/api/webhooks", createWebhookRoutes(pgPool));
-app.use("/api/system", createSystemRoutes(pgPool));
-app.use("/api/users", createUserRoutes(pgPool, supabaseAuth));
-app.use("/api/employees", createEmployeeRoutes(pgPool));
-app.use("/api/permissions", createPermissionRoutes(pgPool));
-app.use("/api/testing", createTestingRoutes(pgPool));
-app.use("/api/documents", createDocumentRoutes(pgPool));
-app.use("/api/documentationfiles", createDocumentationFileRoutes(pgPool));
-app.use("/api/reports", createReportRoutes(pgPool));
-app.use("/api/cashflow", createCashflowRoutes(pgPool));
-app.use("/api/cron", createCronRoutes(pgPool));
-// Metrics routes read from performance_logs; use direct Postgres when available, otherwise Supabase API
-app.use("/api/metrics", createMetricsRoutes(perfLogPool || pgPool));
-app.use("/api/utils", createUtilsRoutes(pgPool));
-app.use("/api/bizdev", createBizdevRoutes(pgPool));
-app.use("/api/bizdevsources", createBizDevSourceRoutes(pgPool));
-app.use("/api/clients", createClientRoutes(pgPool));
-app.use("/api/workflows", createWorkflowRoutes(pgPool));
-app.use("/api/workflowexecutions", createWorkflowExecutionRoutes(pgPool));
+// Use the pgPool directly; per-request DB time is measured inside the DB adapter
+const measuredPgPool = pgPool;
+
+// Mount routers with instrumented database pool
+app.use("/api/database", createDatabaseRoutes(measuredPgPool));
+app.use("/api/integrations", createIntegrationRoutes(measuredPgPool));
+app.use("/api/telephony", createTelephonyRoutes(measuredPgPool));
+app.use("/api/ai", createAiRoutes(measuredPgPool));
+app.use("/api/mcp", createMcpRoutes(measuredPgPool));
+app.use("/api/accounts", createAccountRoutes(measuredPgPool));
+app.use("/api/leads", createLeadRoutes(measuredPgPool));
+app.use("/api/contacts", createContactRoutes(measuredPgPool));
+app.use("/api/validation", createValidationRoutes(measuredPgPool));
+app.use("/api/billing", createBillingRoutes(measuredPgPool));
+app.use("/api/storage", createStorageRoutes(measuredPgPool));
+app.use("/api/webhooks", createWebhookRoutes(measuredPgPool));
+app.use("/api/system", createSystemRoutes(measuredPgPool));
+app.use("/api/users", createUserRoutes(measuredPgPool, supabaseAuth));
+app.use("/api/employees", createEmployeeRoutes(measuredPgPool));
+app.use("/api/permissions", createPermissionRoutes(measuredPgPool));
+app.use("/api/testing", createTestingRoutes(measuredPgPool));
+app.use("/api/documents", createDocumentRoutes(measuredPgPool));
+app.use("/api/documentationfiles", createDocumentationFileRoutes(measuredPgPool));
+app.use("/api/reports", createReportRoutes(measuredPgPool));
+app.use("/api/cashflow", createCashflowRoutes(measuredPgPool));
+app.use("/api/cron", createCronRoutes(measuredPgPool));
+// Metrics routes read from performance_logs; use resilient wrapper to avoid ended pool errors
+app.use("/api/metrics", createMetricsRoutes(resilientPerfDb));
+app.use("/api/utils", createUtilsRoutes(measuredPgPool));
+app.use("/api/bizdev", createBizdevRoutes(measuredPgPool));
+app.use("/api/bizdevsources", createBizDevSourceRoutes(measuredPgPool));
+app.use("/api/clients", createClientRoutes(measuredPgPool));
+app.use("/api/workflows", createWorkflowRoutes(measuredPgPool));
+app.use("/api/workflowexecutions", createWorkflowExecutionRoutes(measuredPgPool));
 // Route activities through Supabase API (primary test target)
-app.use("/api/activities", createActivityRoutes(pgPool));
-app.use("/api/opportunities", createOpportunityRoutes(pgPool));
-app.use("/api/notifications", createNotificationRoutes(pgPool));
-app.use("/api/system-logs", createSystemLogRoutes(pgPool));
-app.use("/api/audit-logs", createAuditLogRoutes(pgPool));
-app.use("/api/modulesettings", createModuleSettingsRoutes(pgPool));
-app.use("/api/tenantintegrations", createTenantIntegrationRoutes(pgPool));
-app.use("/api/tenants", createTenantRoutes(pgPool));
-app.use("/api/announcements", createAnnouncementRoutes(pgPool));
-app.use("/api/apikeys", createApikeyRoutes(pgPool));
-app.use("/api/notes", createNoteRoutes(pgPool));
-app.use("/api/systembrandings", createSystemBrandingRoutes(pgPool));
-app.use("/api/synchealths", createSyncHealthRoutes(pgPool));
-app.use("/api/aicampaigns", createAICampaignRoutes(pgPool));
+app.use("/api/activities", createActivityRoutes(measuredPgPool));
+app.use("/api/opportunities", createOpportunityRoutes(measuredPgPool));
+app.use("/api/notifications", createNotificationRoutes(measuredPgPool));
+app.use("/api/system-logs", createSystemLogRoutes(measuredPgPool));
+app.use("/api/audit-logs", createAuditLogRoutes(measuredPgPool));
+app.use("/api/modulesettings", createModuleSettingsRoutes(measuredPgPool));
+app.use("/api/tenantintegrations", createTenantIntegrationRoutes(measuredPgPool));
+app.use("/api/tenants", createTenantRoutes(measuredPgPool));
+app.use("/api/announcements", createAnnouncementRoutes(measuredPgPool));
+app.use("/api/apikeys", createApikeyRoutes(measuredPgPool));
+app.use("/api/notes", createNoteRoutes(measuredPgPool));
+app.use("/api/systembrandings", createSystemBrandingRoutes(measuredPgPool));
+app.use("/api/synchealths", createSyncHealthRoutes(measuredPgPool));
+app.use("/api/aicampaigns", createAICampaignRoutes(measuredPgPool));
 
 // 404 handler
 app.use((req, res) => {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -117,8 +117,14 @@ export default function ContactForm({
   console.log('[ContactForm] Initial state set, isSuperadmin:', isSuperadmin);
   console.log('[ContactForm] Current user state:', user?.email, 'Loading:', userLoading);
 
+  const dupCheckAvailableRef = useRef(true);
+
   const checkForDuplicates = useCallback(async (data) => {
     console.log('[ContactForm] checkForDuplicates called');
+    if (!dupCheckAvailableRef.current) {
+      console.log('[ContactForm] Duplicate check disabled for this session (unavailable).');
+      return;
+    }
     
     // Skip duplicate check for test data
     if (data.is_test_data) {
@@ -184,12 +190,19 @@ export default function ContactForm({
       if (logError) {
         logError(handleApiError('Contact Form - Duplicate Check', error));
       }
+      // If function isn't available in production, disable further checks to avoid noisy re-renders
+      if (String(error?.message || '').includes('not available')) {
+        dupCheckAvailableRef.current = false;
+      }
       setDuplicateWarning(null);
     } finally {
       console.log('[ContactForm] Duplicate check complete');
       setCheckingDuplicates(false);
     }
   }, [contact, user, selectedTenantId, cachedRequest, logError]);
+
+  // Initialize form state once per open session (avoid resets on unrelated re-renders)
+  const initializedRef = useRef(false);
 
   useEffect(() => {
     console.log('[ContactForm] === useEffect: loadInitialFormData ===');
@@ -218,7 +231,13 @@ export default function ContactForm({
           is_test_data: contact.is_test_data || false,
         });
         console.log('[ContactForm] Form data loaded for existing contact');
+        initializedRef.current = true;
       } else {
+        // For new contact, only initialize once per open to avoid wiping user input
+        if (initializedRef.current) {
+          console.log('[ContactForm] Skipping re-initialization (already initialized)');
+          return;
+        }
         console.log('[ContactForm] Creating new contact form');
         const urlParams = new URLSearchParams(window.location.search);
         const accountId = urlParams.get('accountId');
@@ -252,6 +271,7 @@ export default function ContactForm({
           first_name: prev.first_name || newContactInitialState.first_name,
           last_name: prev.last_name || newContactInitialState.last_name,
         }));
+        initializedRef.current = true;
         console.log('[ContactForm] New contact form initialized (preserving existing name fields if present)');
         
         // Only check for duplicates if we have email or phone and user is available
@@ -268,7 +288,11 @@ export default function ContactForm({
     } else {
       console.log('[ContactForm] Waiting for user to load form data...');
     }
-  }, [contact, user, selectedTenantId, checkForDuplicates]);
+  // Important: do NOT depend on checkForDuplicates or selectedTenantId here to prevent resets
+  // We intentionally omit checkForDuplicates from deps to avoid re-initializing the form
+  // after user starts typing. Safe because we only call it once on initial load when needed.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contact, user]);
 
   // Separate effect for loading tags
   useEffect(() => {
@@ -366,7 +390,9 @@ export default function ContactForm({
       last_name: ''
     };
 
-    // Require at least first name OR last name (not both mandatory)
+    // Require at least first name OR last name (not both mandatory) for UX,
+    // but note: backend currently requires BOTH. The submit button is also
+    // disabled unless both are present; this check is a safety net.
     if (!formData.first_name?.trim() && !formData.last_name?.trim()) {
       errors.first_name = 'First name or last name is required';
       errors.last_name = 'First name or last name is required';
@@ -378,6 +404,18 @@ export default function ContactForm({
         variant: "destructive",
       });
       setSubmitError("At least first name or last name is required.");
+      return;
+    }
+
+    // Superadmin must have a selected tenant for writes (backend enforces this)
+    if (user?.role === 'superadmin' && !selectedTenantId) {
+      console.log('[ContactForm] ERROR: Superadmin write without selected tenant');
+      toast({
+        title: 'Select a tenant',
+        description: 'As superadmin, please pick a tenant (top-right selector) before creating a contact.',
+        variant: 'destructive',
+      });
+      setSubmitError('Tenant is required for superadmin writes.');
       return;
     }
 

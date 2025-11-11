@@ -38,6 +38,17 @@ export default function createMetricsRoutes(pgPool) {
       const errorCountFallback = logs.filter(l => Number(l.status_code) >= 400).length;
       const serverErrorCountFallback = logs.filter(l => Number(l.status_code) >= 500).length;
       const successCountFallback = logs.filter(l => Number(l.status_code) < 400).length;
+      // Success work calls (JS fallback) excluding 304 and non-work endpoints
+      const successWorkCallsFallback = logs.filter(l => {
+        const sc = Number(l.status_code) || 0;
+        const ep = String(l.endpoint || '');
+        const is2xx = sc >= 200 && sc <= 299;
+        const is304 = sc === 304;
+        const isHeartbeat = ep.startsWith('/api/users/heartbeat');
+        const isSystemStatus = ep === '/api/system/status';
+        return is2xx && !is304 && !isHeartbeat && !isSystemStatus;
+      }).length;
+
       const fallbackAgg = {
         total_calls: totalFallback,
         avg_response_time: totalFallback ? Math.round(sumFallback / totalFallback) : 0,
@@ -45,26 +56,64 @@ export default function createMetricsRoutes(pgPool) {
         min_response_time: minFallback,
         error_count: errorCountFallback,
         server_error_count: serverErrorCountFallback,
-        success_count: successCountFallback
+        success_count: successCountFallback,
+        success_work_calls: successWorkCallsFallback
+      };
+
+      // 2b. JS fallback metrics excluding 304 Not Modified responses
+      const no304Logs = logs.filter(l => Number(l.status_code) !== 304);
+      const no304Durations = no304Logs.map(l => Number(l.duration_ms) || 0);
+      const totalNo304 = no304Logs.length;
+      const sumNo304 = no304Durations.reduce((a, b) => a + b, 0);
+      const maxNo304 = no304Durations.reduce((a, b) => Math.max(a, b), 0);
+      const minNo304 = no304Durations.length ? no304Durations.reduce((a, b) => Math.min(a, b), no304Durations[0]) : 0;
+      const errNo304 = no304Logs.filter(l => Number(l.status_code) >= 400).length;
+      const srvErrNo304 = no304Logs.filter(l => Number(l.status_code) >= 500).length;
+      const succNo304 = no304Logs.filter(l => Number(l.status_code) < 400).length;
+      // Success work calls (JS fallback) on no304 view
+      const successWorkCallsFallbackNo304 = no304Logs.filter(l => {
+        const sc = Number(l.status_code) || 0;
+        const ep = String(l.endpoint || '');
+        const is2xx = sc >= 200 && sc <= 299;
+        const isHeartbeat = ep.startsWith('/api/users/heartbeat');
+        const isSystemStatus = ep === '/api/system/status';
+        return is2xx && !isHeartbeat && !isSystemStatus;
+      }).length;
+
+      const fallbackAggNo304 = {
+        total_calls: totalNo304,
+        avg_response_time: totalNo304 ? Math.round(sumNo304 / totalNo304) : 0,
+        max_response_time: maxNo304,
+        min_response_time: minNo304,
+        error_count: errNo304,
+        server_error_count: srvErrNo304,
+        success_count: succNo304,
+        success_work_calls: successWorkCallsFallbackNo304
       };
 
       // 3. Attempt DB aggregate (fast path); if it fails or returns zero, use fallbackAgg
       let finalAgg = fallbackAgg;
+      let finalAggNo304 = fallbackAggNo304;
       try {
         const metricsParams = [`${hours} hours`];
         if (tenant_id) metricsParams.push(tenant_id);
         const metricsWhere = tenant_id
           ? 'WHERE created_at > NOW() - $1::INTERVAL AND tenant_id = $2'
           : 'WHERE created_at > NOW() - $1::INTERVAL';
-        const metricsSql = `SELECT COUNT(*) as total_calls,
-                                   AVG(duration_ms) as avg_response_time,
-                                   MAX(duration_ms) as max_response_time,
-                                   MIN(duration_ms) as min_response_time,
-                                   COUNT(*) FILTER (WHERE status_code >= 400) as error_count,
-                                   COUNT(*) FILTER (WHERE status_code >= 500) as server_error_count,
-                                   COUNT(*) FILTER (WHERE status_code < 400) as success_count
-                            FROM performance_logs
-                            ${metricsWhere}`;
+   const metricsSql = `SELECT COUNT(*) as total_calls,
+          AVG(duration_ms) as avg_response_time,
+          MAX(duration_ms) as max_response_time,
+          MIN(duration_ms) as min_response_time,
+          COUNT(*) FILTER (WHERE status_code >= 400) as error_count,
+          COUNT(*) FILTER (WHERE status_code >= 500) as server_error_count,
+          COUNT(*) FILTER (WHERE status_code < 400) as success_count,
+          COUNT(*) FILTER (
+            WHERE status_code BETWEEN 200 AND 299
+              AND status_code <> 304
+              AND endpoint NOT IN ('/api/users/heartbeat', '/api/system/status')
+          ) as success_work_calls
+        FROM performance_logs
+        ${metricsWhere}`;
         const metricsResult = await pgPool.query(metricsSql, metricsParams);
         const row = metricsResult.rows?.[0] || {};
         const dbAgg = {
@@ -74,23 +123,58 @@ export default function createMetricsRoutes(pgPool) {
           min_response_time: Number(row.min_response_time ?? 0),
           error_count: Number(row.error_count ?? 0),
           server_error_count: Number(row.server_error_count ?? 0),
-          success_count: Number(row.success_count ?? 0)
+          success_count: Number(row.success_count ?? 0),
+          success_work_calls: Number(row.success_work_calls ?? 0)
         };
         // Prefer DB aggregate only if it has at least 1 call
         if (dbAgg.total_calls > 0) {
           finalAgg = dbAgg;
+        }
+
+        // DB aggregate excluding 304 responses
+   const metricsSqlNo304 = `SELECT COUNT(*) as total_calls,
+               AVG(duration_ms) as avg_response_time,
+               MAX(duration_ms) as max_response_time,
+               MIN(duration_ms) as min_response_time,
+               COUNT(*) FILTER (WHERE status_code >= 400) as error_count,
+               COUNT(*) FILTER (WHERE status_code >= 500) as server_error_count,
+               COUNT(*) FILTER (WHERE status_code < 400) as success_count,
+               COUNT(*) FILTER (
+                 WHERE status_code BETWEEN 200 AND 299
+                   AND status_code <> 304
+                   AND endpoint NOT IN ('/api/users/heartbeat', '/api/system/status')
+               ) as success_work_calls
+             FROM performance_logs
+             ${metricsWhere} AND status_code <> 304`;
+        const metricsResultNo304 = await pgPool.query(metricsSqlNo304, metricsParams);
+        const rowNo304 = metricsResultNo304.rows?.[0] || {};
+        const dbAggNo304 = {
+          total_calls: Number(rowNo304.total_calls ?? 0),
+          avg_response_time: Number(rowNo304.avg_response_time ?? 0),
+          max_response_time: Number(rowNo304.max_response_time ?? 0),
+          min_response_time: Number(rowNo304.min_response_time ?? 0),
+          error_count: Number(rowNo304.error_count ?? 0),
+          server_error_count: Number(rowNo304.server_error_count ?? 0),
+          success_count: Number(rowNo304.success_count ?? 0),
+          success_work_calls: Number(rowNo304.success_work_calls ?? 0)
+        };
+        if (dbAggNo304.total_calls > 0) {
+          finalAggNo304 = dbAggNo304;
         }
       } catch (aggErr) {
         console.warn('[Metrics] DB aggregate failed, using fallback:', aggErr.message);
       }
 
       const errorRate = finalAgg.total_calls > 0 ? Number(((finalAgg.error_count / finalAgg.total_calls) * 100).toFixed(2)) : 0;
+      const errorRateNo304 = finalAggNo304.total_calls > 0 ? Number(((finalAggNo304.error_count / finalAggNo304.total_calls) * 100).toFixed(2)) : 0;
       console.log('[Metrics] performance', {
         tenant_id: tenant_id || 'ALL',
         hours,
         logCount: logs.length,
         usingFallback: finalAgg === fallbackAgg,
-        agg: finalAgg
+        usingFallbackNo304: finalAggNo304 === fallbackAggNo304,
+        agg: finalAgg,
+        aggNo304: finalAggNo304
       });
 
       return res.json({
@@ -107,7 +191,20 @@ export default function createMetricsRoutes(pgPool) {
             errorCount: finalAgg.error_count,
             serverErrorCount: finalAgg.server_error_count,
             successCount: finalAgg.success_count,
-            uptime: process.uptime()
+            uptime: process.uptime(),
+            successWorkCalls: finalAgg.success_work_calls || 0,
+            // Additional view excluding 304 Not Modified responses
+            no304: {
+              totalCalls: finalAggNo304.total_calls,
+              avgResponseTime: finalAggNo304.avg_response_time,
+              maxResponseTime: finalAggNo304.max_response_time,
+              minResponseTime: finalAggNo304.min_response_time,
+              errorRate: errorRateNo304,
+              errorCount: finalAggNo304.error_count,
+              serverErrorCount: finalAggNo304.server_error_count,
+              successCount: finalAggNo304.success_count,
+              successWorkCalls: finalAggNo304.success_work_calls || 0
+            }
           }
         }
       });
