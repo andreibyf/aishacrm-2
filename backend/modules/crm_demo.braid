@@ -68,14 +68,14 @@ fn calculate_mrr(annual_value: i32) -> i32 {
 
 @route(method: "POST", path: "/api/braid/crm/calculate_commission")
 fn calculate_commission(deal_value: i32, rate: i32) -> i32 {
-  let result: i32 = deal_value * rate; result / 100
+  deal_value * rate / 100
 }
 
 // ===== ACTIVITY TRACKING =====
 
 @route(method: "POST", path: "/api/braid/crm/activity_score")
 fn activity_score(emails: i32, calls: i32, meetings: i32) -> i32 {
-  let calls_score: i32 = calls * 3; let meetings_score: i32 = meetings * 5; emails + calls_score + meetings_score
+  emails + calls * 3 + meetings * 5
 }
 
 @route(method: "POST", path: "/api/braid/crm/follow_up_priority")

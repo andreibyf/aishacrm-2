@@ -18,3 +18,18 @@ async fn async_compute() -> i32 {
 async fn async_echo(msg: String) -> String {
   msg
 }
+
+// Async with await (simulated delay via Promise)
+@route(method: "POST", path: "/api/braid/async_delay")
+async fn async_delay(ms: i32, message: String) -> String {
+  let delayed: String = await Promise.resolve(message);
+  delayed
+}
+
+// Async with multiple awaits
+@route(method: "GET", path: "/api/braid/async_multi")
+async fn async_multi() -> String {
+  let step1: String = await Promise.resolve("Step 1");
+  let step2: String = await Promise.resolve("Step 2");
+  step1 + " -> " + step2
+}

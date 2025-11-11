@@ -185,12 +185,6 @@ function transpileBlock(block, isAsync = false) {
     return '  return "";';
   }
   
-  // Check for await expressions (only valid in async functions)
-  if (isAsync && processed.includes('await ')) {
-    // Pass through await expressions directly
-    return `  return ${processed};`;
-  }
-  
   // Check for conditional expressions FIRST (most complex pattern)
   // Handles: if/else, else if chains
   if (processed.startsWith('if ')) {
@@ -212,7 +206,8 @@ function transpileBlock(block, isAsync = false) {
     return `  return ${processed};`;
   }
 
-  // Early: multiple let bindings (ensure they transpile before indexing/property access shortcuts)
+  // Multiple let bindings (ensure they transpile before indexing/property access shortcuts)
+  // Handles both regular and async/await let bindings
   if (processed.includes('let ') && processed.includes(';')) {
     const statements = processed.split(/;/).map(s => s.trim()).filter(s => s);
     if (statements.length > 1) {
@@ -223,6 +218,7 @@ function transpileBlock(block, isAsync = false) {
         const letMatch = stmt.match(/^let\s+(\w+)\s*:\s*\w+\s*=\s*(.+)$/);
         if (letMatch) {
           const [, varName, value] = letMatch;
+          // Preserve await in value expression if present
           lines.push(`  const ${varName} = ${transformBuiltins(value.trim())};`);
           hasLet = true;
         } else if (i === statements.length - 1) {
@@ -233,6 +229,12 @@ function transpileBlock(block, isAsync = false) {
         return lines.join('\n');
       }
     }
+  }
+  
+  // Single await expression (only valid in async functions)
+  if (isAsync && processed.includes('await ') && !processed.includes('let ')) {
+    // Pass through single-line await expressions
+    return `  return ${processed};`;
   }
   
   // Check for function calls
@@ -304,10 +306,11 @@ function transpileBlock(block, isAsync = false) {
   
   // Check if it's an arithmetic expression
   // Supports: a + b, x * y, x * 2, 5 + n, etc.
-  // More general pattern: includes arithmetic operators
-  // Allow word chars, whitespace, brackets for indexing, and dots for property access
+  // Enhanced to support chained operators: a * b / c, x + y * z, etc.
+  // Allow word chars, whitespace, brackets for indexing, dots for property access, and parentheses
+  // Pattern: operands with operators between them (one or more operators)
   // eslint-disable-next-line no-useless-escape -- the character class intentionally includes brackets and dot
-  const arithmeticMatch = processed.match(/^[\w\s\.\[\]]+\s*[+\-*/%]\s*[\w\s\.\[\]]+$/);
+  const arithmeticMatch = processed.match(/^[\w\s\.\[\]()]+\s*[+\-*/%]\s*[\w\s\.\[\]()]+(?:\s*[+\-*/%]\s*[\w\s\.\[\]()]+)*$/);
   if (arithmeticMatch) {
     return `  return ${processed};`;
   }
