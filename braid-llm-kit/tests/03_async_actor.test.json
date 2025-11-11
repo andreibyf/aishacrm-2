@@ -1,4 +1,0 @@
-{
-  "file": "examples/04_async_actor.braid",
-  "expect": { "errors": [] }
-}

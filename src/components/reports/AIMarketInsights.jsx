@@ -306,7 +306,7 @@ Ensure the output is specific to ${locationContext} and the ${industryLabel} ind
       } else {
         // Local Dev Fallback: Build insights using backend MCP web + crm tools
         const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-          "http://localhost:4001";
+          "http://localhost:3001";
         const execTool = async (server_id, tool_name, parameters) => {
           const res = await fetch(`${BACKEND_URL}/api/mcp/execute-tool`, {
             method: "POST",

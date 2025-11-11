@@ -13,7 +13,6 @@ import {
   sendPasswordResetEmail,
   updateAuthUserMetadata,
   updateAuthUserPassword,
-  updatePasswordWithToken,
 } from "../lib/supabaseAuth.js";
 import { createAuditLog, getUserEmailFromRequest, getClientIP } from "../lib/auditLogger.js";
 
@@ -1565,137 +1564,6 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
     }
   });
 
-  // POST /api/users/bulk-delete - Delete multiple users at once
-  router.post("/bulk-delete", mutateLimiter, async (req, res) => {
-    try {
-      const { user_ids } = req.body;
-
-      if (!Array.isArray(user_ids) || user_ids.length === 0) {
-        return res.status(400).json({
-          status: "error",
-          message: "user_ids array is required and must not be empty",
-        });
-      }
-
-      if (user_ids.length > 100) {
-        return res.status(400).json({
-          status: "error",
-          message: "Cannot delete more than 100 users at once",
-        });
-      }
-
-      const { getSupabaseClient } = await import('../lib/supabase-db.js');
-      const supabase = getSupabaseClient();
-
-      const IMMUTABLE_SUPERADMINS = [
-        'abyfield@4vdataconsulting.com',
-      ];
-
-      const results = {
-        success: [],
-        failed: [],
-        skipped: []
-      };
-
-      for (const id of user_ids) {
-        try {
-          // Try users table first
-          let userResult = await pgPool.query(
-            "SELECT id, email, role, tenant_id FROM users WHERE id = $1",
-            [id],
-          );
-          let tableName = "users";
-
-          // If not found, check employees table
-          if (userResult.rows.length === 0) {
-            userResult = await pgPool.query(
-              "SELECT id, email, tenant_id FROM employees WHERE id = $1",
-              [id],
-            );
-            tableName = "employees";
-          }
-
-          if (userResult.rows.length === 0) {
-            results.failed.push({ id, reason: 'User not found' });
-            continue;
-          }
-
-          const userEmail = userResult.rows[0].email;
-
-          // Check immutable superadmins
-          if (IMMUTABLE_SUPERADMINS.includes(userEmail)) {
-            results.skipped.push({ id, email: userEmail, reason: 'Immutable superadmin' });
-            continue;
-          }
-
-          // Check if last superadmin
-          if (tableName === 'users' && userResult.rows[0].role?.toLowerCase() === 'superadmin') {
-            const superadminCheck = await pgPool.query(
-              "SELECT COUNT(*) as count FROM users WHERE LOWER(role) = 'superadmin'",
-            );
-            if (parseInt(superadminCheck.rows[0].count, 10) <= 1) {
-              results.skipped.push({ id, email: userEmail, reason: 'Last superadmin' });
-              continue;
-            }
-          }
-
-          // Delete from Supabase Auth
-          const { data: authUser } = await getAuthUserByEmail(userEmail);
-          if (authUser) {
-            try {
-              await deleteAuthUser(authUser.id);
-            } catch (authError) {
-              console.warn(`⚠ Could not delete auth user ${userEmail}:`, authError.message);
-            }
-          }
-
-          // Delete from database
-          let query, params;
-          if (tableName === "users") {
-            query = "DELETE FROM users WHERE id = $1 RETURNING id, email";
-            params = [id];
-          } else {
-            query = "DELETE FROM employees WHERE id = $1 RETURNING id, email";
-            params = [id];
-          }
-
-          const _result = await pgPool.query(query, params);
-
-          // Audit log
-          try {
-            await supabase.from('system_logs').insert({
-              event_type: 'user_deletion',
-              user_email: 'system',
-              details: {
-                deleted_user_id: id,
-                deleted_email: userEmail,
-                deleted_from_table: tableName,
-                bulk_operation: true
-              },
-              ip_address: getClientIP(req),
-              user_agent: req.headers['user-agent'],
-            });
-          } catch (auditError) {
-            console.warn('[AUDIT] Failed to log bulk user deletion:', auditError.message);
-          }
-
-          results.success.push({ id, email: userEmail });
-        } catch (error) {
-          results.failed.push({ id, reason: error.message });
-        }
-      }
-
-      res.json({
-        status: "success",
-        message: `Bulk delete completed: ${results.success.length} deleted, ${results.failed.length} failed, ${results.skipped.length} skipped`,
-        data: results
-      });
-    } catch (error) {
-      console.error("Error in bulk delete:", error);
-      res.status(500).json({ status: "error", message: error.message });
-    }
-  });
-
   // POST /api/users/reset-password - Send password reset email
   router.post("/reset-password", passwordLimiter, async (req, res) => {
     try {
@@ -1708,82 +1576,24 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         });
       }
 
-      // SECURITY: Always return success to prevent email enumeration attacks
-      // Even if the email doesn't exist, we return success to avoid leaking user information
-      try {
-        const { data: _data, error } = await sendPasswordResetEmail(email);
-
-        // Log errors internally but don't expose to client
-        if (error) {
-          console.error("[Password Reset] Error for email:", email, "->", error.message);
-        } else {
-          console.log("[Password Reset] Reset email sent successfully to:", email);
-        }
-      } catch (err) {
-        // Log but don't expose
-        console.error("[Password Reset] Exception:", err.message);
-      }
-
-      // ALWAYS return success message (prevents email enumeration)
-      res.json({
-        status: "success",
-        message: "If an account exists with that email, you will receive a password reset link shortly.",
-      });
-    } catch (error) {
-      console.error("Error in password reset endpoint:", error);
-      // Even on catastrophic failure, don't leak information
-      res.json({
-        status: "success",
-        message: "If an account exists with that email, you will receive a password reset link shortly.",
-      });
-    }
-  });
-
-  // POST /api/users/update-password - Update password using reset token
-  router.post("/update-password", passwordLimiter, async (req, res) => {
-    try {
-      const { access_token, new_password } = req.body;
-
-      if (!access_token || !new_password) {
-        return res.status(400).json({
-          status: "error",
-          message: "access_token and new_password are required",
-        });
-      }
-
-      if (new_password.length < 6) {
-        return res.status(400).json({
-          status: "error",
-          message: "Password must be at least 6 characters",
-        });
-      }
-
-      // Use the access token to update the user's password
-      const { user, error } = await updatePasswordWithToken(
-        access_token,
-        new_password
-      );
+      const { data, error } = await sendPasswordResetEmail(email);
 
       if (error) {
-        console.error("[Update Password] Error:", error);
-        return res.status(400).json({
+        console.error("[Password Reset] Error:", error);
+        return res.status(500).json({
           status: "error",
-          message: error.message || "Failed to update password",
+          message: `Failed to send reset email: ${error.message}`,
         });
       }
 
-      console.log("[Update Password] Password updated successfully for user:", user?.email);
-
       res.json({
         status: "success",
-        message: "Password updated successfully",
+        message: "Password reset email sent",
+        data,
       });
     } catch (error) {
-      console.error("Error in update password endpoint:", error);
-      res.status(500).json({
-        status: "error",
-        message: "An error occurred while updating password",
-      });
+      console.error("Error sending password reset:", error);
+      res.status(500).json({ status: "error", message: error.message });
     }
   });
 

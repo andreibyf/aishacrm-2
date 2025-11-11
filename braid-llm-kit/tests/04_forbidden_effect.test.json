@@ -1,9 +1,0 @@
-{
-  "file": "examples/08_forbidden_effect.braid",
-  "policy": "templates/policy-deny-clock.json",
-  "expect": {
-    "errors": [
-      { "code": "BRAD201" }
-    ]
-  }
-}

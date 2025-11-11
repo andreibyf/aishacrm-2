@@ -326,102 +326,17 @@ export default function createLeadRoutes(pgPool) {
   });
 
   // POST /api/leads/:id/convert - Convert lead to contact/opportunity
-  // Uses ID preservation: lead ID becomes contact ID (no duplication)
   router.post('/:id/convert', async (req, res) => {
     try {
       const { id } = req.params;
-      const { 
-        tenant_id, 
-        account_id, 
-        create_opportunity, 
-        performed_by 
-      } = req.body;
-
-      if (!tenant_id) {
-        return res.status(400).json({ 
-          status: 'error', 
-          message: 'tenant_id is required' 
-        });
-      }
-
-      // Get tenant UUID (after migration 032, tenant_id is UUID FK)
-      const tenantResult = await pgPool.query(
-        'SELECT id FROM tenant WHERE tenant_id = $1',
-        [tenant_id]
-      );
-
-      if (!tenantResult.rows[0]) {
-        return res.status(404).json({
-          status: 'error',
-          message: `Tenant not found: ${tenant_id}`
-        });
-      }
-
-      const tenantUuid = tenantResult.rows[0].id;
-
-      // Use database function to convert lead (preserves ID)
-      const result = await pgPool.query(
-        'SELECT convert_lead_to_contact($1, $2, $3, $4) as contact_id',
-        [id, tenantUuid, account_id || null, performed_by || null]
-      );
-
-      const contactId = result.rows[0].contact_id;
-
-      // Fetch the created contact
-      const contactResult = await pgPool.query(
-        'SELECT * FROM contacts WHERE id = $1',
-        [contactId]
-      );
-
-      const contact = contactResult.rows[0];
-
-      // Optionally create opportunity if requested
-      let opportunity = null;
-      if (create_opportunity) {
-        const leadData = await pgPool.query(
-          'SELECT * FROM leads WHERE id = $1',
-          [id]
-        );
-
-        const lead = leadData.rows[0];
-        
-        const oppResult = await pgPool.query(
-          `INSERT INTO opportunities (
-            tenant_id, 
-            name, 
-            stage, 
-            account_id, 
-            contact_id,
-            metadata,
-            created_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
-          RETURNING *`,
-          [
-            tenantUuid,
-            `Opportunity for ${lead.first_name} ${lead.last_name}`,
-            'qualification',
-            account_id || null,
-            contactId,
-            { converted_from_lead_id: id }
-          ]
-        );
-
-        opportunity = oppResult.rows[0];
-      }
+      const { create_opportunity, create_account } = req.body;
 
       res.json({
         status: 'success',
-        message: 'Lead converted to contact (ID preserved)',
-        data: { 
-          lead_id: id, 
-          contact_id: contactId,
-          contact,
-          opportunity,
-          note: 'Lead ID and Contact ID are identical - no duplication'
-        },
+        message: 'Lead converted',
+        data: { lead_id: id, create_opportunity, create_account },
       });
     } catch (error) {
-      console.error('Error converting lead:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

@@ -1,15 +1,8 @@
 #!/usr/bin/env node
 import fs from "fs";
 import { validate } from "./validate.js";
-
-const args = process.argv.slice(2);
-const file = args[0] && !args[0].startsWith("-") ? args[0] : "-";
-const polIdx = args.indexOf("--policy");
-let policy = null;
-if (polIdx > -1 && args[polIdx+1]) {
-	try { policy = JSON.parse(fs.readFileSync(args[polIdx+1],"utf8")); } catch {}
-}
+const file = process.argv[2] || "-";
 const src = file === "-" ? fs.readFileSync(0,"utf8") : fs.readFileSync(file,"utf8");
-const diags = validate(src, file === "-" ? "stdin" : file, policy);
+const diags = validate(src, file === "-" ? "stdin" : file);
 for (const d of diags) process.stdout.write(JSON.stringify(d) + "\n");
 process.exit(diags.some(d=>d.severity==="error") ? 1 : 0);

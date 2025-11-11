@@ -19,14 +19,13 @@ import { Badge } from '@/components/ui/badge';
 // import { Alert, AlertDescription } from "@/components/ui/alert"; // Reserved for future use
 import InviteUserDialog from './InviteUserDialog';
 import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
 import { format } from 'date-fns';
 import { updateEmployeeSecure } from "@/api/functions";
 import { canDeleteUser } from "@/utils/permissions";
 import { useUser } from '@/components/shared/useUser.js';
 
 // Backend API URL
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
@@ -514,8 +513,6 @@ export default function EnhancedUserManagement() {
     const [isInviteModalOpen, setInviteModalOpen] = useState(false);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [userToDelete, setUserToDelete] = useState(null);
-    const [selectedUsers, setSelectedUsers] = useState([]);
-    const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
     
     // Use global user context instead of local User.me()
     const { user: currentUser } = useUser();
@@ -689,82 +686,6 @@ export default function EnhancedUserManagement() {
         }
     };
 
-    // Bulk selection handlers
-    const handleSelectAll = (checked) => {
-        if (checked) {
-            // Select all non-protected users
-            const selectableUsers = filteredUsers.filter(user => {
-                const isProtectedSuperAdmin = user.email?.toLowerCase() === 'abyfield@4vdataconsulting.com';
-                const isCurrentUser = user.id === currentUser?.id;
-                return !isProtectedSuperAdmin && !isCurrentUser;
-            });
-            setSelectedUsers(selectableUsers.map(u => u.id));
-        } else {
-            setSelectedUsers([]);
-        }
-    };
-
-    const handleSelectUser = (userId, checked) => {
-        if (checked) {
-            setSelectedUsers(prev => [...prev, userId]);
-        } else {
-            setSelectedUsers(prev => prev.filter(id => id !== userId));
-        }
-    };
-
-    const handleBulkDelete = async () => {
-        if (selectedUsers.length === 0) return;
-
-        const totalUsers = selectedUsers.length;
-        console.log(`[Bulk Delete] Starting deletion of ${totalUsers} users`);
-        setBulkDeleteConfirmOpen(false);
-        
-        // Show progress toast
-        const toastId = toast.loading(`Deleting ${totalUsers} user(s)...`);
-
-        try {
-            // Use bulk delete endpoint instead of individual requests
-            const response = await fetch(`${BACKEND_URL}/api/users/bulk-delete`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'include',
-                body: JSON.stringify({ user_ids: selectedUsers }),
-            });
-
-            const result = await response.json();
-
-            // Dismiss loading toast
-            toast.dismiss(toastId);
-
-            if (response.ok && result.data) {
-                const { success, failed, skipped } = result.data;
-                console.log(`[Bulk Delete] Complete:`, result.data);
-
-                if (success.length > 0) {
-                    let message = `Successfully deleted ${success.length} user(s)`;
-                    if (failed.length > 0) message += ` (${failed.length} failed)`;
-                    if (skipped.length > 0) message += ` (${skipped.length} skipped)`;
-                    
-                    toast.success(message, { duration: 5000 });
-                } else {
-                    toast.error(`Failed to delete users`);
-                }
-            } else {
-                throw new Error(result.message || 'Bulk delete failed');
-            }
-
-            setSelectedUsers([]);
-            await loadData();
-            console.log(`[Bulk Delete] User list refreshed`);
-        } catch (error) {
-            toast.dismiss(toastId);
-            console.error("[Bulk Delete] Unexpected error:", error);
-            toast.error(`Failed to delete users: ${error.message}`);
-        }
-    };
-
     // Simplified role display
     const getRoleDisplay = (user) => {
         const role = user.role?.toLowerCase();
@@ -874,16 +795,6 @@ export default function EnhancedUserManagement() {
                 </div>
 
                 <div className="flex gap-2">
-                    {selectedUsers.length > 0 && (
-                        <Button 
-                            variant="destructive" 
-                            onClick={() => setBulkDeleteConfirmOpen(true)}
-                            className="bg-red-600 hover:bg-red-700"
-                        >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Delete {selectedUsers.length} Selected
-                        </Button>
-                    )}
                     <Button variant="outline" onClick={refreshUsers} className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
                         <RefreshCw className="w-4 h-4 mr-2" />
                         Refresh
@@ -897,17 +808,6 @@ export default function EnhancedUserManagement() {
                         <Table>
                             <TableHeader>
                                 <TableRow className="border-slate-700 hover:bg-slate-700/50">
-                                    <TableHead className="w-12">
-                                        <Checkbox
-                                            checked={selectedUsers.length > 0 && selectedUsers.length === filteredUsers.filter(u => {
-                                                const isProtectedSuperAdmin = u.email?.toLowerCase() === 'abyfield@4vdataconsulting.com';
-                                                const isCurrentUser = u.id === currentUser?.id;
-                                                return !isProtectedSuperAdmin && !isCurrentUser;
-                                            }).length}
-                                            onCheckedChange={handleSelectAll}
-                                            className="border-slate-400"
-                                        />
-                                    </TableHead>
                                     <TableHead className="text-slate-300">Name</TableHead>
                                     <TableHead className="text-slate-300">Role</TableHead>
                                     <TableHead className="text-slate-300">Client</TableHead>
@@ -921,7 +821,7 @@ export default function EnhancedUserManagement() {
                             <TableBody>
                                 {filteredUsers.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={9} className="text-center py-8 text-slate-400">
+                                        <TableCell colSpan={8} className="text-center py-8 text-slate-400">
                                             No users found matching your criteria.
                                         </TableCell>
                                     </TableRow>
@@ -929,9 +829,6 @@ export default function EnhancedUserManagement() {
                                     filteredUsers.map((user) => {
                                         const tenant = allTenants.find(t => t.tenant_id === user.tenant_id);
                                         const isCreator = currentUser && user.id === currentUser.id && user.role === 'superadmin';
-                                        const isProtectedSuperAdmin = user.email?.toLowerCase() === 'abyfield@4vdataconsulting.com';
-                                        const isCurrentUser = user.id === currentUser?.id;
-                                        const isSelectable = !isProtectedSuperAdmin && !isCurrentUser;
                                         
                                         // managerCanEdit now only checks for admin role to edit specific permissions
                                         const managerCanEdit = (currentUser?.role === 'admin' || currentUser?.role === 'superadmin');
@@ -956,15 +853,6 @@ export default function EnhancedUserManagement() {
 
                                         return (
                                             <TableRow key={user.id} className="border-slate-700 hover:bg-slate-700/50">
-                                                <TableCell>
-                                                    {isSelectable && (
-                                                        <Checkbox
-                                                            checked={selectedUsers.includes(user.id)}
-                                                            onCheckedChange={(checked) => handleSelectUser(user.id, checked)}
-                                                            className="border-slate-400"
-                                                        />
-                                                    )}
-                                                </TableCell>
                                                 <TableCell className="font-medium">
                                                     <div className="flex items-center gap-3">
                                                         <div className="relative">
@@ -1143,44 +1031,6 @@ export default function EnhancedUserManagement() {
                             className="bg-red-600 hover:bg-red-700 text-white"
                         >
                             Delete User
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-
-            <AlertDialog open={bulkDeleteConfirmOpen} onOpenChange={setBulkDeleteConfirmOpen}>
-                <AlertDialogContent className="bg-slate-800 border-slate-700">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="text-red-400 flex items-center gap-2">
-                            <Trash2 className="w-5 h-5" />
-                            Bulk Delete Users
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-slate-300">
-                            Are you sure you want to permanently delete {selectedUsers.length} selected user(s)?
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <div className="space-y-3 px-6">
-                        <div className="p-3 bg-slate-900 rounded border border-slate-700 text-sm max-h-60 overflow-y-auto">
-                            {selectedUsers.map(userId => {
-                                const user = users.find(u => u.id === userId);
-                                return user ? (
-                                    <div key={userId} className="text-slate-300 py-1 border-b border-slate-700 last:border-0">
-                                        <strong>{user.display_name || user.full_name || 'Unknown'}</strong> ({user.email})
-                                    </div>
-                                ) : null;
-                            })}
-                        </div>
-                        <div className="text-yellow-400 font-semibold text-sm">⚠️ This action cannot be undone.</div>
-                    </div>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
-                            Cancel
-                        </AlertDialogCancel>
-                        <AlertDialogAction 
-                            onClick={handleBulkDelete} 
-                            className="bg-red-600 hover:bg-red-700 text-white"
-                        >
-                            Delete {selectedUsers.length} User(s)
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

@@ -1,8 +1,10 @@
 # Supabase Local Docker - README
 
+> Important: The main project uses Supabase Cloud by default. The local Postgres/Supabase stack described here is optional and intended for migration testing only. In `docker-compose.yml`, the local `db` service is disabled behind a `migration-testing` profile and should normally remain stopped. See comments in the root `docker-compose.yml`.
+
 ## 🚀 Quick Start
 
-Your local Supabase environment is now running!
+Your local Supabase environment is now running! (Only if you've explicitly enabled and started it.)
 
 ### Services Running:
 - **PostgreSQL**: `localhost:5432`
@@ -20,20 +22,20 @@ postgresql://postgres:postgres@localhost:5432/postgres
 
 ## 📋 Docker Commands
 
-### Start containers:
+### Start containers (optional, migration testing only):
 ```powershell
-docker-compose up -d
+docker-compose --profile migration-testing up -d
 ```
 
 ### Stop containers:
 ```powershell
-docker-compose down
+docker-compose --profile migration-testing down
 ```
 
 ### View logs:
 ```powershell
 # All services
-docker-compose logs -f
+docker-compose --profile migration-testing logs -f
 
 # Specific service
 docker-compose logs -f db
@@ -42,7 +44,7 @@ docker-compose logs -f supabase
 
 ### Connect to PostgreSQL:
 ```powershell
-docker exec -it ai-sha-crm-copy-c872be53-db-1 psql -U postgres
+docker exec -it aishacrm-db psql -U postgres
 ```
 
 ### Run sanity check:
@@ -87,9 +89,10 @@ docker-compose down
 
 ## ⚠️ Important Notes
 
-1. **Data Persistence**: Database data is stored in the `postgres_data` Docker volume
-2. **Port Conflicts**: Ensure ports 5432 and 8000 are not in use by other services
-3. **Production Warning**: This is for LOCAL DEVELOPMENT ONLY - never use in production
+1. This local stack is optional and not used by default; the app points to Supabase Cloud in normal development.
+2. Data Persistence: Database data is stored in the `postgres_data` Docker volume
+3. Port Conflicts: Ensure ports 5432 and 8000 are not in use by other services
+4. Production Warning: This is for LOCAL DEVELOPMENT ONLY - never use in production
 
 ## 🔍 Troubleshooting
 

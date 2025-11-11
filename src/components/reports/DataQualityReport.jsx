@@ -15,7 +15,7 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
-import { analyzeDataQuality } from "@/api/fallbackFunctions";
+import { analyzeDataQuality } from "@/api/functions";
 
 export default function DataQualityReport({ tenantFilter }) {
   const [loading, setLoading] = useState(true);

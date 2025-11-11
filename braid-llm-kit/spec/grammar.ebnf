@@ -3,10 +3,7 @@ Letter      = "A"…"Z" | "a"…"z" ;
 Digit       = "0"…"9" ;
 
 Program     = { Item } ;
-Attribute   = "@" Ident [ "(" [ AttrArgs ] ")" ] ;
-AttrArgs    = AttrArg { "," AttrArg } ;
-AttrArg     = Ident ":" ( StringLiteral | TypeExpr | Literal ) ;
-Item        = { Attribute } ( TypeDecl | EnumDecl | TraitDecl | ImplDecl | FnDecl | ActorDecl ) ;
+Item        = TypeDecl | EnumDecl | TraitDecl | ImplDecl | FnDecl ;
 
 TypeDecl    = "type" Ident "=" TypeExpr ";" ;
 EnumDecl    = "enum" Ident "{" { Variant } "}" ;
@@ -16,8 +13,7 @@ TraitDecl   = "trait" Ident "{" { FnSig ";" } "}" ;
 ImplDecl    = "impl" Ident "for" TypeExpr "{" { FnDecl } "}" ;
 
 FnDecl      = FnSig Block ;
-(* Allow async before or after for flexibility while stabilizing spec *)
-FnSig       = ( [ "async" ] "fn" | "fn" ) Ident "(" [ Params ] ")" "->" TypeExpr [ "!" EffectList ] [ "async" ] ;
+FnSig       = "fn" Ident "(" [ Params ] ")" "->" TypeExpr [ "!" EffectList ] ;
 Params      = Param { "," Param } ;
 Param       = Ident ":" TypeExpr ;
 
@@ -34,30 +30,19 @@ TypeExpr    = Ident
 Field       = Ident ":" TypeExpr ;
 
 Block       = "{" { Stmt } "}" ;
-Stmt        = Let | Assign | Expr ";" ;
+Stmt        = Let | Expr ";" ;
 Let         = "let" [ "mut" ] Ident ":" TypeExpr "=" Expr ";" ;
 
-Assign      = LValue AssignOp Expr ";" ;
-LValue      = Ident | Member ;
-AssignOp    = "=" | "+=" | "-=" | "*=" | "/=" ;
-
-Primary     = Ident
+Expr        = Ident
             | Literal
-            | RecordLit
             | Call
             | Match
             | Lambda
+            | RecordLit
             | "Ok" "(" Expr ")"
             | "Err" "(" Expr ")"
             | "??" [ StringLiteral ]           (* hole *)
-            | "(" Expr ")"
             ;
-
-Postfix     = Primary [ "?" ] ;                 (* Result propagation *)
-
-Member      = Postfix { "." Ident [ "(" [ ArgList ] ")" ] } ;  (* field access and method call *)
-
-Expr        = [ "await" ] ( Member | Spawn ) ;  (* await unary on calls or actor messages *)
 
 Call        = Ident "(" [ ArgList ] ")" ;
 ArgList     = Expr { "," Expr } ;
@@ -72,19 +57,7 @@ Lambda      = "|" Ident "|" "->" TypeExpr Block ;
 
 RecordLit   = "{" { Ident ":" Expr } "}" ;
 
-(* Actors *)
-ActorDecl   = "actor" Ident "{" "state" "{" { Field { "," Field } } "}" { FnDecl } "}" ;
-StateDecl   = "state" RecordType ;
-RecordType  = "{" { Field } "}" ;
-Spawn       = "spawn" Ident RecordLit ;
-Await       = "await" Expr ;
-
 Literal     = Int | StringLiteral | Bool ;
 Int         = Digit { Digit } ;
 Bool        = "true" | "false" ;
 StringLiteral = '"' { ? any but " ? } '"' ;
-
-(* Comments (lexically ignored):
-    LineComment   = "//" { ? not newline ? } ;
-    BlockComment  = "/*" { ? any ? } "*/" ;
-*)

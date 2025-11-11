@@ -27,7 +27,7 @@ import {
 } from "@/utils/permissions";
 
 // Backend API URL
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
 
 export default function InviteUserDialog(
   { open, onOpenChange, onSuccess, tenants, currentUser },

@@ -267,13 +267,12 @@ export default function createBizDevSourceRoutes(pgPool) {
   });
 
   // POST /api/bizdevsources/:id/promote - Promote bizdev source to account
-  // Uses ID preservation: bizdev ID becomes account ID (no duplication)
   router.post('/:id/promote', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id, account_name, performed_by } = req.body;
+      const { tenant_id } = req.body;
 
-      console.log('[Promote BizDev Source] Request received:', { id, tenant_id, account_name });
+      console.log('[Promote BizDev Source] Request received:', { id, tenant_id, body: req.body });
 
       if (!tenant_id) {
         return res.status(400).json({
@@ -282,44 +281,83 @@ export default function createBizDevSourceRoutes(pgPool) {
         });
       }
 
-      // Get tenant UUID (after migration 032, tenant_id is UUID FK)
-      const tenantResult = await pgPool.query(
-        'SELECT id FROM tenant WHERE tenant_id = $1',
-        [tenant_id]
+      // Fetch the bizdev source
+      const sourceResult = await pgPool.query(
+        'SELECT * FROM bizdev_sources WHERE id = $1 AND tenant_id = $2 LIMIT 1',
+        [id, tenant_id]
       );
 
-      if (!tenantResult.rows[0]) {
+      if (sourceResult.rows.length === 0) {
         return res.status(404).json({
           status: 'error',
-          message: `Tenant not found: ${tenant_id}`
+          message: 'BizDev source not found'
         });
       }
 
-      const tenantUuid = tenantResult.rows[0].id;
+      const source = sourceResult.rows[0];
+      console.log('[Promote BizDev Source] Source data:', { 
+        company_name: source.company_name, 
+        source: source.source,
+        source_name: source.source_name,
+        industry: source.industry 
+      });
 
-      // Use database function to promote bizdev source (preserves ID)
-      const result = await pgPool.query(
-        'SELECT promote_bizdev_to_account($1, $2, $3, $4) as account_id',
-        [id, tenantUuid, account_name || null, performed_by || null]
-      );
+      // Validate required fields and create fallback name
+      // bizdev_sources table uses: company_name, source (not source_name)
+      let accountName = source.company_name || source.source || source.source_name;
+      if (!accountName) {
+        // Generate fallback name from available data
+        accountName = source.industry || source.source_type || `BizDev Source ${source.id.substring(0, 8)}`;
+      }
 
-      const accountId = result.rows[0].account_id;
+      // Create account from bizdev source
+      const accountData = {
+        tenant_id,
+        name: accountName,
+        industry: source.industry || null,
+        website: source.website || source.source_url,
+        metadata: {
+          ...source.metadata,
+          promoted_from_bizdev_source: source.id,
+          promoted_at: new Date().toISOString(),
+          original_source: source.source,
+          original_source_type: source.source_type,
+          original_priority: source.priority,
+          notes: source.notes,
+          contact_phone: source.contact_phone || source.phone_number,
+          contact_email: source.contact_email || source.email,
+          dba_name: source.dba_name,
+          address: {
+            line1: source.address_line_1,
+            line2: source.address_line_2,
+            city: source.city,
+            state: source.state_province,
+            postal_code: source.postal_code,
+            country: source.country
+          },
+          license: {
+            industry_license: source.industry_license,
+            license_status: source.license_status,
+            license_expiry_date: source.license_expiry_date
+          }
+        }
+      };
 
-      // Fetch the created account
       const accountResult = await pgPool.query(
-        'SELECT * FROM accounts WHERE id = $1',
-        [accountId]
+        `INSERT INTO accounts (
+          tenant_id, name, industry, website, metadata, created_at
+        ) VALUES ($1, $2, $3, $4, $5, NOW())
+        RETURNING *`,
+        [
+          accountData.tenant_id,
+          accountData.name,
+          accountData.industry,
+          accountData.website,
+          accountData.metadata
+        ]
       );
 
       const newAccount = accountResult.rows[0];
-
-      // Fetch bizdev source data for contact creation
-      const bizdevResult = await pgPool.query(
-        'SELECT * FROM bizdev_sources WHERE id = $1',
-        [id]
-      );
-
-      const source = bizdevResult.rows[0];
 
       // Create a contact if we have contact person info
       let newContact = null;
@@ -333,8 +371,8 @@ export default function createBizDevSourceRoutes(pgPool) {
           ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
           RETURNING *`,
           [
-            tenantUuid,
-            accountId,
+            tenant_id,
+            newAccount.id,
             firstName,
             lastName || '',
             source.contact_email,
@@ -345,7 +383,25 @@ export default function createBizDevSourceRoutes(pgPool) {
         newContact = contactResult.rows[0];
       }
 
-      // Link any opportunities created from this BizDev Source to the new Account
+      // Update bizdev source status to 'Promoted' and store linkage
+      await pgPool.query(
+        `UPDATE bizdev_sources SET
+          status = 'Promoted',
+          account_id = $1,
+          account_name = $2,
+          metadata = jsonb_set(
+            COALESCE(metadata, '{}'::jsonb),
+            '{converted_to_account_id}',
+            to_jsonb($1::text)
+          ),
+          updated_at = NOW()
+        WHERE id = $3 AND tenant_id = $4`,
+        [newAccount.id, newAccount.name, id, tenant_id]
+      );
+
+      // Link any opportunities created from this BizDev Source (by metadata) to the new Account
+      // Primary linking: metadata.origin_bizdev_source_id
+      // Backward compatibility: description contains marker [BizDevSource:<id>]
       try {
         const linkByMetadata = await pgPool.query(
           `UPDATE opportunities
@@ -355,27 +411,37 @@ export default function createBizDevSourceRoutes(pgPool) {
              AND account_id IS NULL
              AND (metadata ->> 'origin_bizdev_source_id') = $3
           `,
-          [accountId, tenantUuid, id]
+          [newAccount.id, tenant_id, id]
+        );
+
+        const linkByDescription = await pgPool.query(
+          `UPDATE opportunities
+             SET account_id = $1,
+                 updated_at = NOW()
+           WHERE tenant_id = $2
+             AND account_id IS NULL
+             AND description ILIKE $3
+          `,
+          [newAccount.id, tenant_id, `%[BizDevSource:${id}]%`]
         );
 
         console.log('[Promote BizDev Source] Linked opportunities to new account', {
           linked_by_metadata: linkByMetadata.rowCount,
-          new_account_id: accountId,
+          linked_by_description: linkByDescription.rowCount,
+          new_account_id: newAccount.id,
           bizdev_source_id: id,
         });
       } catch (linkErr) {
-        console.warn('[Promote BizDev Source] Failed to link opportunities', linkErr);
+        console.warn('[Promote BizDev Source] Failed to link opportunities by origin metadata/description', linkErr);
       }
 
       res.json({
         status: 'success',
-        message: 'BizDev source promoted to account (ID preserved)',
+        message: 'BizDev source promoted to account',
         data: {
           account: newAccount,
           contact: newContact,
-          bizdev_source_id: id,
-          account_id: accountId,
-          note: 'BizDev ID and Account ID are identical - no duplication'
+          bizdev_source_id: id
         }
       });
     } catch (error) {

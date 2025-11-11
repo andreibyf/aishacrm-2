@@ -23,8 +23,7 @@ async function safeCount(_pgPool, table, tenantId) {
         const { count } = await supabase
           .from(table)
           .select('*', { count: 'exact', head: true })
-          .eq('tenant_id', tenantId)
-          .neq('is_test_data', true); // Exclude test data
+          .eq('tenant_id', tenantId);
         return count ?? 0;
       } catch {
         // Fall through to global count if tenant_id column doesn't exist
@@ -32,8 +31,7 @@ async function safeCount(_pgPool, table, tenantId) {
     }
     const { count } = await supabase
       .from(table)
-      .select('*', { count: 'exact', head: true })
-      .neq('is_test_data', true); // Exclude test data
+      .select('*', { count: 'exact', head: true });
     return count ?? 0;
   } catch {
     return 0; // table might not exist yet; return 0 as a safe default
@@ -52,7 +50,6 @@ async function safeRecentActivities(_pgPool, tenantId, limit = 10) {
           .from('activities')
           .select('id, type, subject, created_at')
           .eq('tenant_id', tenantId)
-          .neq('is_test_data', true) // Exclude test data
           .order('created_at', { ascending: false })
           .limit(max);
         if (error) throw error;
@@ -64,7 +61,6 @@ async function safeRecentActivities(_pgPool, tenantId, limit = 10) {
     const { data } = await supabase
       .from('activities')
       .select('id, type, subject, created_at')
-      .neq('is_test_data', true) // Exclude test data
       .order('created_at', { ascending: false })
       .limit(max);
     return data || [];
@@ -96,33 +92,12 @@ export default function createReportRoutes(pgPool) {
       ]);
       const recentActivities = await safeRecentActivities(pgPool, tenant_id, 10);
 
-      // Calculate pipeline value (sum of opportunity values)
-      let pipelineValue = 0;
-      try {
-        const { getSupabaseClient } = await import('../lib/supabase-db.js');
-        const supabase = getSupabaseClient();
-        const { data: oppData } = await supabase
-          .from('opportunities')
-          .select('value')
-          .eq('tenant_id', tenant_id)
-          .neq('is_test_data', true)
-          .neq('stage', 'closed_lost')
-          .neq('stage', 'closed_won');
-        
-        if (oppData && oppData.length > 0) {
-          pipelineValue = oppData.reduce((sum, opp) => sum + (parseFloat(opp.value) || 0), 0);
-        }
-      } catch (error) {
-        console.error('Error calculating pipeline value:', error);
-      }
-
       const stats = {
         totalContacts: contacts,
         totalAccounts: accounts,
         totalLeads: leads,
         totalOpportunities: opportunities,
-        activitiesLogged: activities, // Changed from totalActivities to match OverviewStats
-        pipelineValue,
+        totalActivities: activities,
         recentActivities,
         revenue: { total: 0, thisMonth: 0, lastMonth: 0 },
       };

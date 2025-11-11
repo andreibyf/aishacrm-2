@@ -5,19 +5,6 @@
 
 import { BACKEND_URL } from '@/api/entities';
 
-// Resolve tenant id from app-local storage conventions
-const getTenantIdFromStorage = () => {
-  try {
-    const sel = localStorage.getItem('selected_tenant_id');
-    if (sel) return sel;
-    const legacy = localStorage.getItem('tenant_id');
-    if (legacy) return legacy;
-  } catch {
-    // ignore storage access errors
-  }
-  return '';
-};
-
 /**
  * Create a new conversation
  * @param {Object} options - Conversation options
@@ -30,7 +17,7 @@ export async function createConversation({ agent_name = 'crm_assistant', metadat
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-tenant-id': getTenantIdFromStorage(),
+      'x-tenant-id': localStorage.getItem('tenant_id') || '',
     },
     credentials: 'include',
     body: JSON.stringify({ agent_name, metadata }),
@@ -52,7 +39,7 @@ export async function createConversation({ agent_name = 'crm_assistant', metadat
 export async function getConversation(conversationId) {
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations/${conversationId}`, {
     headers: {
-      'x-tenant-id': getTenantIdFromStorage(),
+      'x-tenant-id': localStorage.getItem('tenant_id') || '',
     },
     credentials: 'include',
   });
@@ -84,7 +71,7 @@ export async function addMessage(conversation, { role, content, file_urls = [] }
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-tenant-id': getTenantIdFromStorage(),
+      'x-tenant-id': localStorage.getItem('tenant_id') || '',
     },
     credentials: 'include',
     body: JSON.stringify({ role, content, metadata }),
@@ -105,7 +92,7 @@ export async function addMessage(conversation, { role, content, file_urls = [] }
  * @returns {Function} Unsubscribe function
  */
 export function subscribeToConversation(conversationId, callback) {
-  const tenantId = getTenantIdFromStorage();
+  const tenantId = localStorage.getItem('tenant_id') || '';
   const eventSource = new EventSource(
     `${BACKEND_URL}/api/ai/conversations/${conversationId}/stream?tenant_id=${tenantId}`
   );

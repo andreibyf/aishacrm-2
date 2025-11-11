@@ -1,5 +1,0 @@
-@ai(intent: {"service":"crm","action":"lead_create"})
-fn create_lead(input: Json) -> Result[Json, Err] !clock {
-  // pretend to use clock via an adapter at runtime
-  Ok(input)
-}

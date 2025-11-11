@@ -100,7 +100,7 @@ export default function createAccountRoutes(pgPool) {
   // POST /api/accounts - Create account
   router.post("/", async (req, res) => {
     try {
-      const { tenant_id, name, type, industry, website, metadata: incomingMetadata, ...otherFields } = req.body;
+      const { tenant_id, name, type, industry, website } = req.body;
 
       if (!tenant_id) {
         return res.status(400).json({
@@ -116,15 +116,9 @@ export default function createAccountRoutes(pgPool) {
         });
       }
 
-      // Merge unknown fields into metadata JSON for forward-compatibility
-      const mergedMetadata = {
-        ...(incomingMetadata || {}),
-        ...otherFields,
-      };
-
       const query = `
-        INSERT INTO accounts (tenant_id, name, type, industry, website, metadata, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+        INSERT INTO accounts (tenant_id, name, type, industry, website, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
         RETURNING *
       `;
 
@@ -134,20 +128,12 @@ export default function createAccountRoutes(pgPool) {
         type,
         industry,
         website,
-        mergedMetadata,
       ]);
-
-      // Expand metadata before returning for consistency
-      const expandMetadata = (record) => {
-        if (!record) return record;
-        const { metadata = {}, ...rest } = record;
-        return { ...rest, ...metadata, metadata };
-      };
 
       res.json({
         status: "success",
         message: "Account created",
-        data: expandMetadata(result.rows[0]),
+        data: result.rows[0],
       });
     } catch (error) {
       console.error("Error creating account:", error);

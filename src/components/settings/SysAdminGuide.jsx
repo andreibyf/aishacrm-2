@@ -39,7 +39,7 @@ export default function SysAdminGuide() {
               
               <div className="space-y-3">
                 <div className="border-l-4 border-blue-500 pl-4">
-                  <h4 className="text-blue-400 font-semibold">Frontend (Port 4000)</h4>
+                  <h4 className="text-blue-400 font-semibold">Frontend (Port 5173)</h4>
                   <ul className="list-disc list-inside space-y-1 text-sm mt-2">
                     <li>React + Vite application</li>
                     <li>Domain-organized components (accounts, activities, ai, contacts, leads, opportunities)</li>
@@ -49,13 +49,13 @@ export default function SysAdminGuide() {
                 </div>
 
                 <div className="border-l-4 border-green-500 pl-4">
-                  <h4 className="text-green-400 font-semibold">Backend (Port 4001)</h4>
+                  <h4 className="text-green-400 font-semibold">Backend (Port 3001)</h4>
                   <ul className="list-disc list-inside space-y-1 text-sm mt-2">
                     <li>Node.js Express server in <code>backend/server.js</code></li>
                     <li>197 API endpoints across 26 categories</li>
                     <li>PostgreSQL database via Supabase</li>
                     <li>Routes in <code>backend/routes/</code></li>
-                    <li>Health monitoring at <code>http://localhost:4001/health</code></li>
+                    <li>Health monitoring at <code>http://localhost:3001/health</code></li>
                   </ul>
                 </div>
 
@@ -234,10 +234,10 @@ export default function SysAdminGuide() {
             <h3 className="text-slate-200 text-lg font-medium mt-6">4.2 Backend Server Management</h3>
             <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
               <p className="text-sm mb-2">
-                <strong>Health Check:</strong> <code>http://localhost:4001/health</code>
+                <strong>Health Check:</strong> <code>http://localhost:3001/health</code>
               </p>
               <p className="text-sm mb-2">
-                <strong>API Status:</strong> <code>http://localhost:4001/api/status</code>
+                <strong>API Status:</strong> <code>http://localhost:3001/api/status</code>
               </p>
               <p className="text-sm">
                 Server logs display startup banner with:
@@ -271,11 +271,11 @@ export default function SysAdminGuide() {
               <div>
                 <h3 className="text-slate-200 text-lg font-medium">6.1 Restarting Services</h3>
                 <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3 mt-2">
-                  <p className="text-sm mb-2"><strong>Frontend (Docker):</strong></p>
-                  <code className="text-xs bg-slate-800 p-2 rounded block">docker-compose up -d --build frontend</code>
+                  <p className="text-sm mb-2"><strong>Frontend (Vite):</strong></p>
+                  <code className="text-xs bg-slate-800 p-2 rounded block">npm run dev</code>
                   
-                  <p className="text-sm mt-3 mb-2"><strong>Backend (Docker):</strong></p>
-                  <code className="text-xs bg-slate-800 p-2 rounded block">docker-compose up -d --build backend</code>
+                  <p className="text-sm mt-3 mb-2"><strong>Backend (Express):</strong></p>
+                  <code className="text-xs bg-slate-800 p-2 rounded block">cd backend && npm run dev</code>
                   
                   <p className="text-sm mt-3 mb-2"><strong>Full Stack:</strong></p>
                   <code className="text-xs bg-slate-800 p-2 rounded block">.\\start-all.ps1</code>

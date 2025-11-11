@@ -197,8 +197,7 @@ CREATE TABLE IF NOT EXISTS guide_content (
 );
 
 -- AI Campaigns
--- DEPRECATED (migration 035): ai_campaign replaced by ai_campaigns; keeping for historical reference only
--- CREATE TABLE IF NOT EXISTS ai_campaign (
+CREATE TABLE IF NOT EXISTS ai_campaign (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id TEXT NOT NULL,
   name TEXT NOT NULL,

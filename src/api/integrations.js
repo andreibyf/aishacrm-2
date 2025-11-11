@@ -74,91 +74,16 @@ const mockCore = {
   ExtractDataFromUploadedFile: createMockIntegration(
     "ExtractDataFromUploadedFile",
   ),
+  CreateFileSignedUrl: createMockIntegration("CreateFileSignedUrl"),
   UploadPrivateFile: createMockIntegration("UploadPrivateFile"),
 };
 
-// Real implementation for CreateFileSignedUrl using backend API
-async function CreateFileSignedUrl({ file_uri, expires_in = 3600 }) {
-  try {
-    const response = await fetch(`${getBackendUrl()}/api/storage/signed-url`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ file_uri, expires_in }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP ${response.status}`);
-    }
-
-    const result = await response.json();
-    return result.data; // Returns { signed_url, expires_at }
-  } catch (error) {
-    console.error('[CreateFileSignedUrl] Error:', error);
-    throw error;
-  }
-}
-
 // Export mock Core integration - all functionality moved to backend
-export const Core = { ...mockCore, CreateFileSignedUrl };
+export const Core = mockCore;
 
 export const InvokeLLM = Core.InvokeLLM;
 export const SendEmail = Core.SendEmail;
 export const GenerateImage = Core.GenerateImage;
 export const ExtractDataFromUploadedFile = Core.ExtractDataFromUploadedFile;
-export { CreateFileSignedUrl };
+export const CreateFileSignedUrl = Core.CreateFileSignedUrl;
 export const UploadPrivateFile = Core.UploadPrivateFile;
-
-/**
- * Tests the connection to the OpenAI API using the provided credentials.
- * @param {object} data - The data for testing the connection.
- * @param {string} data.api_key - The OpenAI API key.
- * @param {string} data.model - The model to use for the test.
- * @returns {Promise<object>} The response from the backend.
- */
-export const testOpenAIConnection = async (data) => {
-  const backendUrl = getBackendUrl();
-  
-  // Create an AbortController for timeout
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-  
-  try {
-    const response = await fetch(`${backendUrl}/api/integrations/openai/test`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
-    const result = await response.json();
-
-    if (!response.ok) {
-      // Create an error object that mimics the structure components might expect
-      const error = new Error(result.error || 'API request failed');
-      error.response = { data: result };
-      throw error;
-    }
-
-    return { data: result }; // Wrap in `data` to maintain consistency with other calls
-  } catch (error) {
-    clearTimeout(timeoutId);
-    
-    // Handle abort/timeout error
-    if (error.name === 'AbortError') {
-      const timeoutError = new Error('Request timeout - OpenAI API took too long to respond');
-      timeoutError.response = { data: { error: 'Request timeout after 30 seconds' } };
-      console.error("[testOpenAIConnection] Timeout:", timeoutError);
-      throw timeoutError;
-    }
-    
-    console.error("[testOpenAIConnection] Error:", error);
-    // Re-throw the error so it can be caught by the calling component
-    throw error;
-  }
-};

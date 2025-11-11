@@ -13,13 +13,13 @@ const { Client } = pkg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load environment variables from backend/.env
-dotenv.config({ path: path.join(__dirname, '.env') });
+// Load environment variables
+dotenv.config({ path: path.join(__dirname, '.env.local') });
 
 const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
-  console.error('❌ DATABASE_URL not found in backend/.env');
+  console.error('❌ DATABASE_URL not found in .env.local');
   process.exit(1);
 }
 

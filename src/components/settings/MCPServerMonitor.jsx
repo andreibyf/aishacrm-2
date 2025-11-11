@@ -77,7 +77,7 @@ export default function MCPServerMonitor() {
       // Also fetch backend-discovered MCP servers (e.g., GitHub MCP proxy)
       try {
         const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-          "http://localhost:4001";
+          "http://localhost:3001";
         const resp = await fetch(`${backendUrl}/api/mcp/servers`);
         if (resp.ok) {
           const json = await resp.json();

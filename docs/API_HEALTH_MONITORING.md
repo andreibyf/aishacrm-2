@@ -187,6 +187,10 @@ apiHealthMonitor.setReportingEnabled(true/false);
 - Verify `sonner` toast provider is loaded
 - Check browser notification permissions
 
+### Why some client errors aren't in health metrics
+- 4xx client validation errors (e.g., 400 Bad Request due to missing tenant_id) are considered consumer-side issues. They are intentionally excluded from "API health" degradation metrics and won't appear as outages.
+- Missing endpoints (404) are tracked by the monitor since they indicate incomplete feature wiring. Use Settings → API Health to see and copy fix templates.
+
 ## Future Enhancements
 
 Planned features:

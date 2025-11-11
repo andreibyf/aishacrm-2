@@ -30,23 +30,66 @@ import {
   YAxis,
 } from "recharts";
 import { format, isThisWeek, isToday, startOfWeek, subWeeks } from "date-fns";
-import { Activity } from "@/api/entities";
+import { Activity, User } from "@/api/entities"; // Assuming User is also exported from here
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 
 export default function ProductivityAnalytics({ tenantFilter }) {
   const [activities, setActivities] = useState([]);
+  const [activitiesPerUser, setActivitiesPerUser] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchProductivityData = async () => {
       setIsLoading(true);
       try {
-        const rawActivities = await Activity.filter(tenantFilter);
-        setActivities(rawActivities);
+        // Assuming Activity and User from "@/api/entities" have a similar .filter method as the mocks
+        const [rawActivities, users] = await Promise.all([
+          Activity.filter(tenantFilter),
+          User.filter(tenantFilter),
+        ]);
+
+        setActivities(rawActivities); // Set the main activities state for overall calculations
+
+        // Process data for activitiesPerUser
+        const userMap = users.reduce((acc, user) => {
+          acc[user.id] = user.name;
+          return acc;
+        }, {});
+
+        const activitiesByUser = rawActivities.reduce((acc, activity) => {
+          if (!activity.userId) return acc; // Skip if no user ID
+          if (!acc[activity.userId]) {
+            acc[activity.userId] = {
+              name: userMap[activity.userId] ||
+                `Unknown User (${activity.userId})`,
+              total: 0,
+              completed: 0,
+            };
+          }
+          acc[activity.userId].total++;
+          if (activity.status === "completed") {
+            acc[activity.userId].completed++;
+          }
+          return acc;
+        }, {});
+
+        const processedActivitiesPerUser = Object.entries(activitiesByUser).map(
+          ([userId, data]) => ({
+            userId: userId,
+            name: data.name,
+            totalActivities: data.total,
+            completedActivities: data.completed,
+            completionRate: data.total > 0
+              ? Math.round((data.completed / data.total) * 100)
+              : 0,
+          })
+        );
+        setActivitiesPerUser(processedActivitiesPerUser);
       } catch (error) {
         console.error("Failed to fetch productivity data:", error);
-        setActivities([]);
+        setActivities([]); // Clear activities on error
+        setActivitiesPerUser([]);
       } finally {
         setIsLoading(false);
       }
@@ -62,17 +105,12 @@ export default function ProductivityAnalytics({ tenantFilter }) {
   const completionRate = activities.length > 0
     ? (completedActivities.length / activities.length) * 100
     : 0;
-  
-  // For "today's activities" and "this week", we'll use created_at since there's no due_date
-  const todaysActivities = activities.filter((act) => {
-    if (!act.created_at) return false;
-    return isToday(new Date(act.created_at));
-  });
-  
-  const thisWeekActivities = activities.filter((act) => {
-    if (!act.created_at) return false;
-    return isThisWeek(new Date(act.created_at));
-  });
+  const todaysActivities = activities.filter((act) =>
+    act.due_date && isToday(new Date(act.due_date))
+  );
+  const thisWeekActivities = activities.filter((act) =>
+    act.due_date && isThisWeek(new Date(act.due_date))
+  );
 
   // Activity type distribution
   const getActivityTypeData = () => {
@@ -113,8 +151,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
       const weekName = format(weekStart, "MMM dd"); // Display the start date of the week
 
       const weekActivities = activities.filter((activity) => {
-        if (!activity.created_at) return false;
-        const actCreatedDate = new Date(activity.created_at);
+        const actCreatedDate = new Date(activity.created_date);
         return actCreatedDate >= weekStart && actCreatedDate < weekEnd;
       });
 
@@ -134,26 +171,45 @@ export default function ProductivityAnalytics({ tenantFilter }) {
     return weeklyData;
   };
 
-  // Priority distribution - since priority field doesn't exist, we'll skip this or use metadata
+  // Priority distribution
   const getPriorityDistribution = () => {
-    // Return empty data since priority field doesn't exist in schema
-    return [
-      { name: "Normal", value: activities.length }
-    ];
+    const priorities = {};
+    activities.forEach((activity) => {
+      const priority = activity.priority || "normal";
+      priorities[priority] = (priorities[priority] || 0) + 1;
+    });
+    return Object.entries(priorities).map(([name, value]) => ({ name, value }));
   };
 
-  // Activity efficiency metrics - simplified since we don't have due_date
+  // Activity efficiency metrics
   const getEfficiencyMetrics = () => {
     const metrics = {
-      completed: completedActivities.length,
-      pending: activities.filter(a => a.status === "pending").length,
-      other: activities.filter(a => a.status && a.status !== "completed" && a.status !== "pending").length,
+      onTime: 0,
+      late: 0,
+      upcoming: 0,
     };
 
+    activities.forEach((activity) => {
+      if (!activity.due_date) return;
+
+      const dueDate = new Date(activity.due_date);
+      const now = new Date();
+
+      if (activity.status === "completed" && dueDate >= now) { // Completed on or before due date
+        metrics.onTime++;
+      } else if (activity.status === "completed" && dueDate < now) { // Completed but late
+        metrics.late++; // Count as late even if completed
+      } else if (activity.status !== "completed" && dueDate < now) { // Not completed and overdue
+        metrics.late++;
+      } else if (activity.status !== "completed" && dueDate >= now) { // Not completed and upcoming
+        metrics.upcoming++;
+      }
+    });
+
     return [
-      { name: "Completed", value: metrics.completed },
-      { name: "Pending", value: metrics.pending },
-      { name: "Other", value: metrics.other },
+      { name: "On Time", value: metrics.onTime },
+      { name: "Overdue", value: metrics.late },
+      { name: "Upcoming", value: metrics.upcoming },
     ];
   };
 
@@ -167,6 +223,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
     highestCompletionDate: null,
     completionRate: completionRate,
     mostProductiveType: "N/A",
+    overdueCount: 0,
   };
 
   if (weeklyData.length > 0) {
@@ -197,6 +254,11 @@ export default function ProductivityAnalytics({ tenantFilter }) {
     }
   }
 
+  const overdueEntry = efficiencyData.find((e) => e.name === "Overdue");
+  if (overdueEntry) {
+    stats.overdueCount = overdueEntry.value;
+  }
+
   const insights = [
     {
       type: "completion",
@@ -215,7 +277,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
       message: stats.completionRate < 70
         ? `Your completion rate of ${
           stats.completionRate.toFixed(1)
-        }% needs improvement. Consider reducing task volume or reviewing workflows.`
+        }% needs improvement. Consider reducing task volume or extending deadlines.`
         : `Great job! Your ${
           stats.completionRate.toFixed(1)
         }% completion rate shows strong execution.`,
@@ -230,13 +292,13 @@ export default function ProductivityAnalytics({ tenantFilter }) {
         : "Complete more activities to identify your most productive task types.",
     },
     {
-      type: "activity",
+      type: "deadline",
       bgColor: "bg-amber-50",
       textColor: "text-amber-900",
       borderColor: "border-amber-200",
-      message: activities.length > 0
-        ? `You have ${activities.length} total activities tracked. Keep logging activities to improve insights.`
-        : "Start logging activities to get productivity insights.",
+      message: stats.overdueCount > 0
+        ? `You have ${stats.overdueCount} overdue tasks. Consider using time-blocking and setting realistic deadlines to improve efficiency.`
+        : "No overdue tasks! Your deadline management is excellent.",
     },
   ];
 
@@ -498,6 +560,60 @@ export default function ProductivityAnalytics({ tenantFilter }) {
               </div>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* New: Activities Per User (Fetched but not fully rendered in outline, showing example here) */}
+      <Card className="shadow-lg bg-slate-800 border-slate-700">
+        <CardHeader>
+          <CardTitle className="text-lg text-slate-100">
+            Individual User Performance (within tenant)
+          </CardTitle>
+          <CardDescription className="text-slate-400">
+            Breakdown of total and completed activities per user.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {activitiesPerUser.length > 0
+            ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart
+                  data={activitiesPerUser}
+                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 12, fill: "#94a3b8" }}
+                  />
+                  <YAxis tick={{ fontSize: 12, fill: "#94a3b8" }} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#1e293b",
+                      border: "1px solid #475569",
+                      borderRadius: "8px",
+                      color: "#f1f5f9",
+                    }}
+                  />
+                  <Legend wrapperStyle={{ color: "#f1f5f9" }} />
+                  <Bar
+                    dataKey="totalActivities"
+                    fill="#3b82f6"
+                    name="Total Activities"
+                  />
+                  <Bar
+                    dataKey="completedActivities"
+                    fill="#10b981"
+                    name="Completed Activities"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )
+            : (
+              <p className="text-center text-slate-400">
+                No user data available for this tenant.
+              </p>
+            )}
         </CardContent>
       </Card>
     </div>

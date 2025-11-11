@@ -3,24 +3,14 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files from backend directory
-COPY backend/package*.json ./
+# Copy package files
+COPY package*.json ./
 
 # Install dependencies (only production needed for backend)
 RUN npm ci --omit=dev
 
-# Copy backend source code
-COPY backend/ .
-
-# Copy braid-llm-kit from root (needed for module loader)
-COPY braid-llm-kit/ ../braid-llm-kit/
-
-# Copy root package.json and install dependencies for braid-llm-kit tools
-WORKDIR /braid-llm-kit
-COPY package*.json ./
-RUN npm ci
-
-WORKDIR /app
+# Copy source code
+COPY . .
 
 # Production stage
 FROM node:22-alpine AS runner
@@ -32,9 +22,6 @@ COPY --from=builder /app/node_modules ./node_modules
 
 # Copy application files
 COPY --from=builder /app .
-
-# Copy braid-llm-kit toolkit with dependencies
-COPY --from=builder /braid-llm-kit ../braid-llm-kit
 
 # Set environment
 ENV NODE_ENV=production

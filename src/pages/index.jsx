@@ -1,5 +1,4 @@
 import Layout from "./Layout.jsx";
-import { useEffect } from 'react';
 
 import Dashboard from "./Dashboard";
 
@@ -70,8 +69,6 @@ import ClientRequirements from "./ClientRequirements";
 import SystemLogs from "./SystemLogs";
 
 import Workflows from "./Workflows";
-
-import ResetPassword from "./ResetPassword";
 
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 
@@ -167,24 +164,12 @@ function PagesContent() {
     const location = useLocation();
     const currentPage = _getCurrentPage(location.pathname);
     
-    // Force re-render when location changes
-    useEffect(() => {
-        console.log('[PagesContent] Route changed to:', location.pathname);
-    }, [location.pathname]);
-    
-    // Check if this is the reset password route (no Layout needed)
-    if (location.pathname === '/reset-password') {
-        return <ResetPassword />;
-    }
-    
     return (
         <Layout currentPageName={currentPage}>
-            <Routes location={location}>            
+            <Routes>            
                 
                     <Route path="/" element={<Dashboard />} />
                 
-                
-                <Route path="/reset-password" element={<ResetPassword />} />
                 
                 <Route path="/Dashboard" element={<Dashboard />} />
                 

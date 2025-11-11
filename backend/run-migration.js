@@ -76,10 +76,11 @@ async function runMigration() {
     console.error('\n❌ Migration failed:', error.message);
     if (error.message.includes('already exists')) {
       console.log('ℹ️  Table may already exist - checking...');
-        try {
-          await pool.query("SELECT COUNT(*) FROM ai_campaigns");
-          console.log('✅ Table ai_campaigns exists and is accessible');
-        } catch (e) {
+      try {
+  // Table already exists; perform a lightweight count to confirm accessibility without storing result
+  await pool.query("SELECT COUNT(*) FROM ai_campaigns");
+  console.log('✅ Table ai_campaigns exists and is accessible');
+      } catch (e) {
         console.error('❌ Table check failed:', e.message);
       }
     }

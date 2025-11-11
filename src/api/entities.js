@@ -25,7 +25,7 @@ export const BACKEND_URL = import.meta.env.DEV
   ? ''
   : normalizeBackendUrl(
       import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-      "http://localhost:4001"
+      "http://localhost:3001"
     );
 
 // Helper to properly pluralize entity names for API endpoints
@@ -1272,25 +1272,15 @@ export const User = {
    * Sign in with email and password
    * @param {string} email - User email
    * @param {string} password - User password
-   * @param {string} captchaToken - Optional reCAPTCHA token
    */
-  signIn: async (email, password, captchaToken = null) => {
+  signIn: async (email, password) => {
     // Production: Use Supabase Auth
     if (isSupabaseConfigured()) {
       try {
-        const signInOptions = {
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
-        };
-        
-        // Add captcha token if provided
-        if (captchaToken) {
-          signInOptions.options = {
-            captchaToken,
-          };
-        }
-
-        const { data, error } = await supabase.auth.signInWithPassword(signInOptions);
+        });
 
         if (error) {
           console.error("[Supabase Auth] Sign in error:", error);

@@ -152,13 +152,6 @@ export const syncDatabase = createFallbackFunction(
   'syncDatabase'
 );
 
-// User/AI Functions
-export const getOrCreateUserApiKey = createFallbackFunction(
-  cloudFunctions.getOrCreateUserApiKey,
-  localFunctions.getOrCreateUserApiKey,
-  'getOrCreateUserApiKey'
-);
-
 // Add more critical functions as needed
 // export const yourFunction = createFallbackFunction(
 //   cloudFunctions.yourFunction,

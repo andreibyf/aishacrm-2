@@ -3,57 +3,10 @@
  * N8N, OpenAI, Stripe, Twilio, Slack, etc.
  */
 
-import { Router } from 'express';
-import OpenAI from 'openai';
+import express from 'express';
 
 export default function createIntegrationRoutes(_pgPool) {
-  const router = Router();
-
-  // POST /api/integrations/openai/test - Test OpenAI API connection
-  router.post('/openai/test', async (req, res) => {
-    const { api_key, model = 'gpt-4o-mini' } = req.body;
-
-    if (!api_key) {
-      return res.status(400).json({ success: false, error: "API key is required" });
-    }
-
-    if (!api_key.startsWith('sk-') || api_key.length < 20) {
-      return res.status(400).json({ 
-        success: false, 
-        error: "Invalid API key format. OpenAI API keys should start with 'sk-'." 
-      });
-    }
-
-    try {
-      const openai = new OpenAI({ apiKey: api_key });
-      const completion = await openai.chat.completions.create({
-        model: model,
-        messages: [{ role: "user", content: "Respond with: 'OK'" }],
-        max_tokens: 5,
-      });
-
-      const response = completion.choices[0].message.content;
-      if (response.trim() === 'OK') {
-        res.json({ 
-          success: true, 
-          message: `Connection successful! Model: ${model}` 
-        });
-      } else {
-        res.status(400).json({ success: false, error: "Unexpected response from OpenAI." });
-      }
-    } catch (error) {
-      console.error("OpenAI API test error:", error);
-      let errorMessage = "Failed to connect to OpenAI.";
-      if (error.status === 401) {
-        errorMessage = "Invalid API key provided.";
-      } else if (error.status === 429) {
-        errorMessage = "Rate limit exceeded or quota exhausted.";
-      } else if (error.status === 404) {
-        errorMessage = `Model '${model}' not found or not accessible.`;
-      }
-      res.status(error.status || 500).json({ success: false, error: errorMessage, details: error.message });
-    }
-  });
+  const router = express.Router();
 
   // POST /api/integrations/n8n/trigger - Trigger N8N workflow
   router.post('/n8n/trigger', async (req, res) => {

@@ -12,14 +12,14 @@ export default function createCashFlowRoutes(pgPool) {
   // GET /api/cashflow - List cash flow records
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, limit = 50, offset = 0, transaction_type } = req.query;
+      const { tenant_id, limit = 50, offset = 0, type } = req.query;
       if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
       let query = 'SELECT * FROM cash_flow WHERE 1=1';
       const params = [];
       let pc = 1;
       if (tenant_id) { query += ` AND tenant_id = $${pc}`; params.push(tenant_id); pc++; }
-      if (transaction_type) { query += ` AND transaction_type = $${pc}`; params.push(transaction_type); pc++; }
+      if (type) { query += ` AND type = $${pc}`; params.push(type); pc++; }
       query += ` ORDER BY transaction_date DESC LIMIT $${pc} OFFSET $${pc + 1}`;
       params.push(parseInt(limit), parseInt(offset));
 
@@ -28,7 +28,7 @@ export default function createCashFlowRoutes(pgPool) {
       const countParams = [];
       let cpc = 1;
       if (tenant_id) { countQuery += ` AND tenant_id = $${cpc}`; countParams.push(tenant_id); cpc++; }
-      if (transaction_type) { countQuery += ` AND transaction_type = $${cpc}`; countParams.push(transaction_type); }
+      if (type) { countQuery += ` AND type = $${cpc}`; countParams.push(type); }
       const countResult = await pgPool.query(countQuery, countParams);
 
       res.json({ status: 'success', data: { cashflow: result.rows, total: parseInt(countResult.rows[0].count) } });
@@ -59,14 +59,14 @@ export default function createCashFlowRoutes(pgPool) {
   router.post('/', async (req, res) => {
     try {
       const c = req.body;
-      if (!c.tenant_id || !c.amount || !c.transaction_type || !c.transaction_date) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id, amount, transaction_type, and transaction_date required' });
+      if (!c.tenant_id || !c.amount || !c.type || !c.transaction_date) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id, amount, type, and transaction_date required' });
       }
       if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
-      const query = `INSERT INTO cash_flow (tenant_id, transaction_date, amount, transaction_type, category, description, account_id, metadata)
+      const query = `INSERT INTO cash_flow (tenant_id, transaction_date, amount, type, category, description, account_id, metadata)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`;
-      const vals = [c.tenant_id, c.transaction_date, c.amount, c.transaction_type, c.category || null, c.description || null, c.account_id || null, JSON.stringify(c.metadata || {})];
+      const vals = [c.tenant_id, c.transaction_date, c.amount, c.type, c.category || null, c.description || null, c.account_id || null, JSON.stringify(c.metadata || {})];
       const result = await pgPool.query(query, vals);
       res.status(201).json({ status: 'success', message: 'Created', data: { cashflow: result.rows[0] } });
     } catch (error) {
@@ -85,7 +85,7 @@ export default function createCashFlowRoutes(pgPool) {
       if (!validateTenantScopedId(id, tenant_id, res)) return;
       if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
-      const allowed = ['transaction_date', 'amount', 'transaction_type', 'category', 'description', 'account_id', 'metadata'];
+      const allowed = ['transaction_date', 'amount', 'type', 'category', 'description', 'account_id', 'metadata'];
       const sets = [], vals = [tenant_id];
       let pc = 2;
       Object.entries(u).forEach(([k, v]) => {

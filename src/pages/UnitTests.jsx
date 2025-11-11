@@ -4,7 +4,7 @@ import { formValidationTests } from '../components/testing/formValidationTests';
 import { dataIntegrityTests } from '../components/testing/dataIntegrityTests';
 import { utilityFunctionTests } from '../components/testing/utilityFunctionTests';
 import { employeeScopeTests } from '../components/testing/employeeScopeTests';
-// import { apiHealthMonitorTests } from '../components/testing/apiHealthMonitorTests'; // TEMPORARILY DISABLED
+import { apiHealthMonitorTests } from '../components/testing/apiHealthMonitorTests';
 import { crudTests } from '../components/testing/crudTests';
 import { systemLogsTests } from '../components/testing/systemLogsTests';
 import { userContextTests } from '../components/testing/userContextTests.jsx';
@@ -15,7 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Info, TestTube } from "lucide-react";
 
   const testSuites = [
-    schemaValidationTests,
+    schemaValidationTests, // New comprehensive schema validation tests
     userContextTests,
     userMigrationIntegrationTests,
     errorLoggerTests,
@@ -23,7 +23,7 @@ import { Info, TestTube } from "lucide-react";
     dataIntegrityTests,
     utilityFunctionTests,
     employeeScopeTests,
-    // apiHealthMonitorTests, // TEMPORARILY DISABLED - causes console spam
+    apiHealthMonitorTests,
     crudTests,
     systemLogsTests
   ];export default function UnitTestsPage() {

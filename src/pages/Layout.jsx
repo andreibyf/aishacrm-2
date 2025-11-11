@@ -2,7 +2,6 @@ import React, { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom"; // Import useNavigate
 import { createPageUrl } from "@/utils";
 import PasswordChangeModal from "@/components/auth/PasswordChangeModal";
-import ForgotPasswordDialog from "@/components/auth/ForgotPasswordDialog";
 import {
   BarChart3,
   BookOpen, // NEW: Added for Documentation and WorkflowGuide
@@ -62,7 +61,7 @@ import SystemStatusIndicator from "../components/shared/SystemStatusIndicator";
 import Clock from "../components/shared/Clock";
 import { useUser } from "@/components/shared/useUser.js";
 import RouteGuard from "../components/shared/RouteGuard";
-import { getOrCreateUserApiKey } from "@/api/fallbackFunctions";
+import { getOrCreateUserApiKey } from "@/api/functions";
 import { createAuditLog } from "@/api/functions";
 import { MCPManager } from "../components/shared/MCPClient";
 import GlobalDetailViewer from "../components/shared/GlobalDetailViewer";
@@ -121,7 +120,7 @@ const secondaryNavItems = [
     icon: Bot,
     label: "AI Agent",
     isAvatar: true,
-    avatarUrl: "/assets/aisha-avatar.jpeg",
+    avatarUrl: "/assets/Ai-SHA-logo-2.png",
   },
   {
     href: "ClientRequirements",
@@ -485,7 +484,6 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   const [moduleSettings, setModuleSettings] = React.useState([]);
   const [currentTenantData, setCurrentTenantData] = React.useState(null);
   const [elevenLabsApiKey, setElevenLabsApiKey] = useState(null);
-  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
 
   // CRITICAL: Access tenant context safely WITHOUT destructuring
   const tenantContext = useTenant();
@@ -1064,9 +1062,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           lastTenantRequestIdRef.current = null;
 
           // For admins, clear the bad selection so they can pick a valid tenant
-          // IMPORTANT: Only reset if we have valid user data (role is set)
           if (
-            user?.role && // Guard: only proceed if we have user role loaded
             (user.role === "admin" || user.role === "superadmin") &&
             setSelectedTenantId && selectedTenantId &&
             effectiveTenantId === selectedTenantId
@@ -1111,9 +1107,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           setSelectedTenant(null);
           lastTenantRequestIdRef.current = null;
 
-          // IMPORTANT: Only reset if we have valid user data (role is set)
           if (
-            user?.role && // Guard: only proceed if we have user role loaded
             (user.role === "admin" || user.role === "superadmin") &&
             setSelectedTenantId && selectedTenantId &&
             effectiveTenantId === selectedTenantId
@@ -1151,12 +1145,11 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           setSelectedTenant(null);
 
           // CRITICAL FIX: Clear invalid tenant from localStorage for ALL users
-          // IMPORTANT: Only reset if we have valid user data (role is set)
           try {
             const storedTenantId = localStorage.getItem("selected_tenant_id");
             if (storedTenantId === attemptedTenantId) {
               localStorage.removeItem("selected_tenant_id");
-              if (setSelectedTenantId && user?.role) { // Guard: only proceed if we have user role loaded
+              if (setSelectedTenantId) {
                 setSelectedTenantId(null);
               }
             }
@@ -2116,31 +2109,10 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               e.preventDefault();
               const email = e.target.email.value;
               const password = e.target.password.value;
-              const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
 
               try {
                 console.log("[Login] Attempting sign in with:", email);
-
-                // Acquire reCAPTCHA Enterprise token (v3 style, invisible)
-                let captchaToken = null;
-                if (siteKey && window.grecaptcha?.enterprise) {
-                  try {
-                    await new Promise((resolve) => window.grecaptcha.enterprise.ready(resolve));
-                    captchaToken = await window.grecaptcha.enterprise.execute(siteKey, { action: 'LOGIN' });
-                    if (!captchaToken) {
-                      alert('Please complete the reCAPTCHA verification and try again.');
-                      return;
-                    }
-                  } catch (capErr) {
-                    console.warn('[Login] reCAPTCHA enterprise failed:', capErr);
-                    alert('reCAPTCHA could not be verified. Please refresh the page and try again.');
-                    return;
-                  }
-                } else {
-                  console.warn('[Login] reCAPTCHA enterprise not loaded or site key missing');
-                }
-
-                await User.signIn(email, password, captchaToken);
+                await User.signIn(email, password);
                 console.log("[Login] Sign in successful, reloading...");
                 window.location.reload(); // Reload to update app state
               } catch (error) {
@@ -2169,22 +2141,13 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               />
             </div>
 
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <label
-                  className="block text-slate-800 text-sm font-semibold"
-                  htmlFor="password"
-                >
-                  Password
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setForgotPasswordOpen(true)}
-                  className="text-xs text-purple-600 hover:text-purple-700 font-medium"
-                >
-                  Forgot Password?
-                </button>
-              </div>
+            <div className="mb-6">
+              <label
+                className="block text-slate-800 text-sm font-semibold mb-2"
+                htmlFor="password"
+              >
+                Password
+              </label>
               <input
                 type="password"
                 id="password"
@@ -2197,8 +2160,6 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               />
             </div>
 
-            {/* reCAPTCHA Enterprise v3: no visible widget; token acquired programmatically */}
-
             <button
               type="submit"
               className="w-full text-white px-4 py-2 rounded-md transition-all font-semibold shadow-lg hover:brightness-110"
@@ -2209,11 +2170,6 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               Sign In
             </button>
           </form>
-
-          <ForgotPasswordDialog 
-            open={forgotPasswordOpen} 
-            onOpenChange={setForgotPasswordOpen}
-          />
 
           {/* Hint: Users should be created via Supabase Auth. Removed demo credentials. */}
           <div className="mt-6 text-center text-xs text-slate-500">
@@ -2419,8 +2375,17 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                     >
                       <img
                         src={item.avatarUrl}
-                        alt={item.label}
-                        className="w-full h-full object-cover rounded-full"
+                        alt="AI Assistant"
+                        style={{
+                          width: "0.75in",
+                          height: "0.75in",
+                          borderRadius: "50%",
+                        }}
+                        className={`object-cover sidebar-avatar-border ${
+                          currentPageName === item.href
+                            ? "opacity-100"
+                            : "opacity-90 hover:opacity-100"
+                        }`}
                       />
                     </div>
                   )

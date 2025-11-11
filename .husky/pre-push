@@ -1,9 +1,3 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
-# Fail on first error
-set -e
-
 # Run lint to catch syntax errors
 npm run lint -- --max-warnings 0
 

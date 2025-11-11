@@ -13,10 +13,11 @@ import { createServer } from "http";
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './lib/swagger.js';
 import { initSupabaseDB, pool as supabasePool } from './lib/supabase-db.js';
-import { loadBraidModules, registerBraidRoutes } from './lib/braid-loader.js';
 
-// Load environment variables from backend/.env only (project standard)
-dotenv.config({ path: "./.env" });
+// Load environment variables
+// Try .env.local first (for local development), then fall back to .env
+dotenv.config({ path: ".env.local" });
+dotenv.config(); // Fallback to .env if .env.local doesn't exist
 
 // NOTE: Using Supabase PostgREST API instead of direct PostgreSQL connection
 // Direct connection requires IPv6 which Docker doesn't support well
@@ -25,7 +26,7 @@ let ipv4FirstApplied = false;
 const app = express();
 // Behind proxies, trust X-Forwarded-* to get real client IPs
 app.set('trust proxy', 1);
-const PORT = process.env.PORT || 4001;
+const PORT = process.env.PORT || 3001;
 
 // Database connection using Supabase PostgREST API (avoids IPv6 issues)
 let pgPool = null;
@@ -101,16 +102,34 @@ if (process.env.DATABASE_URL) {
   }
   console.log("✓ Performance logging pool initialized (PostgreSQL direct connection)");
   
-  // Test connection (async, non-blocking)
+  // Test connection with auto SSL fallback if necessary
   const testPerfPool = async () => {
     try {
       await perfLogPool.query('SELECT 1');
       console.log("✓ Performance logging pool connection verified");
     } catch (err) {
-      // Log error but don't set pool to null - keep it for future requests
-      // The pool will auto-reconnect on next query
-      console.warn("⚠️  Performance logging pool initial connection failed:", err.message);
-      console.warn("   Pool will retry on next request");
+      if (/does not support SSL connections/i.test(err.message) && !process.env.PERF_DB_DISABLE_SSL) {
+        // Auto-retry without SSL; suppress initial error
+        try {
+          perfLogPool.end().catch(() => { /* ignore end error */ });
+        } catch {
+          /* ignore */
+        }
+        perfLogPool = new Pool({
+          connectionString: process.env.DATABASE_URL,
+          max: 5,
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 5000,
+        });
+        try {
+          await perfLogPool.query('SELECT 1');
+          console.log("✓ Performance logging pool connection verified (no SSL)");
+        } catch (e2) {
+          console.error("✗ Performance logging pool connection failed:", e2.message);
+        }
+      } else {
+        console.error("✗ Performance logging pool connection failed:", err.message);
+      }
     }
   };
   testPerfPool();
@@ -338,7 +357,6 @@ import createIntegrationRoutes from "./routes/integrations.js";
 import createTelephonyRoutes from "./routes/telephony.js";
 import createAiRoutes from "./routes/ai.js";
 import createMcpRoutes from "./routes/mcp.js";
-import createAssistantRoutes from "./routes/assistant.js";
 import createAccountRoutes from "./routes/accounts.js";
 import createLeadRoutes from "./routes/leads.js";
 import createContactRoutes from "./routes/contacts.js";
@@ -366,7 +384,6 @@ import createActivityRoutes from "./routes/activities.js";
 import createOpportunityRoutes from "./routes/opportunities.js";
 import createNotificationRoutes from "./routes/notifications.js";
 import createSystemLogRoutes from "./routes/system-logs.js";
-import createSystemSettingsRoutes from "./routes/system-settings.js";
 import createAuditLogRoutes from "./routes/audit-logs.js";
 import createModuleSettingsRoutes from "./routes/modulesettings.js";
 import createTenantIntegrationRoutes from "./routes/tenant-integrations.js";
@@ -379,23 +396,12 @@ import createSystemBrandingRoutes from "./routes/systembrandings.js";
 import createSyncHealthRoutes from "./routes/synchealths.js";
 import createAICampaignRoutes from "./routes/aicampaigns.js";
 
-// Load Braid modules early (needed by AI routes)
-console.log("→ Loading Braid modules...");
-let braidModules = [];
-try {
-  braidModules = loadBraidModules();
-  console.log(`✓ Loaded ${braidModules.length} Braid module(s)`);
-} catch (err) {
-  console.error("⚠️ Failed to load Braid modules:", err.message);
-}
-
 // Mount routers with database pool
 app.use("/api/database", createDatabaseRoutes(pgPool));
 app.use("/api/integrations", createIntegrationRoutes(pgPool));
 app.use("/api/telephony", createTelephonyRoutes(pgPool));
-app.use("/api/ai", createAiRoutes(pgPool, braidModules));
-app.use("/api/mcp", createMcpRoutes(pgPool, braidModules));
-app.use("/api/assistant", createAssistantRoutes(pgPool));
+app.use("/api/ai", createAiRoutes(pgPool));
+app.use("/api/mcp", createMcpRoutes(pgPool));
 app.use("/api/accounts", createAccountRoutes(pgPool));
 app.use("/api/leads", createLeadRoutes(pgPool));
 app.use("/api/contacts", createContactRoutes(pgPool));
@@ -425,7 +431,6 @@ app.use("/api/activities", createActivityRoutes(pgPool));
 app.use("/api/opportunities", createOpportunityRoutes(pgPool));
 app.use("/api/notifications", createNotificationRoutes(pgPool));
 app.use("/api/system-logs", createSystemLogRoutes(pgPool));
-app.use("/api/system-settings", createSystemSettingsRoutes(pgPool));
 app.use("/api/audit-logs", createAuditLogRoutes(pgPool));
 app.use("/api/modulesettings", createModuleSettingsRoutes(pgPool));
 app.use("/api/tenantintegrations", createTenantIntegrationRoutes(pgPool));
@@ -436,15 +441,6 @@ app.use("/api/notes", createNoteRoutes(pgPool));
 app.use("/api/systembrandings", createSystemBrandingRoutes(pgPool));
 app.use("/api/synchealths", createSyncHealthRoutes(pgPool));
 app.use("/api/aicampaigns", createAICampaignRoutes(pgPool));
-
-// Register Braid HTTP routes (already loaded above before AI routes)
-console.log("→ Registering Braid HTTP routes...");
-try {
-  await registerBraidRoutes(app, braidModules);
-  console.log("✓ Braid routes registered");
-} catch (err) {
-  console.error("⚠️ Failed to register Braid routes:", err.message);
-}
 
 // 404 handler
 app.use((req, res) => {
@@ -515,16 +511,9 @@ process.on("SIGTERM", async () => {
   );
   if (heartbeatTimer) clearInterval(heartbeatTimer);
 
-  // Close both pools on shutdown
-  const pools = [];
-  if (pgPool) pools.push(pgPool.end());
-  if (perfLogPool) pools.push(perfLogPool.end());
-
-  if (pools.length > 0) {
-    Promise.all(pools).then(() => {
-      console.log("Database pools closed");
-      process.exit(0);
-    }).catch(() => {
+  if (pgPool) {
+    pgPool.end(() => {
+      console.log("PostgreSQL pool closed");
       process.exit(0);
     });
   } else {

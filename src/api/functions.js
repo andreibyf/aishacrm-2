@@ -585,30 +585,6 @@ const createFunctionProxy = (functionName) => {
         }
       }
 
-      // Local dev unique ID generator (in-memory, no DB uniqueness guarantee)
-      if (functionName === 'generateUniqueId') {
-        try {
-          const { entity_type, tenant_id } = args[0] || {};
-          if (!entity_type || !tenant_id) {
-            return { data: { success: false, message: 'entity_type and tenant_id required' } };
-          }
-          const prefixMap = { Lead: 'LEAD', Contact: 'CONT', Account: 'ACCT', Opportunity: 'OPP', Activity: 'ACT' };
-          const pfx = (prefixMap[entity_type] || 'ID');
-          const tenantSlug = String(tenant_id).toUpperCase().replace(/[^A-Z0-9-]/g, '').split('-')[0].slice(0, 6) || 'TEN';
-          const now = new Date();
-          const y = String(now.getUTCFullYear()).slice(-2);
-          const m = String(now.getUTCMonth() + 1).padStart(2, '0');
-          const d = String(now.getUTCDate()).padStart(2, '0');
-          const datePart = `${y}${m}${d}`;
-          const rand = () => Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(2, 6);
-          const unique_id = `${pfx}-${tenantSlug}-${datePart}-${rand()}`;
-          return { data: { success: true, unique_id } };
-        } catch (err) {
-          console.warn(`[Local Dev Mode] generateUniqueId fallback failed: ${err?.message || err}`);
-          return { data: { success: false, error: err?.message || String(err) } };
-        }
-      }
-
       // Default behavior for other functions in local dev mode: warn + no-op
       console.warn(`[Local Dev Mode] Function '${functionName}' called but not available in local dev mode.`);
       return Promise.resolve({ data: { success: false, message: 'Function not available in local dev mode' } });
@@ -654,27 +630,6 @@ const createFunctionProxy = (functionName) => {
       } catch (err) {
         console.error('[validateAndImport] Error:', err);
         return { data: { status: 'error', error: err?.message || String(err) } };
-      }
-    }
-
-    // Production: generateUniqueId via backend route
-    if (functionName === 'generateUniqueId') {
-      try {
-        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
-        const payload = args[0] || {};
-        const response = await fetch(`${BACKEND_URL}/api/utils/generate-unique-id`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(payload)
-        });
-        const json = await response.json();
-        if (!response.ok) {
-          return { data: { success: false, message: json?.message || 'Unique ID generation failed' } };
-        }
-        return { data: { success: true, unique_id: json?.data?.unique_id, entity_type: json?.data?.entity_type, tenant_id: json?.data?.tenant_id } };
-      } catch (err) {
-        return { data: { success: false, message: err?.message || 'Unique ID generation failed', error: err?.message } };
       }
     }
 

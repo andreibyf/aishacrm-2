@@ -2392,8 +2392,7 @@ drop table "public"."accounts";
 
 drop table "public"."activities";
 
--- DEPRECATED: ai_campaign is legacy and consolidated into ai_campaigns by migration 035
--- drop table "public"."ai_campaign";
+drop table "public"."ai_campaign";
 
 drop table "public"."announcement";
 

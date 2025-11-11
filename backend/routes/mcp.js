@@ -5,16 +5,9 @@
 
 import express from "express";
 import fetch from "node-fetch";
-import { createClient } from "@supabase/supabase-js";
 
-export default function createMCPRoutes(pgPool, braidModules = []) {
+export default function createMCPRoutes(pgPool) {
   const router = express.Router();
-
-  // Initialize Supabase client for direct DB queries
-  const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
 
   // GET /api/mcp/servers - List available MCP servers
   router.get("/servers", async (req, res) => {
@@ -95,36 +88,6 @@ export default function createMCPRoutes(pgPool, braidModules = []) {
         configured: true,
         healthy: true,
         capabilities: ["web.search_wikipedia", "web.get_wikipedia_page"],
-      });
-
-      // Add Braid MCP server - exposes all loaded Braid functions
-      const braidTools = [];
-      const braidFunctions = [];
-      for (const mod of braidModules) {
-        if (mod.error || !mod.hir || !mod.hir.functions) continue;
-        for (const fn of mod.hir.functions) {
-          const toolName = `braid.${fn.name}`;
-          braidTools.push(toolName);
-          braidFunctions.push({
-            name: fn.name,
-            params: fn.params,
-            returnType: fn.returnType,
-            effects: fn.effects || [],
-            module: mod.file
-          });
-        }
-      }
-      
-      servers.push({
-        id: "braid",
-        name: "Braid MCP",
-        type: "mcp",
-        transport: "proxy",
-        configured: true,
-        healthy: true,
-        capabilities: braidTools,
-        functions: braidFunctions,
-        modules: braidModules.length
       });
 
       res.json({ status: "success", data: { servers } });
@@ -280,23 +243,37 @@ export default function createMCPRoutes(pgPool, braidModules = []) {
         }
 
         if (tool_name === "crm.get_tenant_stats") {
-          // Use Supabase client API for accurate counts (bypasses pgPool RLS issues)
           const [accounts, contacts, leads, opps, activities] = await Promise
             .all([
-              supabase.from('accounts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
-              supabase.from('contacts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
-              supabase.from('leads').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
-              supabase.from('opportunities').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
-              supabase.from('activities').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
+              pgPool.query(
+                `SELECT COUNT(*)::int AS c FROM accounts WHERE tenant_id = $1`,
+                [tenant_id],
+              ),
+              pgPool.query(
+                `SELECT COUNT(*)::int AS c FROM contacts WHERE tenant_id = $1`,
+                [tenant_id],
+              ),
+              pgPool.query(
+                `SELECT COUNT(*)::int AS c FROM leads WHERE tenant_id = $1`,
+                [tenant_id],
+              ),
+              pgPool.query(
+                `SELECT COUNT(*)::int AS c FROM opportunities WHERE tenant_id = $1`,
+                [tenant_id],
+              ),
+              pgPool.query(
+                `SELECT COUNT(*)::int AS c FROM activities WHERE tenant_id = $1`,
+                [tenant_id],
+              ),
             ]);
           return res.json({
             status: "success",
             data: {
-              accounts: accounts.count || 0,
-              contacts: contacts.count || 0,
-              leads: leads.count || 0,
-              opportunities: opps.count || 0,
-              activities: activities.count || 0,
+              accounts: accounts.rows?.[0]?.c || 0,
+              contacts: contacts.rows?.[0]?.c || 0,
+              leads: leads.rows?.[0]?.c || 0,
+              opportunities: opps.rows?.[0]?.c || 0,
+              activities: activities.rows?.[0]?.c || 0,
             },
           });
         }
@@ -351,79 +328,6 @@ export default function createMCPRoutes(pgPool, braidModules = []) {
           status: "error",
           message: `Unknown Web tool: ${tool_name}`,
         });
-      }
-
-      // Braid MCP - Execute transpiled Braid functions
-      if (server_id === "braid") {
-        // Extract function name from tool_name (e.g., "braid.score_lead" -> "score_lead")
-        const functionName = tool_name.replace(/^braid\./, '');
-        
-        // Find the module containing this function
-        let targetModule = null;
-        let targetFunction = null;
-        
-        for (const mod of braidModules) {
-          if (mod.error || !mod.hir || !mod.hir.functions) continue;
-          const fn = mod.hir.functions.find(f => f.name === functionName);
-          if (fn) {
-            targetModule = mod;
-            targetFunction = fn;
-            break;
-          }
-        }
-        
-        if (!targetModule || !targetFunction) {
-          return res.status(404).json({
-            status: "error",
-            message: `Braid function not found: ${functionName}`,
-          });
-        }
-        
-        // Import the transpiled module
-        try {
-          const { pathToFileURL } = await import('url');
-          const jsModule = await import(pathToFileURL(targetModule.jsPath).href);
-          const transpiledFn = jsModule[functionName];
-          
-          if (!transpiledFn) {
-            return res.status(501).json({
-              status: "error",
-              message: `Braid function '${functionName}' not transpiled`,
-            });
-          }
-          
-          // Parse parameters and call function
-          const args = [];
-          if (targetFunction.params && targetFunction.params.length > 0) {
-            const paramNames = targetFunction.params
-              .split(',')
-              .map(p => p.trim().split(':')[0].trim())
-              .filter(name => name.length > 0);
-            
-            for (const paramName of paramNames) {
-              const value = parameters?.[paramName];
-              args.push(value);
-            }
-          }
-          
-          console.log(`[MCP Braid] Calling ${functionName} with args:`, args);
-          const result = await transpiledFn(...args);
-          console.log(`[MCP Braid] Result from ${functionName}:`, result);
-          
-          return res.json({
-            status: "success",
-            data: result,
-            function: functionName,
-            module: targetModule.file
-          });
-        } catch (err) {
-          console.error(`[MCP Braid] Error executing ${functionName}:`, err);
-          return res.status(500).json({
-            status: "error",
-            message: err.message,
-            function: functionName
-          });
-        }
       }
 
       // Default stub

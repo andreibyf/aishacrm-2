@@ -32,7 +32,10 @@ Originally powered by Ai-SHA, now transitioning to your own independent infrastr
    Edit `.env` and configure:
    ```
    VITE_BASE44_APP_ID=your_app_id_here  # For data migration only
-   VITE_AISHACRM_BACKEND_URL=http://localhost:3001  # Your backend
+   # Backend URL:
+   # - Local dev (npm run dev backend):       http://localhost:3001
+   # - Docker (recommended for this project): http://localhost:4001
+   VITE_AISHACRM_BACKEND_URL=http://localhost:4001
    ```
 
 3. **Set up your backend server**
@@ -58,13 +61,16 @@ To avoid confusion when testing, different ports are used for local development 
 | Frontend | `http://localhost:5173` (Vite default) | `http://localhost:4000` |
 | Backend API | `http://localhost:3001` | `http://localhost:4001` |
 
-**Local Development:**
-- Start with `npm run dev` (frontend) and `cd backend && npm run dev` (backend)
-- Or use `.\start-all.ps1` to start both in background
+**Local Development (non-Docker):**
+- Start with `npm run dev` (frontend at 5173) and `cd backend && npm run dev` (backend at 3001)
+- Or use `\.\start-all.ps1` to start both in background
 
-**Docker Containers:**
+Note: This project primarily runs in Docker. When using Docker, always use ports 4000 (frontend) and 4001 (backend), and set `VITE_AISHACRM_BACKEND_URL` accordingly.
+
+**Docker Containers (recommended):**
 - Start with `docker compose up -d --build`
-- Access frontend at port 4000, backend at port 4001
+- Access frontend at `http://localhost:4000`, backend at `http://localhost:4001`
+- Ensure root `.env` has `VITE_AISHACRM_BACKEND_URL=http://localhost:4001`
 
 ## Quick Start (All Services)
 
