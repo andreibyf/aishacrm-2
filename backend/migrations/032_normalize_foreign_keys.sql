@@ -39,7 +39,13 @@ ALTER TABLE tenant_integration ADD COLUMN IF NOT EXISTS tenant_uuid UUID;
 ALTER TABLE announcement ADD COLUMN IF NOT EXISTS tenant_uuid UUID;
 ALTER TABLE file ADD COLUMN IF NOT EXISTS tenant_uuid UUID;
 ALTER TABLE user_invitation ADD COLUMN IF NOT EXISTS tenant_uuid UUID;
-ALTER TABLE ai_campaign ADD COLUMN IF NOT EXISTS tenant_uuid UUID;
+-- Guard legacy ai_campaign: only run if table exists
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ai_campaign') THEN
+    ALTER TABLE ai_campaign ADD COLUMN IF NOT EXISTS tenant_uuid UUID;
+  END IF;
+END$$;
 ALTER TABLE api_key ADD COLUMN IF NOT EXISTS tenant_uuid UUID;
 ALTER TABLE cash_flow ADD COLUMN IF NOT EXISTS tenant_uuid UUID;
 ALTER TABLE cron_job ADD COLUMN IF NOT EXISTS tenant_uuid UUID;
@@ -83,7 +89,13 @@ UPDATE tenant_integration SET tenant_uuid = (SELECT id FROM tenant WHERE tenant.
 UPDATE announcement SET tenant_uuid = (SELECT id FROM tenant WHERE tenant.tenant_id = announcement.tenant_id) WHERE announcement.tenant_id IS NOT NULL;
 UPDATE file SET tenant_uuid = (SELECT id FROM tenant WHERE tenant.tenant_id = file.tenant_id);
 UPDATE user_invitation SET tenant_uuid = (SELECT id FROM tenant WHERE tenant.tenant_id = user_invitation.tenant_id);
-UPDATE ai_campaign SET tenant_uuid = (SELECT id FROM tenant WHERE tenant.tenant_id = ai_campaign.tenant_id);
+-- Guard legacy ai_campaign update
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ai_campaign') THEN
+    UPDATE ai_campaign SET tenant_uuid = (SELECT id FROM tenant WHERE tenant.tenant_id = ai_campaign.tenant_id);
+  END IF;
+END$$;
 UPDATE api_key SET tenant_uuid = (SELECT id FROM tenant WHERE tenant.tenant_id = api_key.tenant_id);
 UPDATE cash_flow SET tenant_uuid = (SELECT id FROM tenant WHERE tenant.tenant_id = cash_flow.tenant_id);
 UPDATE cron_job SET tenant_uuid = (SELECT id FROM tenant WHERE tenant.tenant_id = cron_job.tenant_id) WHERE cron_job.tenant_id IS NOT NULL;
@@ -126,7 +138,13 @@ ALTER TABLE tenant_integration DROP COLUMN IF EXISTS tenant_id;
 ALTER TABLE announcement DROP COLUMN IF EXISTS tenant_id;
 ALTER TABLE file DROP COLUMN IF EXISTS tenant_id;
 ALTER TABLE user_invitation DROP COLUMN IF EXISTS tenant_id;
-ALTER TABLE ai_campaign DROP COLUMN IF EXISTS tenant_id;
+-- Guard legacy ai_campaign
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ai_campaign') THEN
+    ALTER TABLE ai_campaign DROP COLUMN IF EXISTS tenant_id;
+  END IF;
+END$$;
 ALTER TABLE api_key DROP COLUMN IF EXISTS tenant_id;
 ALTER TABLE cash_flow DROP COLUMN IF EXISTS tenant_id;
 ALTER TABLE cron_job DROP COLUMN IF EXISTS tenant_id;
@@ -167,7 +185,13 @@ ALTER TABLE tenant_integration RENAME COLUMN tenant_uuid TO tenant_id;
 ALTER TABLE announcement RENAME COLUMN tenant_uuid TO tenant_id;
 ALTER TABLE file RENAME COLUMN tenant_uuid TO tenant_id;
 ALTER TABLE user_invitation RENAME COLUMN tenant_uuid TO tenant_id;
-ALTER TABLE ai_campaign RENAME COLUMN tenant_uuid TO tenant_id;
+-- Guard legacy ai_campaign
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ai_campaign') THEN
+    ALTER TABLE ai_campaign RENAME COLUMN tenant_uuid TO tenant_id;
+  END IF;
+END$$;
 ALTER TABLE api_key RENAME COLUMN tenant_uuid TO tenant_id;
 ALTER TABLE cash_flow RENAME COLUMN tenant_uuid TO tenant_id;
 ALTER TABLE cron_job RENAME COLUMN tenant_uuid TO tenant_id;
@@ -207,7 +231,13 @@ ALTER TABLE test_report ADD CONSTRAINT fk_test_report_tenant FOREIGN KEY (tenant
 ALTER TABLE tenant_integration ADD CONSTRAINT fk_tenant_integration_tenant FOREIGN KEY (tenant_id) REFERENCES tenant(id) ON DELETE CASCADE;
 ALTER TABLE file ADD CONSTRAINT fk_file_tenant FOREIGN KEY (tenant_id) REFERENCES tenant(id) ON DELETE CASCADE;
 ALTER TABLE user_invitation ADD CONSTRAINT fk_user_invitation_tenant FOREIGN KEY (tenant_id) REFERENCES tenant(id) ON DELETE CASCADE;
-ALTER TABLE ai_campaign ADD CONSTRAINT fk_ai_campaign_tenant FOREIGN KEY (tenant_id) REFERENCES tenant(id) ON DELETE CASCADE;
+-- Guard legacy ai_campaign FK
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ai_campaign') THEN
+    ALTER TABLE ai_campaign ADD CONSTRAINT fk_ai_campaign_tenant FOREIGN KEY (tenant_id) REFERENCES tenant(id) ON DELETE CASCADE;
+  END IF;
+END$$;
 ALTER TABLE api_key ADD CONSTRAINT fk_api_key_tenant FOREIGN KEY (tenant_id) REFERENCES tenant(id) ON DELETE CASCADE;
 ALTER TABLE cash_flow ADD CONSTRAINT fk_cash_flow_tenant FOREIGN KEY (tenant_id) REFERENCES tenant(id) ON DELETE CASCADE;
 ALTER TABLE performance_log ADD CONSTRAINT fk_performance_log_tenant FOREIGN KEY (tenant_id) REFERENCES tenant(id) ON DELETE CASCADE;
@@ -250,7 +280,13 @@ ALTER TABLE test_report ALTER COLUMN tenant_id SET NOT NULL;
 ALTER TABLE tenant_integration ALTER COLUMN tenant_id SET NOT NULL;
 ALTER TABLE file ALTER COLUMN tenant_id SET NOT NULL;
 ALTER TABLE user_invitation ALTER COLUMN tenant_id SET NOT NULL;
-ALTER TABLE ai_campaign ALTER COLUMN tenant_id SET NOT NULL;
+-- Guard legacy ai_campaign not-null
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ai_campaign') THEN
+    ALTER TABLE ai_campaign ALTER COLUMN tenant_id SET NOT NULL;
+  END IF;
+END$$;
 ALTER TABLE api_key ALTER COLUMN tenant_id SET NOT NULL;
 ALTER TABLE cash_flow ALTER COLUMN tenant_id SET NOT NULL;
 ALTER TABLE performance_log ALTER COLUMN tenant_id SET NOT NULL;
@@ -288,7 +324,13 @@ DROP INDEX IF EXISTS idx_test_report_tenant;
 DROP INDEX IF EXISTS idx_tenant_integration_tenant;
 DROP INDEX IF EXISTS idx_file_tenant;
 DROP INDEX IF EXISTS idx_user_invitation_tenant;
-DROP INDEX IF EXISTS idx_ai_campaign_tenant;
+-- Guard legacy ai_campaign index drop
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM pg_class WHERE relname = 'ai_campaign') THEN
+    DROP INDEX IF EXISTS idx_ai_campaign_tenant;
+  END IF;
+END$$;
 DROP INDEX IF EXISTS idx_api_key_tenant;
 DROP INDEX IF EXISTS idx_cash_flow_tenant;
 DROP INDEX IF EXISTS idx_performance_log_tenant;
@@ -322,7 +364,13 @@ CREATE INDEX idx_test_report_tenant ON test_report(tenant_id);
 CREATE INDEX idx_tenant_integration_tenant ON tenant_integration(tenant_id);
 CREATE INDEX idx_file_tenant ON file(tenant_id);
 CREATE INDEX idx_user_invitation_tenant ON user_invitation(tenant_id);
-CREATE INDEX idx_ai_campaign_tenant ON ai_campaign(tenant_id);
+-- Guard legacy ai_campaign index create
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ai_campaign') THEN
+    CREATE INDEX IF NOT EXISTS idx_ai_campaign_tenant ON ai_campaign(tenant_id);
+  END IF;
+END$$;
 CREATE INDEX idx_api_key_tenant ON api_key(tenant_id);
 CREATE INDEX idx_cash_flow_tenant ON cash_flow(tenant_id);
 CREATE INDEX idx_performance_log_tenant ON performance_log(tenant_id);

@@ -221,7 +221,8 @@ COMMENT ON COLUMN "public"."activities"."due_time" IS 'Time component of due dat
 
 
 
-CREATE TABLE IF NOT EXISTS "public"."ai_campaign" (
+-- DEPRECATED (migration 035): legacy singular table replaced by ai_campaigns
+-- CREATE TABLE IF NOT EXISTS "public"."ai_campaign" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "tenant_id" "text" NOT NULL,
     "name" "text" NOT NULL,
@@ -1813,7 +1814,8 @@ CREATE POLICY "Service role full access to activities" ON "public"."activities" 
 
 
 
-CREATE POLICY "Service role full access to ai_campaign" ON "public"."ai_campaign" TO "service_role" USING (true) WITH CHECK (true);
+-- DEPRECATED: ai_campaign policy replaced by ai_campaigns policies
+-- CREATE POLICY "Service role full access to ai_campaign" ON "public"."ai_campaign" TO "service_role" USING (true) WITH CHECK (true);
 
 
 
@@ -1987,7 +1989,8 @@ ALTER TABLE "public"."accounts" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."activities" ENABLE ROW LEVEL SECURITY;
 
 
-ALTER TABLE "public"."ai_campaign" ENABLE ROW LEVEL SECURITY;
+-- DEPRECATED: ai_campaign RLS no longer needed after consolidation
+-- ALTER TABLE "public"."ai_campaign" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."announcement" ENABLE ROW LEVEL SECURITY;
@@ -2500,9 +2503,12 @@ GRANT ALL ON TABLE "public"."activities" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."ai_campaign" TO "anon";
-GRANT ALL ON TABLE "public"."ai_campaign" TO "authenticated";
-GRANT ALL ON TABLE "public"."ai_campaign" TO "service_role";
+-- DEPRECATED: ai_campaign grants superseded by ai_campaigns
+-- GRANT ALL ON TABLE "public"."ai_campaign" TO "anon";
+-- DEPRECATED: ai_campaign grants superseded by ai_campaigns
+-- GRANT ALL ON TABLE "public"."ai_campaign" TO "authenticated";
+-- DEPRECATED: ai_campaign grants superseded by ai_campaigns
+-- GRANT ALL ON TABLE "public"."ai_campaign" TO "service_role";
 
 
 

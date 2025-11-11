@@ -32,3 +32,7 @@ jobs:
 
       - name: ESLint (fail on warnings)
         run: npx eslint . --max-warnings=0
+
+      - name: Schema lint check (prevent legacy table references)
+        run: pwsh -File scripts/lint-check-ai-campaign.ps1
+        shell: pwsh
