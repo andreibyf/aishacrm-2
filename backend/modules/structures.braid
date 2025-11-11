@@ -1,0 +1,32 @@
+// Structures demo (flat objects, arrays of objects, object with array)
+// NOTE: Nested object literals are currently unsupported by the Braid grammar (parse error on inner '{').
+// We approximate nested data by flattening keys and combining arrays of objects.
+
+// Flat object containing array field
+@route(method: "GET", path: "/api/braid/get_nested")
+fn get_nested() -> String {
+  { user_name: "Alice", user_city: "NYC", user_zip: 10001, scores: [10, 20, 30] }
+}
+
+// Let binding then property access on flat object
+@route(method: "GET", path: "/api/braid/get_user_name")
+fn get_user_name() -> String {
+  let user: User = { name: "Bob", age: 42 }; user.name
+}
+
+// Array of flat objects then index + property
+@route(method: "GET", path: "/api/braid/first_product_name")
+fn first_product_name() -> String {
+  [{ name: "Widget" }, { name: "Gadget" }][0].name
+}
+
+@route(method: "GET", path: "/api/braid/first_id")
+fn first_id() -> i32 {
+  [{ id: 7 }, { id: 9 }][0].id
+}
+
+// Identifier indexing then property access (split let from return)
+@route(method: "POST", path: "/api/braid/product_name_at")
+fn product_name_at(i: i32) -> String {
+  let products: List = [{ name: "W" }, { name: "G" }, { name: "T" }]; products[i].name
+}

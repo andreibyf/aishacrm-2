@@ -84,7 +84,9 @@ function parseIfExpression(text, indent = '  ') {
   // Extract the value from thenBody (handle string literals, identifiers, etc.)
   const thenValue = extractValue(cleanThen);
   
-  let jsCode = `${indent}if (${condition.trim()}) {\n${indent}  return ${thenValue};\n${indent}}`;
+  // Transform builtins in condition (e.g., len(arr) -> arr.length)
+  const transformedCond = transformBuiltins(condition.trim());
+  let jsCode = `${indent}if (${transformedCond}) {\n${indent}  return ${thenValue};\n${indent}}`;
   
   // Check if there's an else clause
   const restTrimmed = rest.trim();
@@ -113,19 +115,49 @@ function parseIfExpression(text, indent = '  ') {
  */
 function extractValue(text) {
   const trimmed = text.trim();
+  const transformed = transformBuiltins(trimmed);
   
   // String literal
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return trimmed;
+  if (transformed.startsWith('"') && transformed.endsWith('"')) {
+    return transformed;
   }
   
   // Numeric literal
-  if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
-    return trimmed;
+  if (/^-?\d+(\.\d+)?$/.test(transformed)) {
+    return transformed;
   }
   
   // Expression (arithmetic, comparison, function calls, etc.)
-  return trimmed;
+  return transformed;
+}
+
+/**
+ * Transform Braid builtins to JavaScript equivalents.
+ * Currently supports:
+ * - len(expr) -> (expr).length
+ */
+function transformBuiltins(text) {
+  if (!text) return text;
+  let out = text;
+  // Replace len(x) with (x).length, preserving inner expression
+  out = out.replace(/\blen\(([^)]+)\)/g, '($1).length');
+  // List helpers: map(list, fn) -> (list).map(fn)
+  out = out.replace(/\bmap\(([^,]+),\s*([^)]+)\)/g, '($1).map($2)');
+  // filter(list, fn) -> (list).filter(fn)
+  out = out.replace(/\bfilter\(([^,]+),\s*([^)]+)\)/g, '($1).filter($2)');
+  // reduce(list, fn, init) -> (list).reduce(fn, init)
+  out = out.replace(/\breduce\(([^,]+),\s*([^,]+),\s*([^)]+)\)/g, '($1).reduce($2, $3)');
+  // find(list, fn) -> (list).find(fn)
+  out = out.replace(/\bfind\(([^,]+),\s*([^)]+)\)/g, '($1).find($2)');
+  // some(list, fn) -> (list).some(fn)
+  out = out.replace(/\bsome\(([^,]+),\s*([^)]+)\)/g, '($1).some($2)');
+  // every(list, fn) -> (list).every(fn)
+  out = out.replace(/\bevery\(([^,]+),\s*([^)]+)\)/g, '($1).every($2)');
+  // includes(list, val) -> (list).includes(val)
+  out = out.replace(/\bincludes\(([^,]+),\s*([^)]+)\)/g, '($1).includes($2)');
+  // join(list, sep) -> (list).join(sep)
+  out = out.replace(/\bjoin\(([^,]+),\s*([^)]+)\)/g, '($1).join($2)');
+  return out;
 }
 
 /**
@@ -144,74 +176,99 @@ function hasFunctionCall(text) {
  */
 function transpileBlock(block) {
   const bodyText = (block.raw || '').trim();
+  const processed = transformBuiltins(bodyText);
   
-  if (!bodyText) {
+  if (!processed) {
     return '  return "";';
   }
   
   // Check for conditional expressions FIRST (most complex pattern)
   // Handles: if/else, else if chains
-  if (bodyText.startsWith('if ')) {
-    return transpileConditional(bodyText);
+  if (processed.startsWith('if ')) {
+    return transpileConditional(processed);
   }
   
   // Check for array literals
   // Pattern: [1, 2, 3] or ["a", "b"] or [x, y, z] or []
   // JavaScript arrays have the same syntax as Braid
-  if (bodyText.startsWith('[') && bodyText.endsWith(']')) {
-    return `  return ${bodyText};`;
+  if (processed.startsWith('[') && processed.endsWith(']')) {
+    return `  return ${processed};`;
   }
   
   // Check for object literals
   // Pattern: { key: value, ... } or {}
   // JavaScript objects have the same syntax as Braid
-  if (bodyText.startsWith('{') && bodyText.endsWith('}')) {
+  if (processed.startsWith('{') && processed.endsWith('}')) {
     // Empty object or object with key-value pairs
-    return `  return ${bodyText};`;
+    return `  return ${processed};`;
   }
-  
-  // Check for function calls
-  // Pattern: functionName(args) or expressions containing function calls
-  // This is deliberately broad - if it has parentheses and looks like a call, pass it through
-  // Examples: double(x), format_greeting("World"), double(n) + double(n)
-  if (hasFunctionCall(bodyText)) {
-    // Function calls in JavaScript have the same syntax as Braid, so pass through
-    return `  return ${bodyText};`;
-  }
-  
-  // Check for multiple let bindings (before checking for string concat)
-  // More robust: look for any number of let statements followed by a final expression
-  if (bodyText.includes('let ') && bodyText.includes(';')) {
-    // Split by semicolons to find individual statements
-    const statements = bodyText.split(/;/).map(s => s.trim()).filter(s => s);
-    
+
+  // Early: multiple let bindings (ensure they transpile before indexing/property access shortcuts)
+  if (processed.includes('let ') && processed.includes(';')) {
+    const statements = processed.split(/;/).map(s => s.trim()).filter(s => s);
     if (statements.length > 1) {
       const lines = [];
       let hasLet = false;
-      
       for (let i = 0; i < statements.length; i++) {
         const stmt = statements[i];
-        
-        // Check if this is a let binding
         const letMatch = stmt.match(/^let\s+(\w+)\s*:\s*\w+\s*=\s*(.+)$/);
         if (letMatch) {
           const [, varName, value] = letMatch;
-          lines.push(`  const ${varName} = ${value.trim()};`);
+          lines.push(`  const ${varName} = ${transformBuiltins(value.trim())};`);
           hasLet = true;
         } else if (i === statements.length - 1) {
-          // Last statement is the return expression
           lines.push(`  return ${stmt};`);
         }
       }
-      
       if (hasLet) {
         return lines.join('\n');
       }
     }
   }
   
+  // Check for function calls
+  // Pattern: functionName(args) or expressions containing function calls
+  // This is deliberately broad - if it has parentheses and looks like a call, pass it through
+  // Examples: double(x), format_greeting("World"), double(n) + double(n)
+  if (hasFunctionCall(processed)) {
+    // Function calls in JavaScript have the same syntax as Braid, so pass through
+    return `  return ${processed};`;
+  }
+
+  // Property access chains on identifiers: user.name, account.owner.id
+  if (/^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)+$/.test(processed)) {
+    return `  return ${processed};`;
+  }
+
+  // Identifier indexing with property chain: items[0].name, arr[i].value
+  if (/^\w+\s*\[[^\]]+\](\.[a-zA-Z_][a-zA-Z0-9_]*)+$/.test(processed)) {
+    return `  return ${processed};`;
+  }
+
+  // Array literal indexing then property: [ { name: "A" } ][0].name or [1,2,3][0].toString()
+  if (/^\[.*\]\s*\[[^\]]+\](\.[a-zA-Z_][a-zA-Z0-9_]*)+$/.test(processed)) {
+    return `  return ${processed};`;
+  }
+
+  // Object literal with property access chain: { user: { name: "Alice" } }.user.name
+  // (User might wrap with let binding, but allow direct literal property access.)
+  if (/^\{.*\}(\.[a-zA-Z_][a-zA-Z0-9_]*)+$/.test(processed)) {
+    return `  return (${processed});`; // wrap in parens for safety
+  }
+
+  // Support indexing directly on array literals e.g. [1,2,3][0]
+  if (/^\[.*\]\s*\[[^\]]+\]$/.test(processed)) {
+    return `  return ${processed};`;
+  }
+
+  // Check for list indexing (e.g., arr[0], items[i]) or property access like .length
+  if (/\w+\s*\[[^\]]+\]/.test(processed) || processed.includes('.length')) {
+    return `  return ${processed};`;
+  }
+  
+  
   // Check if it's a string literal
-  const stringMatch = bodyText.match(/^"([^"]*)"$/);
+  const stringMatch = processed.match(/^"([^"]*)"$/);
   if (stringMatch) {
     const stringValue = stringMatch[1];
     return `  return "${stringValue}";`;
@@ -220,46 +277,48 @@ function transpileBlock(block) {
   // Check if it's a numeric literal
   const numericMatch = bodyText.match(/^-?\d+(\.\d+)?$/);
   if (numericMatch) {
-    return `  return ${bodyText};`;
+    return `  return ${processed};`;
   }
   
   // Check if it's a simple identifier (variable/parameter reference)
-  const identifierMatch = bodyText.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/);
+  const identifierMatch = processed.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/);
   if (identifierMatch) {
-    return `  return ${bodyText};`;
+    return `  return ${processed};`;
   }
   
   // Check for string concatenation (e.g., "Hello, " + name + "!")
   // This handles any expression with + that contains at least one string literal
-  if (bodyText.includes('+') && bodyText.includes('"')) {
+  if (processed.includes('+') && processed.includes('"')) {
     // Simple approach: if it has + and quotes, treat as concatenation expression
-    return `  return ${bodyText};`;
+    return `  return ${processed};`;
   }
   
   // Check if it's an arithmetic expression
   // Supports: a + b, x * y, x * 2, 5 + n, etc.
   // More general pattern: includes arithmetic operators
-  const arithmeticMatch = bodyText.match(/^[a-zA-Z0-9_\s]+\s*[+\-*/%]\s*[a-zA-Z0-9_\s]+$/);
+  // Allow word chars, whitespace, brackets for indexing, and dots for property access
+  // eslint-disable-next-line no-useless-escape -- the character class intentionally includes brackets and dot
+  const arithmeticMatch = processed.match(/^[\w\s\.\[\]]+\s*[+\-*/%]\s*[\w\s\.\[\]]+$/);
   if (arithmeticMatch) {
-    return `  return ${bodyText};`;
+    return `  return ${processed};`;
   }
   
   // Check for single let binding with string literal: let varName: Type = "value"; returnExpr
-  const letStringMatch = bodyText.match(/let\s+(\w+)\s*:\s*\w+\s*=\s*"([^"]*)"\s*;\s*(\w+)/);
+  const letStringMatch = processed.match(/let\s+(\w+)\s*:\s*\w+\s*=\s*"([^"]*)"\s*;\s*(\w+)/);
   if (letStringMatch) {
     const [, varName, stringValue, returnExpr] = letStringMatch;
     return `  const ${varName} = "${stringValue}";\n  return ${returnExpr};`;
   }
   
   // Check for single let binding with numeric literal: let varName: Type = 123; returnExpr
-  const letNumericMatch = bodyText.match(/let\s+(\w+)\s*:\s*\w+\s*=\s*(-?\d+(?:\.\d+)?)\s*;\s*(\w+)/);
+  const letNumericMatch = processed.match(/let\s+(\w+)\s*:\s*\w+\s*=\s*(-?\d+(?:\.\d+)?)\s*;\s*(\w+)/);
   if (letNumericMatch) {
     const [, varName, numericValue, returnExpr] = letNumericMatch;
     return `  const ${varName} = ${numericValue};\n  return ${returnExpr};`;
   }
   
   // Fallback: return empty string
-  console.warn(`[Transpiler] Unhandled block expression: ${bodyText}`);
+  console.warn(`[Transpiler] Unhandled block expression: ${processed}`);
   return '  return "";';
 }
 
