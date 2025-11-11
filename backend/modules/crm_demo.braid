@@ -1,0 +1,196 @@
+// CRM Demo Endpoints - Real-world CRM operations
+// Showcases: arithmetic, strings, conditionals, let bindings, function calls, async, error handling
+
+// ===== LEAD SCORING =====
+
+@route(method: "POST", path: "/api/braid/crm/score_lead")
+fn score_lead(company_size: i32, budget: i32, urgency: i32) -> i32 {
+  let size_score: i32 = company_size * 2;
+  let budget_score: i32 = budget / 1000;
+  let total: i32 = size_score + budget_score + urgency;
+  total
+}
+
+@route(method: "POST", path: "/api/braid/crm/lead_quality")
+fn lead_quality(score: i32) -> String {
+  if score > 80 {
+    "Hot"
+  } else if score > 50 {
+    "Warm"
+  } else {
+    "Cold"
+  }
+}
+
+// ===== DEAL PIPELINE =====
+
+@route(method: "POST", path: "/api/braid/crm/deal_probability")
+fn deal_probability(stage: i32) -> i32 {
+  if stage == 1 {
+    10
+  } else if stage == 2 {
+    25
+  } else if stage == 3 {
+    50
+  } else if stage == 4 {
+    75
+  } else if stage == 5 {
+    90
+  } else {
+    0
+  }
+}
+
+@route(method: "POST", path: "/api/braid/crm/weighted_value")
+fn weighted_value(deal_value: i32, stage: i32) -> i32 {
+  let probability: i32 = deal_probability(stage);
+  deal_value * probability / 100
+}
+
+// ===== CONTACT MANAGEMENT =====
+
+@route(method: "POST", path: "/api/braid/crm/format_contact")
+fn format_contact(first_name: String, last_name: String, title: String) -> String {
+  title + " " + first_name + " " + last_name
+}
+
+@route(method: "POST", path: "/api/braid/crm/create_contact")
+fn create_contact(first_name: String, last_name: String, company: String) -> String {
+  { first_name: first_name, last_name: last_name, company: company, status: "active" }
+}
+
+// ===== REVENUE CALCULATIONS =====
+
+@route(method: "POST", path: "/api/braid/crm/calculate_mrr")
+fn calculate_mrr(annual_value: i32) -> i32 {
+  annual_value / 12
+}
+
+@route(method: "POST", path: "/api/braid/crm/calculate_commission")
+fn calculate_commission(deal_value: i32, rate: i32) -> i32 {
+  let result: i32 = deal_value * rate; result / 100
+}
+
+// ===== ACTIVITY TRACKING =====
+
+@route(method: "POST", path: "/api/braid/crm/activity_score")
+fn activity_score(emails: i32, calls: i32, meetings: i32) -> i32 {
+  let calls_score: i32 = calls * 3; let meetings_score: i32 = meetings * 5; emails + calls_score + meetings_score
+}
+
+@route(method: "POST", path: "/api/braid/crm/follow_up_priority")
+fn follow_up_priority(days_since_contact: i32) -> String {
+  if days_since_contact > 14 {
+    "Urgent"
+  } else if days_since_contact > 7 {
+    "High"
+  } else {
+    "Normal"
+  }
+}
+
+// ===== TERRITORY MANAGEMENT =====
+
+@route(method: "POST", path: "/api/braid/crm/assign_territory")
+fn assign_territory(company_size: i32) -> String {
+  if company_size > 1000 {
+    "Enterprise"
+  } else if company_size > 100 {
+    "Mid-Market"
+  } else {
+    "SMB"
+  }
+}
+
+@route(method: "POST", path: "/api/braid/crm/territory_quota")
+fn territory_quota(accounts: i32) -> i32 {
+  accounts * 50000
+}
+
+// ===== FORECASTING =====
+
+@route(method: "GET", path: "/api/braid/crm/stage_name")
+fn stage_name(stage: i32) -> String {
+  if stage == 1 {
+    "Prospecting"
+  } else if stage == 2 {
+    "Qualification"
+  } else if stage == 3 {
+    "Proposal"
+  } else if stage == 4 {
+    "Negotiation"
+  } else if stage == 5 {
+    "Closed-Won"
+  } else {
+    "Unknown"
+  }
+}
+
+@route(method: "POST", path: "/api/braid/crm/avg_deal_size")
+fn avg_deal_size(count: i32, total_value: i32) -> i32 {
+  total_value / count
+}
+
+// ===== ASYNC OPERATIONS =====
+
+@route(method: "POST", path: "/api/braid/crm/account_summary")
+async fn account_summary(account_id: i32, name: String) -> String {
+  { account_id: account_id, name: name, stage: "Active", deals: 5 }
+}
+
+// ===== VALIDATION =====
+
+@route(method: "POST", path: "/api/braid/crm/validate_email")
+fn validate_email(email: String) -> String {
+  if len(email) < 5 {
+    "Error: Email too short"
+  } else {
+    "Valid"
+  }
+}
+
+@route(method: "POST", path: "/api/braid/crm/validate_deal")
+fn validate_deal(amount: i32, stage: i32) -> String {
+  if amount < 0 {
+    "Error: Amount cannot be negative"
+  } else if stage < 1 {
+    "Error: Invalid stage"
+  } else if stage > 5 {
+    "Error: Stage out of range"
+  } else {
+    "Valid"
+  }
+}
+
+// ===== ARRAY OPERATIONS =====
+
+@route(method: "GET", path: "/api/braid/crm/pipeline_stages")
+fn pipeline_stages() -> String {
+  ["Prospecting", "Qualification", "Proposal", "Negotiation", "Closed-Won"]
+}
+
+@route(method: "POST", path: "/api/braid/crm/stage_at_index")
+fn stage_at_index(index: i32) -> String {
+  ["Prospecting", "Qualification", "Proposal", "Negotiation", "Closed-Won"][index]
+}
+
+@route(method: "GET", path: "/api/braid/crm/stage_count")
+fn stage_count() -> i32 {
+  len(["Prospecting", "Qualification", "Proposal", "Negotiation", "Closed-Won"])
+}
+
+// ===== COMPOSITE OPERATIONS =====
+
+@route(method: "POST", path: "/api/braid/crm/evaluate_lead")
+fn evaluate_lead(company_size: i32, budget: i32, urgency: i32) -> String {
+  let score: i32 = score_lead(company_size, budget, urgency);
+  let quality: String = lead_quality(score);
+  quality
+}
+
+@route(method: "POST", path: "/api/braid/crm/total_pipeline")
+fn total_pipeline(deal1: i32, deal2: i32, deal3: i32) -> i32 {
+  let deals: List = [deal1, deal2, deal3];
+  let total: i32 = deals[0] + deals[1] + deals[2];
+  total
+}
