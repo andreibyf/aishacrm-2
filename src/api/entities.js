@@ -1272,15 +1272,25 @@ export const User = {
    * Sign in with email and password
    * @param {string} email - User email
    * @param {string} password - User password
+   * @param {string} captchaToken - Optional reCAPTCHA token
    */
-  signIn: async (email, password) => {
+  signIn: async (email, password, captchaToken = null) => {
     // Production: Use Supabase Auth
     if (isSupabaseConfigured()) {
       try {
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const signInOptions = {
           email,
           password,
-        });
+        };
+        
+        // Add captcha token if provided
+        if (captchaToken) {
+          signInOptions.options = {
+            captchaToken,
+          };
+        }
+
+        const { data, error } = await supabase.auth.signInWithPassword(signInOptions);
 
         if (error) {
           console.error("[Supabase Auth] Sign in error:", error);

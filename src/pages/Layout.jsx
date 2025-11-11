@@ -2111,10 +2111,31 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               e.preventDefault();
               const email = e.target.email.value;
               const password = e.target.password.value;
+              const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
 
               try {
                 console.log("[Login] Attempting sign in with:", email);
-                await User.signIn(email, password);
+
+                // Acquire reCAPTCHA Enterprise token (v3 style, invisible)
+                let captchaToken = null;
+                if (siteKey && window.grecaptcha?.enterprise) {
+                  try {
+                    await new Promise((resolve) => window.grecaptcha.enterprise.ready(resolve));
+                    captchaToken = await window.grecaptcha.enterprise.execute(siteKey, { action: 'LOGIN' });
+                    if (!captchaToken) {
+                      alert('Please complete the reCAPTCHA verification and try again.');
+                      return;
+                    }
+                  } catch (capErr) {
+                    console.warn('[Login] reCAPTCHA enterprise failed:', capErr);
+                    alert('reCAPTCHA could not be verified. Please refresh the page and try again.');
+                    return;
+                  }
+                } else {
+                  console.warn('[Login] reCAPTCHA enterprise not loaded or site key missing');
+                }
+
+                await User.signIn(email, password, captchaToken);
                 console.log("[Login] Sign in successful, reloading...");
                 window.location.reload(); // Reload to update app state
               } catch (error) {
@@ -2143,7 +2164,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               />
             </div>
 
-            <div className="mb-6">
+            <div className="mb-4">
               <div className="flex items-center justify-between mb-2">
                 <label
                   className="block text-slate-800 text-sm font-semibold"
@@ -2170,6 +2191,8 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 placeholder="Enter your password"
               />
             </div>
+
+            {/* reCAPTCHA Enterprise v3: no visible widget; token acquired programmatically */}
 
             <button
               type="submit"
