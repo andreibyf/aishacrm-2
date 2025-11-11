@@ -162,6 +162,14 @@ function transpileBlock(block) {
     return `  return ${bodyText};`;
   }
   
+  // Check for object literals
+  // Pattern: { key: value, ... } or {}
+  // JavaScript objects have the same syntax as Braid
+  if (bodyText.startsWith('{') && bodyText.endsWith('}')) {
+    // Empty object or object with key-value pairs
+    return `  return ${bodyText};`;
+  }
+  
   // Check for function calls
   // Pattern: functionName(args) or expressions containing function calls
   // This is deliberately broad - if it has parentheses and looks like a call, pass it through

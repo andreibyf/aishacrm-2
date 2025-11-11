@@ -1,0 +1,25 @@
+// Object operations module
+
+// Simple object literal
+@route(method: "GET", path: "/api/braid/get_user")
+fn get_user() -> String {
+  { name: "Alice", age: 30 }
+}
+
+// Object with mixed types
+@route(method: "GET", path: "/api/braid/get_product")
+fn get_product() -> String {
+  { id: 1, name: "Widget", price: 19.99 }
+}
+
+// Object from parameters
+@route(method: "POST", path: "/api/braid/make_person")
+fn make_person(name: String, age: i32) -> String {
+  { name: name, age: age }
+}
+
+// Empty object
+@route(method: "GET", path: "/api/braid/empty_object")
+fn empty_object() -> String {
+  {}
+}
