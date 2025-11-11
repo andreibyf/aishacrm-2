@@ -109,9 +109,32 @@ export async function registerBraidRoutes(app, modules) {
         // Register working route with transpiled function
         app[method](routePath, async (req, res) => {
           try {
-            const result = await transpiledFn(req.body, req.query, req.params);
+            // Map function parameters from request data
+            // fn.params is a string like "input: String, name: String" from HIR
+            // We need to parse it to extract parameter names
+            const args = [];
+            if (fn?.params && fn.params.length > 0) {
+              // Parse params string: "input: String, name: String" -> ["input", "name"]
+              const paramNames = fn.params
+                .split(',')
+                .map(p => p.trim().split(':')[0].trim())
+                .filter(name => name.length > 0);
+              
+              console.log(`[Braid Loader] Mapping params for ${route.function}:`, paramNames);
+              for (const paramName of paramNames) {
+                // Try body first (POST/PUT/PATCH), then query (GET), then params (route params)
+                const value = req.body?.[paramName] ?? req.query?.[paramName] ?? req.params?.[paramName];
+                console.log(`[Braid Loader]   ${paramName} =`, value);
+                args.push(value);
+              }
+            }
+            
+            console.log(`[Braid Loader] Calling ${route.function} with args:`, args);
+            const result = await transpiledFn(...args);
+            console.log(`[Braid Loader] Result from ${route.function}:`, result);
             res.json({ result });
           } catch (err) {
+            console.error(`[Braid Loader] Error in ${route.function}:`, err);
             res.status(500).json({
               error: 'Execution Error',
               message: err.message,

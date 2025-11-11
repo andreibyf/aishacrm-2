@@ -44,21 +44,58 @@ function transpileFunction(func) {
 }
 
 /**
- * Transpile a block (simplified for MVP - string literal return only)
+ * Transpile a block expression
+ * Supports: string literals, identifiers, numeric literals, arithmetic, let bindings
  */
 function transpileBlock(block) {
-  // For MVP: Extract string literal from raw body
-  const bodyText = block.raw || '';
+  const bodyText = (block.raw || '').trim();
   
-  // Simple regex to find string literals (handles basic cases)
-  const stringMatch = bodyText.match(/"([^"]*)"/);
+  if (!bodyText) {
+    return '  return "";';
+  }
   
+  // Check if it's a string literal
+  const stringMatch = bodyText.match(/^"([^"]*)"$/);
   if (stringMatch) {
     const stringValue = stringMatch[1];
     return `  return "${stringValue}";`;
   }
   
+  // Check if it's a numeric literal
+  const numericMatch = bodyText.match(/^-?\d+(\.\d+)?$/);
+  if (numericMatch) {
+    return `  return ${bodyText};`;
+  }
+  
+  // Check if it's a simple identifier (variable/parameter reference)
+  const identifierMatch = bodyText.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/);
+  if (identifierMatch) {
+    return `  return ${bodyText};`;
+  }
+  
+  // Check if it's a simple arithmetic expression (identifiers with operators)
+  // Supports: a + b, x * y, x - y, x / y, etc.
+  const arithmeticMatch = bodyText.match(/^[a-zA-Z_][a-zA-Z0-9_]*\s*[+\-*/%]\s*[a-zA-Z_][a-zA-Z0-9_]*$/);
+  if (arithmeticMatch) {
+    return `  return ${bodyText};`;
+  }
+  
+  // Check for let binding with string literal: let varName: Type = "value"; returnExpr
+  const letStringMatch = bodyText.match(/let\s+(\w+)\s*:\s*\w+\s*=\s*"([^"]*)"\s*;\s*(\w+)/);
+  if (letStringMatch) {
+    const [, varName, stringValue, returnExpr] = letStringMatch;
+    return `  const ${varName} = "${stringValue}";\n  return ${returnExpr};`;
+  }
+  
+  // Check for let binding with numeric literal: let varName: Type = 123; returnExpr
+  const letNumericMatch = bodyText.match(/let\s+(\w+)\s*:\s*\w+\s*=\s*(-?\d+(?:\.\d+)?)\s*;\s*(\w+)/);
+  if (letNumericMatch) {
+    const [, varName, numericValue, returnExpr] = letNumericMatch;
+    return `  const ${varName} = ${numericValue};\n  return ${returnExpr};`;
+  }
+  
   // Fallback: return empty string
+  console.warn(`[Transpiler] Unhandled block expression: ${bodyText}`);
   return '  return "";';
 }
 
