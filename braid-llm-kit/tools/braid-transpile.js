@@ -45,13 +45,44 @@ function transpileFunction(func) {
 
 /**
  * Transpile a block expression
- * Supports: string literals, identifiers, numeric literals, arithmetic, let bindings
+ * Supports: string literals, identifiers, numeric literals, arithmetic, string concatenation, let bindings
  */
 function transpileBlock(block) {
   const bodyText = (block.raw || '').trim();
   
   if (!bodyText) {
     return '  return "";';
+  }
+  
+  // Check for multiple let bindings FIRST (before checking for string concat)
+  // More robust: look for any number of let statements followed by a final expression
+  if (bodyText.includes('let ') && bodyText.includes(';')) {
+    // Split by semicolons to find individual statements
+    const statements = bodyText.split(/;/).map(s => s.trim()).filter(s => s);
+    
+    if (statements.length > 1) {
+      const lines = [];
+      let hasLet = false;
+      
+      for (let i = 0; i < statements.length; i++) {
+        const stmt = statements[i];
+        
+        // Check if this is a let binding
+        const letMatch = stmt.match(/^let\s+(\w+)\s*:\s*\w+\s*=\s*(.+)$/);
+        if (letMatch) {
+          const [, varName, value] = letMatch;
+          lines.push(`  const ${varName} = ${value.trim()};`);
+          hasLet = true;
+        } else if (i === statements.length - 1) {
+          // Last statement is the return expression
+          lines.push(`  return ${stmt};`);
+        }
+      }
+      
+      if (hasLet) {
+        return lines.join('\n');
+      }
+    }
   }
   
   // Check if it's a string literal
@@ -73,6 +104,13 @@ function transpileBlock(block) {
     return `  return ${bodyText};`;
   }
   
+  // Check for string concatenation (e.g., "Hello, " + name + "!")
+  // This handles any expression with + that contains at least one string literal
+  if (bodyText.includes('+') && bodyText.includes('"')) {
+    // Simple approach: if it has + and quotes, treat as concatenation expression
+    return `  return ${bodyText};`;
+  }
+  
   // Check if it's a simple arithmetic expression (identifiers with operators)
   // Supports: a + b, x * y, x - y, x / y, etc.
   const arithmeticMatch = bodyText.match(/^[a-zA-Z_][a-zA-Z0-9_]*\s*[+\-*/%]\s*[a-zA-Z_][a-zA-Z0-9_]*$/);
@@ -80,14 +118,14 @@ function transpileBlock(block) {
     return `  return ${bodyText};`;
   }
   
-  // Check for let binding with string literal: let varName: Type = "value"; returnExpr
+  // Check for single let binding with string literal: let varName: Type = "value"; returnExpr
   const letStringMatch = bodyText.match(/let\s+(\w+)\s*:\s*\w+\s*=\s*"([^"]*)"\s*;\s*(\w+)/);
   if (letStringMatch) {
     const [, varName, stringValue, returnExpr] = letStringMatch;
     return `  const ${varName} = "${stringValue}";\n  return ${returnExpr};`;
   }
   
-  // Check for let binding with numeric literal: let varName: Type = 123; returnExpr
+  // Check for single let binding with numeric literal: let varName: Type = 123; returnExpr
   const letNumericMatch = bodyText.match(/let\s+(\w+)\s*:\s*\w+\s*=\s*(-?\d+(?:\.\d+)?)\s*;\s*(\w+)/);
   if (letNumericMatch) {
     const [, varName, numericValue, returnExpr] = letNumericMatch;
