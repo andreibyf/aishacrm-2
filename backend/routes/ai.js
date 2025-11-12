@@ -82,10 +82,71 @@ export default function createAIRoutes(pgPool) {
     }
 
     if (userKey) return userKey;
+
+    // Fallback to system settings table
+    try {
+      console.log('[AI Routes] Checking system_settings table for OpenAI key...');
+      const systemSettingsResult = await pgPool.query(
+        `SELECT settings FROM system_settings
+         WHERE settings IS NOT NULL
+           AND settings->>'system_openai_settings' IS NOT NULL
+         LIMIT 1`
+      );
+
+      console.log('[AI Routes] System settings query returned:', systemSettingsResult.rows?.length, 'rows');
+      if (systemSettingsResult.rows?.length) {
+        const settings = systemSettingsResult.rows[0].settings;
+        console.log('[AI Routes] Found settings:', typeof settings, settings ? 'has data' : 'empty');
+        const systemOpenAI = typeof settings === 'object' 
+          ? settings.system_openai_settings 
+          : JSON.parse(settings || '{}').system_openai_settings;
+        
+        console.log('[AI Routes] System OpenAI config:', {
+          found: !!systemOpenAI,
+          enabled: systemOpenAI?.enabled,
+          hasKey: !!systemOpenAI?.openai_api_key
+        });
+        
+        if (systemOpenAI?.enabled && systemOpenAI?.openai_api_key) {
+          console.log('[AI Routes] ✓ Using system OpenAI key from system_settings');
+          return systemOpenAI.openai_api_key;
+        }
+      }
+    } catch (error) {
+      console.warn('[AI Routes] Failed to resolve system settings:', error.message || error);
+    }
+
+    // Fallback to admin/superadmin user settings (legacy)
+    try {
+      const systemUsersResult = await pgPool.query(
+        `SELECT system_openai_settings FROM users
+         WHERE role IN ('admin', 'superadmin')
+           AND system_openai_settings IS NOT NULL
+           AND (system_openai_settings->>'enabled')::boolean = true
+           AND system_openai_settings->>'openai_api_key' IS NOT NULL
+         ORDER BY 
+           CASE role WHEN 'superadmin' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
+           updated_at DESC NULLS LAST
+         LIMIT 1`
+      );
+
+      if (systemUsersResult.rows?.length) {
+        const systemSettings = systemUsersResult.rows[0].system_openai_settings;
+        const systemKey = typeof systemSettings === 'object' 
+          ? systemSettings.openai_api_key 
+          : JSON.parse(systemSettings || '{}').openai_api_key;
+        if (systemKey) {
+          return systemKey;
+        }
+      }
+    } catch (error) {
+      console.warn('[AI Routes] Failed to resolve user system OpenAI settings:', error.message || error);
+    }
+
     return null;
   };
 
-  const fetchTenantSnapshot = async (tenantUuid, options = {}) => {
+  const fetchTenantSnapshot = async (tenantIdSlug, options = {}) => {
     const limitRaw = options.limit ?? options.activities_limit ?? 5;
     const safeLimit = Math.min(Math.max(Number(limitRaw) || 5, 1), 10);
     const segmentsAll = ['activities', 'opportunities', 'leads', 'accounts', 'contacts'];
@@ -106,8 +167,9 @@ export default function createAIRoutes(pgPool) {
     }
 
     const snapshot = {
-      tenant_id: tenantUuid,
+      tenant_id: tenantIdSlug,
       generated_at: new Date().toISOString(),
+      summary: {},
     };
 
     if (segments.includes('activities')) {
@@ -117,9 +179,10 @@ export default function createAIRoutes(pgPool) {
          WHERE tenant_id = $1
          ORDER BY created_at DESC
          LIMIT $2`,
-        [tenantUuid, safeLimit]
+        [tenantIdSlug, safeLimit]
       );
       snapshot.activities = rows;
+      snapshot.summary.activities_count = rows.length;
     }
 
     if (segments.includes('opportunities')) {
@@ -129,9 +192,10 @@ export default function createAIRoutes(pgPool) {
          WHERE tenant_id = $1
          ORDER BY updated_at DESC
          LIMIT $2`,
-        [tenantUuid, safeLimit]
+        [tenantIdSlug, safeLimit]
       );
       snapshot.opportunities = rows;
+      snapshot.summary.opportunities_count = rows.length;
     }
 
     if (segments.includes('leads')) {
@@ -141,9 +205,10 @@ export default function createAIRoutes(pgPool) {
          WHERE tenant_id = $1
          ORDER BY created_at DESC
          LIMIT $2`,
-        [tenantUuid, safeLimit]
+        [tenantIdSlug, safeLimit]
       );
       snapshot.leads = rows;
+      snapshot.summary.leads_count = rows.length;
     }
 
     if (segments.includes('accounts')) {
@@ -153,9 +218,10 @@ export default function createAIRoutes(pgPool) {
          WHERE tenant_id = $1
          ORDER BY updated_at DESC
          LIMIT $2`,
-        [tenantUuid, safeLimit]
+        [tenantIdSlug, safeLimit]
       );
       snapshot.accounts = rows;
+      snapshot.summary.accounts_count = rows.length;
     }
 
     if (segments.includes('contacts')) {
@@ -165,36 +231,48 @@ export default function createAIRoutes(pgPool) {
          WHERE tenant_id = $1
          ORDER BY updated_at DESC
          LIMIT $2`,
-        [tenantUuid, safeLimit]
+        [tenantIdSlug, safeLimit]
       );
       snapshot.contacts = rows;
+      snapshot.summary.contacts_count = rows.length;
     }
 
     return snapshot;
   };
 
   const insertAssistantMessage = async (conversationId, content, metadata = {}) => {
-    const result = await pgPool.query(
-      `INSERT INTO conversation_messages (conversation_id, role, content, metadata)
-       VALUES ($1, 'assistant', $2, $3)
-       RETURNING *`,
-      [conversationId, content, JSON.stringify(metadata)]
-    );
+    try {
+      const result = await pgPool.query(
+        `INSERT INTO conversation_messages (conversation_id, role, content, metadata)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [conversationId, 'assistant', content, JSON.stringify(metadata)]
+      );
 
-    await pgPool.query(
-      'UPDATE conversations SET updated_date = CURRENT_TIMESTAMP WHERE id = $1',
-      [conversationId]
-    );
+      await pgPool.query(
+        'UPDATE conversations SET updated_date = CURRENT_TIMESTAMP WHERE id = $1',
+        [conversationId]
+      );
 
-    const message = result.rows[0];
-    broadcastMessage(conversationId, message);
-    return message;
+      const message = result.rows[0];
+      broadcastMessage(conversationId, message);
+      return message;
+    } catch (error) {
+      console.error('[AI Routes] insertAssistantMessage error:', {
+        conversationId,
+        contentLength: content?.length,
+        metadataSize: JSON.stringify(metadata).length,
+        error: error.message
+      });
+      throw error;
+    }
   };
 
   const executeToolCall = async ({ toolName, args, tenantRecord }) => {
     switch (toolName) {
       case 'fetch_tenant_snapshot': {
-        return fetchTenantSnapshot(tenantRecord.id, args || {});
+        // Use tenant_id (slug) not id (UUID) because data tables reference tenant_id
+        return fetchTenantSnapshot(tenantRecord.tenant_id, args || {});
       }
       default:
         return { error: `Unsupported tool: ${toolName}` };
@@ -358,8 +436,10 @@ export default function createAIRoutes(pgPool) {
                 args: parsedArgs,
                 tenantRecord,
               });
+              console.log(`[AI Tool Execution] ${toolName} for tenant ${tenantRecord.tenant_id}:`, JSON.stringify(toolResult, null, 2));
             } catch (toolError) {
               toolResult = { error: toolError.message || String(toolError) };
+              console.error(`[AI Tool Execution] ${toolName} error:`, toolError);
             }
 
             executedTools.push({
@@ -701,6 +781,46 @@ export default function createAIRoutes(pgPool) {
     }
   });
 
+  // GET /api/ai/conversations/:id/messages - Get conversation messages
+  router.get('/conversations/:id/messages', async (req, res) => {
+    const { id } = req.params;
+    try {
+      const tenantIdentifier = getTenantId(req);
+      const tenantRecord = await resolveTenantRecord(tenantIdentifier);
+
+      if (!tenantRecord?.id) {
+        return res.status(400).json({ status: 'error', message: 'Tenant context required' });
+      }
+
+      // Verify conversation belongs to tenant
+      const convResult = await pgPool.query(
+        'SELECT id FROM conversations WHERE id = $1 AND tenant_id = $2',
+        [id, tenantRecord.id]
+      );
+
+      if (!convResult.rows?.length) {
+        return res.status(404).json({ status: 'error', message: 'Conversation not found' });
+      }
+
+      // Get messages
+      const messagesResult = await pgPool.query(
+        `SELECT id, conversation_id, role, content, metadata, created_date
+         FROM conversation_messages
+         WHERE conversation_id = $1
+         ORDER BY created_date ASC`,
+        [id]
+      );
+
+      res.json({
+        status: 'success',
+        data: messagesResult.rows || []
+      });
+    } catch (error) {
+      console.error('[AI Routes] Get messages error:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // POST /api/ai/conversations/:id/messages - Add message to conversation
   router.post('/conversations/:id/messages', async (req, res) => {
     const { id } = req.params;
@@ -913,6 +1033,31 @@ export default function createAIRoutes(pgPool) {
       // Fall back to authenticated user system settings if present
       if (!apiKey && req.user?.system_openai_settings?.openai_api_key) {
         apiKey = req.user.system_openai_settings.openai_api_key;
+      }
+
+      // Fall back to system settings table
+      if (!apiKey) {
+        try {
+          const systemSettingsResult = await pgPool.query(
+            `SELECT settings FROM system_settings
+             WHERE settings IS NOT NULL
+               AND settings->>'system_openai_settings' IS NOT NULL
+             LIMIT 1`
+          );
+
+          if (systemSettingsResult.rows?.length) {
+            const settings = systemSettingsResult.rows[0].settings;
+            const systemOpenAI = typeof settings === 'object' 
+              ? settings.system_openai_settings 
+              : JSON.parse(settings || '{}').system_openai_settings;
+            
+            if (systemOpenAI?.enabled && systemOpenAI?.openai_api_key) {
+              apiKey = systemOpenAI.openai_api_key;
+            }
+          }
+        } catch (error) {
+          console.warn('[ai.chat] Failed to resolve system settings:', error.message || error);
+        }
       }
 
       const result = await createChatCompletion({ messages: msgs, model, temperature, apiKey });

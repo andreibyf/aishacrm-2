@@ -214,27 +214,67 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
   const handleSend = useCallback(async (messageText) => {
     // Allow passing message directly (for voice input) or use state
     const text = messageText ? messageText.trim() : (input || "").trim();
-    if (!text || !conversation || sending) return;
+    if (!text || sending) return;
     
     if (!tenantId) {
       alert('Please select a client before sending messages');
       return;
     }
     
+    if (!conversation || !conversation.id) {
+      console.error('[AgentChat] No conversation available! conversation:', conversation);
+      alert('No conversation available. Please try refreshing the page.');
+      return;
+    }
+    
     setSending(true);
+    console.log('[AgentChat] Attempting to send message:', {
+      conversationId: conversation.id,
+      messageText: text.substring(0, 50),
+      tenantId,
+      tenantName
+    });
+    
     try {
       // Add tenant context for the agent but it will be hidden in display
       const messageWithContext = `[Client ID: ${tenantId}${tenantName ? ` | Client Name: ${tenantName}` : ''}]\n${text}`;
       
-      console.log('[AgentChat] Sending message with client context:', { tenantId, tenantName });
+      console.log('[AgentChat] Sending message to conversation:', conversation.id);
       
-      await agentSDK.addMessage(conversation, { 
+      const result = await agentSDK.addMessage(conversation, { 
         role: "user", 
         content: messageWithContext
       });
+      
+      console.log('[AgentChat] Message sent successfully:', result);
       setInput("");
+      
+      // Poll for updates (AI response may take a few seconds)
+      console.log('[AgentChat] Starting polling for AI response...');
+      let pollAttempts = 0;
+      const maxPolls = 20; // Poll for up to 20 seconds
+      const pollInterval = setInterval(async () => {
+        try {
+          pollAttempts++;
+          const updatedConvo = await agentSDK.getConversation(conversation.id);
+          const updatedMessages = (updatedConvo?.messages || []).filter(m => m.role !== 'system');
+          
+          console.log(`[AgentChat] Poll #${pollAttempts}: ${updatedMessages.length} messages`);
+          setMessages(updatedMessages);
+          
+          // Stop polling after max attempts
+          if (pollAttempts >= maxPolls) {
+            console.log('[AgentChat] Stopping polling after max attempts');
+            clearInterval(pollInterval);
+          }
+        } catch (refreshError) {
+          console.error('[AgentChat] Polling error:', refreshError);
+          clearInterval(pollInterval);
+        }
+      }, 1000); // Poll every 1 second
     } catch (e) {
       console.error("[AgentChat] Send failed:", e);
+      alert(`Failed to send message: ${e.message}`);
     } finally {
       setSending(false);
     }
@@ -433,16 +473,25 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
         setConversation(convo);
         
         const conversationMessages = (convo?.messages || []).filter(m => m.role !== 'system');
+        console.log('[AgentChat] Filtered conversation messages:', {
+          total: convo?.messages?.length || 0,
+          filtered: conversationMessages.length,
+          messages: conversationMessages
+        });
         
         if (conversationMessages.length === 0) {
+          console.log('[AgentChat] No messages, setting greeting');
           setMessages([{ role: 'assistant', content: 'Hi, how may I help?' }]);
         } else {
+          console.log('[AgentChat] Setting messages from conversation:', conversationMessages.length);
           setMessages(conversationMessages);
         }
         lastMessageCountRef.current = conversationMessages.length || 1; // Initialize for existing messages
 
         unsubRef.current = agentSDK.subscribeToConversation(convo.id, (data) => {
-          setMessages((data.messages || []).filter(m => m.role !== 'system'));
+          const filteredMessages = (data.messages || []).filter(m => m.role !== 'system');
+          console.log('[AgentChat] SSE update received:', filteredMessages.length, 'messages');
+          setMessages(filteredMessages);
         });
 
         if (!didContextRef.current) {
@@ -573,19 +622,25 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
 
       <Card className="bg-slate-800 border-slate-700 p-4 h-[60vh] flex flex-col">
         <div className="flex-1 overflow-y-auto pr-1">
-          {messages?.length ? (
-            messages.map((m, idx) => (
-              <Bubble 
-                key={idx} 
-                role={m.role} 
-                content={m.content} 
-              />
-            ))
-          ) : (
-            <div className="text-slate-400 text-sm">
-              Say &quot;What opportunities do I have open?&quot; or &quot;Create a lead for Jane Doe at Acme, title Marketing Manager&quot;
-            </div>
-          )}
+          {(() => {
+            console.log('[AgentChat] Rendering messages:', messages?.length, messages);
+            return messages?.length ? (
+              messages.map((m, idx) => {
+                console.log('[AgentChat] Rendering message', idx, ':', { role: m.role, content: m.content?.substring(0, 50) });
+                return (
+                  <Bubble 
+                    key={idx} 
+                    role={m.role} 
+                    content={m.content} 
+                  />
+                );
+              })
+            ) : (
+              <div className="text-slate-400 text-sm">
+                Say &quot;What opportunities do I have open?&quot; or &quot;Create a lead for Jane Doe at Acme, title Marketing Manager&quot;
+              </div>
+            );
+          })()}
         </div>
 
         <div className="mt-3 flex items-center gap-2">

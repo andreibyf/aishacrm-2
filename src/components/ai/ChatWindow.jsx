@@ -129,14 +129,27 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
   }, [messages]);
 
   const loadConversation = useCallback(async () => {
-    if (!conversationId) return;
+    if (!conversationId) {
+      console.log('[ChatWindow] loadConversation: No conversationId, skipping');
+      return;
+    }
+    console.log(`[ChatWindow] Loading conversation ${conversationId}`);
     try {
       const conv = await conversations.getConversation(conversationId);
+      console.log(`[ChatWindow] Loaded conversation:`, conv);
+      console.log(`[ChatWindow] Messages array:`, conv?.messages);
+      console.log(`[ChatWindow] Messages count: ${conv?.messages?.length || 0}`);
+      
       if (conv?.messages) {
-        setMessages(conv.messages.map(wrapMessage));
+        const wrappedMessages = conv.messages.map(wrapMessage);
+        console.log('[ChatWindow] Wrapped messages:', wrappedMessages);
+        setMessages(wrappedMessages);
+        console.log('[ChatWindow] Messages state updated');
+      } else {
+        console.warn('[ChatWindow] No messages in conversation');
       }
     } catch (error) {
-      console.error("Error loading conversation:", error);
+      console.error("[ChatWindow] Error loading conversation:", error);
       toast({
         title: "Error",
         description: "Failed to load conversation history",
@@ -147,17 +160,19 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
 
   useEffect(() => {
     let mounted = true;
+    console.log('[ChatWindow] Initializing, creating conversation...');
     (async () => {
       try {
         const conv = await conversations.createConversation({
           agent_name: "crm_assistant",
           metadata: { name: "Chat Session", description: "User chat session" }
         });
+        console.log('[ChatWindow] Conversation created:', conv);
         if (mounted && conv?.id) {
           setConversationId(conv.id);
         }
       } catch (error) {
-        console.error("Error creating conversation:", error);
+        console.error("[ChatWindow] Error creating conversation:", error);
       }
     })();
     return () => { mounted = false; };
@@ -165,14 +180,19 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
 
   useEffect(() => {
     if (!conversationId) return;
+    console.log(`[ChatWindow] Setting up subscription for conversation ${conversationId}`);
     loadConversation();
     const unsub = conversations.subscribeToConversation(conversationId, (data) => {
+      console.log('[ChatWindow] SSE update received:', data);
       if (data?.messages) {
         setMessages(data.messages.map(wrapMessage));
         setIsLoading(false);
       }
     });
-    return () => unsub();
+    return () => {
+      console.log(`[ChatWindow] Cleaning up subscription for ${conversationId}`);
+      unsub();
+    };
   }, [conversationId, loadConversation]);
 
   const handleSend = async () => {
@@ -199,10 +219,33 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
         content: enhancedMessage
       });
 
-      // Refresh immediately in case the SSE stream is delayed or unavailable
-      await loadConversation();
+      // Poll for AI response with exponential backoff
+      let attempts = 0;
+      const maxAttempts = 10;
+      const pollInterval = 1000; // Start with 1 second
 
-      setIsLoading(false);
+      const pollForResponse = async () => {
+        attempts++;
+        await loadConversation();
+        
+        // Check if we got a response from the assistant
+        const latestMessages = await conversations.getConversation(conversationId);
+        const hasAssistantReply = latestMessages.messages?.some(
+          (msg, idx) => idx > 0 && msg.role === 'assistant' && 
+          latestMessages.messages[idx - 1].content === enhancedMessage
+        );
+
+        if (hasAssistantReply || attempts >= maxAttempts) {
+          setIsLoading(false);
+        } else {
+          // Continue polling with exponential backoff
+          setTimeout(pollForResponse, Math.min(pollInterval * attempts, 5000));
+        }
+      };
+
+      // Start polling after a brief delay
+      setTimeout(pollForResponse, 1500);
+
     } catch (error) {
       console.error("Error sending message:", error);
       setIsLoading(false);

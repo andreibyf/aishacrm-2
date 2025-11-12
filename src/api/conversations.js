@@ -27,6 +27,8 @@ function resolveTenantId() {
  */
 export async function createConversation({ agent_name = 'crm_assistant', metadata = {} } = {}) {
   const tenantId = resolveTenantId();
+  console.log(`[Conversations API] Creating conversation for tenant ${tenantId}`);
+  
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations`, {
     method: 'POST',
     headers: {
@@ -38,10 +40,12 @@ export async function createConversation({ agent_name = 'crm_assistant', metadat
   });
 
   if (!response.ok) {
+    console.error(`[Conversations API] Failed to create conversation: ${response.status} ${response.statusText}`);
     throw new Error(`Failed to create conversation: ${response.statusText}`);
   }
 
   const result = await response.json();
+  console.log(`[Conversations API] Created conversation ${result.data?.id}`);
   return result.data;
 }
 
@@ -52,6 +56,8 @@ export async function createConversation({ agent_name = 'crm_assistant', metadat
  */
 export async function getConversation(conversationId) {
   const tenantId = resolveTenantId();
+  console.log(`[Conversations API] Getting conversation ${conversationId} for tenant ${tenantId}`);
+  
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations/${conversationId}`, {
     headers: {
       'x-tenant-id': tenantId,
@@ -60,10 +66,12 @@ export async function getConversation(conversationId) {
   });
 
   if (!response.ok) {
+    console.error(`[Conversations API] Failed to get conversation: ${response.status} ${response.statusText}`);
     throw new Error(`Failed to get conversation: ${response.statusText}`);
   }
 
   const result = await response.json();
+  console.log(`[Conversations API] Got conversation with ${result.data?.messages?.length || 0} messages`);
   return result.data;
 }
 
