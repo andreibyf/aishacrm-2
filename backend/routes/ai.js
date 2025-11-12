@@ -4,34 +4,612 @@
  */
 
 import express from 'express';
-import { createChatCompletion, buildSystemPrompt } from '../lib/aiProvider.js';
+import { createChatCompletion, buildSystemPrompt, getOpenAIClient } from '../lib/aiProvider.js';
+
+const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 export default function createAIRoutes(pgPool) {
   const router = express.Router();
+  const DEFAULT_CHAT_MODEL = process.env.DEFAULT_OPENAI_MODEL || 'gpt-4o-mini';
+  const MAX_TOOL_ITERATIONS = 3;
+  const tenantIntegrationKeyCache = new Map();
+
+  // SSE clients storage for real-time conversation updates
+  const conversationClients = new Map(); // conversationId -> Set<res>
+
+  const parseMetadata = (value) => {
+    if (!value) return {};
+    if (typeof value === 'object') return value;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return {};
+    }
+  };
+
+  const broadcastMessage = (conversationId, message) => {
+    if (!conversationClients.has(conversationId)) {
+      return;
+    }
+    const payload = JSON.stringify({ type: 'message', data: message });
+    const clients = conversationClients.get(conversationId);
+    clients.forEach((client) => {
+      try {
+        client.write(`data: ${payload}\n\n`);
+      } catch (err) {
+        console.warn('[AI Routes] Failed to broadcast conversation update:', err.message || err);
+      }
+    });
+  };
+
+  const resolveTenantOpenAiKey = async ({ explicitKey, headerKey, userKey, tenantSlug }) => {
+    if (explicitKey) return explicitKey;
+    if (headerKey) return headerKey;
+
+    if (tenantSlug) {
+      if (tenantIntegrationKeyCache.has(tenantSlug)) {
+        const cached = tenantIntegrationKeyCache.get(tenantSlug);
+        if (cached) {
+          return cached;
+        }
+      }
+
+      try {
+        const result = await pgPool.query(
+          `SELECT api_credentials FROM tenant_integrations
+           WHERE tenant_id = $1
+             AND is_active = true
+             AND integration_type IN ('openai_llm')
+           ORDER BY updated_at DESC NULLS LAST, created_at DESC
+           LIMIT 1`,
+          [tenantSlug]
+        );
+
+        if (result.rows?.length) {
+          const rawCreds = result.rows[0].api_credentials;
+          const creds = typeof rawCreds === 'object' ? rawCreds : JSON.parse(rawCreds || '{}');
+          const tenantKey = creds?.api_key || creds?.apiKey || null;
+          tenantIntegrationKeyCache.set(tenantSlug, tenantKey || null);
+          if (tenantKey) {
+            return tenantKey;
+          }
+        } else {
+          tenantIntegrationKeyCache.set(tenantSlug, null);
+        }
+      } catch (error) {
+        console.warn('[AI Routes] Failed to resolve tenant OpenAI key:', error.message || error);
+      }
+    }
+
+    if (userKey) return userKey;
+    return null;
+  };
+
+  const fetchTenantSnapshot = async (tenantUuid, options = {}) => {
+    const limitRaw = options.limit ?? options.activities_limit ?? 5;
+    const safeLimit = Math.min(Math.max(Number(limitRaw) || 5, 1), 10);
+    const segmentsAll = ['activities', 'opportunities', 'leads', 'accounts', 'contacts'];
+
+    const scopeRaw = options.scope;
+    let segments = [];
+    if (Array.isArray(scopeRaw)) {
+      segments = scopeRaw.map((item) => String(item || '').toLowerCase()).filter((item) => segmentsAll.includes(item));
+    } else if (typeof scopeRaw === 'string') {
+      const entry = scopeRaw.toLowerCase();
+      if (segmentsAll.includes(entry)) {
+        segments = [entry];
+      }
+    }
+
+    if (segments.length === 0) {
+      segments = segmentsAll;
+    }
+
+    const snapshot = {
+      tenant_id: tenantUuid,
+      generated_at: new Date().toISOString(),
+    };
+
+    if (segments.includes('activities')) {
+      const { rows } = await pgPool.query(
+        `SELECT id, subject, status, type, due_date, owner_id, created_at
+         FROM activities
+         WHERE tenant_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2`,
+        [tenantUuid, safeLimit]
+      );
+      snapshot.activities = rows;
+    }
+
+    if (segments.includes('opportunities')) {
+      const { rows } = await pgPool.query(
+        `SELECT id, name, stage, amount, close_date, owner_id, probability, updated_at
+         FROM opportunities
+         WHERE tenant_id = $1
+         ORDER BY updated_at DESC
+         LIMIT $2`,
+        [tenantUuid, safeLimit]
+      );
+      snapshot.opportunities = rows;
+    }
+
+    if (segments.includes('leads')) {
+      const { rows } = await pgPool.query(
+        `SELECT id, first_name, last_name, email, status, company, source, owner_id, created_at
+         FROM leads
+         WHERE tenant_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2`,
+        [tenantUuid, safeLimit]
+      );
+      snapshot.leads = rows;
+    }
+
+    if (segments.includes('accounts')) {
+      const { rows } = await pgPool.query(
+        `SELECT id, name, industry, owner_id, annual_revenue, website, updated_at
+         FROM accounts
+         WHERE tenant_id = $1
+         ORDER BY updated_at DESC
+         LIMIT $2`,
+        [tenantUuid, safeLimit]
+      );
+      snapshot.accounts = rows;
+    }
+
+    if (segments.includes('contacts')) {
+      const { rows } = await pgPool.query(
+        `SELECT id, first_name, last_name, email, job_title, account_id, owner_id, updated_at
+         FROM contacts
+         WHERE tenant_id = $1
+         ORDER BY updated_at DESC
+         LIMIT $2`,
+        [tenantUuid, safeLimit]
+      );
+      snapshot.contacts = rows;
+    }
+
+    return snapshot;
+  };
+
+  const insertAssistantMessage = async (conversationId, content, metadata = {}) => {
+    const result = await pgPool.query(
+      `INSERT INTO conversation_messages (conversation_id, role, content, metadata)
+       VALUES ($1, 'assistant', $2, $3)
+       RETURNING *`,
+      [conversationId, content, JSON.stringify(metadata)]
+    );
+
+    await pgPool.query(
+      'UPDATE conversations SET updated_date = CURRENT_TIMESTAMP WHERE id = $1',
+      [conversationId]
+    );
+
+    const message = result.rows[0];
+    broadcastMessage(conversationId, message);
+    return message;
+  };
+
+  const executeToolCall = async ({ toolName, args, tenantRecord }) => {
+    switch (toolName) {
+      case 'fetch_tenant_snapshot': {
+        return fetchTenantSnapshot(tenantRecord.id, args || {});
+      }
+      default:
+        return { error: `Unsupported tool: ${toolName}` };
+    }
+  };
+
+  const generateAssistantResponse = async ({
+    conversationId,
+    tenantRecord,
+    tenantIdentifier,
+    conversation,
+    requestDescriptor = {},
+  }) => {
+    try {
+      const tenantSlug = tenantRecord?.tenant_id || tenantIdentifier || null;
+      const conversationMetadata = parseMetadata(conversation?.metadata);
+
+      const apiKey = await resolveTenantOpenAiKey({
+        explicitKey: requestDescriptor.bodyApiKey,
+        headerKey: requestDescriptor.headerApiKey,
+        userKey: requestDescriptor.userApiKey,
+        tenantSlug,
+      });
+
+      if (!apiKey) {
+        await logAiEvent({
+          level: 'WARNING',
+          message: 'AI agent blocked: missing OpenAI API key',
+          tenantRecord,
+          tenantIdentifier,
+          metadata: {
+            operation: 'agent_followup',
+            conversation_id: conversationId,
+            agent_name: conversation?.agent_name,
+          },
+        });
+
+        await insertAssistantMessage(conversationId, 'I cannot reach the AI model right now because no OpenAI API key is configured for this client. Please contact an administrator.', {
+          reason: 'missing_api_key',
+        });
+        return;
+      }
+
+      const client = getOpenAIClient(apiKey);
+      if (!client) {
+        await logAiEvent({
+          level: 'ERROR',
+          message: 'AI agent blocked: failed to initialize OpenAI client',
+          tenantRecord,
+          tenantIdentifier,
+          metadata: {
+            operation: 'agent_followup',
+            conversation_id: conversationId,
+            agent_name: conversation?.agent_name,
+          },
+        });
+
+        await insertAssistantMessage(conversationId, 'I was unable to initialize the AI model for this request. Please try again later.', {
+          reason: 'client_init_failed',
+        });
+        return;
+      }
+
+      const history = await pgPool.query(
+        `SELECT role, content FROM conversation_messages
+         WHERE conversation_id = $1
+         ORDER BY created_date ASC`,
+        [conversationId]
+      );
+
+      const tenantName = conversationMetadata?.tenant_name || tenantRecord?.name || tenantSlug || 'CRM Tenant';
+      const systemPrompt = `${buildSystemPrompt({ tenantName })}\n\nUse the available CRM tools to fetch data before answering. Only reference data returned by the tools to guarantee tenant isolation.`;
+
+      const messages = [
+        { role: 'system', content: systemPrompt },
+      ];
+
+      for (const row of history.rows || []) {
+        if (!row || !row.role) continue;
+        if (row.role === 'system') continue;
+        messages.push({ role: row.role, content: row.content });
+      }
+
+      const model = requestDescriptor.modelOverride || conversationMetadata?.model || DEFAULT_CHAT_MODEL;
+      const rawTemperature = requestDescriptor.temperatureOverride ?? conversationMetadata?.temperature ?? 0.2;
+      const temperature = Math.min(Math.max(Number(rawTemperature) || 0.2, 0), 2);
+
+      const tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'fetch_tenant_snapshot',
+            description: 'Retrieve a fresh summary of CRM data (activities, opportunities, leads, accounts, contacts) for the current tenant. Use this before answering questions that require factual data.',
+            parameters: {
+              type: 'object',
+              properties: {
+                scope: {
+                  type: 'string',
+                  description: 'Optional area to focus on. One of activities, opportunities, leads, accounts, contacts.',
+                },
+                limit: {
+                  type: 'integer',
+                  description: 'Maximum number of records per category (1-10). Defaults to 5.',
+                  minimum: 1,
+                  maximum: 10,
+                },
+              },
+            },
+          },
+        },
+      ];
+
+      const executedTools = [];
+      let assistantResponded = false;
+      let conversationMessages = [...messages];
+
+      for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
+        const response = await client.chat.completions.create({
+          model,
+          messages: conversationMessages,
+          tools,
+          tool_choice: 'auto',
+          temperature,
+        });
+
+        const choice = response.choices?.[0];
+        if (!choice?.message) {
+          break;
+        }
+
+        const { message } = choice;
+        const toolCalls = message.tool_calls || [];
+
+        if (toolCalls.length > 0) {
+          conversationMessages.push({
+            role: 'assistant',
+            content: message.content || '',
+            tool_calls: toolCalls.map((call) => ({
+              id: call.id,
+              type: call.type,
+              function: {
+                name: call.function?.name,
+                arguments: call.function?.arguments,
+              },
+            })),
+          });
+
+          for (const call of toolCalls) {
+            const toolName = call.function?.name;
+            let parsedArgs = {};
+            try {
+              parsedArgs = call.function?.arguments ? JSON.parse(call.function.arguments) : {};
+            } catch {
+              parsedArgs = {};
+            }
+
+            let toolResult;
+            try {
+              toolResult = await executeToolCall({
+                toolName,
+                args: parsedArgs,
+                tenantRecord,
+              });
+            } catch (toolError) {
+              toolResult = { error: toolError.message || String(toolError) };
+            }
+
+            executedTools.push({
+              name: toolName,
+              arguments: parsedArgs,
+              result_preview: typeof toolResult === 'string' ? toolResult.slice(0, 500) : JSON.stringify(toolResult).slice(0, 500),
+            });
+
+            const toolContent = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
+            conversationMessages.push({
+              role: 'tool',
+              tool_call_id: call.id,
+              content: toolContent,
+            });
+          }
+
+          continue;
+        }
+
+        const assistantText = (message.content || '').trim();
+        if (assistantText) {
+          await insertAssistantMessage(conversationId, assistantText, {
+            model: response.model || model,
+            usage: response.usage || null,
+            tool_interactions: executedTools,
+            iterations: iteration + 1,
+          });
+          assistantResponded = true;
+        }
+
+        break;
+      }
+
+      if (!assistantResponded) {
+        await insertAssistantMessage(
+          conversationId,
+          'I could not complete that request right now. Please try again shortly.',
+          {
+            reason: 'empty_response',
+            tool_interactions: executedTools,
+          }
+        );
+
+        await logAiEvent({
+          level: 'WARNING',
+          message: 'AI agent produced no response',
+          tenantRecord,
+          tenantIdentifier,
+          metadata: {
+            operation: 'agent_followup',
+            conversation_id: conversationId,
+            agent_name: conversation?.agent_name,
+            tool_interactions: executedTools,
+          },
+        });
+      }
+    } catch (error) {
+      console.error('[AI Routes] Agent follow-up error:', error);
+      await logAiEvent({
+        message: 'AI agent follow-up failed',
+        tenantRecord,
+        tenantIdentifier,
+        error,
+        metadata: {
+          operation: 'agent_followup',
+          conversation_id: conversationId,
+          agent_name: conversation?.agent_name,
+        },
+      });
+
+      await insertAssistantMessage(
+        conversationId,
+        'I ran into an error while processing that request. Please try again in a moment.',
+        {
+          reason: 'exception',
+        }
+      );
+    }
+  };
 
   // Middleware to get tenant_id from request
   const getTenantId = (req) => {
-    return req.headers['x-tenant-id'] || req.user?.tenant_id;
+    return (
+      req.headers['x-tenant-id'] ||
+      req.query?.tenant_id ||
+      req.query?.tenantId ||
+      req.user?.tenant_id
+    );
   };
 
-  // SSE clients storage for real-time conversation updates
-  const conversationClients = new Map(); // conversationId -> Set of response objects
+  const tenantLookupCache = new Map();
+
+  const cacheTenantRecord = (record) => {
+    if (!record) return;
+    if (record.id) {
+      tenantLookupCache.set(record.id, record);
+    }
+    if (record.tenant_id) {
+      tenantLookupCache.set(record.tenant_id, record);
+    }
+  };
+
+  const resolveTenantRecord = async (identifier) => {
+    if (!identifier || typeof identifier !== 'string') {
+      return null;
+    }
+
+    const key = identifier.trim();
+    if (!key) {
+      return null;
+    }
+
+    if (tenantLookupCache.has(key)) {
+      return tenantLookupCache.get(key);
+    }
+
+    const attempts = UUID_PATTERN.test(key)
+      ? [
+          { sql: 'SELECT id, tenant_id, name FROM tenant WHERE id = $1 LIMIT 1', value: key },
+          { sql: 'SELECT id, tenant_id, name FROM tenant WHERE tenant_id = $1 LIMIT 1', value: key },
+        ]
+      : [
+          { sql: 'SELECT id, tenant_id, name FROM tenant WHERE tenant_id = $1 LIMIT 1', value: key },
+          { sql: 'SELECT id, tenant_id, name FROM tenant WHERE id = $1 LIMIT 1', value: key },
+        ];
+
+    for (const attempt of attempts) {
+      try {
+        const result = await pgPool.query(attempt.sql, [attempt.value]);
+        if (result.rows?.length) {
+          const record = result.rows[0];
+          cacheTenantRecord(record);
+          tenantLookupCache.set(key, record);
+          return record;
+        }
+      } catch (error) {
+        console.warn('[AI Routes] Tenant lookup failed for identifier:', key, error.message || error);
+      }
+    }
+
+    tenantLookupCache.set(key, null);
+    return null;
+  };
+
+  const truncateString = (value, maxLength = 1000) => {
+    if (typeof value !== 'string') {
+      return value;
+    }
+    return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
+  };
+
+  const sanitizeMetadata = (metadata = {}) => {
+    const sanitized = {};
+    for (const [key, value] of Object.entries(metadata)) {
+      if (value === undefined) continue;
+      if (typeof value === 'string') {
+        sanitized[key] = truncateString(value);
+      } else if (Array.isArray(value)) {
+        sanitized[key] = { count: value.length };
+      } else if (value && typeof value === 'object') {
+        try {
+          const serialized = JSON.stringify(value);
+          sanitized[key] = serialized.length > 1000 ? truncateString(serialized) : value;
+        } catch {
+          sanitized[key] = String(value);
+        }
+      } else {
+        sanitized[key] = value;
+      }
+    }
+    return sanitized;
+  };
+
+  const logAiEvent = async ({
+    level = 'ERROR',
+    message,
+    tenantRecord,
+    tenantIdentifier,
+    error,
+    metadata = {},
+  }) => {
+    if (!pgPool || !message) return;
+    const tenantSlug = tenantRecord?.tenant_id || tenantIdentifier || 'system';
+    const stackTrace = error?.stack ? truncateString(String(error.stack), 8000) : null;
+    const payload = sanitizeMetadata({
+      feature: 'ai',
+      component: 'agent_chat',
+      tenant_uuid: tenantRecord?.id,
+      tenant_slug: tenantSlug,
+      error_message: error?.message,
+      error_code: error?.code,
+      ...metadata,
+    });
+
+    try {
+      await pgPool.query(
+        `INSERT INTO system_logs (tenant_id, level, message, source, metadata, stack_trace, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        [
+          tenantSlug,
+          level,
+          message,
+          'AI Routes',
+          JSON.stringify(payload),
+          stackTrace,
+        ]
+      );
+    } catch (logError) {
+      console.error('[AI Routes] Failed to record system log:', logError.message || logError);
+    }
+  };
 
   // POST /api/ai/conversations - Create new conversation
   router.post('/conversations', async (req, res) => {
+    let tenantIdentifier = null;
+    let tenantRecord = null;
+    let agentName = 'crm_assistant';
     try {
       const { agent_name = 'crm_assistant', metadata = {} } = req.body;
-      const tenant_id = getTenantId(req);
+      agentName = agent_name;
+      tenantIdentifier = getTenantId(req);
+      tenantRecord = await resolveTenantRecord(tenantIdentifier);
 
-      if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id required' });
+      if (!tenantRecord?.id) {
+        await logAiEvent({
+          level: 'WARNING',
+          message: 'AI conversation creation blocked: missing tenant context',
+          tenantRecord,
+          tenantIdentifier,
+          metadata: {
+            operation: 'create_conversation',
+            agent_name: agentName,
+            request_path: req.originalUrl || req.url,
+          },
+        });
+        return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
       }
+
+      const enrichedMetadata = {
+        ...metadata,
+        tenant_slug: metadata?.tenant_slug ?? tenantRecord.tenant_id ?? tenantIdentifier ?? null,
+        tenant_uuid: metadata?.tenant_uuid ?? tenantRecord.id,
+        tenant_name: metadata?.tenant_name ?? tenantRecord.name ?? null,
+      };
 
       const result = await pgPool.query(
         `INSERT INTO conversations (tenant_id, agent_name, metadata, status)
          VALUES ($1, $2, $3, 'active')
          RETURNING *`,
-        [tenant_id, agent_name, JSON.stringify(metadata)]
+        [tenantRecord.id, agentName, JSON.stringify(enrichedMetadata)]
       );
 
       res.json({
@@ -40,20 +618,50 @@ export default function createAIRoutes(pgPool) {
       });
     } catch (error) {
       console.error('Create conversation error:', error);
+      await logAiEvent({
+        message: 'AI conversation creation failed',
+        tenantRecord,
+        tenantIdentifier,
+        error,
+        metadata: {
+          operation: 'create_conversation',
+          agent_name: agentName,
+          request_path: req.originalUrl || req.url,
+          http_status: 500,
+        },
+      });
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
   // GET /api/ai/conversations/:id - Get conversation details
   router.get('/conversations/:id', async (req, res) => {
+    const { id } = req.params;
+    let tenantIdentifier = null;
+    let tenantRecord = null;
     try {
-      const { id } = req.params;
-      const tenant_id = getTenantId(req);
+      tenantIdentifier = getTenantId(req);
+      tenantRecord = await resolveTenantRecord(tenantIdentifier);
+
+      if (!tenantRecord?.id) {
+        await logAiEvent({
+          level: 'WARNING',
+          message: 'AI conversation fetch blocked: missing tenant context',
+          tenantRecord,
+          tenantIdentifier,
+          metadata: {
+            operation: 'get_conversation',
+            conversation_id: id,
+            request_path: req.originalUrl || req.url,
+          },
+        });
+        return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
+      }
 
       // Get conversation
       const convResult = await pgPool.query(
         'SELECT * FROM conversations WHERE id = $1 AND tenant_id = $2',
-        [id, tenant_id]
+        [id, tenantRecord.id]
       );
 
       if (convResult.rows.length === 0) {
@@ -77,32 +685,70 @@ export default function createAIRoutes(pgPool) {
       });
     } catch (error) {
       console.error('Get conversation error:', error);
+      await logAiEvent({
+        message: 'AI conversation fetch failed',
+        tenantRecord,
+        tenantIdentifier,
+        error,
+        metadata: {
+          operation: 'get_conversation',
+          conversation_id: id,
+          request_path: req.originalUrl || req.url,
+          http_status: 500,
+        },
+      });
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
   // POST /api/ai/conversations/:id/messages - Add message to conversation
   router.post('/conversations/:id/messages', async (req, res) => {
+    const { id } = req.params;
+    const { role, content, metadata = {} } = req.body;
+    let tenantIdentifier = null;
+    let tenantRecord = null;
+    let conversation = null;
     try {
-      const { id } = req.params;
-      const { role, content, metadata = {} } = req.body;
-      const tenant_id = getTenantId(req);
-
       if (!role || !content) {
         return res.status(400).json({ status: 'error', message: 'role and content required' });
       }
 
-      // Verify conversation exists and belongs to tenant
-      const convCheck = await pgPool.query(
-        'SELECT id FROM conversations WHERE id = $1 AND tenant_id = $2',
-        [id, tenant_id]
+      const shouldTriggerAgent = role === 'user';
+
+      tenantIdentifier = getTenantId(req);
+      tenantRecord = await resolveTenantRecord(tenantIdentifier);
+
+      if (!tenantRecord?.id) {
+        await logAiEvent({
+          level: 'WARNING',
+          message: 'AI conversation message blocked: missing tenant context',
+          tenantRecord,
+          tenantIdentifier,
+          metadata: {
+            operation: 'add_message',
+            conversation_id: id,
+            role,
+            request_path: req.originalUrl || req.url,
+          },
+        });
+        return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
+      }
+
+      const convResult = await pgPool.query(
+        `SELECT id, tenant_id, agent_name, metadata
+         FROM conversations
+         WHERE id = $1 AND tenant_id = $2
+         LIMIT 1`,
+        [id, tenantRecord.id]
       );
 
-      if (convCheck.rows.length === 0) {
+      if (convResult.rows.length === 0) {
         return res.status(404).json({ status: 'error', message: 'Conversation not found' });
       }
 
-      // Insert message
+      conversation = convResult.rows[0];
+      const conversationMetadata = parseMetadata(conversation.metadata);
+
       const result = await pgPool.query(
         `INSERT INTO conversation_messages (conversation_id, role, content, metadata)
          VALUES ($1, $2, $3, $4)
@@ -112,28 +758,54 @@ export default function createAIRoutes(pgPool) {
 
       const message = result.rows[0];
 
-      // Update conversation updated_date
       await pgPool.query(
         'UPDATE conversations SET updated_date = CURRENT_TIMESTAMP WHERE id = $1',
         [id]
       );
 
-      // Broadcast to SSE clients
-      if (conversationClients.has(id)) {
-        const clients = conversationClients.get(id);
-        const data = JSON.stringify({ type: 'message', data: message });
-        
-        clients.forEach((client) => {
-          client.write(`data: ${data}\n\n`);
-        });
-      }
+      broadcastMessage(id, message);
 
       res.json({
         status: 'success',
         data: message,
       });
+
+      if (shouldTriggerAgent) {
+        const requestDescriptor = {
+          bodyApiKey: req.body?.api_key || null,
+          headerApiKey: req.headers['x-openai-key'] || null,
+          userApiKey: req.user?.system_openai_settings?.openai_api_key || null,
+          modelOverride: req.body?.model,
+          temperatureOverride: req.body?.temperature,
+        };
+
+        setImmediate(() => {
+          generateAssistantResponse({
+            conversationId: id,
+            tenantRecord,
+            tenantIdentifier,
+            conversation: { ...conversation, metadata: conversationMetadata },
+            requestDescriptor,
+          }).catch((err) => {
+            console.error('[AI Routes] Async agent follow-up error:', err);
+          });
+        });
+      }
     } catch (error) {
       console.error('Add message error:', error);
+      await logAiEvent({
+        message: 'AI conversation message failed',
+        tenantRecord,
+        tenantIdentifier,
+        error,
+        metadata: {
+          operation: 'add_message',
+          conversation_id: id,
+          role,
+          request_path: req.originalUrl || req.url,
+          http_status: 500,
+        },
+      });
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -142,12 +814,17 @@ export default function createAIRoutes(pgPool) {
   router.get('/conversations/:id/stream', async (req, res) => {
     try {
       const { id } = req.params;
-      const tenant_id = getTenantId(req);
+      const tenantIdentifier = getTenantId(req);
+      const tenantRecord = await resolveTenantRecord(tenantIdentifier);
+
+      if (!tenantRecord?.id) {
+        return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
+      }
 
       // Verify conversation exists
       const convCheck = await pgPool.query(
         'SELECT id FROM conversations WHERE id = $1 AND tenant_id = $2',
-        [id, tenant_id]
+        [id, tenantRecord.id]
       );
 
       if (convCheck.rows.length === 0) {
@@ -193,7 +870,7 @@ export default function createAIRoutes(pgPool) {
   // POST /api/ai/chat - AI chat completion
   router.post('/chat', async (req, res) => {
     try {
-      const { messages = [], model = process.env.DEFAULT_OPENAI_MODEL || 'gpt-4o-mini', temperature = 0.7, tenantName } = req.body || {};
+  const { messages = [], model = process.env.DEFAULT_OPENAI_MODEL || 'gpt-4o-mini', temperature = 0.7, tenantName } = req.body || {};
 
       // Basic validation
       if (!Array.isArray(messages) || messages.length === 0) {
@@ -207,9 +884,40 @@ export default function createAIRoutes(pgPool) {
         msgs = [{ role: 'system', content: buildSystemPrompt({ tenantName }) }, ...messages];
       }
 
-      const result = await createChatCompletion({ messages: msgs, model, temperature });
+      // Resolve API key priority: explicit in body > tenant integration > backend env
+      let apiKey = req.body?.api_key || null;
+      const tenantIdentifier = getTenantId(req);
+  const tenantRecord = tenantIdentifier ? await resolveTenantRecord(tenantIdentifier) : null;
+  const tenantSlug = tenantRecord?.tenant_id || tenantIdentifier || null;
+      // Allow explicit header override (avoids putting key in body for some clients)
+      if (!apiKey && req.headers['x-openai-key']) {
+        apiKey = req.headers['x-openai-key'];
+      }
+      if (!apiKey && tenantSlug) {
+        try {
+          // Prefer active OpenAI LLM integration for tenant
+          const ti = await pgPool.query(
+            `SELECT api_credentials, integration_type FROM tenant_integrations
+             WHERE tenant_id = $1 AND is_active = true AND integration_type IN ('openai_llm')
+             ORDER BY updated_at DESC NULLS LAST, created_at DESC LIMIT 1`,
+            [tenantSlug]
+          );
+          if (ti.rows?.length) {
+            const creds = ti.rows[0].api_credentials || {};
+            apiKey = creds.api_key || creds.apiKey || null;
+          }
+        } catch (e) {
+          console.warn('[ai.chat] Failed to fetch tenant OpenAI integration:', e.message || e);
+        }
+      }
+      // Fall back to authenticated user system settings if present
+      if (!apiKey && req.user?.system_openai_settings?.openai_api_key) {
+        apiKey = req.user.system_openai_settings.openai_api_key;
+      }
+
+      const result = await createChatCompletion({ messages: msgs, model, temperature, apiKey });
       if (result.status === 'error') {
-        const http = /OPENAI_API_KEY/.test(result.error || '') ? 501 : 500; // 501 Not Implemented if key missing
+        const http = /OPENAI_API_KEY|not configured/i.test(result.error || '') ? 501 : 500; // 501 if key missing
         return res.status(http).json({ status: 'error', message: result.error });
       }
 

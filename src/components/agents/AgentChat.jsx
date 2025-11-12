@@ -1,7 +1,6 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-// import { agentSDK } from "@/agents"; // TODO: Create src/agents file or remove this dependency
-const agentSDK = null; // Temporary stub to fix build
+import * as agentSDK from "@/api/conversations";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Send, MessageSquare, ExternalLink, Sparkles, RefreshCw, Trash2 } from "lucide-react";
@@ -97,11 +96,14 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
   }, [tenantId, tenantName]);
 
   const whatsappUrl = useMemo(() => {
-    try {
-      return agentSDK.getWhatsAppConnectURL(agentName);
-    } catch {
-      return null;
+    if (typeof agentSDK.getWhatsAppConnectURL === "function") {
+      try {
+        return agentSDK.getWhatsAppConnectURL(agentName);
+      } catch (error) {
+        console.warn("[AgentChat] Failed to resolve WhatsApp connect URL:", error);
+      }
     }
+    return null;
   }, [agentName]);
 
   // DEBUG: Log mic state changes in parent component

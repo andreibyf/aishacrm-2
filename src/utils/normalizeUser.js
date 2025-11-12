@@ -95,6 +95,8 @@ export function normalizeUser(raw) {
 
   // Branding settings
   const brandingSettings = raw.branding_settings || meta.branding_settings || undefined;
+  const systemOpenAISettings = raw.system_openai_settings || meta.system_openai_settings || undefined;
+  const systemStripeSettings = raw.system_stripe_settings || meta.system_stripe_settings || undefined;
 
   // Live status / last seen
   const live_status = raw.live_status || meta.live_status || undefined;
@@ -124,6 +126,8 @@ export function normalizeUser(raw) {
     full_name: fullName,
     display_name: displayName,
     branding_settings: brandingSettings,
+  system_openai_settings: systemOpenAISettings,
+  system_stripe_settings: systemStripeSettings,
     navigation_permissions: navigationPermissions,
     permissions: mergedPermissions,
     status: raw.status || meta.status,

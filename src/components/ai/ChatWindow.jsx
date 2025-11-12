@@ -182,26 +182,38 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
     setInputValue("");
     setIsLoading(true);
 
+    // Optimistically render the user's message so the UI responds immediately
+    const optimisticMessage = wrapMessage({ role: 'user', content: userMessage });
+    setMessages(prev => [...prev, optimisticMessage]);
+
     try {
       const conv = await conversations.getConversation(conversationId);
-      
+
       // Add industry context to the message if it exists
       const enhancedMessage = industryContext 
         ? `${industryContext}\n\nUser Question: ${userMessage}`
         : userMessage;
-      
+
       await conversations.addMessage(conv, {
         role: "user",
         content: enhancedMessage
       });
+
+      // Refresh immediately in case the SSE stream is delayed or unavailable
+      await loadConversation();
+
+      setIsLoading(false);
     } catch (error) {
       console.error("Error sending message:", error);
       setIsLoading(false);
+      // Roll back optimistic message when the backend rejects the send
+      setMessages(prev => prev.filter(m => m !== optimisticMessage));
       toast({
         title: "Error",
         description: "Failed to send message",
         variant: "destructive",
       });
+      return;
     }
   };
 

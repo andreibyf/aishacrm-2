@@ -5,6 +5,19 @@
 
 import { BACKEND_URL } from '@/api/entities';
 
+// Helper to read tenant ID consistently (new key first, legacy fallback)
+function resolveTenantId() {
+  try {
+    return (
+      localStorage.getItem('selected_tenant_id') ||
+      localStorage.getItem('tenant_id') ||
+      ''
+    );
+  } catch {
+    return '';
+  }
+}
+
 /**
  * Create a new conversation
  * @param {Object} options - Conversation options
@@ -13,11 +26,12 @@ import { BACKEND_URL } from '@/api/entities';
  * @returns {Promise<Object>} Created conversation
  */
 export async function createConversation({ agent_name = 'crm_assistant', metadata = {} } = {}) {
+  const tenantId = resolveTenantId();
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-tenant-id': localStorage.getItem('tenant_id') || '',
+      'x-tenant-id': tenantId,
     },
     credentials: 'include',
     body: JSON.stringify({ agent_name, metadata }),
@@ -37,9 +51,10 @@ export async function createConversation({ agent_name = 'crm_assistant', metadat
  * @returns {Promise<Object>} Conversation with messages
  */
 export async function getConversation(conversationId) {
+  const tenantId = resolveTenantId();
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations/${conversationId}`, {
     headers: {
-      'x-tenant-id': localStorage.getItem('tenant_id') || '',
+      'x-tenant-id': tenantId,
     },
     credentials: 'include',
   });
@@ -66,12 +81,12 @@ export async function addMessage(conversation, { role, content, file_urls = [] }
   if (file_urls.length > 0) {
     metadata.file_urls = file_urls;
   }
-
+  const tenantId = resolveTenantId();
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations/${conversation.id}/messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-tenant-id': localStorage.getItem('tenant_id') || '',
+      'x-tenant-id': tenantId,
     },
     credentials: 'include',
     body: JSON.stringify({ role, content, metadata }),
@@ -92,7 +107,7 @@ export async function addMessage(conversation, { role, content, file_urls = [] }
  * @returns {Function} Unsubscribe function
  */
 export function subscribeToConversation(conversationId, callback) {
-  const tenantId = localStorage.getItem('tenant_id') || '';
+  const tenantId = resolveTenantId();
   const eventSource = new EventSource(
     `${BACKEND_URL}/api/ai/conversations/${conversationId}/stream?tenant_id=${tenantId}`
   );

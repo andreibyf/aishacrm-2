@@ -67,7 +67,7 @@ export function UserProvider({ children }) {
   }, [loadUser]);
 
   return (
-    <UserContextInternal.Provider value={{ user, loading, reloadUser: loadUser }}>
+    <UserContextInternal.Provider value={{ user, loading, reloadUser: loadUser, refetch: loadUser }}>
       {children}
     </UserContextInternal.Provider>
   );

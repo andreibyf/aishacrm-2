@@ -42,6 +42,49 @@ const createFunctionProxy = (functionName) => {
   // Provide local fallbacks for functions used by Settings checks and CRUD operations
   // so the UI works in standalone mode without backend/cloud-functions running.
   return async (...args) => {
+    // Unified handler for chat: always call backend /api/ai/chat so ChatInterface works
+    if (functionName === 'processChatCommand') {
+      try {
+        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+        const opts = args[0] || {};
+        // Unified tenant ID resolution: explicit opts.tenantId > selected_tenant_id (new) > tenant_id (legacy) > ''
+        let tenantId = opts.tenantId || '';
+        if (!tenantId && typeof localStorage !== 'undefined') {
+          tenantId = localStorage.getItem('selected_tenant_id') || '';
+          if (!tenantId) {
+            // Legacy fallback if older key still present
+            tenantId = localStorage.getItem('tenant_id') || '';
+          }
+        }
+        const messages = Array.isArray(opts.messages)
+          ? opts.messages
+          : [{ role: 'user', content: String(opts.message || '').trim() }].filter(m => m.content);
+        const body = {
+          messages,
+          model: opts.model,
+          temperature: typeof opts.temperature === 'number' ? opts.temperature : undefined,
+          api_key: opts.api_key
+        };
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (tenantId) headers['x-tenant-id'] = tenantId;
+        else if (import.meta.env.DEV) {
+          console.warn('[processChatCommand] Missing tenantId (superadmin global view or not selected). Header omitted.');
+        }
+
+        const resp = await fetch(`${BACKEND_URL}/api/ai/chat`, {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify(body)
+        });
+        const json = await resp.json().catch(() => ({}));
+        return { status: resp.status, data: json };
+      } catch (err) {
+        return { status: 500, data: { status: 'error', message: err?.message || String(err) } };
+      }
+    }
+
     if (isLocalDevMode()) {
       // ========================================
       // Workflows (Local Backend)
@@ -591,6 +634,61 @@ const createFunctionProxy = (functionName) => {
     }
 
     // Non-local mode: Use backend routes for all functions
+    if (functionName === 'testSystemOpenAI') {
+      const payload = args[0] || {};
+      const { api_key, model = 'gpt-4o-mini' } = payload;
+      if (!api_key) {
+        return { data: { success: false, error: 'OpenAI API key is required for connectivity test.' } };
+      }
+
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+      const headers = { 'Content-Type': 'application/json' };
+      const tenantHeader = payload.tenantId || payload.tenant_id;
+      if (tenantHeader) headers['x-tenant-id'] = tenantHeader;
+
+      const messages = Array.isArray(payload.messages) && payload.messages.length
+        ? payload.messages
+        : [
+            { role: 'system', content: 'You are performing a diagnostic connectivity check for the Aisha CRM platform.' },
+            { role: 'user', content: 'Please reply with a short confirmation that the OpenAI connectivity test succeeded.' }
+          ];
+
+      const body = {
+        messages,
+        model,
+        temperature: typeof payload.temperature === 'number' ? payload.temperature : 0.2,
+        api_key
+      };
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/ai/chat`, {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify(body)
+        });
+
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok || json?.status !== 'success') {
+          const errorMessage = json?.message || `OpenAI test failed with status ${response.status}`;
+          return { data: { success: false, error: errorMessage, details: json?.data || null } };
+        }
+
+        return {
+          data: {
+            success: true,
+            message: json?.data?.response ? 'OpenAI connection verified.' : 'OpenAI connection verified with empty response.',
+            response: json?.data?.response || '',
+            usage: json?.data?.usage || null,
+            model: json?.data?.model || model
+          }
+        };
+      } catch (err) {
+        console.error('[testSystemOpenAI] Backend call failed:', err);
+        throw err;
+      }
+    }
+
     if (functionName === 'cleanupOrphanedData') {
       try {
         const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';

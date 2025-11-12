@@ -157,8 +157,12 @@ export const TenantProvider = ({ children }) => {
       try {
         if (sanitized === null) {
           localStorage.removeItem("selected_tenant_id");
+          // Legacy key cleanup for compatibility
+          try { localStorage.removeItem("tenant_id"); } catch { /* ignore */ }
         } else {
           localStorage.setItem("selected_tenant_id", sanitized);
+          // Legacy compatibility: mirror to old key until all callers migrate
+          try { localStorage.setItem("tenant_id", sanitized); } catch { /* ignore */ }
         }
         // Also reflect in URL for persistence across reloads/deep links
         updateUrlTenantParam(sanitized);
@@ -210,6 +214,18 @@ export const TenantProvider = ({ children }) => {
         saved === null || saved === "null" || saved === "undefined" ||
         saved === ""
       ) {
+        // Attempt legacy migration from 'tenant_id' key
+        try {
+          const legacy = localStorage.getItem("tenant_id");
+          if (legacy && isValidId(String(legacy))) {
+            const migrated = String(legacy);
+            setSelectedTenantIdState(migrated);
+            try { localStorage.setItem("selected_tenant_id", migrated); } catch { /* ignore */ }
+            logTenantEvent("INFO", "Migrated tenant selection from legacy key", { tenantId: migrated });
+            return;
+          }
+        } catch { /* ignore */ }
+
         // No tenant or explicitly null - keep as null (No Client)
         setSelectedTenantIdState(null);
         logTenantEvent("INFO", "No tenant selected (No Client)", {

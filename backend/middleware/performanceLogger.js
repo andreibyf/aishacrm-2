@@ -48,10 +48,11 @@ export function performanceLogger(pgPool) {
         }
 
         // Extract tenant_id from query, body, or user context
-        const tenant_id = 
-          req.query?.tenant_id || 
-          req.body?.tenant_id || 
-          req.user?.tenant_id || 
+        const tenant_id =
+          req.headers?.['x-tenant-id'] ||
+          req.query?.tenant_id ||
+          req.body?.tenant_id ||
+          req.user?.tenant_id ||
           'unknown';
 
         // Extract error info if present

@@ -8,16 +8,20 @@ import OpenAI from 'openai';
  *  - Structured error responses (status + message)
  */
 
-const apiKey = process.env.OPENAI_API_KEY || null;
-let client = null;
-if (apiKey) {
+const defaultApiKey = process.env.OPENAI_API_KEY || null;
+if (!defaultApiKey) {
+  console.warn('[aiProvider] No DEFAULT OPENAI_API_KEY set; will require tenant-level key.');
+}
+
+function getClient(apiKey) {
+  const key = apiKey || defaultApiKey;
+  if (!key) return null;
   try {
-    client = new OpenAI({ apiKey });
+    return new OpenAI({ apiKey: key });
   } catch (err) {
     console.error('[aiProvider] Failed to init OpenAI client:', err);
+    return null;
   }
-} else {
-  console.warn('[aiProvider] OPENAI_API_KEY not set; /api/ai/chat will return informative error.');
 }
 
 /**
@@ -29,9 +33,10 @@ if (apiKey) {
  * @param {number} [opts.maxContextMessages=40] - Max number of recent messages to send (older ones trimmed)
  * @returns {Promise<{status:string,content?:string,usage?:object,error?:string}>}
  */
-export async function createChatCompletion({ messages, model = 'gpt-4o-mini', temperature = 0.7, maxContextMessages = 40 }) {
+export async function createChatCompletion({ messages, model = 'gpt-4o-mini', temperature = 0.7, maxContextMessages = 40, apiKey = null }) {
+  const client = getClient(apiKey);
   if (!client) {
-    return { status: 'error', error: 'OPENAI_API_KEY not configured on backend' };
+    return { status: 'error', error: 'OPENAI_API_KEY not configured (provide tenant integration or backend env)' };
   }
   try {
     const trimmed = Array.isArray(messages) ? messages.slice(-maxContextMessages) : [];
@@ -62,4 +67,11 @@ export async function createChatCompletion({ messages, model = 'gpt-4o-mini', te
  */
 export function buildSystemPrompt({ tenantName }) {
   return `You are Aisha CRM Assistant. You help users query and summarize CRM data. Tenant: ${tenantName || 'Unknown Tenant'}. Keep answers concise, actionable, and include follow-up suggestions when helpful.`;
+}
+
+/**
+ * Expose a safe OpenAI client accessor for advanced routes that need tool calling.
+ */
+export function getOpenAIClient(apiKey = null) {
+  return getClient(apiKey);
 }
