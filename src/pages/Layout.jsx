@@ -120,7 +120,7 @@ const secondaryNavItems = [
     icon: Bot,
     label: "AI Agent",
     isAvatar: true,
-    avatarUrl: "/assets/Ai-SHA-logo-2.png",
+    avatarUrl: "/aisha-avatar.jpg",
   },
   {
     href: "ClientRequirements",
