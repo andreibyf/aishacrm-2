@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as agentSDK from '@/api/conversations';
-import { Loader2, Plus, RefreshCw, MessageSquare, Trash2 } from 'lucide-react';
+import { Loader2, Plus, RefreshCw, MessageSquare, Trash2, Filter, Edit2, Check, X } from 'lucide-react';
 import AI_CONFIG from '@/config/ai.config';
+
+// Topic categories for filtering
+const TOPICS = [
+  { value: 'all', label: 'All Topics', icon: '📋' },
+  { value: 'leads', label: 'Leads', icon: '🎯' },
+  { value: 'accounts', label: 'Accounts', icon: '🏢' },
+  { value: 'opportunities', label: 'Opportunities', icon: '💼' },
+  { value: 'contacts', label: 'Contacts', icon: '👤' },
+  { value: 'support', label: 'Support', icon: '🆘' },
+  { value: 'general', label: 'General', icon: '💬' },
+];
 
 // Format relative time (e.g., "2m ago", "3h ago", "5d ago")
 function formatRelativeTime(dateString) {
@@ -20,21 +31,37 @@ function formatRelativeTime(dateString) {
 
 /**
  * ConversationSidebar
- * Beautiful, compact sidebar for conversation management
+ * Beautiful, compact sidebar for conversation management with topic filtering
  */
 export default function ConversationSidebar({ agentName, tenantId, activeConversationId, onSelect }) {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState([]);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
+  const [selectedTopic, setSelectedTopic] = useState('all');
+  const [editingId, setEditingId] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editTopic, setEditTopic] = useState('general');
 
   const filtered = useMemo(() => {
-    if (!search) return items;
-    const q = search.toLowerCase();
-    return items.filter((c) =>
-      (c.last_message_excerpt || '').toLowerCase().includes(q)
-    );
-  }, [items, search]);
+    let result = items;
+    
+    // Filter by topic
+    if (selectedTopic !== 'all') {
+      result = result.filter((c) => (c.topic || 'general') === selectedTopic);
+    }
+    
+    // Filter by search
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter((c) => {
+        const title = c.title || c.last_message_excerpt || '';
+        return title.toLowerCase().includes(q);
+      });
+    }
+    
+    return result;
+  }, [items, search, selectedTopic]);
 
   async function loadList() {
     if (!tenantId) return;
@@ -106,6 +133,37 @@ export default function ConversationSidebar({ agentName, tenantId, activeConvers
     }
   }
 
+  function handleStartEdit(conversation, e) {
+    e.stopPropagation(); // Prevent selecting the conversation
+    setEditingId(conversation.id);
+    setEditTitle(conversation.title || conversation.last_message_excerpt || '');
+    setEditTopic(conversation.topic || 'general');
+  }
+
+  async function handleSaveEdit(conversationId, e) {
+    if (e) e.stopPropagation();
+    
+    try {
+      await agentSDK.updateConversation(conversationId, {
+        title: editTitle.trim() || undefined,
+        topic: editTopic,
+      });
+      
+      setEditingId(null);
+      await loadList();
+    } catch (e) {
+      console.error('[ConversationSidebar] Update failed:', e);
+      alert('Failed to update conversation: ' + (e?.message || 'Unknown error'));
+    }
+  }
+
+  function handleCancelEdit(e) {
+    if (e) e.stopPropagation();
+    setEditingId(null);
+    setEditTitle('');
+    setEditTopic('general');
+  }
+
   return (
     <aside className="w-72 shrink-0 flex flex-col h-full bg-slate-900/50 border-r border-slate-700/50">
       {/* Header */}
@@ -133,6 +191,22 @@ export default function ConversationSidebar({ agentName, tenantId, activeConvers
           onChange={(e) => setSearch(e.target.value)}
           className="w-full px-3 py-2 text-sm bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 outline-none focus:border-slate-600 focus:ring-1 focus:ring-slate-600 transition-colors"
         />
+        
+        {/* Topic Filter */}
+        <div className="mt-2 flex items-center gap-2">
+          <Filter className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+          <select
+            value={selectedTopic}
+            onChange={(e) => setSelectedTopic(e.target.value)}
+            className="w-full px-2 py-1.5 text-xs bg-slate-800 border border-slate-700 rounded-lg text-slate-300 outline-none focus:border-slate-600 focus:ring-1 focus:ring-slate-600 transition-colors"
+          >
+            {TOPICS.map((topic) => (
+              <option key={topic.value} value={topic.value}>
+                {topic.icon} {topic.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Conversation List */}
@@ -159,55 +233,118 @@ export default function ConversationSidebar({ agentName, tenantId, activeConvers
           <div className="space-y-1">
             {filtered.map((c) => {
               const isActive = c.id === activeConversationId;
-              const excerpt = c.last_message_excerpt || 'New conversation';
-              const title = excerpt.slice(0, 50) + (excerpt.length > 50 ? '...' : '');
+              const isEditing = editingId === c.id;
+              // Use title if available, fallback to excerpt or default
+              const title = c.title || c.last_message_excerpt || 'New conversation';
+              const displayTitle = title.slice(0, 50) + (title.length > 50 ? '...' : '');
               const count = c.message_count || 0;
               const lastAt = c.last_message_at || c.updated_date || c.created_date;
               const timeAgo = formatRelativeTime(lastAt);
+              const topicInfo = TOPICS.find(t => t.value === (c.topic || 'general'));
               
               return (
                 <div key={c.id} className="relative group">
-                  <button
-                    onClick={() => onSelect?.(c.id)}
-                    className={`
-                      w-full text-left px-3 py-2.5 rounded-lg transition-all
-                      ${isActive 
-                        ? 'bg-blue-600/20 border border-blue-500/50 text-slate-100 shadow-sm' 
-                        : 'hover:bg-slate-800/50 border border-transparent text-slate-300 hover:text-slate-100'
-                      }
-                    `}
-                  >
-                    {/* Title line */}
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <span className="text-sm font-medium leading-tight line-clamp-2 pr-6">
-                        {title}
-                      </span>
-                      {count > 0 && (
-                        <span className={`
-                          shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded
-                          ${isActive ? 'bg-blue-500/30 text-blue-200' : 'bg-slate-700 text-slate-400'}
-                        `}>
-                          {count}
-                        </span>
-                      )}
-                    </div>
-                    
-                    {/* Time */}
-                    {timeAgo && (
-                      <div className={`text-[11px] ${isActive ? 'text-slate-400' : 'text-slate-500'}`}>
-                        {timeAgo}
+                  {isEditing ? (
+                    // Edit mode
+                    <div className="p-3 rounded-lg border border-blue-500/50 bg-slate-800">
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full px-2 py-1 text-sm bg-slate-700 border border-slate-600 rounded text-slate-200 mb-2 outline-none focus:border-blue-500"
+                        placeholder="Conversation title..."
+                        autoFocus
+                      />
+                      <select
+                        value={editTopic}
+                        onChange={(e) => setEditTopic(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full px-2 py-1 text-xs bg-slate-700 border border-slate-600 rounded text-slate-200 mb-2 outline-none focus:border-blue-500"
+                      >
+                        {TOPICS.filter(t => t.value !== 'all').map((topic) => (
+                          <option key={topic.value} value={topic.value}>
+                            {topic.icon} {topic.label}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={(e) => handleSaveEdit(c.id, e)}
+                          className="flex-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center justify-center gap-1"
+                        >
+                          <Check className="w-3 h-3" /> Save
+                        </button>
+                        <button
+                          onClick={handleCancelEdit}
+                          className="flex-1 px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded flex items-center justify-center gap-1"
+                        >
+                          <X className="w-3 h-3" /> Cancel
+                        </button>
                       </div>
-                    )}
-                  </button>
+                    </div>
+                  ) : (
+                    // Normal display mode
+                    <button
+                      onClick={() => onSelect?.(c.id)}
+                      className={`
+                        w-full text-left px-3 py-2.5 rounded-lg transition-all
+                        ${isActive 
+                          ? 'bg-blue-600/20 border border-blue-500/50 text-slate-100 shadow-sm' 
+                          : 'hover:bg-slate-800/50 border border-transparent text-slate-300 hover:text-slate-100'
+                        }
+                      `}
+                    >
+                      {/* Title line with topic emoji */}
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <div className="flex items-start gap-1.5 min-w-0 flex-1">
+                          {topicInfo && (
+                            <span className="shrink-0 text-xs mt-0.5" title={topicInfo.label}>
+                              {topicInfo.icon}
+                            </span>
+                          )}
+                          <span className="text-sm font-medium leading-tight line-clamp-2 pr-6">
+                            {displayTitle}
+                          </span>
+                        </div>
+                        {count > 0 && (
+                          <span className={`
+                            shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded
+                            ${isActive ? 'bg-blue-500/30 text-blue-200' : 'bg-slate-700 text-slate-400'}
+                          `}>
+                            {count}
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Time */}
+                      {timeAgo && (
+                        <div className={`text-[11px] ${isActive ? 'text-slate-400' : 'text-slate-500'}`}>
+                          {timeAgo}
+                        </div>
+                      )}
+                    </button>
+                  )}
                   
-                  {/* Delete button - shows on hover */}
-                  <button
-                    onClick={(e) => handleDelete(c.id, e)}
-                    className="absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900/80 hover:bg-red-600 text-slate-400 hover:text-white"
-                    title="Delete conversation"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {/* Edit and Delete buttons - show on hover (not when editing) */}
+                  {!isEditing && (
+                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => handleStartEdit(c, e)}
+                        className="p-1.5 rounded bg-slate-900/80 hover:bg-blue-600 text-slate-400 hover:text-white transition-colors"
+                        title="Edit conversation"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => handleDelete(c.id, e)}
+                        className="p-1.5 rounded bg-slate-900/80 hover:bg-red-600 text-slate-400 hover:text-white transition-colors"
+                        title="Delete conversation"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}

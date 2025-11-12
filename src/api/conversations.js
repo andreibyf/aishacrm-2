@@ -107,6 +107,38 @@ export async function listConversations({ agent_name, limit } = {}) {
 }
 
 /**
+ * Update conversation title and/or topic
+ * @param {string} conversationId - Conversation ID
+ * @param {Object} updates - Fields to update
+ * @param {string} [updates.title] - New title
+ * @param {string} [updates.topic] - New topic (leads, accounts, support, general, etc.)
+ * @returns {Promise<Object>} Updated conversation
+ */
+export async function updateConversation(conversationId, { title, topic }) {
+  const tenantId = resolveTenantId();
+  console.log(`[Conversations API] Updating conversation ${conversationId}:`, { title, topic });
+  
+  const response = await fetch(`${BACKEND_URL}/api/ai/conversations/${conversationId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-tenant-id': tenantId,
+    },
+    credentials: 'include',
+    body: JSON.stringify({ title, topic }),
+  });
+
+  if (!response.ok) {
+    console.error(`[Conversations API] Failed to update conversation: ${response.status} ${response.statusText}`);
+    throw new Error(`Failed to update conversation: ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  console.log(`[Conversations API] Updated conversation ${conversationId}`);
+  return result.data;
+}
+
+/**
  * Delete a conversation
  * @param {string} conversationId - Conversation ID to delete
  * @returns {Promise<void>}
@@ -211,6 +243,7 @@ export default {
   createConversation,
   getConversation,
   listConversations,
+  updateConversation,
   deleteConversation,
   addMessage,
   subscribeToConversation,

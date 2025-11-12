@@ -129,6 +129,9 @@ npm run build
 - `backend/routes/` - API route handlers (26 categories)
 - `backend/.env` - Backend configuration
 
+See also:
+- `docs/AI_CONVERSATIONS.md` — AI chat conversations: titles, topics, and Supabase-backed routes
+
 ## 🎯 Why Your Own Backend?
 
 **The Problem:** When Ai-SHA went down, your entire app was inaccessible.

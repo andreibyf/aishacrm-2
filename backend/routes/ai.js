@@ -5,6 +5,7 @@
 
 import express from 'express';
 import { createChatCompletion, buildSystemPrompt, getOpenAIClient } from '../lib/aiProvider.js';
+import { getSupabaseClient } from '../lib/supabase-db.js';
 
 const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
@@ -13,6 +14,7 @@ export default function createAIRoutes(pgPool) {
   const DEFAULT_CHAT_MODEL = process.env.DEFAULT_OPENAI_MODEL || 'gpt-4o-mini';
   const MAX_TOOL_ITERATIONS = 3;
   const tenantIntegrationKeyCache = new Map();
+  const supa = getSupabaseClient();
 
   // SSE clients storage for real-time conversation updates
   const conversationClients = new Map(); // conversationId -> Set<res>
@@ -42,6 +44,40 @@ export default function createAIRoutes(pgPool) {
     });
   };
 
+  // Simple keyword-based topic classifier
+  // Returns one of: leads, accounts, opportunities, contacts, support, general
+  const classifyTopicFromText = (text) => {
+    if (!text || typeof text !== 'string') return 'general';
+    const t = text.toLowerCase();
+
+    // Leads-related keywords
+    if (/(lead|leads|prospect|prospecting|mql|sql|source|campaign|list build|qualification|pipeline\s?gen)/.test(t)) {
+      return 'leads';
+    }
+
+    // Opportunities / deals keywords
+    if (/(opportunity|opportunities|deal|deals|pipeline|stage|close\s?date|forecast|quote|proposal)/.test(t)) {
+      return 'opportunities';
+    }
+
+    // Accounts / companies keywords
+    if (/(account|accounts|customer\s?account|company|companies|organization|org|client|clients)/.test(t)) {
+      return 'accounts';
+    }
+
+    // Contacts / people keywords
+    if (/(contact|contacts|person|people|individual|email list|phone list|prospect list)/.test(t)) {
+      return 'contacts';
+    }
+
+    // Support / issues keywords
+    if (/(support|ticket|issue|bug|incident|helpdesk|escalation|sla)/.test(t)) {
+      return 'support';
+    }
+
+    return 'general';
+  };
+
   const resolveTenantOpenAiKey = async ({ explicitKey, headerKey, userKey, tenantSlug }) => {
     if (explicitKey) return explicitKey;
     if (headerKey) return headerKey;
@@ -55,24 +91,22 @@ export default function createAIRoutes(pgPool) {
       }
 
       try {
-        const result = await pgPool.query(
-          `SELECT api_credentials FROM tenant_integrations
-           WHERE tenant_id = $1
-             AND is_active = true
-             AND integration_type IN ('openai_llm')
-           ORDER BY updated_at DESC NULLS LAST, created_at DESC
-           LIMIT 1`,
-          [tenantSlug]
-        );
-
-        if (result.rows?.length) {
-          const rawCreds = result.rows[0].api_credentials;
+        const { data, error } = await supa
+          .from('tenant_integrations')
+          .select('api_credentials')
+          .eq('tenant_id', tenantSlug)
+          .eq('is_active', true)
+          .in('integration_type', ['openai_llm'])
+          .order('updated_at', { ascending: false, nullsFirst: false })
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (error) throw error;
+        if (data?.length) {
+          const rawCreds = data[0].api_credentials;
           const creds = typeof rawCreds === 'object' ? rawCreds : JSON.parse(rawCreds || '{}');
           const tenantKey = creds?.api_key || creds?.apiKey || null;
           tenantIntegrationKeyCache.set(tenantSlug, tenantKey || null);
-          if (tenantKey) {
-            return tenantKey;
-          }
+          if (tenantKey) return tenantKey;
         } else {
           tenantIntegrationKeyCache.set(tenantSlug, null);
         }
@@ -86,16 +120,16 @@ export default function createAIRoutes(pgPool) {
     // Fallback to system settings table
     try {
       console.log('[AI Routes] Checking system_settings table for OpenAI key...');
-      const systemSettingsResult = await pgPool.query(
-        `SELECT settings FROM system_settings
-         WHERE settings IS NOT NULL
-           AND settings->>'system_openai_settings' IS NOT NULL
-         LIMIT 1`
-      );
+      const { data, error } = await supa
+        .from('system_settings')
+        .select('settings')
+        .not('settings', 'is', null)
+        .limit(1);
+      if (error) throw error;
 
-      console.log('[AI Routes] System settings query returned:', systemSettingsResult.rows?.length, 'rows');
-      if (systemSettingsResult.rows?.length) {
-        const settings = systemSettingsResult.rows[0].settings;
+      console.log('[AI Routes] System settings query returned:', data?.length || 0, 'rows');
+      if (data?.length) {
+        const settings = data[0].settings;
         console.log('[AI Routes] Found settings:', typeof settings, settings ? 'has data' : 'empty');
         const systemOpenAI = typeof settings === 'object' 
           ? settings.system_openai_settings 
@@ -118,26 +152,21 @@ export default function createAIRoutes(pgPool) {
 
     // Fallback to admin/superadmin user settings (legacy)
     try {
-      const systemUsersResult = await pgPool.query(
-        `SELECT system_openai_settings FROM users
-         WHERE role IN ('admin', 'superadmin')
-           AND system_openai_settings IS NOT NULL
-           AND (system_openai_settings->>'enabled')::boolean = true
-           AND system_openai_settings->>'openai_api_key' IS NOT NULL
-         ORDER BY 
-           CASE role WHEN 'superadmin' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,
-           updated_at DESC NULLS LAST
-         LIMIT 1`
-      );
-
-      if (systemUsersResult.rows?.length) {
-        const systemSettings = systemUsersResult.rows[0].system_openai_settings;
+      const { data, error } = await supa
+        .from('users')
+        .select('system_openai_settings, role')
+        .in('role', ['admin', 'superadmin'])
+        .not('system_openai_settings', 'is', null)
+        .order('role', { ascending: true })
+        .order('updated_at', { ascending: false, nullsFirst: false })
+        .limit(1);
+      if (error) throw error;
+      if (data?.length) {
+        const systemSettings = data[0].system_openai_settings;
         const systemKey = typeof systemSettings === 'object' 
           ? systemSettings.openai_api_key 
           : JSON.parse(systemSettings || '{}').openai_api_key;
-        if (systemKey) {
-          return systemKey;
-        }
+        if (systemKey) return systemKey;
       }
     } catch (error) {
       console.warn('[AI Routes] Failed to resolve user system OpenAI settings:', error.message || error);
@@ -173,68 +202,68 @@ export default function createAIRoutes(pgPool) {
     };
 
     if (segments.includes('activities')) {
-      const { rows } = await pgPool.query(
-        `SELECT id, subject, status, type, due_date, owner_id, created_at
-         FROM activities
-         WHERE tenant_id = $1
-         ORDER BY created_at DESC
-         LIMIT $2`,
-        [tenantIdSlug, safeLimit]
-      );
-      snapshot.activities = rows;
-      snapshot.summary.activities_count = rows.length;
+      const { data, error } = await supa
+        .from('activities')
+        .select('id, subject, status, type, due_date, owner_id, created_at')
+        .eq('tenant_id', tenantIdSlug)
+        .order('created_at', { ascending: false })
+        .limit(safeLimit);
+      if (!error) {
+        snapshot.activities = data || [];
+        snapshot.summary.activities_count = snapshot.activities.length;
+      }
     }
 
     if (segments.includes('opportunities')) {
-      const { rows } = await pgPool.query(
-        `SELECT id, name, stage, amount, close_date, owner_id, probability, updated_at
-         FROM opportunities
-         WHERE tenant_id = $1
-         ORDER BY updated_at DESC
-         LIMIT $2`,
-        [tenantIdSlug, safeLimit]
-      );
-      snapshot.opportunities = rows;
-      snapshot.summary.opportunities_count = rows.length;
+      const { data, error } = await supa
+        .from('opportunities')
+        .select('id, name, stage, amount, close_date, owner_id, probability, updated_at')
+        .eq('tenant_id', tenantIdSlug)
+        .order('updated_at', { ascending: false })
+        .limit(safeLimit);
+      if (!error) {
+        snapshot.opportunities = data || [];
+        snapshot.summary.opportunities_count = snapshot.opportunities.length;
+      }
     }
 
     if (segments.includes('leads')) {
-      const { rows } = await pgPool.query(
-        `SELECT id, first_name, last_name, email, status, company, source, owner_id, created_at
-         FROM leads
-         WHERE tenant_id = $1
-         ORDER BY created_at DESC
-         LIMIT $2`,
-        [tenantIdSlug, safeLimit]
-      );
-      snapshot.leads = rows;
-      snapshot.summary.leads_count = rows.length;
+      const { data, error } = await supa
+        .from('leads')
+        .select('id, first_name, last_name, email, status, company, source, owner_id, created_at')
+        .eq('tenant_id', tenantIdSlug)
+        .order('created_at', { ascending: false })
+        .limit(safeLimit);
+      if (!error) {
+        snapshot.leads = data || [];
+        snapshot.summary.leads_count = snapshot.leads.length;
+      }
     }
 
     if (segments.includes('accounts')) {
-      const { rows } = await pgPool.query(
-        `SELECT id, name, industry, owner_id, annual_revenue, website, updated_at
-         FROM accounts
-         WHERE tenant_id = $1
-         ORDER BY updated_at DESC
-         LIMIT $2`,
-        [tenantIdSlug, safeLimit]
-      );
-      snapshot.accounts = rows;
-      snapshot.summary.accounts_count = rows.length;
+      const { data, error } = await supa
+        .from('accounts')
+        .select('id, name, industry, owner_id, annual_revenue, website, updated_at')
+        .eq('tenant_id', tenantIdSlug)
+        .order('updated_at', { ascending: false })
+        .limit(safeLimit);
+      if (!error) {
+        snapshot.accounts = data || [];
+        snapshot.summary.accounts_count = snapshot.accounts.length;
+      }
     }
 
     if (segments.includes('contacts')) {
-      const { rows } = await pgPool.query(
-        `SELECT id, first_name, last_name, email, job_title, account_id, owner_id, updated_at
-         FROM contacts
-         WHERE tenant_id = $1
-         ORDER BY updated_at DESC
-         LIMIT $2`,
-        [tenantIdSlug, safeLimit]
-      );
-      snapshot.contacts = rows;
-      snapshot.summary.contacts_count = rows.length;
+      const { data, error } = await supa
+        .from('contacts')
+        .select('id, first_name, last_name, email, job_title, account_id, owner_id, updated_at')
+        .eq('tenant_id', tenantIdSlug)
+        .order('updated_at', { ascending: false })
+        .limit(safeLimit);
+      if (!error) {
+        snapshot.contacts = data || [];
+        snapshot.summary.contacts_count = snapshot.contacts.length;
+      }
     }
 
     return snapshot;
@@ -242,19 +271,19 @@ export default function createAIRoutes(pgPool) {
 
   const insertAssistantMessage = async (conversationId, content, metadata = {}) => {
     try {
-      const result = await pgPool.query(
-        `INSERT INTO conversation_messages (conversation_id, role, content, metadata)
-         VALUES ($1, $2, $3, $4)
-         RETURNING *`,
-        [conversationId, 'assistant', content, JSON.stringify(metadata)]
-      );
+      const { data: inserted, error } = await supa
+        .from('conversation_messages')
+        .insert({ conversation_id: conversationId, role: 'assistant', content, metadata })
+        .select()
+        .single();
+      if (error) throw error;
 
-      await pgPool.query(
-        'UPDATE conversations SET updated_date = CURRENT_TIMESTAMP WHERE id = $1',
-        [conversationId]
-      );
+      await supa
+        .from('conversations')
+        .update({ updated_date: new Date().toISOString() })
+        .eq('id', conversationId);
 
-      const message = result.rows[0];
+      const message = inserted;
       broadcastMessage(conversationId, message);
       return message;
     } catch (error) {
@@ -336,12 +365,11 @@ export default function createAIRoutes(pgPool) {
         return;
       }
 
-      const history = await pgPool.query(
-        `SELECT role, content FROM conversation_messages
-         WHERE conversation_id = $1
-         ORDER BY created_date ASC`,
-        [conversationId]
-      );
+      const { data: historyRows } = await supa
+        .from('conversation_messages')
+        .select('role, content')
+        .eq('conversation_id', conversationId)
+        .order('created_date', { ascending: true });
 
       const tenantName = conversationMetadata?.tenant_name || tenantRecord?.name || tenantSlug || 'CRM Tenant';
       const systemPrompt = `${buildSystemPrompt({ tenantName })}\n\nUse the available CRM tools to fetch data before answering. Only reference data returned by the tools to guarantee tenant isolation.`;
@@ -350,7 +378,7 @@ export default function createAIRoutes(pgPool) {
         { role: 'system', content: systemPrompt },
       ];
 
-      for (const row of history.rows || []) {
+      for (const row of historyRows || []) {
         if (!row || !row.role) continue;
         if (row.role === 'system') continue;
         messages.push({ role: row.role, content: row.content });
@@ -556,28 +584,50 @@ export default function createAIRoutes(pgPool) {
       return tenantLookupCache.get(key);
     }
 
-    const attempts = UUID_PATTERN.test(key)
-      ? [
-          { sql: 'SELECT id, tenant_id, name FROM tenant WHERE id = $1 LIMIT 1', value: key },
-          { sql: 'SELECT id, tenant_id, name FROM tenant WHERE tenant_id = $1 LIMIT 1', value: key },
-        ]
-      : [
-          { sql: 'SELECT id, tenant_id, name FROM tenant WHERE tenant_id = $1 LIMIT 1', value: key },
-          { sql: 'SELECT id, tenant_id, name FROM tenant WHERE id = $1 LIMIT 1', value: key },
-        ];
-
-    for (const attempt of attempts) {
-      try {
-        const result = await pgPool.query(attempt.sql, [attempt.value]);
-        if (result.rows?.length) {
-          const record = result.rows[0];
-          cacheTenantRecord(record);
-          tenantLookupCache.set(key, record);
-          return record;
+    try {
+      let record = null;
+      if (UUID_PATTERN.test(key)) {
+        const { data: byId } = await supa
+          .from('tenant')
+          .select('id, tenant_id, name')
+          .eq('id', key)
+          .limit(1)
+          .single();
+        record = byId || null;
+        if (!record) {
+          const { data: bySlug } = await supa
+            .from('tenant')
+            .select('id, tenant_id, name')
+            .eq('tenant_id', key)
+            .limit(1)
+            .single();
+          record = bySlug || null;
         }
-      } catch (error) {
-        console.warn('[AI Routes] Tenant lookup failed for identifier:', key, error.message || error);
+      } else {
+        const { data: bySlug } = await supa
+          .from('tenant')
+          .select('id, tenant_id, name')
+          .eq('tenant_id', key)
+          .limit(1)
+          .single();
+        record = bySlug || null;
+        if (!record) {
+          const { data: byId } = await supa
+            .from('tenant')
+            .select('id, tenant_id, name')
+            .eq('id', key)
+            .limit(1)
+            .single();
+          record = byId || null;
+        }
       }
+      if (record) {
+        cacheTenantRecord(record);
+        tenantLookupCache.set(key, record);
+        return record;
+      }
+    } catch (error) {
+      console.warn('[AI Routes] Tenant lookup failed for identifier:', key, error.message || error);
     }
 
     tenantLookupCache.set(key, null);
@@ -635,18 +685,17 @@ export default function createAIRoutes(pgPool) {
     });
 
     try {
-      await pgPool.query(
-        `INSERT INTO system_logs (tenant_id, level, message, source, metadata, stack_trace, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-        [
-          tenantSlug,
-          level,
-          message,
-          'AI Routes',
-          JSON.stringify(payload),
-          stackTrace,
-        ]
-      );
+      const insertPayload = {
+        tenant_id: tenantSlug,
+        level,
+        message,
+        source: 'AI Routes',
+        metadata: payload,
+        stack_trace: stackTrace,
+        created_at: new Date().toISOString(),
+      };
+      const { error } = await supa.from('system_logs').insert(insertPayload);
+      if (error) throw error;
     } catch (logError) {
       console.error('[AI Routes] Failed to record system log:', logError.message || logError);
     }
@@ -685,17 +734,14 @@ export default function createAIRoutes(pgPool) {
         tenant_name: metadata?.tenant_name ?? tenantRecord.name ?? null,
       };
 
-      const result = await pgPool.query(
-        `INSERT INTO conversations (tenant_id, agent_name, metadata, status)
-         VALUES ($1, $2, $3, 'active')
-         RETURNING *`,
-        [tenantRecord.id, agentName, JSON.stringify(enrichedMetadata)]
-      );
+      const { data, error } = await supa
+        .from('conversations')
+        .insert({ tenant_id: tenantRecord.id, agent_name: agentName, metadata: enrichedMetadata, status: 'active' })
+        .select()
+        .single();
+      if (error) throw error;
 
-      res.json({
-        status: 'success',
-        data: result.rows[0],
-      });
+      res.json({ status: 'success', data });
     } catch (error) {
       console.error('Create conversation error:', error);
       await logAiEvent({
@@ -740,14 +786,15 @@ export default function createAIRoutes(pgPool) {
       const safeLimit = Math.min(parseInt(limit, 10) || 25, 100);
 
       // Query conversations using simple SELECT without ORDER BY (avoid adapter parsing issues)
-      const convQuery = `SELECT id, agent_name, status, created_date, updated_date FROM conversations WHERE tenant_id = $1 ${agent_name ? 'AND agent_name = $2' : ''} ${status ? `AND status = $${agent_name ? 3 : 2}` : ''} LIMIT $${agent_name && status ? 4 : agent_name || status ? 3 : 2}`;
-      const convParams = [tenantRecord.id];
-      if (agent_name) convParams.push(agent_name);
-      if (status) convParams.push(status);
-      convParams.push(safeLimit * 2); // Fetch extra since we'll sort in JS
-      
-      const convResult = await pgPool.query(convQuery, convParams);
-      const conversations = convResult.rows || [];
+      let query = supa
+        .from('conversations')
+        .select('id, agent_name, status, title, topic, created_date, updated_date')
+        .eq('tenant_id', tenantRecord.id);
+      if (agent_name) query = query.eq('agent_name', agent_name);
+      if (status) query = query.eq('status', status);
+      const { data: conversationsRaw, error } = await query.limit(safeLimit * 2);
+      if (error) throw error;
+      const conversations = conversationsRaw || [];
 
       if (conversations.length === 0) {
         return res.json({ status: 'success', data: [] });
@@ -755,18 +802,21 @@ export default function createAIRoutes(pgPool) {
 
       // Get message counts and last message times for all conversations
       const ids = conversations.map(c => c.id);
-      const countsQuery = `SELECT conversation_id, COUNT(*)::int AS message_count, MAX(created_date) AS last_message_at FROM conversation_messages WHERE conversation_id = ANY($1) GROUP BY conversation_id`;
-      const countsResult = await pgPool.query(countsQuery, [ids]);
-      const countsMap = new Map(countsResult.rows.map(r => [r.conversation_id, r]));
-
-      // Get last message excerpt for each conversation (simple approach: one query per conversation)
+      const { data: msgs, error: msgsErr } = await supa
+        .from('conversation_messages')
+        .select('conversation_id, content, created_date')
+        .in('conversation_id', ids)
+        .order('created_date', { ascending: false });
+      if (msgsErr) throw msgsErr;
+      const countsMap = new Map();
       const lastMsgMap = new Map();
-      for (const id of ids) {
-        const msgQuery = `SELECT content FROM conversation_messages WHERE conversation_id = $1 LIMIT 1`;
-        const msgResult = await pgPool.query(msgQuery, [id]);
-        if (msgResult.rows.length > 0) {
-          lastMsgMap.set(id, { content: msgResult.rows[0].content });
-        }
+      for (const row of msgs || []) {
+        const cid = row.conversation_id;
+        const meta = countsMap.get(cid) || { message_count: 0, last_message_at: null };
+        meta.message_count += 1;
+        if (!meta.last_message_at) meta.last_message_at = row.created_date;
+        countsMap.set(cid, meta);
+        if (!lastMsgMap.has(cid)) lastMsgMap.set(cid, { content: row.content });
       }
 
       // Merge and sort by last activity in JavaScript
@@ -828,29 +878,28 @@ export default function createAIRoutes(pgPool) {
       }
 
       // Get conversation
-      const convResult = await pgPool.query(
-        'SELECT * FROM conversations WHERE id = $1 AND tenant_id = $2',
-        [id, tenantRecord.id]
-      );
-
-      if (convResult.rows.length === 0) {
+      const { data: conv, error: convErr } = await supa
+        .from('conversations')
+        .select('*')
+        .eq('id', id)
+        .eq('tenant_id', tenantRecord.id)
+        .single();
+      if (convErr && convErr.code !== 'PGRST116') throw convErr;
+      if (!conv) {
         return res.status(404).json({ status: 'error', message: 'Conversation not found' });
       }
 
       // Get messages
-      const messagesResult = await pgPool.query(
-        `SELECT * FROM conversation_messages 
-         WHERE conversation_id = $1 
-         ORDER BY created_date ASC`,
-        [id]
-      );
+      const { data: msgs, error: msgsErr } = await supa
+        .from('conversation_messages')
+        .select('*')
+        .eq('conversation_id', id)
+        .order('created_date', { ascending: true });
+      if (msgsErr) throw msgsErr;
 
       res.json({
         status: 'success',
-        data: {
-          ...convResult.rows[0],
-          messages: messagesResult.rows,
-        },
+        data: { ...conv, messages: msgs || [] },
       });
     } catch (error) {
       console.error('Get conversation error:', error);
@@ -861,6 +910,79 @@ export default function createAIRoutes(pgPool) {
         error,
         metadata: {
           operation: 'get_conversation',
+          conversation_id: id,
+          request_path: req.originalUrl || req.url,
+          http_status: 500,
+        },
+      });
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // PATCH /api/ai/conversations/:id - Update conversation (title, topic)
+  router.patch('/conversations/:id', async (req, res) => {
+    const { id } = req.params;
+    const { title, topic } = req.body;
+    let tenantIdentifier = null;
+    let tenantRecord = null;
+    try {
+      tenantIdentifier = getTenantId(req);
+      tenantRecord = await resolveTenantRecord(tenantIdentifier);
+
+      if (!tenantRecord?.id) {
+        return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
+      }
+
+      // Verify conversation belongs to tenant
+      const { data: conv, error } = await supa
+        .from('conversations')
+        .select('id')
+        .eq('id', id)
+        .eq('tenant_id', tenantRecord.id)
+        .single();
+      if (error && error.code !== 'PGRST116') throw error;
+      if (!conv) {
+        return res.status(404).json({ status: 'error', message: 'Conversation not found' });
+      }
+
+      const updateData = {};
+      if (title !== undefined) updateData.title = title;
+      if (topic !== undefined) updateData.topic = topic;
+      if (!('title' in updateData) && !('topic' in updateData)) {
+        return res.status(400).json({ status: 'error', message: 'No valid fields to update (title or topic required)' });
+      }
+      updateData.updated_date = new Date().toISOString();
+
+      const { data: updated, error: updErr } = await supa
+        .from('conversations')
+        .update(updateData)
+        .eq('id', id)
+        .eq('tenant_id', tenantRecord.id)
+        .select()
+        .single();
+      if (updErr) throw updErr;
+
+      await logAiEvent({
+        message: 'Conversation updated',
+        tenantRecord,
+        tenantIdentifier,
+        metadata: {
+          operation: 'update_conversation',
+          conversation_id: id,
+          updates: { title, topic },
+        },
+      });
+
+  res.json({ status: 'success', data: updated });
+    } catch (error) {
+      console.error('Update conversation error:', error);
+      await logAiEvent({
+        message: 'AI conversation update failed',
+        tenantRecord,
+        tenantIdentifier,
+        error,
+        metadata: {
+          operation: 'update_conversation',
           conversation_id: id,
           request_path: req.originalUrl || req.url,
           http_status: 500,
@@ -884,26 +1006,20 @@ export default function createAIRoutes(pgPool) {
       }
 
       // Verify conversation belongs to tenant before deleting
-      const convResult = await pgPool.query(
-        'SELECT id FROM conversations WHERE id = $1 AND tenant_id = $2',
-        [id, tenantRecord.id]
-      );
-
-      if (!convResult.rows?.length) {
+      const { data: conv, error } = await supa
+        .from('conversations')
+        .select('id')
+        .eq('id', id)
+        .eq('tenant_id', tenantRecord.id)
+        .single();
+      if (error && error.code !== 'PGRST116') throw error;
+      if (!conv) {
         return res.status(404).json({ status: 'error', message: 'Conversation not found' });
       }
-
       // Delete messages first (foreign key constraint)
-      await pgPool.query(
-        'DELETE FROM conversation_messages WHERE conversation_id = $1',
-        [id]
-      );
-
+      await supa.from('conversation_messages').delete().eq('conversation_id', id);
       // Delete conversation
-      await pgPool.query(
-        'DELETE FROM conversations WHERE id = $1 AND tenant_id = $2',
-        [id, tenantRecord.id]
-      );
+      await supa.from('conversations').delete().eq('id', id).eq('tenant_id', tenantRecord.id);
 
       await logAiEvent({
         message: 'Conversation deleted',
@@ -946,27 +1062,28 @@ export default function createAIRoutes(pgPool) {
       }
 
       // Verify conversation belongs to tenant
-      const convResult = await pgPool.query(
-        'SELECT id FROM conversations WHERE id = $1 AND tenant_id = $2',
-        [id, tenantRecord.id]
-      );
-
-      if (!convResult.rows?.length) {
+      const { data: conv, error } = await supa
+        .from('conversations')
+        .select('id')
+        .eq('id', id)
+        .eq('tenant_id', tenantRecord.id)
+        .single();
+      if (error && error.code !== 'PGRST116') throw error;
+      if (!conv) {
         return res.status(404).json({ status: 'error', message: 'Conversation not found' });
       }
 
       // Get messages
-      const messagesResult = await pgPool.query(
-        `SELECT id, conversation_id, role, content, metadata, created_date
-         FROM conversation_messages
-         WHERE conversation_id = $1
-         ORDER BY created_date ASC`,
-        [id]
-      );
+      const { data: messages, error: msgsListErr } = await supa
+        .from('conversation_messages')
+        .select('id, conversation_id, role, content, metadata, created_date')
+        .eq('conversation_id', id)
+        .order('created_date', { ascending: true });
+      if (msgsListErr) throw msgsListErr;
 
       res.json({
         status: 'success',
-        data: messagesResult.rows || []
+        data: messages || []
       });
     } catch (error) {
       console.error('[AI Routes] Get messages error:', error);
@@ -1007,34 +1124,63 @@ export default function createAIRoutes(pgPool) {
         return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
       }
 
-      const convResult = await pgPool.query(
-        `SELECT id, tenant_id, agent_name, metadata
-         FROM conversations
-         WHERE id = $1 AND tenant_id = $2
-         LIMIT 1`,
-        [id, tenantRecord.id]
-      );
-
-      if (convResult.rows.length === 0) {
+      const { data: conv, error } = await supa
+        .from('conversations')
+        .select('id, tenant_id, agent_name, metadata')
+        .eq('id', id)
+        .eq('tenant_id', tenantRecord.id)
+        .limit(1)
+        .single();
+      if (error && error.code !== 'PGRST116') throw error;
+      if (!conv) {
         return res.status(404).json({ status: 'error', message: 'Conversation not found' });
       }
-
-      conversation = convResult.rows[0];
+      conversation = conv;
       const conversationMetadata = parseMetadata(conversation.metadata);
 
-      const result = await pgPool.query(
-        `INSERT INTO conversation_messages (conversation_id, role, content, metadata)
-         VALUES ($1, $2, $3, $4)
-         RETURNING *`,
-        [id, role, content, JSON.stringify(metadata)]
-      );
+      const { data: inserted, error: insErr } = await supa
+        .from('conversation_messages')
+        .insert({ conversation_id: id, role, content, metadata })
+        .select()
+        .single();
+      if (insErr) throw insErr;
+      const message = inserted;
 
-      const message = result.rows[0];
+      // Auto-generate title and topic from first user message (if not already set)
+      if (role === 'user') {
+        const { data: convState } = await supa
+          .from('conversations')
+          .select('title, topic')
+          .eq('id', id)
+          .limit(1)
+          .single();
 
-      await pgPool.query(
-        'UPDATE conversations SET updated_date = CURRENT_TIMESTAMP WHERE id = $1',
-        [id]
-      );
+        if (convState) {
+          const { title: existingTitle, topic: existingTopic } = convState;
+          const updateData = {};
+          if (!existingTitle) {
+            let autoTitle = content.trim().slice(0, 50);
+            if (content.trim().length > 50) autoTitle += '...';
+            updateData.title = autoTitle;
+          }
+          if (!existingTopic || existingTopic === 'general') {
+            const classified = classifyTopicFromText(content);
+            if (classified && classified !== existingTopic) {
+              updateData.topic = classified;
+            }
+          }
+          updateData.updated_date = new Date().toISOString();
+          if (Object.keys(updateData).length > 1 || ('updated_date' in updateData)) {
+            await supa.from('conversations').update(updateData).eq('id', id);
+          }
+        }
+      } else {
+        // Not a user message, just update timestamp
+        await supa
+          .from('conversations')
+          .update({ updated_date: new Date().toISOString() })
+          .eq('id', id);
+      }
 
       broadcastMessage(id, message);
 
@@ -1095,12 +1241,14 @@ export default function createAIRoutes(pgPool) {
       }
 
       // Verify conversation exists
-      const convCheck = await pgPool.query(
-        'SELECT id FROM conversations WHERE id = $1 AND tenant_id = $2',
-        [id, tenantRecord.id]
-      );
-
-      if (convCheck.rows.length === 0) {
+      const { data: convCheck, error } = await supa
+        .from('conversations')
+        .select('id')
+        .eq('id', id)
+        .eq('tenant_id', tenantRecord.id)
+        .single();
+      if (error && error.code !== 'PGRST116') throw error;
+      if (!convCheck) {
         return res.status(404).json({ status: 'error', message: 'Conversation not found' });
       }
 
@@ -1158,7 +1306,7 @@ export default function createAIRoutes(pgPool) {
       }
 
       // Resolve API key priority: explicit in body > tenant integration > backend env
-      let apiKey = req.body?.api_key || null;
+  let apiKey = req.body?.api_key || null;
       const tenantIdentifier = getTenantId(req);
   const tenantRecord = tenantIdentifier ? await resolveTenantRecord(tenantIdentifier) : null;
   const tenantSlug = tenantRecord?.tenant_id || tenantIdentifier || null;
@@ -1168,15 +1316,18 @@ export default function createAIRoutes(pgPool) {
       }
       if (!apiKey && tenantSlug) {
         try {
-          // Prefer active OpenAI LLM integration for tenant
-          const ti = await pgPool.query(
-            `SELECT api_credentials, integration_type FROM tenant_integrations
-             WHERE tenant_id = $1 AND is_active = true AND integration_type IN ('openai_llm')
-             ORDER BY updated_at DESC NULLS LAST, created_at DESC LIMIT 1`,
-            [tenantSlug]
-          );
-          if (ti.rows?.length) {
-            const creds = ti.rows[0].api_credentials || {};
+          const { data: ti, error } = await supa
+            .from('tenant_integrations')
+            .select('api_credentials, integration_type')
+            .eq('tenant_id', tenantSlug)
+            .eq('is_active', true)
+            .in('integration_type', ['openai_llm'])
+            .order('updated_at', { ascending: false, nullsFirst: false })
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (error) throw error;
+          if (ti?.length) {
+            const creds = ti[0].api_credentials || {};
             apiKey = creds.api_key || creds.apiKey || null;
           }
         } catch (e) {
@@ -1191,19 +1342,17 @@ export default function createAIRoutes(pgPool) {
       // Fall back to system settings table
       if (!apiKey) {
         try {
-          const systemSettingsResult = await pgPool.query(
-            `SELECT settings FROM system_settings
-             WHERE settings IS NOT NULL
-               AND settings->>'system_openai_settings' IS NOT NULL
-             LIMIT 1`
-          );
-
-          if (systemSettingsResult.rows?.length) {
-            const settings = systemSettingsResult.rows[0].settings;
+          const { data, error } = await supa
+            .from('system_settings')
+            .select('settings')
+            .not('settings', 'is', null)
+            .limit(1);
+          if (error) throw error;
+          if (data?.length) {
+            const settings = data[0].settings;
             const systemOpenAI = typeof settings === 'object' 
               ? settings.system_openai_settings 
               : JSON.parse(settings || '{}').system_openai_settings;
-            
             if (systemOpenAI?.enabled && systemOpenAI?.openai_api_key) {
               apiKey = systemOpenAI.openai_api_key;
             }
@@ -1224,12 +1373,12 @@ export default function createAIRoutes(pgPool) {
       let savedMessage = null;
       if (conversation_id && result.content) {
         try {
-          const insert = await pgPool.query(
-            `INSERT INTO conversation_messages (conversation_id, role, content, metadata)
-             VALUES ($1, 'assistant', $2, $3) RETURNING *`,
-            [conversation_id, result.content, JSON.stringify({ model })]
-          );
-          savedMessage = insert.rows?.[0] || null;
+          const { data: ins, error } = await supa
+            .from('conversation_messages')
+            .insert({ conversation_id, role: 'assistant', content: result.content, metadata: { model } })
+            .select()
+            .single();
+          if (!error) savedMessage = ins || null;
         } catch (err) {
           console.warn('[ai.chat] Failed to persist assistant message:', err.message || err);
         }
