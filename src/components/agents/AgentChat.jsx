@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Send, MessageSquare, ExternalLink, Sparkles, RefreshCw, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { isValidId } from "../shared/tenantUtils";
+import AI_CONFIG from "@/config/ai.config";
 
 // Replaced direct User.me() usage with global user context hook
 import { useUser } from "@/components/shared/useUser.js";
@@ -15,6 +16,34 @@ import { Activity } from "@/api/entities";
 import { Account } from "@/api/entities";
 import MicButton from "../ai/MicButton";
 import { generateElevenLabsSpeech } from "@/api/functions";
+
+// Cleanup old conversation references from localStorage
+function cleanupStaleConversations() {
+  try {
+    const storageKeys = Object.keys(localStorage).filter(key => 
+      key.startsWith(AI_CONFIG.conversation.storageKeyPrefix)
+    );
+    
+    storageKeys.forEach(key => {
+      const timestampKey = `${key}_timestamp`;
+      const timestamp = localStorage.getItem(timestampKey);
+      
+      if (timestamp) {
+        const age = (Date.now() - parseInt(timestamp, 10)) / (1000 * 60 * 60 * 24);
+        if (age > AI_CONFIG.conversation.maxAgeDays) {
+          console.log(`[AgentChat] Removing stale conversation key: ${key} (${Math.floor(age)} days old)`);
+          localStorage.removeItem(key);
+          localStorage.removeItem(timestampKey);
+        }
+      } else {
+        // No timestamp = legacy entry, add one now
+        localStorage.setItem(timestampKey, Date.now().toString());
+      }
+    });
+  } catch (error) {
+    console.warn('[AgentChat] Failed to cleanup stale conversations:', error);
+  }
+}
 
 // Helper to strip tenant context from display
 function stripTenantContext(content) {
@@ -72,7 +101,12 @@ function Bubble({ role, content }) {
   );
 }
 
-export default function AgentChat({ agentName = "crm_assistant", tenantId, tenantName, voiceEnabled = true }) {
+export default function AgentChat({ 
+  agentName = AI_CONFIG.conversation.defaultAgentName, 
+  tenantId, 
+  tenantName, 
+  voiceEnabled = true 
+}) {
   const { user: currentUser } = useUser();
   const [conversation, setConversation] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -252,7 +286,6 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
       // Poll for updates (AI response may take a few seconds)
       console.log('[AgentChat] Starting polling for AI response...');
       let pollAttempts = 0;
-      const maxPolls = 20; // Poll for up to 20 seconds
       const pollInterval = setInterval(async () => {
         try {
           pollAttempts++;
@@ -263,7 +296,7 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
           setMessages(updatedMessages);
           
           // Stop polling after max attempts
-          if (pollAttempts >= maxPolls) {
+          if (pollAttempts >= AI_CONFIG.polling.maxAttempts) {
             console.log('[AgentChat] Stopping polling after max attempts');
             clearInterval(pollInterval);
           }
@@ -271,7 +304,7 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
           console.error('[AgentChat] Polling error:', refreshError);
           clearInterval(pollInterval);
         }
-      }, 1000); // Poll every 1 second
+      }, AI_CONFIG.polling.intervalMs);
     } catch (e) {
       console.error("[AgentChat] Send failed:", e);
       alert(`Failed to send message: ${e.message}`);
@@ -403,7 +436,7 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
             console.log('[AgentChat] Mic locked, starting audio playback');
             
             // Add small delay before playing to ensure lock takes effect
-            await new Promise(resolve => setTimeout(resolve, 200));
+            await new Promise(resolve => setTimeout(resolve, AI_CONFIG.voice.playbackDelayMs));
             
             await audio.play();
             console.log('[AgentChat] Audio playback started, duration:', audio.duration || 'unknown', 'seconds');
@@ -430,8 +463,12 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
       didContextRef.current = false;
       lastMessageCountRef.current = 0; // Reset message count on init
       
+      // Cleanup stale conversations on mount
+      cleanupStaleConversations();
+      
       try {
-        const storageKey = `agent_conversation_${agentName}_${tenantId || 'default'}`;
+        const storageKey = `${AI_CONFIG.conversation.storageKeyPrefix}${agentName}_${tenantId || 'default'}`;
+        const timestampKey = `${storageKey}_timestamp`;
         const savedConvId = localStorage.getItem(storageKey);
         
         let convo = null;
@@ -440,8 +477,21 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
           try {
             convo = await agentSDK.getConversation(savedConvId);
             console.log('[AgentChat] Loaded saved conversation:', savedConvId);
+            
+            // Check if conversation is stale (older than 7 days)
+            const lastMessageDate = convo.messages?.length > 0 
+              ? new Date(convo.messages[convo.messages.length - 1].created_date)
+              : new Date(convo.created_date);
+            
+            const daysSinceLastMessage = (Date.now() - lastMessageDate.getTime()) / (1000 * 60 * 60 * 24);
+            
+            if (daysSinceLastMessage > AI_CONFIG.conversation.maxAgeDays) {
+              console.log('[AgentChat] Conversation is stale (', Math.floor(daysSinceLastMessage), 'days old), creating new one');
+              localStorage.removeItem(storageKey);
+              convo = null; // Force creation of new conversation
+            }
           } catch (error) {
-            console.warn('[AgentChat] Saved conversation not found, creating new one:', error);
+            console.warn('[AgentChat] Saved conversation not found or invalid, creating new one:', error);
             localStorage.removeItem(storageKey);
           }
         }
@@ -450,23 +500,27 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
           convo = await agentSDK.createConversation({
             agent_name: agentName,
             metadata: {
-              name: "Ai-SHA Executive Assistant",
-              description: "Context-aware CRM assistant with memory",
+              name: AI_CONFIG.context.assistantName,
+              description: AI_CONFIG.context.assistantDescription,
               tenant_id: tenantId,
               tenant_name: tenantName
             }
           });
           localStorage.setItem(storageKey, convo.id);
+          localStorage.setItem(timestampKey, Date.now().toString());
           console.log('[AgentChat] Created new conversation:', convo.id, 'for tenant:', tenantId);
           
           try {
             await agentSDK.addMessage(convo, {
               role: "assistant",
-              content: "Hi, how may I help?"
+              content: AI_CONFIG.conversation.defaultGreeting
             });
           } catch (greetErr) {
             console.warn('[AgentChat] Failed to add greeting message:', greetErr);
           }
+        } else {
+          // Update timestamp for existing conversation
+          localStorage.setItem(timestampKey, Date.now().toString());
         }
         
         if (!mounted) return;
@@ -481,7 +535,7 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
         
         if (conversationMessages.length === 0) {
           console.log('[AgentChat] No messages, setting greeting');
-          setMessages([{ role: 'assistant', content: 'Hi, how may I help?' }]);
+          setMessages([{ role: 'assistant', content: AI_CONFIG.conversation.defaultGreeting }]);
         } else {
           console.log('[AgentChat] Setting messages from conversation:', conversationMessages.length);
           setMessages(conversationMessages);
@@ -572,8 +626,10 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
                       }
                     });
                     
-                    const storageKey = `agent_conversation_${agentName}_${tenantId || 'default'}`;
+                    const storageKey = `${AI_CONFIG.conversation.storageKeyPrefix}${agentName}_${tenantId || 'default'}`;
+                    const timestampKey = `${storageKey}_timestamp`;
                     localStorage.setItem(storageKey, newConvo.id);
+                    localStorage.setItem(timestampKey, Date.now().toString());
                     
                     setConversation(newConvo);
                     setMessages([]);
@@ -583,12 +639,12 @@ export default function AgentChat({ agentName = "crm_assistant", tenantId, tenan
                     try {
                       await agentSDK.addMessage(newConvo, {
                         role: "assistant",
-                        content: "Hi, how may I help?"
+                        content: AI_CONFIG.conversation.defaultGreeting
                       });
-                      setMessages([{ role: 'assistant', content: 'Hi, how may I help?' }]);
+                      setMessages([{ role: 'assistant', content: AI_CONFIG.conversation.defaultGreeting }]);
                     } catch (greetErr) {
                       console.warn('[AgentChat] Failed to add greeting message to cleared conversation:', greetErr);
-                      setMessages([{ role: 'assistant', content: 'Hi, how may I help?' }]);
+                      setMessages([{ role: 'assistant', content: AI_CONFIG.conversation.defaultGreeting }]);
                     }
                     lastMessageCountRef.current = 1; // For the initial greeting message
 
