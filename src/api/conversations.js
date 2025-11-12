@@ -76,6 +76,62 @@ export async function getConversation(conversationId) {
 }
 
 /**
+ * List conversations for current tenant
+ * @param {Object} options
+ * @param {string} [options.agent_name]
+ * @param {number} [options.limit]
+ * @returns {Promise<Array>} Array of conversation summaries
+ */
+export async function listConversations({ agent_name, limit } = {}) {
+  const tenantId = resolveTenantId();
+  const params = new URLSearchParams();
+  if (agent_name) params.set('agent_name', agent_name);
+  if (limit) params.set('limit', String(limit));
+
+  const url = `${BACKEND_URL}/api/ai/conversations${params.toString() ? `?${params.toString()}` : ''}`;
+
+  const response = await fetch(url, {
+    headers: {
+      'x-tenant-id': tenantId,
+    },
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    console.error(`[Conversations API] Failed to list conversations: ${response.status} ${response.statusText}`);
+    throw new Error(`Failed to list conversations: ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  return result.data || [];
+}
+
+/**
+ * Delete a conversation
+ * @param {string} conversationId - Conversation ID to delete
+ * @returns {Promise<void>}
+ */
+export async function deleteConversation(conversationId) {
+  const tenantId = resolveTenantId();
+  console.log(`[Conversations API] Deleting conversation ${conversationId} for tenant ${tenantId}`);
+  
+  const response = await fetch(`${BACKEND_URL}/api/ai/conversations/${conversationId}`, {
+    method: 'DELETE',
+    headers: {
+      'x-tenant-id': tenantId,
+    },
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    console.error(`[Conversations API] Failed to delete conversation: ${response.status} ${response.statusText}`);
+    throw new Error(`Failed to delete conversation: ${response.statusText}`);
+  }
+
+  console.log(`[Conversations API] Deleted conversation ${conversationId}`);
+}
+
+/**
  * Add a message to a conversation
  * @param {Object} conversation - Conversation object
  * @param {Object} message - Message to add
@@ -154,6 +210,8 @@ export function subscribeToConversation(conversationId, callback) {
 export default {
   createConversation,
   getConversation,
+  listConversations,
+  deleteConversation,
   addMessage,
   subscribeToConversation,
 };

@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import * as agentSDK from "@/api/conversations";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Send, MessageSquare, ExternalLink, Sparkles, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, Send, MessageSquare, ExternalLink, RefreshCw, Trash2 } from "lucide-react";
+import ConversationSidebar from './ConversationSidebar';
 import ReactMarkdown from "react-markdown";
 import { isValidId } from "../shared/tenantUtils";
 import AI_CONFIG from "@/config/ai.config";
@@ -68,34 +69,66 @@ function stripMarkdownForTTS(text) {
     .trim();
 }
 
-function Bubble({ role, content }) {
-  const isUser = role === "user";
+// Relative time helper (simple: seconds, minutes, hours, days)
+function formatRelativeTime(dateString) {
+  if (!dateString) return '';
+  const diffMs = Date.now() - new Date(dateString).getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${diffH}h ago`;
+  const diffD = Math.floor(diffH / 24);
+  return `${diffD}d ago`;
+}
+
+function ChatMessage({ role, content, createdDate, grouped }) {
+  const isUser = role === 'user';
   const displayContent = isUser ? stripTenantContext(content) : content;
-  
+  const absoluteTime = createdDate ? new Date(createdDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+  const relativeTime = createdDate ? formatRelativeTime(createdDate) : '';
+
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"} my-1 gap-2`}>
-      <div className={`${isUser ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-200"} px-3 py-2 rounded-xl max-w-[80%]`}>
-        {isUser ? (
-          <p className="whitespace-pre-wrap">{displayContent}</p>
-        ) : (
-          <ReactMarkdown 
-            className="prose prose-sm prose-invert max-w-none"
-            components={{
-              p: ({children}) => <p className="my-1 whitespace-pre-wrap">{children}</p>,
-              strong: ({children}) => <strong className="font-bold text-slate-100">{children}</strong>,
-              em: ({children}) => <em className="italic">{children}</em>,
-              ul: ({children}) => <ul className="list-disc list-inside my-1">{children}</ul>,
-              ol: ({children}) => <ol className="list-decimal list-inside my-1">{children}</ol>,
-              li: ({children}) => <li className="my-0.5">{children}</li>,
-              code: ({inline, children}) => 
-                inline ? 
-                  <code className="bg-slate-700 px-1 py-0.5 rounded text-sm">{children}</code> :
-                  <code className="block bg-slate-700 p-2 rounded my-1">{children}</code>
-            }}
-          >
-            {displayContent || ""}
-          </ReactMarkdown>
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} ${grouped ? 'mt-1 mb-1' : 'my-3'}`}>
+      <div className={`flex ${isUser ? 'flex-row-reverse' : 'flex-row'} items-end gap-2 max-w-[80%]`}>
+        {/* Avatar (hidden if grouped) */}
+        {!grouped && (
+          <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shadow-md overflow-hidden ${isUser ? 'bg-blue-600 text-white' : 'bg-gradient-to-br from-cyan-500 to-blue-600'}`}>
+            {isUser ? (
+              'You'
+            ) : (
+              <img 
+                src="/aisha-avatar.jpg" 
+                alt="AI Assistant" 
+                className="w-full h-full object-cover"
+              />
+            )}
+          </div>
         )}
+        <div className={`rounded-2xl px-4 py-2.5 shadow-sm ${isUser ? 'bg-blue-600 text-white' : 'bg-slate-800 border border-slate-700 text-slate-200'} ${grouped ? (isUser ? 'rounded-tr-md' : 'rounded-tl-md') : ''}`}>
+          {isUser ? (
+            <p className="whitespace-pre-wrap leading-relaxed text-[15px]">{displayContent}</p>
+          ) : (
+            <ReactMarkdown
+              className="prose prose-sm prose-invert max-w-none"
+              components={{
+                p: ({ children }) => <p className="my-1 whitespace-pre-wrap leading-relaxed text-[15px]">{children}</p>,
+                strong: ({ children }) => <strong className="font-bold text-inherit">{children}</strong>,
+                em: ({ children }) => <em className="italic">{children}</em>,
+                ul: ({ children }) => <ul className="list-disc list-inside my-1">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal list-inside my-1">{children}</ol>,
+                li: ({ children }) => <li className="my-0.5">{children}</li>,
+                code: ({ inline, children }) => inline ? <code className="bg-slate-700/70 px-1 py-0.5 rounded text-xs">{children}</code> : <code className="block bg-slate-700/70 p-2 rounded my-1 text-xs">{children}</code>
+              }}
+            >
+              {displayContent || ''}
+            </ReactMarkdown>
+          )}
+          {(!grouped && relativeTime) && (
+            <div className={`mt-1.5 text-[10px] ${isUser ? 'text-white/70' : 'text-slate-500'}`} title={absoluteTime}>{relativeTime}</div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -586,15 +619,57 @@ export default function AgentChat({
   }
 
   return (
-    <div className="space-y-4">
-      <Card className="bg-slate-800 border-slate-700 p-4">
+    <div className="flex gap-4 h-[calc(100vh-120px)]">
+      {/* Conversation Sidebar */}
+      <ConversationSidebar
+        agentName={agentName}
+        tenantId={tenantId}
+        activeConversationId={conversation?.id || null}
+        onSelect={async (targetId) => {
+          // Handle null (deleted active conversation)
+          if (targetId === null) {
+            if (unsubRef.current) { try { unsubRef.current(); } catch { /* noop */ } }
+            setConversation(null);
+            setMessages([{ role: 'assistant', content: AI_CONFIG.conversation.defaultGreeting }]);
+            lastMessageCountRef.current = 1;
+            return;
+          }
+          
+          if (!targetId || targetId === conversation?.id) return;
+          try {
+            if (unsubRef.current) { try { unsubRef.current(); } catch { /* noop */ } }
+            setLoading(true);
+            const newConvo = await agentSDK.getConversation(targetId);
+            setConversation(newConvo);
+            const filtered = (newConvo?.messages || []).filter(m => m.role !== 'system');
+            setMessages(filtered.length ? filtered : [{ role: 'assistant', content: AI_CONFIG.conversation.defaultGreeting }]);
+            lastMessageCountRef.current = filtered.length || 1;
+            unsubRef.current = agentSDK.subscribeToConversation(targetId, (data) => {
+              setMessages((data.messages || []).filter(m => m.role !== 'system'));
+            });
+          } catch (e) {
+            console.error('[AgentChat] Sidebar selection failed:', e);
+          } finally {
+            setLoading(false);
+          }
+        }}
+      />
+      
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col gap-3">
+        {/* Header Card */}
+        <Card className="bg-slate-800 border-slate-700 p-4 shrink-0">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-lg bg-slate-700 flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-cyan-400" />
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full overflow-hidden shadow-lg border-2 border-cyan-500/30">
+              <img 
+                src="/aisha-avatar.jpg" 
+                alt="Ai-SHA Assistant" 
+                className="w-full h-full object-cover"
+              />
             </div>
             <div>
-              <div className="text-slate-100 font-semibold">Ai-SHA</div>
+              <div className="text-slate-100 font-semibold text-lg">Ai-SHA Executive Assistant</div>
               <div className="text-slate-400 text-sm">{tenantName || tenantId || 'No client selected'}</div>
             </div>
           </div>
@@ -615,6 +690,17 @@ export default function AgentChat({
                 if (window.confirm('Clear this conversation and start fresh?')) {
                   try {
                     if (unsubRef.current) unsubRef.current();
+                    // Remove stored conversation id & timestamp so a brand new one is created next mount
+                    const storageKey = `${AI_CONFIG.conversation.storageKeyPrefix}${agentName}_${tenantId || 'default'}`;
+                    const timestampKey = `${storageKey}_timestamp`;
+                    localStorage.removeItem(storageKey);
+                    localStorage.removeItem(timestampKey);
+                    // Hard reset UI state
+                    setMessages([]);
+                    setConversation(null);
+                    didContextRef.current = false;
+                    lastMessageCountRef.current = 0;
+                    // Create truly fresh conversation (no prior messages will be fetched)
                     
                     const newConvo = await agentSDK.createConversation({
                       agent_name: agentName,
@@ -626,27 +712,24 @@ export default function AgentChat({
                       }
                     });
                     
-                    const storageKey = `${AI_CONFIG.conversation.storageKeyPrefix}${agentName}_${tenantId || 'default'}`;
-                    const timestampKey = `${storageKey}_timestamp`;
+                    // Persist only the brand new conversation id
                     localStorage.setItem(storageKey, newConvo.id);
                     localStorage.setItem(timestampKey, Date.now().toString());
-                    
                     setConversation(newConvo);
-                    setMessages([]);
-                    didContextRef.current = false;
-                    lastMessageCountRef.current = 0; // Reset message count after clear
                     
+                    // Optionally seed with greeting only (no previous history)
                     try {
                       await agentSDK.addMessage(newConvo, {
-                        role: "assistant",
+                        role: 'assistant',
                         content: AI_CONFIG.conversation.defaultGreeting
                       });
                       setMessages([{ role: 'assistant', content: AI_CONFIG.conversation.defaultGreeting }]);
+                      lastMessageCountRef.current = 1;
                     } catch (greetErr) {
-                      console.warn('[AgentChat] Failed to add greeting message to cleared conversation:', greetErr);
+                      console.warn('[AgentChat] Failed to add greeting after clear:', greetErr);
                       setMessages([{ role: 'assistant', content: AI_CONFIG.conversation.defaultGreeting }]);
+                      lastMessageCountRef.current = 1;
                     }
-                    lastMessageCountRef.current = 1; // For the initial greeting message
 
                     unsubRef.current = agentSDK.subscribeToConversation(newConvo.id, (data) => {
                       setMessages((data.messages || []).filter(m => m.role !== 'system'));
@@ -674,23 +757,38 @@ export default function AgentChat({
             )}
           </div>
         </div>
-      </Card>
+  </Card>
 
-      <Card className="bg-slate-800 border-slate-700 p-4 h-[60vh] flex flex-col">
+        {/* Main Chat Card - takes remaining space */}
+        <Card className="bg-slate-800 border-slate-700 p-4 flex-1 flex flex-col min-h-0">
         <div className="flex-1 overflow-y-auto pr-1">
           {(() => {
             console.log('[AgentChat] Rendering messages:', messages?.length, messages);
             return messages?.length ? (
-              messages.map((m, idx) => {
-                console.log('[AgentChat] Rendering message', idx, ':', { role: m.role, content: m.content?.substring(0, 50) });
-                return (
-                  <Bubble 
-                    key={idx} 
-                    role={m.role} 
-                    content={m.content} 
-                  />
-                );
-              })
+              // Group consecutive messages by same role within 5 minutes
+              (() => {
+                const ELEMENTS = [];
+                const GROUP_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+                let prev = null;
+                messages.forEach((m, idx) => {
+                  const created = m.created_date ? new Date(m.created_date) : null;
+                  let grouped = false;
+                  if (prev && prev.role === m.role && created && prev.created && (created - prev.created) < GROUP_THRESHOLD_MS) {
+                    grouped = true;
+                  }
+                  ELEMENTS.push(
+                    <ChatMessage
+                      key={idx}
+                      role={m.role}
+                      content={m.content}
+                      createdDate={m.created_date}
+                      grouped={grouped}
+                    />
+                  );
+                  prev = { role: m.role, created };
+                });
+                return ELEMENTS;
+              })()
             ) : (
               <div className="text-slate-400 text-sm">
                 Say &quot;What opportunities do I have open?&quot; or &quot;Create a lead for Jane Doe at Acme, title Marketing Manager&quot;
@@ -699,25 +797,33 @@ export default function AgentChat({
           })()}
         </div>
 
-        <div className="mt-3 flex items-center gap-2">
-          <input
-            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-slate-500"
-            placeholder="Type a message…"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-            disabled={!tenantId}
-          />
-          {voiceEnabled && (
-            <MicButton 
+        {/* Message Input Bar - Fixed at bottom */}
+        <div className="mt-4 pt-4 border-t border-slate-700/50">
+          <div className="flex items-end gap-2">
+            <input
+              className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-slate-200 placeholder-slate-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors resize-none"
+              placeholder="Type a message…"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
               disabled={!tenantId}
             />
-          )}
-          <Button onClick={() => handleSend()} disabled={sending || !input.trim() || !tenantId} className="bg-blue-600 hover:bg-blue-700">
-            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          </Button>
+            {voiceEnabled && (
+              <MicButton 
+                disabled={!tenantId}
+              />
+            )}
+            <Button 
+              onClick={() => handleSend()} 
+              disabled={sending || !input.trim() || !tenantId} 
+              className="bg-blue-600 hover:bg-blue-700 px-4 py-3 h-auto"
+            >
+              {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+            </Button>
+          </div>
         </div>
       </Card>
+      </div>
     </div>
   );
 }

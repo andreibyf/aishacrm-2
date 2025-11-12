@@ -714,6 +714,95 @@ export default function createAIRoutes(pgPool) {
     }
   });
 
+  // GET /api/ai/conversations - List conversations for tenant
+  router.get('/conversations', async (req, res) => {
+    let tenantIdentifier = null;
+    let tenantRecord = null;
+    try {
+      tenantIdentifier = getTenantId(req);
+      tenantRecord = await resolveTenantRecord(tenantIdentifier);
+
+      if (!tenantRecord?.id) {
+        await logAiEvent({
+          level: 'WARNING',
+          message: 'AI conversation list blocked: missing tenant context',
+          tenantRecord,
+          tenantIdentifier,
+          metadata: {
+            operation: 'list_conversations',
+            request_path: req.originalUrl || req.url,
+          },
+        });
+        return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
+      }
+
+      const { agent_name = null, status = 'active', limit = 25 } = req.query || {};
+      const safeLimit = Math.min(parseInt(limit, 10) || 25, 100);
+
+      // Query conversations using simple SELECT without ORDER BY (avoid adapter parsing issues)
+      const convQuery = `SELECT id, agent_name, status, created_date, updated_date FROM conversations WHERE tenant_id = $1 ${agent_name ? 'AND agent_name = $2' : ''} ${status ? `AND status = $${agent_name ? 3 : 2}` : ''} LIMIT $${agent_name && status ? 4 : agent_name || status ? 3 : 2}`;
+      const convParams = [tenantRecord.id];
+      if (agent_name) convParams.push(agent_name);
+      if (status) convParams.push(status);
+      convParams.push(safeLimit * 2); // Fetch extra since we'll sort in JS
+      
+      const convResult = await pgPool.query(convQuery, convParams);
+      const conversations = convResult.rows || [];
+
+      if (conversations.length === 0) {
+        return res.json({ status: 'success', data: [] });
+      }
+
+      // Get message counts and last message times for all conversations
+      const ids = conversations.map(c => c.id);
+      const countsQuery = `SELECT conversation_id, COUNT(*)::int AS message_count, MAX(created_date) AS last_message_at FROM conversation_messages WHERE conversation_id = ANY($1) GROUP BY conversation_id`;
+      const countsResult = await pgPool.query(countsQuery, [ids]);
+      const countsMap = new Map(countsResult.rows.map(r => [r.conversation_id, r]));
+
+      // Get last message excerpt for each conversation (simple approach: one query per conversation)
+      const lastMsgMap = new Map();
+      for (const id of ids) {
+        const msgQuery = `SELECT content FROM conversation_messages WHERE conversation_id = $1 LIMIT 1`;
+        const msgResult = await pgPool.query(msgQuery, [id]);
+        if (msgResult.rows.length > 0) {
+          lastMsgMap.set(id, { content: msgResult.rows[0].content });
+        }
+      }
+
+      // Merge and sort by last activity in JavaScript
+      const data = conversations.map(c => {
+        const meta = countsMap.get(c.id) || {};
+        const last = lastMsgMap.get(c.id) || {};
+        return {
+          ...c,
+          message_count: meta.message_count || 0,
+          last_message_at: meta.last_message_at || null,
+          last_message_excerpt: last.content ? last.content.slice(0, 200) : null,
+        };
+      }).sort((a, b) => {
+        const aTime = new Date(a.last_message_at || a.updated_date || a.created_date).getTime();
+        const bTime = new Date(b.last_message_at || b.updated_date || b.created_date).getTime();
+        return bTime - aTime;
+      }).slice(0, safeLimit);
+
+      res.json({ status: 'success', data });
+    } catch (error) {
+      console.error('List conversations error:', error);
+      await logAiEvent({
+        message: 'AI conversation list failed',
+        tenantRecord,
+        tenantIdentifier,
+        error,
+        metadata: {
+          operation: 'list_conversations',
+          request_path: req.originalUrl || req.url,
+          http_status: 500,
+        },
+      });
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // GET /api/ai/conversations/:id - Get conversation details
   router.get('/conversations/:id', async (req, res) => {
     const { id } = req.params;
@@ -772,6 +861,70 @@ export default function createAIRoutes(pgPool) {
         error,
         metadata: {
           operation: 'get_conversation',
+          conversation_id: id,
+          request_path: req.originalUrl || req.url,
+          http_status: 500,
+        },
+      });
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // DELETE /api/ai/conversations/:id - Delete a conversation
+  router.delete('/conversations/:id', async (req, res) => {
+    const { id } = req.params;
+    let tenantIdentifier = null;
+    let tenantRecord = null;
+    try {
+      tenantIdentifier = getTenantId(req);
+      tenantRecord = await resolveTenantRecord(tenantIdentifier);
+
+      if (!tenantRecord?.id) {
+        return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
+      }
+
+      // Verify conversation belongs to tenant before deleting
+      const convResult = await pgPool.query(
+        'SELECT id FROM conversations WHERE id = $1 AND tenant_id = $2',
+        [id, tenantRecord.id]
+      );
+
+      if (!convResult.rows?.length) {
+        return res.status(404).json({ status: 'error', message: 'Conversation not found' });
+      }
+
+      // Delete messages first (foreign key constraint)
+      await pgPool.query(
+        'DELETE FROM conversation_messages WHERE conversation_id = $1',
+        [id]
+      );
+
+      // Delete conversation
+      await pgPool.query(
+        'DELETE FROM conversations WHERE id = $1 AND tenant_id = $2',
+        [id, tenantRecord.id]
+      );
+
+      await logAiEvent({
+        message: 'Conversation deleted',
+        tenantRecord,
+        tenantIdentifier,
+        metadata: {
+          operation: 'delete_conversation',
+          conversation_id: id,
+        },
+      });
+
+      res.json({ status: 'success', message: 'Conversation deleted' });
+    } catch (error) {
+      console.error('Delete conversation error:', error);
+      await logAiEvent({
+        message: 'AI conversation deletion failed',
+        tenantRecord,
+        tenantIdentifier,
+        error,
+        metadata: {
+          operation: 'delete_conversation',
           conversation_id: id,
           request_path: req.originalUrl || req.url,
           http_status: 500,
