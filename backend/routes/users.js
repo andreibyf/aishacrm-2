@@ -315,9 +315,9 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         createdRow = { table: "users", record: insert.rows[0] };
       } else if (role === "admin" && normalizedTenantId) {
         const insert = await pgPool.query(
-          `INSERT INTO users (email, first_name, last_name, role, tenant_id, metadata, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-           RETURNING id, email, first_name, last_name, role, tenant_id, metadata, created_at, updated_at`,
+          `INSERT INTO users (email, first_name, last_name, role, tenant_id, tenant_uuid, metadata, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, (SELECT id FROM tenant WHERE tenant_id = $5 LIMIT 1), $6, NOW(), NOW())
+           RETURNING id, email, first_name, last_name, role, tenant_id, tenant_uuid, metadata, created_at, updated_at`,
           [email, first_name, last_name, "admin", normalizedTenantId, {
             display_name,
             ...meta,
@@ -859,7 +859,7 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
             },
           },
         });
-      } else if (role === "admin" && normalizedTenantId) {
+  } else if (role === "admin" && normalizedTenantId) {
         // Create tenant-scoped admin in users table WITH tenant_id
         // NOTE: Global email uniqueness already checked above
         // BYPASS ADAPTER: Use direct Supabase to avoid wildcard bug
@@ -906,9 +906,9 @@ export default function createUserRoutes(pgPool, _supabaseAuth) {
         authUserId = authUser?.id;
 
         const result = await pgPool.query(
-          `INSERT INTO users (email, first_name, last_name, role, tenant_id, metadata, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-           RETURNING id, email, first_name, last_name, role, tenant_id, metadata, created_at, updated_at`,
+          `INSERT INTO users (email, first_name, last_name, role, tenant_id, tenant_uuid, metadata, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, (SELECT id FROM tenant WHERE tenant_id = $5 LIMIT 1), $6, NOW(), NOW())
+           RETURNING id, email, first_name, last_name, role, tenant_id, tenant_uuid, metadata, created_at, updated_at`,
           [
             normalizedEmail,
             first_name,

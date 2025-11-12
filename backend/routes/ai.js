@@ -78,6 +78,34 @@ export default function createAIRoutes(pgPool) {
     return 'general';
   };
 
+  // Strip tenant/client boilerplate from message content before using it for titles/topics
+  const stripTenantPreamble = (text) => {
+    if (!text || typeof text !== 'string') return '';
+    let out = text;
+    // Remove bracketed preambles that mention client/tenant
+    out = out.replace(/\[[^\]]*\]/g, (match) => (/client|tenant/i.test(match) ? '' : match));
+    // Drop lines that are boilerplate labels
+    out = out
+      .split(/\r?\n/)
+      .filter((line) => !/^\s*(client\s*id|client\s*name|tenant\s*id|tenant|client)\s*:/i.test(line.trim()))
+      .join('\n');
+    // Collapse whitespace
+    out = out.replace(/[\t ]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    return out;
+  };
+
+  // Generate a concise title from user content with boilerplate removed
+  const generateAutoTitleFromContent = (text, maxLen = 50) => {
+    const cleaned = stripTenantPreamble(text) || '';
+    let candidate = cleaned || (typeof text === 'string' ? text : '');
+    const firstLine = (candidate.split(/\r?\n/).map((s) => s.trim()).find(Boolean)) || candidate.trim();
+    const sentence = firstLine.split(/[.!?]/)[0].trim() || firstLine;
+    let title = sentence.slice(0, maxLen);
+    if (sentence.length > maxLen) title += '...';
+    if (!title) title = 'New conversation';
+    return title;
+  };
+
   const resolveTenantOpenAiKey = async ({ explicitKey, headerKey, userKey, tenantSlug }) => {
     if (explicitKey) return explicitKey;
     if (headerKey) return headerKey;
@@ -175,7 +203,10 @@ export default function createAIRoutes(pgPool) {
     return null;
   };
 
-  const fetchTenantSnapshot = async (tenantIdSlug, options = {}) => {
+  // Fetch a lightweight snapshot of tenant data for tool usage.
+  // Handles historical inconsistency where some rows were written with tenant_id = tenant UUID instead of slug.
+  // Attempts primary lookup by slug, then (if empty) fallback lookup by tenant UUID.
+  const fetchTenantSnapshot = async (tenantIdSlug, tenantUuid = null, options = {}) => {
     const limitRaw = options.limit ?? options.activities_limit ?? 5;
     const safeLimit = Math.min(Math.max(Number(limitRaw) || 5, 1), 10);
     const segmentsAll = ['activities', 'opportunities', 'leads', 'accounts', 'contacts'];
@@ -201,69 +232,65 @@ export default function createAIRoutes(pgPool) {
       summary: {},
     };
 
-    if (segments.includes('activities')) {
-      const { data, error } = await supa
-        .from('activities')
-        .select('id, subject, status, type, due_date, owner_id, created_at')
+    const tryDualTenantQuery = async (table, columns, orderCol = 'updated_at') => {
+      // Primary query by slug
+      let { data, error } = await supa
+        .from(table)
+        .select(columns)
         .eq('tenant_id', tenantIdSlug)
-        .order('created_at', { ascending: false })
+        .order(orderCol, { ascending: false })
         .limit(safeLimit);
-      if (!error) {
-        snapshot.activities = data || [];
-        snapshot.summary.activities_count = snapshot.activities.length;
+      if (error) {
+        return { rows: [], count: 0, error }; // return error for optional logging
       }
+      if ((data?.length || 0) === 0 && tenantUuid && tenantUuid !== tenantIdSlug) {
+        // Fallback: rows may have been inserted with tenant UUID mistakenly stored in tenant_id (TEXT)
+        const fallback = await supa
+          .from(table)
+          .select(columns)
+          .eq('tenant_id', tenantUuid)
+          .order(orderCol, { ascending: false })
+          .limit(safeLimit);
+        if (!fallback.error && (fallback.data?.length || 0) > 0) {
+          return { rows: fallback.data, count: fallback.data.length, usedFallback: true };
+        }
+      }
+      return { rows: data || [], count: data?.length || 0, usedFallback: false };
+    };
+
+    if (segments.includes('activities')) {
+      const result = await tryDualTenantQuery('activities', 'id, subject, status, type, due_date, owner_id, created_at', 'created_at');
+      snapshot.activities = result.rows;
+      snapshot.summary.activities_count = result.count;
+      if (result.usedFallback) snapshot.summary.activities_fallback_used = true;
     }
 
     if (segments.includes('opportunities')) {
-      const { data, error } = await supa
-        .from('opportunities')
-        .select('id, name, stage, amount, close_date, owner_id, probability, updated_at')
-        .eq('tenant_id', tenantIdSlug)
-        .order('updated_at', { ascending: false })
-        .limit(safeLimit);
-      if (!error) {
-        snapshot.opportunities = data || [];
-        snapshot.summary.opportunities_count = snapshot.opportunities.length;
-      }
+      const result = await tryDualTenantQuery('opportunities', 'id, name, stage, amount, close_date, owner_id, probability, updated_at');
+      snapshot.opportunities = result.rows;
+      snapshot.summary.opportunities_count = result.count;
+      if (result.usedFallback) snapshot.summary.opportunities_fallback_used = true;
     }
 
     if (segments.includes('leads')) {
-      const { data, error } = await supa
-        .from('leads')
-        .select('id, first_name, last_name, email, status, company, source, owner_id, created_at')
-        .eq('tenant_id', tenantIdSlug)
-        .order('created_at', { ascending: false })
-        .limit(safeLimit);
-      if (!error) {
-        snapshot.leads = data || [];
-        snapshot.summary.leads_count = snapshot.leads.length;
-      }
+      const result = await tryDualTenantQuery('leads', 'id, first_name, last_name, email, status, company, source, owner_id, created_at', 'created_at');
+      snapshot.leads = result.rows;
+      snapshot.summary.leads_count = result.count;
+      if (result.usedFallback) snapshot.summary.leads_fallback_used = true;
     }
 
     if (segments.includes('accounts')) {
-      const { data, error } = await supa
-        .from('accounts')
-        .select('id, name, industry, owner_id, annual_revenue, website, updated_at')
-        .eq('tenant_id', tenantIdSlug)
-        .order('updated_at', { ascending: false })
-        .limit(safeLimit);
-      if (!error) {
-        snapshot.accounts = data || [];
-        snapshot.summary.accounts_count = snapshot.accounts.length;
-      }
+      const result = await tryDualTenantQuery('accounts', 'id, name, industry, owner_id, annual_revenue, website, updated_at');
+      snapshot.accounts = result.rows;
+      snapshot.summary.accounts_count = result.count;
+      if (result.usedFallback) snapshot.summary.accounts_fallback_used = true;
     }
 
     if (segments.includes('contacts')) {
-      const { data, error } = await supa
-        .from('contacts')
-        .select('id, first_name, last_name, email, job_title, account_id, owner_id, updated_at')
-        .eq('tenant_id', tenantIdSlug)
-        .order('updated_at', { ascending: false })
-        .limit(safeLimit);
-      if (!error) {
-        snapshot.contacts = data || [];
-        snapshot.summary.contacts_count = snapshot.contacts.length;
-      }
+      const result = await tryDualTenantQuery('contacts', 'id, first_name, last_name, email, job_title, account_id, owner_id, updated_at');
+      snapshot.contacts = result.rows;
+      snapshot.summary.contacts_count = result.count;
+      if (result.usedFallback) snapshot.summary.contacts_fallback_used = true;
     }
 
     return snapshot;
@@ -300,8 +327,8 @@ export default function createAIRoutes(pgPool) {
   const executeToolCall = async ({ toolName, args, tenantRecord }) => {
     switch (toolName) {
       case 'fetch_tenant_snapshot': {
-        // Use tenant_id (slug) not id (UUID) because data tables reference tenant_id
-        return fetchTenantSnapshot(tenantRecord.tenant_id, args || {});
+        // Use tenant slug primarily; attempt fallback to tenant UUID if historical data stored incorrectly
+        return fetchTenantSnapshot(tenantRecord.tenant_id, tenantRecord.id, args || {});
       }
       default:
         return { error: `Unsupported tool: ${toolName}` };
@@ -1159,12 +1186,11 @@ export default function createAIRoutes(pgPool) {
           const { title: existingTitle, topic: existingTopic } = convState;
           const updateData = {};
           if (!existingTitle) {
-            let autoTitle = content.trim().slice(0, 50);
-            if (content.trim().length > 50) autoTitle += '...';
+            let autoTitle = generateAutoTitleFromContent(content, 50);
             updateData.title = autoTitle;
           }
           if (!existingTopic || existingTopic === 'general') {
-            const classified = classifyTopicFromText(content);
+            const classified = classifyTopicFromText(stripTenantPreamble(content) || content);
             if (classified && classified !== existingTopic) {
               updateData.topic = classified;
             }
