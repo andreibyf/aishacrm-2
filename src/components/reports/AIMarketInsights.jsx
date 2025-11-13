@@ -96,16 +96,7 @@ export default function AIMarketInsights({ tenant }) {
   const [insights, setInsights] = useState(null);
   const [error, setError] = useState(null);
 
-  // Safer HTML-to-text sanitizer than regex tag stripping
-  const sanitizeToText = (html) => {
-    try {
-      const div = document.createElement('div');
-      div.innerHTML = String(html ?? '');
-      return (div.textContent || div.innerText || '').trim();
-    } catch {
-      return String(html ?? '');
-    }
-  };
+  // (no-op) sanitizer removed; backend returns plain text fields
 
   // Helper function to format large numbers with B/M/K suffixes
   const formatLargeNumber = (num) => {
@@ -168,196 +159,32 @@ export default function AIMarketInsights({ tenant }) {
     try {
       const industryLabel = INDUSTRY_LABELS[tenant.industry] || tenant.industry;
       const businessModel = tenant.business_model || "B2B";
-      const geographicFocus = GEOGRAPHIC_LABELS[tenant.geographic_focus] ||
-        "North America";
+      const geographicFocus = GEOGRAPHIC_LABELS[tenant.geographic_focus] || "North America";
 
-      // Build location string with increasing specificity
-      let locationContext = geographicFocus;
-      if (tenant.country) {
-        locationContext = tenant.country;
-        if (tenant.major_city) {
-          locationContext = `${tenant.major_city}, ${tenant.country}`;
-        }
-      }
-
-      console.log("Generating insights for:", {
-        industryLabel,
-        businessModel,
-        locationContext,
-      });
-
-    // Prompt string retained in case we later route summarization through an MCP LLM tool
-    // Currently not used since we assemble insights from MCP tools directly
-    const _prompt = "";
-
-      // Unified MCP path: build insights using backend MCP web + crm tools
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-        "http://localhost:3001";
-      const execTool = async (server_id, tool_name, parameters) => {
-        const res = await fetch(`${BACKEND_URL}/api/mcp/execute-tool`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ server_id, tool_name, parameters }),
-        });
-        const json = await res.json();
-        if (json.status !== "success") {
-          throw new Error(json.message || "MCP tool error");
-        }
-        return json.data;
-      };
-
-      // 1) Get tenant stats to ground recommendations
+      // Unified backend orchestration: call single endpoint
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || "http://localhost:4001";
       const tenantId = tenant?.id || tenant?.tenant_id || "local-tenant-001";
-      let tenantStats = null;
-      try {
-        tenantStats = await execTool("crm", "crm.get_tenant_stats", {
+      const res = await fetch(`${BACKEND_URL}/api/mcp/market-insights`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-tenant-id": tenantId,
+        },
+        body: JSON.stringify({
           tenant_id: tenantId,
-        });
-      } catch { /* non-fatal */ }
-
-      // 2) Do a quick Wikipedia search for industry/location context
-      const searchQuery = `${industryLabel} market ${locationContext}`;
-      const searchResults = await execTool("web", "web.search_wikipedia", {
-        q: searchQuery,
+          industry: industryLabel,
+          business_model: businessModel,
+          geographic_focus: geographicFocus,
+          model: undefined, // use backend default
+        }),
       });
-      let overview = "";
-      try {
-        const first = Array.isArray(searchResults) ? searchResults[0] : null;
-        if (first?.pageid) {
-          const page = await execTool("web", "web.get_wikipedia_page", {
-            pageid: String(first.pageid),
-          });
-          overview = page?.extract || "";
-        }
-      } catch { /* ignore */ }
-
-      // 3) Assemble a basic insights JSON compatible with UI schema
-      const makeArray = (
-        arr,
-      ) => (Array.isArray(arr) && arr.length ? arr : []);
-      const majorNews = makeArray(searchResults).slice(0, 5).map((r) => ({
-        title: r?.title || "Industry update",
-        // Use DOM-based text extraction instead of regex-based tag stripping
-        description: sanitizeToText(r?.snippet || ""),
-        date: new Date().toISOString().slice(0, 10),
-        impact: "neutral",
-      }));
-
-      // Basic, sensible defaults; refined by stats if available
-      const swot = {
-        strengths: [
-          `${industryLabel} demand resilience in ${locationContext}`,
-          `Growing digital adoption in ${locationContext}`,
-        ],
-        weaknesses: [
-          `Operational costs volatility`,
-          `Talent acquisition challenges`,
-        ],
-        opportunities: [
-          `Niche positioning within ${industryLabel}`,
-          `Automation and AI-driven efficiency`,
-        ],
-        threats: [
-          `Competitive pressure from incumbents and startups`,
-          `Regulatory uncertainty`,
-        ],
-      };
-
-      const recs = [
-        {
-          title: "Tighten ICP and messaging",
-          description:
-            `Focus on segments with strong fit in ${locationContext}; align outreach with ${industryLabel} pain points.`,
-          priority: "high",
-        },
-        {
-          title: "Double down on pipeline hygiene",
-          description:
-            `Improve conversion tracking and deal reviews to increase forecast accuracy.`,
-          priority: "medium",
-        },
-      ];
-
-      if (tenantStats) {
-        if ((tenantStats.activities || 0) < 10) {
-          recs.push({
-            title: "Increase sales activity",
-            description:
-              `Low recent activity detected; run outreach sprints to boost top-of-funnel.`,
-            priority: "high",
-          });
-        }
-        if ((tenantStats.opportunities || 0) === 0) {
-          recs.push({
-            title: "Kickstart opportunities",
-            description:
-              `No active pipeline found; run targeted campaigns and warm intros to seed opportunities.`,
-            priority: "high",
-          });
-        }
+      const json = await res.json();
+      if (json.status !== "success") {
+        throw new Error(json.message || "Failed to generate insights");
       }
-
-      const response = {
-        data: {
-          market_overview: overview ||
-            `Market context for ${industryLabel} in ${locationContext}.`,
-          swot_analysis: swot,
-          competitive_landscape: {
-            overview:
-              `Competitive environment in ${locationContext} features both established players and challengers. Differentiate on niche focus and velocity.`,
-            major_competitors: makeArray(searchResults).slice(0, 3).map((r) =>
-              r?.title || "Key competitor"
-            ),
-            market_dynamics:
-              `Monitor pricing pressure and emerging substitutes; emphasize speed-to-value.`,
-          },
-          major_news: majorNews,
-          recommendations: recs,
-          economic_indicators: [
-            {
-              name: "GDP Growth",
-              current_value: 2.2,
-              trend: "up",
-              unit: "percent",
-            },
-            {
-              name: "Inflation",
-              current_value: 3.1,
-              trend: "down",
-              unit: "percent",
-            },
-            {
-              name: "Unemployment",
-              current_value: 4.0,
-              trend: "stable",
-              unit: "percent",
-            },
-            {
-              name: "Venture Funding",
-              current_value: 12.5,
-              trend: "up",
-              unit: "USD (B)",
-            },
-            {
-              name: "Industry Index",
-              current_value: 108,
-              trend: "up",
-              unit: "index",
-            },
-          ],
-        },
-      };
-
-      console.log("LLM Response:", response);
-
-      // We shaped 'response' as { data: {...} }
-      if (response && (response.data || typeof response === "object")) {
-        // functions proxy returns { data: <payload> } in some cases; handle both shapes
-        const payload = response.data || response;
-        setInsights(payload);
-      } else {
-        setError("Failed to generate insights. Please try again.");
-      }
+      const payload = json?.data?.insights || json?.data || null;
+      if (!payload) throw new Error("No insights returned");
+      setInsights(payload);
     } catch (error) {
       console.error("Error generating AI insights:", error);
       setError(error.message || "An error occurred while generating insights.");

@@ -32,7 +32,6 @@ import HistoricalTrends from "../components/reports/HistoricalTrends";
 import ForecastingDashboard from "../components/reports/ForecastingDashboard";
 import AIMarketInsights from "../components/reports/AIMarketInsights";
 import DataQualityReport from "../components/reports/DataQualityReport";
-import { exportReportToPDF } from "@/api/functions";
 import { exportReportToCSV } from "@/api/functions";
 
 export default function ReportsPage() {
@@ -214,28 +213,16 @@ export default function ReportsPage() {
   const handleExport = async (format) => {
     setIsExporting(true);
     try {
-      const tenantName = currentUser?.branding_settings?.companyName || "Ai-SHA CRM";
-
-      let aiInsightsData = null;
-      
-      const aiInsightsElement = document.querySelector('[data-ai-insights]');
-      if (aiInsightsElement && aiInsightsElement.dataset.aiInsights) {
-        try {
-          aiInsightsData = JSON.parse(aiInsightsElement.dataset.aiInsights);
-        } catch {
-          console.warn('Could not parse AI insights data for export');
-        }
+      if (format === 'pdf') {
+        // PDF export not yet implemented - use browser print-to-PDF
+        toast.error('PDF export coming soon! Use browser Print → Save as PDF for now.');
+        setIsExporting(false);
+        return;
       }
 
+      // For CSV export
       let response;
-      if (format === 'pdf') {
-        response = await exportReportToPDF({ 
-          reportType: activeTab, 
-          tenantFilter: currentScopedFilter,
-          tenantName,
-          aiInsightsData
-        });
-      } else if (format === 'csv') {
+      if (format === 'csv') {
         response = await exportReportToCSV({ reportType: activeTab, tenantFilter: currentScopedFilter });
       }
 
@@ -260,7 +247,7 @@ export default function ReportsPage() {
         window.URL.revokeObjectURL(url);
       } else if (response && response.error) {
         console.error('Export failed with API error:', response.error);
-        alert(`Export failed: ${response.error}`);
+        toast.error(`Export failed: ${response.error}`);
       } else {
         const errorData = response?.data ? JSON.parse(new TextDecoder().decode(response.data)) : { error: "Unknown export error" };
         throw new Error(errorData.error || "Export failed, no data received.");
@@ -268,7 +255,7 @@ export default function ReportsPage() {
 
     } catch (error) {
       console.error(`Error exporting to ${format}:`, error);
-      alert(`Failed to export report: ${error.message}`);
+      toast.error(`Failed to export report: ${error.message}`);
     } finally {
       setIsExporting(false);
     }

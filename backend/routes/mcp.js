@@ -5,9 +5,61 @@
 
 import express from "express";
 import fetch from "node-fetch";
+import { getSupabaseClient } from "../lib/supabase-db.js";
+import { createChatCompletion } from "../lib/aiProvider.js";
 
 export default function createMCPRoutes(pgPool) {
   const router = express.Router();
+  const supa = getSupabaseClient();
+
+  // Minimal OpenAI API key resolution for LLM MCP tools
+  const resolveOpenAIKey = async ({ explicitKey, tenantId }) => {
+    if (explicitKey) return explicitKey;
+    // Try tenant integration first (openai_llm)
+    if (tenantId) {
+      try {
+        const { data: ti, error } = await supa
+          .from("tenant_integrations")
+          .select("api_credentials, integration_type")
+          .eq("tenant_id", tenantId)
+          .eq("is_active", true)
+          .in("integration_type", ["openai_llm"])
+          .order("updated_at", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false })
+          .limit(1);
+        if (error) throw error;
+        if (ti?.length) {
+          const creds = ti[0].api_credentials || {};
+          const k = creds.api_key || creds.apiKey || null;
+          if (k) return k;
+        }
+      } catch (e) {
+        // non-fatal
+        void e;
+      }
+    }
+    // Fallback to system settings table
+    try {
+      const { data, error } = await supa
+        .from("system_settings")
+        .select("settings")
+        .not("settings", "is", null)
+        .limit(1);
+      if (error) throw error;
+      if (data?.length) {
+        const settings = data[0].settings;
+        const systemOpenAI = typeof settings === "object"
+          ? settings.system_openai_settings
+          : JSON.parse(settings || "{}").system_openai_settings;
+        if (systemOpenAI?.enabled && systemOpenAI?.openai_api_key) {
+          return systemOpenAI.openai_api_key;
+        }
+      }
+    } catch (e) {
+      void e;
+    }
+    return null;
+  };
 
   // GET /api/mcp/servers - List available MCP servers
   router.get("/servers", async (req, res) => {
@@ -88,6 +140,17 @@ export default function createMCPRoutes(pgPool) {
         configured: true,
         healthy: true,
         capabilities: ["web.search_wikipedia", "web.get_wikipedia_page"],
+      });
+
+      // Add LLM MCP facade
+      servers.push({
+        id: "llm",
+        name: "LLM MCP",
+        type: "mcp",
+        transport: "proxy",
+        configured: true,
+        healthy: true,
+        capabilities: ["llm.generate_json"],
       });
 
       res.json({ status: "success", data: { servers } });
@@ -330,6 +393,64 @@ export default function createMCPRoutes(pgPool) {
         });
       }
 
+      // LLM MCP facade
+      if (server_id === "llm") {
+        if (tool_name !== "llm.generate_json") {
+          return res.status(400).json({ status: "error", message: `Unknown LLM tool: ${tool_name}` });
+        }
+
+        const {
+          prompt = "",
+          schema = {},
+          context = null,
+          model = process.env.DEFAULT_OPENAI_MODEL || "gpt-4o-mini",
+          temperature = 0.2,
+          api_key,
+          tenant_id: tenantIdParam,
+        } = parameters || {};
+
+        // Resolve key: explicit > tenant integration > system settings
+        const apiKey = await resolveOpenAIKey({ explicitKey: api_key, tenantId: tenantIdParam });
+        if (!apiKey) {
+          return res.status(501).json({ status: "error", message: "OpenAI API key not configured" });
+        }
+
+        const SYSTEM_INSTRUCTIONS = `You are a strict JSON generator. Produce ONLY valid JSON that exactly matches the provided JSON Schema.\n- Do not include any commentary or code fences.\n- If you are unsure, return the closest valid JSON.\n`;
+
+        const userContentParts = [];
+        if (prompt) userContentParts.push(String(prompt));
+        if (context) {
+          if (typeof context === "string") userContentParts.push(context);
+          else if (Array.isArray(context)) userContentParts.push(context.map((c) => (typeof c === "string" ? c : JSON.stringify(c))).join("\n\n"));
+          else userContentParts.push(JSON.stringify(context));
+        }
+        if (schema && Object.keys(schema || {}).length) {
+          userContentParts.push(`JSON Schema:\n${JSON.stringify(schema)}`);
+        }
+
+        const messages = [
+          { role: "system", content: SYSTEM_INSTRUCTIONS },
+          { role: "user", content: userContentParts.join("\n\n") || "Generate JSON." },
+        ];
+
+        const result = await createChatCompletion({ messages, model, temperature, apiKey });
+        if (result.status === "error") {
+          const http = /OPENAI_API_KEY|not configured/i.test(result.error || '') ? 501 : 500;
+          return res.status(http).json({ status: "error", message: result.error });
+        }
+        let jsonOut = null;
+        try {
+          jsonOut = JSON.parse(result.content || "null");
+        } catch {
+          // try to extract JSON block heuristically
+          const match = (result.content || "").match(/\{[\s\S]*\}\s*$/);
+          if (match) {
+            try { jsonOut = JSON.parse(match[0]); } catch { jsonOut = null; }
+          }
+        }
+        return res.json({ status: "success", data: { json: jsonOut, raw: result.content, model: result.model, usage: result.usage } });
+      }
+
       // Default stub
       res.json({
         status: "success",
@@ -398,6 +519,242 @@ export default function createMCPRoutes(pgPool) {
         status: "success",
         data: { configured: true, healthy: false, error: String(err) },
       });
+    }
+  });
+
+  // POST /api/mcp/market-insights - Orchestrate web + CRM tools and summarize via LLM into JSON schema
+  router.post("/market-insights", async (req, res) => {
+    try {
+      const body = req.body || {};
+      const tenantId = req.headers["x-tenant-id"] || body.tenant_id || body.tenantId || null;
+      if (!tenantId) {
+        return res.status(400).json({ status: "error", message: "tenant_id required" });
+      }
+
+      // Load tenant profile for context
+      const { data: tenantRows, error: tErr } = await supa
+        .from("tenant")
+        .select("id, tenant_id, name, industry, business_model, geographic_focus, country, major_city")
+        .or(`tenant_id.eq.${tenantId},id.eq.${tenantId}`)
+        .limit(1);
+      if (tErr) throw tErr;
+      const tenant = tenantRows?.[0] || { tenant_id: tenantId, name: tenantId };
+
+      const INDUSTRY = tenant.industry || body.industry || "SaaS & Cloud Services";
+      const BUSINESS_MODEL = tenant.business_model || body.business_model || "B2B";
+      const GEO = tenant.geographic_focus || body.geographic_focus || "North America";
+      const LOCATION = tenant.major_city && tenant.country ? `${tenant.major_city}, ${tenant.country}` : (tenant.country || GEO);
+
+      // CRM stats (reuse logic from crm.get_tenant_stats)
+      const [accounts, contacts, leads, opps, activities] = await Promise.all([
+        pgPool.query(`SELECT COUNT(*)::int AS c FROM accounts WHERE tenant_id = $1`, [tenant.tenant_id || tenantId]),
+        pgPool.query(`SELECT COUNT(*)::int AS c FROM contacts WHERE tenant_id = $1`, [tenant.tenant_id || tenantId]),
+        pgPool.query(`SELECT COUNT(*)::int AS c FROM leads WHERE tenant_id = $1`, [tenant.tenant_id || tenantId]),
+        pgPool.query(`SELECT COUNT(*)::int AS c FROM opportunities WHERE tenant_id = $1`, [tenant.tenant_id || tenantId]),
+        pgPool.query(`SELECT COUNT(*)::int AS c FROM activities WHERE tenant_id = $1`, [tenant.tenant_id || tenantId]),
+      ]);
+      const tenantStats = {
+        accounts: accounts.rows?.[0]?.c || 0,
+        contacts: contacts.rows?.[0]?.c || 0,
+        leads: leads.rows?.[0]?.c || 0,
+        opportunities: opps.rows?.[0]?.c || 0,
+        activities: activities.rows?.[0]?.c || 0,
+      };
+
+      // Wikipedia context (reuse logic from web tools)
+      const searchQ = `${INDUSTRY} market ${LOCATION}`;
+      const searchResp = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=5&srsearch=${encodeURIComponent(searchQ)}`);
+      const searchJson = await searchResp.json();
+      const searchResults = searchJson?.query?.search || [];
+      let overview = "";
+      if (searchResults.length) {
+        const first = searchResults[0];
+        const pageid = String(first.pageid);
+        try {
+          const pageResp = await fetch(`https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&format=json&pageids=${encodeURIComponent(pageid)}`);
+          const pageJson = await pageResp.json();
+          overview = pageJson?.query?.pages?.[pageid]?.extract || "";
+        } catch {
+          overview = "";
+        }
+      }
+
+      // Build JSON schema for insights
+      const schema = {
+        type: "object",
+        properties: {
+          market_overview: { type: "string" },
+          swot_analysis: {
+            type: "object",
+            properties: {
+              strengths: { type: "array", items: { type: "string" } },
+              weaknesses: { type: "array", items: { type: "string" } },
+              opportunities: { type: "array", items: { type: "string" } },
+              threats: { type: "array", items: { type: "string" } },
+            },
+            required: ["strengths", "weaknesses", "opportunities", "threats"],
+          },
+          competitive_landscape: {
+            type: "object",
+            properties: {
+              overview: { type: "string" },
+              major_competitors: { type: "array", items: { type: "string" } },
+              market_dynamics: { type: "string" },
+            },
+            required: ["overview", "major_competitors"],
+          },
+          major_news: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                description: { type: "string" },
+                date: { type: "string" },
+                impact: { type: "string", enum: ["positive", "negative", "neutral"] },
+              },
+              required: ["title", "description", "date", "impact"],
+            },
+          },
+          recommendations: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                description: { type: "string" },
+                priority: { type: "string", enum: ["high", "medium", "low"] },
+              },
+              required: ["title", "description", "priority"],
+            },
+          },
+          economic_indicators: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                current_value: { type: "number" },
+                trend: { type: "string", enum: ["up", "down", "stable"] },
+                unit: { type: "string" },
+              },
+              required: ["name", "current_value", "trend", "unit"],
+            },
+          },
+        },
+        required: ["market_overview", "swot_analysis", "competitive_landscape", "major_news", "recommendations", "economic_indicators"],
+      };
+
+      // Compose prompt and context for the LLM
+      const prompt = `Generate a concise JSON market insight for a company in ${INDUSTRY} (${BUSINESS_MODEL}) focused on ${LOCATION}. Use the schema provided. Use tenant CRM stats to tailor recommendations.`;
+      const context = [
+        `Tenant: ${tenant.name || tenant.tenant_id}`,
+        `Industry: ${INDUSTRY}`,
+        `Business Model: ${BUSINESS_MODEL}`,
+        `Location: ${LOCATION}`,
+        `CRM Stats: ${JSON.stringify(tenantStats)}`,
+        `Market Overview Seed: ${overview?.slice(0, 1200) || ""}`,
+        `News: ${(searchResults || []).map(r => `${r.title}: ${r.snippet || ''}`).join(" | ").slice(0, 1500)}`,
+      ];
+
+      // Generate JSON via LLM MCP tool (internally call our facade directly)
+      const apiKey = await resolveOpenAIKey({ explicitKey: body.api_key || null, tenantId });
+      if (!apiKey) {
+        // Fallback: return a baseline insights object without LLM
+        const strip = (s) => String(s || '').replace(/<[^>]+>/g, '').trim();
+        const baseline = {
+          market_overview: overview || `Market context for ${INDUSTRY} in ${LOCATION}.`,
+          swot_analysis: {
+            strengths: [
+              `${INDUSTRY} demand resilience in ${LOCATION}`,
+              `Growing digital adoption in ${LOCATION}`,
+            ],
+            weaknesses: [
+              `Operational costs volatility`,
+              `Talent acquisition challenges`,
+            ],
+            opportunities: [
+              `Niche positioning within ${INDUSTRY}`,
+              `Automation and AI-driven efficiency`,
+            ],
+            threats: [
+              `Competitive pressure from incumbents and startups`,
+              `Regulatory uncertainty`,
+            ],
+          },
+          competitive_landscape: {
+            overview: `Competitive environment in ${LOCATION} features both established players and challengers. Differentiate on niche focus and velocity.`,
+            major_competitors: (searchResults || []).slice(0, 3).map((r) => r?.title || 'Key competitor'),
+            market_dynamics: `Monitor pricing pressure and emerging substitutes; emphasize speed-to-value.`,
+          },
+          major_news: (searchResults || []).slice(0, 5).map((r) => ({
+            title: r?.title || 'Industry update',
+            description: strip(r?.snippet || ''),
+            date: new Date().toISOString().slice(0, 10),
+            impact: 'neutral',
+          })),
+          recommendations: [
+            {
+              title: 'Tighten ICP and messaging',
+              description: `Focus on segments with strong fit in ${LOCATION}; align outreach with ${INDUSTRY} pain points.`,
+              priority: 'high',
+            },
+            {
+              title: 'Double down on pipeline hygiene',
+              description: `Improve conversion tracking and deal reviews to increase forecast accuracy.`,
+              priority: 'medium',
+            },
+            ...(tenantStats.activities < 10 ? [{
+              title: 'Increase sales activity',
+              description: 'Low recent activity detected; run outreach sprints to boost top-of-funnel.',
+              priority: 'high',
+            }] : []),
+            ...(tenantStats.opportunities === 0 ? [{
+              title: 'Kickstart opportunities',
+              description: 'No active pipeline found; run targeted campaigns and warm intros to seed opportunities.',
+              priority: 'high',
+            }] : []),
+          ],
+          economic_indicators: [
+            { name: 'GDP Growth', current_value: 2.2, trend: 'up', unit: 'percent' },
+            { name: 'Inflation', current_value: 3.1, trend: 'down', unit: 'percent' },
+            { name: 'Unemployment', current_value: 4.0, trend: 'stable', unit: 'percent' },
+            { name: 'Venture Funding', current_value: 12.5, trend: 'up', unit: 'USD (B)' },
+            { name: 'Industry Index', current_value: 108, trend: 'up', unit: 'index' },
+          ],
+        };
+        return res.json({ status: 'success', data: { insights: baseline, model: null, usage: null, fallback: true } });
+      }
+
+      const SYSTEM = `You are a strict JSON generator. Output ONLY JSON matching the schema. No commentary.`;
+      const messages = [
+        { role: "system", content: SYSTEM },
+        { role: "user", content: `${prompt}\n\nSchema:\n${JSON.stringify(schema)}\n\nContext:\n${context.join("\n")}` },
+      ];
+      const model = body.model || process.env.DEFAULT_OPENAI_MODEL || "gpt-4o-mini";
+      const temperature = typeof body.temperature === "number" ? body.temperature : 0.2;
+      const result = await createChatCompletion({ messages, model, temperature, apiKey });
+      if (result.status === "error") {
+        const http = /OPENAI_API_KEY|not configured/i.test(result.error || '') ? 501 : 500;
+        return res.status(http).json({ status: "error", message: result.error });
+      }
+      let insights = null;
+      try { insights = JSON.parse(result.content || "null"); } catch { insights = null; }
+      if (!insights) {
+        // fallback minimal object
+        insights = {
+          market_overview: overview || `Market context for ${INDUSTRY} in ${LOCATION}.`,
+          swot_analysis: { strengths: [], weaknesses: [], opportunities: [], threats: [] },
+          competitive_landscape: { overview: "", major_competitors: [], market_dynamics: "" },
+          major_news: [],
+          recommendations: [],
+          economic_indicators: [],
+        };
+      }
+
+      return res.json({ status: "success", data: { insights, model: result.model, usage: result.usage } });
+    } catch (error) {
+      res.status(500).json({ status: "error", message: error.message });
     }
   });
 

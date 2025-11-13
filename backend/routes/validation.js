@@ -94,18 +94,139 @@ export default function createValidationRoutes(pgPool) {
   // POST /api/validation/analyze-data-quality - Analyze data quality
   router.post('/analyze-data-quality', async (req, res) => {
     try {
-      const { tenant_id, entity_type } = req.body || {};
+      const { tenant_id } = req.body || {};
 
-      const analysis = {
-        completeness: 0,
-        accuracy: 0,
-        consistency: 0,
-        issues: [],
-        recommendations: [],
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id required' });
+      }
+
+      // Fetch all data
+      const [contacts, accounts, leads, opportunities] = await Promise.all([
+        pgPool.query(`SELECT * FROM contacts WHERE tenant_id = $1`, [tenant_id]),
+        pgPool.query(`SELECT * FROM accounts WHERE tenant_id = $1`, [tenant_id]),
+        pgPool.query(`SELECT * FROM leads WHERE tenant_id = $1`, [tenant_id]),
+        pgPool.query(`SELECT * FROM opportunities WHERE tenant_id = $1`, [tenant_id]),
+      ]);
+
+      // Helper to check email validity
+      const isValidEmail = (email) => {
+        if (!email) return false;
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
       };
 
-      res.json({ status: 'success', data: analysis, tenant_id, entity_type });
+      // Helper to check name has invalid characters
+      const hasInvalidNameChars = (name) => {
+        if (!name) return false;
+        // Allow letters, spaces, hyphens, apostrophes, periods
+        const invalidRegex = /[^a-zA-Z\s\-'.]/;
+        return invalidRegex.test(name);
+      };
+
+      // Analyze Contacts
+      const contactsData = contacts.rows;
+      const contactsIssues = {
+        missing_first_name: 0,
+        missing_last_name: 0,
+        invalid_email: 0,
+        missing_contact_info: 0,
+        invalid_name_characters: 0,
+      };
+
+      contactsData.forEach((contact) => {
+        if (!contact.first_name) contactsIssues.missing_first_name++;
+        if (!contact.last_name) contactsIssues.missing_last_name++;
+        if (contact.email && !isValidEmail(contact.email)) contactsIssues.invalid_email++;
+        if (!contact.email && !contact.phone && !contact.mobile) contactsIssues.missing_contact_info++;
+        if (hasInvalidNameChars(contact.first_name) || hasInvalidNameChars(contact.last_name)) {
+          contactsIssues.invalid_name_characters++;
+        }
+      });
+
+      const contactsTotal = contactsData.length || 1; // Avoid division by zero
+      const contactsIssuesCount = Object.values(contactsIssues).reduce((sum, count) => sum + count, 0);
+      const contactsIssuesPercentage = (contactsIssuesCount / contactsTotal) * 100;
+
+      // Analyze Accounts
+      const accountsData = accounts.rows;
+      const accountsIssues = {
+        invalid_email: 0,
+        missing_contact_info: 0,
+        invalid_name_characters: 0,
+      };
+
+      accountsData.forEach((account) => {
+        if (account.email && !isValidEmail(account.email)) accountsIssues.invalid_email++;
+        if (!account.email && !account.phone) accountsIssues.missing_contact_info++;
+        if (hasInvalidNameChars(account.name)) accountsIssues.invalid_name_characters++;
+      });
+
+      const accountsTotal = accountsData.length || 1;
+      const accountsIssuesCount = Object.values(accountsIssues).reduce((sum, count) => sum + count, 0);
+      const accountsIssuesPercentage = (accountsIssuesCount / accountsTotal) * 100;
+
+      // Analyze Leads
+      const leadsData = leads.rows;
+      const leadsIssues = {
+        missing_first_name: 0,
+        missing_last_name: 0,
+        invalid_email: 0,
+        missing_contact_info: 0,
+        invalid_name_characters: 0,
+      };
+
+      leadsData.forEach((lead) => {
+        if (!lead.first_name) leadsIssues.missing_first_name++;
+        if (!lead.last_name) leadsIssues.missing_last_name++;
+        if (lead.email && !isValidEmail(lead.email)) leadsIssues.invalid_email++;
+        if (!lead.email && !lead.phone) leadsIssues.missing_contact_info++;
+        if (hasInvalidNameChars(lead.first_name) || hasInvalidNameChars(lead.last_name)) {
+          leadsIssues.invalid_name_characters++;
+        }
+      });
+
+      const leadsTotal = leadsData.length || 1;
+      const leadsIssuesCount = Object.values(leadsIssues).reduce((sum, count) => sum + count, 0);
+      const leadsIssuesPercentage = (leadsIssuesCount / leadsTotal) * 100;
+
+      // Analyze Opportunities
+      const opportunitiesData = opportunities.rows;
+      const opportunitiesIssues = {};
+
+      const opportunitiesTotal = opportunitiesData.length || 1;
+      const opportunitiesIssuesCount = 0;
+      const opportunitiesIssuesPercentage = 0;
+
+      const report = {
+        contacts: {
+          total: contactsTotal,
+          issues: contactsIssues,
+          issues_count: contactsIssuesCount,
+          issues_percentage: contactsIssuesPercentage,
+        },
+        accounts: {
+          total: accountsTotal,
+          issues: accountsIssues,
+          issues_count: accountsIssuesCount,
+          issues_percentage: accountsIssuesPercentage,
+        },
+        leads: {
+          total: leadsTotal,
+          issues: leadsIssues,
+          issues_count: leadsIssuesCount,
+          issues_percentage: leadsIssuesPercentage,
+        },
+        opportunities: {
+          total: opportunitiesTotal,
+          issues: opportunitiesIssues,
+          issues_count: opportunitiesIssuesCount,
+          issues_percentage: opportunitiesIssuesPercentage,
+        },
+      };
+
+      res.json({ status: 'success', data: { report }, tenant_id });
     } catch (error) {
+      console.error('analyze-data-quality error:', error);
       res.status(500).json({
         status: 'error',
         message: error.message,
