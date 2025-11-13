@@ -214,8 +214,26 @@ export default function ReportsPage() {
     setIsExporting(true);
     try {
       if (format === 'pdf') {
-        // PDF export not yet implemented - use browser print-to-PDF
-        toast.error('PDF export coming soon! Use browser Print → Save as PDF for now.');
+        // Export PDF via backend endpoint
+        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+        const params = new URLSearchParams();
+        if (currentScopedFilter?.tenant_id) {
+          params.append('tenant_id', currentScopedFilter.tenant_id);
+        }
+        params.append('report_type', activeTab);
+        
+        const url = `${BACKEND_URL}/api/reports/export-pdf?${params.toString()}`;
+        
+        // Open in new tab to download
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${activeTab}_report_${Date.now()}.pdf`;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        toast.success('PDF report is being generated...');
         setIsExporting(false);
         return;
       }

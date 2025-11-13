@@ -44,16 +44,30 @@ export default function ProductivityAnalytics({ tenantFilter }) {
       setIsLoading(true);
       try {
         // Assuming Activity and User from "@/api/entities" have a similar .filter method as the mocks
-        const [rawActivities, users] = await Promise.all([
+        const [rawActivitiesResult, usersResult] = await Promise.all([
           Activity.filter(tenantFilter),
           User.filter(tenantFilter),
         ]);
+
+        // Handle API response - ensure we have arrays
+        const rawActivities = Array.isArray(rawActivitiesResult) 
+          ? rawActivitiesResult 
+          : [];
+        const users = Array.isArray(usersResult) 
+          ? usersResult 
+          : [];
+
+        console.log('[ProductivityAnalytics] Fetched data:', {
+          activitiesCount: rawActivities.length,
+          usersCount: users.length,
+          tenantFilter
+        });
 
         setActivities(rawActivities); // Set the main activities state for overall calculations
 
         // Process data for activitiesPerUser
         const userMap = users.reduce((acc, user) => {
-          acc[user.id] = user.name;
+          acc[user.id] = user.name || user.first_name + ' ' + user.last_name || user.email;
           return acc;
         }, {});
 
