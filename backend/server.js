@@ -278,6 +278,29 @@ app.use(productionSafetyGuard({
 }));
 console.log("✓ Production safety guard enabled");
 
+// ----------------------------------------------------------------------------
+// Canary logging middleware for BizDevSource promote diagnostics
+// Logs every POST to /api/bizdevsources/* BEFORE route handlers.
+// Helps distinguish client/network stall vs server handling issues.
+// ----------------------------------------------------------------------------
+app.use((req, _res, next) => {
+  try {
+    if (req.method === 'POST' && req.path.startsWith('/api/bizdevsources/')) {
+      console.log('[CANARY Promote POST] Incoming request', {
+        path: req.path,
+        method: req.method,
+        origin: req.headers.origin,
+        contentType: req.headers['content-type'],
+        hasBody: !!req.headers['content-length'],
+        productionGuardEnabled: true,
+      });
+    }
+  } catch (e) {
+    console.warn('[CANARY Promote POST] Logging error', e?.message);
+  }
+  return next();
+});
+
 // Root endpoint - provides API information
 app.get("/", (req, res) => {
   res.json({

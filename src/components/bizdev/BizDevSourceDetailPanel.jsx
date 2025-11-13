@@ -91,42 +91,57 @@ export default function BizDevSourceDetailPanel({
       return;
     }
 
+    console.log('[DetailPanel] Starting promotion:', {
+      id: currentSource.id,
+      company_name: currentSource.company_name,
+      status: currentSource.status,
+      has_onPromote: !!onPromote
+    });
+
     setPromoting(true);
     setShowPromoteConfirm(false);
 
     try {
-      const result = await BizDevSource.promote(currentSource.id, currentSource.tenant_id);
+      // Delegate to parent to perform the actual promotion (avoids double API call)
+      let result = null;
+      if (onPromote) {
+        console.log('[DetailPanel] Calling parent onPromote...');
+        result = await onPromote(currentSource);
+        console.log('[DetailPanel] Parent onPromote returned:', result);
+        
+        // If parent returns null (e.g., user cancelled confirm dialog), bail out
+        if (result === null) {
+          console.log('[DetailPanel] Parent returned null, cancelling promotion');
+          return;
+        }
+      } else {
+        // Fallback: if no parent handler provided, call API directly
+        console.log('[DetailPanel] No parent handler, calling API directly');
+        result = await BizDevSource.promote(currentSource.id, currentSource.tenant_id);
+      }
 
-      const updatedSource = {
+      // Update local state with returned account linkage if available
+      const updated = {
         ...currentSource,
         status: 'Promoted',
-        account_id: result.account.id,
-        account_name: result.account.name,
-        metadata: {
-          ...currentSource.metadata,
-          converted_to_account_id: result.account.id
-        }
+        ...(result?.account && {
+          account_id: result.account.id,
+          account_name: result.account.name,
+          metadata: {
+            ...currentSource.metadata,
+            converted_to_account_id: result.account.id,
+          },
+        }),
       };
+      setCurrentSource(updated);
 
-      setCurrentSource(updatedSource);
-
-      if (onUpdate) onUpdate(updatedSource);
-      if (onPromote) onPromote(updatedSource);
+      if (onUpdate) onUpdate(updated);
       if (onRefresh) onRefresh();
-
-      toast.success('BizDev source promoted to account', {
-        description: `Created account: ${result.account.name}`
-      });
+      // Success toast handled by parent to avoid duplicates.
     } catch (error) {
       console.error('Promote error:', error);
-      
-      if (error.response?.status === 400) {
-        toast.error("Cannot promote this source", {
-          description: error.response?.data?.error || "This source may already be promoted"
-        });
-      } else {
-        toast.error(error.message || 'Failed to promote BizDev Source');
-      }
+      const message = error?.message || 'Failed to promote BizDev Source';
+      toast.error(message);
     } finally {
       setPromoting(false);
     }
@@ -359,7 +374,7 @@ export default function BizDevSourceDetailPanel({
           )}
 
           {/* Edit and Archive */}
-          {!isArchived && (
+          {!isArchived && !isPromoted && (
             <>
               <Button
                 variant="outline"

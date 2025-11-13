@@ -233,23 +233,68 @@ export default function BizDevSourcesPage() {
 
   const handlePromote = async (sourceToPromote) => {
     if (!confirm(`Are you sure you want to promote "${sourceToPromote.company_name}" to an Account?`)) {
-      return;
+      return null;
     }
 
+    // Use the source's tenant_id as primary, fallback to selected tenant
+    const tenantId = sourceToPromote.tenant_id || selectedTenantId || user?.tenant_id;
+    
+    if (!tenantId) {
+      toast.error('Cannot promote: No tenant context available');
+      throw new Error('No tenant_id available');
+    }
+
+    console.log('[BizDevSources] Promoting source:', {
+      id: sourceToPromote.id,
+      company_name: sourceToPromote.company_name,
+      tenant_id: tenantId
+    });
+
     try {
-      const result = await BizDevSource.promote(sourceToPromote.id, selectedTenantId);
+      const result = await BizDevSource.promote(sourceToPromote.id, tenantId);
+
+      // Optimistically update local state so stats reflect immediately
+      setSources(prev => prev.map(s =>
+        s.id === sourceToPromote.id
+          ? {
+              ...s,
+              status: 'Promoted',
+              account_id: result?.account?.id || s.account_id,
+              account_name: result?.account?.name || s.account_name,
+              metadata: {
+                ...(s.metadata || {}),
+                ...(result?.account?.id ? { converted_to_account_id: result.account.id } : {}),
+              },
+            }
+          : s
+      ));
+      if (selectedSource?.id === sourceToPromote.id) {
+        setSelectedSource(prev => prev ? {
+          ...prev,
+          status: 'Promoted',
+          account_id: result?.account?.id || prev.account_id,
+          account_name: result?.account?.name || prev.account_name,
+          metadata: {
+            ...(prev.metadata || {}),
+            ...(result?.account?.id ? { converted_to_account_id: result.account.id } : {}),
+          },
+        } : prev);
+      }
 
       toast.success('BizDev source promoted to account', {
         description: `Created account: ${result.account.name}`
       });
 
+      // Sync with backend to ensure full consistency
       handleRefresh();
       setShowDetailPanel(false);
+      return result;
     } catch (error) {
       if (logError) {
         logError(handleApiError('BizDev Source Promotion', error));
       }
       toast.error(`Failed to promote BizDev source to Account.`);
+      throw error;
     }
   };
 

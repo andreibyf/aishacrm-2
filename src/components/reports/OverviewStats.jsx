@@ -62,7 +62,7 @@ export default function OverviewStats({ tenantFilter }) {
         // Ensure test data is excluded unless explicitly included for direct entity fetches
         const effectiveFilter = { ...tenantFilter };
         if (!("is_test_data" in effectiveFilter)) {
-          effectiveFilter.is_test_data = { $ne: true };
+          effectiveFilter.is_test_data = false;
         }
 
         // Fetch additional data for charts and specific stats that getDashboardStats might not provide as totals

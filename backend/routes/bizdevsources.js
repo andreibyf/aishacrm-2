@@ -269,12 +269,14 @@ export default function createBizDevSourceRoutes(pgPool) {
 
   // POST /api/bizdevsources/:id/promote - Promote bizdev source to account
   router.post('/:id/promote', async (req, res) => {
-    const client = await pgPool.connect();
+    const supportsTx = typeof pgPool.connect === 'function';
+    let client = null;
     try {
-      const { id } = req.params;
-      const { tenant_id, performed_by, delete_source = true } = req.body;
+  const { id } = req.params;
+  // Default delete_source to false to retain promoted sources for UX (grayed out + stats)
+  const { tenant_id, performed_by, delete_source = false } = req.body;
 
-      console.log('[Promote BizDev Source] Request received:', { id, tenant_id, body: req.body });
+      console.log('[Promote BizDev Source] Request received:', { id, tenant_id, body: req.body, supportsTx });
 
       if (!tenant_id) {
         return res.status(400).json({
@@ -283,13 +285,24 @@ export default function createBizDevSourceRoutes(pgPool) {
         });
       }
 
-      // Fetch the bizdev source (lock)
-      const sourceResult = await client.query(
-        'SELECT * FROM bizdev_sources WHERE id = $1 AND tenant_id = $2 LIMIT 1 FOR UPDATE',
-        [id, tenant_id]
-      );
+      if (supportsTx) {
+        client = await pgPool.connect();
+      } else {
+        client = { query: (...args) => pgPool.query(...args), release: () => {} };
+      }
+
+      if (supportsTx) {
+        await client.query('BEGIN');
+      }
+
+      // Fetch the bizdev source (lock if transactions supported)
+      const selectSql = supportsTx
+        ? 'SELECT * FROM bizdev_sources WHERE id = $1 AND tenant_id = $2 LIMIT 1 FOR UPDATE'
+        : 'SELECT * FROM bizdev_sources WHERE id = $1 AND tenant_id = $2 LIMIT 1';
+      const sourceResult = await client.query(selectSql, [id, tenant_id]);
 
       if (sourceResult.rows.length === 0) {
+        if (supportsTx) { try { await client.query('ROLLBACK'); } catch { /* noop */ } }
         return res.status(404).json({
           status: 'error',
           message: 'BizDev source not found'
@@ -297,187 +310,171 @@ export default function createBizDevSourceRoutes(pgPool) {
       }
 
       const source = sourceResult.rows[0];
-      console.log('[Promote BizDev Source] Source data:', { 
-        company_name: source.company_name, 
+      console.log('[Promote BizDev Source] Source data:', {
+        company_name: source.company_name,
         source: source.source,
         source_name: source.source_name,
-        industry: source.industry 
+        industry: source.industry
       });
 
-      // Validate required fields and create fallback name
-      // bizdev_sources table uses: company_name, source (not source_name)
+      // Determine account name
       let accountName = source.company_name || source.source || source.source_name;
       if (!accountName) {
-        // Generate fallback name from available data
-        accountName = source.industry || source.source_type || `BizDev Source ${source.id.substring(0, 8)}`;
+        accountName = source.industry || source.source_type || `BizDev Source ${String(source.id).substring(0, 8)}`;
       }
 
-      // Create account from bizdev source
-      const accountData = {
-        tenant_id,
-        name: accountName,
-        industry: source.industry || null,
-        website: source.website || source.source_url,
-        metadata: {
-          ...source.metadata,
-          promoted_from_bizdev_source: source.id,
-          promoted_at: new Date().toISOString(),
-          original_source: source.source,
-          original_source_type: source.source_type,
-          original_priority: source.priority,
-          notes: source.notes,
-          contact_phone: source.contact_phone || source.phone_number,
-          contact_email: source.contact_email || source.email,
-          dba_name: source.dba_name,
-          address: {
-            line1: source.address_line_1,
-            line2: source.address_line_2,
-            city: source.city,
-            state: source.state_province,
-            postal_code: source.postal_code,
-            country: source.country
-          },
-          license: {
-            industry_license: source.industry_license,
-            license_status: source.license_status,
-            license_expiry_date: source.license_expiry_date
-          }
-        }
+      const accountMetadata = {
+        ...(source.metadata || {}),
+        promoted_from_bizdev_source: source.id,
+        promoted_at: new Date().toISOString(),
+        original_source: source.source,
+        original_source_type: source.source_type,
+        original_priority: source.priority,
+        notes: source.notes,
+        contact_phone: source.contact_phone || source.phone_number,
+        contact_email: source.contact_email || source.email,
+        dba_name: source.dba_name,
+        address: {
+          line1: source.address_line_1,
+          line2: source.address_line_2,
+          city: source.city,
+          state: source.state_province,
+          postal_code: source.postal_code,
+          country: source.country,
+        },
+        license: {
+          industry_license: source.industry_license,
+          license_status: source.license_status,
+          license_expiry_date: source.license_expiry_date,
+        },
       };
 
-      await client.query('BEGIN');
-
+      // Create account
       const accountResult = await client.query(
         `INSERT INTO accounts (
-          tenant_id, name, industry, website, metadata, created_at
-        ) VALUES ($1, $2, $3, $4, $5, NOW())
+          tenant_id, name, type, industry, website, metadata, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
         RETURNING *`,
-        [
-          accountData.tenant_id,
-          accountData.name,
-          accountData.industry,
-          accountData.website,
-          accountData.metadata
-        ]
+        [tenant_id, accountName, 'prospect', source.industry || null, source.website || source.source_url, accountMetadata]
       );
-
       const newAccount = accountResult.rows[0];
 
-      // Create a contact if we have contact person info
+      // Optional contact
       let newContact = null;
       if (source.contact_person) {
-        const [firstName, ...lastNameParts] = source.contact_person.split(' ');
+        const [firstName, ...lastNameParts] = String(source.contact_person).split(' ');
         const lastName = lastNameParts.join(' ');
-
         const contactResult = await client.query(
           `INSERT INTO contacts (
             tenant_id, account_id, first_name, last_name, email, phone, created_at
           ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
           RETURNING *`,
-          [
-            tenant_id,
-            newAccount.id,
-            firstName,
-            lastName || '',
-            source.contact_email,
-            source.contact_phone
-          ]
+          [tenant_id, newAccount.id, firstName, lastName || '', source.contact_email, source.contact_phone]
         );
-
         newContact = contactResult.rows[0];
       }
 
-      // Update bizdev source status to 'Promoted' and store linkage
-      await client.query(
-        `UPDATE bizdev_sources SET
-          status = 'Promoted',
-          account_id = $1,
-          account_name = $2,
-          metadata = jsonb_set(
-            COALESCE(metadata, '{}'::jsonb),
-            '{converted_to_account_id}',
-            to_jsonb($1::text)
-          ),
-          updated_at = NOW()
-        WHERE id = $3 AND tenant_id = $4`,
-        [newAccount.id, newAccount.name, id, tenant_id]
-      );
-
-      // Link any opportunities created from this BizDev Source (by metadata) to the new Account
-      // Primary linking: metadata.origin_bizdev_source_id
-      // Backward compatibility: description contains marker [BizDevSource:<id>]
-      try {
-        const linkByMetadata = await client.query(
-          `UPDATE opportunities
-             SET account_id = $1,
-                 updated_at = NOW()
-           WHERE tenant_id = $2
-             AND account_id IS NULL
-             AND (metadata ->> 'origin_bizdev_source_id') = $3
-          `,
-          [newAccount.id, tenant_id, id]
+      // Update bizdev_source link + status
+      if (supportsTx) {
+        await client.query(
+          `UPDATE bizdev_sources SET
+            status = 'Promoted',
+            account_id = $1,
+            account_name = $2,
+            metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{converted_to_account_id}', to_jsonb($1::text)),
+            updated_at = NOW()
+           WHERE id = $3 AND tenant_id = $4`,
+          [newAccount.id, newAccount.name, id, tenant_id]
         );
-
-        const linkByDescription = await client.query(
-          `UPDATE opportunities
-             SET account_id = $1,
-                 updated_at = NOW()
-           WHERE tenant_id = $2
-             AND account_id IS NULL
-             AND description ILIKE $3
-          `,
-          [newAccount.id, tenant_id, `%[BizDevSource:${id}]%`]
+      } else {
+        const newMetadata = { ...(source.metadata || {}), converted_to_account_id: String(newAccount.id) };
+        await client.query(
+          `UPDATE bizdev_sources SET
+             status = $1,
+             account_id = $2,
+             account_name = $3,
+             metadata = $4,
+             updated_at = NOW()
+           WHERE id = $5 AND tenant_id = $6`,
+          ['Promoted', newAccount.id, newAccount.name, newMetadata, id, tenant_id]
         );
-
-        console.log('[Promote BizDev Source] Linked opportunities to new account', {
-          linked_by_metadata: linkByMetadata.rowCount,
-          linked_by_description: linkByDescription.rowCount,
-          new_account_id: newAccount.id,
-          bizdev_source_id: id,
-        });
-      } catch (linkErr) {
-        console.warn('[Promote BizDev Source] Failed to link opportunities by origin metadata/description', linkErr);
       }
 
-      // Relink activities from bizdev_source -> account
-      await client.query(
-        `UPDATE activities SET related_to = 'account', related_id = $1, updated_date = now()
-         WHERE tenant_id = $2 AND related_to = 'bizdev_source' AND related_id = $3`,
-        [newAccount.id, tenant_id, id]
-      );
+      // Link opportunities (skip in API mode due to JSON/ILIKE filters)
+      if (supportsTx) {
+        try {
+          const linkByMetadata = await client.query(
+            `UPDATE opportunities SET account_id = $1, updated_at = NOW()
+             WHERE tenant_id = $2 AND account_id IS NULL AND (metadata ->> 'origin_bizdev_source_id') = $3`,
+            [newAccount.id, tenant_id, id]
+          );
+          const linkByDescription = await client.query(
+            `UPDATE opportunities SET account_id = $1, updated_at = NOW()
+             WHERE tenant_id = $2 AND account_id IS NULL AND description ILIKE $3`,
+            [newAccount.id, tenant_id, `%[BizDevSource:${id}]%`]
+          );
+          console.log('[Promote BizDev Source] Linked opportunities to new account', {
+            linked_by_metadata: linkByMetadata.rowCount,
+            linked_by_description: linkByDescription.rowCount,
+            new_account_id: newAccount.id,
+            bizdev_source_id: id,
+          });
+        } catch (linkErr) {
+          console.warn('[Promote BizDev Source] Failed to link opportunities by origin metadata/description', linkErr);
+        }
+      } else {
+        console.warn('[Promote BizDev Source] Skipping opportunity linking in API mode');
+      }
+
+      // Relink activities (simple WHERE supported in API mode)
+      try {
+        await client.query(
+          `UPDATE activities SET related_to = $1, related_id = $2
+           WHERE tenant_id = $3 AND related_to = 'bizdev_source' AND related_id = $4`,
+          ['account', newAccount.id, tenant_id, id]
+        );
+      } catch (e) {
+        console.warn('[Promote BizDev Source] Failed to relink activities', e?.message || e);
+      }
 
       if (delete_source) {
-        await logEntityTransition(client, {
-          tenant_id,
-          from_table: 'bizdev_sources',
-          from_id: id,
-          to_table: 'accounts',
-          to_id: newAccount.id,
-          action: 'promote',
-          performed_by,
-          snapshot: source,
-        });
+        // Transition log best-effort: use pg-like client when available
+        try {
+          await logEntityTransition(client, {
+            tenant_id,
+            from_table: 'bizdev_sources',
+            from_id: id,
+            to_table: 'accounts',
+            to_id: newAccount.id,
+            action: 'promote',
+            performed_by,
+            snapshot: source,
+          });
+        } catch (e) {
+          console.warn('[Promote BizDev Source] Transition log failed (non-fatal):', e?.message || e);
+        }
         await client.query('DELETE FROM bizdev_sources WHERE id = $1 AND tenant_id = $2', [id, tenant_id]);
       }
 
-      await client.query('COMMIT');
+      if (supportsTx) {
+        await client.query('COMMIT');
+      }
 
-      res.json({
+      return res.json({
         status: 'success',
         message: 'BizDev source promoted to account',
-        data: {
-          account: newAccount,
-          contact: newContact,
-          bizdev_source_id: id
-        }
+        data: { account: newAccount, contact: newContact, bizdev_source_id: id }
       });
     } catch (error) {
-      try { await client.query('ROLLBACK'); } catch { /* noop */ }
+      if (supportsTx && client) {
+        try { await client.query('ROLLBACK'); } catch { /* noop */ }
+      }
       console.error('Error promoting bizdev source:', error);
-      res.status(500).json({
-        status: 'error',
-        message: error.message
-      });
+      return res.status(500).json({ status: 'error', message: error.message });
+    } finally {
+      if (supportsTx && client && typeof client.release === 'function') {
+        try { client.release(); } catch { /* noop */ }
+      }
     }
   });
 

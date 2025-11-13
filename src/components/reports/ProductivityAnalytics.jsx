@@ -544,7 +544,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
             Productivity Insights & Recommendations
           </CardTitle>
           <CardDescription className="text-slate-400">
-            Insights are based on tenant ID: {tenantFilter?.tenantId || "N/A"}
+            Insights are based on tenant ID: {tenantFilter?.tenant_id || "N/A"}
           </CardDescription>
         </CardHeader>
         <CardContent>

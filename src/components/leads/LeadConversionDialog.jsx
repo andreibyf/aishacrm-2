@@ -15,12 +15,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 
 import { Loader2, UserPlus, Building2, Target, ArrowRight } from "lucide-react";
-import { generateUniqueId } from "@/api/functions";
 import { useApiManager } from "../shared/ApiManager";
 
 export default function LeadConversionDialog({ lead, accounts, open, onConvert, onClose }) {
   const [isConverting, setIsConverting] = useState(false);
-  const [createAccount, setCreateAccount] = useState(true);
+  const [createAccount, setCreateAccount] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [createOpportunity, setCreateOpportunity] = useState(false);
   const [accountName, setAccountName] = useState("");
@@ -77,23 +76,22 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
           assigned_to: lead.assigned_to || currentUser.email,
         };
 
+        // Backend will auto-generate unique_id if not provided
         try {
-          const idResponse = await generateUniqueId({ entity_type: 'Account', tenant_id: currentUser.tenant_id });
-          if (idResponse.data?.unique_id) {
-            newAccountData.unique_id = idResponse.data.unique_id;
-            console.log("Generated unique_id for new account during conversion:", newAccountData.unique_id);
-          }
+          const newAccount = await cachedRequest(
+            'Account',
+            'create',
+            { data: newAccountData },
+            () => Account.create(newAccountData)
+          );
+          accountId = newAccount.id;
         } catch (error) {
-          console.warn("Failed to generate unique_id for account during conversion", error);
+          // Check for duplicate account error
+          if (error.message?.includes('duplicate') || error.message?.includes('already exists')) {
+            throw new Error(`An account named "${accountName}" already exists. Please choose a different name or select the existing account.`);
+          }
+          throw error;
         }
-
-        const newAccount = await cachedRequest(
-          'Account',
-          'create',
-          { data: newAccountData },
-          () => Account.create(newAccountData)
-        );
-        accountId = newAccount.id;
       } else if (!createAccount && selectedAccountId) {
         accountId = selectedAccountId;
         console.log("Using existing account:", accountId);
@@ -374,7 +372,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
           </Button>
           <Button 
             onClick={handleConvert} 
-            disabled={isConverting || (createAccount && !accountName.trim()) || (!createAccount && !selectedAccountId && createOpportunity)}
+            disabled={isConverting || (createAccount && !accountName.trim())}
             className="bg-green-600 hover:bg-green-700"
           >
             {isConverting ? (

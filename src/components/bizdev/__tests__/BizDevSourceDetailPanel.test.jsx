@@ -6,12 +6,11 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 // Mock toast to avoid console noise
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-// Mock entities used by the panel
-const promoteMock = vi.fn();
+// Mock entities used by the panel (list-only; promote handled by parent callback now)
 const listLeadsMock = vi.fn();
 const listOppsMock = vi.fn();
 vi.mock('@/api/entities', () => ({
-  BizDevSource: { promote: (...args) => promoteMock(...args) },
+  BizDevSource: { promote: vi.fn() },
   Lead: { list: (...args) => listLeadsMock(...args) },
   Opportunity: { list: (...args) => listOppsMock(...args), create: vi.fn() },
   Activity: { create: vi.fn() },
@@ -39,11 +38,10 @@ describe('BizDevSourceDetailPanel - Promote Flow', () => {
       phone_number: '555-1234',
     };
 
-    const promotedAccount = { id: 'acc-999', name: 'Acme Construction' };
-    promoteMock.mockResolvedValue({ account: promotedAccount });
+  const promotedAccount = { id: 'acc-999', name: 'Acme Construction' };
 
-    const onUpdate = vi.fn();
-    const onPromote = vi.fn();
+  const onUpdate = vi.fn();
+  const onPromote = vi.fn().mockResolvedValue({ account: promotedAccount });
     const onRefresh = vi.fn();
 
     renderWithRouter(
@@ -69,8 +67,8 @@ describe('BizDevSourceDetailPanel - Promote Flow', () => {
     // Click confirm
     fireEvent.click(screen.getByRole('button', { name: /Confirm Promotion/i }));
 
-    // Verify API call
-    await waitFor(() => expect(promoteMock).toHaveBeenCalledWith('src-123', 'tenant-abc'));
+  // Verify parent onPromote callback was called
+  await waitFor(() => expect(onPromote).toHaveBeenCalled());
 
     // Callbacks invoked with updated source (status: Promoted, account_id set)
     expect(onUpdate).toHaveBeenCalled();
@@ -79,7 +77,8 @@ describe('BizDevSourceDetailPanel - Promote Flow', () => {
     expect(updatedSource.account_id).toBe('acc-999');
     expect(updatedSource.account_name).toBe('Acme Construction');
 
-    expect(onPromote).toHaveBeenCalledWith(expect.objectContaining({ status: 'Promoted' }));
+    // Panel delegates promotion to parent; ensure it was invoked (status update verified via onUpdate).
+    expect(onPromote).toHaveBeenCalled();
     expect(onRefresh).toHaveBeenCalled();
 
     // UI should show 'Already Promoted' alert after state updates
@@ -128,14 +127,14 @@ describe('BizDevSourceDetailPanel - Promote Flow', () => {
       tenant_id: 'tenant-abc',
     };
 
-    promoteMock.mockRejectedValue(new Error('Network error'));
+  const onPromote = vi.fn().mockRejectedValue(new Error('Network error'));
 
     renderWithRouter(
       <BizDevSourceDetailPanel
         bizDevSource={source}
         onClose={vi.fn()}
         onEdit={vi.fn()}
-        onPromote={vi.fn()}
+        onPromote={onPromote}
         onUpdate={vi.fn()}
         onRefresh={vi.fn()}
       />
@@ -146,7 +145,7 @@ describe('BizDevSourceDetailPanel - Promote Flow', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Confirm Promotion/i }));
 
-    await waitFor(() => expect(promoteMock).toHaveBeenCalled());
+  await waitFor(() => expect(onPromote).toHaveBeenCalled());
     expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/Network error|Failed to promote/i));
   });
 

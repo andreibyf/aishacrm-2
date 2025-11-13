@@ -68,7 +68,7 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState([]);
   const [users, setUsers] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [, setAccounts] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -922,9 +922,22 @@ export default function LeadsPage() {
     setIsConversionDialogOpen(true);
   };
 
-  const handleConversionSuccess = async () => {
+  const handleConversionSuccess = async (result) => {
+    // Optimistically update the lead status in the local state
+    if (convertingLead) {
+      setLeads(prevLeads => 
+        prevLeads.map(l => 
+          l.id === convertingLead.id 
+            ? { ...l, status: 'converted', converted_contact_id: result?.contact?.id, converted_account_id: result?.accountId }
+            : l
+        )
+      );
+    }
+    
     setIsConversionDialogOpen(false);
     setConvertingLead(null);
+    
+    // Refresh data from server
     clearCache("Lead");
     clearCache("Contact");
     clearCache("Account");
@@ -1023,9 +1036,10 @@ export default function LeadsPage() {
 
         <LeadConversionDialog
           lead={convertingLead}
+          accounts={accounts}
           open={isConversionDialogOpen}
-          onOpenChange={setIsConversionDialogOpen}
-          onSuccess={handleConversionSuccess}
+          onClose={() => setIsConversionDialogOpen(false)}
+          onConvert={handleConversionSuccess}
         />
 
         <LeadDetailPanel
@@ -1446,12 +1460,13 @@ export default function LeadsPage() {
                       {leads.map((lead) => {
                         const age = calculateLeadAge(lead.created_date);
                         const ageBucket = getLeadAgeBucket(lead);
+                        const isConverted = lead.status === 'converted';
 
                         return (
                           <tr
                             key={lead.id}
                             data-testid={`lead-row-${lead.email}`}
-                            className="hover:bg-slate-700/30 transition-colors"
+                            className={`hover:bg-slate-700/30 transition-colors ${isConverted ? 'opacity-70' : ''}`}
                           >
                             <td className="px-4 py-3">
                               <Checkbox
@@ -1462,7 +1477,9 @@ export default function LeadsPage() {
                               />
                             </td>
                             <td className="px-4 py-3 text-sm text-slate-300">
-                              {lead.first_name} {lead.last_name}
+                              <span className={isConverted ? 'line-through' : ''}>
+                                {lead.first_name} {lead.last_name}
+                              </span>
                             </td>
                             <td
                               className="px-4 py-3 text-sm text-slate-300"
@@ -1569,6 +1586,7 @@ export default function LeadsPage() {
                                         setIsFormOpen(true);
                                       }}
                                       className="h-8 w-8 text-slate-400 hover:text-blue-400"
+                                      disabled={isConverted}
                                     >
                                       <Edit className="w-4 h-4" />
                                     </Button>
@@ -1607,6 +1625,7 @@ export default function LeadsPage() {
                                         handleDelete(lead.id);
                                       }}
                                       className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                                      disabled={isConverted}
                                     >
                                       <Trash2 className="w-4 h-4" />
                                     </Button>

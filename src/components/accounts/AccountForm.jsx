@@ -212,8 +212,12 @@ export default function AccountForm({
         toast.success('Account created successfully');
       }
 
-      // Call parent's onSubmit with the result
-      await onSubmit(result);
+      // Defensive: verify onSubmit is still valid before calling
+      if (onSubmit && typeof onSubmit === 'function') {
+        await onSubmit(result);
+      } else {
+        console.error('[AccountForm] onSubmit became invalid after save');
+      }
     } catch (error) {
       console.error("[AccountForm] Error submitting account:", error);
       const errorMsg = normalizeError(error);
