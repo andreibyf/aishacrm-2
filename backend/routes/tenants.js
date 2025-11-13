@@ -107,15 +107,15 @@ export default function createTenantRoutes(_pgPool) {
         accent_color: r.branding_settings?.accent_color ||
           r.metadata?.accent_color || null,
         settings: r.branding_settings || {}, // For backward compatibility
-        // Extract metadata fields to top-level for UI
-        country: r.metadata?.country || "",
-        major_city: r.metadata?.major_city || "",
-        industry: r.metadata?.industry || "other",
-        business_model: r.metadata?.business_model || "b2b",
-        geographic_focus: r.metadata?.geographic_focus || "north_america",
-        elevenlabs_agent_id: r.metadata?.elevenlabs_agent_id || "",
-        display_order: r.metadata?.display_order ?? 0,
-        domain: r.metadata?.domain || "",
+        // Use direct columns (migrated from metadata JSONB)
+        country: r.country || "",
+        major_city: r.major_city || "",
+        industry: r.industry || "other",
+        business_model: r.business_model || "b2b",
+        geographic_focus: r.geographic_focus || "north_america",
+        elevenlabs_agent_id: r.elevenlabs_agent_id || "",
+        display_order: r.display_order ?? 0,
+        domain: r.domain || "",
       }));
 
       res.json({
@@ -184,17 +184,9 @@ export default function createTenantRoutes(_pgPool) {
         ...(accent_color !== undefined ? { accent_color } : {}),
       };
 
-      // Build metadata from individual fields or use provided object
+      // Keep metadata for other fields not yet migrated to columns
       const finalMetadata = {
         ...(metadata || {}),
-        ...(country !== undefined ? { country } : {}),
-        ...(major_city !== undefined ? { major_city } : {}),
-        ...(industry !== undefined ? { industry } : {}),
-        ...(business_model !== undefined ? { business_model } : {}),
-        ...(geographic_focus !== undefined ? { geographic_focus } : {}),
-        ...(elevenlabs_agent_id !== undefined ? { elevenlabs_agent_id } : {}),
-        ...(display_order !== undefined ? { display_order } : {}),
-        ...(domain !== undefined ? { domain } : {}),
       };
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
@@ -206,6 +198,15 @@ export default function createTenantRoutes(_pgPool) {
         branding_settings: finalBrandingSettings,
         status: status || 'active',
         metadata: finalMetadata,
+        // Direct column assignments (migrated from metadata)
+        country: country || null,
+        major_city: major_city || null,
+        industry: industry || null,
+        business_model: business_model || null,
+        geographic_focus: geographic_focus || null,
+        elevenlabs_agent_id: elevenlabs_agent_id || null,
+        display_order: display_order ?? 0,
+        domain: domain || null,
         created_at: nowIso,
         updated_at: nowIso,
       };
@@ -392,43 +393,59 @@ export default function createTenantRoutes(_pgPool) {
         paramCount++;
       }
 
-      // Handle metadata - merge with existing and add new fields
-      const shouldUpdateMetadata = metadata !== undefined ||
-        country !== undefined ||
-        major_city !== undefined || industry !== undefined ||
-        business_model !== undefined ||
-        geographic_focus !== undefined || elevenlabs_agent_id !== undefined ||
-        display_order !== undefined || domain !== undefined ||
-        settings !== undefined;
-
-      if (shouldUpdateMetadata) {
-        // Fetch existing metadata to merge
-        const { getSupabaseClient } = await import('../lib/supabase-db.js');
-        const supabase = getSupabaseClient();
-        const selMeta = supabase.from('tenant').select('metadata');
-        const { data: cur, error: metaErr } = isUUID
-          ? await selMeta.eq('id', id).single()
-          : await selMeta.eq('tenant_id', id).single();
-        if (metaErr && metaErr.code !== 'PGRST116') throw new Error(metaErr.message);
-        const existingMetadata = cur?.metadata || {};
-
-        // Merge all metadata fields
-        const mergedMetadata = {
-          ...existingMetadata,
-          ...metadata,
-          ...(settings || {}), // Legacy settings field
-          ...(country !== undefined ? { country } : {}),
-          ...(major_city !== undefined ? { major_city } : {}),
-          ...(industry !== undefined ? { industry } : {}),
-          ...(business_model !== undefined ? { business_model } : {}),
-          ...(geographic_focus !== undefined ? { geographic_focus } : {}),
-          ...(elevenlabs_agent_id !== undefined ? { elevenlabs_agent_id } : {}),
-          ...(display_order !== undefined ? { display_order } : {}),
-          ...(domain !== undefined ? { domain } : {}),
-        };
-
+      // Handle metadata - keep for fields not yet migrated to columns
+      if (metadata !== undefined) {
         updates.push(`metadata = $${paramCount}`);
-        params.push(mergedMetadata);
+        params.push(metadata);
+        paramCount++;
+      }
+
+      // Handle individual tenant fields (migrated from metadata to direct columns)
+      if (country !== undefined) {
+        updates.push(`country = $${paramCount}`);
+        params.push(country);
+        paramCount++;
+      }
+
+      if (major_city !== undefined) {
+        updates.push(`major_city = $${paramCount}`);
+        params.push(major_city);
+        paramCount++;
+      }
+
+      if (industry !== undefined) {
+        updates.push(`industry = $${paramCount}`);
+        params.push(industry);
+        paramCount++;
+      }
+
+      if (business_model !== undefined) {
+        updates.push(`business_model = $${paramCount}`);
+        params.push(business_model);
+        paramCount++;
+      }
+
+      if (geographic_focus !== undefined) {
+        updates.push(`geographic_focus = $${paramCount}`);
+        params.push(geographic_focus);
+        paramCount++;
+      }
+
+      if (elevenlabs_agent_id !== undefined) {
+        updates.push(`elevenlabs_agent_id = $${paramCount}`);
+        params.push(elevenlabs_agent_id);
+        paramCount++;
+      }
+
+      if (display_order !== undefined) {
+        updates.push(`display_order = $${paramCount}`);
+        params.push(display_order);
+        paramCount++;
+      }
+
+      if (domain !== undefined) {
+        updates.push(`domain = $${paramCount}`);
+        params.push(domain);
         paramCount++;
       }
 

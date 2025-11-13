@@ -47,7 +47,7 @@ console.log('');
 
 async function runMigration() {
   // Initialize Supabase client with service role key (bypasses RLS)
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  const _supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: {
       autoRefreshToken: false,
       persistSession: false
@@ -93,7 +93,6 @@ async function runMigration() {
         }
 
         let pool;
-        let usedSSL = true;
         
         try {
           // Try with SSL first
@@ -139,7 +138,6 @@ async function runMigration() {
           // Retry without SSL if server doesn't support it
           if (/does not support SSL connections/i.test(sslError.message)) {
             console.log('   ⚠️  SSL not supported, retrying without SSL...');
-            usedSSL = false;
             
             pool = new Pool({
               connectionString: DATABASE_URL,
@@ -178,26 +176,6 @@ async function runMigration() {
             throw sslError;
           }
         }
-
-        console.log('');
-        console.log('✅ Migration executed successfully!');
-        console.log('');
-
-        if (notices.length > 0) {
-          console.log('📢 Migration notices:');
-          notices.forEach(notice => console.log(`   ${notice}`));
-          console.log('');
-        }
-
-        if (result.rowCount !== null) {
-          console.log(`   Rows affected: ${result.rowCount}`);
-        }
-
-        console.log('');
-        console.log('🔍 Verifying tables...');
-        await verifyTables(pool);
-
-        return;
       }
 
       const errorText = await response.text();
