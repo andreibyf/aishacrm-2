@@ -78,9 +78,13 @@ export default function createReportRoutes(pgPool) {
     try {
       let { tenant_id } = req.query;
 
+      console.log('[dashboard-stats] Received tenant_id:', tenant_id);
+
       // Normalize UUID tenant_id to slug for database queries
       if (tenant_id && isUUID(tenant_id)) {
+        const originalTenantId = tenant_id;
         tenant_id = await resolveTenantSlug(tenant_id, pgPool);
+        console.log('[dashboard-stats] Normalized UUID', originalTenantId, 'to slug:', tenant_id);
       }
 
       // Optional: allow stats without tenant filter in local mode
