@@ -336,7 +336,6 @@ export default function createLeadRoutes(pgPool) {
 
   // POST /api/leads/:id/convert - Convert lead to contact/opportunity
   router.post('/:id/convert', async (req, res) => {
-    const client = await pgPool.connect();
     try {
       const { id } = req.params;
       const {
@@ -354,147 +353,162 @@ export default function createLeadRoutes(pgPool) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
-      await client.query('BEGIN');
-
-      // Lock lead row
-      const leadRes = await client.query(
-        'SELECT * FROM leads WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
-        [id, tenant_id]
-      );
+      // Fetch the lead (no FOR UPDATE when using Supabase API fallback)
+      const leadRes = await pgPool.query('SELECT * FROM leads WHERE id = $1 AND tenant_id = $2 LIMIT 1', [id, tenant_id]);
       if (leadRes.rows.length === 0) {
-        await client.query('ROLLBACK');
         return res.status(404).json({ status: 'error', message: 'Lead not found' });
       }
       const lead = leadRes.rows[0];
 
-      // Determine Account: use selected, create new if requested, else null
+      // Prepare bookkeeping for compensating actions if something fails
       let accountId = selected_account_id || null;
       let newAccount = null;
-      if (!accountId && create_account) {
-        const name = (account_name || lead.company || '').trim();
-        if (!name) {
-          throw new Error('Account name is required to create a new account');
-        }
-        const accIns = await client.query(
-          `INSERT INTO accounts (tenant_id, name, phone, assigned_to, created_at, updated_at)
-           VALUES ($1,$2,$3,$4, now(), now()) RETURNING *`,
-          [tenant_id, name, lead.phone || null, lead.assigned_to || performed_by || null]
-        );
-        newAccount = accIns.rows[0];
-        accountId = newAccount.id;
-      }
-
-      // Create Contact from Lead
-      const contactIns = await client.query(
-        `INSERT INTO contacts (
-           tenant_id, account_id, first_name, last_name, email, phone, job_title, status,
-           metadata, assigned_to, created_at, updated_at
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
-                   COALESCE($9::jsonb, '{}'::jsonb), $10, now(), now())
-         RETURNING *`,
-        [
-          tenant_id,
-          accountId || null,
-          lead.first_name,
-          lead.last_name,
-          lead.email,
-          lead.phone,
-          lead.job_title,
-          'prospect',
-          JSON.stringify({ converted_from_lead_id: lead.id, source: lead.source || null }),
-          lead.assigned_to || performed_by || null,
-        ]
-      );
-      const contact = contactIns.rows[0];
-
-      // Optionally create Opportunity
+      let contact = null;
       let opportunity = null;
-      if (create_opportunity) {
-        const oppName = (opportunity_name && opportunity_name.trim()) || `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'New Opportunity';
-        const oppAmt = Number(opportunity_amount || lead.estimated_value || 0) || 0;
-        const oppIns = await client.query(
-          `INSERT INTO opportunities (
-             tenant_id, name, account_id, contact_id, stage, amount, probability, lead_source,
-             assigned_to, close_date, type, created_at, updated_at
-           ) VALUES ($1,$2,$3,$4,'prospecting',$5,25,$6,$7, (now() + interval '30 days')::date, 'new_business', now(), now())
+
+      try {
+        // Create account if requested
+        if (!accountId && create_account) {
+          const name = (account_name || lead.company || '').trim();
+          if (!name) throw new Error('Account name is required to create a new account');
+          const accIns = await pgPool.query(
+            `INSERT INTO accounts (tenant_id, name, phone, assigned_to, created_at, updated_at)
+               VALUES ($1,$2,$3,$4, now(), now()) RETURNING *`,
+            [tenant_id, name, lead.phone || null, lead.assigned_to || performed_by || null]
+          );
+          newAccount = accIns.rows[0];
+          accountId = newAccount.id;
+        }
+
+        // Create contact from lead
+        const contactIns = await pgPool.query(
+          `INSERT INTO contacts (
+             tenant_id, account_id, first_name, last_name, email, phone, job_title, status,
+             metadata, assigned_to, created_at, updated_at
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
+                     COALESCE($9::jsonb, '{}'::jsonb), $10, now(), now())
            RETURNING *`,
           [
             tenant_id,
-            oppName,
             accountId || null,
-            contact.id,
-            oppAmt,
-            lead.source || 'other',
+            lead.first_name,
+            lead.last_name,
+            lead.email,
+            lead.phone,
+            lead.job_title,
+            'prospect',
+            JSON.stringify({ converted_from_lead_id: lead.id, source: lead.source || null }),
             lead.assigned_to || performed_by || null,
           ]
         );
-        opportunity = oppIns.rows[0];
-      }
+        contact = contactIns.rows[0];
 
-      // Re-link Activities from lead -> contact
-      await client.query(
-        `UPDATE activities
-           SET related_to = 'contact', related_id = $1, updated_date = now()
-         WHERE tenant_id = $2 AND related_to = 'lead' AND related_id = $3`,
-        [contact.id, tenant_id, lead.id]
-      );
+        // Optionally create Opportunity
+        if (create_opportunity) {
+          const oppName = (opportunity_name && opportunity_name.trim()) || `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'New Opportunity';
+          const oppAmt = Number(opportunity_amount || lead.estimated_value || 0) || 0;
+          const closeDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+          const nowIso = new Date().toISOString();
+          const oppIns = await pgPool.query(
+            `INSERT INTO opportunities (
+               tenant_id, name, account_id, contact_id, stage, amount, probability,
+               assigned_to, close_date, created_at, updated_at
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+             RETURNING *`,
+            [
+              tenant_id,
+              oppName,
+              accountId || null,
+              contact.id,
+              'prospecting',
+              oppAmt,
+              25,
+              lead.assigned_to || performed_by || null,
+              closeDate,
+              nowIso,
+              nowIso,
+            ]
+          );
+          opportunity = oppIns.rows[0];
+        }
 
-      // Re-link any existing Opportunities originally tied to this lead
-      try {
-        const linkOppByMeta = await client.query(
-          `UPDATE opportunities
-             SET contact_id = COALESCE(contact_id, $1),
-                 account_id = COALESCE(account_id, $2),
-                 updated_at = now()
-           WHERE tenant_id = $3
-             AND (metadata ->> 'origin_lead_id') = $4`,
-          [contact.id, accountId || null, tenant_id, lead.id]
+        // Re-link Activities from lead -> contact
+        await pgPool.query(
+          `UPDATE activities
+             SET related_to = 'contact', related_id = $1, updated_date = now()
+           WHERE tenant_id = $2 AND related_to = 'lead' AND related_id = $3`,
+          [contact.id, tenant_id, lead.id]
         );
 
-        const linkOppByDesc = await client.query(
-          `UPDATE opportunities
-             SET contact_id = COALESCE(contact_id, $1),
-                 account_id = COALESCE(account_id, $2),
-                 updated_at = now()
-           WHERE tenant_id = $3
-             AND description ILIKE $4`,
-          [contact.id, accountId || null, tenant_id, `%[Lead:${lead.id}]%`]
-        );
+        // Re-link opportunities that reference this lead (best-effort)
+        try {
+          const linkOppByMeta = await pgPool.query(
+            `UPDATE opportunities
+               SET contact_id = COALESCE(contact_id, $1),
+                   account_id = COALESCE(account_id, $2),
+                   updated_at = now()
+             WHERE tenant_id = $3
+               AND (metadata ->> 'origin_lead_id') = $4`,
+            [contact.id, accountId || null, tenant_id, lead.id]
+          );
 
-        console.log('[Leads] Converted: relinked opportunities', {
-          by_meta: linkOppByMeta.rowCount,
-          by_desc: linkOppByDesc.rowCount,
+          const linkOppByDesc = await pgPool.query(
+            `UPDATE opportunities
+               SET contact_id = COALESCE(contact_id, $1),
+                   account_id = COALESCE(account_id, $2),
+                   updated_at = now()
+             WHERE tenant_id = $3
+               AND description ILIKE $4`,
+            [contact.id, accountId || null, tenant_id, `%[Lead:${lead.id}]%`]
+          );
+
+          console.log('[Leads] Converted: relinked opportunities', {
+            by_meta: linkOppByMeta.rowCount,
+            by_desc: linkOppByDesc.rowCount,
+          });
+        } catch (oppLinkErr) {
+          console.warn('[Leads] Failed to relink opportunities from lead', oppLinkErr);
+        }
+
+        // Record transition snapshot, then delete lead
+        await logEntityTransition(pgPool, {
+          tenant_id,
+          from_table: 'leads',
+          from_id: lead.id,
+          to_table: 'contacts',
+          to_id: contact.id,
+          action: 'convert',
+          performed_by,
+          snapshot: lead,
         });
-      } catch (oppLinkErr) {
-        console.warn('[Leads] Failed to relink opportunities from lead', oppLinkErr);
+
+        await pgPool.query('DELETE FROM leads WHERE id = $1 AND tenant_id = $2', [lead.id, tenant_id]);
+
+        return res.json({
+          status: 'success',
+          message: 'Lead converted and moved to contacts',
+          data: { contact, account: newAccount, opportunity }
+        });
+
+      } catch (innerErr) {
+        // Compensate created records when running without DB transactions (best-effort)
+        console.error('[Leads] conversion inner error, attempting cleanup:', innerErr.message || innerErr);
+        try {
+          if (opportunity && opportunity.id) await pgPool.query('DELETE FROM opportunities WHERE id = $1 AND tenant_id = $2', [opportunity.id, tenant_id]);
+        } catch (e) { console.warn('Cleanup opportunity failed', e.message || e); }
+        try {
+          if (contact && contact.id) await pgPool.query('DELETE FROM contacts WHERE id = $1 AND tenant_id = $2', [contact.id, tenant_id]);
+        } catch (e) { console.warn('Cleanup contact failed', e.message || e); }
+        try {
+          if (newAccount && newAccount.id) await pgPool.query('DELETE FROM accounts WHERE id = $1 AND tenant_id = $2', [newAccount.id, tenant_id]);
+        } catch (e) { console.warn('Cleanup account failed', e.message || e); }
+
+        console.error('[Leads] convert error:', innerErr);
+        return res.status(500).json({ status: 'error', message: innerErr.message || String(innerErr) });
       }
-
-      // Record transition snapshot, then delete lead to avoid double counting
-      await logEntityTransition(client, {
-        tenant_id,
-        from_table: 'leads',
-        from_id: lead.id,
-        to_table: 'contacts',
-        to_id: contact.id,
-        action: 'convert',
-        performed_by,
-        snapshot: lead,
-      });
-
-      await client.query('DELETE FROM leads WHERE id = $1 AND tenant_id = $2', [lead.id, tenant_id]);
-
-      await client.query('COMMIT');
-      return res.json({
-        status: 'success',
-        message: 'Lead converted and moved to contacts',
-        data: { contact, account: newAccount, opportunity }
-      });
     } catch (error) {
-  try { await client.query('ROLLBACK'); } catch { /* noop */ }
       console.error('[Leads] convert error:', error);
       return res.status(500).json({ status: 'error', message: error.message });
-    } finally {
-      client.release();
     }
   });
 

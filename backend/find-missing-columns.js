@@ -27,7 +27,7 @@ const TABLES = [
 
 async function getDatabaseColumns(tableName) {
   try {
-    const { data, error } = await supa
+    const { data: _data, error } = await supa
       .from(tableName)
       .select('*')
       .limit(0); // Get schema only
@@ -56,8 +56,8 @@ async function getDatabaseColumns(tableName) {
     }
     
     return cols?.map(c => c.column_name) || [];
-  } catch (err) {
-    console.error(`  Error fetching columns for ${tableName}:`, err.message);
+  } catch (_err) {
+    console.error(`  Error fetching columns for ${tableName}:`, _err.message);
     return [];
   }
 }
@@ -67,7 +67,7 @@ function extractFieldsFromFrontend(tableName) {
   const srcDir = path.join(__dirname, '..', 'src');
   
   // Common patterns to search for
-  const patterns = [
+  const _patterns = [
     new RegExp(`${tableName}\\.(\\w+)`, 'g'),
     new RegExp(`formData\\.(\\w+)`, 'g'),
     new RegExp(`handleChange\\(['"]([\\w_]+)['"]`, 'g'),
@@ -98,7 +98,7 @@ function extractFieldsFromFrontend(tableName) {
           }
         }
       }
-    } catch (err) {
+    } catch {
       // Ignore errors
     }
   }

@@ -77,7 +77,7 @@ console.log(summary);
 console.log('');
 
 // Verify revenue calculation
-const expectedTotal = 2500000 + 1800000 + 1200000;
+const _expectedTotal = 2500000 + 1800000 + 1200000;
 const hasCorrectTotal = summary.includes('$5,500,000') || summary.includes('5500000');
 
 if (hasCorrectTotal) {

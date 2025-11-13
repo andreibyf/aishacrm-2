@@ -34,6 +34,19 @@ fn createLead(
   };
 }
 
+fn deleteLead(
+  tenant: String,
+  lead_id: String
+) -> Result<Boolean, CRMError> !net {
+  let url = "/api/leads/" + lead_id;
+  let response = http.delete(url, {});
+  return match response {
+    Ok{value} => Ok(true),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
 fn updateLead(
   tenant: String,
   lead_id: String,
@@ -53,12 +66,10 @@ fn updateLead(
 fn convertLeadToAccount(
   tenant: String,
   lead_id: String,
-  create_contact: Boolean
+  options: Object
 ) -> Result<Object, CRMError> !net {
   let url = "/api/leads/" + lead_id + "/convert";
-  let body = {
-    create_contact: create_contact
-  };
+  let body = options;
   
   let response = http.post(url, { body: body });
   

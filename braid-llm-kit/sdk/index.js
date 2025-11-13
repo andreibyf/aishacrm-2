@@ -64,13 +64,8 @@ export function createBackendDeps(baseUrl, tenantId, userId = null) {
           };
         }
         
-        const data = await response.json();
-  try {
-          // Lightweight debug to verify value propagation
-          const preview = typeof data === 'object' ? JSON.stringify(data).slice(0, 200) : String(data);
-          console.log(`[BRAID_HTTP_GET] ${fullUrl} :: ${preview.length}b`);
-  } catch { /* ignore preview logging errors */ }
-        return { tag: 'Ok', value: data };
+  const data = await response.json();
+  return { tag: 'Ok', value: data };
       },
       
       async post(url, options = {}) {
@@ -104,8 +99,9 @@ export function createBackendDeps(baseUrl, tenantId, userId = null) {
       
       async put(url, options = {}) {
         const body = options.body || {};
-        
-        const response = await fetch(`${baseUrl}${url}`, {
+        const params = new URLSearchParams(options.params || {});
+        const fullUrl = params.toString() ? `${baseUrl}${url}?${params}` : `${baseUrl}${url}`;
+        const response = await fetch(fullUrl, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -130,8 +126,10 @@ export function createBackendDeps(baseUrl, tenantId, userId = null) {
         return { tag: 'Ok', value: data };
       },
       
-      async delete(url, _options = {}) {
-        const response = await fetch(`${baseUrl}${url}`, {
+      async delete(url, options = {}) {
+        const params = new URLSearchParams(options.params || {});
+        const fullUrl = params.toString() ? `${baseUrl}${url}?${params}` : `${baseUrl}${url}`;
+        const response = await fetch(fullUrl, {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',

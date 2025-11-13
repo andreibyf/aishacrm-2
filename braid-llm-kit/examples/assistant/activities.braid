@@ -17,6 +17,7 @@ fn createActivity(
   let payload = {
     tenant_id: tenant,
     subject: subject,
+    activity_type: activity_type,
     due_date: due_date,
     assigned_to: assigned_to,
     related_to_type: related_to_type,
@@ -102,6 +103,7 @@ fn scheduleMeeting(
   let payload = {
     tenant_id: tenant,
     subject: subject,
+    activity_type: "meeting",
     due_date: date_time,
     assigned_to: assigned_to,
     body: "Attendees: meeting",
@@ -113,6 +115,19 @@ fn scheduleMeeting(
   
   return match response {
     Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn deleteActivity(
+  tenant: String,
+  activity_id: String
+) -> Result<Boolean, CRMError> !net {
+  let url = "/api/activities/" + activity_id;
+  let response = http.delete(url, {});
+  return match response {
+    Ok{value} => Ok(true),
     Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };

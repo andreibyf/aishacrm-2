@@ -26,12 +26,31 @@ if (!connectionString) {
 console.log('🔗 Connecting to Supabase Cloud DEV/QA...');
 console.log(`📍 ${connectionString.replace(/:([^:@]+)@/, ':****@')}`);
 
-const client = new Client({
-  connectionString: connectionString,
-  ssl: {
-    rejectUnauthorized: false
+async function connectWithSslFallback() {
+  // First try with SSL (Supabase Cloud requires SSL); if server rejects SSL, retry without
+  let client;
+  try {
+    client = new Client({
+      connectionString,
+      ssl: { rejectUnauthorized: false },
+    });
+    await client.connect();
+    return client;
+  } catch (err) {
+    if (/does not support SSL connections/i.test(err.message)) {
+      console.warn('⚠️  SSL not supported by server; retrying without SSL...');
+      try {
+        client = new Client({ connectionString });
+        await client.connect();
+        return client;
+      } catch (e2) {
+        console.error('❌ Failed to connect without SSL:', e2.message);
+        throw e2;
+      }
+    }
+    throw err;
   }
-});
+}
 
 // Discover all .sql migrations and apply in lexical order
 const migrationsDir = path.join(__dirname, 'migrations');
@@ -40,9 +59,10 @@ let migrations = fs.readdirSync(migrationsDir)
   .sort((a, b) => a.localeCompare(b));
 
 async function applyMigrations() {
+  let dbClient = null;
   try {
-    await client.connect();
-    console.log('✅ Connected to Supabase Cloud\n');
+    dbClient = await connectWithSslFallback();
+    console.log('✅ Connected to Supabase Cloud / DB Host\n');
 
     for (const migration of migrations) {
       const migrationPath = path.join(__dirname, 'migrations', migration);
@@ -56,7 +76,7 @@ async function applyMigrations() {
       const sql = fs.readFileSync(migrationPath, 'utf8');
       
       try {
-        await client.query(sql);
+  await dbClient.query(sql);
         console.log(`✅ ${migration} applied successfully\n`);
       } catch (error) {
         console.error(`❌ Error applying ${migration}:`, error.message);
@@ -70,7 +90,7 @@ async function applyMigrations() {
 
     // Verify tables were created
     console.log('🔍 Verifying tables...');
-    const result = await client.query(`
+    const result = await dbClient.query(`
       SELECT tablename 
       FROM pg_tables 
       WHERE schemaname = 'public' 
@@ -92,7 +112,7 @@ async function applyMigrations() {
     console.error('\n❌ Migration failed:', error);
     process.exit(1);
   } finally {
-    await client.end();
+    try { await dbClient?.end(); } catch (e) { const _ignored = e; void _ignored; }
   }
 }
 

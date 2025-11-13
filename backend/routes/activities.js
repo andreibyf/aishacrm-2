@@ -269,6 +269,9 @@ export default function createActivityRoutes(pgPool) {
         ...rest
       } = activity || {};
 
+      // Support alias: activity_type -> type (to accommodate Braid reserved word)
+      const normalizedType = activity?.activity_type ?? type;
+
       const meta = { ...rest, description: bodyText };
 
       // Insert only columns that exist in initial schema; put extras into metadata
@@ -282,7 +285,7 @@ export default function createActivityRoutes(pgPool) {
 
       const values = [
         tenant_id,
-        (type || 'task'),
+        (normalizedType || 'task'),
         subject || null,
         bodyText,
         related_id || null,
@@ -331,9 +334,11 @@ export default function createActivityRoutes(pgPool) {
       const values = [];
       let paramCount = 1;
 
-      if (payload.type !== undefined) {
+      // Support alias: activity_type -> type
+      const updateType = payload.activity_type !== undefined ? payload.activity_type : payload.type;
+      if (updateType !== undefined) {
         updates.push(`type = $${paramCount++}`);
-        values.push(payload.type);
+        values.push(updateType);
       }
       if (payload.subject !== undefined) {
         updates.push(`subject = $${paramCount++}`);

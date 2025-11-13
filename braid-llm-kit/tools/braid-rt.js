@@ -114,7 +114,7 @@ export const CRM_POLICIES = {
     allow_effects: ['net', 'clock'],
     tenant_isolation: true,
     audit_log: true,
-    max_execution_ms: 10000
+    max_execution_ms: 30000
   },
   
   ADMIN_ALL: {

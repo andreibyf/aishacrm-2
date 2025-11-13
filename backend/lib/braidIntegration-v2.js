@@ -30,6 +30,7 @@ const TOOL_REGISTRY = {
   update_lead: { file: 'leads.braid', function: 'updateLead', policy: 'WRITE_OPERATIONS' },
   convert_lead_to_account: { file: 'leads.braid', function: 'convertLeadToAccount', policy: 'WRITE_OPERATIONS' },
   list_leads: { file: 'leads.braid', function: 'listLeads', policy: 'READ_ONLY' },
+  delete_lead: { file: 'leads.braid', function: 'deleteLead', policy: 'WRITE_OPERATIONS' },
   
   // Activity & Calendar
   create_activity: { file: 'activities.braid', function: 'createActivity', policy: 'WRITE_OPERATIONS' },
@@ -37,6 +38,7 @@ const TOOL_REGISTRY = {
   mark_activity_complete: { file: 'activities.braid', function: 'markActivityComplete', policy: 'WRITE_OPERATIONS' },
   get_upcoming_activities: { file: 'activities.braid', function: 'getUpcomingActivities', policy: 'READ_ONLY' },
   schedule_meeting: { file: 'activities.braid', function: 'scheduleMeeting', policy: 'WRITE_OPERATIONS' },
+  delete_activity: { file: 'activities.braid', function: 'deleteActivity', policy: 'WRITE_OPERATIONS' },
   
   // Notes
   create_note: { file: 'notes.braid', function: 'createNote', policy: 'WRITE_OPERATIONS' },
@@ -51,12 +53,14 @@ const TOOL_REGISTRY = {
   list_opportunities_by_stage: { file: 'opportunities.braid', function: 'listOpportunitiesByStage', policy: 'READ_ONLY' },
   get_opportunity_forecast: { file: 'opportunities.braid', function: 'getOpportunityForecast', policy: 'READ_ONLY' },
   mark_opportunity_won: { file: 'opportunities.braid', function: 'markOpportunityWon', policy: 'WRITE_OPERATIONS' },
+  delete_opportunity: { file: 'opportunities.braid', function: 'deleteOpportunity', policy: 'WRITE_OPERATIONS' },
   
   // Contacts
   create_contact: { file: 'contacts.braid', function: 'createContact', policy: 'WRITE_OPERATIONS' },
   update_contact: { file: 'contacts.braid', function: 'updateContact', policy: 'WRITE_OPERATIONS' },
   list_contacts_for_account: { file: 'contacts.braid', function: 'listContactsForAccount', policy: 'READ_ONLY' },
   search_contacts: { file: 'contacts.braid', function: 'searchContacts', policy: 'READ_ONLY' },
+  delete_contact: { file: 'contacts.braid', function: 'deleteContact', policy: 'WRITE_OPERATIONS' },
   
   // Web Research
   search_web: { file: 'web-research.braid', function: 'searchWeb', policy: 'READ_ONLY' },

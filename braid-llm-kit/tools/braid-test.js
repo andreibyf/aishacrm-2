@@ -4,11 +4,12 @@
  * Property-based testing for pure functions, effect mocking for !net,clock
  */
 
-import fs from 'fs/promises';
-import path from 'path';
+/* eslint-env node */
+/* global Buffer, process */
+
 import { parse } from './braid-parse.js';
 import { transpileToJS } from './braid-transpile.js';
-import { Ok, Err, CRM_POLICIES } from './braid-rt.js';
+import { CRM_POLICIES } from './braid-rt.js';
 
 // Mock effect dependencies for testing
 function createMockDeps(overrides = {}) {
@@ -201,7 +202,7 @@ async function runTests() {
     const module = await import(dataUrl);
     
     for (const len of integers(0, 50, 10)) {
-      const input = Array.from({length: len}, (_, i) => i);
+      const _input = Array.from({length: len}, (_, i) => i);
       const result = await module.doubleArray();
       assertEqual(result.value.length, len, `Array length should be preserved for ${len} elements`);
     }

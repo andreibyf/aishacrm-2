@@ -35,6 +35,19 @@ fn createOpportunity(
   };
 }
 
+fn deleteOpportunity(
+  tenant: String,
+  opportunity_id: String
+) -> Result<Boolean, CRMError> !net {
+  let url = "/api/opportunities/" + opportunity_id;
+  let response = http.delete(url, {});
+  return match response {
+    Ok{value} => Ok(true),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
 fn updateOpportunity(
   tenant: String,
   opportunity_id: String,

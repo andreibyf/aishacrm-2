@@ -2,11 +2,14 @@
 // Transpiles .braid files, enforces policies, handles errors, caches results
 "use strict";
 
+/* eslint-env node */
+/* global Buffer, process */
+
 import fs from 'fs/promises';
 import path from 'path';
 import { parse } from './braid-parse.js';
 import { transpileToJS } from './braid-transpile.js';
-import { CRM_POLICIES, getAuditLog } from './braid-rt.js';
+import { CRM_POLICIES } from './braid-rt.js';
 
 // Result cache for compiled Braid functions (prevents re-transpilation)
 const compiledCache = new Map();
@@ -50,11 +53,7 @@ export async function executeBraid(braidFilePath, functionName, policy, deps, ar
         typescript: false,
         runtimeImport: runtimeUrl
       });
-      try {
-        if (braidFilePath.endsWith('snapshot.braid')) {
-          console.log('[BRAID_COMPILED_SNAPSHOT]\n' + code.slice(0, 800));
-        }
-      } catch {}
+      // Removed debug-time compiled code preview logging
       
       // Dynamic import using data URL (Node.js 18+)
       const dataUrl = `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
