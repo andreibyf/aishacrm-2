@@ -127,13 +127,18 @@ export default function DashboardPage() {
     let filter = {};
 
     // Tenant filtering
-    if (user.role === "superadmin" || user.role === "admin") {
+    // Updated: Always prefer an explicit selectedTenantId; fallback to user.tenant_id for all non-superadmin roles.
+    if (user.role === "superadmin") {
+      if (selectedTenantId) {
+        filter.tenant_id = selectedTenantId; // superadmin scoped view when chosen
+      } // else superadmin global view (no tenant_id added)
+    } else {
+      // admin / manager / employee: MUST be tenant-scoped
       if (selectedTenantId) {
         filter.tenant_id = selectedTenantId;
+      } else if (user.tenant_id) {
+        filter.tenant_id = user.tenant_id; // fallback auto-scope
       }
-      // If no tenant selected, superadmin/admin sees all data (no tenant filter)
-    } else if (user.tenant_id) {
-      filter.tenant_id = user.tenant_id;
     }
 
     // Employee scope filtering from context
@@ -174,13 +179,17 @@ export default function DashboardPage() {
         // Inline tenant filter logic to avoid dependency issues
         let tenantFilter = {};
 
-        // Tenant filtering
-        if (user.role === "superadmin" || user.role === "admin") {
+        // Tenant filtering (mirrors getTenantFilter logic)
+        if (user.role === "superadmin") {
           if (selectedTenantId) {
             tenantFilter.tenant_id = selectedTenantId;
           }
-        } else if (user.tenant_id) {
-          tenantFilter.tenant_id = user.tenant_id;
+        } else {
+          if (selectedTenantId) {
+            tenantFilter.tenant_id = selectedTenantId;
+          } else if (user.tenant_id) {
+            tenantFilter.tenant_id = user.tenant_id;
+          }
         }
 
         // Employee scope filtering from context
@@ -204,19 +213,15 @@ export default function DashboardPage() {
         }
 
         // Guard: ensure we have a valid tenant_id before loading data
-        if (!tenantFilter || !tenantFilter.tenant_id) {
-          logger.warning(
-            "No tenant selected - cannot load dashboard data",
-            "Dashboard",
-            {
-              userId: user.email,
-              selectedTenantId,
-              tenantFilter,
-              userRole: user.role,
-            },
-          );
-          
-          // Set loading false and show empty stats to render the "select tenant" message
+        // For non-superadmin roles, tenantFilter.tenant_id MUST be present; guard just superadmin global.
+        if (user.role !== 'superadmin' && (!tenantFilter || !tenantFilter.tenant_id)) {
+          logger.error('Tenant scoping failure: expected tenant_id for user role', 'Dashboard', {
+            userId: user.email,
+            userRole: user.role,
+            selectedTenantId,
+            tenantFilter,
+          });
+          toast.error('Tenant context missing. Please re-login.');
           setStats({
             totalContacts: 0,
             newLeads: 0,

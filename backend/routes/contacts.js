@@ -5,6 +5,7 @@
 
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
+import { resolveTenantSlug, isUUID } from '../lib/tenantResolver.js';
 
 export default function createContactRoutes(pgPool) {
   const router = express.Router();
@@ -27,10 +28,15 @@ export default function createContactRoutes(pgPool) {
   // GET /api/contacts - List contacts
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, limit = 50, offset = 0, status, account_id } = req.query;
+      let { tenant_id, limit = 50, offset = 0, status, account_id } = req.query;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      // Accept UUID or slug; normalize to slug for legacy columns
+      if (tenant_id && isUUID(String(tenant_id))) {
+        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
       }
 
       // Build query with optional filters
@@ -85,13 +91,18 @@ export default function createContactRoutes(pgPool) {
   // GET /api/contacts/search - Search contacts by name/email/phone
   router.get('/search', async (req, res) => {
     try {
-      const { tenant_id, q = '', limit = 25, offset = 0 } = req.query;
+      let { tenant_id, q = '', limit = 25, offset = 0 } = req.query;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
       if (!q || !q.trim()) {
         return res.status(400).json({ status: 'error', message: 'q is required' });
+      }
+
+      // Accept UUID or slug; normalize to slug for legacy columns
+      if (tenant_id && isUUID(String(tenant_id))) {
+        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
       }
 
       const like = `%${q}%`;
@@ -146,7 +157,7 @@ export default function createContactRoutes(pgPool) {
   router.post('/', async (req, res) => {
     try {
       const {
-        tenant_id,
+        tenant_id: incomingTenantId,
         first_name,
         last_name,
         email,
@@ -157,9 +168,14 @@ export default function createContactRoutes(pgPool) {
         ...otherFields
       } = req.body || {};
 
-      if (!tenant_id) {
+      if (!incomingTenantId) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
+
+      // Accept UUID or slug; normalize to slug for legacy columns
+      const tenant_id = isUUID(String(incomingTenantId))
+        ? await resolveTenantSlug(pgPool, String(incomingTenantId))
+        : incomingTenantId;
 
       // Validate required name fields
       if (!first_name || !first_name.trim()) {
@@ -219,10 +235,15 @@ export default function createContactRoutes(pgPool) {
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query || {};
+      let { tenant_id } = req.query || {};
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      // Accept UUID or slug; normalize to slug for legacy columns
+      if (tenant_id && isUUID(String(tenant_id))) {
+        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
       }
 
       const result = await pgPool.query(

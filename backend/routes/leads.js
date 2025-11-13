@@ -5,6 +5,7 @@
 
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
+import { resolveTenantSlug, isUUID } from '../lib/tenantResolver.js';
 import { logEntityTransition } from '../lib/transitions.js';
 
 export default function createLeadRoutes(pgPool) {
@@ -28,7 +29,12 @@ export default function createLeadRoutes(pgPool) {
   // GET /api/leads - List leads
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, status, account_id, limit = 50, offset = 0 } = req.query;
+      let { tenant_id, status, account_id, limit = 50, offset = 0 } = req.query;
+
+      // Accept UUID or slug; normalize to slug for legacy columns
+      if (tenant_id && isUUID(String(tenant_id))) {
+        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
+      }
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });

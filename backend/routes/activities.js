@@ -1,5 +1,6 @@
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
+import { resolveTenantSlug, isUUID } from '../lib/tenantResolver.js';
 
 export default function createActivityRoutes(pgPool) {
   const router = express.Router();
@@ -40,13 +41,18 @@ export default function createActivityRoutes(pgPool) {
   // GET /api/activities - List activities with filtering
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id } = req.query;
+      let { tenant_id } = req.query;
 
       if (!tenant_id) {
         return res.status(400).json({
           status: 'error',
           message: 'tenant_id is required'
         });
+      }
+
+      // Accept UUID or slug; normalize to slug for legacy columns
+      if (tenant_id && isUUID(String(tenant_id))) {
+        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
       }
 
       // Parse limit/offset if provided; default to generous limits for local dev
@@ -65,8 +71,8 @@ export default function createActivityRoutes(pgPool) {
       };
 
       // Build dynamic WHERE clause safely
-      const where = ['tenant_id = $1'];
-      const params = [tenant_id];
+  const where = ['tenant_id = $1'];
+  const params = [tenant_id];
 
       // Map simple equals filters on top-level columns
       const simpleEq = [
@@ -199,7 +205,7 @@ export default function createActivityRoutes(pgPool) {
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query || {};
+      let { tenant_id } = req.query || {};
       
         console.log(`[Activities GET /:id] Requested ID: ${id}, Tenant: ${tenant_id}`);
       
@@ -209,6 +215,11 @@ export default function createActivityRoutes(pgPool) {
             status: 'error',
             message: 'tenant_id is required'
           });
+        }
+
+        // Accept UUID or slug; normalize to slug for legacy columns
+        if (tenant_id && isUUID(String(tenant_id))) {
+          tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
         }
 
         // Query with tenant_id scoping first, then id, and limit 1 for safety
@@ -261,7 +272,7 @@ export default function createActivityRoutes(pgPool) {
       // Map to schema + keep remaining fields in metadata for forward compatibility
       const bodyText = activity.description ?? activity.body ?? null;
       const {
-        tenant_id,
+        tenant_id: incomingTenantId,
         type,
         subject,
         related_id,
@@ -282,6 +293,11 @@ export default function createActivityRoutes(pgPool) {
           $1, $2, $3, $4, $5, $6
         ) RETURNING *
       `;
+
+      // Accept UUID or slug; normalize to slug for legacy columns
+      const tenant_id = isUUID(String(incomingTenantId))
+        ? await resolveTenantSlug(pgPool, String(incomingTenantId))
+        : incomingTenantId;
 
       const values = [
         tenant_id,

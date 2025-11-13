@@ -6,14 +6,24 @@
 import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
 import { logEntityTransition } from '../lib/transitions.js';
+import { validateTenantAccess } from '../middleware/validateTenant.js';
+import { resolveTenantSlug, isUUID } from '../lib/tenantResolver.js';
 
 export default function createBizDevSourceRoutes(pgPool) {
   const router = express.Router();
 
+  // Enforce tenant scoping and defaults
+  router.use(validateTenantAccess);
+
   // Get all bizdev sources (with optional filtering)
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, status, source_type, priority } = req.query;
+      let { tenant_id, status, source_type, priority } = req.query;
+
+      // Accept UUID or slug; normalize to slug for legacy columns
+      if (tenant_id && isUUID(String(tenant_id))) {
+        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
+      }
       
       let query = 'SELECT * FROM bizdev_sources WHERE 1=1';
       const params = [];
@@ -64,9 +74,14 @@ export default function createBizDevSourceRoutes(pgPool) {
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query || {};
+      let { tenant_id } = req.query || {};
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
+
+      // Accept UUID or slug; normalize to slug for legacy columns
+      if (tenant_id && isUUID(String(tenant_id))) {
+        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
+      }
       
       const result = await pgPool.query(
         'SELECT * FROM bizdev_sources WHERE tenant_id = $1 AND id = $2 LIMIT 1',
@@ -102,7 +117,7 @@ export default function createBizDevSourceRoutes(pgPool) {
   router.post('/', async (req, res) => {
     try {
       const {
-        tenant_id,
+        tenant_id: incomingTenantId,
         source_name,
         source_type,
         source_url,
@@ -120,12 +135,17 @@ export default function createBizDevSourceRoutes(pgPool) {
         is_test_data
       } = req.body;
 
-      if (!tenant_id || !source_name) {
+      if (!incomingTenantId || !source_name) {
         return res.status(400).json({
           status: 'error',
           message: 'tenant_id and source_name are required'
         });
       }
+
+      // Accept UUID or slug; normalize to slug for legacy columns
+      const tenant_id = isUUID(String(incomingTenantId))
+        ? await resolveTenantSlug(pgPool, String(incomingTenantId))
+        : incomingTenantId;
 
       const result = await pgPool.query(
         `INSERT INTO bizdev_sources (
@@ -162,7 +182,7 @@ export default function createBizDevSourceRoutes(pgPool) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query || {};
+      let { tenant_id } = req.query || {};
       const {
         source_name,
         source_type,
@@ -182,6 +202,11 @@ export default function createBizDevSourceRoutes(pgPool) {
       } = req.body;
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
+
+      // Accept UUID or slug; normalize to slug for legacy columns
+      if (tenant_id && isUUID(String(tenant_id))) {
+        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
+      }
 
       const result = await pgPool.query(
         `UPDATE bizdev_sources SET
@@ -237,9 +262,14 @@ export default function createBizDevSourceRoutes(pgPool) {
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query || {};
+      let { tenant_id } = req.query || {};
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
+
+      // Accept UUID or slug; normalize to slug for legacy columns
+      if (tenant_id && isUUID(String(tenant_id))) {
+        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
+      }
       
       const result = await pgPool.query(
         'DELETE FROM bizdev_sources WHERE tenant_id = $1 AND id = $2 RETURNING *',
@@ -274,7 +304,12 @@ export default function createBizDevSourceRoutes(pgPool) {
     try {
   const { id } = req.params;
   // Default delete_source to false to retain promoted sources for UX (grayed out + stats)
-  const { tenant_id, performed_by, delete_source = false } = req.body;
+  const { tenant_id: incomingTenantId, performed_by, delete_source = false } = req.body;
+
+      // Accept UUID or slug; normalize to slug for legacy columns
+      const tenant_id = isUUID(String(incomingTenantId))
+        ? await resolveTenantSlug(pgPool, String(incomingTenantId))
+        : incomingTenantId;
 
       console.log('[Promote BizDev Source] Request received:', { id, tenant_id, body: req.body, supportsTx });
 
@@ -299,7 +334,7 @@ export default function createBizDevSourceRoutes(pgPool) {
       const selectSql = supportsTx
         ? 'SELECT * FROM bizdev_sources WHERE id = $1 AND tenant_id = $2 LIMIT 1 FOR UPDATE'
         : 'SELECT * FROM bizdev_sources WHERE id = $1 AND tenant_id = $2 LIMIT 1';
-      const sourceResult = await client.query(selectSql, [id, tenant_id]);
+  const sourceResult = await client.query(selectSql, [id, tenant_id]);
 
       if (sourceResult.rows.length === 0) {
         if (supportsTx) { try { await client.query('ROLLBACK'); } catch { /* noop */ } }

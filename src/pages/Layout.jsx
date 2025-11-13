@@ -887,17 +887,18 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       setUserError(null);
       await reloadUser();
       // Fetch AI API key silently for the (new) current user context
-      getOrCreateUserApiKey()
-        .then((response) => {
-          if (response?.data?.apiKey) {
-            setElevenLabsApiKey(response.data.apiKey);
-          }
-        })
-        .catch((err) => {
-          if (import.meta.env.DEV) {
+      // Only in dev mode to avoid production warnings
+      if (import.meta.env.DEV) {
+        getOrCreateUserApiKey()
+          .then((response) => {
+            if (response?.data?.apiKey) {
+              setElevenLabsApiKey(response.data.apiKey);
+            }
+          })
+          .catch((err) => {
             console.debug("AI API key fetch skipped:", err.message);
-          }
-        });
+          });
+      }
     } catch (error) {
       if (import.meta.env.DEV) {
         console.debug("User reload error (ignored):", error?.message || error);
@@ -2665,6 +2666,48 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             --chatbox-bg: rgba(255, 255, 255, 0) !important; /* fully transparent in light theme */
             --chatbox-border: rgba(226, 232, 240, 0.75); /* slate-200 @ 75% */
           }
+
+          /* BUTTONS - Make blue buttons MUCH more visible in light theme */
+          .theme-light .bg-blue-600,
+          .theme-light button.bg-blue-600,
+          .theme-light a.bg-blue-600,
+          .theme-light [role="button"].bg-blue-600,
+          .theme-light [class*="bg-blue-600"] {
+            background-color: #1e40af !important; /* blue-800 - very dark */
+            color: #ffffff !important;
+            border: 1px solid #1e3a8a !important; /* blue-900 border */
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.2) !important;
+          }
+          .theme-light .bg-blue-600:hover,
+          .theme-light button.bg-blue-600:hover,
+          .theme-light a.bg-blue-600:hover,
+          .theme-light [role="button"].bg-blue-600:hover,
+          .theme-light [class*="bg-blue-600"]:hover {
+            background-color: #1e3a8a !important; /* blue-900 - even darker on hover */
+            box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.3) !important;
+          }
+          .theme-light .hover\\:bg-blue-700:hover,
+          .theme-light .bg-blue-700 {
+            background-color: #1e3a8a !important; /* blue-900 */
+          }
+
+          /* Action icon buttons - make them MUCH more visible in light theme */
+          .theme-light .text-slate-400,
+          .theme-light button.text-slate-400,
+          .theme-light [class*="text-slate-400"] {
+            color: #64748b !important; /* slate-500 - darker gray */
+          }
+          .theme-light .hover\\:text-slate-300:hover,
+          .theme-light button:hover.hover\\:text-slate-300,
+          .theme-light [class*="hover:text-slate-300"]:hover {
+            color: #1e40af !important; /* blue-800 - dark blue on hover */
+          }
+          .theme-light .hover\\:bg-slate-700:hover,
+          .theme-light button:hover.hover\\:bg-slate-700,
+          .theme-light [class*="hover:bg-slate-700"]:hover {
+            background-color: #e2e8f0 !important; /* slate-200 - light gray background */
+          }
+
           .theme-light .bg-slate-900 { background-color: #f8fafc !important; } /* page bg */
           .theme-light .bg-slate-800 { background-color: #ffffff !important; } /* cards/dialogs */
           .theme-light .bg-slate-700 { background-color: #f1f5f9 !important; }

@@ -107,9 +107,14 @@ export default function ContactsPage() {
     let filter = {};
 
     // Tenant filtering
+    // Previous logic required selectedTenantId for admin/superadmin and skipped user.tenant_id fallback
+    // This caused missing tenant_id (400) until tenant dropdown was manually chosen.
+    // New logic: always fall back to user.tenant_id when selectedTenantId is absent.
     if (user.role === "superadmin" || user.role === "admin") {
       if (selectedTenantId) {
         filter.tenant_id = selectedTenantId;
+      } else if (user.tenant_id) {
+        filter.tenant_id = user.tenant_id; // fallback ensures data loads immediately after login
       }
     } else if (user.tenant_id) {
       filter.tenant_id = user.tenant_id;

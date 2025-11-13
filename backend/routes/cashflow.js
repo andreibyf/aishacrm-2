@@ -5,19 +5,29 @@
 
 import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
+import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
+import { resolveTenantSlug, isUUID } from '../lib/tenantResolver.js';
 
 export default function createCashFlowRoutes(pgPool) {
   const router = express.Router();
 
+  // Enforce tenant scoping and employee data scope consistently with other routes
+  router.use(validateTenantAccess);
+  router.use(enforceEmployeeDataScope);
+
   // GET /api/cashflow - List cash flow records
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, limit = 50, offset = 0, type } = req.query;
+      let { tenant_id, limit = 50, offset = 0, type } = req.query;
       if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
       let query = 'SELECT * FROM cash_flow WHERE 1=1';
       const params = [];
       let pc = 1;
+      // Accept UUID or slug; normalize to slug for legacy columns
+      if (tenant_id && isUUID(String(tenant_id))) {
+        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
+      }
       if (tenant_id) { query += ` AND tenant_id = $${pc}`; params.push(tenant_id); pc++; }
       if (type) { query += ` AND type = $${pc}`; params.push(type); pc++; }
       query += ` ORDER BY transaction_date DESC LIMIT $${pc} OFFSET $${pc + 1}`;
@@ -42,7 +52,11 @@ export default function createCashFlowRoutes(pgPool) {
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query || {};
+      let { tenant_id } = req.query || {};
+      // Accept UUID or slug; normalize
+      if (tenant_id && isUUID(String(tenant_id))) {
+        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
+      }
       if (!validateTenantScopedId(id, tenant_id, res)) return;
       if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
       const result = await pgPool.query('SELECT * FROM cash_flow WHERE tenant_id = $1 AND id = $2 LIMIT 1', [tenant_id, id]);
@@ -64,9 +78,14 @@ export default function createCashFlowRoutes(pgPool) {
       }
       if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
+      // Normalize tenant_id if UUID provided
+      const resolvedTenantId = isUUID(String(c.tenant_id))
+        ? await resolveTenantSlug(pgPool, String(c.tenant_id))
+        : c.tenant_id;
+
       const query = `INSERT INTO cash_flow (tenant_id, transaction_date, amount, type, category, description, account_id, metadata)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`;
-      const vals = [c.tenant_id, c.transaction_date, c.amount, c.type, c.category || null, c.description || null, c.account_id || null, JSON.stringify(c.metadata || {})];
+      const vals = [resolvedTenantId, c.transaction_date, c.amount, c.type, c.category || null, c.description || null, c.account_id || null, JSON.stringify(c.metadata || {})];
       const result = await pgPool.query(query, vals);
       res.status(201).json({ status: 'success', message: 'Created', data: { cashflow: result.rows[0] } });
     } catch (error) {
@@ -79,9 +98,12 @@ export default function createCashFlowRoutes(pgPool) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query || {};
+      let { tenant_id } = req.query || {};
       const u = req.body;
 
+      if (tenant_id && isUUID(String(tenant_id))) {
+        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
+      }
       if (!validateTenantScopedId(id, tenant_id, res)) return;
       if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
@@ -109,8 +131,11 @@ export default function createCashFlowRoutes(pgPool) {
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query || {};
+      let { tenant_id } = req.query || {};
 
+      if (tenant_id && isUUID(String(tenant_id))) {
+        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
+      }
       if (!validateTenantScopedId(id, tenant_id, res)) return;
       if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
@@ -128,8 +153,34 @@ export default function createCashFlowRoutes(pgPool) {
   // GET /api/cashflow/summary - Get cash flow summary
   router.get('/summary', async (req, res) => {
     try {
-      const { tenant_id, start_date, end_date } = req.query;
-      res.json({ status: 'success', data: { tenant_id, period: { start_date, end_date }, income: 0, expenses: 0, net: 0 } });
+      let { tenant_id, start_date, end_date } = req.query;
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      // Normalize tenant id
+      if (tenant_id && isUUID(String(tenant_id))) {
+        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
+      }
+
+      const params = [tenant_id];
+      let pc = 2;
+      let where = 'WHERE tenant_id = $1';
+      if (start_date) { where += ` AND transaction_date >= $${pc}`; params.push(start_date); pc++; }
+      if (end_date) { where += ` AND transaction_date <= $${pc}`; params.push(end_date); pc++; }
+
+      const sql = `
+        SELECT 
+          COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS income,
+          COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS expenses
+        FROM cash_flow
+        ${where}
+      `;
+      const result = await pgPool.query(sql, params);
+      const income = Number(result.rows?.[0]?.income || 0);
+      const expenses = Number(result.rows?.[0]?.expenses || 0);
+      const net = income - expenses;
+
+      res.json({ status: 'success', data: { tenant_id, period: { start_date: start_date || null, end_date: end_date || null }, income, expenses, net } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }
