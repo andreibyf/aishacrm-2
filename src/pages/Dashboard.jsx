@@ -207,9 +207,9 @@ export default function DashboardPage() {
           tenantFilter.assigned_to = user.email;
         }
 
-        // Test data filtering
+        // Test data filtering - use simple boolean
         if (!showTestData) {
-          tenantFilter.is_test_data = { $ne: true };
+          tenantFilter.is_test_data = false;
         }
 
         // Guard: ensure we have a valid tenant_id before loading data
