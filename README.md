@@ -1,8 +1,30 @@
 # Aisha CRM
 
-**Your Independent CRM System** - Built with React + Vite frontend and Node.js backend.
+**AI-SHA CRM: AI Super Hi-performing Assistant** - Comprehensive Executive Assistant powered by Braid SDK.
 
-Originally powered by Ai-SHA, now transitioning to your own independent infrastructure for complete control and zero vendor dependency.
+Built with React + Vite frontend and Node.js backend, featuring 27+ AI-native tools for full CRM lifecycle management.
+
+## ✨ What Makes AI-SHA Special
+
+### 🤖 Executive Assistant, Not Just CRM
+AI-SHA isn't a traditional CRM with AI features bolted on. It's an **Executive Assistant** that manages your entire business workflow:
+
+- **Create & Update Records:** Accounts, leads, contacts, opportunities
+- **Calendar Management:** Schedule meetings, detect conflicts, suggest alternatives
+- **Note Taking:** Capture meeting notes, search across all records
+- **Sales Pipeline:** Track opportunities, forecast revenue, manage stages
+- **Web Research:** Search companies, enrich data, validate information
+
+### 🚀 Powered by Braid SDK
+Braid is an **AI-native language designed by LLMs, for LLMs** with:
+
+- **Type Safety:** LLMs generate correct tool calls (no parameter hallucination)
+- **Capability Enforcement:** Explicit effect declarations (`!net`, `!clock`, `!fs`)
+- **Tenant Isolation:** Automatic `tenant_id` injection prevents data leaks
+- **Audit Logging:** Every action tracked for compliance
+- **Result Types:** `Result<T, E>` for explicit error handling
+
+**27 Production Tools** across 7 domains - see [EXECUTIVE_ASSISTANT_TRANSFORMATION.md](./EXECUTIVE_ASSISTANT_TRANSFORMATION.md) for full details.
 
 ## 🚨 Critical: Read This First
 

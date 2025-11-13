@@ -1,0 +1,237 @@
+#!/usr/bin/env node
+/**
+ * Braid Testing Framework
+ * Property-based testing for pure functions, effect mocking for !net,clock
+ */
+
+import fs from 'fs/promises';
+import path from 'path';
+import { parse } from './braid-parse.js';
+import { transpileToJS } from './braid-transpile.js';
+import { Ok, Err, CRM_POLICIES } from './braid-rt.js';
+
+// Mock effect dependencies for testing
+function createMockDeps(overrides = {}) {
+  return {
+    http: {
+      get: overrides.http?.get || (async () => ({ tag: 'Ok', data: { test: true } })),
+      post: overrides.http?.post || (async () => ({ tag: 'Ok', data: { created: true } })),
+      put: overrides.http?.put || (async () => ({ tag: 'Ok', data: { updated: true } })),
+      delete: overrides.http?.delete || (async () => ({ tag: 'Ok', data: { deleted: true } }))
+    },
+    clock: {
+      now: overrides.clock?.now || (() => '2025-01-01T00:00:00.000Z'),
+      sleep: overrides.clock?.sleep || (async (ms) => ms)
+    },
+    fs: null, // Disabled
+    rng: {
+      random: overrides.rng?.random || (() => 0.5),
+      uuid: overrides.rng?.uuid || (() => '00000000-0000-0000-0000-000000000000')
+    }
+  };
+}
+
+// Test runner
+class BraidTestRunner {
+  constructor() {
+    this.tests = [];
+    this.passed = 0;
+    this.failed = 0;
+  }
+
+  test(name, fn) {
+    this.tests.push({ name, fn });
+  }
+
+  async run() {
+    console.log(`\n🧪 Running ${this.tests.length} Braid tests...\n`);
+    
+    for (const { name, fn } of this.tests) {
+      try {
+        await fn();
+        this.passed++;
+        console.log(`✅ ${name}`);
+      } catch (error) {
+        this.failed++;
+        console.log(`❌ ${name}`);
+        console.log(`   ${error.message}`);
+        if (error.stack) console.log(`   ${error.stack.split('\n')[1]}`);
+      }
+    }
+    
+    console.log(`\n📊 Results: ${this.passed} passed, ${this.failed} failed\n`);
+    return this.failed === 0;
+  }
+}
+
+// Assertion helpers
+function assertEqual(actual, expected, message = '') {
+  const a = JSON.stringify(actual);
+  const e = JSON.stringify(expected);
+  if (a !== e) {
+    throw new Error(`${message}\n  Expected: ${e}\n  Actual: ${a}`);
+  }
+}
+
+function assertOk(result, message = 'Expected Ok result') {
+  if (result.tag !== 'Ok') {
+    throw new Error(`${message}\n  Got: ${JSON.stringify(result)}`);
+  }
+}
+
+function assertErr(result, message = 'Expected Err result') {
+  if (result.tag !== 'Err') {
+    throw new Error(`${message}\n  Got: ${JSON.stringify(result)}`);
+  }
+}
+
+// Property-based test generators
+function* integers(min = 0, max = 100, count = 20) {
+  for (let i = 0; i < count; i++) {
+    yield Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+}
+
+function* strings(length = 10, count = 20) {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  for (let i = 0; i < count; i++) {
+    let s = '';
+    for (let j = 0; j < length; j++) {
+      s += chars[Math.floor(Math.random() * chars.length)];
+    }
+    yield s;
+  }
+}
+
+// Test Suite
+async function runTests() {
+  const runner = new BraidTestRunner();
+  
+  // Test 1: Parser handles type declarations
+  runner.test('Parser: Type declarations', async () => {
+    const source = `
+      type Result<T, E> = Ok<T> | Err<E>
+      type Account = { id: String, name: String }
+    `;
+    const ast = parse(source);
+    assertEqual(ast.items.length, 2, 'Should parse 2 type declarations');
+    assertEqual(ast.items[0].type, 'TypeDecl');
+    assertEqual(ast.items[0].name, 'Result');
+    assertEqual(ast.items[0].typeParams.length, 2);
+  });
+  
+  // Test 2: Transpiler generates correct imports
+  runner.test('Transpiler: Import generation', async () => {
+    const source = `
+      import { Ok, Err } from "./types.braid"
+      fn test() -> Number {
+        return 42;
+      }
+    `;
+    const ast = parse(source);
+    const { code } = transpileToJS(ast);
+    if (!code.includes('import { Ok, Err }')) {
+      throw new Error('Transpiler should generate import statement');
+    }
+  });
+  
+  // Test 3: Effect enforcement
+  runner.test('Runtime: Effect denial', async () => {
+    const policy = { allow_effects: ['clock'], audit_log: false };
+    const { cap } = await import('./braid-rt.js');
+    
+    try {
+      cap(policy, 'net');
+      throw new Error('Should have thrown capability error');
+    } catch (error) {
+      if (!error.message.includes('denied')) {
+        throw error;
+      }
+    }
+  });
+  
+  // Test 4: Tenant isolation
+  runner.test('Runtime: Tenant isolation injection', async () => {
+    const policy = {
+      ...CRM_POLICIES.READ_ONLY,
+      context: { tenant_id: 'test-tenant', user_id: 'user-123' }
+    };
+    const mockDeps = createMockDeps({
+      http: {
+        get: async (url, opts) => {
+          assertEqual(opts.params.tenant_id, 'test-tenant', 'Tenant ID should be injected');
+          return { tag: 'Ok', data: {} };
+        }
+      }
+    });
+    
+    const { IO } = await import('./braid-rt.js');
+    const io = IO(policy, mockDeps);
+    await io.http.get('/test', { params: {} });
+  });
+  
+  // Test 5: Result type pattern matching
+  runner.test('Transpiler: Match expression', async () => {
+    const source = `
+      fn handleResult(r: Result) -> String {
+        return match r {
+          Ok{value} => value,
+          Err{error} => error,
+          _ => "unknown"
+        };
+      }
+    `;
+    const ast = parse(source);
+    const { code } = transpileToJS(ast);
+    if (!code.includes('switch')) {
+      throw new Error('Match should transpile to switch');
+    }
+  });
+  
+  // Test 6: Property-based: Pure function consistency
+  runner.test('Property: Array length preservation', async () => {
+    const source = `
+      fn doubleArray(arr: Array) -> Array {
+        return map(arr, (x) => x * 2);
+      }
+    `;
+    const ast = parse(source);
+    const { code } = transpileToJS(ast, { pure: true });
+    const dataUrl = `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
+    const module = await import(dataUrl);
+    
+    for (const len of integers(0, 50, 10)) {
+      const input = Array.from({length: len}, (_, i) => i);
+      const result = await module.doubleArray();
+      assertEqual(result.value.length, len, `Array length should be preserved for ${len} elements`);
+    }
+  });
+  
+  // Test 7: Mock HTTP dependency
+  runner.test('Integration: Mocked HTTP call', async () => {
+    const mockDeps = createMockDeps({
+      http: {
+        get: async () => ({ 
+          tag: 'Ok', 
+          data: { accounts: [{ id: '1', name: 'Test Corp' }] } 
+        })
+      }
+    });
+    
+    const { IO } = await import('./braid-rt.js');
+    const io = IO(CRM_POLICIES.READ_ONLY, mockDeps);
+    const result = await io.http.get('/api/snapshot');
+    
+    assertOk(result, 'Mock HTTP should return Ok');
+    assertEqual(result.data.accounts[0].name, 'Test Corp');
+  });
+  
+  return await runner.run();
+}
+
+// CLI
+if (import.meta.url === `file://${process.argv[1]}`) {
+  runTests().then(success => process.exit(success ? 0 : 1));
+}
+
+export { BraidTestRunner, assertEqual, assertOk, assertErr, createMockDeps, integers, strings };

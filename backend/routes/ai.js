@@ -6,6 +6,7 @@
 import express from 'express';
 import { createChatCompletion, buildSystemPrompt, getOpenAIClient } from '../lib/aiProvider.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import { summarizeToolResult, BRAID_SYSTEM_PROMPT, generateToolSchemas, executeBraidTool } from '../lib/braidIntegration-v2.js';
 
 const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
@@ -203,98 +204,7 @@ export default function createAIRoutes(pgPool) {
     return null;
   };
 
-  // Fetch a lightweight snapshot of tenant data for tool usage.
-  // Handles historical inconsistency where some rows were written with tenant_id = tenant UUID instead of slug.
-  // Attempts primary lookup by slug, then (if empty) fallback lookup by tenant UUID.
-  const fetchTenantSnapshot = async (tenantIdSlug, tenantUuid = null, options = {}) => {
-    const limitRaw = options.limit ?? options.activities_limit ?? 5;
-    const safeLimit = Math.min(Math.max(Number(limitRaw) || 5, 1), 10);
-    const segmentsAll = ['activities', 'opportunities', 'leads', 'accounts', 'contacts'];
-
-    const scopeRaw = options.scope;
-    let segments = [];
-    if (Array.isArray(scopeRaw)) {
-      segments = scopeRaw.map((item) => String(item || '').toLowerCase()).filter((item) => segmentsAll.includes(item));
-    } else if (typeof scopeRaw === 'string') {
-      const entry = scopeRaw.toLowerCase();
-      if (segmentsAll.includes(entry)) {
-        segments = [entry];
-      }
-    }
-
-    if (segments.length === 0) {
-      segments = segmentsAll;
-    }
-
-    const snapshot = {
-      tenant_id: tenantIdSlug,
-      generated_at: new Date().toISOString(),
-      summary: {},
-    };
-
-    const tryDualTenantQuery = async (table, columns, orderCol = 'updated_at') => {
-      // Primary query by slug
-      let { data, error } = await supa
-        .from(table)
-        .select(columns)
-        .eq('tenant_id', tenantIdSlug)
-        .order(orderCol, { ascending: false })
-        .limit(safeLimit);
-      if (error) {
-        return { rows: [], count: 0, error }; // return error for optional logging
-      }
-      if ((data?.length || 0) === 0 && tenantUuid && tenantUuid !== tenantIdSlug) {
-        // Fallback: rows may have been inserted with tenant UUID mistakenly stored in tenant_id (TEXT)
-        const fallback = await supa
-          .from(table)
-          .select(columns)
-          .eq('tenant_id', tenantUuid)
-          .order(orderCol, { ascending: false })
-          .limit(safeLimit);
-        if (!fallback.error && (fallback.data?.length || 0) > 0) {
-          return { rows: fallback.data, count: fallback.data.length, usedFallback: true };
-        }
-      }
-      return { rows: data || [], count: data?.length || 0, usedFallback: false };
-    };
-
-    if (segments.includes('activities')) {
-      const result = await tryDualTenantQuery('activities', 'id, subject, status, type, due_date, owner_id, created_at', 'created_at');
-      snapshot.activities = result.rows;
-      snapshot.summary.activities_count = result.count;
-      if (result.usedFallback) snapshot.summary.activities_fallback_used = true;
-    }
-
-    if (segments.includes('opportunities')) {
-      const result = await tryDualTenantQuery('opportunities', 'id, name, stage, amount, close_date, owner_id, probability, updated_at');
-      snapshot.opportunities = result.rows;
-      snapshot.summary.opportunities_count = result.count;
-      if (result.usedFallback) snapshot.summary.opportunities_fallback_used = true;
-    }
-
-    if (segments.includes('leads')) {
-      const result = await tryDualTenantQuery('leads', 'id, first_name, last_name, email, status, company, source, owner_id, created_at', 'created_at');
-      snapshot.leads = result.rows;
-      snapshot.summary.leads_count = result.count;
-      if (result.usedFallback) snapshot.summary.leads_fallback_used = true;
-    }
-
-    if (segments.includes('accounts')) {
-      const result = await tryDualTenantQuery('accounts', 'id, name, industry, owner_id, annual_revenue, website, updated_at');
-      snapshot.accounts = result.rows;
-      snapshot.summary.accounts_count = result.count;
-      if (result.usedFallback) snapshot.summary.accounts_fallback_used = true;
-    }
-
-    if (segments.includes('contacts')) {
-      const result = await tryDualTenantQuery('contacts', 'id, first_name, last_name, email, job_title, account_id, owner_id, updated_at');
-      snapshot.contacts = result.rows;
-      snapshot.summary.contacts_count = result.count;
-      if (result.usedFallback) snapshot.summary.contacts_fallback_used = true;
-    }
-
-    return snapshot;
-  };
+  // Note: Tool execution is handled by Braid SDK via executeBraidTool()
 
   const insertAssistantMessage = async (conversationId, content, metadata = {}) => {
     try {
@@ -325,14 +235,8 @@ export default function createAIRoutes(pgPool) {
   };
 
   const executeToolCall = async ({ toolName, args, tenantRecord }) => {
-    switch (toolName) {
-      case 'fetch_tenant_snapshot': {
-        // Use tenant slug primarily; attempt fallback to tenant UUID if historical data stored incorrectly
-        return fetchTenantSnapshot(tenantRecord.tenant_id, tenantRecord.id, args || {});
-      }
-      default:
-        return { error: `Unsupported tool: ${toolName}` };
-    }
+    // Route execution through Braid SDK tool registry
+    return await executeBraidTool(toolName, args || {}, tenantRecord, null);
   };
 
   const generateAssistantResponse = async ({
@@ -399,7 +303,15 @@ export default function createAIRoutes(pgPool) {
         .order('created_date', { ascending: true });
 
       const tenantName = conversationMetadata?.tenant_name || tenantRecord?.name || tenantSlug || 'CRM Tenant';
-      const systemPrompt = `${buildSystemPrompt({ tenantName })}\n\nUse the available CRM tools to fetch data before answering. Only reference data returned by the tools to guarantee tenant isolation.`;
+      const systemPrompt = `${buildSystemPrompt({ tenantName })}
+
+${BRAID_SYSTEM_PROMPT}
+
+**CRITICAL INSTRUCTIONS:**
+- You MUST call fetch_tenant_snapshot tool before answering ANY questions about CRM data
+- NEVER assume or guess data - always use tools to fetch current information
+- When asked about revenue, accounts, leads, or any CRM metrics, fetch the data first
+- Only reference data returned by the tools to guarantee tenant isolation`;
 
       const messages = [
         { role: 'system', content: systemPrompt },
@@ -415,34 +327,38 @@ export default function createAIRoutes(pgPool) {
       const rawTemperature = requestDescriptor.temperatureOverride ?? conversationMetadata?.temperature ?? 0.2;
       const temperature = Math.min(Math.max(Number(rawTemperature) || 0.2, 0), 2);
 
-      const tools = [
-        {
+      const tools = await generateToolSchemas();
+      console.log('[AI DEBUG] generateToolSchemas() returned', tools?.length || 0, 'tools');
+      if (!tools || tools.length === 0) {
+        console.warn('[AI DEBUG] No Braid tools loaded; falling back to minimal snapshot tool definition');
+        // Fallback legacy single tool to avoid hallucinations
+        tools.push({
           type: 'function',
           function: {
             name: 'fetch_tenant_snapshot',
-            description: 'Retrieve a fresh summary of CRM data (activities, opportunities, leads, accounts, contacts) for the current tenant. Use this before answering questions that require factual data.',
+            description: 'Fallback: retrieve CRM snapshot (accounts, leads, contacts, opportunities, activities). Use before answering tenant data questions.',
             parameters: {
               type: 'object',
               properties: {
-                scope: {
-                  type: 'string',
-                  description: 'Optional area to focus on. One of activities, opportunities, leads, accounts, contacts.',
-                },
-                limit: {
-                  type: 'integer',
-                  description: 'Maximum number of records per category (1-10). Defaults to 5.',
-                  minimum: 1,
-                  maximum: 10,
-                },
-              },
-            },
-          },
-        },
-      ];
+                scope: { type: 'string', description: 'Optional single category to fetch' },
+                limit: { type: 'integer', description: 'Max records per category (1-10)', minimum: 1, maximum: 10 }
+              }
+            }
+          }
+        });
+      } else {
+        console.log('[AI DEBUG] Tool names:', tools.map(t => t.function?.name).join(', '));
+      }
 
       const executedTools = [];
       let assistantResponded = false;
       let conversationMessages = [...messages];
+
+      // DEBUG: Log what we're sending to OpenAI
+      console.log('[AI DEBUG] System prompt length:', systemPrompt.length);
+      console.log('[AI DEBUG] Tools available:', tools.map(t => t.function.name));
+      console.log('[AI DEBUG] First message role:', conversationMessages[0]?.role);
+      console.log('[AI DEBUG] Last user message:', conversationMessages.slice().reverse().find(m => m.role === 'user')?.content?.slice(0, 100));
 
       for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
         const response = await client.chat.completions.create({
@@ -491,7 +407,29 @@ export default function createAIRoutes(pgPool) {
                 args: parsedArgs,
                 tenantRecord,
               });
-              console.log(`[AI Tool Execution] ${toolName} for tenant ${tenantRecord.tenant_id}:`, JSON.stringify(toolResult, null, 2));
+              console.log(`[AI Tool Execution] ${toolName} for tenant ${tenantRecord.tenant_id}:`);
+              console.log('  Result type:', typeof toolResult);
+              console.log('  Result tag:', toolResult?.tag);
+              console.log('  Result keys:', Object.keys(toolResult || {}));
+              console.log('  Full result (truncated):', JSON.stringify(toolResult, null, 2).substring(0, 500));
+              if (toolResult && toolResult.tag === 'Ok') {
+                try {
+                  const v = toolResult.value;
+                  const keys = v && typeof v === 'object' ? Object.keys(v) : [];
+                  console.log('  Ok.value keys:', keys);
+                  if (v && v.accounts) {
+                    console.log('  Snapshot counts:', {
+                      accounts: v.accounts?.length || 0,
+                      leads: v.leads?.length || 0,
+                      contacts: v.contacts?.length || 0,
+                      opportunities: v.opportunities?.length || 0,
+                      activities: v.activities?.length || 0
+                    });
+                  }
+                } catch (e) {
+                  console.warn('[AI Tool Execution] failed to introspect Ok.value:', e.message || e);
+                }
+              }
             } catch (toolError) {
               toolResult = { error: toolError.message || String(toolError) };
               console.error(`[AI Tool Execution] ${toolName} error:`, toolError);
@@ -503,11 +441,20 @@ export default function createAIRoutes(pgPool) {
               result_preview: typeof toolResult === 'string' ? toolResult.slice(0, 500) : JSON.stringify(toolResult).slice(0, 500),
             });
 
-            const toolContent = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
+            // Generate human-readable summary for better LLM comprehension
+            const summary = summarizeToolResult(toolResult, toolName);
+            
+            // Send both raw data and summary to LLM
+            const toolContent = typeof toolResult === 'string' 
+              ? toolResult 
+              : JSON.stringify(toolResult);
+            
+            const enhancedContent = `${summary}\n\n--- Raw Data ---\n${toolContent}`;
+            
             conversationMessages.push({
               role: 'tool',
               tool_call_id: call.id,
-              content: toolContent,
+              content: enhancedContent,
             });
           }
 
@@ -727,6 +674,92 @@ export default function createAIRoutes(pgPool) {
       console.error('[AI Routes] Failed to record system log:', logError.message || logError);
     }
   };
+
+  // GET /api/ai/snapshot-internal - Internal snapshot endpoint for Braid tools
+  // Returns CRM snapshot data in Braid-compatible format
+  router.get('/snapshot-internal', async (req, res) => {
+    try {
+      const tenantIdentifier = getTenantId(req) || req.query.tenant_id;
+      const tenantRecord = await resolveTenantRecord(tenantIdentifier);
+
+      if (!tenantRecord?.id) {
+        return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
+      }
+
+  // Fetch accounts
+      const { data: accounts, error: accErr } = await supa
+        .from('accounts')
+        .select('id, name, annual_revenue, industry, website, email, phone, assigned_to, metadata')
+        .eq('tenant_id', tenantRecord.tenant_id)
+        .limit(100);
+      if (accErr) throw accErr;
+
+      // Fetch leads (phone, job_title are direct columns)
+      const { data: leads, error: leadsErr } = await supa
+        .from('leads')
+        .select('id, first_name, last_name, email, company, status, source, phone, job_title, assigned_to')
+        .eq('tenant_id', tenantRecord.tenant_id)
+        .limit(100);
+      if (leadsErr) throw leadsErr;
+
+  // Fetch contacts (phone, job_title, assigned_to are direct columns)
+      const { data: contacts, error: contactsErr } = await supa
+        .from('contacts')
+        .select('id, first_name, last_name, email, phone, job_title, account_id, assigned_to, metadata')
+        .eq('tenant_id', tenantRecord.tenant_id)
+        .limit(100);
+      if (contactsErr) throw contactsErr;
+
+      // Fetch opportunities (include description, assigned_to)
+      const { data: opportunities, error: oppsErr } = await supa
+        .from('opportunities')
+        .select('id, name, amount, stage, probability, close_date, description, account_id, contact_id, assigned_to')
+        .eq('tenant_id', tenantRecord.tenant_id)
+        .limit(100);
+      if (oppsErr) throw oppsErr;
+
+      // Fetch activities
+      const { data: activities, error: actsErr } = await supa
+        .from('activities')
+        .select('id, type, subject, status, due_date, assigned_to')
+        .eq('tenant_id', tenantRecord.tenant_id)
+        .limit(100);
+      if (actsErr) throw actsErr;
+
+      const totalRevenue = (accounts || []).reduce((sum, acc) => sum + (acc.annual_revenue || 0), 0);
+      const totalForecast = (opportunities || []).reduce((sum, opp) => sum + ((opp.amount || 0) * (opp.probability || 0) / 100), 0);
+
+      const snapshot = {
+        accounts: accounts || [],
+        leads: leads || [],
+        contacts: contacts || [],
+        opportunities: opportunities || [],
+        activities: activities || [],
+        summary: {
+          accounts_count: (accounts || []).length,
+          leads_count: (leads || []).length,
+          contacts_count: (contacts || []).length,
+          opportunities_count: (opportunities || []).length,
+          activities_count: (activities || []).length,
+          total_revenue: totalRevenue,
+          total_forecast: totalForecast
+        },
+        metadata: {
+          tenant_id: tenantRecord.tenant_id,
+          tenant_uuid: tenantRecord.id,
+          fetched_at: new Date().toISOString(),
+          scope: req.query.scope || 'all',
+          accounts_fallback_used: false,
+          leads_fallback_used: false
+        }
+      };
+
+      res.json(snapshot);
+    } catch (error) {
+      console.error('[AI Routes] Snapshot error:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
 
   // POST /api/ai/conversations - Create new conversation
   router.post('/conversations', async (req, res) => {

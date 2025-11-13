@@ -1,0 +1,100 @@
+// Executive Assistant Tools - Account Management
+// Create, read, update accounts with full CRM data
+
+import { Result, Account, CRMError } from "../../spec/types.braid"
+
+fn createAccount(
+  tenant: String,
+  name: String,
+  industry: String,
+  annual_revenue: Number,
+  website: String,
+  assigned_to: String
+) -> Result<Account, CRMError> !net {
+  let url = "/api/accounts";
+  let body = {
+    tenant_id: tenant,
+    name: name,
+    industry: industry,
+    annual_revenue: annual_revenue,
+    website: website,
+  assigned_to: assigned_to,
+    metadata: {}
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn updateAccount(
+  tenant: String,
+  account_id: String,
+  updates: Object
+) -> Result<Account, CRMError> !net {
+  let url = "/api/accounts/" + account_id;
+  
+  let response = http.put(url, { body: updates });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getAccountDetails(
+  tenant: String,
+  account_id: String
+) -> Result<Account, CRMError> !net {
+  let url = "/api/accounts/" + account_id;
+  let params = { tenant_id: tenant };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn listAccounts(
+  tenant: String,
+  limit: Number,
+  offset: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/accounts";
+  let params = {
+    tenant_id: tenant,
+    limit: limit,
+    offset: offset
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn deleteAccount(
+  tenant: String,
+  account_id: String
+) -> Result<Boolean, CRMError> !net {
+  let url = "/api/accounts/" + account_id;
+  
+  let response = http.delete(url, {});
+  
+  return match response {
+    Ok{value} => Ok(true),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

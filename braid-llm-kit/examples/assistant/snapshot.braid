@@ -1,0 +1,32 @@
+// Example: CRM Snapshot Fetcher (Production-Ready)
+// Demonstrates: Type safety, effect declaration, tenant isolation, error handling
+
+import { Result, Snapshot, CRMError } from "../spec/types.braid"
+
+fn fetchSnapshot(tenant: String, scope: String, limit: Number) -> Result<Snapshot, CRMError> !net, clock {
+  let url = "/api/ai/snapshot-internal";
+  // Tenant isolation handled via x-tenant-id header injected by runtime; no need to pass params
+  let response = http.get(url, {});
+  // Explicitly unwrap and rewrap to ensure value propagates
+  return match response {
+    Ok{value} => Ok(value),
+    Err{error} => Err(error),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+// Minimal probe to validate Ok(value) propagation end-to-end
+fn probe() -> Result<Object, CRMError> {
+  return Ok({ probe: true });
+}
+
+// AI Tool Usage Example:
+// const policy = CRM_POLICIES.READ_ONLY;  // tenant_isolation=true, allow_effects=['net']
+// const result = await fetchSnapshot(policy, deps, "acme", "accounts", 10);
+// match result { 
+//   Ok{value} => {
+//     // Access: value.accounts[0].annual_revenue (top-level field)
+//     // NOT: value.accounts[0].metadata.revenue_actual (wrong!)
+//   }, 
+//   Err{error} => handleError(error) 
+// }

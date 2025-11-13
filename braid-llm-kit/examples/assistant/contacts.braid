@@ -1,0 +1,92 @@
+// Executive Assistant Tools - Contacts Management
+// Manage business contacts, roles, relationships
+
+import { Result, Contact, CRMError } from "../../spec/types.braid"
+
+fn createContact(
+  tenant: String,
+  first_name: String,
+  last_name: String,
+  email: String,
+  phone: String,
+  job_title: String,
+  account_id: String,
+  assigned_to: String
+) -> Result<Contact, CRMError> !net {
+  let url = "/api/contacts";
+  let body = {
+    tenant_id: tenant,
+    first_name: first_name,
+    last_name: last_name,
+    email: email,
+    phone: phone,
+    job_title: job_title,
+    account_id: account_id,
+  assigned_to: assigned_to,
+    metadata: {}
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn updateContact(
+  tenant: String,
+  contact_id: String,
+  updates: Object
+) -> Result<Contact, CRMError> !net {
+  let url = "/api/contacts/" + contact_id;
+  
+  let response = http.put(url, { body: updates });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn listContactsForAccount(
+  tenant: String,
+  account_id: String
+) -> Result<Array, CRMError> !net {
+  let url = "/api/contacts";
+  let params = {
+    tenant_id: tenant,
+    account_id: account_id
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn searchContacts(
+  tenant: String,
+  query: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/contacts/search";
+  let params = {
+    tenant_id: tenant,
+    q: query,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

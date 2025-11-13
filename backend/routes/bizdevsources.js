@@ -5,6 +5,7 @@
 
 import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
+import { logEntityTransition } from '../lib/transitions.js';
 
 export default function createBizDevSourceRoutes(pgPool) {
   const router = express.Router();
@@ -268,9 +269,10 @@ export default function createBizDevSourceRoutes(pgPool) {
 
   // POST /api/bizdevsources/:id/promote - Promote bizdev source to account
   router.post('/:id/promote', async (req, res) => {
+    const client = await pgPool.connect();
     try {
       const { id } = req.params;
-      const { tenant_id } = req.body;
+      const { tenant_id, performed_by, delete_source = true } = req.body;
 
       console.log('[Promote BizDev Source] Request received:', { id, tenant_id, body: req.body });
 
@@ -281,9 +283,9 @@ export default function createBizDevSourceRoutes(pgPool) {
         });
       }
 
-      // Fetch the bizdev source
-      const sourceResult = await pgPool.query(
-        'SELECT * FROM bizdev_sources WHERE id = $1 AND tenant_id = $2 LIMIT 1',
+      // Fetch the bizdev source (lock)
+      const sourceResult = await client.query(
+        'SELECT * FROM bizdev_sources WHERE id = $1 AND tenant_id = $2 LIMIT 1 FOR UPDATE',
         [id, tenant_id]
       );
 
@@ -343,7 +345,9 @@ export default function createBizDevSourceRoutes(pgPool) {
         }
       };
 
-      const accountResult = await pgPool.query(
+      await client.query('BEGIN');
+
+      const accountResult = await client.query(
         `INSERT INTO accounts (
           tenant_id, name, industry, website, metadata, created_at
         ) VALUES ($1, $2, $3, $4, $5, NOW())
@@ -365,7 +369,7 @@ export default function createBizDevSourceRoutes(pgPool) {
         const [firstName, ...lastNameParts] = source.contact_person.split(' ');
         const lastName = lastNameParts.join(' ');
 
-        const contactResult = await pgPool.query(
+        const contactResult = await client.query(
           `INSERT INTO contacts (
             tenant_id, account_id, first_name, last_name, email, phone, created_at
           ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
@@ -384,7 +388,7 @@ export default function createBizDevSourceRoutes(pgPool) {
       }
 
       // Update bizdev source status to 'Promoted' and store linkage
-      await pgPool.query(
+      await client.query(
         `UPDATE bizdev_sources SET
           status = 'Promoted',
           account_id = $1,
@@ -403,7 +407,7 @@ export default function createBizDevSourceRoutes(pgPool) {
       // Primary linking: metadata.origin_bizdev_source_id
       // Backward compatibility: description contains marker [BizDevSource:<id>]
       try {
-        const linkByMetadata = await pgPool.query(
+        const linkByMetadata = await client.query(
           `UPDATE opportunities
              SET account_id = $1,
                  updated_at = NOW()
@@ -414,7 +418,7 @@ export default function createBizDevSourceRoutes(pgPool) {
           [newAccount.id, tenant_id, id]
         );
 
-        const linkByDescription = await pgPool.query(
+        const linkByDescription = await client.query(
           `UPDATE opportunities
              SET account_id = $1,
                  updated_at = NOW()
@@ -435,6 +439,29 @@ export default function createBizDevSourceRoutes(pgPool) {
         console.warn('[Promote BizDev Source] Failed to link opportunities by origin metadata/description', linkErr);
       }
 
+      // Relink activities from bizdev_source -> account
+      await client.query(
+        `UPDATE activities SET related_to = 'account', related_id = $1, updated_date = now()
+         WHERE tenant_id = $2 AND related_to = 'bizdev_source' AND related_id = $3`,
+        [newAccount.id, tenant_id, id]
+      );
+
+      if (delete_source) {
+        await logEntityTransition(client, {
+          tenant_id,
+          from_table: 'bizdev_sources',
+          from_id: id,
+          to_table: 'accounts',
+          to_id: newAccount.id,
+          action: 'promote',
+          performed_by,
+          snapshot: source,
+        });
+        await client.query('DELETE FROM bizdev_sources WHERE id = $1 AND tenant_id = $2', [id, tenant_id]);
+      }
+
+      await client.query('COMMIT');
+
       res.json({
         status: 'success',
         message: 'BizDev source promoted to account',
@@ -445,6 +472,7 @@ export default function createBizDevSourceRoutes(pgPool) {
         }
       });
     } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* noop */ }
       console.error('Error promoting bizdev source:', error);
       res.status(500).json({
         status: 'error',

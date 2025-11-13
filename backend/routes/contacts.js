@@ -27,7 +27,7 @@ export default function createContactRoutes(pgPool) {
   // GET /api/contacts - List contacts
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, limit = 50, offset = 0, status } = req.query;
+      const { tenant_id, limit = 50, offset = 0, status, account_id } = req.query;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -41,6 +41,10 @@ export default function createContactRoutes(pgPool) {
         params.push(status);
         query += ` AND status = $${params.length}`;
       }
+      if (account_id) {
+        params.push(account_id);
+        query += ` AND account_id = $${params.length}`;
+      }
       
       query += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
       params.push(parseInt(limit), parseInt(offset));
@@ -53,6 +57,10 @@ export default function createContactRoutes(pgPool) {
       if (status) {
         countParams.push(status);
         countQuery += ' AND status = $2';
+      }
+      if (account_id) {
+        countParams.push(account_id);
+        countQuery += ` AND account_id = $${countParams.length}`;
       }
       const countResult = await pgPool.query(countQuery, countParams);
 
@@ -70,6 +78,66 @@ export default function createContactRoutes(pgPool) {
       });
     } catch (error) {
       console.error('Error listing contacts:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // GET /api/contacts/search - Search contacts by name/email/phone
+  router.get('/search', async (req, res) => {
+    try {
+      const { tenant_id, q = '', limit = 25, offset = 0 } = req.query;
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      if (!q || !q.trim()) {
+        return res.status(400).json({ status: 'error', message: 'q is required' });
+      }
+
+      const like = `%${q}%`;
+
+      const searchQuery = `
+        SELECT *
+        FROM contacts
+        WHERE tenant_id = $1
+          AND (
+            first_name ILIKE $2 OR
+            last_name ILIKE $2 OR
+            email ILIKE $2 OR
+            phone ILIKE $2
+          )
+        ORDER BY updated_at DESC
+        LIMIT $3 OFFSET $4
+      `;
+      const searchParams = [tenant_id, like, parseInt(limit), parseInt(offset)];
+      const result = await pgPool.query(searchQuery, searchParams);
+
+      const countQuery = `
+        SELECT COUNT(*)
+        FROM contacts
+        WHERE tenant_id = $1
+          AND (
+            first_name ILIKE $2 OR
+            last_name ILIKE $2 OR
+            email ILIKE $2 OR
+            phone ILIKE $2
+          )
+      `;
+      const countResult = await pgPool.query(countQuery, [tenant_id, like]);
+
+      const contacts = result.rows.map(expandMetadata);
+
+      res.json({
+        status: 'success',
+        data: {
+          contacts,
+          total: parseInt(countResult.rows?.[0]?.count || 0),
+          limit: parseInt(limit),
+          offset: parseInt(offset),
+        },
+      });
+    } catch (error) {
+      console.error('Error searching contacts:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

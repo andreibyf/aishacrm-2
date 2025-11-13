@@ -153,6 +153,52 @@ export default function createReportRoutes(pgPool) {
       });
     }
   });
+  // Analytics: Opportunity pipeline by stage
+  // GET /api/reports/pipeline - Opportunity counts by stage
+  router.get('/pipeline', async (req, res) => {
+    try {
+      const { tenant_id } = req.query;
+      const where = tenant_id ? 'WHERE tenant_id = $1' : '';
+      const params = tenant_id ? [tenant_id] : [];
+      const sql = `SELECT stage, count FROM v_opportunity_pipeline_by_stage ${where} ORDER BY stage`;
+      const result = await pgPool.query(sql, params);
+      res.json({ status: 'success', data: { stages: result.rows } });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // GET /api/reports/lead-status - Lead counts by status
+  router.get('/lead-status', async (req, res) => {
+    try {
+      const { tenant_id } = req.query;
+      const where = tenant_id ? 'WHERE tenant_id = $1' : '';
+      const params = tenant_id ? [tenant_id] : [];
+      const sql = `SELECT status, count FROM v_lead_counts_by_status ${where} ORDER BY status`;
+      const result = await pgPool.query(sql, params);
+      res.json({ status: 'success', data: { statuses: result.rows } });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // GET /api/reports/calendar - Calendar feed from activities
+  router.get('/calendar', async (req, res) => {
+    try {
+      const { tenant_id, from_date, to_date } = req.query;
+      const conds = [];
+      const params = [];
+      if (tenant_id) { params.push(tenant_id); conds.push(`tenant_id = $${params.length}`); }
+      if (from_date) { params.push(from_date); conds.push(`(due_at IS NULL OR due_at >= $${params.length})`); }
+      if (to_date) { params.push(to_date); conds.push(`(due_at IS NULL OR due_at <= $${params.length})`); }
+      const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+      const sql = `SELECT * FROM v_calendar_activities ${where} ORDER BY COALESCE(due_at, created_at)`;
+      const result = await pgPool.query(sql, params);
+      res.json({ status: 'success', data: { activities: result.rows } });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
 
   return router;
 }

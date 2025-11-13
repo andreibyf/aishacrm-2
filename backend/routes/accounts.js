@@ -162,6 +162,23 @@ export default function createAccountRoutes(pgPool) {
     }
   });
 
+  // GET /api/accounts/:id/related-people - Contacts and Leads under the Account
+  router.get('/:id/related-people', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { tenant_id } = req.query || {};
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      const sql = `SELECT * FROM v_account_related_people WHERE tenant_id = $1 AND account_id = $2 ORDER BY created_at DESC`;
+      const result = await pgPool.query(sql, [tenant_id, id]);
+      return res.json({ status: 'success', data: { people: result.rows } });
+    } catch (error) {
+      console.error('[Accounts] related-people error:', error);
+      return res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // PUT /api/accounts/:id - Update account
   router.put("/:id", async (req, res) => {
     try {
