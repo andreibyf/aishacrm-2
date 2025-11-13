@@ -141,6 +141,77 @@ export default function createStorageRoutes(_pgPool) {
     }
   });
 
+  // POST /api/storage/signed-url - Generate signed URL for a file
+  router.post("/signed-url", async (req, res) => {
+    try {
+      const { file_uri, filepath } = req.body;
+      const objectKey = file_uri || filepath;
+
+      if (!objectKey) {
+        return res.status(400).json({
+          status: "error",
+          message: "file_uri or filepath is required",
+        });
+      }
+
+      const supabase = getSupabaseAdmin();
+      const bucket = getBucketName();
+      const expiresIn = 60 * 60 * 24 * 7; // 7 days
+
+      // First try to get public URL
+      const { data: publicUrlData } = supabase.storage.from(bucket)
+        .getPublicUrl(objectKey);
+      
+      let fileUrl = publicUrlData?.publicUrl || null;
+      let isPublicAccessible = false;
+
+      // Check if public URL is accessible
+      if (fileUrl) {
+        try {
+          const resp = await fetch(fileUrl, { method: "HEAD" });
+          isPublicAccessible = resp.ok;
+        } catch {
+          isPublicAccessible = false;
+        }
+      }
+
+      // If not publicly accessible, create signed URL
+      if (!fileUrl || !isPublicAccessible) {
+        const { data: signed, error: signErr } = await supabase.storage
+          .from(bucket)
+          .createSignedUrl(objectKey, expiresIn);
+        
+        if (signErr) {
+          console.error("[storage.signed-url] Error creating signed URL:", signErr);
+          throw signErr;
+        }
+        
+        fileUrl = signed?.signedUrl;
+      }
+
+      if (!fileUrl) {
+        return res.status(404).json({
+          status: "error",
+          message: "Could not generate URL for file",
+        });
+      }
+
+      return res.json({
+        status: "success",
+        data: {
+          signed_url: fileUrl,
+          expires_in: expiresIn,
+        },
+      });
+    } catch (error) {
+      console.error("[storage.signed-url] Error:", error);
+      return res.status(500).json({
+        status: "error",
+        message: error.message || "Failed to generate signed URL",
+      });
+    }
+  });
+
   // GET /api/storage/download/:fileId - Placeholder for future use
   router.get("/download/:fileId", async (req, res) => {
     try {

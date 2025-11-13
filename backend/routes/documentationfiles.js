@@ -38,9 +38,11 @@ export default function createDocumentationFileRoutes(pgPool) {
       // Map fields for frontend compatibility
       file_name: row.filename || metadata.title || 'Untitled',
       file_uri: row.filepath,
+      file_type: row.mimetype || 'unknown',
       title: metadata.title || row.filename,
       category: metadata.category || 'other',
       tags: metadata.tags || [],
+      created_at: row.created_at, // Expose created_at for sorting and display
       // Expose all metadata fields at top level
       ...metadata
     };

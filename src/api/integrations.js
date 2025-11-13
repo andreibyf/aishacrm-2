@@ -66,6 +66,41 @@ export const UploadFile = async ({ file, tenant_id }) => {
   }
 };
 
+/**
+ * CreateFileSignedUrl - Generate signed URL for a file
+ * Works in both local dev and production
+ * @param {Object} params
+ * @param {string} params.file_uri - The file path/URI to get signed URL for
+ */
+export const CreateFileSignedUrl = async ({ file_uri }) => {
+  const backendUrl = getBackendUrl();
+
+  try {
+    const response = await fetch(`${backendUrl}/api/storage/signed-url`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ file_uri }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Failed to get signed URL");
+    }
+
+    const result = await response.json();
+    return {
+      signed_url: result.data.signed_url,
+      expires_in: result.data.expires_in,
+      success: true,
+    };
+  } catch (error) {
+    console.error("[CreateFileSignedUrl] Error:", error);
+    throw error;
+  }
+};
+
 // Mock Core integration object
 const mockCore = {
   InvokeLLM: createMockIntegration("InvokeLLM"),
@@ -74,7 +109,6 @@ const mockCore = {
   ExtractDataFromUploadedFile: createMockIntegration(
     "ExtractDataFromUploadedFile",
   ),
-  CreateFileSignedUrl: createMockIntegration("CreateFileSignedUrl"),
   UploadPrivateFile: createMockIntegration("UploadPrivateFile"),
 };
 
@@ -85,5 +119,4 @@ export const InvokeLLM = Core.InvokeLLM;
 export const SendEmail = Core.SendEmail;
 export const GenerateImage = Core.GenerateImage;
 export const ExtractDataFromUploadedFile = Core.ExtractDataFromUploadedFile;
-export const CreateFileSignedUrl = Core.CreateFileSignedUrl;
 export const UploadPrivateFile = Core.UploadPrivateFile;
