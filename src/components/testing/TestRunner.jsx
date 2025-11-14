@@ -121,6 +121,7 @@ export default function TestRunner({ testSuites }) {
     setRunning(true);
     const allResults = [];
     resultsRef.current = [];
+    console.log('[TestRunner] CLEARING results at start of run');
     setResults([]);
     sessionStorage.removeItem(TEST_RESULTS_KEY);
     // Flag unit test mode for API monitor suppression
@@ -138,6 +139,7 @@ export default function TestRunner({ testSuites }) {
     const flushResults = () => {
       // Batch UI/state updates to reduce flicker
       resultsRef.current = [...allResults];
+      console.log('[TestRunner] flushResults called - setting results to length:', allResults.length);
       setResults([...allResults]);
       try {
         sessionStorage.setItem(TEST_RESULTS_KEY, JSON.stringify(allResults));
@@ -247,6 +249,7 @@ export default function TestRunner({ testSuites }) {
   const [cleaning, setCleaning] = useState(false);
   const clearResults = async () => {
     // Clear UI/test results first
+    console.log('[TestRunner] CLEARING results via clearResults button');
     setResults([]);
     resultsRef.current = [];
     try {
