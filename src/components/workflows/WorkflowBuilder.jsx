@@ -1166,7 +1166,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           <NodeLibrary onAddNode={handleAddNode} />
         </div>
 
-        <div className="flex-1 bg-slate-950 overflow-auto">
+        <div className="flex-1 bg-slate-950 overflow-y-auto">
           <WorkflowCanvas
             nodes={nodes}
             connections={connections}

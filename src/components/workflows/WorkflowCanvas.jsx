@@ -69,7 +69,26 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
   };
 
   return (
-    <div className="relative p-8 min-h-full">
+    <div className="workflow-canvas relative p-8 min-h-full overflow-y-auto" style={{
+      scrollbarWidth: 'thin',
+      scrollbarColor: '#6b7280 #1e293b'
+    }}>
+      <style>{`
+        .workflow-canvas::-webkit-scrollbar {
+          width: 12px;
+        }
+        .workflow-canvas::-webkit-scrollbar-track {
+          background: #1e293b;
+          border-radius: 6px;
+        }
+        .workflow-canvas::-webkit-scrollbar-thumb {
+          background: #6b7280;
+          border-radius: 6px;
+        }
+        .workflow-canvas::-webkit-scrollbar-thumb:hover {
+          background: #9ca3af;
+        }
+      `}</style>
       {connectingFrom && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-purple-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-bounce">
           🔗 Click on another node to connect
