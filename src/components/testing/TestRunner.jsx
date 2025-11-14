@@ -27,6 +27,8 @@ export default function TestRunner({ testSuites }) {
       return [];
     }
   });
+  const syncIntervalRef = useRef(null);
+  const runIdRef = useRef(0);
   const [running, setRunning] = useState(false);
   const [currentTest, setCurrentTest] = useState(null);
   const resultsRef = useRef([]);
@@ -101,6 +103,7 @@ export default function TestRunner({ testSuites }) {
       window.__UNIT_TEST_MODE = true;
       window.__UNIT_TEST_SUPPRESS_CODES = ['400']; // suppress validation error noise
     }
+    runIdRef.current += 1;
 
     console.log('[TestRunner] Starting test run with', testSuites.length, 'suites');
     let testIndex = 0;
@@ -177,8 +180,44 @@ export default function TestRunner({ testSuites }) {
         delete window.__UNIT_TEST_MODE;
         delete window.__UNIT_TEST_SUPPRESS_CODES;
       }
+      if (allResults.length !== totalTests) {
+        console.warn(`[TestRunner] WARNING: Expected ${totalTests} tests, but only ${allResults.length} completed.`);
+      }
     }
   };
+
+  // Periodic sync to recover from accidental unmount/remount or lost state during a run
+  useEffect(() => {
+    if (running) {
+      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
+      syncIntervalRef.current = setInterval(() => {
+        try {
+          const stored = sessionStorage.getItem(TEST_RESULTS_KEY);
+          if (!stored) return;
+          const parsed = JSON.parse(stored);
+          // If we lost in-memory results (e.g. remount), restore
+          if (Array.isArray(parsed) && parsed.length > results.length) {
+            console.log('[TestRunner] Sync recovery: restoring', parsed.length, 'results from storage');
+            resultsRef.current = parsed;
+            setResults(parsed);
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      }, 1000);
+    } else {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+        syncIntervalRef.current = null;
+      }
+    }
+    return () => {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+        syncIntervalRef.current = null;
+      }
+    };
+  }, [running, results.length]);
 
   // Restore results from ref if component remounts during test run
   useEffect(() => {
@@ -392,6 +431,14 @@ export default function TestRunner({ testSuites }) {
                   </div>
                 </CardContent>
               </Card>
+              {completedTests > 0 && completedTests !== totalTests && (
+                <Card className="bg-yellow-900/30 border-yellow-700 col-span-4">
+                  <CardContent className="p-4">
+                    <div className="text-sm text-yellow-400">Integrity Warning</div>
+                    <div className="text-sm text-yellow-300 mt-1">Missing tests detected: expected {totalTests} but only {completedTests} completed. This usually indicates a component remount or early abort. Results were auto-recovered from storage if possible.</div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
 
