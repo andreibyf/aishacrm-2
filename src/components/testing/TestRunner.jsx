@@ -18,17 +18,36 @@ const BACKEND_URL = getBackendUrl();
 const TEST_RESULTS_KEY = 'unit_test_results';
 
 export default function TestRunner({ testSuites }) {
-  // Initialize results from sessionStorage if available
-  const [results, setResults] = useState(() => {
-    try {
-      const stored = sessionStorage.getItem(TEST_RESULTS_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
+  // Start with empty results; allow manual restore instead of auto-populating
+  const [results, setResults] = useState([]);
+  const [hasStoredResults, setHasStoredResults] = useState(false);
   const syncIntervalRef = useRef(null);
   const runIdRef = useRef(0);
+
+  // Detect presence of stored results (for manual restore)
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(TEST_RESULTS_KEY);
+      setHasStoredResults(!!stored);
+    } catch {
+      setHasStoredResults(false);
+    }
+  }, [results.length]);
+
+  const restoreResults = () => {
+    try {
+      const stored = sessionStorage.getItem(TEST_RESULTS_KEY);
+      if (!stored) return;
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        resultsRef.current = parsed;
+        setResults(parsed);
+        console.log('[TestRunner] Restored previous results from sessionStorage:', parsed.length);
+      }
+    } catch (e) {
+      console.warn('[TestRunner] Failed to restore previous results:', e.message);
+    }
+  };
   const [running, setRunning] = useState(false);
   const [currentTest, setCurrentTest] = useState(null);
   const resultsRef = useRef([]);
@@ -333,6 +352,17 @@ export default function TestRunner({ testSuites }) {
                 >
                   <XCircle className="w-4 h-4 mr-2" />
                   {cleaning ? 'Clearing…' : 'Clear Results + Data'}
+                </Button>
+              )}
+              {results.length === 0 && !running && hasStoredResults && (
+                <Button
+                  onClick={restoreResults}
+                  variant="outline"
+                  className="bg-slate-700 border-slate-600"
+                  disabled={running}
+                >
+                  <Clock className="w-4 h-4 mr-2" />
+                  Restore Last Results
                 </Button>
               )}
               <Button
