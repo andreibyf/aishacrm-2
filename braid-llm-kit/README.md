@@ -97,6 +97,55 @@ const response = await openai.chat.completions.create({
 });
 ```
 
+### 5. **Calling a Remote MCP Braid Server**
+
+You can also execute Braid actions via the Dockerized MCP server (see `braid-mcp-node-server/` and `tools/mcp-braid-server.json`). It expects a `BraidRequestEnvelope` and returns a `BraidResponseEnvelope`.
+
+**Example `BraidRequestEnvelope` (JSON):**
+```json
+{
+  "requestId": "demo-request-1",
+  "actor": { "id": "agent:demo", "type": "agent" },
+  "createdAt": "2025-01-01T00:00:00.000Z",
+  "client": "aisha-llm-kit",
+  "channel": "agent",
+  "actions": [
+    {
+      "id": "action-1",
+      "verb": "read",
+      "actor": { "id": "agent:demo", "type": "agent" },
+      "resource": { "system": "mock", "kind": "example-entity" },
+      "targetId": "123"
+    }
+  ]
+}
+```
+
+**Example `BraidResponseEnvelope` (JSON):**
+```json
+{
+  "requestId": "demo-request-1",
+  "startedAt": "2025-01-01T00:00:00.100Z",
+  "finishedAt": "2025-01-01T00:00:00.150Z",
+  "metadata": {
+    "actorId": "agent:demo",
+    "client": "aisha-llm-kit",
+    "channel": "agent"
+  },
+  "results": [
+    {
+      "actionId": "action-1",
+      "status": "success",
+      "resource": { "system": "mock", "kind": "example-entity" },
+      "data": {
+        "echo": true,
+        "note": "Mock adapter - replace with real system adapter."
+      }
+    }
+  ]
+}
+```
+
 ## 🛠️ Available Tools (27 Production-Ready)
 
 ### **CRM Operations** (6 tools)

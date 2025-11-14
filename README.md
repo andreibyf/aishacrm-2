@@ -101,6 +101,46 @@ Use the convenience script to start everything at once:
 .\start-all.ps1  # Starts both backend and frontend with auto-restart
 ```
 
+## Braid MCP Node Server Integration
+
+This repo includes a Dockerized Node.js MCP-style Braid server under `braid-mcp-node-server/`. It exposes the Braid v0 executor (including the CRM adapter) over HTTP for use as a remote tool.
+
+- Health check: `GET http://localhost:8000/health`
+- MCP endpoint: `POST http://localhost:8000/mcp/run` (expects `BraidRequestEnvelope`, returns `BraidResponseEnvelope`)
+
+### Running the MCP server
+
+There are two ways to run the MCP server:
+
+- **Standalone (server only)**:
+  ```bash
+  npm run serve:braid
+  ```
+  This uses `braid-mcp-node-server/docker-compose.yml` and binds the server to `http://localhost:8000`.
+
+- **Full stack with backend (recommended for real CRM calls)**:
+  ```bash
+  docker compose up --build backend braid-mcp-server
+  ```
+  In this mode, the `braid-mcp-server` service (defined in root `docker-compose.yml`) talks to the backend container at `http://backend:3001` via `CRM_BACKEND_URL` and exposes `http://localhost:8000` on the host.
+
+### LLM kit integration
+
+The AiSHA Braid LLM kit can treat the MCP server as a remote tool via:
+
+- `braid-llm-kit/tools/mcp-braid-server.json`:
+  ```json
+  {
+    "toolName": "braid-mcp-server",
+    "type": "http",
+    "endpoint": "http://localhost:8000/mcp/run",
+    "requestFormat": "BraidRequestEnvelope",
+    "responseFormat": "BraidResponseEnvelope"
+  }
+  ```
+
+Any Braid action with `resource.system: "crm"` sent to this endpoint will be handled by the CRM adapter in `braid-mcp-node-server`, which delegates to the existing AiSHA CRM backend routes.
+
 ## Development Features
 
 ### Auto-Restart
@@ -172,4 +212,3 @@ See `backend/README.md` for backend setup details.
 ⚠️ **Important**: Never commit your `.env` file to version control. It contains sensitive configuration.
 
 See `SECURITY_PERFORMANCE_REVIEW.md` for detailed security and performance guidelines.
-

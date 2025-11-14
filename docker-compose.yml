@@ -65,6 +65,22 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Braid MCP Node Server (CRM MCP-style bridge)
+  braid-mcp-server:
+    build:
+      context: ./braid-mcp-node-server
+      dockerfile: Dockerfile
+    container_name: braid-mcp-server
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8000:8000"
+    environment:
+      - NODE_ENV=production
+      # Point MCP server at backend API inside compose network
+      - CRM_BACKEND_URL=http://backend:3001
+
   # Frontend (Vite dev server for development, or built static for production-like testing)
   frontend:
     build:
@@ -93,4 +109,3 @@ services:
 volumes:
   postgres_data:
     driver: local
-
