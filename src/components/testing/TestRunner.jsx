@@ -34,6 +34,7 @@ export default function TestRunner({ testSuites }) {
   const [hasStoredResults, setHasStoredResults] = useState(false);
   const syncIntervalRef = useRef(null);
   const runIdRef = useRef(0);
+  const pollIntervalRef = useRef(null);
 
   // Detect presence of stored results (for manual restore)
   useEffect(() => {
@@ -44,6 +45,55 @@ export default function TestRunner({ testSuites }) {
       setHasStoredResults(false);
     }
   }, [results.length]);
+
+  // Poll for test run completion if we detect an active run on mount
+  useEffect(() => {
+    const runningFlag = sessionStorage.getItem('test_runner_active');
+    if (runningFlag === 'true' && !running) {
+      console.log('[TestRunner] Detected active test run in another component instance, polling for updates...');
+      
+      // Poll sessionStorage for updates
+      const pollInterval = setInterval(() => {
+        try {
+          const stillRunning = sessionStorage.getItem('test_runner_active');
+          if (stillRunning !== 'true') {
+            console.log('[TestRunner] Test run completed, syncing final results');
+            const stored = sessionStorage.getItem(TEST_RESULTS_KEY);
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              setResults(parsed);
+              resultsRef.current = parsed;
+            }
+            clearInterval(pollInterval);
+          } else {
+            // Sync intermediate results
+            const stored = sessionStorage.getItem(TEST_RESULTS_KEY);
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              setResults((currentResults) => {
+                if (parsed.length !== currentResults.length) {
+                  console.log('[TestRunner] Polling sync: updating to', parsed.length, 'tests');
+                  resultsRef.current = parsed;
+                  return parsed;
+                }
+                return currentResults;
+              });
+            }
+          }
+        } catch (e) {
+          console.error('[TestRunner] Polling error:', e);
+        }
+      }, 500); // Poll every 500ms
+
+      pollIntervalRef.current = pollInterval;
+      
+      return () => {
+        if (pollInterval) {
+          clearInterval(pollInterval);
+        }
+      };
+    }
+  }, [running]); // Only depend on running state
 
   const restoreResults = () => {
     try {
