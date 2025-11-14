@@ -379,16 +379,34 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     }
     // For single item operations (get, create, update), return the data directly
     if (!Array.isArray(result.data)) {
-      // If backend wraps the object under a named key (e.g., { employee: {...} }), unwrap it
-      const objectKey = Object.keys(result.data).find((key) =>
-        key !== "tenant_id" &&
-        result.data[key] &&
-        typeof result.data[key] === 'object' &&
-        !Array.isArray(result.data[key])
-      );
-      if (objectKey) {
-        return result.data[objectKey];
+      // If it's already an entity-like object (has an id), return as-is
+      if (Object.prototype.hasOwnProperty.call(result.data, 'id')) {
+        return result.data;
       }
+
+      // Known wrapper keys for single-entity responses
+      const wrapperKeys = new Set([
+        'employee','account','contact','lead','opportunity','user','tenant','activity','opportunities','employees','accounts','contacts','users','tenants','activities'
+      ]);
+
+      // Prefer unwrapping a known wrapper key
+      const knownWrapperKey = Object.keys(result.data).find((key) =>
+        key !== 'tenant_id' && wrapperKeys.has(key) &&
+        result.data[key] && typeof result.data[key] === 'object' && !Array.isArray(result.data[key])
+      );
+      if (knownWrapperKey) {
+        return result.data[knownWrapperKey];
+      }
+
+      // As a last resort, if the object has exactly one nested object value, unwrap that
+      const nestedObjects = Object.keys(result.data).filter((key) =>
+        key !== 'tenant_id' && result.data[key] && typeof result.data[key] === 'object' && !Array.isArray(result.data[key])
+      );
+      if (nestedObjects.length === 1) {
+        return result.data[nestedObjects[0]];
+      }
+
+      // Default: return as-is
       return result.data;
     }
   }
