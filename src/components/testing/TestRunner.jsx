@@ -173,8 +173,11 @@ export default function TestRunner({ testSuites }) {
           }
 
           allResults.push(result);
-          // Flush every 5 tests or at end to limit re-renders
-          if (testIndex % 5 === 0 || testIndex === totalTests) {
+          // Flush strategy:
+          // - Flush every test for the first 5 to show immediate progress
+          // - Then flush every 5 tests to reduce flicker
+          // - Always flush on final test
+          if (testIndex <= 5 || testIndex % 5 === 0 || testIndex === totalTests) {
             flushResults();
           }
         }
