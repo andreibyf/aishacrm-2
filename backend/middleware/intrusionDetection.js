@@ -30,13 +30,13 @@ const IDR_CONFIG = {
     /(\bUNION\b.*\bSELECT\b)|(\bOR\b.*=.*)/i,
     /(\bDROP\b.*\bTABLE\b)|(\bEXEC\b.*\()/i,
     /(\bINSERT\b.*\bINTO\b)|(\bUPDATE\b.*\bSET\b)/i,
-    /(--|;|\/\*|\*\/|xp_)/i
+    /(--|;|\/\*|\*\/|xp_)/i,
   ],
   SUSPICIOUS_PATTERNS: {
     RAPID_TENANT_SWITCHING: 5, // Different tenants in 5 requests
     EXCESSIVE_FAILURES: 10, // Failed requests in 1 minute
-    BULK_DATA_EXTRACTION: 1000 // Records in single request
-  }
+    BULK_DATA_EXTRACTION: 1000, // Records in single request
+  },
 };
 
 /**
@@ -49,23 +49,26 @@ function getActivityKey(ip, userId) {
 /**
  * Log security event to system_logs table
  */
-async function logSecurityEvent(supabase, {
-  tenant_id,
-  level = 'security_alert',
-  message,
-  source,
-  user_id,
-  user_email,
-  ip_address,
-  user_agent,
-  url,
-  method,
-  attempted_tenant,
-  actual_tenant,
-  violation_type,
-  severity,
-  metadata = {}
-}) {
+async function logSecurityEvent(
+  supabase,
+  {
+    tenant_id,
+    level = 'security_alert',
+    message,
+    source,
+    user_id,
+    user_email,
+    ip_address,
+    user_agent,
+    url,
+    method,
+    attempted_tenant,
+    actual_tenant,
+    violation_type,
+    severity,
+    metadata = {},
+  },
+) {
   try {
     const logEntry = {
       tenant_id: tenant_id || 'system',
@@ -85,8 +88,8 @@ async function logSecurityEvent(supabase, {
         violation_type,
         severity,
         timestamp: new Date().toISOString(),
-        idr_version: '1.0'
-      }
+        idr_version: '1.0',
+      },
     };
 
     await supabase.from('system_logs').insert(logEntry);
@@ -95,7 +98,7 @@ async function logSecurityEvent(supabase, {
     console.error(`[IDR ${severity.toUpperCase()}] ${message}`, {
       user_id,
       ip_address,
-      violation_type
+      violation_type,
     });
   } catch (error) {
     console.error('Failed to log security event:', error);
@@ -129,7 +132,7 @@ function trackActivity(key, activityType, data) {
       requests: [],
       tenantAccess: new Set(),
       violations: [],
-      lastReset: Date.now()
+      lastReset: Date.now(),
     });
   }
 
@@ -146,7 +149,7 @@ function trackActivity(key, activityType, data) {
   tracker.requests.push({ type: activityType, timestamp: now, data });
 
   // Keep only last 5 minutes of requests
-  tracker.requests = tracker.requests.filter(r => now - r.timestamp < 5 * 60 * 1000);
+  tracker.requests = tracker.requests.filter((r) => now - r.timestamp < 5 * 60 * 1000);
 
   return tracker;
 }
@@ -157,7 +160,7 @@ function trackActivity(key, activityType, data) {
 function detectSQLInjection(value) {
   if (typeof value !== 'string') return false;
 
-  return IDR_CONFIG.SQL_INJECTION_PATTERNS.some(pattern => pattern.test(value));
+  return IDR_CONFIG.SQL_INJECTION_PATTERNS.some((pattern) => pattern.test(value));
 }
 
 /**
@@ -200,6 +203,19 @@ function scanForSQLInjection(req) {
  */
 export async function intrusionDetection(req, res, next) {
   const ip = req.ip || req.connection.remoteAddress;
+
+  // Exempt localhost/loopback traffic (development, testing, internal services)
+  const isLocalhost =
+    ip === '127.0.0.1' ||
+    ip === '::1' ||
+    ip === '::ffff:127.0.0.1' ||
+    ip?.startsWith('172.') || // Docker network
+    ip?.startsWith('192.168.'); // Local network
+
+  if (isLocalhost) {
+    return next();
+  }
+
   const user = req.user;
   const userId = user?.id || 'anonymous';
   const activityKey = getActivityKey(ip, userId);
@@ -209,7 +225,7 @@ export async function intrusionDetection(req, res, next) {
     return res.status(403).json({
       status: 'error',
       message: 'Access denied: IP address temporarily blocked due to suspicious activity',
-      code: 'IP_BLOCKED'
+      code: 'IP_BLOCKED',
     });
   }
 
@@ -238,8 +254,8 @@ export async function intrusionDetection(req, res, next) {
         metadata: {
           field: sqlInjectionResult.field,
           location: sqlInjectionResult.location,
-          attempted_value: sqlInjectionResult.value
-        }
+          attempted_value: sqlInjectionResult.value,
+        },
       });
 
       // Block IP immediately for SQL injection
@@ -248,33 +264,37 @@ export async function intrusionDetection(req, res, next) {
       return res.status(403).json({
         status: 'error',
         message: 'Security violation detected. This incident has been logged.',
-        code: 'SQL_INJECTION_DETECTED'
+        code: 'SQL_INJECTION_DETECTED',
       });
     }
 
     // 2. Cross-Tenant Access Detection
     const requestedTenantId = req.body.tenant_id || req.query.tenant_id || req.params.tenant_id;
 
-    if (user && user.role !== 'superadmin' && requestedTenantId && requestedTenantId !== user.tenant_id) {
+    if (
+      user &&
+      user.role !== 'superadmin' &&
+      requestedTenantId &&
+      requestedTenantId !== user.tenant_id
+    ) {
       const tracker = trackActivity(activityKey, 'TENANT_VIOLATION', {
         attempted: requestedTenantId,
-        actual: user.tenant_id
+        actual: user.tenant_id,
       });
 
       tracker.violations.push({
         type: 'CROSS_TENANT_ACCESS',
         timestamp: Date.now(),
         attempted_tenant: requestedTenantId,
-        actual_tenant: user.tenant_id
+        actual_tenant: user.tenant_id,
       });
 
       const recentViolations = tracker.violations.filter(
-        v => Date.now() - v.timestamp < 60 * 60 * 1000
+        (v) => Date.now() - v.timestamp < 60 * 60 * 1000,
       );
 
-      const severity = recentViolations.length >= IDR_CONFIG.MAX_TENANT_VIOLATIONS_PER_HOUR
-        ? 'critical'
-        : 'high';
+      const severity =
+        recentViolations.length >= IDR_CONFIG.MAX_TENANT_VIOLATIONS_PER_HOUR ? 'critical' : 'high';
 
       await logSecurityEvent(supabase, {
         tenant_id: user.tenant_id,
@@ -293,8 +313,8 @@ export async function intrusionDetection(req, res, next) {
         severity,
         metadata: {
           violation_count: recentViolations.length,
-          recent_attempts: recentViolations.slice(-5)
-        }
+          recent_attempts: recentViolations.slice(-5),
+        },
       });
 
       // Block IP after repeated violations
@@ -304,7 +324,7 @@ export async function intrusionDetection(req, res, next) {
         return res.status(403).json({
           status: 'error',
           message: 'Multiple security violations detected. Access temporarily blocked.',
-          code: 'TENANT_VIOLATION_LIMIT_EXCEEDED'
+          code: 'TENANT_VIOLATION_LIMIT_EXCEEDED',
         });
       }
 
@@ -334,8 +354,8 @@ export async function intrusionDetection(req, res, next) {
           severity: 'medium',
           metadata: {
             unique_tenants_accessed: Array.from(tracker.tenantAccess),
-            tenant_count: tracker.tenantAccess.size
-          }
+            tenant_count: tracker.tenantAccess.size,
+          },
         });
       }
     }
@@ -358,14 +378,14 @@ export async function intrusionDetection(req, res, next) {
         severity: 'high',
         metadata: {
           requested_limit: limit,
-          threshold: IDR_CONFIG.SUSPICIOUS_PATTERNS.BULK_DATA_EXTRACTION
-        }
+          threshold: IDR_CONFIG.SUSPICIOUS_PATTERNS.BULK_DATA_EXTRACTION,
+        },
       });
 
       return res.status(400).json({
         status: 'error',
         message: `Request limit too high. Maximum allowed: ${IDR_CONFIG.SUSPICIOUS_PATTERNS.BULK_DATA_EXTRACTION}`,
-        code: 'BULK_EXTRACTION_BLOCKED'
+        code: 'BULK_EXTRACTION_BLOCKED',
       });
     }
 
@@ -374,10 +394,10 @@ export async function intrusionDetection(req, res, next) {
 
     // Intercept response to track failures
     const originalJson = res.json;
-    res.json = function(data) {
+    res.json = function (data) {
       if (data && (data.status === 'error' || res.statusCode >= 400)) {
         const failedRequests = tracker.requests.filter(
-          r => r.type === 'FAILED_REQUEST' && Date.now() - r.timestamp < 60 * 1000
+          (r) => r.type === 'FAILED_REQUEST' && Date.now() - r.timestamp < 60 * 1000,
         );
 
         if (failedRequests.length >= IDR_CONFIG.MAX_FAILED_REQUESTS_PER_MINUTE) {
@@ -396,8 +416,8 @@ export async function intrusionDetection(req, res, next) {
             severity: 'medium',
             metadata: {
               failed_count: failedRequests.length + 1,
-              threshold: IDR_CONFIG.MAX_FAILED_REQUESTS_PER_MINUTE
-            }
+              threshold: IDR_CONFIG.MAX_FAILED_REQUESTS_PER_MINUTE,
+            },
           });
 
           blockIP(ip, 5 * 60 * 1000); // 5 minute block
@@ -405,7 +425,7 @@ export async function intrusionDetection(req, res, next) {
 
         trackActivity(activityKey, 'FAILED_REQUEST', {
           url: req.originalUrl,
-          status: res.statusCode
+          status: res.statusCode,
         });
       }
 
@@ -427,7 +447,7 @@ export function getSecurityStatus() {
   return {
     blocked_ips: Array.from(blockedIPs),
     active_trackers: suspiciousActivityTracker.size,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 }
 
@@ -462,5 +482,5 @@ export default {
   getSecurityStatus,
   manuallyBlockIP,
   unblockIP,
-  clearTrackingData
+  clearTrackingData,
 };
