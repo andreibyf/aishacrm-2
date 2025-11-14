@@ -112,6 +112,12 @@ export default function TestRunner({ testSuites }) {
   }, [checkBackend]);
 
   const runTests = async () => {
+    // Prevent concurrent runs
+    if (running) {
+      console.log('[TestRunner] Already running, ignoring duplicate runTests call');
+      return;
+    }
+    
     setRunning(true);
     const allResults = [];
     resultsRef.current = [];
@@ -123,6 +129,7 @@ export default function TestRunner({ testSuites }) {
       window.__UNIT_TEST_SUPPRESS_CODES = ['400']; // suppress validation error noise
     }
     runIdRef.current += 1;
+    console.log('[TestRunner] Starting run ID:', runIdRef.current);
 
     console.log('[TestRunner] Starting test run with', testSuites.length, 'suites');
     let testIndex = 0;
