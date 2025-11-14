@@ -209,45 +209,20 @@ export default function TestRunner({ testSuites }) {
   };
 
   // Periodic sync to recover from accidental unmount/remount or lost state during a run
+  // DISABLED: This was causing double-run issues by restoring state mid-run
+  // If we need recovery, use the manual restore button instead
   useEffect(() => {
-    if (running) {
-      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
-      syncIntervalRef.current = setInterval(() => {
-        try {
-          const stored = sessionStorage.getItem(TEST_RESULTS_KEY);
-          if (!stored) return;
-          const parsed = JSON.parse(stored);
-          // If we lost in-memory results (e.g. remount), restore
-          if (Array.isArray(parsed) && parsed.length > results.length) {
-            console.log('[TestRunner] Sync recovery: restoring', parsed.length, 'results from storage');
-            resultsRef.current = parsed;
-            setResults(parsed);
-          }
-        } catch {
-          // Ignore parse errors
-        }
-      }, 1000);
-    } else {
-      if (syncIntervalRef.current) {
-        clearInterval(syncIntervalRef.current);
-        syncIntervalRef.current = null;
-      }
-    }
+    // Cleanup any existing interval on unmount
     return () => {
       if (syncIntervalRef.current) {
         clearInterval(syncIntervalRef.current);
         syncIntervalRef.current = null;
       }
     };
-  }, [running, results.length]);
+  }, []);
 
-  // Restore results from ref if component remounts during test run
-  useEffect(() => {
-    if (resultsRef.current.length > 0 && results.length === 0 && !running) {
-      console.log('[TestRunner] Restoring results from ref:', resultsRef.current.length);
-      setResults(resultsRef.current);
-    }
-  }, [results.length, running]);
+  // REMOVED: Auto-restore was causing double-run issues
+  // Use the manual "Restore Previous Results" button instead
 
   const totalTests = testSuites.reduce(
     (sum, suite) => sum + suite.tests.length,

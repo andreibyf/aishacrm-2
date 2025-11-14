@@ -109,13 +109,19 @@ export default function createEmployeeRoutes(_pgPool) {
   // POST /api/employees - Create employee
   router.post('/', async (req, res) => {
     try {
+      // DEBUG: Log what we received
+      console.log('[Employee POST] Received body:', JSON.stringify(req.body, null, 2));
+      console.log('[Employee POST] Body keys:', Object.keys(req.body));
+      
       const { tenant_id, first_name, last_name, email, role, status, ...additionalFields } = req.body;
 
       if (!tenant_id) {
+        console.log('[Employee POST] VALIDATION FAILED: tenant_id missing');
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
       
       if (!first_name || !last_name) {
+        console.log('[Employee POST] VALIDATION FAILED: first_name or last_name missing', { first_name, last_name });
         return res.status(400).json({ status: 'error', message: 'first_name and last_name are required' });
       }
 
