@@ -63,74 +63,18 @@ await (async () => {
   console.warn("⚠ No database configured - set USE_SUPABASE_PROD=true with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
 })();
 
-// Create dedicated pg.Pool for performance logging (direct PostgreSQL connection)
-// This is separate from Supabase API and works even when USE_SUPABASE_PROD=true
-import pg from 'pg';
-const { Pool } = pg;
-let perfLogPool = null;
-if (process.env.DATABASE_URL) {
-  // Mask password in log
-  const dbUrlForLog = process.env.DATABASE_URL.replace(/:([^@]+)@/, ':****@');
-  console.log(`[Performance Logging] DATABASE_URL: ${dbUrlForLog}`);
-
-  // Use direct parameter specification (more reliable)
-  // Prefer using connection string when provided (e.g., Supabase). Enable SSL for cloud Postgres.
-  // Fallback to local dev settings only if explicitly requested.
-  if (process.env.PERF_DB_USE_LOCAL === 'true') {
-    perfLogPool = new Pool({
-      host: 'db',
-      port: 5432,
-      database: 'aishacrm',
-      user: 'postgres',
-      password: 'changeme_local_dev_only',
-      max: 5,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
-    });
-  } else {
-    // Supabase sometimes requires 'require' vs custom rejectUnauthorized; fallback without SSL if server rejects
-    const useSSL = process.env.PERF_DB_DISABLE_SSL === 'true' ? false : true;
-    const baseConfig = {
-      connectionString: process.env.DATABASE_URL,
-      max: 5,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
-    };
-    if (useSSL) {
-      baseConfig.ssl = { rejectUnauthorized: false };
-    }
-    perfLogPool = new Pool(baseConfig);
-  }
-  console.log("✓ Performance logging pool initialized (PostgreSQL direct connection)");
-
-  // Test connection with auto SSL fallback if necessary
+// Use Supabase client wrapper for performance logging (replaces direct pg.Pool)
+// This ensures consistency with ESLint policy while maintaining performance logging capability
+import { pool as perfLogPool } from './lib/supabase-db.js';
+if (pgPool) {
+  console.log("✓ Performance logging enabled via Supabase pool wrapper");
+  // Test connection
   const testPerfPool = async () => {
     try {
       await perfLogPool.query('SELECT 1');
       console.log("✓ Performance logging pool connection verified");
     } catch (err) {
-      if (/does not support SSL connections/i.test(err.message) && !process.env.PERF_DB_DISABLE_SSL) {
-        // Auto-retry without SSL; suppress initial error
-        try {
-          perfLogPool.end().catch(() => { /* ignore end error */ });
-        } catch {
-          /* ignore */
-        }
-        perfLogPool = new Pool({
-          connectionString: process.env.DATABASE_URL,
-          max: 5,
-          idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 5000,
-        });
-        try {
-          await perfLogPool.query('SELECT 1');
-          console.log("✓ Performance logging pool connection verified (no SSL)");
-        } catch (e2) {
-          console.error("✗ Performance logging pool connection failed:", e2.message);
-        }
-      } else {
-        console.error("✗ Performance logging pool connection failed:", err.message);
-      }
+      console.error("✗ Performance logging pool connection failed:", err.message);
     }
   };
   testPerfPool();
