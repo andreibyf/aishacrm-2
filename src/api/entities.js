@@ -118,9 +118,9 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       if (typeof window !== 'undefined') {
         const url = new URL(window.location.href);
 
-        // For the UnitTests page, always force the dedicated test tenant
+        // For the UnitTests page, always force the dedicated test tenant UUID
         if (url.pathname.toLowerCase().includes('unittests')) {
-          return 'local-tenant-001';
+          return '11111111-1111-1111-1111-111111111111';
         }
 
         const urlTenant = url.searchParams.get('tenant');
