@@ -191,7 +191,9 @@ export default function TestRunner({ testSuites }) {
 
   console.log('[TestRunner] Render - results.length:', results.length, 'passed:', passedTests, 'failed:', failedTests);
 
-  const clearResults = () => {
+  const [cleaning, setCleaning] = useState(false);
+  const clearResults = async () => {
+    // Clear UI/test results first
     setResults([]);
     resultsRef.current = [];
     try {
@@ -200,6 +202,59 @@ export default function TestRunner({ testSuites }) {
     } catch (e) {
       console.error('[TestRunner] Failed to clear results:', e);
     }
+
+    // Proactively clean up test data created with test tenant
+    // This helps when a run aborts before Delete tests execute
+    const TEST_TENANT_ID = 'local-tenant-001';
+    const BACKEND_URL = getBackendUrl();
+    const cleanupSpecs = [
+      {
+        endpoint: 'contacts', key: 'contacts', matcher: (r) =>
+          (r.email && r.email.includes('@unittest.local')) || r.first_name === 'Test'
+      },
+      {
+        endpoint: 'leads', key: 'leads', matcher: (r) =>
+          (r.email && r.email.includes('@unittest.local')) || r.first_name === 'Test'
+      },
+      {
+        endpoint: 'accounts', key: 'accounts', matcher: (r) =>
+          r.name && r.name.startsWith('Test Account ')
+      },
+      {
+        endpoint: 'system-logs', key: 'system-logs', matcher: (r) =>
+          r.source === 'UnitTests:SystemLogs'
+      }
+    ];
+
+    setCleaning(true);
+    const summary = [];
+    for (const spec of cleanupSpecs) {
+      try {
+        const listResp = await fetch(`${BACKEND_URL}/api/${spec.endpoint}?tenant_id=${encodeURIComponent(TEST_TENANT_ID)}&limit=200`);
+        if (!listResp.ok) {
+          console.warn(`[Cleanup] Skip ${spec.endpoint}: status ${listResp.status}`);
+          continue;
+        }
+        const listJson = await listResp.json();
+        const raw = listJson?.data?.[spec.key] || [];
+        const targets = raw.filter(spec.matcher);
+        let deleted = 0;
+        for (const item of targets) {
+          if (!item.id) continue;
+          try {
+            const del = await fetch(`${BACKEND_URL}/api/${spec.endpoint}/${item.id}?tenant_id=${encodeURIComponent(TEST_TENANT_ID)}`, { method: 'DELETE' });
+            if (del.ok) deleted++;
+          } catch (e) {
+            console.warn(`[Cleanup] Failed delete ${spec.endpoint} ${item.id}:`, e.message);
+          }
+        }
+        summary.push(`${spec.endpoint}:${deleted}/${targets.length}`);
+      } catch (e) {
+        console.warn(`[Cleanup] Error processing ${spec.endpoint}:`, e.message);
+      }
+    }
+    setCleaning(false);
+    console.log('[Cleanup] Test data cleanup summary ->', summary.join(', '));
   };
 
   return (
@@ -220,15 +275,15 @@ export default function TestRunner({ testSuites }) {
                   : <FileText className="w-4 h-4 mr-2" />}
                 Check Backend
               </Button>
-              {results.length > 0 && (
+              {(results.length > 0 || !running) && (
                 <Button
                   onClick={clearResults}
                   variant="outline"
                   className="bg-slate-700 border-slate-600 hover:bg-red-900/30"
-                  disabled={running}
+                  disabled={running || cleaning}
                 >
                   <XCircle className="w-4 h-4 mr-2" />
-                  Clear Results
+                  {cleaning ? 'Clearing…' : 'Clear Results + Data'}
                 </Button>
               )}
               <Button
