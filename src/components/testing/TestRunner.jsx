@@ -97,52 +97,70 @@ export default function TestRunner({ testSuites }) {
     setResults([]);
     sessionStorage.removeItem(TEST_RESULTS_KEY); // Clear storage
 
-    for (const suite of testSuites) {
-      for (const test of suite.tests) {
-        setCurrentTest(`${suite.name} - ${test.name}`);
-
-        const startTime = Date.now();
-        let result = {
-          suite: suite.name,
-          test: test.name,
-          status: "running",
-          duration: 0,
-          error: null,
-        };
-
-        try {
-          await test.fn();
-          result.status = "passed";
-          result.duration = Date.now() - startTime;
-        } catch (error) {
-          result.status = "failed";
-          result.duration = Date.now() - startTime;
-          result.error = error.message;
-        }
-
-        allResults.push(result);
-        resultsRef.current = [...allResults]; // Store in ref
-        setResults([...allResults]);
-        // Persist to sessionStorage immediately
-        try {
-          sessionStorage.setItem(TEST_RESULTS_KEY, JSON.stringify(allResults));
-        } catch (e) {
-          console.error('[TestRunner] Failed to store results:', e);
-        }
-        console.log('[TestRunner] Updated results:', allResults.length, 'tests');
-      }
-    }
-
-    console.log('[TestRunner] All tests completed:', allResults.length, 'total');
-    resultsRef.current = [...allResults]; // Final storage in ref
-    // Final persist to sessionStorage
+    console.log('[TestRunner] Starting test run with', testSuites.length, 'suites');
+    let testIndex = 0;
+    
     try {
-      sessionStorage.setItem(TEST_RESULTS_KEY, JSON.stringify(allResults));
-    } catch (e) {
-      console.error('[TestRunner] Failed to store final results:', e);
+      for (const suite of testSuites) {
+        console.log(`[TestRunner] Starting suite: ${suite.name} (${suite.tests.length} tests)`);
+        
+        for (const test of suite.tests) {
+          testIndex++;
+          console.log(`[TestRunner] Test ${testIndex}: ${suite.name} - ${test.name}`);
+          setCurrentTest(`${suite.name} - ${test.name}`);
+
+          const startTime = Date.now();
+          let result = {
+            suite: suite.name,
+            test: test.name,
+            status: "running",
+            duration: 0,
+            error: null,
+          };
+
+          try {
+            await test.fn();
+            result.status = "passed";
+            result.duration = Date.now() - startTime;
+            console.log(`[TestRunner] ✓ Test ${testIndex} passed in ${result.duration}ms`);
+          } catch (error) {
+            result.status = "failed";
+            result.duration = Date.now() - startTime;
+            result.error = error.message;
+            console.error(`[TestRunner] ✗ Test ${testIndex} failed:`, error.message);
+          }
+
+          allResults.push(result);
+          resultsRef.current = [...allResults]; // Store in ref
+          setResults([...allResults]);
+          // Persist to sessionStorage immediately
+          try {
+            sessionStorage.setItem(TEST_RESULTS_KEY, JSON.stringify(allResults));
+          } catch (e) {
+            console.error('[TestRunner] Failed to store results:', e);
+          }
+        }
+        
+        console.log(`[TestRunner] Completed suite: ${suite.name}`);
+      }
+
+      console.log('[TestRunner] All tests completed:', allResults.length, 'total');
+    } catch (error) {
+      console.error('[TestRunner] FATAL ERROR during test execution:', error);
+      console.error('[TestRunner] Stack:', error.stack);
+      alert(`Test runner crashed at test ${testIndex}: ${error.message}\n\nCheck console for details.`);
+    } finally {
+      resultsRef.current = [...allResults]; // Final storage in ref
+      // Final persist to sessionStorage
+      try {
+        sessionStorage.setItem(TEST_RESULTS_KEY, JSON.stringify(allResults));
+      } catch (e) {
+        console.error('[TestRunner] Failed to store final results:', e);
+      }
+      setCurrentTest(null);
+      setRunning(false);
+      console.log('[TestRunner] Test run finished. Results:', allResults.length);
     }
-    setCurrentTest(null);
-    setRunning(false);
   };
 
   // Restore results from ref if component remounts during test run
