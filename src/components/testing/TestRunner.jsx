@@ -65,6 +65,9 @@ export default function TestRunner({ testSuites }) {
               resultsRef.current = parsed;
             }
             clearInterval(pollInterval);
+            if (pollIntervalRef.current) {
+              pollIntervalRef.current = null;
+            }
           } else {
             // Sync intermediate results
             const stored = sessionStorage.getItem(TEST_RESULTS_KEY);
@@ -88,8 +91,9 @@ export default function TestRunner({ testSuites }) {
       pollIntervalRef.current = pollInterval;
       
       return () => {
-        if (pollInterval) {
-          clearInterval(pollInterval);
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
         }
       };
     }
