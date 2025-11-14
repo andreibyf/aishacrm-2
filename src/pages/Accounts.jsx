@@ -328,8 +328,14 @@ export default function AccountsPage() {
 
       setTotalItems(filtered.length);
 
-      // Apply pagination
+      // Apply pagination with out-of-range guard (e.g., after deletions)
       const startIndex = (currentPage - 1) * pageSize;
+      if (startIndex >= filtered.length && currentPage > 1) {
+        setCurrentPage(currentPage - 1);
+        setLoading(false);
+        return;
+      }
+
       const endIndex = startIndex + pageSize;
       const paginatedAccounts = filtered.slice(startIndex, endIndex);
 
@@ -444,6 +450,15 @@ export default function AccountsPage() {
     }
 
     try {
+      // Optimistically update UI for instant feedback
+      setAccounts((prev) => prev.filter((a) => a.id !== id));
+      setTotalItems((t) => Math.max(0, (t || 0) - 1));
+      setSelectedAccounts((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+
       await Account.delete(id);
       clearCacheByKey("Account");
       await Promise.all([
@@ -454,6 +469,8 @@ export default function AccountsPage() {
     } catch (error) {
       console.error("Failed to delete account:", error);
       toast.error("Failed to delete account");
+      // Ensure UI consistency by reloading on failure
+      await loadAccounts();
     }
   };
 
@@ -534,6 +551,10 @@ export default function AccountsPage() {
         await Promise.all(
           [...selectedAccounts].map((id) => Account.delete(id)),
         );
+        // Optimistically update UI for selected deletions
+        const idsToRemove = new Set(selectedAccounts);
+        setAccounts((prev) => prev.filter((a) => !idsToRemove.has(a.id)));
+        setTotalItems((t) => Math.max(0, (t || 0) - idsToRemove.size));
         setSelectedAccounts(new Set());
         clearCacheByKey("Account");
         await Promise.all([
@@ -544,6 +565,7 @@ export default function AccountsPage() {
       } catch (error) {
         console.error("Failed to delete accounts:", error);
         toast.error("Failed to delete accounts");
+        await loadAccounts();
       }
     }
   };

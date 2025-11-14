@@ -74,6 +74,18 @@
 - **Docker Status:** Check `docker ps` to see running containers; `docker logs aishacrm-frontend` or `docker logs aishacrm-backend` for debugging.
 - **Backend Issues:** If server exits immediately, see `backend/TROUBLESHOOTING_NODE_ESM.md` for ESM-specific debugging.
 
+### Windows + Git Notes
+- Reserved filenames: Avoid adding files named `nul`, `con`, `prn`, etc. If accidentally staged, remove with `git rm --cached --ignore-unmatch nul`.
+- PowerShell quoting: When referencing paths with `$` (e.g., `backend/routes/$_`), wrap in single quotes to prevent variable expansion: `'backend/routes/$_'`.
+- CRLF warnings: Messages like "CRLF will be replaced by LF" are informational under `.gitattributes` rules and can be ignored. To reduce noise on Windows: `git config core.autocrlf true`.
+- Ignored files: `test-results` is intentionally ignored. Only force-add with `git add -f` if truly required.
+- Safer staging: Prefer `git add -A` instead of enumerating many paths inline to avoid shell quirks.
+
+### Cache & UI Refresh
+- Frontend cache: `useApiManager()` exposes `cachedRequest`, `clearCache`, and `clearCacheByKey` (alias) for cache invalidation. Use `clearCacheByKey("Account")` after mutations.
+- Optimistic updates: For snappy UX, optimistically update local state (e.g., remove deleted item from list) and then revalidate with `load*()` calls.
+- Pagination guard: After bulk deletes, ensure page indices are clamped to avoid empty pages.
+
 ## Project-Specific Conventions
 - Components: Function-based React, domain-grouped; use `ConfirmDialog` instead of `window.confirm()`.
 - API Integration: Use `src/api/fallbackFunctions.js` for Base44 → local backend auto-failover.
@@ -87,6 +99,12 @@
 - **External API:** Base44 SDK for migration/sync; local backend for independence.
 - **AI Features:** Custom assistants in `src/components/ai/`; MCP server example in `src/functions/mcpServer.js`.
 - **Security:** Helmet.js, CORS, rate limiting in backend; never commit `.env`.
+
+### Tenant Identifiers (UUID-First)
+- Source of truth: Use UUIDs for `tenant_id` across backend and frontend; do not convert to or filter by slug.
+- Backend routes: All filters and joins must use UUID `tenant_id` (or `tenants.id`). Avoid any UUID→slug mapping.
+- Frontend params: Always pass the tenant UUID; do not send legacy slug values.
+- Migration note: Legacy `tenant_id` (slug) can exist on records; do not rely on it for filtering.
 
 ## Backend Route Categories
 The backend exposes 197 API endpoints across 26 categories:
