@@ -130,6 +130,13 @@ class ApiHealthMonitor {
    */
   _trackError(errorMap, endpoint, context, errorInfo) {
     const key = endpoint;
+    // Suppression logic for unit test mode / expected validation errors
+    const isBrowser = typeof window !== 'undefined';
+    const suppressedCodes = (isBrowser && Array.isArray(window.__UNIT_TEST_SUPPRESS_CODES)) ? window.__UNIT_TEST_SUPPRESS_CODES : [];
+    const isUnitTestMode = isBrowser && window.__UNIT_TEST_MODE === true;
+    const isSuppressedType = suppressedCodes.includes(errorInfo.type);
+    const explicitlyExpected = context && context.expected === true; // caller can mark expected negative test
+    const suppressOutput = (isUnitTestMode && (isSuppressedType || explicitlyExpected));
     
     if (!errorMap.has(key)) {
       errorMap.set(key, {
@@ -141,15 +148,15 @@ class ApiHealthMonitor {
         lastSeen: new Date()
       });
       
-      console.error(`[API Health Monitor] ${errorInfo.title} detected: ${endpoint}`, context);
-      
-      // Show user-friendly notification
-      if (this.reportingEnabled) {
-        const toastFn = errorInfo.severity === 'critical' ? toast.error : toast.warning;
-        toastFn(`${errorInfo.title}: ${endpoint}`, {
-          description: errorInfo.description,
-          duration: 5000
-        });
+      if (!suppressOutput) {
+        console.error(`[API Health Monitor] ${errorInfo.title} detected: ${endpoint}`, context);
+        if (this.reportingEnabled) {
+          const toastFn = errorInfo.severity === 'critical' ? toast.error : toast.warning;
+          toastFn(`${errorInfo.title}: ${endpoint}`, {
+            description: errorInfo.description,
+            duration: 5000
+          });
+        }
       }
     } else {
       // Update existing entry

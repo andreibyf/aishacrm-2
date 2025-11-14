@@ -96,6 +96,11 @@ export default function TestRunner({ testSuites }) {
     resultsRef.current = [];
     setResults([]);
     sessionStorage.removeItem(TEST_RESULTS_KEY);
+    // Flag unit test mode for API monitor suppression
+    if (typeof window !== 'undefined') {
+      window.__UNIT_TEST_MODE = true;
+      window.__UNIT_TEST_SUPPRESS_CODES = ['400']; // suppress validation error noise
+    }
 
     console.log('[TestRunner] Starting test run with', testSuites.length, 'suites');
     let testIndex = 0;
@@ -167,6 +172,11 @@ export default function TestRunner({ testSuites }) {
       setCurrentTest(null);
       setRunning(false);
       console.log('[TestRunner] Test run finished. Results:', allResults.length);
+      // Remove suppression flags
+      if (typeof window !== 'undefined') {
+        delete window.__UNIT_TEST_MODE;
+        delete window.__UNIT_TEST_SUPPRESS_CODES;
+      }
     }
   };
 
