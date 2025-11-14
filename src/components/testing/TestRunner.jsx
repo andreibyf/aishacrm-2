@@ -31,6 +31,9 @@ export default function TestRunner({ testSuites }) {
     }
     return [];
   });
+  // Declare state/refs used by effects BEFORE effects to avoid TDZ/minifier issues
+  const [running, setRunning] = useState(false);
+  const resultsRef = useRef([]);
   const [hasStoredResults, setHasStoredResults] = useState(false);
   const syncIntervalRef = useRef(null);
   const runIdRef = useRef(0);
@@ -113,9 +116,7 @@ export default function TestRunner({ testSuites }) {
       console.warn('[TestRunner] Failed to restore previous results:', e.message);
     }
   };
-  const [running, setRunning] = useState(false);
   const [currentTest, setCurrentTest] = useState(null);
-  const resultsRef = useRef([]);
   const [preflight, setPreflight] = useState({
     status: "unknown",
     message: null,
@@ -175,6 +176,12 @@ export default function TestRunner({ testSuites }) {
   useEffect(() => {
     checkBackend();
   }, [checkBackend]);
+
+  // Compute totals early so runTests can safely reference them
+  const totalTests = testSuites.reduce(
+    (sum, suite) => sum + suite.tests.length,
+    0,
+  );
 
   const runTests = async () => {
     // Prevent concurrent runs - check both state AND sessionStorage
@@ -302,11 +309,6 @@ export default function TestRunner({ testSuites }) {
 
   // REMOVED: Auto-restore was causing double-run issues
   // Use the manual "Restore Previous Results" button instead
-
-  const totalTests = testSuites.reduce(
-    (sum, suite) => sum + suite.tests.length,
-    0,
-  );
   const passedTests = results.filter((r) => r.status === "passed").length;
   const failedTests = results.filter((r) => r.status === "failed").length;
   const completedTests = results.length;
