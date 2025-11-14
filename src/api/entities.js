@@ -260,13 +260,14 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     });
   }
 
-  if (isDebugEntity) {
+  // Enhanced debug for all POST requests during tests
+  if (method === 'POST' || isDebugEntity) {
     console.log('[API Debug] Final request configuration', {
       entity: entityName,
       method,
       url,
       hasBody: !!options.body,
-      bodyPreview: options.body ? (() => { try { const parsed = JSON.parse(options.body); return { keys: Object.keys(parsed), stage: parsed.stage, tenant_id: parsed.tenant_id, first_name: parsed.first_name, last_name: parsed.last_name, name: parsed.name }; } catch { return 'unparseable'; } })() : null,
+      bodyPreview: options.body ? (() => { try { const parsed = JSON.parse(options.body); return { keys: Object.keys(parsed), stage: parsed.stage, tenant_id: parsed.tenant_id, first_name: parsed.first_name, last_name: parsed.last_name, name: parsed.name, fullBody: parsed }; } catch { return 'unparseable'; } })() : null,
     });
   }
 
