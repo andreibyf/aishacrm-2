@@ -121,7 +121,7 @@ export default function PerformanceMonitor() {
         currentTs = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hour6, 0, 0, 0).getTime();
       } else {
         const d = new Date(currentTs);
-        currentTs = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
+        currentTs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0);
       }
       
       while (currentTs <= now.getTime()) {
@@ -166,11 +166,11 @@ export default function PerformanceMonitor() {
             hour6, 0, 0, 0
           ).getTime();
         } else {
-          bucketTs = new Date(
-            logDate.getFullYear(),
-            logDate.getMonth(),
-            logDate.getDate(), 0, 0, 0, 0
-          ).getTime();
+          bucketTs = Date.UTC(
+            logDate.getUTCFullYear(),
+            logDate.getUTCMonth(),
+            logDate.getUTCDate(), 0, 0, 0, 0
+          );
         }
 
         if (buckets[bucketTs]) {
@@ -193,6 +193,16 @@ export default function PerformanceMonitor() {
         }))
         .sort((a, b) => a.ts - b.ts)
         .slice(-(groupBy === 'hour' ? days * 24 : groupBy === '6hour' ? days * 4 : days));
+
+      // Debug logging
+      console.log('📊 PerformanceMonitor Chart Data:', {
+        totalBuckets: chartDataArray.length,
+        firstThree: chartDataArray.slice(0, 3),
+        lastThree: chartDataArray.slice(-3),
+        nonZeroBuckets: chartDataArray.filter(b => b.calls > 0).length,
+        totalCalls: chartDataArray.reduce((sum, b) => sum + b.calls, 0),
+        maxAvgResponseTime: Math.max(...chartDataArray.map(b => b.avgResponseTime))
+      });
 
       setChartData(chartDataArray);
       setLastUpdate(new Date());
