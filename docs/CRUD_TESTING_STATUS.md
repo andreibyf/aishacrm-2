@@ -88,7 +88,7 @@ When you ran the CRUD tests, you saw:
    - PUT /:id - Update record
    - DELETE /:id - Delete record
 
-3. Use `pgPool.query()` like opportunities route does
+3. Use Supabase client like opportunities route does (`supabase.from(table).insert/select/update/delete`)
 
 4. Restart backend server
 

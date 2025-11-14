@@ -87,7 +87,9 @@ CREATE TABLE IF NOT EXISTS bizdev_source (
 
 Route Registration:
 import createBizDevSourceRoutes from './routes/bizdevsources.js';
-app.use('/api/bizdevsources', createBizDevSourceRoutes(pgPool));
+app.use('/api/bizdevsources', createBizDevSourceRoutes());
+
+**Note:** Routes now use Supabase client internally via `getSupabaseClient()` instead of pgPool parameter.
 
 Pluralization Rule:
 'bizdevsource': 'bizdevsources'

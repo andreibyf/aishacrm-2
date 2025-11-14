@@ -68,7 +68,7 @@ async function safeRecentActivities(_pgPool, tenantId, limit = 10) {
   }
 }
 
-export default function createReportRoutes(pgPool) {
+export default function createReportRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/reports/dashboard-stats - Get dashboard statistics
@@ -78,20 +78,18 @@ export default function createReportRoutes(pgPool) {
 
       console.log('[dashboard-stats] Received tenant_id:', tenant_id);
 
-            // Optional: allow stats without tenant filter in local mode
-      if (!tenant_id && !pgPool) {
+      if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
-      // Try to fetch counts from Postgres if available; otherwise return zeros
       const [contacts, accounts, leads, opportunities, activities] = await Promise.all([
-        safeCount(pgPool, 'contacts', tenant_id),
-        safeCount(pgPool, 'accounts', tenant_id),
-        safeCount(pgPool, 'leads', tenant_id),
-        safeCount(pgPool, 'opportunities', tenant_id),
-        safeCount(pgPool, 'activities', tenant_id),
+        safeCount(null, 'contacts', tenant_id),
+        safeCount(null, 'accounts', tenant_id),
+        safeCount(null, 'leads', tenant_id),
+        safeCount(null, 'opportunities', tenant_id),
+        safeCount(null, 'activities', tenant_id),
       ]);
-      const recentActivities = await safeRecentActivities(pgPool, tenant_id, 10);
+      const recentActivities = await safeRecentActivities(null, tenant_id, 10);
 
       const stats = {
         totalContacts: contacts,
@@ -159,11 +157,13 @@ export default function createReportRoutes(pgPool) {
   router.get('/pipeline', async (req, res) => {
     try {
       let { tenant_id } = req.query;
-            const where = tenant_id ? 'WHERE tenant_id = $1' : '';
-      const params = tenant_id ? [tenant_id] : [];
-      const sql = `SELECT stage, count FROM v_opportunity_pipeline_by_stage ${where} ORDER BY stage`;
-      const result = await pgPool.query(sql, params);
-      res.json({ status: 'success', data: { stages: result.rows } });
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      let query = supabase.from('v_opportunity_pipeline_by_stage').select('stage, count').order('stage');
+      if (tenant_id) query = query.eq('tenant_id', tenant_id);
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      res.json({ status: 'success', data: { stages: data || [] } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }
@@ -173,11 +173,13 @@ export default function createReportRoutes(pgPool) {
   router.get('/lead-status', async (req, res) => {
     try {
       let { tenant_id } = req.query;
-            const where = tenant_id ? 'WHERE tenant_id = $1' : '';
-      const params = tenant_id ? [tenant_id] : [];
-      const sql = `SELECT status, count FROM v_lead_counts_by_status ${where} ORDER BY status`;
-      const result = await pgPool.query(sql, params);
-      res.json({ status: 'success', data: { statuses: result.rows } });
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      let query = supabase.from('v_lead_counts_by_status').select('status, count').order('status');
+      if (tenant_id) query = query.eq('tenant_id', tenant_id);
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      res.json({ status: 'success', data: { statuses: data || [] } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }
@@ -187,15 +189,16 @@ export default function createReportRoutes(pgPool) {
   router.get('/calendar', async (req, res) => {
     try {
       let { tenant_id, from_date, to_date } = req.query;
-            const conds = [];
-      const params = [];
-      if (tenant_id) { params.push(tenant_id); conds.push(`tenant_id = $${params.length}`); }
-      if (from_date) { params.push(from_date); conds.push(`(due_at IS NULL OR due_at >= $${params.length})`); }
-      if (to_date) { params.push(to_date); conds.push(`(due_at IS NULL OR due_at <= $${params.length})`); }
-      const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
-      const sql = `SELECT * FROM v_calendar_activities ${where} ORDER BY COALESCE(due_at, created_at)`;
-      const result = await pgPool.query(sql, params);
-      res.json({ status: 'success', data: { activities: result.rows } });
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      let query = supabase.from('v_calendar_activities').select('*');
+      if (tenant_id) query = query.eq('tenant_id', tenant_id);
+      if (from_date) query = query.or(`due_at.is.null,due_at.gte.${from_date}`);
+      if (to_date) query = query.or(`due_at.is.null,due_at.lte.${to_date}`);
+      query = query.order('due_at', { ascending: true, nullsFirst: false });
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      res.json({ status: 'success', data: { activities: data || [] } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }

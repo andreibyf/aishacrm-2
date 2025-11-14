@@ -97,15 +97,15 @@ Frontend (CronHeartbeat.jsx)
     ↓ Every 5 minutes
     ↓ POST /api/cron/run
 Backend (routes/cron.js)
-    ↓ Fetch due jobs from database
+    ↓ Fetch due jobs from database (via Supabase)
     ↓ For each job with function_name:
-    ↓ executeJob(function_name, pgPool, metadata)
+    ↓ executeJob(function_name, supabase, metadata)
 Job Executor (lib/cronExecutors.js)
     ↓ jobExecutors registry lookup
-    ↓ Execute actual job function
+    ↓ Execute actual job function (receives supabase client)
     ↓ Return result
 Backend
-    ↓ Update last_run, next_run, metadata
+    ↓ Update last_run, next_run, metadata (via Supabase)
     ↓ Return summary to frontend
 ```
 
@@ -166,18 +166,21 @@ await fetch('/api/cron/jobs', {
 });
 
 // Then implement in cronExecutors.js:
-export async function cleanupOldRecords(pgPool, jobMetadata) {
+export async function cleanupOldRecords(supabase, jobMetadata) {
   const retentionDays = jobMetadata.retention_days || 30;
   const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
   
-  const result = await pgPool.query(
-    'DELETE FROM records WHERE created_at < $1',
-    [cutoffDate]
-  );
+  const { data, error } = await supabase
+    .from('records')
+    .delete()
+    .lt('created_at', cutoffDate.toISOString())
+    .select();
+  
+  if (error) throw error;
   
   return {
     success: true,
-    deleted: result.rowCount
+    deleted: data?.length || 0
   };
 }
 

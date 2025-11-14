@@ -6,7 +6,7 @@
 import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
 
-export default function createAnnouncementRoutes(pgPool) {
+export default function createAnnouncementRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/announcements - List announcements
@@ -14,48 +14,22 @@ export default function createAnnouncementRoutes(pgPool) {
     try {
       const { tenant_id, is_active, limit = 50, offset = 0 } = req.query;
 
-      if (!pgPool) {
-        return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      }
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
 
-      let query = 'SELECT * FROM announcement WHERE 1=1';
-      const params = [];
-      let paramCount = 1;
+      let query = supabase.from('announcement').select('*', { count: 'exact' });
 
-      if (tenant_id) {
-        query += ` AND tenant_id = $${paramCount}`;
-        params.push(tenant_id);
-        paramCount++;
-      }
+      if (tenant_id) query = query.eq('tenant_id', tenant_id);
+      if (is_active !== undefined) query = query.eq('is_active', is_active === 'true');
 
-      if (is_active !== undefined) {
-        query += ` AND is_active = $${paramCount}`;
-        params.push(is_active === 'true');
-        paramCount++;
-      }
+      query = query.order('created_at', { ascending: false }).range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
 
-      query += ` ORDER BY created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
-      params.push(parseInt(limit), parseInt(offset));
-
-      const result = await pgPool.query(query, params);
-      
-      let countQuery = 'SELECT COUNT(*) FROM announcement WHERE 1=1';
-      const countParams = [];
-      let countParamCount = 1;
-      if (tenant_id) {
-        countQuery += ` AND tenant_id = $${countParamCount}`;
-        countParams.push(tenant_id);
-        countParamCount++;
-      }
-      if (is_active !== undefined) {
-        countQuery += ` AND is_active = $${countParamCount}`;
-        countParams.push(is_active === 'true');
-      }
-      const countResult = await pgPool.query(countQuery, countParams);
+      const { data, error, count } = await query;
+      if (error) throw new Error(error.message);
 
       res.json({
         status: 'success',
-        data: { announcements: result.rows, total: parseInt(countResult.rows[0].count) },
+        data: { announcements: data || [], total: count || 0 },
       });
     } catch (error) {
       console.error('Error fetching announcements:', error);
@@ -69,13 +43,18 @@ export default function createAnnouncementRoutes(pgPool) {
       const { id } = req.params;
       const { tenant_id } = req.query || {};
       if (!validateTenantScopedId(id, tenant_id, res)) return;
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      const result = await pgPool.query(
-        'SELECT * FROM announcement WHERE (tenant_id = $1 OR tenant_id IS NULL) AND id = $2 LIMIT 1',
-        [tenant_id, id]
-      );
-      if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
-      res.json({ status: 'success', data: { announcement: result.rows[0] } });
+      
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('announcement')
+        .select('*')
+        .or(`tenant_id.eq.${tenant_id},tenant_id.is.null`)
+        .eq('id', id)
+        .single();
+      if (error?.code === 'PGRST116') return res.status(404).json({ status: 'error', message: 'Not found' });
+      if (error) throw new Error(error.message);
+      res.json({ status: 'success', data: { announcement: data } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }
@@ -86,13 +65,26 @@ export default function createAnnouncementRoutes(pgPool) {
     try {
       const a = req.body;
       if (!a.title || !a.content) return res.status(400).json({ status: 'error', message: 'title and content required' });
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
-      const query = `INSERT INTO announcement (tenant_id, title, content, type, is_active, start_date, end_date, target_roles, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`;
-      const values = [a.tenant_id || null, a.title, a.content, a.type || 'info', a.is_active !== false, a.start_date || null, a.end_date || null, JSON.stringify(a.target_roles || []), JSON.stringify(a.metadata || {})];
-      const result = await pgPool.query(query, values);
-      res.status(201).json({ status: 'success', message: 'Created', data: { announcement: result.rows[0] } });
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('announcement')
+        .insert([{
+          tenant_id: a.tenant_id || null,
+          title: a.title,
+          content: a.content,
+          type: a.type || 'info',
+          is_active: a.is_active !== false,
+          start_date: a.start_date || null,
+          end_date: a.end_date || null,
+          target_roles: a.target_roles || [],
+          metadata: a.metadata || {}
+        }])
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
+      res.status(201).json({ status: 'success', message: 'Created', data: { announcement: data } });
     } catch (error) {
       console.error('Error creating announcement:', error);
       res.status(500).json({ status: 'error', message: error.message });
@@ -107,24 +99,28 @@ export default function createAnnouncementRoutes(pgPool) {
       const u = req.body;
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
       const allowed = ['title', 'content', 'type', 'is_active', 'start_date', 'end_date', 'target_roles', 'metadata'];
-      const sets = [], vals = [tenant_id];
-      let pc = 2;
+      const payload = {};
       Object.entries(u).forEach(([k, v]) => {
         if (allowed.includes(k)) {
-          sets.push(`${k} = $${pc}`);
-          vals.push((k === 'target_roles' || k === 'metadata') ? JSON.stringify(v) : v);
-          pc++;
+          payload[k] = v;
         }
       });
-      if (sets.length === 0) return res.status(400).json({ status: 'error', message: 'No valid fields' });
-      sets.push(`updated_at = NOW()`);
-      vals.push(id);
-      const result = await pgPool.query(`UPDATE announcement SET ${sets.join(', ')} WHERE (tenant_id = $1 OR tenant_id IS NULL) AND id = $${pc} RETURNING *`, vals);
-      if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
-      res.json({ status: 'success', message: 'Updated', data: { announcement: result.rows[0] } });
+      if (Object.keys(payload).length === 0) return res.status(400).json({ status: 'error', message: 'No valid fields' });
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('announcement')
+        .update(payload)
+        .or(`tenant_id.eq.${tenant_id},tenant_id.is.null`)
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) return res.status(404).json({ status: 'error', message: 'Not found' });
+      res.json({ status: 'success', message: 'Updated', data: { announcement: data } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }
@@ -137,14 +133,19 @@ export default function createAnnouncementRoutes(pgPool) {
       const { tenant_id } = req.query || {};
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
-      const result = await pgPool.query(
-        'DELETE FROM announcement WHERE (tenant_id = $1 OR tenant_id IS NULL) AND id = $2 RETURNING id',
-        [tenant_id, id]
-      );
-      if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
-      res.json({ status: 'success', message: 'Deleted', data: { id: result.rows[0].id } });
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('announcement')
+        .delete()
+        .or(`tenant_id.eq.${tenant_id},tenant_id.is.null`)
+        .eq('id', id)
+        .select('id')
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) return res.status(404).json({ status: 'error', message: 'Not found' });
+      res.json({ status: 'success', message: 'Deleted', data: { id: data.id } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }

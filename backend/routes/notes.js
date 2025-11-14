@@ -6,35 +6,28 @@
 import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
 
-export default function createNoteRoutes(pgPool) {
+export default function createNoteRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/notes - List notes
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, related_type, related_id, limit = 50, offset = 0 } = req.query;
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
+      const { tenant_id, related_type, related_id } = req.query;
+      const limit = parseInt(req.query.limit || '50', 10);
+      const offset = parseInt(req.query.offset || '0', 10);
 
-      let query = 'SELECT * FROM note WHERE 1=1';
-      const params = [];
-      let pc = 1;
-      if (tenant_id) { query += ` AND tenant_id = $${pc}`; params.push(tenant_id); pc++; }
-      if (related_type) { query += ` AND related_type = $${pc}`; params.push(related_type); pc++; }
-      if (related_id) { query += ` AND related_id = $${pc}`; params.push(related_id); pc++; }
-      query += ` ORDER BY created_at DESC LIMIT $${pc} OFFSET $${pc + 1}`;
-      params.push(parseInt(limit), parseInt(offset));
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      let q = supabase.from('note').select('*', { count: 'exact' });
+      if (tenant_id) q = q.eq('tenant_id', tenant_id);
+      if (related_type) q = q.eq('related_type', related_type);
+      if (related_id) q = q.eq('related_id', related_id);
+      q = q.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
 
-      const result = await pgPool.query(query, params);
-      
-      let countQuery = 'SELECT COUNT(*) FROM note WHERE 1=1';
-      const countParams = [];
-      let cpc = 1;
-      if (tenant_id) { countQuery += ` AND tenant_id = $${cpc}`; countParams.push(tenant_id); cpc++; }
-      if (related_type) { countQuery += ` AND related_type = $${cpc}`; countParams.push(related_type); cpc++; }
-      if (related_id) { countQuery += ` AND related_id = $${cpc}`; countParams.push(related_id); }
-      const countResult = await pgPool.query(countQuery, countParams);
+      const { data, error, count } = await q;
+      if (error) throw new Error(error.message);
 
-      res.json({ status: 'success', data: { notes: result.rows, total: parseInt(countResult.rows[0].count) } });
+      res.json({ status: 'success', data: { notes: data || [], total: count || 0 } });
     } catch (error) {
       console.error('Error fetching notes:', error);
       res.status(500).json({ status: 'error', message: error.message });
@@ -47,12 +40,18 @@ export default function createNoteRoutes(pgPool) {
       const { id } = req.params;
       const { tenant_id } = req.query || {};
       if (!validateTenantScopedId(id, tenant_id, res)) return;
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      const result = await pgPool.query('SELECT * FROM note WHERE tenant_id = $1 AND id = $2 LIMIT 1', [tenant_id, id]);
-      if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
-      // Safety check
-      if (result.rows[0].tenant_id !== tenant_id) return res.status(404).json({ status: 'error', message: 'Not found' });
-      res.json({ status: 'success', data: { note: result.rows[0] } });
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('note')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .single();
+      if (error?.code === 'PGRST116') return res.status(404).json({ status: 'error', message: 'Not found' });
+      if (error) throw new Error(error.message);
+      res.json({ status: 'success', data: { note: data } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }
@@ -65,13 +64,24 @@ export default function createNoteRoutes(pgPool) {
       if (!n.tenant_id || !n.content) {
         return res.status(400).json({ status: 'error', message: 'tenant_id and content required' });
       }
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
-      const query = `INSERT INTO note (tenant_id, title, content, related_type, related_id, created_by, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`;
-      const vals = [n.tenant_id, n.title || null, n.content, n.related_type || null, n.related_id || null, n.created_by || null, JSON.stringify(n.metadata || {})];
-      const result = await pgPool.query(query, vals);
-      res.status(201).json({ status: 'success', message: 'Created', data: { note: result.rows[0] } });
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('note')
+        .insert([{
+          tenant_id: n.tenant_id,
+          title: n.title || null,
+          content: n.content,
+          related_type: n.related_type || null,
+          related_id: n.related_id || null,
+          created_by: n.created_by || null,
+          metadata: n.metadata || {},
+        }])
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
+      res.status(201).json({ status: 'success', message: 'Created', data: { note: data } });
     } catch (error) {
       console.error('Error creating note:', error);
       res.status(500).json({ status: 'error', message: error.message });
@@ -86,24 +96,26 @@ export default function createNoteRoutes(pgPool) {
       const u = req.body;
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
       const allowed = ['title', 'content', 'related_type', 'related_id', 'metadata'];
-      const sets = [], vals = [tenant_id];
-      let pc = 2;
+      const payload = { updated_at: new Date().toISOString() };
       Object.entries(u).forEach(([k, v]) => {
-        if (allowed.includes(k)) {
-          sets.push(`${k} = $${pc}`);
-          vals.push(k === 'metadata' ? JSON.stringify(v) : v);
-          pc++;
-        }
+        if (allowed.includes(k)) payload[k] = v;
       });
-      if (sets.length === 0) return res.status(400).json({ status: 'error', message: 'No valid fields' });
-      sets.push(`updated_at = NOW()`);
-      vals.push(id);
-      const result = await pgPool.query(`UPDATE note SET ${sets.join(', ')} WHERE tenant_id = $1 AND id = $${pc} RETURNING *`, vals);
-      if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
-      res.json({ status: 'success', message: 'Updated', data: { note: result.rows[0] } });
+      if (Object.keys(payload).length === 1) return res.status(400).json({ status: 'error', message: 'No valid fields' });
+
+      const { data, error } = await supabase
+        .from('note')
+        .update(payload)
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .select('*')
+        .single();
+      if (error?.code === 'PGRST116') return res.status(404).json({ status: 'error', message: 'Not found' });
+      if (error) throw new Error(error.message);
+      res.json({ status: 'success', message: 'Updated', data: { note: data } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }
@@ -116,14 +128,19 @@ export default function createNoteRoutes(pgPool) {
       const { tenant_id } = req.query || {};
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
-      const result = await pgPool.query(
-        'DELETE FROM note WHERE tenant_id = $1 AND id = $2 RETURNING id',
-        [tenant_id, id]
-      );
-      if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
-      res.json({ status: 'success', message: 'Deleted', data: { id: result.rows[0].id } });
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('note')
+        .delete()
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .select('id')
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) return res.status(404).json({ status: 'error', message: 'Not found' });
+      res.json({ status: 'success', message: 'Deleted', data: { id: data.id } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }

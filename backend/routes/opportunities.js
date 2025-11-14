@@ -1,7 +1,7 @@
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 
-export default function createOpportunityRoutes(pgPool) {
+export default function createOpportunityRoutes(_pgPool) {
   const router = express.Router();
 
   // Apply tenant validation and employee data scope to all routes
@@ -45,7 +45,9 @@ export default function createOpportunityRoutes(pgPool) {
   // GET /api/opportunities - List opportunities with filtering
   router.get('/', async (req, res) => {
     try {
-      let { tenant_id, limit = 50, offset = 0 } = req.query;
+      let { tenant_id } = req.query;
+      const limit = parseInt(req.query.limit || '50', 10);
+      const offset = parseInt(req.query.offset || '0', 10);
 
       if (!tenant_id) {
         return res.status(400).json({
@@ -54,19 +56,17 @@ export default function createOpportunityRoutes(pgPool) {
         });
       }
 
-      const query = `
-        SELECT * FROM opportunities 
-        WHERE tenant_id = $1 
-        ORDER BY created_date DESC 
-        LIMIT $2 OFFSET $3
-      `;
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error, count } = await supabase
+        .from('opportunities')
+        .select('*', { count: 'exact' })
+        .eq('tenant_id', tenant_id)
+        .order('created_date', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (error) throw new Error(error.message);
       
-  const result = await pgPool.query(query, [tenant_id, parseInt(limit), parseInt(offset)]);
-      
-      const countQuery = 'SELECT COUNT(*) FROM opportunities WHERE tenant_id = $1';
-    const countResult = await pgPool.query(countQuery, [tenant_id]);
-      
-      const opportunities = result.rows.map(expandMetadata);
+      const opportunities = (data || []).map(expandMetadata);
       
       // Disable caching for dynamic list to avoid stale 304 during rapid updates
       res.set({
@@ -78,9 +78,9 @@ export default function createOpportunityRoutes(pgPool) {
         status: 'success',
         data: {
           opportunities,
-          total: parseInt(countResult.rows[0].count),
-          limit: parseInt(limit),
-          offset: parseInt(offset)
+          total: count || 0,
+          limit,
+          offset
         }
       });
     } catch (error) {
@@ -102,22 +102,21 @@ export default function createOpportunityRoutes(pgPool) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
-      // Accept UUID or slug; normalize to slug for legacy columns
-
-      const result = await pgPool.query('SELECT * FROM opportunities WHERE tenant_id = $1 AND id = $2 LIMIT 1', [tenant_id, id]);
-      
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('opportunities')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .single();
+      if (error?.code === 'PGRST116') {
         return res.status(404).json({
           status: 'error',
           message: 'Opportunity not found'
         });
       }
-      
-      const row = result.rows[0];
-      if (row.id !== id || row.tenant_id !== tenant_id) {
-        console.error('[Opportunities GET /:id] Mismatched row returned', { expected: { id, tenant_id }, got: { id: row.id, tenant_id: row.tenant_id } });
-        return res.status(404).json({ status: 'error', message: 'Opportunity not found' });
-      }
+      if (error) throw new Error(error.message);
 
       // Disable caching for single record as well
       res.set({
@@ -125,7 +124,7 @@ export default function createOpportunityRoutes(pgPool) {
         'Pragma': 'no-cache',
         'Expires': '0',
       });
-      const opportunity = expandMetadata(row);
+      const opportunity = expandMetadata(data);
       
       res.json({
         status: 'success',
@@ -152,36 +151,33 @@ export default function createOpportunityRoutes(pgPool) {
         });
       }
 
-      // Merge metadata with unknown fields
       const combinedMetadata = {
         ...(metadata || {}),
         ...otherFields
       };
 
-      const query = `
-        INSERT INTO opportunities (
-          tenant_id, name, account_id, contact_id, amount, stage, 
-          probability, close_date, metadata, created_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()
-        ) RETURNING *
-      `;
+      const nowIso = new Date().toISOString();
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('opportunities')
+        .insert([{
+          tenant_id,
+          name,
+          account_id: account_id || null,
+          contact_id: contact_id || null,
+          amount: amount || 0,
+          stage: stage || 'prospecting',
+          probability: probability || 0,
+          close_date: close_date || null,
+          metadata: combinedMetadata,
+          created_at: nowIso,
+        }])
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
       
-      const values = [
-        tenant_id,
-        name,
-        account_id || null,
-        contact_id || null,
-        amount || 0,
-        stage || 'prospecting',
-        probability || 0,
-        close_date || null,
-        combinedMetadata
-      ];
-      
-      const result = await pgPool.query(query, values);
-      
-      const opportunity = expandMetadata(result.rows[0]);
+      const opportunity = expandMetadata(data);
       
       res.status(201).json({
         status: 'success',
@@ -206,88 +202,64 @@ export default function createOpportunityRoutes(pgPool) {
       if (!requestedTenantId) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required for update' });
       }
-      // Accept UUID or slug; normalize to slug for legacy columns
       
-      // Fetch current metadata (strictly tenant-scoped)
-      const currentOpp = await pgPool.query(
-        'SELECT id, tenant_id, stage, metadata FROM opportunities WHERE id = $1 AND tenant_id = $2',
-        [id, requestedTenantId]
-      );
-      
-      if (currentOpp.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data: before, error: fetchErr } = await supabase
+        .from('opportunities')
+        .select('id, tenant_id, stage, metadata')
+        .eq('id', id)
+        .eq('tenant_id', requestedTenantId)
+        .single();
+      if (fetchErr?.code === 'PGRST116') {
         return res.status(404).json({
           status: 'error',
           message: 'Opportunity not found'
         });
       }
+      if (fetchErr) throw new Error(fetchErr.message);
 
-      const before = currentOpp.rows[0];
-      if (before.id !== id || before.tenant_id !== requestedTenantId) {
-        console.warn('[Opportunities PUT] ⚠️  Row mismatch from pre-fetch', {
-          expected: { id, tenant_id: requestedTenantId },
-          actual: { id: before.id, tenant_id: before.tenant_id },
-          action: 'proceeding with WHERE clause enforcement'
-        });
-      }
-
-      // Merge metadata
-      const currentMetadata = currentOpp.rows[0].metadata || {};
+      const currentMetadata = before?.metadata || {};
       const updatedMetadata = {
         ...currentMetadata,
         ...(metadata || {}),
         ...otherFields,
       };
-      // Normalize stage to lowercase (pipeline stages are lowercase in UI)
       const normalizedStage = typeof stage === 'string' ? stage.toLowerCase() : null;
       
-      const query = `
-        UPDATE opportunities SET
-          name = COALESCE($1, name),
-          account_id = COALESCE($2, account_id),
-          contact_id = COALESCE($3, contact_id),
-          amount = COALESCE($4, amount),
-          stage = CASE WHEN $5 IS NOT NULL THEN $5 ELSE stage END,
-          probability = COALESCE($6, probability),
-          close_date = COALESCE($7, close_date),
-          metadata = $8,
-          updated_at = NOW()
-        WHERE id = $9 AND tenant_id = $10
-        RETURNING *
-      `;
-      
-      const values = [
-        name,
-        account_id,
-        contact_id,
-        amount,
-        normalizedStage,
-        probability,
-        close_date,
-        updatedMetadata,
-        id,
-        requestedTenantId
-      ];
+      const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
+      if (name !== undefined) payload.name = name;
+      if (account_id !== undefined) payload.account_id = account_id;
+      if (contact_id !== undefined) payload.contact_id = contact_id;
+      if (amount !== undefined) payload.amount = amount;
+      if (normalizedStage !== null) payload.stage = normalizedStage;
+      if (probability !== undefined) payload.probability = probability;
+      if (close_date !== undefined) payload.close_date = close_date;
 
-      const result = await pgPool.query(query, values);
-      
-      if (result.rows.length === 0) {
+      const { data, error } = await supabase
+        .from('opportunities')
+        .update(payload)
+        .eq('id', id)
+        .eq('tenant_id', requestedTenantId)
+        .select('*')
+        .single();
+      if (error?.code === 'PGRST116') {
         return res.status(404).json({
           status: 'error',
           message: 'Opportunity not found for tenant'
         });
       }
-      
-      const afterRow = result.rows[0];
+      if (error) throw new Error(error.message);
 
-      if (normalizedStage !== null && afterRow.stage !== normalizedStage) {
+      if (normalizedStage !== null && data.stage !== normalizedStage) {
         console.warn('[Opportunities PUT] ⚠️  Stage mismatch', {
           expected: normalizedStage,
-          persisted: afterRow.stage,
-          id: afterRow.id
+          persisted: data.stage,
+          id: data.id
         });
       }
 
-      const updatedOpportunity = expandMetadata(afterRow);
+      const updatedOpportunity = expandMetadata(data);
       
       res.json({
         status: 'success',
@@ -306,9 +278,16 @@ export default function createOpportunityRoutes(pgPool) {
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const result = await pgPool.query('DELETE FROM opportunities WHERE id = $1 RETURNING *', [id]);
-      
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('opportunities')
+        .delete()
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) {
         return res.status(404).json({
           status: 'error',
           message: 'Opportunity not found'

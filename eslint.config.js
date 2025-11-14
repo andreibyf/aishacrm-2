@@ -73,6 +73,12 @@ export default [
       'react-refresh/only-export-components': 'off',
       // Keep unused vars as warnings, ignore underscored args/vars
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      // Disallow direct Postgres access; use Supabase client instead
+      'no-restricted-imports': ['error', {
+        paths: [
+          { name: 'pg', message: 'Use Supabase client (backend/lib/supabase-db.js) instead of pg' },
+        ],
+      }],
     },
   },
   // Root scripts override: Node environment for maintenance/utility scripts at repo root

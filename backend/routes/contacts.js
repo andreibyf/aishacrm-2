@@ -6,7 +6,7 @@
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 
-export default function createContactRoutes(pgPool) {
+export default function createContactRoutes(_pgPool) {
   const router = express.Router();
 
   // Apply tenant validation and employee data scope to all routes
@@ -27,53 +27,33 @@ export default function createContactRoutes(pgPool) {
   // GET /api/contacts - List contacts
   router.get('/', async (req, res) => {
     try {
-      let { tenant_id, limit = 50, offset = 0, status, account_id } = req.query;
+      let { tenant_id, status, account_id } = req.query;
+      const limit = parseInt(req.query.limit || '50', 10);
+      const offset = parseInt(req.query.offset || '0', 10);
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
-      // Build query with optional filters
-      let query = 'SELECT * FROM contacts WHERE tenant_id = $1';
-      const params = [tenant_id];
-      
-      if (status) {
-        params.push(status);
-        query += ` AND status = $${params.length}`;
-      }
-      if (account_id) {
-        params.push(account_id);
-        query += ` AND account_id = $${params.length}`;
-      }
-      
-      query += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
-      params.push(parseInt(limit), parseInt(offset));
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      let q = supabase.from('contacts').select('*', { count: 'exact' }).eq('tenant_id', tenant_id);
+      if (status) q = q.eq('status', status);
+      if (account_id) q = q.eq('account_id', account_id);
+      q = q.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
 
-      const result = await pgPool.query(query, params);
-      
-      // Get total count
-      let countQuery = 'SELECT COUNT(*) FROM contacts WHERE tenant_id = $1';
-      const countParams = [tenant_id];
-      if (status) {
-        countParams.push(status);
-        countQuery += ' AND status = $2';
-      }
-      if (account_id) {
-        countParams.push(account_id);
-        countQuery += ` AND account_id = $${countParams.length}`;
-      }
-      const countResult = await pgPool.query(countQuery, countParams);
+      const { data, error, count } = await q;
+      if (error) throw new Error(error.message);
 
-      // Expand metadata for all contacts
-      const contacts = result.rows.map(expandMetadata);
+      const contacts = (data || []).map(expandMetadata);
 
       res.json({
         status: 'success',
         data: {
           contacts,
-            total: parseInt(countResult.rows?.[0]?.count || 0),
-          limit: parseInt(limit),
-          offset: parseInt(offset)
+          total: count || 0,
+          limit,
+          offset
         },
       });
     } catch (error) {
@@ -85,7 +65,9 @@ export default function createContactRoutes(pgPool) {
   // GET /api/contacts/search - Search contacts by name/email/phone
   router.get('/search', async (req, res) => {
     try {
-      let { tenant_id, q = '', limit = 25, offset = 0 } = req.query;
+      let { tenant_id, q = '' } = req.query;
+      const limit = parseInt(req.query.limit || '25', 10);
+      const offset = parseInt(req.query.offset || '0', 10);
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -94,48 +76,28 @@ export default function createContactRoutes(pgPool) {
         return res.status(400).json({ status: 'error', message: 'q is required' });
       }
 
-      // Accept UUID or slug; normalize to slug for legacy columns
-
       const like = `%${q}%`;
 
-      const searchQuery = `
-        SELECT *
-        FROM contacts
-        WHERE tenant_id = $1
-          AND (
-            first_name ILIKE $2 OR
-            last_name ILIKE $2 OR
-            email ILIKE $2 OR
-            phone ILIKE $2
-          )
-        ORDER BY updated_at DESC
-        LIMIT $3 OFFSET $4
-      `;
-      const searchParams = [tenant_id, like, parseInt(limit), parseInt(offset)];
-      const result = await pgPool.query(searchQuery, searchParams);
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error, count } = await supabase
+        .from('contacts')
+        .select('*', { count: 'exact' })
+        .eq('tenant_id', tenant_id)
+        .or(`first_name.ilike.${like},last_name.ilike.${like},email.ilike.${like},phone.ilike.${like}`)
+        .order('updated_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (error) throw new Error(error.message);
 
-      const countQuery = `
-        SELECT COUNT(*)
-        FROM contacts
-        WHERE tenant_id = $1
-          AND (
-            first_name ILIKE $2 OR
-            last_name ILIKE $2 OR
-            email ILIKE $2 OR
-            phone ILIKE $2
-          )
-      `;
-      const countResult = await pgPool.query(countQuery, [tenant_id, like]);
-
-      const contacts = result.rows.map(expandMetadata);
+      const contacts = (data || []).map(expandMetadata);
 
       res.json({
         status: 'success',
         data: {
           contacts,
-          total: parseInt(countResult.rows?.[0]?.count || 0),
-          limit: parseInt(limit),
-          offset: parseInt(offset),
+          total: count || 0,
+          limit,
+          offset,
         },
       });
     } catch (error) {
@@ -180,36 +142,36 @@ export default function createContactRoutes(pgPool) {
         });
       }
 
-      // Merge all extra fields (including is_test_data, tags, etc.) into metadata JSON
       const mergedMetadata = {
         ...(incomingMetadata || {}),
         ...otherFields,
       };
 
-      const query = `
-        INSERT INTO contacts (
-          tenant_id, first_name, last_name, email, phone, account_id, status, metadata, created_at, updated_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()
-        )
-        RETURNING *
-      `;
-      
-      const result = await pgPool.query(query, [
-        tenant_id,
-        first_name,
-        last_name,
-        email,
-        phone,
-        account_id || null,
-        status,
-        mergedMetadata,
-      ]);
+      const nowIso = new Date().toISOString();
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('contacts')
+        .insert([{
+          tenant_id,
+          first_name,
+          last_name,
+          email,
+          phone,
+          account_id: account_id || null,
+          status,
+          metadata: mergedMetadata,
+          created_at: nowIso,
+          updated_at: nowIso,
+        }])
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
 
       res.json({
         status: 'success',
         message: 'Contact created',
-        data: { contact: result.rows[0] },
+        data: { contact: data },
       });
     } catch (error) {
       console.error('Error creating contact:', error);
@@ -227,25 +189,20 @@ export default function createContactRoutes(pgPool) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
-      // Accept UUID or slug; normalize to slug for legacy columns
-
-      const result = await pgPool.query(
-        'SELECT * FROM contacts WHERE tenant_id = $1 AND id = $2 LIMIT 1',
-        [tenant_id, id]
-      );
-      
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('contacts')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .single();
+      if (error?.code === 'PGRST116') {
         return res.status(404).json({ status: 'error', message: 'Contact not found' });
       }
+      if (error) throw new Error(error.message);
 
-      const row = result.rows[0];
-      if (row.id !== id || row.tenant_id !== tenant_id) {
-        console.error('[Contacts GET /:id] Mismatched row returned', { expected: { id, tenant_id }, got: { id: row.id, tenant_id: row.tenant_id } });
-        return res.status(404).json({ status: 'error', message: 'Contact not found' });
-      }
-
-      // Expand metadata to top-level properties
-      const contact = expandMetadata(row);
+      const contact = expandMetadata(data);
 
       res.json({
         status: 'success',
@@ -280,68 +237,45 @@ export default function createContactRoutes(pgPool) {
         });
       }
 
-      // First, get current contact to merge metadata
-      const currentContact = await pgPool.query('SELECT metadata FROM contacts WHERE id = $1', [id]);
-      
-      if (currentContact.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data: current, error: fetchErr } = await supabase
+        .from('contacts')
+        .select('metadata')
+        .eq('id', id)
+        .single();
+      if (fetchErr?.code === 'PGRST116') {
         return res.status(404).json({ status: 'error', message: 'Contact not found' });
       }
+      if (fetchErr) throw new Error(fetchErr.message);
 
-      // Merge metadata
-      const currentMetadata = currentContact.rows[0].metadata || {};
+      const currentMetadata = current?.metadata || {};
       const updatedMetadata = {
         ...currentMetadata,
         ...(metadata || {}),
         ...otherFields,
       };
 
-      // Build dynamic update query
-      const updates = [];
-      const values = [];
-      let paramCount = 1;
+      const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
+      if (first_name !== undefined) payload.first_name = first_name;
+      if (last_name !== undefined) payload.last_name = last_name;
+      if (email !== undefined) payload.email = email;
+      if (phone !== undefined) payload.phone = phone;
+      if (account_id !== undefined) payload.account_id = account_id;
+      if (status !== undefined) payload.status = status;
 
-      if (first_name !== undefined) {
-        updates.push(`first_name = $${paramCount++}`);
-        values.push(first_name);
-      }
-      if (last_name !== undefined) {
-        updates.push(`last_name = $${paramCount++}`);
-        values.push(last_name);
-      }
-      if (email !== undefined) {
-        updates.push(`email = $${paramCount++}`);
-        values.push(email);
-      }
-      if (phone !== undefined) {
-        updates.push(`phone = $${paramCount++}`);
-        values.push(phone);
-      }
-      if (account_id !== undefined) {
-        updates.push(`account_id = $${paramCount++}`);
-        values.push(account_id);
-      }
-      if (status !== undefined) {
-        updates.push(`status = $${paramCount++}`);
-        values.push(status);
-      }
-
-      // Always update metadata
-      updates.push(`metadata = $${paramCount++}`);
-      values.push(updatedMetadata);
-
-      updates.push(`updated_at = NOW()`);
-      values.push(id);
-
-      const query = `UPDATE contacts SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`;
-      const result = await pgPool.query(query, values);
-
-      if (result.rows.length === 0) {
+      const { data, error } = await supabase
+        .from('contacts')
+        .update(payload)
+        .eq('id', id)
+        .select('*')
+        .single();
+      if (error?.code === 'PGRST116') {
         return res.status(404).json({ status: 'error', message: 'Contact not found' });
       }
+      if (error) throw new Error(error.message);
 
-      // Expand metadata in response
-      // Expand metadata in response
-      const updatedContact = expandMetadata(result.rows[0]);
+      const updatedContact = expandMetadata(data);
 
       res.json({
         status: 'success',
@@ -359,16 +293,21 @@ export default function createContactRoutes(pgPool) {
     try {
       const { id } = req.params;
 
-      const result = await pgPool.query('DELETE FROM contacts WHERE id = $1 RETURNING id', [id]);
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({ status: 'error', message: 'Contact not found' });
-      }
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('contacts')
+        .delete()
+        .eq('id', id)
+        .select('id')
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) return res.status(404).json({ status: 'error', message: 'Contact not found' });
 
       res.json({
         status: 'success',
         message: 'Contact deleted',
-        data: { id: result.rows[0].id },
+        data: { id: data.id },
       });
     } catch (error) {
       console.error('Error deleting contact:', error);

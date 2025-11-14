@@ -1,6 +1,6 @@
 import express from "express";
 
-export default function createSystemLogRoutes(pgPool) {
+export default function createSystemLogRoutes(_pgPool) {
   const router = express.Router();
 
   // Helper function to expand metadata fields to top-level properties
@@ -44,32 +44,22 @@ export default function createSystemLogRoutes(pgPool) {
       if (user_agent) combinedMetadata.user_agent = user_agent;
       if (url) combinedMetadata.url = url;
 
-      // Insert only columns that exist in the schema
-      const query = `
-        INSERT INTO system_logs (
-          tenant_id, level, message, source, metadata, stack_trace, created_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, NOW()
-        ) RETURNING *
-      `;
-
       // Ensure message is a non-empty string
       const safeMessage = (typeof message === 'string' && message.trim() !== '')
         ? message
         : (message == null ? '(no message)' : (() => { try { return JSON.stringify(message); } catch { return String(message); } })());
 
-      const values = [
-        effectiveTenantId,
-        level || "INFO",
-        safeMessage,
-        source,
-        JSON.stringify(combinedMetadata), // Ensure metadata is stringified
-        stack_trace,
-      ];
+      const nowIso = new Date().toISOString();
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('system_logs')
+        .insert([{ tenant_id: effectiveTenantId, level: level || 'INFO', message: safeMessage, source, metadata: combinedMetadata, stack_trace, created_at: nowIso }])
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
 
-      const result = await pgPool.query(query, values);
-
-      const systemLog = expandMetadata(result.rows[0]);
+      const systemLog = expandMetadata(data);
 
       res.status(201).json({
         status: "success",
@@ -89,41 +79,31 @@ export default function createSystemLogRoutes(pgPool) {
     try {
       const { tenant_id, level, limit = 100, offset = 0, hours } = req.query;
 
-      let query = "SELECT * FROM system_logs WHERE 1=1";
-      const values = [];
-      let valueIndex = 1;
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      let q = supabase
+        .from('system_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
 
-      // Add time range filter if hours parameter is provided
+      if (tenant_id) q = q.eq('tenant_id', tenant_id);
+      if (level) q = q.eq('level', level);
       if (hours) {
-        query += ` AND created_at > NOW() - INTERVAL '${parseInt(hours)} hours'`;
+        const since = new Date(Date.now() - parseInt(hours) * 60 * 60 * 1000).toISOString();
+        q = q.gt('created_at', since);
       }
 
-      if (tenant_id) {
-        query += ` AND tenant_id = $${valueIndex}`;
-        values.push(tenant_id);
-        valueIndex++;
-      }
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
 
-      if (level) {
-        query += ` AND level = $${valueIndex}`;
-        values.push(level);
-        valueIndex++;
-      }
-
-      query += ` ORDER BY created_at DESC LIMIT $${valueIndex} OFFSET $${
-        valueIndex + 1
-      }`;
-      values.push(parseInt(limit), parseInt(offset));
-
-      const result = await pgPool.query(query, values);
-
-      const systemLogs = result.rows.map(expandMetadata);
+      const systemLogs = (data || []).map(expandMetadata);
 
       res.json({
         status: "success",
         data: {
           "system-logs": systemLogs,
-          total: result.rows.length,
+          total: systemLogs.length,
           limit: parseInt(limit),
           offset: parseInt(offset),
         },
@@ -142,10 +122,17 @@ export default function createSystemLogRoutes(pgPool) {
     try {
       const { id } = req.params;
 
-      const query = "DELETE FROM system_logs WHERE id = $1 RETURNING *";
-      const result = await pgPool.query(query, [id]);
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('system_logs')
+        .delete()
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
 
-      if (result.rows.length === 0) {
+      if (!data) {
         return res.status(404).json({
           status: "error",
           message: "System log not found",
@@ -155,7 +142,7 @@ export default function createSystemLogRoutes(pgPool) {
       res.json({
         status: "success",
         message: "System log deleted",
-        data: result.rows[0],
+        data,
       });
     } catch (error) {
       console.error("Error deleting system log:", error);
@@ -171,44 +158,32 @@ export default function createSystemLogRoutes(pgPool) {
     try {
       const { tenant_id, level, older_than_days, hours } = req.query;
 
-      let query = "DELETE FROM system_logs WHERE 1=1";
-      const values = [];
-      let valueIndex = 1;
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
 
-      // Add time range filter if hours parameter is provided
+      let del = supabase.from('system_logs').delete();
+      if (tenant_id) del = del.eq('tenant_id', tenant_id);
+      if (level) del = del.eq('level', level);
       if (hours) {
-        query += ` AND created_at > NOW() - INTERVAL '${parseInt(hours)} hours'`;
+        const since = new Date(Date.now() - parseInt(hours) * 60 * 60 * 1000).toISOString();
+        del = del.gt('created_at', since);
       }
-
-      if (tenant_id) {
-        query += ` AND tenant_id = $${valueIndex}`;
-        values.push(tenant_id);
-        valueIndex++;
-      }
-
-      if (level) {
-        query += ` AND level = $${valueIndex}`;
-        values.push(level);
-        valueIndex++;
-      }
-
       if (older_than_days) {
-        query += ` AND created_at < NOW() - INTERVAL '${
-          parseInt(older_than_days)
-        } days'`;
+        const before = new Date(Date.now() - parseInt(older_than_days) * 24 * 60 * 60 * 1000).toISOString();
+        del = del.lt('created_at', before);
       }
 
-      query += " RETURNING *";
+      const { data, error } = await del.select('id');
+      if (error) throw new Error(error.message);
 
-      const result = await pgPool.query(query, values);
-
-      console.log(`[System Logs] Deleted ${result.rows.length} system log(s) for tenant: ${tenant_id || 'all'}`);
+      const deletedCount = (data || []).length;
+      console.log(`[System Logs] Deleted ${deletedCount} system log(s) for tenant: ${tenant_id || 'all'}`);
 
       res.json({
         status: "success",
-        message: `Deleted ${result.rows.length} system log(s)`,
+        message: `Deleted ${deletedCount} system log(s)`,
         data: {
-          deleted_count: result.rows.length,
+          deleted_count: deletedCount,
         },
       });
     } catch (error) {

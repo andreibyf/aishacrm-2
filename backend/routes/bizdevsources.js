@@ -7,9 +7,11 @@ import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
 import { logEntityTransition } from '../lib/transitions.js';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
+import { getSupabaseClient } from '../lib/supabase-db.js';
 
 export default function createBizDevSourceRoutes(pgPool) {
   const router = express.Router();
+  const supabase = getSupabaseClient();
 
   // Enforce tenant scoping and defaults
   router.use(validateTenantAccess);
@@ -21,41 +23,34 @@ export default function createBizDevSourceRoutes(pgPool) {
 
       // Accept UUID or slug; normalize to slug for legacy columns
       
-      let query = 'SELECT * FROM bizdev_sources WHERE 1=1';
-      const params = [];
-      let paramCount = 1;
+      let query = supabase
+        .from('bizdev_sources')
+        .select('*')
+        .order('created_at', { ascending: false });
 
       if (tenant_id) {
-        query += ` AND tenant_id = $${paramCount}`;
-        params.push(tenant_id);
-        paramCount++;
+        query = query.eq('tenant_id', tenant_id);
       }
 
       if (status) {
-        query += ` AND status = $${paramCount}`;
-        params.push(status);
-        paramCount++;
+        query = query.eq('status', status);
       }
 
       if (source_type) {
-        query += ` AND source_type = $${paramCount}`;
-        params.push(source_type);
-        paramCount++;
+        query = query.eq('source_type', source_type);
       }
 
       if (priority) {
-        query += ` AND priority = $${paramCount}`;
-        params.push(priority);
-        paramCount++;
+        query = query.eq('priority', priority);
       }
 
-      query += ' ORDER BY created_at DESC';
+      const { data, error } = await query;
 
-      const result = await pgPool.query(query, params);
+      if (error) throw error;
 
       res.json({
         status: 'success',
-        data: { bizdevsources: result.rows }
+        data: { bizdevsources: data || [] }
       });
     } catch (error) {
       console.error('Error fetching bizdev sources:', error);
@@ -76,12 +71,16 @@ export default function createBizDevSourceRoutes(pgPool) {
 
       // Accept UUID or slug; normalize to slug for legacy columns
       
-      const result = await pgPool.query(
-        'SELECT * FROM bizdev_sources WHERE tenant_id = $1 AND id = $2 LIMIT 1',
-        [tenant_id, id]
-      );
+      const { data, error } = await supabase
+        .from('bizdev_sources')
+        .select('*')
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .maybeSingle();
 
-      if (result.rows.length === 0) {
+      if (error) throw error;
+
+      if (!data) {
         return res.status(404).json({
           status: 'error',
           message: 'BizDev source not found'
@@ -89,13 +88,13 @@ export default function createBizDevSourceRoutes(pgPool) {
       }
 
       // Safety check
-      if (result.rows[0].tenant_id !== tenant_id) {
+      if (data.tenant_id !== tenant_id) {
         return res.status(404).json({ status: 'error', message: 'BizDev source not found' });
       }
 
       res.json({
         status: 'success',
-        data: result.rows[0]
+        data
       });
     } catch (error) {
       console.error('Error fetching bizdev source:', error);

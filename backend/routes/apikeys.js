@@ -6,7 +6,7 @@
 import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
 
-export default function createApikeyRoutes(pgPool) {
+export default function createApikeyRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/apikeys - List API keys for a tenant
@@ -15,18 +15,16 @@ export default function createApikeyRoutes(pgPool) {
       const { tenant_id } = req.query;
       const limit = parseInt(req.query.limit || '100', 10);
 
-      if (!pgPool) {
-        // Return empty list in non-DB mode
-        return res.json({ status: 'success', data: { apikeys: [], tenant_id } });
-      }
-
-      const q = `SELECT id, tenant_id, key_name, key_value, is_active, description, created_at, created_date, created_by, usage_count, last_used
-                 FROM apikey
-                 WHERE tenant_id = $1
-                 ORDER BY created_date DESC
-                 LIMIT $2`;
-      const { rows } = await pgPool.query(q, [tenant_id, limit]);
-      return res.json({ status: 'success', data: { apikeys: rows } });
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('apikey')
+        .select('id, tenant_id, key_name, key_value, is_active, description, created_at, created_date, created_by, usage_count, last_used')
+        .eq('tenant_id', tenant_id)
+        .order('created_date', { ascending: false })
+        .limit(limit);
+      if (error) throw new Error(error.message);
+      return res.json({ status: 'success', data: { apikeys: data || [] } });
     } catch (error) {
       console.error('apikeys:list error', error);
       res.status(500).json({ status: 'error', message: error.message });
@@ -42,27 +40,16 @@ export default function createApikeyRoutes(pgPool) {
         return res.status(400).json({ status: 'error', message: 'tenant_id, key_name and key_value are required' });
       }
 
-      if (!pgPool) {
-        const newKey = {
-          id: `local-apikey-${Date.now()}`,
-          tenant_id,
-          key_name,
-          key_value,
-          description: description || null,
-          is_active: true,
-          created_at: new Date().toISOString(),
-          created_date: new Date().toISOString(),
-          created_by: created_by || null,
-        };
-        return res.json({ status: 'success', message: 'API key created (local)', data: newKey });
-      }
-
-      const q = `INSERT INTO apikey (tenant_id, key_name, key_value, description, is_active, created_at, created_date, created_by)
-                 VALUES ($1, $2, $3, $4, true, now(), now(), $5)
-                 RETURNING id, tenant_id, key_name, key_value, description, is_active, created_at, created_date, created_by`;
-      const values = [tenant_id, key_name, key_value, description || null, created_by || null];
-      const { rows } = await pgPool.query(q, values);
-      return res.json({ status: 'success', message: 'API key created', data: rows[0] });
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const nowIso = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('apikey')
+        .insert([{ tenant_id, key_name, key_value, description: description || null, is_active: true, created_at: nowIso, created_date: nowIso, created_by: created_by || null }])
+        .select('id, tenant_id, key_name, key_value, description, is_active, created_at, created_date, created_by')
+        .single();
+      if (error) throw new Error(error.message);
+      return res.json({ status: 'success', message: 'API key created', data });
     } catch (error) {
       console.error('apikeys:create error', error);
       res.status(500).json({ status: 'error', message: error.message });
@@ -77,20 +64,17 @@ export default function createApikeyRoutes(pgPool) {
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 
-      if (!pgPool) {
-        // In non-DB mode, echo back request context
-        return res.json({ status: 'success', data: { id, tenant_id } });
-      }
-
-      const q = `SELECT id, tenant_id, key_name, key_value, description, is_active, created_at, created_date, created_by
-                 FROM apikey
-                 WHERE tenant_id = $1 AND id = $2
-                 LIMIT 1`;
-      const { rows } = await pgPool.query(q, [tenant_id, id]);
-      if (rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
-      // Safety check
-      if (rows[0].tenant_id !== tenant_id) return res.status(404).json({ status: 'error', message: 'Not found' });
-      return res.json({ status: 'success', data: rows[0] });
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('apikey')
+        .select('id, tenant_id, key_name, key_value, description, is_active, created_at, created_date, created_by')
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .single();
+      if (error?.code === 'PGRST116') return res.status(404).json({ status: 'error', message: 'Not found' });
+      if (error) throw new Error(error.message);
+      return res.json({ status: 'success', data });
     } catch (error) {
       console.error('apikeys:get error', error);
       res.status(500).json({ status: 'error', message: error.message });
@@ -105,14 +89,18 @@ export default function createApikeyRoutes(pgPool) {
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 
-      if (!pgPool) {
-        return res.json({ status: 'success', message: 'Deleted (local)', data: { id } });
-      }
-
-      const q = 'DELETE FROM apikey WHERE tenant_id = $1 AND id = $2 RETURNING id';
-      const { rows } = await pgPool.query(q, [tenant_id, id]);
-      if (rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
-      return res.json({ status: 'success', message: 'Deleted', data: { id: rows[0].id } });
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('apikey')
+        .delete()
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .select('id')
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) return res.status(404).json({ status: 'error', message: 'Not found' });
+      return res.json({ status: 'success', message: 'Deleted', data: { id: data.id } });
     } catch (error) {
       console.error('apikeys:delete error', error);
       res.status(500).json({ status: 'error', message: error.message });

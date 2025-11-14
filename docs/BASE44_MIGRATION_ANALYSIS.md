@@ -168,18 +168,30 @@ const router = express.Router();
 router.post('/find-duplicates', async (req, res) => {
   const { tenant_id, entity_type } = req.body;
   
-  // Use pgPool directly instead of Base44 SDK
-  const result = await pgPool.query(`
-    SELECT * FROM ${entity_type}s 
-    WHERE tenant_id = $1
-    GROUP BY email 
-    HAVING COUNT(*) > 1
-  `, [tenant_id]);
+  // Use Supabase client instead of Base44 SDK
+  const { data, error } = await supabase
+    .from(`${entity_type}s`)
+    .select('*')
+    .eq('tenant_id', tenant_id);
   
-  res.json({ duplicates: result.rows });
+  if (error) throw error;
+  
+  // Client-side duplicate detection by email
+  const emailMap = new Map();
+  data.forEach(record => {
+    const email = record.email;
+    if (email) {
+      if (!emailMap.has(email)) emailMap.set(email, []);
+      emailMap.get(email).push(record);
+    }
+  });
+  
+  const duplicates = Array.from(emailMap.values()).filter(group => group.length > 1);
+  
+  res.json({ duplicates });
 });
 
-export default (pgPool) => router;
+export default () => router;
 ```
 
 **Option 3: Replace SDK Imports with Backend API Calls (Time-Consuming)**

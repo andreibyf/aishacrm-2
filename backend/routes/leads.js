@@ -7,7 +7,7 @@ import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { logEntityTransition } from '../lib/transitions.js';
 
-export default function createLeadRoutes(pgPool) {
+export default function createLeadRoutes(_pgPool) {
   const router = express.Router();
 
   // Apply tenant validation and employee data scope to all routes
@@ -28,81 +28,47 @@ export default function createLeadRoutes(pgPool) {
   // GET /api/leads - List leads
   router.get('/', async (req, res) => {
     try {
-      let { tenant_id, status, account_id, limit = 50, offset = 0 } = req.query;
+      let { tenant_id, status, account_id } = req.query;
+      const limit = parseInt(req.query.limit || '50', 10);
+      const offset = parseInt(req.query.offset || '0', 10);
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
-  let query = 'SELECT * FROM leads WHERE tenant_id = $1';
-  const params = [tenant_id];
-      
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      let q = supabase.from('leads').select('*', { count: 'exact' }).eq('tenant_id', tenant_id);
+
       if (status) {
-        // Handle MongoDB-style operators (e.g., { $nin: ['converted', 'lost'] })
         let parsedStatus = status;
         if (typeof status === 'string' && status.startsWith('{')) {
           try {
             parsedStatus = JSON.parse(status);
           } catch {
-            // If it's not valid JSON, treat as literal string
+            // treat as literal
           }
         }
-        
         if (typeof parsedStatus === 'object' && parsedStatus.$nin) {
-          // Handle $nin operator: status NOT IN (...)
-          const placeholders = parsedStatus.$nin.map((_, i) => `$${params.length + i + 1}`).join(', ');
-          params.push(...parsedStatus.$nin);
-          query += ` AND status NOT IN (${placeholders})`;
-        } else {
-          // Simple equality
-          params.push(status);
-          query += ` AND status = $${params.length}`;
-        }
-      }
-      if (account_id) {
-        params.push(account_id);
-        query += ` AND account_id = $${params.length}`;
-      }
-      
-      query += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
-      params.push(parseInt(limit), parseInt(offset));
-
-      const result = await pgPool.query(query, params);
-      
-  let countQuery = 'SELECT COUNT(*) FROM leads WHERE tenant_id = $1';
-  const countParams = [tenant_id];
-      if (status) {
-        // Apply same status filter logic for count
-        let parsedStatus = status;
-        if (typeof status === 'string' && status.startsWith('{')) {
-          try {
-            parsedStatus = JSON.parse(status);
-          } catch {
-            // If it's not valid JSON, treat as literal string
+          // NOT IN: filter out these statuses
+          for (const s of parsedStatus.$nin) {
+            q = q.neq('status', s);
           }
-        }
-        
-        if (typeof parsedStatus === 'object' && parsedStatus.$nin) {
-          const placeholders = parsedStatus.$nin.map((_, i) => `$${countParams.length + i + 1}`).join(', ');
-          countParams.push(...parsedStatus.$nin);
-          countQuery += ` AND status NOT IN (${placeholders})`;
         } else {
-          countParams.push(status);
-          countQuery += ' AND status = $2';
+          q = q.eq('status', status);
         }
       }
-      if (account_id) {
-        countParams.push(account_id);
-        countQuery += ` AND account_id = $${countParams.length}`;
-      }
-      const countResult = await pgPool.query(countQuery, countParams);
+      if (account_id) q = q.eq('account_id', account_id);
+      q = q.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
 
-      // Expand metadata for all leads
-      const leads = result.rows.map(expandMetadata);
+      const { data, error, count } = await q;
+      if (error) throw new Error(error.message);
+
+      const leads = (data || []).map(expandMetadata);
 
       res.json({
         status: 'success',
-        data: { leads, total: parseInt(countResult.rows[0].count), status, limit: parseInt(limit), offset: parseInt(offset) },
+        data: { leads, total: count || 0, status, limit, offset },
       });
     } catch (error) {
       console.error('Error listing leads:', error);
@@ -136,32 +102,35 @@ export default function createLeadRoutes(pgPool) {
         });
       }
 
-      // Merge metadata with unknown fields
       const combinedMetadata = {
         ...(metadata || {}),
         ...otherFields
       };
 
-      const query = `
-        INSERT INTO leads (tenant_id, first_name, last_name, email, phone, company, job_title, status, source, metadata, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
-        RETURNING *
-      `;
-      
-      const result = await pgPool.query(query, [
-        tenant_id,
-        first_name,
-        last_name,
-        email,
-        phone,
-        company,
-        job_title,
-        status,
-        source,
-        combinedMetadata
-      ]);
+      const nowIso = new Date().toISOString();
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('leads')
+        .insert([{
+          tenant_id,
+          first_name,
+          last_name,
+          email,
+          phone,
+          company,
+          job_title,
+          status,
+          source,
+          metadata: combinedMetadata,
+          created_at: nowIso,
+          updated_at: nowIso,
+        }])
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
 
-      const lead = expandMetadata(result.rows[0]);
+      const lead = expandMetadata(data);
 
       console.log('[Leads POST] Successfully created lead:', lead.id);
       res.json({
@@ -185,20 +154,20 @@ export default function createLeadRoutes(pgPool) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
-      const result = await pgPool.query('SELECT * FROM leads WHERE tenant_id = $1 AND id = $2 LIMIT 1', [tenant_id, id]);
-      
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .single();
+      if (error?.code === 'PGRST116') {
         return res.status(404).json({ status: 'error', message: 'Lead not found' });
       }
+      if (error) throw new Error(error.message);
 
-      const row = result.rows[0];
-      if (row.id !== id || row.tenant_id !== tenant_id) {
-        console.error('[Leads GET /:id] Mismatched row returned', { expected: { id, tenant_id }, got: { id: row.id, tenant_id: row.tenant_id } });
-        return res.status(404).json({ status: 'error', message: 'Lead not found' });
-      }
-
-      // Expand metadata to top-level properties
-      const lead = expandMetadata(row);
+      const lead = expandMetadata(data);
 
       res.json({
         status: 'success',
@@ -233,74 +202,47 @@ export default function createLeadRoutes(pgPool) {
         });
       }
 
-      // First, get current lead to merge metadata
-      const currentLead = await pgPool.query('SELECT metadata FROM leads WHERE id = $1', [id]);
-      
-      if (currentLead.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data: current, error: fetchErr } = await supabase
+        .from('leads')
+        .select('metadata')
+        .eq('id', id)
+        .single();
+      if (fetchErr?.code === 'PGRST116') {
         return res.status(404).json({ status: 'error', message: 'Lead not found' });
       }
+      if (fetchErr) throw new Error(fetchErr.message);
 
-      // Merge metadata
-      const currentMetadata = currentLead.rows[0].metadata || {};
+      const currentMetadata = current?.metadata || {};
       const updatedMetadata = {
         ...currentMetadata,
         ...(metadata || {}),
         ...otherFields,
       };
 
-      const updates = [];
-      const values = [];
-      let paramCount = 1;
+      const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
+      if (first_name !== undefined) payload.first_name = first_name;
+      if (last_name !== undefined) payload.last_name = last_name;
+      if (email !== undefined) payload.email = email;
+      if (phone !== undefined) payload.phone = phone;
+      if (company !== undefined) payload.company = company;
+      if (job_title !== undefined) payload.job_title = job_title;
+      if (status !== undefined) payload.status = status;
+      if (source !== undefined) payload.source = source;
 
-      if (first_name !== undefined) {
-        updates.push(`first_name = $${paramCount++}`);
-        values.push(first_name);
-      }
-      if (last_name !== undefined) {
-        updates.push(`last_name = $${paramCount++}`);
-        values.push(last_name);
-      }
-      if (email !== undefined) {
-        updates.push(`email = $${paramCount++}`);
-        values.push(email);
-      }
-      if (phone !== undefined) {
-        updates.push(`phone = $${paramCount++}`);
-        values.push(phone);
-      }
-      if (company !== undefined) {
-        updates.push(`company = $${paramCount++}`);
-        values.push(company);
-      }
-      if (job_title !== undefined) {
-        updates.push(`job_title = $${paramCount++}`);
-        values.push(job_title);
-      }
-      if (status !== undefined) {
-        updates.push(`status = $${paramCount++}`);
-        values.push(status);
-      }
-      if (source !== undefined) {
-        updates.push(`source = $${paramCount++}`);
-        values.push(source);
-      }
-
-      // Always update metadata
-      updates.push(`metadata = $${paramCount++}`);
-      values.push(updatedMetadata);
-
-      updates.push(`updated_at = NOW()`);
-      values.push(id);
-
-      const query = `UPDATE leads SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`;
-      const result = await pgPool.query(query, values);
-
-      if (result.rows.length === 0) {
+      const { data, error } = await supabase
+        .from('leads')
+        .update(payload)
+        .eq('id', id)
+        .select('*')
+        .single();
+      if (error?.code === 'PGRST116') {
         return res.status(404).json({ status: 'error', message: 'Lead not found' });
       }
+      if (error) throw new Error(error.message);
 
-      // Expand metadata in response
-      const updatedLead = expandMetadata(result.rows[0]);
+      const updatedLead = expandMetadata(data);
 
       res.json({
         status: 'success',
@@ -318,16 +260,21 @@ export default function createLeadRoutes(pgPool) {
     try {
       const { id } = req.params;
 
-      const result = await pgPool.query('DELETE FROM leads WHERE id = $1 RETURNING id', [id]);
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({ status: 'error', message: 'Lead not found' });
-      }
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('leads')
+        .delete()
+        .eq('id', id)
+        .select('id')
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) return res.status(404).json({ status: 'error', message: 'Lead not found' });
 
       res.json({
         status: 'success',
         message: 'Lead deleted',
-        data: { id: result.rows[0].id },
+        data: { id: data.id },
       });
     } catch (error) {
       console.error('Error deleting lead:', error);
@@ -354,12 +301,20 @@ export default function createLeadRoutes(pgPool) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
-      // Fetch the lead (no FOR UPDATE when using Supabase API fallback)
-      const leadRes = await pgPool.query('SELECT * FROM leads WHERE id = $1 AND tenant_id = $2 LIMIT 1', [id, tenant_id]);
-      if (leadRes.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+
+      // Fetch the lead
+      const { data: lead, error: leadErr } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .single();
+      if (leadErr?.code === 'PGRST116') {
         return res.status(404).json({ status: 'error', message: 'Lead not found' });
       }
-      const lead = leadRes.rows[0];
+      if (leadErr) throw new Error(leadErr.message);
 
       // Prepare bookkeeping for compensating actions if something fails
       let accountId = selected_account_id || null;
@@ -372,107 +327,103 @@ export default function createLeadRoutes(pgPool) {
         if (!accountId && create_account) {
           const name = (account_name || lead.company || '').trim();
           if (!name) throw new Error('Account name is required to create a new account');
-          const accIns = await pgPool.query(
-            `INSERT INTO accounts (tenant_id, name, phone, assigned_to, created_at, updated_at)
-               VALUES ($1,$2,$3,$4, now(), now()) RETURNING *`,
-            [tenant_id, name, lead.phone || null, lead.assigned_to || performed_by || null]
-          );
-          newAccount = accIns.rows[0];
+          const nowIso = new Date().toISOString();
+          const { data: acc, error: accErr } = await supabase
+            .from('accounts')
+            .insert([{
+              tenant_id,
+              name,
+              phone: lead.phone || null,
+              assigned_to: lead.assigned_to || performed_by || null,
+              created_at: nowIso,
+              updated_at: nowIso,
+            }])
+            .select('*')
+            .single();
+          if (accErr) throw new Error(accErr.message);
+          newAccount = acc;
           accountId = newAccount.id;
         }
 
         // Create contact from lead
-        const contactIns = await pgPool.query(
-          `INSERT INTO contacts (
-             tenant_id, account_id, first_name, last_name, email, phone, job_title, status,
-             metadata, assigned_to, created_at, updated_at
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
-                     COALESCE($9::jsonb, '{}'::jsonb), $10, now(), now())
-           RETURNING *`,
-          [
+        const nowIso = new Date().toISOString();
+        const { data: cont, error: contErr } = await supabase
+          .from('contacts')
+          .insert([{
             tenant_id,
-            accountId || null,
-            lead.first_name,
-            lead.last_name,
-            lead.email,
-            lead.phone,
-            lead.job_title,
-            'prospect',
-            JSON.stringify({ converted_from_lead_id: lead.id, source: lead.source || null }),
-            lead.assigned_to || performed_by || null,
-          ]
-        );
-        contact = contactIns.rows[0];
+            account_id: accountId || null,
+            first_name: lead.first_name,
+            last_name: lead.last_name,
+            email: lead.email,
+            phone: lead.phone,
+            job_title: lead.job_title,
+            status: 'prospect',
+            metadata: { converted_from_lead_id: lead.id, source: lead.source || null },
+            assigned_to: lead.assigned_to || performed_by || null,
+            created_at: nowIso,
+            updated_at: nowIso,
+          }])
+          .select('*')
+          .single();
+        if (contErr) throw new Error(contErr.message);
+        contact = cont;
 
         // Optionally create Opportunity
         if (create_opportunity) {
           const oppName = (opportunity_name && opportunity_name.trim()) || `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'New Opportunity';
           const oppAmt = Number(opportunity_amount || lead.estimated_value || 0) || 0;
           const closeDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-          const nowIso = new Date().toISOString();
-          const oppIns = await pgPool.query(
-            `INSERT INTO opportunities (
-               tenant_id, name, account_id, contact_id, stage, amount, probability,
-               assigned_to, close_date, created_at, updated_at
-             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-             RETURNING *`,
-            [
+          const { data: opp, error: oppErr } = await supabase
+            .from('opportunities')
+            .insert([{
               tenant_id,
-              oppName,
-              accountId || null,
-              contact.id,
-              'prospecting',
-              oppAmt,
-              25,
-              lead.assigned_to || performed_by || null,
-              closeDate,
-              nowIso,
-              nowIso,
-            ]
-          );
-          opportunity = oppIns.rows[0];
+              name: oppName,
+              account_id: accountId || null,
+              contact_id: contact.id,
+              stage: 'prospecting',
+              amount: oppAmt,
+              probability: 25,
+              assigned_to: lead.assigned_to || performed_by || null,
+              close_date: closeDate,
+              created_at: nowIso,
+              updated_at: nowIso,
+            }])
+            .select('*')
+            .single();
+          if (oppErr) throw new Error(oppErr.message);
+          opportunity = opp;
         }
 
         // Re-link Activities from lead -> contact
-        await pgPool.query(
-          `UPDATE activities
-             SET related_to = 'contact', related_id = $1, updated_date = now()
-           WHERE tenant_id = $2 AND related_to = 'lead' AND related_id = $3`,
-          [contact.id, tenant_id, lead.id]
-        );
+        await supabase
+          .from('activities')
+          .update({ related_to: 'contact', related_id: contact.id, updated_date: nowIso })
+          .eq('tenant_id', tenant_id)
+          .eq('related_to', 'lead')
+          .eq('related_id', lead.id);
 
         // Re-link opportunities that reference this lead (best-effort)
         try {
-          const linkOppByMeta = await pgPool.query(
-            `UPDATE opportunities
-               SET contact_id = COALESCE(contact_id, $1),
-                   account_id = COALESCE(account_id, $2),
-                   updated_at = now()
-             WHERE tenant_id = $3
-               AND (metadata ->> 'origin_lead_id') = $4`,
-            [contact.id, accountId || null, tenant_id, lead.id]
-          );
+          // TODO: PostgREST doesn't support jsonb ->> operator directly; skip metadata-based lookup
+          // Instead try description ILIKE
+          await supabase
+            .from('opportunities')
+            .update({
+              contact_id: contact.id,
+              account_id: accountId || null,
+              updated_at: nowIso,
+            })
+            .eq('tenant_id', tenant_id)
+            .ilike('description', `%[Lead:${lead.id}]%`);
 
-          const linkOppByDesc = await pgPool.query(
-            `UPDATE opportunities
-               SET contact_id = COALESCE(contact_id, $1),
-                   account_id = COALESCE(account_id, $2),
-                   updated_at = now()
-             WHERE tenant_id = $3
-               AND description ILIKE $4`,
-            [contact.id, accountId || null, tenant_id, `%[Lead:${lead.id}]%`]
-          );
-
-          console.log('[Leads] Converted: relinked opportunities', {
-            by_meta: linkOppByMeta.rowCount,
-            by_desc: linkOppByDesc.rowCount,
-          });
+          console.log('[Leads] Converted: attempted to relink opportunities by description');
         } catch (oppLinkErr) {
           console.warn('[Leads] Failed to relink opportunities from lead', oppLinkErr);
         }
 
-        // Record transition snapshot, then delete lead
-        await logEntityTransition(pgPool, {
+        // Record transition snapshot
+        const transLib = await import('../lib/transitions.js');
+        await transLib.logEntityTransition(supabase, {
           tenant_id,
           from_table: 'leads',
           from_id: lead.id,
@@ -483,7 +434,8 @@ export default function createLeadRoutes(pgPool) {
           snapshot: lead,
         });
 
-        await pgPool.query('DELETE FROM leads WHERE id = $1 AND tenant_id = $2', [lead.id, tenant_id]);
+        // Delete lead
+        await supabase.from('leads').delete().eq('id', lead.id).eq('tenant_id', tenant_id);
 
         return res.json({
           status: 'success',
@@ -495,13 +447,13 @@ export default function createLeadRoutes(pgPool) {
         // Compensate created records when running without DB transactions (best-effort)
         console.error('[Leads] conversion inner error, attempting cleanup:', innerErr.message || innerErr);
         try {
-          if (opportunity && opportunity.id) await pgPool.query('DELETE FROM opportunities WHERE id = $1 AND tenant_id = $2', [opportunity.id, tenant_id]);
+          if (opportunity && opportunity.id) await supabase.from('opportunities').delete().eq('id', opportunity.id).eq('tenant_id', tenant_id);
         } catch (e) { console.warn('Cleanup opportunity failed', e.message || e); }
         try {
-          if (contact && contact.id) await pgPool.query('DELETE FROM contacts WHERE id = $1 AND tenant_id = $2', [contact.id, tenant_id]);
+          if (contact && contact.id) await supabase.from('contacts').delete().eq('id', contact.id).eq('tenant_id', tenant_id);
         } catch (e) { console.warn('Cleanup contact failed', e.message || e); }
         try {
-          if (newAccount && newAccount.id) await pgPool.query('DELETE FROM accounts WHERE id = $1 AND tenant_id = $2', [newAccount.id, tenant_id]);
+          if (newAccount && newAccount.id) await supabase.from('accounts').delete().eq('id', newAccount.id).eq('tenant_id', tenant_id);
         } catch (e) { console.warn('Cleanup account failed', e.message || e); }
 
         console.error('[Leads] convert error:', innerErr);

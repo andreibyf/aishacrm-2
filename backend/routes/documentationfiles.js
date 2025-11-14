@@ -24,7 +24,7 @@ function getBucketName() {
   return process.env.SUPABASE_STORAGE_BUCKET || 'tenant-assets';
 }
 
-export default function createDocumentationFileRoutes(pgPool) {
+export default function createDocumentationFileRoutes(_pgPool) {
   const router = express.Router();
 
   // Apply tenant validation to all routes
@@ -59,26 +59,30 @@ export default function createDocumentationFileRoutes(pgPool) {
           message: 'tenant_id is required'
         });
       }
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      
+      let query = supabase
+        .from('file')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .eq('related_type', 'documentation')
+        .order('created_at', { ascending: false })
+        .limit(1000);
 
-      // Query file table for documentation files
-      const where = ['tenant_id = $1', "related_type = 'documentation'"];
-      const params = [tenant_id];
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
 
+      let filtered = data || [];
       if (category && category !== 'all') {
-        params.push(category);
-        where.push(`metadata->>'category' = $${params.length}`);
+        filtered = filtered.filter(row => row.metadata?.category === category);
       }
-
-      const whereSql = `WHERE ${where.join(' AND ')}`;
-      const sql = `SELECT * FROM file ${whereSql} ORDER BY created_at DESC LIMIT 1000`;
-
-      const result = await pgPool.query(sql, params);
 
       res.json({
         status: 'success',
         data: {
-          documentationfiles: result.rows.map(normalizeDocumentFile),
-          total: result.rows.length
+          documentationfiles: filtered.map(normalizeDocumentFile),
+          total: filtered.length
         }
       });
     } catch (error) {
@@ -94,11 +98,18 @@ export default function createDocumentationFileRoutes(pgPool) {
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-
-      const sql = "SELECT * FROM file WHERE id = $1 AND related_type = 'documentation' LIMIT 1";
-      const result = await pgPool.query(sql, [id]);
-
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      
+      const { data, error } = await supabase
+        .from('file')
+        .select('*')
+        .eq('id', id)
+        .eq('related_type', 'documentation')
+        .maybeSingle();
+      
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) {
         return res.status(404).json({
           status: 'error',
           message: 'Documentation file not found'
@@ -107,7 +118,7 @@ export default function createDocumentationFileRoutes(pgPool) {
 
       res.json({
         status: 'success',
-        data: normalizeDocumentFile(result.rows[0])
+        data: normalizeDocumentFile(data)
       });
     } catch (error) {
       console.error('Error fetching documentation file:', error);
@@ -152,31 +163,30 @@ export default function createDocumentationFileRoutes(pgPool) {
         category: category || 'other',
         tags: tags || []
       };
-
-      const query = `
-        INSERT INTO file (
-          tenant_id, filename, filepath, filesize, mimetype, related_type, uploaded_by, metadata
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8
-        ) RETURNING *
-      `;
-
-      const values = [
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      
+      const payload = {
         tenant_id,
-        filename || title || 'Untitled',
-        filepath || file_uri || '',
-        filesize || null,
-        mimetype || 'application/octet-stream',
-        'documentation',  // Mark this as a documentation file
-        uploaded_by || null,
-        JSON.stringify(metadata)
-      ];
+        filename: filename || title || 'Untitled',
+        filepath: filepath || file_uri || '',
+        filesize: filesize || null,
+        mimetype: mimetype || 'application/octet-stream',
+        related_type: 'documentation',
+        uploaded_by: uploaded_by || null,
+        metadata
+      };
 
-      const result = await pgPool.query(query, values);
+      const { data, error } = await supabase
+        .from('file')
+        .insert([payload])
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
 
       res.status(201).json({
         status: 'success',
-        data: normalizeDocumentFile(result.rows[0])
+        data: normalizeDocumentFile(data)
       });
     } catch (error) {
       console.error('Error creating documentation file:', error);
@@ -192,68 +202,57 @@ export default function createDocumentationFileRoutes(pgPool) {
     try {
       const { id } = req.params;
       const payload = req.body || {};
-
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      
       // Load current record to merge metadata
-      const current = await pgPool.query("SELECT * FROM file WHERE id = $1 AND related_type = 'documentation'", [id]);
-      if (current.rows.length === 0) {
+      const { data: current, error: fetchErr } = await supabase
+        .from('file')
+        .select('*')
+        .eq('id', id)
+        .eq('related_type', 'documentation')
+        .maybeSingle();
+      
+      if (fetchErr && fetchErr.code !== 'PGRST116') throw new Error(fetchErr.message);
+      if (!current) {
         return res.status(404).json({
           status: 'error',
           message: 'Documentation file not found'
         });
       }
 
-      const currentMeta = current.rows[0]?.metadata || {};
+      const currentMeta = current.metadata || {};
       const { id: _id, created_at: _ca, updated_at: _ua, tenant_id: _tid, ...extras } = payload;
       const newMeta = { ...currentMeta, ...extras };
 
-      // Build SET clause
-      const updates = [];
-      const values = [];
-      let paramCount = 1;
-
-      if (payload.filename !== undefined) {
-        updates.push(`filename = $${paramCount++}`);
-        values.push(payload.filename);
-      }
+      // Build update payload
+      const updatePayload = {};
+      if (payload.filename !== undefined) updatePayload.filename = payload.filename;
       if (payload.filepath !== undefined || payload.file_uri !== undefined) {
-        updates.push(`filepath = $${paramCount++}`);
-        values.push(payload.filepath || payload.file_uri);
+        updatePayload.filepath = payload.filepath || payload.file_uri;
       }
-      if (payload.filesize !== undefined) {
-        updates.push(`filesize = $${paramCount++}`);
-        values.push(payload.filesize);
-      }
-      if (payload.mimetype !== undefined) {
-        updates.push(`mimetype = $${paramCount++}`);
-        values.push(payload.mimetype);
-      }
-      if (payload.uploaded_by !== undefined) {
-        updates.push(`uploaded_by = $${paramCount++}`);
-        values.push(payload.uploaded_by);
-      }
+      if (payload.filesize !== undefined) updatePayload.filesize = payload.filesize;
+      if (payload.mimetype !== undefined) updatePayload.mimetype = payload.mimetype;
+      if (payload.uploaded_by !== undefined) updatePayload.uploaded_by = payload.uploaded_by;
+      updatePayload.metadata = newMeta;
 
-      // Always update metadata
-      updates.push(`metadata = $${paramCount++}`);
-      values.push(JSON.stringify(newMeta));
-
-      if (updates.length === 0) {
+      if (Object.keys(updatePayload).length === 1 && updatePayload.metadata) {
         return res.json({
           status: 'success',
-          data: normalizeDocumentFile(current.rows[0])
+          data: normalizeDocumentFile(current)
         });
       }
 
-      const query = `
-        UPDATE file
-        SET ${updates.join(', ')}
-        WHERE id = $${paramCount} AND related_type = 'documentation'
-        RETURNING *
-      `;
-      values.push(id);
-
-      const result = await pgPool.query(query, values);
-
-      if (result.rows.length === 0) {
+      const { data, error } = await supabase
+        .from('file')
+        .update(updatePayload)
+        .eq('id', id)
+        .eq('related_type', 'documentation')
+        .select('*')
+        .maybeSingle();
+      
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) {
         return res.status(404).json({
           status: 'error',
           message: 'Documentation file not found'
@@ -262,7 +261,7 @@ export default function createDocumentationFileRoutes(pgPool) {
 
       res.json({
         status: 'success',
-        data: normalizeDocumentFile(result.rows[0])
+        data: normalizeDocumentFile(data)
       });
     } catch (error) {
       console.error('Error updating documentation file:', error);
@@ -278,28 +277,39 @@ export default function createDocumentationFileRoutes(pgPool) {
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-
-      // Get file info before deleting (to optionally delete from storage)
-      const fileResult = await pgPool.query("SELECT * FROM file WHERE id = $1 AND related_type = 'documentation'", [id]);
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
       
-      if (fileResult.rows.length === 0) {
+      // Get file info before deleting (to optionally delete from storage)
+      const { data: fileRecord, error: fetchErr } = await supabase
+        .from('file')
+        .select('*')
+        .eq('id', id)
+        .eq('related_type', 'documentation')
+        .maybeSingle();
+      
+      if (fetchErr && fetchErr.code !== 'PGRST116') throw new Error(fetchErr.message);
+      if (!fileRecord) {
         return res.status(404).json({
           status: 'error',
           message: 'Documentation file not found'
         });
       }
 
-      const fileRecord = fileResult.rows[0];
-
       // Delete the metadata record
-      await pgPool.query("DELETE FROM file WHERE id = $1 AND related_type = 'documentation'", [id]);
+      const { error: deleteErr } = await supabase
+        .from('file')
+        .delete()
+        .eq('id', id)
+        .eq('related_type', 'documentation');
+      if (deleteErr) throw new Error(deleteErr.message);
 
       // Optionally delete from Supabase Storage
       try {
         if (fileRecord.filepath) {
-          const supabase = getSupabaseAdmin();
+          const supabaseAdmin = getSupabaseAdmin();
           const bucket = getBucketName();
-          await supabase.storage.from(bucket).remove([fileRecord.filepath]);
+          await supabaseAdmin.storage.from(bucket).remove([fileRecord.filepath]);
           console.log(`[documentationfiles] Deleted file from storage: ${fileRecord.filepath}`);
         }
       } catch (storageError) {

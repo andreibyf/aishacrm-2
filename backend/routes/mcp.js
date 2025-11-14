@@ -222,35 +222,81 @@ export default function createMCPRoutes(pgPool) {
 
         if (tool_name === "crm.search_accounts") {
           const q = String(parameters?.q || "").trim();
-          const like = `%${q}%`;
-          const rows = await pgPool.query(
-            `SELECT * FROM accounts WHERE tenant_id = $1 AND ($2 = '' OR name ILIKE $3 OR industry ILIKE $3 OR website ILIKE $3)
-             ORDER BY created_at DESC LIMIT $4 OFFSET $5`,
-            [tenant_id, q, like, limit, offset],
-          );
-          return res.json({ status: "success", data: rows.rows });
+          const { data, error } = await supa
+            .from('accounts')
+            .select('*')
+            .eq('tenant_id', tenant_id)
+            .order('created_at', { ascending: false })
+            .range(offset, offset + limit - 1);
+
+          if (error) throw error;
+
+          // Client-side ILIKE filtering
+          let filtered = data || [];
+          if (q) {
+            const qLower = q.toLowerCase();
+            filtered = filtered.filter(row => {
+              const name = (row.name || '').toLowerCase();
+              const industry = (row.industry || '').toLowerCase();
+              const website = (row.website || '').toLowerCase();
+              return name.includes(qLower) || industry.includes(qLower) || website.includes(qLower);
+            });
+          }
+
+          return res.json({ status: "success", data: filtered });
         }
 
         if (tool_name === "crm.search_contacts") {
           const q = String(parameters?.q || "").trim();
-          const like = `%${q}%`;
-          const rows = await pgPool.query(
-            `SELECT * FROM contacts WHERE tenant_id = $1 AND ($2 = '' OR first_name ILIKE $3 OR last_name ILIKE $3 OR email ILIKE $3)
-             ORDER BY created_at DESC LIMIT $4 OFFSET $5`,
-            [tenant_id, q, like, limit, offset],
-          );
-          return res.json({ status: "success", data: rows.rows });
+          const { data, error } = await supa
+            .from('contacts')
+            .select('*')
+            .eq('tenant_id', tenant_id)
+            .order('created_at', { ascending: false })
+            .range(offset, offset + limit - 1);
+
+          if (error) throw error;
+
+          // Client-side ILIKE filtering
+          let filtered = data || [];
+          if (q) {
+            const qLower = q.toLowerCase();
+            filtered = filtered.filter(row => {
+              const first_name = (row.first_name || '').toLowerCase();
+              const last_name = (row.last_name || '').toLowerCase();
+              const email = (row.email || '').toLowerCase();
+              return first_name.includes(qLower) || last_name.includes(qLower) || email.includes(qLower);
+            });
+          }
+
+          return res.json({ status: "success", data: filtered });
         }
 
         if (tool_name === "crm.search_leads") {
           const q = String(parameters?.q || "").trim();
-          const like = `%${q}%`;
-          const rows = await pgPool.query(
-            `SELECT * FROM leads WHERE tenant_id = $1 AND ($2 = '' OR first_name ILIKE $3 OR last_name ILIKE $3 OR email ILIKE $3 OR company ILIKE $3)
-             ORDER BY created_at DESC LIMIT $4 OFFSET $5`,
-            [tenant_id, q, like, limit, offset],
-          );
-          return res.json({ status: "success", data: rows.rows });
+          const { data, error } = await supa
+            .from('leads')
+            .select('*')
+            .eq('tenant_id', tenant_id)
+            .order('created_at', { ascending: false })
+            .range(offset, offset + limit - 1);
+
+          if (error) throw error;
+
+          // Client-side ILIKE filtering
+          let filtered = data || [];
+          if (q) {
+            const qLower = q.toLowerCase();
+            filtered = filtered.filter(row => {
+              const first_name = (row.first_name || '').toLowerCase();
+              const last_name = (row.last_name || '').toLowerCase();
+              const email = (row.email || '').toLowerCase();
+              const company = (row.company || '').toLowerCase();
+              return first_name.includes(qLower) || last_name.includes(qLower) || email.includes(qLower) || company.includes(qLower);
+            });
+          }
+
+          return res.json({ status: "success", data: filtered });
         }
 
         if (tool_name === "crm.get_record") {
@@ -274,11 +320,16 @@ export default function createMCPRoutes(pgPool) {
               message: `Unsupported entity: ${entity}`,
             });
           }
-          const row = await pgPool.query(
-            `SELECT * FROM ${table} WHERE id = $1 AND tenant_id = $2`,
-            [id, tenant_id],
-          );
-          return res.json({ status: "success", data: row.rows?.[0] || null });
+          const { data, error } = await supa
+            .from(table)
+            .select('*')
+            .eq('id', id)
+            .eq('tenant_id', tenant_id)
+            .maybeSingle();
+
+          if (error) throw error;
+
+          return res.json({ status: "success", data: data || null });
         }
 
         if (tool_name === "crm.create_activity") {
@@ -290,53 +341,42 @@ export default function createMCPRoutes(pgPool) {
               message: "type is required",
             });
           }
-          const row = await pgPool.query(
-            `INSERT INTO activities (tenant_id, type, subject, body, related_id, metadata, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
-            [
+          const { data, error } = await supa
+            .from('activities')
+            .insert({
               tenant_id,
               type,
-              subject || null,
-              body || null,
-              related_id || null,
-              metadata ? JSON.stringify(metadata) : "{}",
-            ],
-          );
-          return res.json({ status: "success", data: row.rows?.[0] });
+              subject: subject || null,
+              body: body || null,
+              related_id: related_id || null,
+              metadata: metadata || {},
+              created_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+
+          if (error) throw error;
+
+          return res.json({ status: "success", data });
         }
 
         if (tool_name === "crm.get_tenant_stats") {
           const [accounts, contacts, leads, opps, activities] = await Promise
             .all([
-              pgPool.query(
-                `SELECT COUNT(*)::int AS c FROM accounts WHERE tenant_id = $1`,
-                [tenant_id],
-              ),
-              pgPool.query(
-                `SELECT COUNT(*)::int AS c FROM contacts WHERE tenant_id = $1`,
-                [tenant_id],
-              ),
-              pgPool.query(
-                `SELECT COUNT(*)::int AS c FROM leads WHERE tenant_id = $1`,
-                [tenant_id],
-              ),
-              pgPool.query(
-                `SELECT COUNT(*)::int AS c FROM opportunities WHERE tenant_id = $1`,
-                [tenant_id],
-              ),
-              pgPool.query(
-                `SELECT COUNT(*)::int AS c FROM activities WHERE tenant_id = $1`,
-                [tenant_id],
-              ),
+              supa.from('accounts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
+              supa.from('contacts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
+              supa.from('leads').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
+              supa.from('opportunities').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
+              supa.from('activities').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant_id),
             ]);
           return res.json({
             status: "success",
             data: {
-              accounts: accounts.rows?.[0]?.c || 0,
-              contacts: contacts.rows?.[0]?.c || 0,
-              leads: leads.rows?.[0]?.c || 0,
-              opportunities: opps.rows?.[0]?.c || 0,
-              activities: activities.rows?.[0]?.c || 0,
+              accounts: accounts.count || 0,
+              contacts: contacts.count || 0,
+              leads: leads.count || 0,
+              opportunities: opps.count || 0,
+              activities: activities.count || 0,
             },
           });
         }
@@ -547,18 +587,18 @@ export default function createMCPRoutes(pgPool) {
 
       // CRM stats (reuse logic from crm.get_tenant_stats)
       const [accounts, contacts, leads, opps, activities] = await Promise.all([
-        pgPool.query(`SELECT COUNT(*)::int AS c FROM accounts WHERE tenant_id = $1`, [tenant.tenant_id || tenantId]),
-        pgPool.query(`SELECT COUNT(*)::int AS c FROM contacts WHERE tenant_id = $1`, [tenant.tenant_id || tenantId]),
-        pgPool.query(`SELECT COUNT(*)::int AS c FROM leads WHERE tenant_id = $1`, [tenant.tenant_id || tenantId]),
-        pgPool.query(`SELECT COUNT(*)::int AS c FROM opportunities WHERE tenant_id = $1`, [tenant.tenant_id || tenantId]),
-        pgPool.query(`SELECT COUNT(*)::int AS c FROM activities WHERE tenant_id = $1`, [tenant.tenant_id || tenantId]),
+        supa.from('accounts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.tenant_id || tenantId),
+        supa.from('contacts').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.tenant_id || tenantId),
+        supa.from('leads').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.tenant_id || tenantId),
+        supa.from('opportunities').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.tenant_id || tenantId),
+        supa.from('activities').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.tenant_id || tenantId),
       ]);
       const tenantStats = {
-        accounts: accounts.rows?.[0]?.c || 0,
-        contacts: contacts.rows?.[0]?.c || 0,
-        leads: leads.rows?.[0]?.c || 0,
-        opportunities: opps.rows?.[0]?.c || 0,
-        activities: activities.rows?.[0]?.c || 0,
+        accounts: accounts.count || 0,
+        contacts: contacts.count || 0,
+        leads: leads.count || 0,
+        opportunities: opps.count || 0,
+        activities: activities.count || 0,
       };
 
       // Wikipedia context (reuse logic from web tools)
