@@ -105,6 +105,89 @@ export default function createWorkflowRoutes(pgPool) {
               log.output = { payload: context.payload };
               break;
             }
+            case 'http_request': {
+              const method = (cfg.method || 'POST').toUpperCase();
+              const url = replaceVariables(cfg.url || '');
+              
+              if (!url || url === cfg.url) {
+                log.status = 'error';
+                log.error = 'URL is required and must be properly configured';
+                break;
+              }
+
+              // Build headers
+              const headers = { 'Content-Type': 'application/json' };
+              if (cfg.headers && Array.isArray(cfg.headers)) {
+                for (const h of cfg.headers) {
+                  if (h.key && h.value) {
+                    headers[h.key] = replaceVariables(h.value);
+                  }
+                }
+              }
+
+              // Build body based on configuration
+              let requestBody = null;
+              if (method !== 'GET' && method !== 'HEAD') {
+                if (cfg.body_type === 'raw') {
+                  requestBody = replaceVariables(cfg.body || '{}');
+                  // Try to parse as JSON if it looks like JSON
+                  try {
+                    requestBody = JSON.parse(requestBody);
+                  } catch {
+                    // Keep as string if not valid JSON
+                  }
+                } else if (cfg.body_mappings && Array.isArray(cfg.body_mappings)) {
+                  requestBody = {};
+                  for (const mapping of cfg.body_mappings) {
+                    if (mapping.key && mapping.value) {
+                      const value = replaceVariables(`{{${mapping.value}}}`);
+                      // Don't include unresolved template variables
+                      if (value !== `{{${mapping.value}}}`) {
+                        requestBody[mapping.key] = value;
+                      }
+                    }
+                  }
+                }
+              }
+
+              try {
+                const fetchOptions = {
+                  method,
+                  headers,
+                  ...(requestBody && { body: typeof requestBody === 'string' ? requestBody : JSON.stringify(requestBody) })
+                };
+
+                const response = await fetch(url, fetchOptions);
+                const contentType = response.headers.get('content-type');
+                let responseData;
+                
+                if (contentType && contentType.includes('application/json')) {
+                  responseData = await response.json().catch(() => null);
+                } else {
+                  responseData = await response.text();
+                }
+
+                log.output = {
+                  status_code: response.status,
+                  status_text: response.statusText,
+                  headers: Object.fromEntries(response.headers.entries()),
+                  data: responseData
+                };
+                
+                context.variables.last_http_response = responseData;
+                context.variables.last_http_status = response.status;
+
+                // Mark as error if HTTP status >= 400
+                if (response.status >= 400) {
+                  log.status = 'error';
+                  log.error = `HTTP ${response.status}: ${response.statusText}`;
+                }
+              } catch (err) {
+                log.status = 'error';
+                log.error = `HTTP request failed: ${err.message}`;
+              }
+              break;
+            }
             case 'send_email': {
               const toRaw = cfg.to || '{{email}}';
               const subjectRaw = cfg.subject || 'Workflow Email';

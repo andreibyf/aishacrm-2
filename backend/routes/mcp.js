@@ -128,6 +128,8 @@ export default function createMCPRoutes(pgPool) {
           "crm.get_record",
           "crm.create_activity",
           "crm.get_tenant_stats",
+          "crm.list_workflows",
+          "crm.execute_workflow",
         ],
       });
 
@@ -379,6 +381,185 @@ export default function createMCPRoutes(pgPool) {
               activities: activities.count || 0,
             },
           });
+        }
+
+        if (tool_name === "crm.list_workflows") {
+          const active_only = parameters?.active_only !== false;
+          let query = supa
+            .from('workflows')
+            .select('id, name, description, trigger, is_active, created_at, updated_at')
+            .eq('tenant_id', tenant_id)
+            .order('updated_at', { ascending: false });
+          
+          if (active_only) {
+            query = query.eq('is_active', true);
+          }
+
+          const { data, error } = await query;
+          if (error) throw error;
+
+          return res.json({ status: "success", data: data || [] });
+        }
+
+        if (tool_name === "crm.execute_workflow") {
+          const { workflow_id, trigger_data } = parameters || {};
+          if (!workflow_id) {
+            return res.status(400).json({
+              status: "error",
+              message: "workflow_id is required",
+            });
+          }
+
+          // Verify workflow exists and belongs to tenant
+          const { data: workflow, error: wErr } = await supa
+            .from('workflows')
+            .select('id, name, is_active, trigger, nodes, connections')
+            .eq('id', workflow_id)
+            .eq('tenant_id', tenant_id)
+            .maybeSingle();
+
+          if (wErr) throw wErr;
+          if (!workflow) {
+            return res.status(404).json({
+              status: "error",
+              message: "Workflow not found",
+            });
+          }
+
+          if (!workflow.is_active) {
+            return res.status(400).json({
+              status: "error",
+              message: "Workflow is not active",
+            });
+          }
+
+          // Execute workflow using the existing executor
+          // Import executeWorkflowById dynamically to avoid circular dependencies
+          const triggerPayload = trigger_data || {};
+          
+          // Create execution record
+          const { data: execution, error: exErr } = await supa
+            .from('workflow_executions')
+            .insert({
+              workflow_id,
+              trigger_data: triggerPayload,
+              status: 'running',
+              execution_log: [],
+              created_at: new Date().toISOString(),
+            })
+            .select()
+            .single();
+
+          if (exErr) throw exErr;
+
+          try {
+            // Execute workflow nodes
+            const context = {
+              variables: {},
+              payload: triggerPayload,
+            };
+
+            const nodes = workflow.nodes || [];
+            const connections = workflow.connections || [];
+            const executionLog = [];
+
+            // Helper function to get next node
+            const getNextNode = (currentNodeId, branchType = null) => {
+              const conn = connections.find(c => 
+                c.from === currentNodeId && 
+                (!branchType || c.type === branchType)
+              );
+              return conn ? nodes.find(n => n.id === conn.to) : null;
+            };
+
+            // Execute nodes sequentially starting after trigger
+            let currentNode = nodes.find(n => n.type !== 'webhook_trigger');
+            
+            while (currentNode) {
+              executionLog.push({
+                node_id: currentNode.id,
+                node_type: currentNode.type,
+                timestamp: new Date().toISOString(),
+                status: 'executing',
+              });
+
+              try {
+                // Execute based on node type (simplified version)
+                if (currentNode.type === 'find_lead') {
+                  const email = currentNode.config?.email || '';
+                  const { data } = await supa
+                    .from('leads')
+                    .select('*')
+                    .eq('tenant_id', tenant_id)
+                    .eq('email', email)
+                    .maybeSingle();
+                  context.variables.found_lead = data || null;
+                  executionLog[executionLog.length - 1].result = { found: !!data };
+                } else if (currentNode.type === 'condition') {
+                  const field = currentNode.config?.field || '';
+                  const operator = currentNode.config?.operator || '==';
+                  const value = currentNode.config?.value || '';
+                  const fieldValue = context.variables[field] || context.payload[field];
+                  let conditionMet = false;
+                  
+                  if (operator === '==' || operator === 'equals') conditionMet = fieldValue == value;
+                  else if (operator === '!=' || operator === 'not_equals') conditionMet = fieldValue != value;
+                  else if (operator === 'contains') conditionMet = String(fieldValue).includes(value);
+                  else if (operator === 'exists') conditionMet = fieldValue != null;
+                  
+                  executionLog[executionLog.length - 1].result = { condition_met: conditionMet };
+                  currentNode = getNextNode(currentNode.id, conditionMet ? 'TRUE' : 'FALSE');
+                  continue;
+                }
+
+                executionLog[executionLog.length - 1].status = 'completed';
+              } catch (nodeError) {
+                executionLog[executionLog.length - 1].status = 'failed';
+                executionLog[executionLog.length - 1].error = nodeError.message;
+                throw nodeError;
+              }
+
+              currentNode = getNextNode(currentNode.id);
+            }
+
+            // Update execution record with success
+            await supa
+              .from('workflow_executions')
+              .update({
+                status: 'success',
+                execution_log: executionLog,
+                completed_at: new Date().toISOString(),
+              })
+              .eq('id', execution.id);
+
+            return res.json({
+              status: "success",
+              data: {
+                execution_id: execution.id,
+                workflow_id,
+                workflow_name: workflow.name,
+                status: 'success',
+                execution_log: executionLog,
+              },
+            });
+          } catch (execError) {
+            // Update execution record with failure
+            await supa
+              .from('workflow_executions')
+              .update({
+                status: 'failed',
+                execution_log: executionLog,
+                error_message: execError.message,
+                completed_at: new Date().toISOString(),
+              })
+              .eq('id', execution.id);
+
+            return res.status(500).json({
+              status: "error",
+              message: `Workflow execution failed: ${execError.message}`,
+              execution_id: execution.id,
+            });
+          }
         }
 
         return res.status(400).json({

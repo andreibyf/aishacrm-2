@@ -1,4 +1,4 @@
-import { Search, Edit, Mail, Plus, GitBranch, UserPlus } from 'lucide-react'
+import { Search, Edit, Mail, Plus, GitBranch, UserPlus, Globe } from 'lucide-react'
 
 const nodeTypes = [
   {
@@ -21,6 +21,13 @@ const nodeTypes = [
     icon: Edit,
     description: 'Update lead fields',
     color: 'emerald'
+  },
+  {
+    type: 'http_request',
+    label: 'HTTP Request',
+    icon: Globe,
+    description: 'Send data to external API (Zapier-style)',
+    color: 'orange'
   },
   {
     type: 'condition',
