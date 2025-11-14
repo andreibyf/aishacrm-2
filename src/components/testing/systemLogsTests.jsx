@@ -87,7 +87,7 @@ export const systemLogsTests = {
       fn: async () => {
         const id = window.__test_log_id;
         assert.exists(id, 'Created log id should be available');
-        const resp = await fetch(`${BACKEND_URL}/api/system-logs/${id}`, { method: 'DELETE' });
+        const resp = await fetch(`${BACKEND_URL}/api/system-logs/${id}?tenant_id=${encodeURIComponent(TEST_TENANT_ID)}`, { method: 'DELETE' });
         assert.truthy(resp.ok, `DELETE /api/system-logs/:id should succeed (status ${resp.status})`);
         const json = await resp.json();
         assert.equal(json.status, 'success', 'Response status should be success');
