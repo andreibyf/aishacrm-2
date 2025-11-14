@@ -159,8 +159,9 @@ export default function TestRunner({ testSuites }) {
   );
   const passedTests = results.filter((r) => r.status === "passed").length;
   const failedTests = results.filter((r) => r.status === "failed").length;
-  const passRate = totalTests > 0
-    ? ((passedTests / results.length) * 100).toFixed(1)
+  const completedTests = results.length;
+  const passRate = completedTests > 0
+    ? ((passedTests / completedTests) * 100).toFixed(1)
     : 0;
 
   console.log('[TestRunner] Render - results.length:', results.length, 'passed:', passedTests, 'failed:', failedTests);
@@ -271,9 +272,9 @@ export default function TestRunner({ testSuites }) {
             <div className="grid grid-cols-4 gap-4 mb-6">
               <Card className="bg-slate-700 border-slate-600">
                 <CardContent className="p-4">
-                  <div className="text-sm text-slate-400">Total Tests</div>
+                  <div className="text-sm text-slate-400">Completed</div>
                   <div className="text-2xl font-bold text-slate-100">
-                    {results.length}
+                    {completedTests} / {totalTests}
                   </div>
                 </CardContent>
               </Card>
