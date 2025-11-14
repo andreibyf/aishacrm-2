@@ -31,8 +31,8 @@ export default [
       ...reactHooks.configs.recommended.rules,
       'react/jsx-no-target-blank': 'off',
       'react/prop-types': 'off', // Disabled - using modern React patterns instead of legacy PropTypes
-      // Allow underscore-prefixed unused vars and ignore React import in JSX runtime projects
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^(?:_|React)$' }],
+      // Allow underscore-prefixed unused vars and ignore unused React import in JSX runtime projects
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^(?:React|_)' }],
       'react-refresh/only-export-components': [
         'warn',
         { allowConstantExport: true },
