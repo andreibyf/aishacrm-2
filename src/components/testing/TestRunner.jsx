@@ -123,13 +123,17 @@ export default function TestRunner({ testSuites }) {
   }, [checkBackend]);
 
   const runTests = async () => {
-    // Prevent concurrent runs
-    if (running) {
-      console.log('[TestRunner] Already running, ignoring duplicate runTests call');
+    // Prevent concurrent runs - check both state AND sessionStorage
+    const runningFlag = sessionStorage.getItem('test_runner_active');
+    if (running || runningFlag === 'true') {
+      console.log('[TestRunner] Already running (running=' + running + ', sessionStorage=' + runningFlag + '), ignoring duplicate runTests call');
       return;
     }
     
+    // Mark as running in BOTH locations
     setRunning(true);
+    sessionStorage.setItem('test_runner_active', 'true');
+    
     const allResults = [];
     resultsRef.current = [];
     console.log('[TestRunner] CLEARING results at start of run');
@@ -216,6 +220,7 @@ export default function TestRunner({ testSuites }) {
       flushResults();
       setCurrentTest(null);
       setRunning(false);
+      sessionStorage.removeItem('test_runner_active'); // Clear running flag
       console.log('[TestRunner] Test run finished. Results:', allResults.length);
       // Remove suppression flags
       if (typeof window !== 'undefined') {
@@ -460,7 +465,7 @@ export default function TestRunner({ testSuites }) {
                   </div>
                 </CardContent>
               </Card>
-              {completedTests > 0 && completedTests !== totalTests && (
+              {completedTests > 0 && completedTests !== totalTests && !running && (
                 <Card className="bg-yellow-900/30 border-yellow-700 col-span-4">
                   <CardContent className="p-4">
                     <div className="text-sm text-yellow-400">Integrity Warning</div>
