@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -41,15 +41,63 @@ export default function TestRunner({ testSuites }) {
   const isSuperadmin = (user?.role || '').toLowerCase() === 'superadmin';
   const [config, setConfig] = useState(() => {
     try {
-      const raw = sessionStorage.getItem(TEST_CONFIG_KEY);
-      if (raw) return JSON.parse(raw);
+      const ls = typeof window !== 'undefined' ? window.localStorage?.getItem(TEST_CONFIG_KEY) : null;
+      if (ls) return JSON.parse(ls);
+      const ss = sessionStorage.getItem(TEST_CONFIG_KEY);
+      if (ss) return JSON.parse(ss);
     } catch (e) { /* ignore config restore error */ }
     return { workers: 1, rate: 0, delayMs: 0 };
   });
+  // Named profiles: save/load/delete (persisted to localStorage)
+  const [profiles, setProfiles] = useState(() => {
+    try {
+      const raw = typeof window !== 'undefined' ? window.localStorage?.getItem('unit_test_profiles') : null;
+      if (raw) return JSON.parse(raw) || {};
+    } catch (e) { /* ignore */ }
+    return {};
+  });
+  const [activeProfile, setActiveProfile] = useState('');
+  const [profileNameInput, setProfileNameInput] = useState('');
   const [hasStoredResults, setHasStoredResults] = useState(false);
   const syncIntervalRef = useRef(null);
   const runIdRef = useRef(0);
   const pollIntervalRef = useRef(null);
+  const startAtRef = useRef(0);
+  const rateLimited429Ref = useRef(0);
+  const [uiStats, setUiStats] = useState({ avgRps: 0, rateLimited429: 0 });
+
+  // Category selection (suites) with persistence
+  const allSuiteNames = useMemo(() => testSuites.map((s) => s.name), [testSuites]);
+  const [selectedCategories, setSelectedCategories] = useState(() => {
+    try {
+      const raw = typeof window !== 'undefined' ? window.localStorage?.getItem('unit_test_selected_categories') : null;
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) return new Set(arr);
+      }
+    } catch (e) { /* ignore */ }
+    return new Set(allSuiteNames);
+  });
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage?.setItem('unit_test_selected_categories', JSON.stringify(Array.from(selectedCategories)));
+      }
+    } catch (e) { /* ignore */ }
+  }, [selectedCategories]);
+  // Keep selection in sync if suites change
+  useEffect(() => {
+    setSelectedCategories((prev) => {
+      const next = new Set(prev);
+      // Add any new suites
+      for (const n of allSuiteNames) next.add(n);
+      // Remove suites that no longer exist
+      for (const n of Array.from(next)) if (!allSuiteNames.includes(n)) next.delete(n);
+      return next;
+    });
+  }, [allSuiteNames.join('|')]);
+
+  const effectiveSuites = useMemo(() => testSuites.filter((s) => selectedCategories.has(s.name)), [testSuites, selectedCategories]);
 
   // Detect presence of stored results (for manual restore)
   useEffect(() => {
@@ -63,8 +111,51 @@ export default function TestRunner({ testSuites }) {
 
   // Persist test config locally for convenience
   useEffect(() => {
-    try { sessionStorage.setItem(TEST_CONFIG_KEY, JSON.stringify(config)); } catch (e) { /* ignore config persist error */ }
+    try {
+      sessionStorage.setItem(TEST_CONFIG_KEY, JSON.stringify(config));
+      if (typeof window !== 'undefined') {
+        window.localStorage?.setItem(TEST_CONFIG_KEY, JSON.stringify(config));
+      }
+    } catch (e) { /* ignore config persist error */ }
   }, [config]);
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage?.setItem('unit_test_profiles', JSON.stringify(profiles));
+      }
+    } catch (e) { /* ignore */ }
+  }, [profiles]);
+
+  const loadProfile = useCallback((name) => {
+    try {
+      const p = profiles?.[name];
+      if (!p) return;
+      setConfig((c) => ({ ...c, workers: p.workers ?? c.workers, rate: p.rate ?? c.rate, delayMs: p.delayMs ?? c.delayMs }));
+      if (Array.isArray(p.categories) && p.categories.length > 0) {
+        setSelectedCategories(new Set(p.categories));
+      }
+      setActiveProfile(name);
+    } catch (e) { /* ignore */ }
+  }, [profiles]);
+
+  const saveProfile = useCallback(() => {
+    const name = profileNameInput?.trim();
+    if (!name) return;
+    const payload = { workers: config.workers, rate: config.rate, delayMs: config.delayMs, categories: Array.from(selectedCategories) };
+    setProfiles((prev) => ({ ...prev, [name]: payload }));
+    setActiveProfile(name);
+  }, [profileNameInput, config, selectedCategories]);
+
+  const deleteProfile = useCallback(() => {
+    const name = activeProfile?.trim();
+    if (!name) return;
+    setProfiles((prev) => {
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+    setActiveProfile('');
+  }, [activeProfile]);
 
   // Poll for test run completion if we detect an active run on mount
   useEffect(() => {
@@ -194,8 +285,8 @@ export default function TestRunner({ testSuites }) {
     checkBackend();
   }, [checkBackend]);
 
-  // Compute totals early so runTests can safely reference them
-  const totalTests = testSuites.reduce(
+  // Compute totals from selected suites
+  const totalTests = effectiveSuites.reduce(
     (sum, suite) => sum + suite.tests.length,
     0,
   );
@@ -225,10 +316,28 @@ export default function TestRunner({ testSuites }) {
     runIdRef.current += 1;
     console.log('[TestRunner] Starting run ID:', runIdRef.current);
 
-    console.log('[TestRunner] Starting test run with', testSuites.length, 'suites');
+    console.log('[TestRunner] Starting test run with', effectiveSuites.length, 'suites');
     let testIndex = 0;
     let completed = 0;
     const TEST_TIMEOUT_MS = 15000; // prevent hangs that reduce completed count
+
+    // Live stats instrumentation
+    startAtRef.current = Date.now();
+    const originalFetch = (typeof window !== 'undefined' && window.fetch) ? window.fetch : null;
+    rateLimited429Ref.current = 0;
+    try {
+      if (typeof window !== 'undefined' && originalFetch) {
+        window.fetch = async (...args) => {
+          const res = await originalFetch(...args);
+          try {
+            if (res && res.status === 429) {
+              rateLimited429Ref.current = (rateLimited429Ref.current || 0) + 1;
+            }
+          } catch (_) { /* ignore */ }
+          return res;
+        };
+      }
+    } catch (_) { /* ignore */ }
 
     const flushResults = () => {
       // Batch UI/state updates to reduce flicker
@@ -240,12 +349,15 @@ export default function TestRunner({ testSuites }) {
       } catch (e) {
         console.error('[TestRunner] Failed to store results:', e);
       }
+      const elapsed = Math.max(1, Date.now() - (startAtRef.current || Date.now()));
+      const avgRpsNum = Number((allResults.length / (elapsed / 1000)).toFixed(1));
+      setUiStats({ avgRps: avgRpsNum, rateLimited429: rateLimited429Ref.current || 0 });
     };
     const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
     // Flatten jobs for scheduling
     const jobs = [];
-    for (const suite of testSuites) {
+    for (const suite of effectiveSuites) {
       for (const test of suite.tests) {
         jobs.push({ suite, test });
       }
@@ -321,6 +433,16 @@ export default function TestRunner({ testSuites }) {
       console.error('[TestRunner] Stack:', error.stack);
       alert(`Test runner crashed at test ${testIndex}: ${error.message}\n\nCheck console for details.`);
     } finally {
+      // Restore fetch and log simple stats
+      try {
+        if (typeof window !== 'undefined' && originalFetch && window.fetch !== originalFetch) {
+          window.fetch = originalFetch;
+        }
+      } catch (_) { /* ignore */ }
+      const elapsed = Math.max(1, Date.now() - (startAtRef.current || Date.now()));
+      const avgRps = (allResults.length / (elapsed / 1000)).toFixed(1);
+      console.log(`[TestRunner] Stats: completed=${allResults.length}, rps_avg=${avgRps}, rate_limited_429=${rateLimited429Ref.current || 0}`);
+      setUiStats({ avgRps: Number(avgRps), rateLimited429: rateLimited429Ref.current || 0 });
       flushResults();
       setCurrentTest(null);
       setRunning(false);
@@ -475,6 +597,63 @@ export default function TestRunner({ testSuites }) {
                   </div>
                 </div>
               )}
+              {isSuperadmin && (
+                <div className="hidden xl:flex items-center gap-2 mr-2">
+                  <select
+                    className="bg-slate-700 border border-slate-600 text-slate-100 text-xs h-8 px-2 rounded"
+                    value={activeProfile}
+                    onChange={(e) => loadProfile(e.target.value)}
+                    disabled={running}
+                  >
+                    <option value="">Profiles…</option>
+                    {Object.keys(profiles).map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="Profile name"
+                    className="bg-slate-700 border border-slate-600 text-slate-100 text-xs h-8 px-2 rounded w-36"
+                    value={profileNameInput}
+                    onChange={(e) => setProfileNameInput(e.target.value)}
+                    disabled={running}
+                  />
+                  <Button
+                    variant="outline"
+                    className="bg-slate-700 border-slate-600 h-8 px-2 text-xs"
+                    disabled={running || !profileNameInput.trim()}
+                    onClick={saveProfile}
+                  >Save</Button>
+                  <Button
+                    variant="outline"
+                    className="bg-slate-700 border-slate-600 h-8 px-2 text-xs"
+                    disabled={running || !activeProfile}
+                    onClick={deleteProfile}
+                  >Delete</Button>
+                </div>
+              )}
+              {isSuperadmin && (
+                <div className="hidden md:flex items-center gap-2 mr-2">
+                  <Button
+                    variant="outline"
+                    className="bg-slate-700 border-slate-600 h-8 px-2 text-xs"
+                    disabled={running}
+                    onClick={() => setConfig({ workers: 2, rate: 5, delayMs: 25 })}
+                  >Balanced</Button>
+                  <Button
+                    variant="outline"
+                    className="bg-slate-700 border-slate-600 h-8 px-2 text-xs"
+                    disabled={running}
+                    onClick={() => setConfig({ workers: 4, rate: 15, delayMs: 0 })}
+                  >Fast</Button>
+                  <Button
+                    variant="outline"
+                    className="bg-slate-700 border-slate-600 h-8 px-2 text-xs"
+                    disabled={running}
+                    onClick={() => setConfig({ workers: 8, rate: 0, delayMs: 0 })}
+                  >Max</Button>
+                </div>
+              )}
               <Button
                 onClick={checkBackend}
                 variant="outline"
@@ -510,7 +689,7 @@ export default function TestRunner({ testSuites }) {
               )}
               <Button
                 onClick={runTests}
-                disabled={running || checking || preflight.status !== "ok"}
+                disabled={running || checking || preflight.status !== "ok" || effectiveSuites.length === 0}
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 {running
@@ -561,6 +740,47 @@ export default function TestRunner({ testSuites }) {
               </Alert>
             )}
 
+          {isSuperadmin && (
+            <div className="mb-4 p-3 rounded border border-slate-700 bg-slate-800/60">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-slate-300 text-sm font-medium">Suites</div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="bg-slate-700 border-slate-600 h-7 px-2 text-xs"
+                    disabled={running}
+                    onClick={() => setSelectedCategories(new Set(allSuiteNames))}
+                  >Select All</Button>
+                  <Button
+                    variant="outline"
+                    className="bg-slate-700 border-slate-600 h-7 px-2 text-xs"
+                    disabled={running}
+                    onClick={() => setSelectedCategories(new Set())}
+                  >Select None</Button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+                {testSuites.map((suite) => (
+                  <label key={suite.name} className="flex items-center gap-2 text-slate-200 text-sm">
+                    <input
+                      type="checkbox"
+                      className="accent-blue-500 h-4 w-4"
+                      checked={selectedCategories.has(suite.name)}
+                      disabled={running}
+                      onChange={(e) => {
+                        const next = new Set(selectedCategories);
+                        if (e.target.checked) next.add(suite.name); else next.delete(suite.name);
+                        setSelectedCategories(next);
+                      }}
+                    />
+                    <span>{suite.name}</span>
+                    <span className="text-xs text-slate-400">({suite.tests.length})</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           {running && currentTest && (
             <Alert className="mb-4 bg-blue-900/30 border-blue-700">
               <Clock className="h-4 w-4 animate-spin" />
@@ -568,6 +788,29 @@ export default function TestRunner({ testSuites }) {
                 Running: {currentTest}
               </AlertDescription>
             </Alert>
+          )}
+
+          {(running || results.length > 0) && (
+            <div className="mb-4 grid grid-cols-3 gap-2">
+              <Card className="bg-slate-700 border-slate-600">
+                <CardContent className="p-3">
+                  <div className="text-xs text-slate-400">Avg RPS</div>
+                  <div className="text-lg font-semibold text-slate-100">{uiStats.avgRps}</div>
+                </CardContent>
+              </Card>
+              <Card className="bg-slate-700 border-slate-600">
+                <CardContent className="p-3">
+                  <div className="text-xs text-slate-400">429 Count</div>
+                  <div className="text-lg font-semibold text-slate-100">{uiStats.rateLimited429}</div>
+                </CardContent>
+              </Card>
+              <Card className="bg-slate-700 border-slate-600">
+                <CardContent className="p-3">
+                  <div className="text-xs text-slate-400">Config</div>
+                  <div className="text-xs text-slate-200">w:{config.workers} r:{config.rate}/s d:{config.delayMs}ms</div>
+                </CardContent>
+              </Card>
+            </div>
           )}
 
           {results.length > 0 && (
