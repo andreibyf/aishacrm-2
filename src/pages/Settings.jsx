@@ -76,6 +76,7 @@ import TestDataManager from "../components/settings/TestDataManager";
 import InternalPerformanceDashboard from "../components/settings/InternalPerformanceDashboard";
 import SyncHealthMonitor from "../components/settings/SyncHealthMonitor";
 import MCPServerMonitor from "../components/settings/MCPServerMonitor";
+import SecurityMonitor from "../components/settings/SecurityMonitor";
 import PerformanceMonitor from '../components/settings/PerformanceMonitor';
 import SystemHealthDashboard from "../components/settings/SystemHealthDashboard"; // NEW: SystemHealthDashboard
 import QaConsole from "../components/settings/QaConsole"; // NEW: QA Console (E2E triggers)
@@ -151,7 +152,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
     ...(isSuperadmin ? [
       { id: 'users', label: 'User Management', icon: Users, color: 'green', roles: ['superadmin'] },
       { id: 'tenants', label: 'Client Management', icon: Building2, color: 'indigo', roles: ['superadmin'] },
-      
+
       // Integrations
       { id: 'global-integrations', label: 'Global Integrations', icon: Plug, color: 'orange', roles: ['superadmin'] },
       { id: 'tenant-integrations', label: 'Tenant Integrations', icon: Puzzle, color: 'orange', roles: ['superadmin'] },
@@ -173,6 +174,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
       { id: 'performance', label: 'Performance', icon: Activity, color: 'emerald', roles: ['superadmin'] },
       { id: 'sync-health', label: 'Sync Health', icon: RefreshCw, color: 'emerald', roles: ['superadmin'] },
       { id: 'mcp-monitor', label: 'MCP Monitor', icon: Server, color: 'emerald', roles: ['superadmin'] },
+      { id: 'security-monitor', label: 'Security', icon: Shield, color: 'red', roles: ['superadmin'] },
       { id: 'system-health', label: 'System Health', icon: Activity, color: 'emerald', roles: ['superadmin'] },
       { id: 'system-logs', label: 'System Logs', icon: FileText, color: 'slate', roles: ['superadmin'] },
 
@@ -181,7 +183,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
       { id: 'qa-console', label: 'QA Console', icon: TestTube2, color: 'blue', roles: ['superadmin'] },
       { id: 'external-tools', label: 'External Tools', icon: ExternalLink, color: 'orange', roles: ['superadmin'] },
       { id: 'api-health', label: 'API Health', icon: Activity, color: 'red', roles: ['superadmin'] },
-      
+
       // Client Management
       { id: 'offboarding', label: 'Client Offboarding', icon: Trash2, color: 'red', roles: ['superadmin'] },
     ] : []),
@@ -385,9 +387,9 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                         <p className="text-sm text-blue-300 mb-2">
                           <strong>Full API documentation available at:</strong>
                         </p>
-                        <a 
-                          href={`${BACKEND_URL}/api-docs`} 
-                          target="_blank" 
+                        <a
+                          href={`${BACKEND_URL}/api-docs`}
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-400 hover:text-blue-300 underline flex items-center gap-2"
                         >
@@ -578,6 +580,23 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                   </CardHeader>
                   <CardContent>
                     <MCPServerMonitor />
+                  </CardContent>
+                </Card>
+              )}
+
+              {activeTab === 'security-monitor' && isAdmin && ( // New Security Monitor tab
+                <Card className="bg-slate-800 border-slate-700">
+                  <CardHeader>
+                    <CardTitle className="text-slate-100 flex items-center gap-2">
+                      <Shield className="w-5 h-5 text-red-400" />
+                      Security & Intrusion Detection
+                    </CardTitle>
+                    <CardDescription className="text-slate-400">
+                      Monitor security alerts, track unauthorized access attempts, and manage blocked IPs
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <SecurityMonitor />
                   </CardContent>
                 </Card>
               )}

@@ -12,7 +12,9 @@
   "author": "Dre' + ChatGPT",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "@supabase/supabase-js": "^2.39.0",
+    "node-fetch": "^2.7.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

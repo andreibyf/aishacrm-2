@@ -80,6 +80,15 @@ services:
       - NODE_ENV=production
       # Point MCP server at backend API inside compose network
       - CRM_BACKEND_URL=http://backend:3001
+      # Supabase connection for direct database access
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - USE_DIRECT_SUPABASE_ACCESS=true
+      # OpenAI configuration
+      - DEFAULT_OPENAI_MODEL=${DEFAULT_OPENAI_MODEL:-gpt-4o-mini}
+      # GitHub token for GitHub MCP tools
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GH_TOKEN=${GH_TOKEN}
 
   # Frontend (Vite dev server for development, or built static for production-like testing)
   frontend:

@@ -48,12 +48,12 @@ await (async () => {
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
     }
-    
+
     initSupabaseDB(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     pgPool = supabasePool;
     dbConnectionType = "Supabase API";
     console.log("✓ Supabase PostgREST API initialized (HTTP-based, bypassing PostgreSQL IPv6)");
-    
+
     // update diagnostics
     app.locals.dbConnectionType = dbConnectionType;
     app.locals.dbConfigPath = 'supabase_api';
@@ -72,7 +72,7 @@ if (process.env.DATABASE_URL) {
   // Mask password in log
   const dbUrlForLog = process.env.DATABASE_URL.replace(/:([^@]+)@/, ':****@');
   console.log(`[Performance Logging] DATABASE_URL: ${dbUrlForLog}`);
-  
+
   // Use direct parameter specification (more reliable)
   // Prefer using connection string when provided (e.g., Supabase). Enable SSL for cloud Postgres.
   // Fallback to local dev settings only if explicitly requested.
@@ -102,7 +102,7 @@ if (process.env.DATABASE_URL) {
     perfLogPool = new Pool(baseConfig);
   }
   console.log("✓ Performance logging pool initialized (PostgreSQL direct connection)");
-  
+
   // Test connection with auto SSL fallback if necessary
   const testPerfPool = async () => {
     try {
@@ -236,6 +236,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // Performance logging middleware (must be after body parsers, before routes)
 import { performanceLogger } from "./middleware/performanceLogger.js";
 import { productionSafetyGuard } from "./middleware/productionSafetyGuard.js";
+import { intrusionDetection } from "./middleware/intrusionDetection.js";
 // Build a resilient perf DB wrapper that falls back to Supabase API pool if the direct pool was ended
 const resilientPerfDb = {
   query: async (...args) => {
@@ -277,6 +278,20 @@ app.use(productionSafetyGuard({
   pgPool, // Pass database connection for security event logging
 }));
 console.log("✓ Production safety guard enabled");
+
+// Attach Supabase client to request for IDR middleware
+app.use((req, _res, next) => {
+  req.supabase = pgPool;
+  next();
+});
+
+// Enable Intrusion Detection and Response (IDR) system
+if (process.env.ENABLE_IDR !== 'false') {
+  app.use(intrusionDetection);
+  console.log("✓ Intrusion Detection & Response (IDR) middleware enabled");
+} else {
+  console.warn("⚠ IDR middleware disabled via ENABLE_IDR=false");
+}
 
 // ----------------------------------------------------------------------------
 // Canary logging middleware for BizDevSource promote diagnostics
@@ -373,10 +388,10 @@ app.use('/api-docs',
     .swagger-ui .model-title { color: #f1f5f9; }
     .swagger-ui .model { color: #cbd5e1; }
     .swagger-ui .prop-type { color: #94a3b8; }
-    .swagger-ui input[type=text], .swagger-ui textarea, .swagger-ui select { 
-      background: #1e293b; 
-      color: #e2e8f0; 
-      border-color: #475569; 
+    .swagger-ui input[type=text], .swagger-ui textarea, .swagger-ui select {
+      background: #1e293b;
+      color: #e2e8f0;
+      border-color: #475569;
     }
   `,
   customSiteTitle: 'Aisha CRM API Documentation'
@@ -446,6 +461,7 @@ import createNoteRoutes from "./routes/notes.js";
 import createSystemBrandingRoutes from "./routes/systembrandings.js";
 import createSyncHealthRoutes from "./routes/synchealths.js";
 import createAICampaignRoutes from "./routes/aicampaigns.js";
+import createSecurityRoutes from "./routes/security.js";
 
 // Use the pgPool directly; per-request DB time is measured inside the DB adapter
 const measuredPgPool = pgPool;
@@ -496,6 +512,7 @@ app.use("/api/notes", createNoteRoutes(measuredPgPool));
 app.use("/api/systembrandings", createSystemBrandingRoutes(measuredPgPool));
 app.use("/api/synchealths", createSyncHealthRoutes(measuredPgPool));
 app.use("/api/aicampaigns", createAICampaignRoutes(measuredPgPool));
+app.use("/api/security", createSecurityRoutes(measuredPgPool, pgPool));
 
 // 404 handler
 app.use((req, res) => {

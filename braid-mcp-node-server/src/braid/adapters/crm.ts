@@ -5,6 +5,7 @@ import {
   BraidFilter,
   BraidSort,
 } from "../types";
+import { getSupabaseClient } from "../../lib/supabase";
 
 // Node 18+ provides a global fetch; declare for TypeScript.
 declare const fetch: any;
@@ -242,6 +243,81 @@ async function handleSearch(
     };
   }
 
+  // Check if direct Supabase access is available
+  const useDirectAccess = process.env.USE_DIRECT_SUPABASE_ACCESS === "true";
+
+  if (useDirectAccess) {
+    try {
+      const supa = getSupabaseClient();
+      const limit = Math.min(Number(action.options?.maxItems) || 10, 100);
+      const offset = 0; // TODO: add pagination support
+
+      // Build query
+      let query = supa
+        .from(kind)
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      // Execute query
+      const { data, error } = await query;
+
+      if (error) {
+        ctx.error("Supabase query error", { error: error.message });
+        throw error;
+      }
+
+      // Client-side filtering if search query provided
+      let filtered = data || [];
+      const qFilter = action.filters?.find((f) => f.field === "q");
+
+      if (qFilter && typeof qFilter.value === "string") {
+        const qLower = String(qFilter.value).toLowerCase();
+
+        filtered = filtered.filter((row: any) => {
+          if (kind === "accounts") {
+            const name = (row.name || '').toLowerCase();
+            const industry = (row.industry || '').toLowerCase();
+            const website = (row.website || '').toLowerCase();
+            return name.includes(qLower) || industry.includes(qLower) || website.includes(qLower);
+          } else if (kind === "contacts") {
+            const first_name = (row.first_name || '').toLowerCase();
+            const last_name = (row.last_name || '').toLowerCase();
+            const email = (row.email || '').toLowerCase();
+            return first_name.includes(qLower) || last_name.includes(qLower) || email.includes(qLower);
+          } else if (kind === "leads") {
+            const first_name = (row.first_name || '').toLowerCase();
+            const last_name = (row.last_name || '').toLowerCase();
+            const email = (row.email || '').toLowerCase();
+            const company = (row.company || '').toLowerCase();
+            return first_name.includes(qLower) || last_name.includes(qLower) || email.includes(qLower) || company.includes(qLower);
+          }
+          return true;
+        });
+      }
+
+      ctx.info("Direct Supabase search successful", {
+        kind,
+        tenantId,
+        count: filtered.length,
+      });
+
+      return {
+        actionId: action.id,
+        status: "success",
+        resource: action.resource,
+        data: filtered,
+      };
+    } catch (err: any) {
+      ctx.warn("Direct Supabase access failed, falling back to backend API", {
+        error: err?.message,
+      });
+      // Fall through to backend API call
+    }
+  }
+
+  // Fallback to backend API
   const params = buildSearchParams(
     tenantId,
     action.filters,
@@ -499,4 +575,3 @@ export const CrmAdapter: BraidAdapter = {
     }
   },
 };
-

@@ -4,6 +4,9 @@ import { BraidExecutor } from "./braid/executor";
 import { createConsoleLogger } from "./braid";
 import { MockAdapter } from "./braid/adapters/mock";
 import { CrmAdapter } from "./braid/adapters/crm";
+import { WebAdapter } from "./braid/adapters/web";
+import { GitHubAdapter } from "./braid/adapters/github";
+import { LlmAdapter } from "./braid/adapters/llm";
 import { BraidRequestEnvelope } from "./braid/types";
 
 const app = express();
@@ -19,10 +22,9 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 const registry = new InMemoryBraidRegistry();
 registry.registerAdapter(MockAdapter);
 registry.registerAdapter(CrmAdapter);
-
-// TODO: register real adapters here, e.g.
-// import { CrmAdapter } from "./braid/adapters/crm";
-// registry.registerAdapter(CrmAdapter);
+registry.registerAdapter(WebAdapter);
+registry.registerAdapter(GitHubAdapter);
+registry.registerAdapter(LlmAdapter);
 
 const executor = new BraidExecutor(registry, {
   logger: createConsoleLogger(),
