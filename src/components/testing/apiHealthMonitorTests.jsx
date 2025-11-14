@@ -7,7 +7,7 @@ const silentMonitor = {
   reset: () => {
     console.error = () => {};
     try {
-      return silentMonitor.reset();
+      return apiHealthMonitor.reset();
     } finally {
       console.error = originalConsoleError;
     }
@@ -15,7 +15,7 @@ const silentMonitor = {
   reportMissingEndpoint: (...args) => {
     console.error = () => {};
     try {
-      return silentMonitor.reportMissingEndpoint(...args);
+      return apiHealthMonitor.reportMissingEndpoint(...args);
     } finally {
       console.error = originalConsoleError;
     }
@@ -23,7 +23,7 @@ const silentMonitor = {
   reportServerError: (...args) => {
     console.error = () => {};
     try {
-      return silentMonitor.reportServerError(...args);
+      return apiHealthMonitor.reportServerError(...args);
     } finally {
       console.error = originalConsoleError;
     }
@@ -31,7 +31,7 @@ const silentMonitor = {
   reportAuthError: (...args) => {
     console.error = () => {};
     try {
-      return silentMonitor.reportAuthError(...args);
+      return apiHealthMonitor.reportAuthError(...args);
     } finally {
       console.error = originalConsoleError;
     }
@@ -39,7 +39,7 @@ const silentMonitor = {
   reportRateLimitError: (...args) => {
     console.error = () => {};
     try {
-      return silentMonitor.reportRateLimitError(...args);
+      return apiHealthMonitor.reportRateLimitError(...args);
     } finally {
       console.error = originalConsoleError;
     }
@@ -47,7 +47,7 @@ const silentMonitor = {
   reportTimeoutError: (...args) => {
     console.error = () => {};
     try {
-      return silentMonitor.reportTimeoutError(...args);
+      return apiHealthMonitor.reportTimeoutError(...args);
     } finally {
       console.error = originalConsoleError;
     }
@@ -55,7 +55,7 @@ const silentMonitor = {
   reportNetworkError: (...args) => {
     console.error = () => {};
     try {
-      return silentMonitor.reportNetworkError(...args);
+      return apiHealthMonitor.reportNetworkError(...args);
     } finally {
       console.error = originalConsoleError;
     }
