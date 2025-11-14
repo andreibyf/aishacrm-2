@@ -93,55 +93,68 @@ export default function TestRunner({ testSuites }) {
   const runTests = async () => {
     setRunning(true);
     const allResults = [];
-    resultsRef.current = []; // Clear ref
+    resultsRef.current = [];
     setResults([]);
-    sessionStorage.removeItem(TEST_RESULTS_KEY); // Clear storage
+    sessionStorage.removeItem(TEST_RESULTS_KEY);
 
     console.log('[TestRunner] Starting test run with', testSuites.length, 'suites');
     let testIndex = 0;
-    
+    const TEST_TIMEOUT_MS = 15000; // prevent hangs that reduce completed count
+
+    const flushResults = () => {
+      // Batch UI/state updates to reduce flicker
+      resultsRef.current = [...allResults];
+      setResults([...allResults]);
+      try {
+        sessionStorage.setItem(TEST_RESULTS_KEY, JSON.stringify(allResults));
+      } catch (e) {
+        console.error('[TestRunner] Failed to store results:', e);
+      }
+    };
+
     try {
       for (const suite of testSuites) {
         console.log(`[TestRunner] Starting suite: ${suite.name} (${suite.tests.length} tests)`);
-        
+
         for (const test of suite.tests) {
           testIndex++;
-          console.log(`[TestRunner] Test ${testIndex}: ${suite.name} - ${test.name}`);
           setCurrentTest(`${suite.name} - ${test.name}`);
-
           const startTime = Date.now();
-          let result = {
+          const result = {
             suite: suite.name,
             test: test.name,
-            status: "running",
+            status: 'running',
             duration: 0,
             error: null,
           };
 
+            // Wrap test in timeout to avoid indefinite hangs
+          const execPromise = (async () => { await test.fn(); })();
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error(`Timeout after ${TEST_TIMEOUT_MS}ms`)), TEST_TIMEOUT_MS);
+          });
+
           try {
-            await test.fn();
-            result.status = "passed";
-            result.duration = Date.now() - startTime;
-            console.log(`[TestRunner] ✓ Test ${testIndex} passed in ${result.duration}ms`);
+            await Promise.race([execPromise, timeoutPromise]);
+            result.status = 'passed';
           } catch (error) {
-            result.status = "failed";
-            result.duration = Date.now() - startTime;
+            result.status = 'failed';
             result.error = error.message;
             console.error(`[TestRunner] ✗ Test ${testIndex} failed:`, error.message);
+          } finally {
+            result.duration = Date.now() - startTime;
           }
 
           allResults.push(result);
-          resultsRef.current = [...allResults]; // Store in ref
-          setResults([...allResults]);
-          // Persist to sessionStorage immediately
-          try {
-            sessionStorage.setItem(TEST_RESULTS_KEY, JSON.stringify(allResults));
-          } catch (e) {
-            console.error('[TestRunner] Failed to store results:', e);
+          // Flush every 5 tests or at end to limit re-renders
+          if (testIndex % 5 === 0 || testIndex === totalTests) {
+            flushResults();
           }
         }
-        
+
         console.log(`[TestRunner] Completed suite: ${suite.name}`);
+        // Flush after each suite (in case suite size < 5)
+        flushResults();
       }
 
       console.log('[TestRunner] All tests completed:', allResults.length, 'total');
@@ -150,13 +163,7 @@ export default function TestRunner({ testSuites }) {
       console.error('[TestRunner] Stack:', error.stack);
       alert(`Test runner crashed at test ${testIndex}: ${error.message}\n\nCheck console for details.`);
     } finally {
-      resultsRef.current = [...allResults]; // Final storage in ref
-      // Final persist to sessionStorage
-      try {
-        sessionStorage.setItem(TEST_RESULTS_KEY, JSON.stringify(allResults));
-      } catch (e) {
-        console.error('[TestRunner] Failed to store final results:', e);
-      }
+      flushResults();
       setCurrentTest(null);
       setRunning(false);
       console.log('[TestRunner] Test run finished. Results:', allResults.length);
