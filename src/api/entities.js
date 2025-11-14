@@ -379,6 +379,16 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     }
     // For single item operations (get, create, update), return the data directly
     if (!Array.isArray(result.data)) {
+      // If backend wraps the object under a named key (e.g., { employee: {...} }), unwrap it
+      const objectKey = Object.keys(result.data).find((key) =>
+        key !== "tenant_id" &&
+        result.data[key] &&
+        typeof result.data[key] === 'object' &&
+        !Array.isArray(result.data[key])
+      );
+      if (objectKey) {
+        return result.data[objectKey];
+      }
       return result.data;
     }
   }
