@@ -18,8 +18,19 @@ const BACKEND_URL = getBackendUrl();
 const TEST_RESULTS_KEY = 'unit_test_results';
 
 export default function TestRunner({ testSuites }) {
-  // Start with empty results; allow manual restore instead of auto-populating
-  const [results, setResults] = useState([]);
+  // Initialize results from sessionStorage to survive remounts during test run
+  const [results, setResults] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem(TEST_RESULTS_KEY);
+      if (stored) {
+        console.log('[TestRunner] Initialized from sessionStorage');
+        return JSON.parse(stored);
+      }
+    } catch (e) {
+      console.error('[TestRunner] Failed to restore from sessionStorage:', e);
+    }
+    return [];
+  });
   const [hasStoredResults, setHasStoredResults] = useState(false);
   const syncIntervalRef = useRef(null);
   const runIdRef = useRef(0);
