@@ -5,7 +5,6 @@
 
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
-import { resolveTenantSlug, isUUID } from '../lib/tenantResolver.js';
 import { logEntityTransition } from '../lib/transitions.js';
 
 export default function createLeadRoutes(pgPool) {
@@ -30,11 +29,6 @@ export default function createLeadRoutes(pgPool) {
   router.get('/', async (req, res) => {
     try {
       let { tenant_id, status, account_id, limit = 50, offset = 0 } = req.query;
-
-      // Accept UUID or slug; normalize to slug for legacy columns
-      if (tenant_id && isUUID(String(tenant_id))) {
-        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
-      }
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -169,10 +163,11 @@ export default function createLeadRoutes(pgPool) {
 
       const lead = expandMetadata(result.rows[0]);
 
+      console.log('[Leads POST] Successfully created lead:', lead.id);
       res.json({
         status: 'success',
         message: 'Lead created',
-        data: lead,
+        data: { lead },
       });
     } catch (error) {
       console.error('Error creating lead:', error);
@@ -207,7 +202,7 @@ export default function createLeadRoutes(pgPool) {
 
       res.json({
         status: 'success',
-        data: lead,
+        data: { lead },
       });
     } catch (error) {
       console.error('Error fetching lead:', error);
@@ -310,7 +305,7 @@ export default function createLeadRoutes(pgPool) {
       res.json({
         status: 'success',
         message: 'Lead updated',
-        data: updatedLead,
+        data: { lead: updatedLead },
       });
     } catch (error) {
       console.error('Error updating lead:', error);

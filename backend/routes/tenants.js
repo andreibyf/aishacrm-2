@@ -92,7 +92,8 @@ export default function createTenantRoutes(_pgPool) {
         .order('created_at', { ascending: false })
         .range(from, to);
 
-      if (tenant_id) q = q.eq('tenant_id', tenant_id);
+      // Filter by UUID id (primary key), not tenant_id slug
+      if (tenant_id) q = q.eq('id', tenant_id);
       if (status) q = q.eq('status', status);
 
       const { data, count, error } = await q;

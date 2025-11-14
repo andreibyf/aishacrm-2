@@ -89,8 +89,9 @@ const makeDevFallback = (entityName, method, data, id) => {
 
 // Helper to call independent backend API
 const callBackendAPI = async (entityName, method, data = null, id = null) => {
-  // Diagnostic logging for Opportunity stage update debugging
+  // Diagnostic logging for key entities during tests
   const isOpportunity = entityName === 'Opportunity';
+  const isDebugEntity = isOpportunity || entityName === 'Employee' || entityName === 'Account' || entityName === 'Contact';
   const entityPath = pluralize(entityName);
   let url = `${BACKEND_URL}/api/${entityPath}`;
 
@@ -105,6 +106,12 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     try {
       if (typeof window !== 'undefined') {
         const url = new URL(window.location.href);
+
+        // For the UnitTests page, always force the dedicated test tenant
+        if (url.pathname.toLowerCase().includes('unittests')) {
+          return 'local-tenant-001';
+        }
+
         const urlTenant = url.searchParams.get('tenant');
         if (urlTenant) return urlTenant;
         const stored = localStorage.getItem('selected_tenant_id');
@@ -243,7 +250,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     options.body = JSON.stringify(bodyData);
   }
 
-  if (isOpportunity) {
+  if (isDebugEntity) {
     console.log('[API Debug] Preparing request', {
       entity: entityName,
       method,
@@ -253,20 +260,20 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     });
   }
 
-  if (isOpportunity) {
+  if (isDebugEntity) {
     console.log('[API Debug] Final request configuration', {
       entity: entityName,
       method,
       url,
       hasBody: !!options.body,
-      bodyPreview: options.body ? (() => { try { const parsed = JSON.parse(options.body); return { keys: Object.keys(parsed), stage: parsed.stage, tenant_id: parsed.tenant_id }; } catch { return 'unparseable'; } })() : null,
+      bodyPreview: options.body ? (() => { try { const parsed = JSON.parse(options.body); return { keys: Object.keys(parsed), stage: parsed.stage, tenant_id: parsed.tenant_id, first_name: parsed.first_name, last_name: parsed.last_name, name: parsed.name }; } catch { return 'unparseable'; } })() : null,
     });
   }
 
   let response;
   try {
     response = await fetch(url, options);
-    if (isOpportunity) {
+    if (isDebugEntity) {
       console.log('[API Debug] Fetch completed', {
         url,
         status: response.status,
@@ -325,8 +332,8 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       return makeDevFallback(entityName, method, data, id);
     }
     // Enhanced Opportunity-specific logging
-    if (entityName === 'Opportunity') {
-      console.error('[API Debug] Opportunity request failed', {
+    if (isDebugEntity) {
+      console.error('[API Debug] Request failed', {
         url,
         method,
         id,
@@ -349,7 +356,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     throw e;
   }
 
-  if (isOpportunity) {
+  if (isDebugEntity) {
     // Log stage-related fields if present
     const stageVal = result?.data?.stage || result?.stage;
     console.log('[API Debug] Parsed response JSON', {

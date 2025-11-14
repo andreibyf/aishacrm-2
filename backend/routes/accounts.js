@@ -8,7 +8,6 @@ import {
   enforceEmployeeDataScope,
   validateTenantAccess,
 } from "../middleware/validateTenant.js";
-import { resolveTenantSlug, isUUID } from "../lib/tenantResolver.js";
 import { tenantScopedId, buildGetByIdSQL } from "../middleware/tenantScopedId.js";
 
 export default function createAccountRoutes(pgPool) {
@@ -33,11 +32,6 @@ export default function createAccountRoutes(pgPool) {
   router.get("/", async (req, res) => {
     try {
       let { tenant_id, type, limit = 50, offset = 0 } = req.query;
-
-      // Normalize tenant_id if UUID is provided
-      if (tenant_id && isUUID(String(tenant_id))) {
-        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
-      }
 
       // Build dynamic query based on tenant_id presence
       let query = "SELECT * FROM accounts";

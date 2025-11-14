@@ -7,7 +7,6 @@ import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
 import { logEntityTransition } from '../lib/transitions.js';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
-import { resolveTenantSlug, isUUID } from '../lib/tenantResolver.js';
 
 export default function createBizDevSourceRoutes(pgPool) {
   const router = express.Router();
@@ -21,9 +20,6 @@ export default function createBizDevSourceRoutes(pgPool) {
       let { tenant_id, status, source_type, priority } = req.query;
 
       // Accept UUID or slug; normalize to slug for legacy columns
-      if (tenant_id && isUUID(String(tenant_id))) {
-        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
-      }
       
       let query = 'SELECT * FROM bizdev_sources WHERE 1=1';
       const params = [];
@@ -79,9 +75,6 @@ export default function createBizDevSourceRoutes(pgPool) {
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 
       // Accept UUID or slug; normalize to slug for legacy columns
-      if (tenant_id && isUUID(String(tenant_id))) {
-        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
-      }
       
       const result = await pgPool.query(
         'SELECT * FROM bizdev_sources WHERE tenant_id = $1 AND id = $2 LIMIT 1',
@@ -142,10 +135,7 @@ export default function createBizDevSourceRoutes(pgPool) {
         });
       }
 
-      // Accept UUID or slug; normalize to slug for legacy columns
-      const tenant_id = isUUID(String(incomingTenantId))
-        ? await resolveTenantSlug(pgPool, String(incomingTenantId))
-        : incomingTenantId;
+      const tenant_id = incomingTenantId;
 
       const result = await pgPool.query(
         `INSERT INTO bizdev_sources (
@@ -204,9 +194,6 @@ export default function createBizDevSourceRoutes(pgPool) {
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 
       // Accept UUID or slug; normalize to slug for legacy columns
-      if (tenant_id && isUUID(String(tenant_id))) {
-        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
-      }
 
       const result = await pgPool.query(
         `UPDATE bizdev_sources SET
@@ -267,9 +254,6 @@ export default function createBizDevSourceRoutes(pgPool) {
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 
       // Accept UUID or slug; normalize to slug for legacy columns
-      if (tenant_id && isUUID(String(tenant_id))) {
-        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
-      }
       
       const result = await pgPool.query(
         'DELETE FROM bizdev_sources WHERE tenant_id = $1 AND id = $2 RETURNING *',
@@ -306,10 +290,7 @@ export default function createBizDevSourceRoutes(pgPool) {
   // Default delete_source to false to retain promoted sources for UX (grayed out + stats)
   const { tenant_id: incomingTenantId, performed_by, delete_source = false } = req.body;
 
-      // Accept UUID or slug; normalize to slug for legacy columns
-      const tenant_id = isUUID(String(incomingTenantId))
-        ? await resolveTenantSlug(pgPool, String(incomingTenantId))
-        : incomingTenantId;
+      const tenant_id = incomingTenantId;
 
       console.log('[Promote BizDev Source] Request received:', { id, tenant_id, body: req.body, supportsTx });
 

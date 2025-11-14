@@ -5,7 +5,6 @@
 
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
-import { resolveTenantSlug, isUUID } from '../lib/tenantResolver.js';
 
 export default function createContactRoutes(pgPool) {
   const router = express.Router();
@@ -32,11 +31,6 @@ export default function createContactRoutes(pgPool) {
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
-      }
-
-      // Accept UUID or slug; normalize to slug for legacy columns
-      if (tenant_id && isUUID(String(tenant_id))) {
-        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
       }
 
       // Build query with optional filters
@@ -101,9 +95,6 @@ export default function createContactRoutes(pgPool) {
       }
 
       // Accept UUID or slug; normalize to slug for legacy columns
-      if (tenant_id && isUUID(String(tenant_id))) {
-        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
-      }
 
       const like = `%${q}%`;
 
@@ -157,7 +148,7 @@ export default function createContactRoutes(pgPool) {
   router.post('/', async (req, res) => {
     try {
       const {
-        tenant_id: incomingTenantId,
+        tenant_id,
         first_name,
         last_name,
         email,
@@ -168,14 +159,9 @@ export default function createContactRoutes(pgPool) {
         ...otherFields
       } = req.body || {};
 
-      if (!incomingTenantId) {
+      if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
-
-      // Accept UUID or slug; normalize to slug for legacy columns
-      const tenant_id = isUUID(String(incomingTenantId))
-        ? await resolveTenantSlug(pgPool, String(incomingTenantId))
-        : incomingTenantId;
 
       // Validate required name fields
       if (!first_name || !first_name.trim()) {
@@ -223,7 +209,7 @@ export default function createContactRoutes(pgPool) {
       res.json({
         status: 'success',
         message: 'Contact created',
-        data: result.rows[0],
+        data: { contact: result.rows[0] },
       });
     } catch (error) {
       console.error('Error creating contact:', error);
@@ -242,9 +228,6 @@ export default function createContactRoutes(pgPool) {
       }
 
       // Accept UUID or slug; normalize to slug for legacy columns
-      if (tenant_id && isUUID(String(tenant_id))) {
-        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
-      }
 
       const result = await pgPool.query(
         'SELECT * FROM contacts WHERE tenant_id = $1 AND id = $2 LIMIT 1',

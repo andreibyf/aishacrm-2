@@ -1,14 +1,76 @@
 import { assert } from './testUtils';
 import apiHealthMonitor from '../../utils/apiHealthMonitor';
 
+// Suppress console.error during tests to avoid cluttering output
+const originalConsoleError = console.error;
+const silentMonitor = {
+  reset: () => {
+    console.error = () => {};
+    try {
+      return silentMonitor.reset();
+    } finally {
+      console.error = originalConsoleError;
+    }
+  },
+  reportMissingEndpoint: (...args) => {
+    console.error = () => {};
+    try {
+      return silentMonitor.reportMissingEndpoint(...args);
+    } finally {
+      console.error = originalConsoleError;
+    }
+  },
+  reportServerError: (...args) => {
+    console.error = () => {};
+    try {
+      return silentMonitor.reportServerError(...args);
+    } finally {
+      console.error = originalConsoleError;
+    }
+  },
+  reportAuthError: (...args) => {
+    console.error = () => {};
+    try {
+      return silentMonitor.reportAuthError(...args);
+    } finally {
+      console.error = originalConsoleError;
+    }
+  },
+  reportRateLimitError: (...args) => {
+    console.error = () => {};
+    try {
+      return silentMonitor.reportRateLimitError(...args);
+    } finally {
+      console.error = originalConsoleError;
+    }
+  },
+  reportTimeoutError: (...args) => {
+    console.error = () => {};
+    try {
+      return silentMonitor.reportTimeoutError(...args);
+    } finally {
+      console.error = originalConsoleError;
+    }
+  },
+  reportNetworkError: (...args) => {
+    console.error = () => {};
+    try {
+      return silentMonitor.reportNetworkError(...args);
+    } finally {
+      console.error = originalConsoleError;
+    }
+  },
+  getHealthReport: () => apiHealthMonitor.getHealthReport()
+};
+
 export const apiHealthMonitorTests = {
   name: 'API Health Monitor',
   tests: [
     {
       name: 'Should track 404 missing endpoints',
       fn: async () => {
-        apiHealthMonitor.reset();
-        apiHealthMonitor.reportMissingEndpoint('/api/test-endpoint', { method: 'GET' });
+        silentMonitor.reset();
+        silentMonitor.reportMissingEndpoint('/api/test-endpoint', { method: 'GET' });
         
         const report = apiHealthMonitor.getHealthReport();
         assert.equal(report.totalMissingEndpoints, 1);
@@ -19,10 +81,10 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should track multiple missing endpoints',
       fn: async () => {
-        apiHealthMonitor.reset();
-        apiHealthMonitor.reportMissingEndpoint('/api/endpoint1', { method: 'GET' });
-        apiHealthMonitor.reportMissingEndpoint('/api/endpoint2', { method: 'POST' });
-        apiHealthMonitor.reportMissingEndpoint('/api/endpoint3', { method: 'PUT' });
+        silentMonitor.reset();
+        silentMonitor.reportMissingEndpoint('/api/endpoint1', { method: 'GET' });
+        silentMonitor.reportMissingEndpoint('/api/endpoint2', { method: 'POST' });
+        silentMonitor.reportMissingEndpoint('/api/endpoint3', { method: 'PUT' });
         
         const report = apiHealthMonitor.getHealthReport();
         assert.equal(report.totalMissingEndpoints, 3);
@@ -32,10 +94,10 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should increment count for repeated missing endpoints',
       fn: async () => {
-        apiHealthMonitor.reset();
-        apiHealthMonitor.reportMissingEndpoint('/api/test', { method: 'GET' });
-        apiHealthMonitor.reportMissingEndpoint('/api/test', { method: 'GET' });
-        apiHealthMonitor.reportMissingEndpoint('/api/test', { method: 'GET' });
+        silentMonitor.reset();
+        silentMonitor.reportMissingEndpoint('/api/test', { method: 'GET' });
+        silentMonitor.reportMissingEndpoint('/api/test', { method: 'GET' });
+        silentMonitor.reportMissingEndpoint('/api/test', { method: 'GET' });
         
         const report = apiHealthMonitor.getHealthReport();
         const endpoint = report.missingEndpoints.find(e => e.endpoint === '/api/test');
@@ -46,8 +108,8 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should track server errors (500)',
       fn: async () => {
-        apiHealthMonitor.reset();
-        apiHealthMonitor.reportServerError('/api/users', 500, { message: 'Internal Server Error' });
+        silentMonitor.reset();
+        silentMonitor.reportServerError('/api/users', 500, { message: 'Internal Server Error' });
         
         const report = apiHealthMonitor.getHealthReport();
         assert.equal(report.totalServerErrors, 1);
@@ -58,10 +120,10 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should track different server error codes',
       fn: async () => {
-        apiHealthMonitor.reset();
-        apiHealthMonitor.reportServerError('/api/test1', 500, { message: 'Internal Server Error' });
-        apiHealthMonitor.reportServerError('/api/test2', 502, { message: 'Bad Gateway' });
-        apiHealthMonitor.reportServerError('/api/test3', 503, { message: 'Service Unavailable' });
+        silentMonitor.reset();
+        silentMonitor.reportServerError('/api/test1', 500, { message: 'Internal Server Error' });
+        silentMonitor.reportServerError('/api/test2', 502, { message: 'Bad Gateway' });
+        silentMonitor.reportServerError('/api/test3', 503, { message: 'Service Unavailable' });
         
         const report = apiHealthMonitor.getHealthReport();
         assert.equal(report.totalServerErrors, 3);
@@ -71,8 +133,8 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should track auth errors (401/403)',
       fn: async () => {
-        apiHealthMonitor.reset();
-        apiHealthMonitor.reportAuthError('/api/protected', 403, { message: 'Forbidden' });
+        silentMonitor.reset();
+        silentMonitor.reportAuthError('/api/protected', 403, { message: 'Forbidden' });
         
         const report = apiHealthMonitor.getHealthReport();
         assert.equal(report.totalAuthErrors, 1);
@@ -83,9 +145,9 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should track both 401 and 403 auth errors',
       fn: async () => {
-        apiHealthMonitor.reset();
-        apiHealthMonitor.reportAuthError('/api/unauthorized', 401, { message: 'Unauthorized' });
-        apiHealthMonitor.reportAuthError('/api/forbidden', 403, { message: 'Forbidden' });
+        silentMonitor.reset();
+        silentMonitor.reportAuthError('/api/unauthorized', 401, { message: 'Unauthorized' });
+        silentMonitor.reportAuthError('/api/forbidden', 403, { message: 'Forbidden' });
         
         const report = apiHealthMonitor.getHealthReport();
         assert.equal(report.totalAuthErrors, 2);
@@ -95,8 +157,8 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should track rate limit errors (429)',
       fn: async () => {
-        apiHealthMonitor.reset();
-        apiHealthMonitor.reportRateLimitError('/api/search', { message: 'Too Many Requests' });
+        silentMonitor.reset();
+        silentMonitor.reportRateLimitError('/api/search', { message: 'Too Many Requests' });
         
         const report = apiHealthMonitor.getHealthReport();
         assert.equal(report.totalRateLimitErrors, 1);
@@ -107,9 +169,9 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should increment rate limit count',
       fn: async () => {
-        apiHealthMonitor.reset();
-        apiHealthMonitor.reportRateLimitError('/api/search', { message: 'Too Many Requests' });
-        apiHealthMonitor.reportRateLimitError('/api/search', { message: 'Too Many Requests' });
+        silentMonitor.reset();
+        silentMonitor.reportRateLimitError('/api/search', { message: 'Too Many Requests' });
+        silentMonitor.reportRateLimitError('/api/search', { message: 'Too Many Requests' });
         
         const report = apiHealthMonitor.getHealthReport();
         const error = report.rateLimitErrors.find(e => e.endpoint === '/api/search');
@@ -120,8 +182,8 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should track timeout errors',
       fn: async () => {
-        apiHealthMonitor.reset();
-        apiHealthMonitor.reportTimeoutError('/api/slow-endpoint', { message: 'Request timeout' });
+        silentMonitor.reset();
+        silentMonitor.reportTimeoutError('/api/slow-endpoint', { message: 'Request timeout' });
         
         const report = apiHealthMonitor.getHealthReport();
         assert.equal(report.totalTimeoutErrors, 1);
@@ -132,10 +194,10 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should track multiple timeout errors',
       fn: async () => {
-        apiHealthMonitor.reset();
-        apiHealthMonitor.reportTimeoutError('/api/slow1', { message: 'timeout' });
-        apiHealthMonitor.reportTimeoutError('/api/slow2', { message: 'timeout' });
-        apiHealthMonitor.reportTimeoutError('/api/slow3', { message: 'timeout' });
+        silentMonitor.reset();
+        silentMonitor.reportTimeoutError('/api/slow1', { message: 'timeout' });
+        silentMonitor.reportTimeoutError('/api/slow2', { message: 'timeout' });
+        silentMonitor.reportTimeoutError('/api/slow3', { message: 'timeout' });
         
         const report = apiHealthMonitor.getHealthReport();
         assert.equal(report.totalTimeoutErrors, 3);
@@ -145,8 +207,8 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should track network errors',
       fn: async () => {
-        apiHealthMonitor.reset();
-        apiHealthMonitor.reportNetworkError('/api/unreachable', { error: 'Network Error', details: 'Failed to fetch' });
+        silentMonitor.reset();
+        silentMonitor.reportNetworkError('/api/unreachable', { error: 'Network Error', details: 'Failed to fetch' });
         
         const report = apiHealthMonitor.getHealthReport();
         assert.equal(report.totalNetworkErrors, 1);
@@ -157,10 +219,10 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should track different network error types',
       fn: async () => {
-        apiHealthMonitor.reset();
-        apiHealthMonitor.reportNetworkError('/api/test1', { error: 'Network Error', details: 'Failed to fetch' });
-        apiHealthMonitor.reportNetworkError('/api/test2', { error: 'Network Error', details: 'Connection refused' });
-        apiHealthMonitor.reportNetworkError('/api/test3', { error: 'Network Error', details: 'DNS lookup failed' });
+        silentMonitor.reset();
+        silentMonitor.reportNetworkError('/api/test1', { error: 'Network Error', details: 'Failed to fetch' });
+        silentMonitor.reportNetworkError('/api/test2', { error: 'Network Error', details: 'Connection refused' });
+        silentMonitor.reportNetworkError('/api/test3', { error: 'Network Error', details: 'DNS lookup failed' });
         
         const report = apiHealthMonitor.getHealthReport();
         assert.equal(report.totalNetworkErrors, 3);
@@ -170,15 +232,15 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should reset all error counts',
       fn: async () => {
-        apiHealthMonitor.reset();
+        silentMonitor.reset();
         
         // Add various errors
-        apiHealthMonitor.reportMissingEndpoint('/api/test1', { method: 'GET' });
-        apiHealthMonitor.reportServerError('/api/test2', 500, { message: 'Error' });
-        apiHealthMonitor.reportAuthError('/api/test3', 403, { message: 'Forbidden' });
-        apiHealthMonitor.reportRateLimitError('/api/test4', { message: 'Too Many' });
-        apiHealthMonitor.reportTimeoutError('/api/test5', { message: 'Timeout' });
-        apiHealthMonitor.reportNetworkError('/api/test6', { error: 'Network', details: 'Failed' });
+        silentMonitor.reportMissingEndpoint('/api/test1', { method: 'GET' });
+        silentMonitor.reportServerError('/api/test2', 500, { message: 'Error' });
+        silentMonitor.reportAuthError('/api/test3', 403, { message: 'Forbidden' });
+        silentMonitor.reportRateLimitError('/api/test4', { message: 'Too Many' });
+        silentMonitor.reportTimeoutError('/api/test5', { message: 'Timeout' });
+        silentMonitor.reportNetworkError('/api/test6', { error: 'Network', details: 'Failed' });
         
         const reportBefore = apiHealthMonitor.getHealthReport();
         assert.equal(reportBefore.totalMissingEndpoints, 1);
@@ -189,7 +251,7 @@ export const apiHealthMonitorTests = {
         assert.equal(reportBefore.totalNetworkErrors, 1);
         
         // Reset
-        apiHealthMonitor.reset();
+        silentMonitor.reset();
         
         const reportAfter = apiHealthMonitor.getHealthReport();
         assert.equal(reportAfter.totalMissingEndpoints, 0);
@@ -203,15 +265,15 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should generate comprehensive health report',
       fn: async () => {
-        apiHealthMonitor.reset();
+        silentMonitor.reset();
         
         // Add one of each error type
-        apiHealthMonitor.reportMissingEndpoint('/api/missing', { method: 'GET' });
-        apiHealthMonitor.reportServerError('/api/server', 500, { message: 'Error' });
-        apiHealthMonitor.reportAuthError('/api/auth', 403, { message: 'Forbidden' });
-        apiHealthMonitor.reportRateLimitError('/api/rate', { message: 'Too Many' });
-        apiHealthMonitor.reportTimeoutError('/api/timeout', { message: 'Timeout' });
-        apiHealthMonitor.reportNetworkError('/api/network', { error: 'Network', details: 'Failed' });
+        silentMonitor.reportMissingEndpoint('/api/missing', { method: 'GET' });
+        silentMonitor.reportServerError('/api/server', 500, { message: 'Error' });
+        silentMonitor.reportAuthError('/api/auth', 403, { message: 'Forbidden' });
+        silentMonitor.reportRateLimitError('/api/rate', { message: 'Too Many' });
+        silentMonitor.reportTimeoutError('/api/timeout', { message: 'Timeout' });
+        silentMonitor.reportNetworkError('/api/network', { error: 'Network', details: 'Failed' });
         
         const report = apiHealthMonitor.getHealthReport();
         
@@ -243,10 +305,10 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should store timestamp with each error',
       fn: async () => {
-        apiHealthMonitor.reset();
+        silentMonitor.reset();
         
         const before = new Date();
-        apiHealthMonitor.reportMissingEndpoint('/api/test', { method: 'GET' });
+        silentMonitor.reportMissingEndpoint('/api/test', { method: 'GET' });
         const after = new Date();
         
         const report = apiHealthMonitor.getHealthReport();
@@ -262,16 +324,16 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should update lastSeen on repeated errors',
       fn: async () => {
-        apiHealthMonitor.reset();
+        silentMonitor.reset();
         
-        apiHealthMonitor.reportMissingEndpoint('/api/test', { method: 'GET' });
+        silentMonitor.reportMissingEndpoint('/api/test', { method: 'GET' });
         const report1 = apiHealthMonitor.getHealthReport();
         const firstSeen = new Date(report1.missingEndpoints.find(e => e.endpoint === '/api/test').lastSeen);
         
         // Wait a bit
         await new Promise(resolve => setTimeout(resolve, 10));
         
-        apiHealthMonitor.reportMissingEndpoint('/api/test', { method: 'GET' });
+        silentMonitor.reportMissingEndpoint('/api/test', { method: 'GET' });
         const report2 = apiHealthMonitor.getHealthReport();
         const lastSeen = new Date(report2.missingEndpoints.find(e => e.endpoint === '/api/test').lastSeen);
         
@@ -281,9 +343,9 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should track error details correctly',
       fn: async () => {
-        apiHealthMonitor.reset();
+        silentMonitor.reset();
         
-        apiHealthMonitor.reportServerError(
+        silentMonitor.reportServerError(
           '/api/users', 
           500, 
           { message: 'Database connection failed', query: 'SELECT * FROM users' }
@@ -303,7 +365,7 @@ export const apiHealthMonitorTests = {
     {
       name: 'Should handle empty health report',
       fn: async () => {
-        apiHealthMonitor.reset();
+        silentMonitor.reset();
         
         const report = apiHealthMonitor.getHealthReport();
         

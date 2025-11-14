@@ -1,6 +1,5 @@
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
-import { resolveTenantSlug, isUUID } from '../lib/tenantResolver.js';
 
 export default function createOpportunityRoutes(pgPool) {
   const router = express.Router();
@@ -55,11 +54,6 @@ export default function createOpportunityRoutes(pgPool) {
         });
       }
 
-      // Accept UUID or slug; normalize to slug for legacy columns
-      if (tenant_id && isUUID(String(tenant_id))) {
-        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
-      }
-
       const query = `
         SELECT * FROM opportunities 
         WHERE tenant_id = $1 
@@ -109,9 +103,6 @@ export default function createOpportunityRoutes(pgPool) {
       }
 
       // Accept UUID or slug; normalize to slug for legacy columns
-      if (tenant_id && isUUID(String(tenant_id))) {
-        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
-      }
 
       const result = await pgPool.query('SELECT * FROM opportunities WHERE tenant_id = $1 AND id = $2 LIMIT 1', [tenant_id, id]);
       
@@ -152,19 +143,14 @@ export default function createOpportunityRoutes(pgPool) {
   // POST /api/opportunities - Create new opportunity
   router.post('/', async (req, res) => {
     try {
-      const { tenant_id: incomingTenantId, name, account_id, contact_id, amount, stage, probability, close_date, metadata, ...otherFields } = req.body;
+      const { tenant_id, name, account_id, contact_id, amount, stage, probability, close_date, metadata, ...otherFields } = req.body;
       
-      if (!incomingTenantId) {
+      if (!tenant_id) {
         return res.status(400).json({
           status: 'error',
           message: 'tenant_id is required'
         });
       }
-
-      // Accept UUID or slug; normalize to slug for legacy columns
-      const tenant_id = isUUID(String(incomingTenantId))
-        ? await resolveTenantSlug(pgPool, String(incomingTenantId))
-        : incomingTenantId;
 
       // Merge metadata with unknown fields
       const combinedMetadata = {
@@ -221,9 +207,6 @@ export default function createOpportunityRoutes(pgPool) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required for update' });
       }
       // Accept UUID or slug; normalize to slug for legacy columns
-      if (requestedTenantId && isUUID(String(requestedTenantId))) {
-        requestedTenantId = await resolveTenantSlug(pgPool, String(requestedTenantId));
-      }
       
       // Fetch current metadata (strictly tenant-scoped)
       const currentOpp = await pgPool.query(

@@ -14,7 +14,6 @@ import AddressFields from "../shared/AddressFields";
 import EmployeeSelector from "../shared/EmployeeSelector";
 import { Account } from "@/api/entities";
 import { useUser } from "@/components/shared/useUser.js";
-import { generateUniqueId } from "@/api/functions";
 import { useEntityForm } from "@/hooks/useEntityForm";
 import { toast } from "sonner";
 
@@ -190,26 +189,12 @@ export default function AccountForm({
         }
       });
 
-      // Generate unique_id for new accounts
-      if (!account?.id) {
-        try {
-          const idResponse = await generateUniqueId({ entity_type: 'Account', tenant_id: currentTenantId });
-          if (idResponse.data?.unique_id) {
-            payload.unique_id = idResponse.data.unique_id;
-          }
-        } catch (error) {
-          console.warn('[AccountForm] Failed to generate unique ID, proceeding without:', error);
-        }
-      }
-
       // Call Account.create or Account.update directly
       let result;
       if (account?.id) {
         result = await Account.update(account.id, payload);
-        toast.success('Account updated successfully');
       } else {
         result = await Account.create(payload);
-        toast.success('Account created successfully');
       }
 
       // Defensive: verify onSubmit is still valid before calling

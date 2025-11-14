@@ -6,7 +6,6 @@
 import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
-import { resolveTenantSlug, isUUID } from '../lib/tenantResolver.js';
 
 export default function createCashFlowRoutes(pgPool) {
   const router = express.Router();
@@ -25,9 +24,6 @@ export default function createCashFlowRoutes(pgPool) {
       const params = [];
       let pc = 1;
       // Accept UUID or slug; normalize to slug for legacy columns
-      if (tenant_id && isUUID(String(tenant_id))) {
-        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
-      }
       if (tenant_id) { query += ` AND tenant_id = $${pc}`; params.push(tenant_id); pc++; }
       if (type) { query += ` AND type = $${pc}`; params.push(type); pc++; }
       query += ` ORDER BY transaction_date DESC LIMIT $${pc} OFFSET $${pc + 1}`;
@@ -54,9 +50,6 @@ export default function createCashFlowRoutes(pgPool) {
       const { id } = req.params;
       let { tenant_id } = req.query || {};
       // Accept UUID or slug; normalize
-      if (tenant_id && isUUID(String(tenant_id))) {
-        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
-      }
       if (!validateTenantScopedId(id, tenant_id, res)) return;
       if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
       const result = await pgPool.query('SELECT * FROM cash_flow WHERE tenant_id = $1 AND id = $2 LIMIT 1', [tenant_id, id]);
@@ -79,9 +72,7 @@ export default function createCashFlowRoutes(pgPool) {
       if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
       // Normalize tenant_id if UUID provided
-      const resolvedTenantId = isUUID(String(c.tenant_id))
-        ? await resolveTenantSlug(pgPool, String(c.tenant_id))
-        : c.tenant_id;
+      const resolvedTenantId = c.tenant_id;
 
       const query = `INSERT INTO cash_flow (tenant_id, transaction_date, amount, type, category, description, account_id, metadata)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`;
@@ -100,10 +91,6 @@ export default function createCashFlowRoutes(pgPool) {
       const { id } = req.params;
       let { tenant_id } = req.query || {};
       const u = req.body;
-
-      if (tenant_id && isUUID(String(tenant_id))) {
-        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
-      }
       if (!validateTenantScopedId(id, tenant_id, res)) return;
       if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
@@ -132,10 +119,6 @@ export default function createCashFlowRoutes(pgPool) {
     try {
       const { id } = req.params;
       let { tenant_id } = req.query || {};
-
-      if (tenant_id && isUUID(String(tenant_id))) {
-        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
-      }
       if (!validateTenantScopedId(id, tenant_id, res)) return;
       if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
@@ -158,9 +141,6 @@ export default function createCashFlowRoutes(pgPool) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
       // Normalize tenant id
-      if (tenant_id && isUUID(String(tenant_id))) {
-        tenant_id = await resolveTenantSlug(pgPool, String(tenant_id));
-      }
 
       const params = [tenant_id];
       let pc = 2;

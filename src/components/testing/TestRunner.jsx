@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,10 +15,21 @@ import { getBackendUrl } from "@/api/backendUrl";
 
 const BACKEND_URL = getBackendUrl();
 
+const TEST_RESULTS_KEY = 'unit_test_results';
+
 export default function TestRunner({ testSuites }) {
-  const [results, setResults] = useState([]);
+  // Initialize results from sessionStorage if available
+  const [results, setResults] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem(TEST_RESULTS_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
   const [running, setRunning] = useState(false);
   const [currentTest, setCurrentTest] = useState(null);
+  const resultsRef = useRef([]);
   const [preflight, setPreflight] = useState({
     status: "unknown",
     message: null,
@@ -81,9 +92,10 @@ export default function TestRunner({ testSuites }) {
 
   const runTests = async () => {
     setRunning(true);
-    setResults([]);
-
     const allResults = [];
+    resultsRef.current = []; // Clear ref
+    setResults([]);
+    sessionStorage.removeItem(TEST_RESULTS_KEY); // Clear storage
 
     for (const suite of testSuites) {
       for (const test of suite.tests) {
@@ -109,13 +121,37 @@ export default function TestRunner({ testSuites }) {
         }
 
         allResults.push(result);
+        resultsRef.current = [...allResults]; // Store in ref
         setResults([...allResults]);
+        // Persist to sessionStorage immediately
+        try {
+          sessionStorage.setItem(TEST_RESULTS_KEY, JSON.stringify(allResults));
+        } catch (e) {
+          console.error('[TestRunner] Failed to store results:', e);
+        }
+        console.log('[TestRunner] Updated results:', allResults.length, 'tests');
       }
     }
 
+    console.log('[TestRunner] All tests completed:', allResults.length, 'total');
+    resultsRef.current = [...allResults]; // Final storage in ref
+    // Final persist to sessionStorage
+    try {
+      sessionStorage.setItem(TEST_RESULTS_KEY, JSON.stringify(allResults));
+    } catch (e) {
+      console.error('[TestRunner] Failed to store final results:', e);
+    }
     setCurrentTest(null);
     setRunning(false);
   };
+
+  // Restore results from ref if component remounts during test run
+  useEffect(() => {
+    if (resultsRef.current.length > 0 && results.length === 0 && !running) {
+      console.log('[TestRunner] Restoring results from ref:', resultsRef.current.length);
+      setResults(resultsRef.current);
+    }
+  }, [results.length, running]);
 
   const totalTests = testSuites.reduce(
     (sum, suite) => sum + suite.tests.length,
@@ -126,6 +162,19 @@ export default function TestRunner({ testSuites }) {
   const passRate = totalTests > 0
     ? ((passedTests / results.length) * 100).toFixed(1)
     : 0;
+
+  console.log('[TestRunner] Render - results.length:', results.length, 'passed:', passedTests, 'failed:', failedTests);
+
+  const clearResults = () => {
+    setResults([]);
+    resultsRef.current = [];
+    try {
+      sessionStorage.removeItem(TEST_RESULTS_KEY);
+      console.log('[TestRunner] Results cleared');
+    } catch (e) {
+      console.error('[TestRunner] Failed to clear results:', e);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -145,6 +194,17 @@ export default function TestRunner({ testSuites }) {
                   : <FileText className="w-4 h-4 mr-2" />}
                 Check Backend
               </Button>
+              {results.length > 0 && (
+                <Button
+                  onClick={clearResults}
+                  variant="outline"
+                  className="bg-slate-700 border-slate-600 hover:bg-red-900/30"
+                  disabled={running}
+                >
+                  <XCircle className="w-4 h-4 mr-2" />
+                  Clear Results
+                </Button>
+              )}
               <Button
                 onClick={runTests}
                 disabled={running || checking || preflight.status !== "ok"}

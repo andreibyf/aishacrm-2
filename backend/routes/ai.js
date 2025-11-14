@@ -148,7 +148,6 @@ export default function createAIRoutes(pgPool) {
 
     // Fallback to system settings table
     try {
-      console.log('[AI Routes] Checking system_settings table for OpenAI key...');
       const { data, error } = await supa
         .from('system_settings')
         .select('settings')
@@ -156,22 +155,13 @@ export default function createAIRoutes(pgPool) {
         .limit(1);
       if (error) throw error;
 
-      console.log('[AI Routes] System settings query returned:', data?.length || 0, 'rows');
       if (data?.length) {
         const settings = data[0].settings;
-        console.log('[AI Routes] Found settings:', typeof settings, settings ? 'has data' : 'empty');
         const systemOpenAI = typeof settings === 'object' 
           ? settings.system_openai_settings 
           : JSON.parse(settings || '{}').system_openai_settings;
         
-        console.log('[AI Routes] System OpenAI config:', {
-          found: !!systemOpenAI,
-          enabled: systemOpenAI?.enabled,
-          hasKey: !!systemOpenAI?.openai_api_key
-        });
-        
         if (systemOpenAI?.enabled && systemOpenAI?.openai_api_key) {
-          console.log('[AI Routes] ✓ Using system OpenAI key from system_settings');
           return systemOpenAI.openai_api_key;
         }
       }
@@ -328,9 +318,8 @@ ${BRAID_SYSTEM_PROMPT}
       const temperature = Math.min(Math.max(Number(rawTemperature) || 0.2, 0), 2);
 
       const tools = await generateToolSchemas();
-      console.log('[AI DEBUG] generateToolSchemas() returned', tools?.length || 0, 'tools');
       if (!tools || tools.length === 0) {
-        console.warn('[AI DEBUG] No Braid tools loaded; falling back to minimal snapshot tool definition');
+        console.warn('[AI] No Braid tools loaded; falling back to minimal snapshot tool definition');
         // Fallback legacy single tool to avoid hallucinations
         tools.push({
           type: 'function',
@@ -346,19 +335,11 @@ ${BRAID_SYSTEM_PROMPT}
             }
           }
         });
-      } else {
-        console.log('[AI DEBUG] Tool names:', tools.map(t => t.function?.name).join(', '));
       }
 
       const executedTools = [];
       let assistantResponded = false;
       let conversationMessages = [...messages];
-
-      // DEBUG: Log what we're sending to OpenAI
-      console.log('[AI DEBUG] System prompt length:', systemPrompt.length);
-      console.log('[AI DEBUG] Tools available:', tools.map(t => t.function.name));
-      console.log('[AI DEBUG] First message role:', conversationMessages[0]?.role);
-      console.log('[AI DEBUG] Last user message:', conversationMessages.slice().reverse().find(m => m.role === 'user')?.content?.slice(0, 100));
 
       for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
         const response = await client.chat.completions.create({
@@ -407,29 +388,6 @@ ${BRAID_SYSTEM_PROMPT}
                 args: parsedArgs,
                 tenantRecord,
               });
-              console.log(`[AI Tool Execution] ${toolName} for tenant ${tenantRecord.tenant_id}:`);
-              console.log('  Result type:', typeof toolResult);
-              console.log('  Result tag:', toolResult?.tag);
-              console.log('  Result keys:', Object.keys(toolResult || {}));
-              console.log('  Full result (truncated):', JSON.stringify(toolResult, null, 2).substring(0, 500));
-              if (toolResult && toolResult.tag === 'Ok') {
-                try {
-                  const v = toolResult.value;
-                  const keys = v && typeof v === 'object' ? Object.keys(v) : [];
-                  console.log('  Ok.value keys:', keys);
-                  if (v && v.accounts) {
-                    console.log('  Snapshot counts:', {
-                      accounts: v.accounts?.length || 0,
-                      leads: v.leads?.length || 0,
-                      contacts: v.contacts?.length || 0,
-                      opportunities: v.opportunities?.length || 0,
-                      activities: v.activities?.length || 0
-                    });
-                  }
-                } catch (e) {
-                  console.warn('[AI Tool Execution] failed to introspect Ok.value:', e.message || e);
-                }
-              }
             } catch (toolError) {
               toolResult = { error: toolError.message || String(toolError) };
               console.error(`[AI Tool Execution] ${toolName} error:`, toolError);

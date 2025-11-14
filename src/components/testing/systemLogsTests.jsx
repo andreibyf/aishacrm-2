@@ -2,7 +2,7 @@ import { assert } from './testUtils';
 import { getBackendUrl } from '@/api/backendUrl';
 
 const BACKEND_URL = getBackendUrl();
-const TEST_TENANT_ID = 'unit-test-tenant';
+const TEST_TENANT_ID = 'local-tenant-001';
 
 // Generate a unique message for this run to find it reliably in listings
 const uniqueSuffix = () => new Date().toISOString().replace(/[:.]/g, '-');

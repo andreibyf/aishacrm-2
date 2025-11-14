@@ -26,7 +26,7 @@ import { getBackendUrl } from '@/api/backendUrl';
  */
 
 const BACKEND_URL = getBackendUrl();
-const TEST_TENANT_ID = 'unit-test-tenant';
+const TEST_TENANT_ID = 'local-tenant-001';
 
 // Helper to generate unique test data
 const generateTestData = () => {

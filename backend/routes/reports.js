@@ -1,10 +1,8 @@
 /**
- * Reports Routes
- * Dashboard stats, analytics, custom reports
+ * Reports & Analytics Routes
  */
 
 import express from 'express';
-import { resolveTenantSlug, isUUID } from '../lib/tenantResolver.js';
 
 // Helper: attempt to count rows from a table safely (optionally by tenant)
 async function safeCount(_pgPool, table, tenantId) {
@@ -80,14 +78,7 @@ export default function createReportRoutes(pgPool) {
 
       console.log('[dashboard-stats] Received tenant_id:', tenant_id);
 
-      // Normalize UUID tenant_id to slug for database queries
-      if (tenant_id && isUUID(tenant_id)) {
-        const originalTenantId = tenant_id;
-        tenant_id = await resolveTenantSlug(tenant_id, pgPool);
-        console.log('[dashboard-stats] Normalized UUID', originalTenantId, 'to slug:', tenant_id);
-      }
-
-      // Optional: allow stats without tenant filter in local mode
+            // Optional: allow stats without tenant filter in local mode
       if (!tenant_id && !pgPool) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
@@ -168,11 +159,7 @@ export default function createReportRoutes(pgPool) {
   router.get('/pipeline', async (req, res) => {
     try {
       let { tenant_id } = req.query;
-      // Normalize UUID to slug
-      if (tenant_id && isUUID(tenant_id)) {
-        tenant_id = await resolveTenantSlug(tenant_id, pgPool);
-      }
-      const where = tenant_id ? 'WHERE tenant_id = $1' : '';
+            const where = tenant_id ? 'WHERE tenant_id = $1' : '';
       const params = tenant_id ? [tenant_id] : [];
       const sql = `SELECT stage, count FROM v_opportunity_pipeline_by_stage ${where} ORDER BY stage`;
       const result = await pgPool.query(sql, params);
@@ -186,11 +173,7 @@ export default function createReportRoutes(pgPool) {
   router.get('/lead-status', async (req, res) => {
     try {
       let { tenant_id } = req.query;
-      // Normalize UUID to slug
-      if (tenant_id && isUUID(tenant_id)) {
-        tenant_id = await resolveTenantSlug(tenant_id, pgPool);
-      }
-      const where = tenant_id ? 'WHERE tenant_id = $1' : '';
+            const where = tenant_id ? 'WHERE tenant_id = $1' : '';
       const params = tenant_id ? [tenant_id] : [];
       const sql = `SELECT status, count FROM v_lead_counts_by_status ${where} ORDER BY status`;
       const result = await pgPool.query(sql, params);
@@ -204,11 +187,7 @@ export default function createReportRoutes(pgPool) {
   router.get('/calendar', async (req, res) => {
     try {
       let { tenant_id, from_date, to_date } = req.query;
-      // Normalize UUID to slug
-      if (tenant_id && isUUID(tenant_id)) {
-        tenant_id = await resolveTenantSlug(tenant_id, pgPool);
-      }
-      const conds = [];
+            const conds = [];
       const params = [];
       if (tenant_id) { params.push(tenant_id); conds.push(`tenant_id = $${params.length}`); }
       if (from_date) { params.push(from_date); conds.push(`(due_at IS NULL OR due_at >= $${params.length})`); }
@@ -226,12 +205,7 @@ export default function createReportRoutes(pgPool) {
   router.get('/data-quality', async (req, res) => {
     try {
       let { tenant_id } = req.query;
-      // Normalize UUID to slug
-      if (tenant_id && isUUID(tenant_id)) {
-        tenant_id = await resolveTenantSlug(tenant_id, pgPool);
-      }
-      
-      // Build WHERE clause for tenant filtering
+            // Build WHERE clause for tenant filtering
       const tenantWhere = tenant_id ? `WHERE tenant_id = $1` : '';
       const params = tenant_id ? [tenant_id] : [];
 
