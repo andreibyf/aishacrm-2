@@ -89,6 +89,17 @@ const makeDevFallback = (entityName, method, data, id) => {
 
 // Helper to call independent backend API
 const callBackendAPI = async (entityName, method, data = null, id = null) => {
+  // ENTRY POINT DEBUG - log exactly what we receive
+  if (method === 'POST') {
+    console.log('[callBackendAPI ENTRY]', {
+      entityName,
+      method,
+      dataReceived: data,
+      dataKeys: data ? Object.keys(data) : null,
+      id
+    });
+  }
+  
   // Diagnostic logging for key entities during tests
   const isOpportunity = entityName === 'Opportunity';
   const isDebugEntity = isOpportunity || entityName === 'Employee' || entityName === 'Account' || entityName === 'Contact';

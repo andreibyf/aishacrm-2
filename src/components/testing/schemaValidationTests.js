@@ -32,6 +32,9 @@ function errorText(error) {
   }
 }
 
+// Test tenant UUID (matches backend test fixtures)
+const TEST_TENANT_UUID = '11111111-1111-1111-1111-111111111111';
+
 export const schemaValidationTests = {
   name: 'Schema Validation',
   tests: [
@@ -43,8 +46,8 @@ export const schemaValidationTests = {
         if (typeof window !== 'undefined') {
           localStorage.removeItem('selected_tenant_id');
           localStorage.removeItem('effective_user_tenant_id');
-          // Set the test tenant
-          localStorage.setItem('selected_tenant_id', 'local-tenant-001');
+          // Set the test tenant UUID
+          localStorage.setItem('selected_tenant_id', TEST_TENANT_UUID);
         }
         return 'Test environment configured';
       }
@@ -54,7 +57,7 @@ export const schemaValidationTests = {
       name: 'Employee: should accept minimal required fields (first_name, last_name)',
       async fn() {
         const employee = await Employee.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           first_name: 'Test',
           last_name: 'Employee'
         });
@@ -70,7 +73,7 @@ export const schemaValidationTests = {
       name: 'Employee: should accept employee without email',
       async fn() {
         const employee = await Employee.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           first_name: 'NoEmail',
           last_name: 'Test',
           email: null
@@ -88,7 +91,7 @@ export const schemaValidationTests = {
       name: 'Employee: should store additional fields in metadata',
       async fn() {
         const employee = await Employee.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           first_name: 'Metadata',
           last_name: 'Test',
           department: 'Sales',
@@ -129,7 +132,7 @@ export const schemaValidationTests = {
       async fn() {
         try {
           await Employee.create({
-            tenant_id: 'local-tenant-001',
+            tenant_id: TEST_TENANT_UUID,
             last_name: 'Test'
           });
           throw new Error('Should have rejected employee without first_name');
@@ -148,7 +151,7 @@ export const schemaValidationTests = {
       async fn() {
         try {
           await Employee.create({
-            tenant_id: 'local-tenant-001',
+            tenant_id: TEST_TENANT_UUID,
             first_name: 'Test'
           });
           throw new Error('Should have rejected employee without last_name');
@@ -168,7 +171,7 @@ export const schemaValidationTests = {
       name: 'Account: should accept minimal required fields (name)',
       async fn() {
         const account = await Account.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           name: `Test Account ${Date.now()}`
         });
         
@@ -182,7 +185,7 @@ export const schemaValidationTests = {
       name: 'Account: should accept account without email',
       async fn() {
         const account = await Account.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           name: `No Email Account ${Date.now()}`,
           email: null
         });
@@ -197,7 +200,7 @@ export const schemaValidationTests = {
       async fn() {
         try {
           await Account.create({
-            tenant_id: 'local-tenant-001'
+            tenant_id: TEST_TENANT_UUID
           });
           throw new Error('Should have rejected account without name');
         } catch (error) {
@@ -216,7 +219,7 @@ export const schemaValidationTests = {
       name: 'Contact: should accept with first_name and last_name',
       async fn() {
         const contact = await Contact.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           first_name: 'Test',
           last_name: 'Contact'
         });
@@ -232,7 +235,7 @@ export const schemaValidationTests = {
       name: 'Contact: should accept without email',
       async fn() {
         const contact = await Contact.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           first_name: 'NoEmail',
           last_name: 'Contact',
           email: null
@@ -248,7 +251,7 @@ export const schemaValidationTests = {
       async fn() {
         try {
           await Contact.create({
-            tenant_id: 'local-tenant-001',
+            tenant_id: TEST_TENANT_UUID,
             email: 'test@example.com'
           });
           throw new Error('Should have rejected contact without names');
@@ -268,7 +271,7 @@ export const schemaValidationTests = {
       name: 'Lead: should accept with first_name and last_name',
       async fn() {
         const lead = await Lead.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           first_name: 'Test',
           last_name: 'Lead'
         });
@@ -284,7 +287,7 @@ export const schemaValidationTests = {
       name: 'Lead: should accept without email',
       async fn() {
         const lead = await Lead.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           first_name: 'NoEmail',
           last_name: 'Lead',
           email: null
@@ -299,7 +302,7 @@ export const schemaValidationTests = {
       name: 'Lead: should accept without company',
       async fn() {
         const lead = await Lead.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           first_name: 'NoCompany',
           last_name: 'Lead'
         });
@@ -315,7 +318,7 @@ export const schemaValidationTests = {
       name: 'Opportunity: should accept minimal required fields (name)',
       async fn() {
         const opportunity = await Opportunity.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           name: `Test Opportunity ${Date.now()}`
         });
         
@@ -331,7 +334,7 @@ export const schemaValidationTests = {
       name: 'Opportunity: should accept without amount',
       async fn() {
         const opportunity = await Opportunity.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           name: `No Amount Opp ${Date.now()}`,
           amount: null
         });
@@ -345,7 +348,7 @@ export const schemaValidationTests = {
       name: 'Opportunity: should accept without close_date',
       async fn() {
         const opportunity = await Opportunity.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           name: `No Date Opp ${Date.now()}`,
           close_date: null
         });
@@ -360,7 +363,7 @@ export const schemaValidationTests = {
       async fn() {
         try {
           await Opportunity.create({
-            tenant_id: 'local-tenant-001',
+            tenant_id: TEST_TENANT_UUID,
             amount: 10000
           });
           throw new Error('Should have rejected opportunity without name');
@@ -381,14 +384,14 @@ export const schemaValidationTests = {
       name: 'Email: should allow multiple NULL emails in employees',
       async fn() {
         const emp1 = await Employee.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           first_name: 'NullEmail1',
           last_name: 'Employee',
           email: null
         });
         
         const emp2 = await Employee.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           first_name: 'NullEmail2',
           last_name: 'Employee',
           email: null
@@ -405,14 +408,14 @@ export const schemaValidationTests = {
       name: 'Email: should allow multiple NULL emails in contacts',
       async fn() {
         const contact1 = await Contact.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           first_name: 'NullEmail1',
           last_name: 'Contact',
           email: null
         });
         
         const contact2 = await Contact.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           first_name: 'NullEmail2',
           last_name: 'Contact',
           email: null
@@ -431,7 +434,7 @@ export const schemaValidationTests = {
         const uniqueEmail = `duplicate${Date.now()}@test.com`;
         
         await Employee.create({
-          tenant_id: 'local-tenant-001',
+          tenant_id: TEST_TENANT_UUID,
           first_name: 'First',
           last_name: 'Employee',
           email: uniqueEmail
@@ -439,7 +442,7 @@ export const schemaValidationTests = {
         
         try {
           await Employee.create({
-            tenant_id: 'local-tenant-001',
+            tenant_id: TEST_TENANT_UUID,
             first_name: 'Second',
             last_name: 'Employee',
             email: uniqueEmail
