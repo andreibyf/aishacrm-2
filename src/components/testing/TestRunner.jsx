@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertTriangle,
@@ -12,10 +13,12 @@ import {
   XCircle,
 } from "lucide-react";
 import { getBackendUrl } from "@/api/backendUrl";
+import { useUser } from '@/components/shared/useUser.js';
 
 const BACKEND_URL = getBackendUrl();
 
 const TEST_RESULTS_KEY = 'unit_test_results';
+const TEST_CONFIG_KEY = 'unit_test_config';
 
 export default function TestRunner({ testSuites }) {
   // Initialize results from sessionStorage to survive remounts during test run
@@ -34,6 +37,15 @@ export default function TestRunner({ testSuites }) {
   // Declare state/refs used by effects BEFORE effects to avoid TDZ/minifier issues
   const [running, setRunning] = useState(false);
   const resultsRef = useRef([]);
+  const { user } = useUser();
+  const isSuperadmin = (user?.role || '').toLowerCase() === 'superadmin';
+  const [config, setConfig] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem(TEST_CONFIG_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) { /* ignore config restore error */ }
+    return { workers: 1, rate: 0, delayMs: 0 };
+  });
   const [hasStoredResults, setHasStoredResults] = useState(false);
   const syncIntervalRef = useRef(null);
   const runIdRef = useRef(0);
@@ -48,6 +60,11 @@ export default function TestRunner({ testSuites }) {
       setHasStoredResults(false);
     }
   }, [results.length]);
+
+  // Persist test config locally for convenience
+  useEffect(() => {
+    try { sessionStorage.setItem(TEST_CONFIG_KEY, JSON.stringify(config)); } catch (e) { /* ignore config persist error */ }
+  }, [config]);
 
   // Poll for test run completion if we detect an active run on mount
   useEffect(() => {
@@ -210,6 +227,7 @@ export default function TestRunner({ testSuites }) {
 
     console.log('[TestRunner] Starting test run with', testSuites.length, 'suites');
     let testIndex = 0;
+    let completed = 0;
     const TEST_TIMEOUT_MS = 15000; // prevent hangs that reduce completed count
 
     const flushResults = () => {
@@ -223,55 +241,80 @@ export default function TestRunner({ testSuites }) {
         console.error('[TestRunner] Failed to store results:', e);
       }
     };
+    const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
-    try {
-      for (const suite of testSuites) {
-        console.log(`[TestRunner] Starting suite: ${suite.name} (${suite.tests.length} tests)`);
+    // Flatten jobs for scheduling
+    const jobs = [];
+    for (const suite of testSuites) {
+      for (const test of suite.tests) {
+        jobs.push({ suite, test });
+      }
+    }
 
-        for (const test of suite.tests) {
-          testIndex++;
-          setCurrentTest(`${suite.name} - ${test.name}`);
-          const startTime = Date.now();
-          const result = {
-            suite: suite.name,
-            test: test.name,
-            status: 'running',
-            duration: 0,
-            error: null,
-          };
+    const maxWorkers = Math.max(1, Number(config.workers) || 1);
+    const rate = Math.max(0, Number(config.rate) || 0); // ops/sec, 0 = unlimited
+    const startGapMs = rate > 0 ? Math.floor(1000 / rate) : 0;
+    const delayAfterMs = Math.max(0, Number(config.delayMs) || 0);
+    let queueIndex = 0;
+    let nextAllowedStart = 0;
 
-            // Wrap test in timeout to avoid indefinite hangs
-          const execPromise = (async () => { await test.fn(); })();
-          const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error(`Timeout after ${TEST_TIMEOUT_MS}ms`)), TEST_TIMEOUT_MS);
-          });
+    setCurrentTest(`Running with ${maxWorkers} worker${maxWorkers > 1 ? 's' : ''}${rate ? ` @ ${rate}/s` : ''}${delayAfterMs ? ` + ${delayAfterMs}ms delay` : ''}`);
 
-          try {
-            await Promise.race([execPromise, timeoutPromise]);
-            result.status = 'passed';
-          } catch (error) {
-            result.status = 'failed';
-            result.error = error.message;
-            console.error(`[TestRunner] ✗ Test ${testIndex} failed:`, error.message);
-          } finally {
-            result.duration = Date.now() - startTime;
-          }
+    const runOne = async (_workerId) => {
+      while (true) {
+        if (queueIndex >= jobs.length) return;
+        const myIdx = queueIndex++;
+        const { suite, test } = jobs[myIdx];
 
-          allResults.push(result);
-          // Flush strategy:
-          // - Flush every test for the first 5 to show immediate progress
-          // - Then flush every 5 tests to reduce flicker
-          // - Always flush on final test
-          if (testIndex <= 5 || testIndex % 5 === 0 || testIndex === totalTests) {
-            flushResults();
-          }
+        // Rate gate across workers
+        const now = Date.now();
+        if (startGapMs > 0 && now < nextAllowedStart) {
+          await sleep(nextAllowedStart - now);
+        }
+        nextAllowedStart = (Date.now()) + startGapMs;
+
+        testIndex++;
+        setCurrentTest(`${suite.name} - ${test.name}`);
+        const startTime = Date.now();
+        const result = {
+          suite: suite.name,
+          test: test.name,
+          status: 'running',
+          duration: 0,
+          error: null,
+        };
+
+        const execPromise = (async () => { await test.fn(); })();
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error(`Timeout after ${TEST_TIMEOUT_MS}ms`)), TEST_TIMEOUT_MS);
+        });
+
+        try {
+          await Promise.race([execPromise, timeoutPromise]);
+          result.status = 'passed';
+        } catch (error) {
+          result.status = 'failed';
+          result.error = error.message;
+          console.error(`[TestRunner] ✗ Test ${testIndex} failed:`, error.message);
+        } finally {
+          result.duration = Date.now() - startTime;
         }
 
-        console.log(`[TestRunner] Completed suite: ${suite.name}`);
-        // Flush after each suite (in case suite size < 5)
-        flushResults();
-      }
+        allResults.push(result);
+        completed++;
+        if (completed <= 5 || completed % 5 === 0 || completed === totalTests) {
+          flushResults();
+        }
 
+        if (delayAfterMs > 0) {
+          await sleep(delayAfterMs);
+        }
+      }
+    };
+
+    try {
+      const workers = Array.from({ length: maxWorkers }, (_, i) => runOne(i + 1));
+      await Promise.all(workers);
       console.log('[TestRunner] All tests completed:', allResults.length, 'total');
     } catch (error) {
       console.error('[TestRunner] FATAL ERROR during test execution:', error);
@@ -392,6 +435,46 @@ export default function TestRunner({ testSuites }) {
           <CardTitle className="text-slate-100 flex items-center justify-between">
             <span>Test Suite Runner</span>
             <div className="flex items-center gap-2">
+              {isSuperadmin && (
+                <div className="flex items-center gap-2 mr-2">
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-400 text-xs">Workers</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={32}
+                      value={config.workers}
+                      disabled={running}
+                      onChange={(e) => setConfig((c) => ({ ...c, workers: Math.max(1, Number(e.target.value) || 1) }))}
+                      className="w-20 bg-slate-700 border-slate-600 h-8 text-slate-100"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-400 text-xs">Rate/s</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={1000}
+                      value={config.rate}
+                      disabled={running}
+                      onChange={(e) => setConfig((c) => ({ ...c, rate: Math.max(0, Number(e.target.value) || 0) }))}
+                      className="w-24 bg-slate-700 border-slate-600 h-8 text-slate-100"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-400 text-xs">Delay(ms)</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={60000}
+                      value={config.delayMs}
+                      disabled={running}
+                      onChange={(e) => setConfig((c) => ({ ...c, delayMs: Math.max(0, Number(e.target.value) || 0) }))}
+                      className="w-28 bg-slate-700 border-slate-600 h-8 text-slate-100"
+                    />
+                  </div>
+                </div>
+              )}
               <Button
                 onClick={checkBackend}
                 variant="outline"
