@@ -22,7 +22,12 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:report": "playwright show-report",
-    "serve:braid": "docker compose -f ./braid-mcp-node-server/docker-compose.yml up --build"
+    "serve:braid": "docker compose -f ./braid-mcp-node-server/docker-compose.yml up --build",
+    "db:exec": "node backend/scripts/run-sql.js",
+    "db:check:idx:leads": "npm run -s db:exec -- backend/migrations/checks/check_idx_leads_tenant_account.sql",
+    "db:show:idx:leads": "npm run -s db:exec -- backend/migrations/checks/show_idx_leads_tenant_account.sql",
+    "db:list:idx:leads": "npm run -s db:exec -- backend/migrations/checks/list_idx_leads.sql",
+    "db:check:idx": "node backend/scripts/check-index.js"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
@@ -73,6 +78,8 @@
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^2.1.7",
     "react-router-dom": "^7.2.0",
+    "dotenv": "^16.4.0",
+    "pg": "^8.12.0",
     "recharts": "^2.15.4",
     "serve": "^14.2.1",
     "sonner": "^2.0.1",
