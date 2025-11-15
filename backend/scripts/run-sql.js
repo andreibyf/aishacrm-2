@@ -50,8 +50,13 @@ async function run() {
   try {
     await client.connect();
     console.log(`Applying SQL from: ${sqlPath}`);
-    await client.query(sql);
-    console.log('SQL applied successfully.');
+    const res = await client.query(sql);
+    if (res && Array.isArray(res.rows) && res.rows.length > 0) {
+      console.log('Query returned rows:');
+      console.log(JSON.stringify(res.rows, null, 2));
+    } else {
+      console.log('SQL applied successfully.');
+    }
   } catch (err) {
     console.error('SQL execution failed:', err.message);
     process.exitCode = 1;

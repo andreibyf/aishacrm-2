@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Clock, Zap, Database, AlertCircle, Activity } from 'lucide-react';
+import { Clock, Zap, Database, AlertCircle, Activity, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BACKEND_URL } from '@/api/entities';
@@ -248,8 +248,8 @@ export default function PerformanceMonitor() {
   };
 
   const getChangeIcon = (value) => {
-    if (value === 0) return '→';
-    return value > 0 ? '↑' : '↓';
+    if (value === 0) return <Minus className="w-3 h-3 inline" />;
+    return value > 0 ? <TrendingUp className="w-3 h-3 inline" /> : <TrendingDown className="w-3 h-3 inline" />;
   };
 
   return (
@@ -315,8 +315,8 @@ export default function PerformanceMonitor() {
                 <span className="text-3xl font-bold text-slate-100">{Math.round(metrics.avgResponseTime)}</span>
                 <span className="text-sm text-slate-400">ms</span>
               </div>
-              <div className={`text-xs mt-1 ${getChangeColor(trends.avgResponseTime)}`}>
-                {getChangeIcon(trends.avgResponseTime)} {formatTrend(trends.avgResponseTime)}
+              <div className={`text-xs mt-1 flex items-center gap-1 ${getChangeColor(trends.avgResponseTime)}`}>
+                {getChangeIcon(trends.avgResponseTime)} <span>{formatTrend(trends.avgResponseTime)}</span>
               </div>
             </div>
 
@@ -329,8 +329,8 @@ export default function PerformanceMonitor() {
                 <span className="text-3xl font-bold text-slate-100">{Math.round(metrics.functionExecutionTime)}</span>
                 <span className="text-sm text-slate-400">ms</span>
               </div>
-              <div className={`text-xs mt-1 ${getChangeColor(trends.functionExecutionTime)}`}>
-                {getChangeIcon(trends.functionExecutionTime)} {formatTrend(trends.functionExecutionTime)}
+              <div className={`text-xs mt-1 flex items-center gap-1 ${getChangeColor(trends.functionExecutionTime)}`}>
+                {getChangeIcon(trends.functionExecutionTime)} <span>{formatTrend(trends.functionExecutionTime)}</span>
               </div>
             </div>
 
@@ -343,8 +343,8 @@ export default function PerformanceMonitor() {
                 <span className="text-3xl font-bold text-slate-100">{Math.round(metrics.databaseQueryTime)}</span>
                 <span className="text-sm text-slate-400">ms</span>
               </div>
-              <div className={`text-xs mt-1 ${getChangeColor(trends.databaseQueryTime)}`}>
-                {getChangeIcon(trends.databaseQueryTime)} {formatTrend(trends.databaseQueryTime)}
+              <div className={`text-xs mt-1 flex items-center gap-1 ${getChangeColor(trends.databaseQueryTime)}`}>
+                {getChangeIcon(trends.databaseQueryTime)} <span>{formatTrend(trends.databaseQueryTime)}</span>
               </div>
             </div>
 
@@ -357,8 +357,8 @@ export default function PerformanceMonitor() {
                 <span className="text-3xl font-bold text-slate-100">{metrics.errorRate.toFixed(2)}</span>
                 <span className="text-sm text-slate-400">%</span>
               </div>
-              <div className={`text-xs mt-1 ${getChangeColor(trends.errorRate)}`}>
-                {getChangeIcon(trends.errorRate)} {formatTrend(trends.errorRate)}
+              <div className={`text-xs mt-1 flex items-center gap-1 ${getChangeColor(trends.errorRate)}`}>
+                {getChangeIcon(trends.errorRate)} <span>{formatTrend(trends.errorRate)}</span>
               </div>
             </div>
           </div>
