@@ -260,19 +260,17 @@ const defaultModules = [
     ],
   },
   {
-    id: "workflows",
-    name: "Workflows (Experimental)",
-    description:
-      "Automate business processes with custom workflows and triggers",
-    icon: Zap,
+    id: "ai_agent",
+    name: "AI Agent",
+    description: "Intelligent AI assistant for CRM tasks and queries",
+    icon: BrainCircuit,
     features: [
-      "Visual Workflow Builder",
-      "Custom Triggers",
-      "Multi-step Automation",
-      "Conditional Logic",
-      "Email & Notification Actions",
+      "Natural Language Queries",
+      "Data Analysis",
+      "Task Automation",
+      "Smart Recommendations",
+      "Context-Aware Assistance",
     ],
-    experimental: true,
   },
 ];
 
@@ -280,12 +278,6 @@ export default function ModuleManager() {
   const [moduleSettings, setModuleSettings] = useState([]);
   const [loading, setLoading] = useState(true);
   const { user } = useUser();
-
-  useEffect(() => {
-    if (user) {
-      loadData();
-    }
-  }, [user, loadData]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -329,7 +321,13 @@ export default function ModuleManager() {
     } finally {
       setLoading(false);
     }
-  }, [user]); // Added dependency array
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      loadData();
+    }
+  }, [user, loadData]);
 
   const toggleModule = async (moduleId, currentStatus) => {
     if (!user) return;
