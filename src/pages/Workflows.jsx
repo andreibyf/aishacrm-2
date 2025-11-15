@@ -37,9 +37,8 @@ export default function WorkflowsPage() {
 
   const loadData = async () => {
     try {
-      const [workflowsData] = await Promise.all([
-        Workflow.list("-created_date"),
-      ]);
+      // Call with empty filter object to trigger tenant_id inclusion from context
+      const workflowsData = await Workflow.list({});
       setWorkflows(workflowsData || []);
     } catch (error) {
       if (import.meta.env.DEV) {
