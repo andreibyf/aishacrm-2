@@ -3,6 +3,8 @@
  * Tracks API request performance metrics
  */
 import { getRequestDbTime } from '../lib/requestContext.js';
+import { getSupabaseClient } from '../lib/supabase-db.js';
+import { enqueuePerformanceLog } from '../lib/perfLogBatcher.js';
 
 export function performanceLogger(pgPool) {
   console.log('[Performance Logger] Middleware initialized with pgPool:', !!pgPool);
@@ -73,25 +75,21 @@ export function performanceLogger(pgPool) {
           try {
             const dbTime = getRequestDbTime(req);
             const ttfb = headersSentAt ? Math.max(0, headersSentAt - startTime) : duration; // fallback to total if headers never explicitly sent
-            await pgPool.query(
-              `INSERT INTO performance_logs 
-                (tenant_id, method, endpoint, status_code, duration_ms, response_time_ms, db_query_time_ms, user_email, ip_address, user_agent, error_message, error_stack)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-              [
-                tenant_id,
-                req.method,
-                req.originalUrl || req.url || req.path,
-                res.statusCode,
-                duration,
-                ttfb, // true time to first byte (headers sent)
-                dbTime,
-                req.user?.email || null,
-                req.ip || req.connection?.remoteAddress,
-                req.get('user-agent'),
-                error_message,
-                error_stack
-              ]
-            );
+            // Prefer Supabase client insert to avoid direct Postgres dependency
+            enqueuePerformanceLog({
+              tenant_id,
+              method: req.method,
+              endpoint: req.originalUrl || req.url || req.path,
+              status_code: res.statusCode,
+              duration_ms: duration,
+              response_time_ms: ttfb,
+              db_query_time_ms: dbTime,
+              user_email: req.user?.email || null,
+              ip_address: req.ip || req.connection?.remoteAddress || null,
+              user_agent: req.get('user-agent'),
+              error_message,
+              error_stack
+            });
           } catch (dbError) {
             // Don't throw - logging failure shouldn't break the app
             // Always log errors so we can debug

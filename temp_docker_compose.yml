@@ -1,6 +1,6 @@
 services:
   # PostgreSQL Database (DISABLED - Using Supabase Cloud)
-  # ⚠️ CRITICAL: This local database is NOT USED for development/production
+  # ΓÜá∩╕Å CRITICAL: This local database is NOT USED for development/production
   # ALL data operations use Supabase Cloud (see DATABASE_CONFIGURATION.md)
   # This service is kept for migration testing only and must remain STOPPED
   # To start for migration testing: docker compose start db
@@ -27,7 +27,7 @@ services:
       retries: 5
 
   # Backend API
-  # ⚠️ CRITICAL: Uses Supabase Cloud database ONLY (see DATABASE_CONFIGURATION.md)
+  # ΓÜá∩╕Å CRITICAL: Uses Supabase Cloud database ONLY (see DATABASE_CONFIGURATION.md)
   # DATABASE_URL points to Supabase Cloud, NOT local PostgreSQL
   backend:
     build:
@@ -47,9 +47,9 @@ services:
       # DATABASE_URL loaded from backend/.env (points to Supabase for performance logging)
       # Supabase vars loaded from backend/.env via env_file above
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4000}
-      # Enforce SSL for all Postgres connections (validation script & any pg usage)
-      - PGSSLMODE=require
-    # Removed extra_hosts override for Supabase host; it broke SSL by redirecting to host gateway.
+    # Force IPv4 resolution for Supabase direct connection
+    extra_hosts:
+      - "db.ehjlenywplgyiahgxkfj.supabase.co:host-gateway"
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -173,3 +173,4 @@ volumes:
     driver: local
   n8n_data:
     driver: local
+

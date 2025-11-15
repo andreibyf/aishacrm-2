@@ -13,6 +13,7 @@ import { createServer } from "http";
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './lib/swagger.js';
 import { initSupabaseDB, pool as supabasePool } from './lib/supabase-db.js';
+import { initializePerformanceLogBatcher } from './lib/perfLogBatcher.js';
 import { attachRequestContext } from './lib/requestContext.js';
 
 // Load environment variables
@@ -68,6 +69,12 @@ await (async () => {
 import { pool as perfLogPool } from './lib/supabase-db.js';
 if (pgPool) {
   console.log("✓ Performance logging enabled via Supabase pool wrapper");
+  // Initialize batching layer (uses Supabase client via supabase-db)
+  try {
+    initializePerformanceLogBatcher(pgPool);
+  } catch (e) {
+    console.error('[Server] Failed to init performance log batcher:', e.message);
+  }
   // Test connection
   const testPerfPool = async () => {
     try {

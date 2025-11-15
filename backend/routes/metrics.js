@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import { getPerformanceLogBatchStatus, flush as flushPerfLogs } from '../lib/perfLogBatcher.js';
 
 export default function createMetricsRoutes(pgPool) {
   const router = express.Router();
@@ -241,6 +242,28 @@ export default function createMetricsRoutes(pgPool) {
         data: { tenant_id, api_calls: 0, storage_used: 0 }
       });
     } catch (error) {
+      return res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // GET /api/metrics/perf-log-status - queue depth & settings
+  router.get('/perf-log-status', (req, res) => {
+    try {
+      const status = getPerformanceLogBatchStatus();
+      return res.json({ status: 'success', data: status });
+    } catch (error) {
+      return res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // POST /api/metrics/flush-performance-logs - force flush
+  router.post('/flush-performance-logs', async (req, res) => {
+    try {
+      await flushPerfLogs();
+      const status = getPerformanceLogBatchStatus();
+      return res.json({ status: 'success', message: 'Flush triggered', data: status });
+    } catch (error) {
+      console.error('[Metrics] Flush endpoint error:', error);
       return res.status(500).json({ status: 'error', message: error.message });
     }
   });
