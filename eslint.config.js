@@ -11,6 +11,7 @@ export default [
       'dist',
       '**/dist/**',
       'braid-mcp-node-server/dist/**',
+      'n8n-nodes-mcp/**',
       'logseq/**',
       'scripts/**',
       'backend/node_modules/**',

@@ -827,7 +827,7 @@ export default function EnhancedUserManagement() {
                                     </TableRow>
                                 ) : (
                                     filteredUsers.map((user) => {
-                                        const tenant = allTenants.find(t => t.tenant_id === user.tenant_id);
+                                        const tenant = allTenants.find(t => t.id === user.tenant_id);
                                         const isCreator = currentUser && user.id === currentUser.id && user.role === 'superadmin';
                                         
                                         // managerCanEdit now only checks for admin role to edit specific permissions
