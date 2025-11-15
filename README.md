@@ -4,6 +4,85 @@
 
 Built with React + Vite frontend and Node.js backend, featuring 27+ AI-native tools for full CRM lifecycle management.
 
+---
+
+## 📚 Documentation
+
+Aisha CRM provides comprehensive technical documentation organized into specialized manuals:
+
+### 👥 For End Users
+- **[User Guide](./docs/AISHA_CRM_USER_GUIDE.md)** - Complete guide for using Aisha CRM features
+  - Dashboard & navigation
+  - AI assistant capabilities
+  - Contact, account, lead, and opportunity management
+  - Activities, workflows, and reporting
+  - Troubleshooting common issues
+
+### 🔧 For System Administrators
+- **[System Administrator Guide](./docs/AISHA_CRM_ADMIN_GUIDE.md)** - Deployment and operations guide
+  - Docker deployment setup
+  - Environment configuration
+  - User and tenant management
+  - Security administration
+  - Monitoring, backups, and maintenance
+
+### 👨‍💻 For Developers
+- **[Developer Manual](./docs/AISHA_CRM_DEVELOPER_MANUAL.md)** - Contributing to the codebase
+  - Development environment setup
+  - Architecture overview (frontend, backend, database)
+  - API development (197 endpoints)
+  - Testing and debugging
+  - Code standards and design patterns
+
+### 🔒 For Security Teams
+- **[Security & Compliance Manual Part 1](./docs/AISHA_CRM_SECURITY_MANUAL_PART1.md)** - Security architecture & data protection
+  - Security overview and threat model
+  - Authentication & authorization (Supabase Auth, RBAC)
+  - Row-level security (RLS) implementation
+  - Permission system architecture
+  - API security and rate limiting
+  - Data protection and encryption
+
+- **[Security & Compliance Manual Part 2](./docs/AISHA_CRM_SECURITY_MANUAL_PART2.md)** - Monitoring, compliance & incident response
+  - Audit logging and compliance (GDPR, CCPA, SOC 2, HIPAA)
+  - Security monitoring and intrusion detection
+  - Incident response procedures
+  - Security testing and penetration testing
+  - Production deployment security
+  - Security best practices
+
+### 🗄️ For Database Administrators
+- **[Database Administration Manual Part 1](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md)** - Architecture & setup
+  - Database architecture (PostgreSQL 15+ on Supabase)
+  - Initial setup and configuration
+  - Schema design (50+ tables, tenant architecture)
+  - Migration management (52+ migrations)
+  - Indexing strategy and data integrity
+
+- **[Database Administration Manual Part 2](./docs/AISHA_CRM_DATABASE_MANUAL_PART2.md)** - Operations & maintenance
+  - Comprehensive migration history (001-052)
+  - Backup and recovery procedures
+  - Performance monitoring and optimization
+  - Maintenance tasks (VACUUM, ANALYZE, reindexing)
+  - Troubleshooting guide
+  - Best practices and scaling strategies
+
+### 🚀 Quick Links
+
+| Task | Manual | Chapter |
+|------|--------|---------|
+| **Get started as a user** | [User Guide](./docs/AISHA_CRM_USER_GUIDE.md) | Ch 1: Getting Started |
+| **Deploy to production** | [Admin Guide](./docs/AISHA_CRM_ADMIN_GUIDE.md) | Ch 2: Docker Deployment |
+| **Set up dev environment** | [Developer Manual](./docs/AISHA_CRM_DEVELOPER_MANUAL.md) | Ch 2: Development Setup |
+| **Apply database migration** | [Database Manual Part 1](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md) | Ch 4: Migrations Management |
+| **Configure security** | [Security Manual Part 1](./docs/AISHA_CRM_SECURITY_MANUAL_PART1.md) | Ch 2: Authentication & Authorization |
+| **Troubleshoot connection issues** | [Database Manual Part 2](./docs/AISHA_CRM_DATABASE_MANUAL_PART2.md) | Ch 11: Troubleshooting |
+| **Review API endpoints** | [Developer Manual](./docs/AISHA_CRM_DEVELOPER_MANUAL.md) | Appendix B: API Reference |
+| **Set up monitoring** | [Admin Guide](./docs/AISHA_CRM_ADMIN_GUIDE.md) | Ch 7: Monitoring & Logging |
+| **Handle security incident** | [Security Manual Part 2](./docs/AISHA_CRM_SECURITY_MANUAL_PART2.md) | Ch 9: Incident Response |
+
+---
+
 ## ✨ What Makes AI-SHA Special
 
 ### 🤖 Executive Assistant, Not Just CRM
@@ -29,6 +108,8 @@ Braid is an **AI-native language designed by LLMs, for LLMs** with:
 ## 🚨 Critical: Read This First
 
 **Before running ANY commands, read:**
+- **[System Administrator Guide - Ch 2: Docker Deployment](./docs/AISHA_CRM_ADMIN_GUIDE.md#chapter-2-docker-deployment)** - Production deployment setup
+- **[Developer Manual - Ch 2: Development Setup](./docs/AISHA_CRM_DEVELOPER_MANUAL.md#chapter-2-development-setup)** - Local dev environment
 - [TERMINAL_RULES.md](./TERMINAL_RULES.md) - **MANDATORY** terminal & directory rules
 - [DEV_QUICK_START.md](./DEV_QUICK_START.md) - Development workflow guide
 
@@ -36,10 +117,19 @@ Braid is an **AI-native language designed by LLMs, for LLMs** with:
 1. ALWAYS run `Get-Location` before executing commands
 2. Use separate terminals for backend, frontend, and your work
 3. Verify directory location - never assume where you are
+4. See **[User Guide](./docs/AISHA_CRM_USER_GUIDE.md)** for feature documentation
+5. See **[Database Manual](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md)** for database operations
 
 ## Getting Started
 
-### Initial Setup
+### Quick Setup
+
+For **detailed setup instructions**, see:
+- **Production Deployment:** [System Administrator Guide - Ch 2: Docker Deployment](./docs/AISHA_CRM_ADMIN_GUIDE.md#chapter-2-docker-deployment)
+- **Development Setup:** [Developer Manual - Ch 2: Development Setup](./docs/AISHA_CRM_DEVELOPER_MANUAL.md#chapter-2-development-setup)
+- **Database Configuration:** [Database Manual - Ch 2: Initial Setup](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md#chapter-2-initial-setup)
+
+### Initial Setup (Quick Reference)
 
 1. **Install dependencies**
    ```bash
@@ -59,6 +149,8 @@ Braid is an **AI-native language designed by LLMs, for LLMs** with:
    # - Docker (recommended for this project): http://localhost:4001
    VITE_AISHACRM_BACKEND_URL=http://localhost:4001
    ```
+   
+   **⚠️ See [Admin Guide - Ch 3: Environment Configuration](./docs/AISHA_CRM_ADMIN_GUIDE.md#chapter-3-environment-configuration) for complete environment setup.**
 
 3. **Set up your backend server**
    ```bash
@@ -68,6 +160,8 @@ Braid is an **AI-native language designed by LLMs, for LLMs** with:
    # Edit backend/.env with your database credentials
    npm run dev  # Starts with auto-restart enabled
    ```
+   
+   **⚠️ Database setup required - see [Database Manual - Ch 2: Initial Setup](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md#chapter-2-initial-setup)**
 
 4. **Run the development server**
    ```bash
@@ -177,6 +271,10 @@ npm run build
 
 ## Project Structure
 
+**For comprehensive architecture documentation, see:**
+- **[Developer Manual - Ch 3: Architecture Overview](./docs/AISHA_CRM_DEVELOPER_MANUAL.md#chapter-3-architecture-overview)** - Complete system architecture
+- **[Database Manual - Ch 3: Schema Design](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md#chapter-3-schema-design)** - Database schema (50+ tables)
+
 ### Frontend
 - `src/api/` - API clients with automatic Ai-SHA → Your Backend fallback
 - `src/functions/` - 197 business functions organized in 26 categories
@@ -186,10 +284,23 @@ npm run build
 - `src/utils/` - Utility functions and helpers
 - `src/hooks/` - Custom React hooks
 
+**See [Developer Manual - Ch 4: Frontend Development](./docs/AISHA_CRM_DEVELOPER_MANUAL.md#chapter-4-frontend-development) for details.**
+
 ### Backend
 - `backend/server.js` - Express server with 197 API endpoints
 - `backend/routes/` - API route handlers (26 categories)
 - `backend/.env` - Backend configuration
+- `backend/migrations/` - Database migrations (52+ files)
+
+**See [Developer Manual - Ch 5: Backend Development](./docs/AISHA_CRM_DEVELOPER_MANUAL.md#chapter-5-backend-development) for details.**
+
+### Database
+- PostgreSQL 15+ hosted on Supabase Cloud
+- 50+ tables with row-level security (RLS)
+- UUID primary keys with tenant isolation
+- JSONB metadata for flexible schema
+
+**See [Database Manual Part 1](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md) for complete schema documentation.**
 
 See also:
 - `docs/AI_CONVERSATIONS.md` — AI chat conversations: titles, topics, and Supabase-backed routes
@@ -200,15 +311,34 @@ See also:
 
 **The Solution:** Your own independent backend server that:
 - ✅ Hosts all 197 functions locally
-- ✅ Stores data in your own PostgreSQL database
+- ✅ Stores data in your own PostgreSQL database (Supabase)
 - ✅ Auto-failover from Base44 to your backend
 - ✅ Complete control - no vendor lock-in
 - ✅ Can run on-premise or your own cloud
 
-See `backend/README.md` for backend setup details.
+**For detailed backend documentation, see:**
+- **[Developer Manual - Ch 5: Backend Development](./docs/AISHA_CRM_DEVELOPER_MANUAL.md#chapter-5-backend-development)** - Backend architecture and API development
+- **[Developer Manual - Appendix B: API Reference](./docs/AISHA_CRM_DEVELOPER_MANUAL.md#appendix-b-api-reference)** - Complete API endpoint listing (197 endpoints)
+- **[Database Manual Part 1](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md)** - Database architecture and setup
+
+See `backend/README.md` for legacy backend notes.
 
 ## Security Notes
 
 ⚠️ **Important**: Never commit your `.env` file to version control. It contains sensitive configuration.
 
-See `SECURITY_PERFORMANCE_REVIEW.md` for detailed security and performance guidelines.
+For comprehensive security documentation, see:
+- **[Security Manual Part 1](./docs/AISHA_CRM_SECURITY_MANUAL_PART1.md)** - Authentication, RLS, permissions, API security, data protection
+- **[Security Manual Part 2](./docs/AISHA_CRM_SECURITY_MANUAL_PART2.md)** - Audit logging, monitoring, incident response, compliance (GDPR, CCPA, SOC 2, HIPAA)
+- **[Admin Guide - Ch 6: Security Administration](./docs/AISHA_CRM_ADMIN_GUIDE.md#chapter-6-security-administration)** - Security operations and user management
+
+### Key Security Features
+- 🔒 **Row-Level Security (RLS)** - Tenant isolation at database level (48+ tables)
+- 🔑 **JWT Authentication** - Supabase Auth with bcrypt password hashing
+- 👥 **Role-Based Access Control** - 4 roles: SuperAdmin, Admin, Manager, Employee
+- 📊 **Audit Logging** - All actions tracked to `audit_log` table
+- 🔐 **API Key Management** - Bcrypt-hashed keys with expiration support
+- 🛡️ **Rate Limiting** - 100 requests/min per IP/user
+- 🚨 **Security Monitoring** - Intrusion detection, suspicious pattern matching
+
+See `SECURITY_PERFORMANCE_REVIEW.md` for legacy security notes.
