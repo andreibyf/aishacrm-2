@@ -16,3 +16,9 @@ services:
     volumes:
       - ./:/app
     command: npm run dev
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s

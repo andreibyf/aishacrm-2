@@ -95,6 +95,12 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 const port = process.env.PORT || 8000;
+// Startup env sanity check (non-fatal): informs developer if required vars are missing.
+const requiredEnv = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "CRM_BACKEND_URL"];
+const missing = requiredEnv.filter(k => !process.env[k] || String(process.env[k]).trim() === "");
+if (missing.length) {
+  console.warn(`[ENV WARNING] Missing env vars: ${missing.join(', ')}. Create braid-mcp-node-server/.env or sync from backend/.env (see docs/mcp/README.md).`);
+}
 app.listen(port, () => {
   console.log(`Braid MCP Node server listening on port ${port}`);
 });

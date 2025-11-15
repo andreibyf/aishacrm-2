@@ -191,8 +191,9 @@ async function callBackend(
         const rawChanges = body ?? data ?? null;
         // Redact known sensitive fields before storing in audit log
         const changesObj = rawChanges ? redactSensitive(rawChanges) : null;
-        const ipAddr = action.metadata?.http?.ip ?? action.metadata?.ip ?? null;
-        const userAgent = action.metadata?.http?.user_agent ?? action.metadata?.userAgent ?? null;
+        const meta = action.metadata as any;
+        const ipAddr = meta?.http?.ip ?? meta?.ip ?? null;
+        const userAgent = meta?.http?.user_agent ?? meta?.userAgent ?? null;
 
         const auditRow: any = {
           tenant_id: tenantIdForAudit,
@@ -203,6 +204,7 @@ async function callBackend(
           changes: changesObj,
           ip_address: ipAddr,
           user_agent: userAgent,
+          request_id: action.metadata?.requestId ?? null,
         };
 
         // Insert audit row, non-blocking for adapter success

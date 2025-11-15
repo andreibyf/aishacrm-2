@@ -22,8 +22,8 @@ This document explains how to run and harden the local `braid-mcp-node-server` u
    - For developer convenience, use a separate dev Supabase project with reduced privileges.
 
 3. Audit logging
-   - The CRM adapter now writes a minimal audit row for `POST`, `PUT`, and `DELETE` actions to the `audit_log` table.
-   - Audit row fields: `action`, `table_name`, `record_id`, `actor_id`, `request_id`, `payload`, `metadata`.
+   - The CRM adapter writes a minimal audit row for `POST`, `PUT`, and `DELETE` actions to the `audit_log` table and now includes the incoming `requestId` from the `BraidRequestEnvelope`. This ensures each audit row is traceable to the envelope that triggered it.
+   - Audit row fields: `action`, `entity_type`, `entity_id`, `tenant_id`, `request_id`, `payload`, `metadata`, plus HTTP metadata (`ip_address`, `user_agent`).
    - Audit insertion is non-blocking: failures do not stop MCP responses, but are logged.
 
 4. Rate limiting and allow-listing
@@ -42,6 +42,41 @@ Using Docker Compose (recommended):
 ```powershell
 # From repository root
 docker compose -f braid-mcp-node-server/docker-compose.yml up --build
+```
+
+### Dev Environment Variables
+
+The dev compose file expects a `.env` inside `braid-mcp-node-server/` containing at least:
+
+```
+SUPABASE_URL=https://your-dev-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key   # dev only
+SUPABASE_ANON_KEY=your_anon_key                   # optional
+CRM_BACKEND_URL=http://host.docker.internal:4001  # points to backend container
+USE_DIRECT_SUPABASE_ACCESS=true                   # optional (read-only direct Supabase)
+```
+
+If you already have these in `backend/.env`, you can sync them with a PowerShell one-liner:
+
+```powershell
+# From repo root
+Get-Content backend/.env | ForEach-Object {
+   if ($_ -match '^(SUPABASE_URL|SUPABASE_SERVICE_ROLE_KEY|SUPABASE_ANON_KEY)=') { $_ } 
+   if ($_ -match '^(FRONTEND_URL)=') { $_ } 
+} | ForEach-Object {
+   if ($_ -match '^(.*)=(.*)$') { "$($matches[1])=$($matches[2])" }
+} | Out-File braid-mcp-node-server/.env -Encoding utf8
+Add-Content braid-mcp-node-server/.env 'CRM_BACKEND_URL=http://host.docker.internal:4001'
+Add-Content braid-mcp-node-server/.env 'USE_DIRECT_SUPABASE_ACCESS=true'
+```
+
+Restart Docker Compose after creating the file:
+
+```powershell
+docker compose -f braid-mcp-node-server/docker-compose.dev.yml up --build
+```
+
+On startup, the server logs a warning if required env vars are missing.
 ```
 
 Using Node (local):
@@ -108,7 +143,11 @@ npm ci
 npm run test-audit
 ```
 
-The script will fail if it cannot find `SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY`, or if no audit row is found for the generated `request_id`.
+The script loads environment variables from `backend/.env` first and falls back to `braid-mcp-node-server/.env` (so your Supabase credentials stored in `backend/.env` are automatically picked up).
+
+It will try both the `tenants` and `tenant` tables when resolving a tenant id, and logs a warning if neither table exists or contains rows. Once it has a tenant, it sends the envelope and checks `audit_log` for the generated `request_id`.
+
+The test will still fail if it cannot find `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, or any audit rows for the generated `request_id`.
 
 Use this script to validate end-to-end behavior in your dev environment before enabling MCP in staging/production.
 
@@ -158,3 +197,43 @@ The workflow waits for `http://localhost:8000` to be available before running th
 ## Redaction policy
 
 - The adapter now redacts commonly sensitive keys (matches: `email`, `ssn`, `social_security`, `phone`, `card`, `creditcard`, `password`, `pwd`) before writing the `changes` JSON into `audit_log`. If you need a stricter policy, we can extend the redaction list or add per-tenant exceptions.
+
+## Container Deployment (Production Hardening)
+
+The production container is built from a multi-stage Dockerfile for smaller size and reduced attack surface:
+
+- Non-root execution: A dedicated `app` user (no shell) limits privilege.
+- Multi-stage build: TypeScript compiled in builder stage; final image contains only `dist/` and production deps (`npm install --omit=dev`).
+- Entrypoint validation: `entrypoint.sh` verifies `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `CRM_BACKEND_URL` before starting. Missing vars cause exit when `NODE_ENV=production`.
+- Healthcheck: `/health` endpoint plus Dockerfile `HEALTHCHECK` and compose healthcheck allow orchestrators to gate traffic until ready.
+- Secrets injection: Supply Supabase keys and backend URL at runtime (Compose `env_file`, Swarm/K8s secrets, ECS task defs). Never bake secrets into the image.
+- Minimal code surface: Source `src/` excluded, reducing leak risk if image is accessed.
+
+### Compose (Production)
+
+`braid-mcp-node-server/docker-compose.yml` now includes a healthcheck. To run locally with production profile:
+
+```powershell
+docker compose -f braid-mcp-node-server/docker-compose.yml up --build -d
+docker logs braid-mcp-server --tail=50
+```
+
+### Failure Diagnosis
+
+- Immediate exit: Check entrypoint log for missing env vars.
+- Unhealthy healthcheck: Confirm port mapping `8000:8000` and `/health` reachable internally.
+- No audit rows: Validate Supabase service role key and network egress; ensure migration added `request_id` column.
+
+### Operational Recommendations
+
+- Add resource limits in orchestrator (CPU/mem) to prevent contention.
+- Centralize logs (e.g. ship stdout to aggregator) for audit correlation.
+- Rotate Supabase service role key; use short-lived rotation window with dual-key strategy.
+- Add runtime security scanning (Trivy, Grype) in CI for image vulnerability assessment.
+
+### Next Container Enhancements (Optional)
+
+- Distroless or `node:slim` base for further reduction.
+- Layer cache optimization (npm install using lockfile + `npm ci`).
+- Build arg-based feature flags (e.g. `ARG ENABLE_SUPABASE_READS`).
+- Add OpenTelemetry tracing exporter env toggle.

@@ -15,8 +15,15 @@
     node scripts/test-mcp-audit.js
 */
 
+const path = require('path');
+const dotenv = require('dotenv');
 const fetch = require('node-fetch');
 const { createClient } = require('@supabase/supabase-js');
+
+const backendEnv = path.resolve(__dirname, '..', '..', 'backend', '.env');
+const rootEnv = path.resolve(__dirname, '..', '.env');
+dotenv.config({ path: backendEnv, override: false });
+dotenv.config({ path: rootEnv, override: false });
 
 const MCP_URL = process.env.MCP_URL || 'http://localhost:8000';
 const MCP_RUN = `${MCP_URL.replace(/\/$/, '')}/mcp/run`;
@@ -53,26 +60,52 @@ function makeEnvelope(requestId, tenantId) {
 
 async function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
+const TENANT_TABLE_NAMES = ['tenants', 'tenant'];
+let cachedTenantTable;
+
+async function detectTenantTable() {
+  if (cachedTenantTable) return cachedTenantTable;
+  for (const table of TENANT_TABLE_NAMES) {
+    try {
+      const { data, error } = await supa.from(table).select('id').limit(1);
+      if (!error) {
+        cachedTenantTable = table;
+        return table;
+      }
+      if (error && !error.message?.includes('does not exist')) {
+        console.warn(`Unexpected error checking table ${table}:`, error.message ?? error);
+      }
+    } catch (err) {
+      if (err && err.message && !err.message.includes('does not exist')) {
+        console.warn(`Error probing table ${table}:`, err.message);
+      }
+    }
+  }
+  return null;
+}
+
 (async () => {
   const requestId = `test-${Date.now()}`;
   // Attempt to find a tenant to use for this test. The Supabase project used
-  // for testing should contain a `tenants` table; otherwise set TENANT_ID
+  // for testing should contain a `tenants` or `tenant` table; otherwise set TENANT_ID
   // env var before running.
   let tenantId = process.env.TENANT_ID;
   // If TENANT_ID provided, it may be either the UUID `id` or the slug `tenant_id`.
-  // Try to resolve it to a canonical `id` by looking up `tenants.id` then `tenants.tenant_id`.
+  // Try to resolve it to a canonical `id` by looking up `tenant.id` first, then `tenant.tenant_id` (supports both table names).
   async function resolveTenantId(candidate) {
     if (!candidate) return null;
+    const table = await detectTenantTable();
+    if (!table) return null;
     try {
       // Try match by UUID/id first
-      let { data, error } = await supa.from('tenants').select('id,tenant_id').eq('id', candidate).limit(1);
+      let { data, error } = await supa.from(table).select('id,tenant_id').eq('id', candidate).limit(1);
       if (error) {
         console.warn('Error querying tenants by id:', error.message || error);
       }
       if (data && data.length > 0) return data[0].id;
 
       // Next try matching the tenant_id (slug)
-      ({ data, error } = await supa.from('tenants').select('id,tenant_id').eq('tenant_id', candidate).limit(1));
+      ({ data, error } = await supa.from(table).select('id,tenant_id').eq('tenant_id', candidate).limit(1));
       if (error) {
         console.warn('Error querying tenants by tenant_id:', error.message || error);
       }
@@ -89,22 +122,27 @@ async function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
       tenantId = resolved;
       console.log('Resolved TENANT_ID to tenant.id:', tenantId);
     } else {
-      console.log('TENANT_ID provided but could not resolve to tenants.id; will attempt auto-detect from tenants table.');
+      console.log('TENANT_ID provided but could not resolve to tenant.id; will attempt auto-detect from tenant table.');
       tenantId = null;
     }
   }
 
   if (!tenantId) {
-    try {
-      const { data: tenants, error: tErr } = await supa.from('tenants').select('id').limit(1);
-      if (tErr) {
-        console.error('Error querying tenants table to find a tenant id:', tErr.message || tErr);
-      } else if (tenants && tenants.length > 0) {
-        tenantId = tenants[0].id;
-        console.log('Using tenant id from tenants table:', tenantId);
+    const table = await detectTenantTable();
+    if (!table) {
+      console.warn('No tenant table detected (checked tenants/tenant).');
+    } else {
+      try {
+        const { data: tenants, error: tErr } = await supa.from(table).select('id').limit(1);
+        if (tErr) {
+          console.error(`Error querying ${table} table to find a tenant id:`, tErr.message || tErr);
+        } else if (tenants && tenants.length > 0) {
+          tenantId = tenants[0].id;
+          console.log(`Using tenant id from ${table} table:`, tenantId);
+        }
+      } catch (e) {
+        console.warn('Could not auto-detect tenant id from Supabase:', e?.message ?? e);
       }
-    } catch (e) {
-      console.warn('Could not auto-detect tenant id from Supabase:', e?.message ?? e);
     }
   }
 
@@ -116,24 +154,30 @@ async function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
       const name = process.env.AUTO_CREATE_TENANT_NAME || 'Auto Created Test Tenant';
       console.log('No tenant found — AUTO_CREATE_TENANT enabled, attempting to create tenant with slug:', slug);
       try {
-        const payload = {
-          tenant_id: slug,
-          name,
-          status: 'active',
-          subscription_tier: 'free',
-          metadata: JSON.stringify({ created_by: 'test-mcp-audit-script', environment: 'ci' })
-        };
-        const { data: created, error: cErr } = await supa.from('tenants').insert(payload).select('id').limit(1);
-        if (cErr) {
-          console.error('Failed to create tenant in Supabase:', cErr.message || cErr);
-        } else if (created && created.length > 0) {
-          tenantId = created[0].id || created[0];
-          console.log('Created tenant id:', tenantId);
-        } else if (created && created.id) {
-          tenantId = created.id;
-          console.log('Created tenant id:', tenantId);
+        const table = await detectTenantTable();
+        if (!table) {
+          console.error('Unable to create tenant because no tenant table could be found (checked tenants/tenant).');
+          // Continue without creating a tenant.
         } else {
-          console.warn('Unexpected create response:', created);
+          const payload = {
+            tenant_id: slug,
+            name,
+            status: 'active',
+            subscription_tier: 'free',
+            metadata: JSON.stringify({ created_by: 'test-mcp-audit-script', environment: 'ci' })
+          };
+          const { data: created, error: cErr } = await supa.from(table).insert(payload).select('id').limit(1);
+          if (cErr) {
+            console.error('Failed to create tenant in Supabase:', cErr.message || cErr);
+          } else if (created && created.length > 0) {
+            tenantId = created[0].id || created[0];
+            console.log('Created tenant id:', tenantId);
+          } else if (created && created.id) {
+            tenantId = created.id;
+            console.log('Created tenant id:', tenantId);
+          } else {
+            console.warn('Unexpected create response:', created);
+          }
         }
       } catch (e) {
         console.error('Error while attempting to create tenant:', e?.message ?? e);
@@ -142,7 +186,7 @@ async function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
   }
 
   if (!tenantId) {
-    console.error('No tenant id available. Set TENANT_ID env var or ensure a tenants table exists in Supabase.');
+    console.error('No tenant id available. Set TENANT_ID env var or ensure a tenant table exists in Supabase.');
     process.exit(5);
   }
 

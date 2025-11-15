@@ -47,7 +47,14 @@ export class BraidExecutor {
     const results: BraidActionResult[] = [];
 
     for (const action of envelope.actions) {
-      const result = await this.executeSingleAction(action, ctx);
+      const actionWithRequestId: BraidAction = {
+        ...action,
+        metadata: {
+          ...(action.metadata ?? {}),
+          requestId: envelope.requestId,
+        },
+      };
+      const result = await this.executeSingleAction(actionWithRequestId, ctx);
       results.push(result);
     }
 
