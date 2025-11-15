@@ -1098,8 +1098,27 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
     setSaving(true);
     try {
+      // Resolve tenant id with robust fallbacks
+      let tenantId = user?.tenant_id ?? null;
+      try {
+        if (!tenantId && typeof window !== 'undefined') {
+          const selected = localStorage.getItem('selected_tenant_id');
+          if (selected) tenantId = selected;
+        }
+      } catch { /* noop */ }
+      if (!tenantId && import.meta.env.DEV) {
+        // Dev fallback to seeded tenant
+        tenantId = 'local-tenant-001';
+      }
+
+      if (!tenantId) {
+        toast.error('No tenant selected. Please choose a tenant and try again.');
+        setSaving(false);
+        return;
+      }
+
       const workflowData = {
-        tenant_id: user.tenant_id,
+        tenant_id: tenantId,
         name,
         description,
         is_active: true,
@@ -1161,12 +1180,12 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-h-0">
         <div className="w-64 border-r border-slate-700 overflow-y-auto p-4 flex-shrink-0">
           <NodeLibrary onAddNode={handleAddNode} />
         </div>
 
-        <div className="flex-1 bg-slate-950 overflow-y-auto">
+        <div className="flex-1 bg-slate-950 overflow-y-auto min-h-0">
           <WorkflowCanvas
             nodes={nodes}
             connections={connections}

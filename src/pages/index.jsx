@@ -60,15 +60,11 @@ import UnitTests from "./UnitTests";
 
 import BizDevSources from "./BizDevSources";
 
-import WorkflowGuide from "./WorkflowGuide";
-
 import ClientOnboarding from "./ClientOnboarding";
 
 import ClientRequirements from "./ClientRequirements";
 
 import SystemLogs from "./SystemLogs";
-
-import Workflows from "./Workflows";
 
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 
@@ -134,15 +130,11 @@ const PAGES = {
     
     BizDevSources: BizDevSources,
     
-    WorkflowGuide: WorkflowGuide,
-    
     ClientOnboarding: ClientOnboarding,
     
     ClientRequirements: ClientRequirements,
     
     SystemLogs: SystemLogs,
-    
-    Workflows: Workflows,
     
 }
 
@@ -231,15 +223,11 @@ function PagesContent() {
                 
                 <Route path="/BizDevSources" element={<BizDevSources />} />
                 
-                <Route path="/WorkflowGuide" element={<WorkflowGuide />} />
-                
                 <Route path="/ClientOnboarding" element={<ClientOnboarding />} />
                 
                 <Route path="/ClientRequirements" element={<ClientRequirements />} />
                 
                 <Route path="/SystemLogs" element={<SystemLogs />} />
-                
-                <Route path="/Workflows" element={<Workflows />} />
                 
             </Routes>
         </Layout>

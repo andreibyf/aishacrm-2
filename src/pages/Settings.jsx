@@ -35,6 +35,7 @@ import {
   Bug, // for TestDataManager
   RefreshCw, // for SyncHealthMonitor
   Server, // for MCPServerMonitor
+  Workflow, // for n8n integration
 } from "lucide-react";
 import { User as UserEntity } from "@/api/entities";
 
@@ -156,6 +157,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
       // Integrations
       { id: 'global-integrations', label: 'Global Integrations', icon: Plug, color: 'orange', roles: ['superadmin'] },
       { id: 'tenant-integrations', label: 'Tenant Integrations', icon: Puzzle, color: 'orange', roles: ['superadmin'] },
+      { id: 'n8n', label: 'n8n Workflows', icon: Workflow, color: 'purple', roles: ['superadmin'] },
       { id: 'api-docs', label: 'API Documentation', icon: BookOpen, color: 'blue', roles: ['superadmin'] },
 
       // System Configuration
@@ -366,6 +368,47 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                   </CardHeader>
                   <CardContent>
                     <TenantIntegrationSettings />
+                  </CardContent>
+                </Card>
+              )}
+
+              {activeTab === 'n8n' && isSuperadmin && (
+                <Card className="bg-slate-800 border-slate-700">
+                  <CardHeader>
+                    <CardTitle className="text-slate-100 flex items-center gap-2">
+                      <Workflow className="w-5 h-5 text-purple-400" />
+                      n8n Workflow Automation
+                    </CardTitle>
+                    <CardDescription className="text-slate-400">
+                      Create and manage automated workflows with 400+ integrations
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="bg-purple-900/20 border border-purple-700/50 rounded-lg p-3 flex items-center justify-between">
+                        <p className="text-sm text-purple-300">
+                          <strong>n8n Workflow Editor</strong> - Visual automation platform embedded below
+                        </p>
+                        <a
+                          href="http://localhost:5678"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition-colors"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          Open in New Tab
+                        </a>
+                      </div>
+                      
+                      <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
+                        <iframe
+                          src="http://localhost:5678"
+                          className="w-full border-0"
+                          style={{ height: 'calc(100vh - 300px)', minHeight: '600px' }}
+                          title="n8n Workflow Editor"
+                        />
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               )}

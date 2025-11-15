@@ -36,30 +36,30 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
     if (isCondition && nodeConnections.length >= 2) {
       // Render decision branches with labeled paths
       return (
-        <div className="flex justify-center items-center gap-8 my-4">
+        <div className="flex justify-center items-center gap-6 my-2">
           <div className="flex flex-col items-center">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-xs font-semibold text-green-400 bg-green-900/30 px-2 py-1 rounded">TRUE</span>
-              <ArrowDownLeft className="w-5 h-5 text-green-400" />
+              <ArrowDownLeft className="w-4 h-4 text-green-400" />
             </div>
-            <div className="w-px h-12 bg-gradient-to-b from-green-400 to-transparent" />
+            <div className="w-px h-6 bg-gradient-to-b from-green-400 to-transparent" />
           </div>
           <div className="flex flex-col items-center">
             <div className="flex items-center gap-2 mb-2">
-              <ArrowDownRight className="w-5 h-5 text-red-400" />
+              <ArrowDownRight className="w-4 h-4 text-red-400" />
               <span className="text-xs font-semibold text-red-400 bg-red-900/30 px-2 py-1 rounded">FALSE</span>
             </div>
-            <div className="w-px h-12 bg-gradient-to-b from-red-400 to-transparent" />
+            <div className="w-px h-6 bg-gradient-to-b from-red-400 to-transparent" />
           </div>
         </div>
       );
     } else if (nodeConnections.length === 1) {
       // Single connection arrow
       return (
-        <div className="flex justify-center my-4">
+        <div className="flex justify-center my-2">
           <div className="flex flex-col items-center">
-            <ArrowDown className="w-6 h-6 text-purple-400 animate-pulse" />
-            <div className="w-px h-8 bg-gradient-to-b from-purple-400 to-transparent" />
+            <ArrowDown className="w-5 h-5 text-purple-400 animate-pulse" />
+            <div className="w-px h-6 bg-gradient-to-b from-purple-400 to-transparent" />
           </div>
         </div>
       );
@@ -69,7 +69,7 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
   };
 
   return (
-    <div className="workflow-canvas relative p-8 min-h-full overflow-y-auto" style={{
+    <div className="workflow-canvas relative p-4 min-h-0 overflow-auto" style={{
       scrollbarWidth: 'thin',
       scrollbarColor: '#6b7280 #1e293b'
     }}>
@@ -96,7 +96,7 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
       )}
 
       {/* Render nodes with connectors */}
-      <div className="space-y-2">
+      <div className="space-y-1">
         {nodes.map((node, _index) => {
           const nodeConnections = getNodeConnections(node.id);
           

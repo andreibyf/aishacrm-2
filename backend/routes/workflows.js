@@ -505,6 +505,182 @@ export default function createWorkflowRoutes(pgPool) {
     }
   });
 
+  // POST /api/workflows - Create new workflow
+  router.post('/', async (req, res) => {
+    try {
+      const { tenant_id, name, description, trigger, nodes, connections, is_active } = req.body;
+
+      if (!tenant_id || !name) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'tenant_id and name are required' 
+        });
+      }
+
+      // Build metadata object containing nodes and connections
+      const metadata = {
+        nodes: nodes || [],
+        connections: connections || [],
+        webhook_url: null, // Will be set after creation
+        execution_count: 0,
+        last_executed: null
+      };
+
+      // Extract trigger type and config
+      const trigger_type = trigger?.type || 'webhook';
+      const trigger_config = trigger?.config || {};
+
+      const query = `
+        INSERT INTO workflow (tenant_id, name, description, trigger_type, trigger_config, is_active, metadata)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *
+      `;
+
+      const values = [
+        tenant_id,
+        name,
+        description || null,
+        trigger_type,
+        trigger_config,
+        is_active !== undefined ? is_active : true,
+        metadata
+      ];
+
+      const result = await pgPool.query(query, values);
+      const workflow = normalizeWorkflow(result.rows[0]);
+
+      // Update webhook URL in metadata now that we have the ID
+      if (trigger_type === 'webhook') {
+        const webhookUrl = `/api/workflows/${workflow.id}/webhook`;
+        await pgPool.query(
+          `UPDATE workflow SET metadata = metadata || $1 WHERE id = $2`,
+          [JSON.stringify({ webhook_url: webhookUrl }), workflow.id]
+        );
+        workflow.webhook_url = webhookUrl;
+      }
+
+      res.status(201).json({
+        status: 'success',
+        data: workflow
+      });
+    } catch (error) {
+      console.error('Error creating workflow:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // PUT /api/workflows/:id - Update existing workflow
+  router.put('/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { tenant_id, name, description, trigger, nodes, connections, is_active } = req.body;
+
+      if (!tenant_id) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'tenant_id is required' 
+        });
+      }
+
+      // Verify workflow exists and belongs to tenant
+      const checkResult = await pgPool.query(
+        'SELECT * FROM workflow WHERE id = $1 AND tenant_id = $2',
+        [id, tenant_id]
+      );
+
+      if (checkResult.rows.length === 0) {
+        return res.status(404).json({ 
+          status: 'error', 
+          message: 'Workflow not found or access denied' 
+        });
+      }
+
+      const existingWorkflow = checkResult.rows[0];
+      const existingMetadata = existingWorkflow.metadata || {};
+
+      // Build updated metadata
+      const metadata = {
+        ...existingMetadata,
+        nodes: nodes !== undefined ? nodes : existingMetadata.nodes || [],
+        connections: connections !== undefined ? connections : existingMetadata.connections || []
+      };
+
+      // Extract trigger type and config if provided
+      const trigger_type = trigger?.type || existingWorkflow.trigger_type;
+      const trigger_config = trigger?.config || existingWorkflow.trigger_config;
+
+      const query = `
+        UPDATE workflow 
+        SET name = $1, 
+            description = $2, 
+            trigger_type = $3, 
+            trigger_config = $4, 
+            is_active = $5, 
+            metadata = $6,
+            updated_at = NOW()
+        WHERE id = $7 AND tenant_id = $8
+        RETURNING *
+      `;
+
+      const values = [
+        name !== undefined ? name : existingWorkflow.name,
+        description !== undefined ? description : existingWorkflow.description,
+        trigger_type,
+        trigger_config,
+        is_active !== undefined ? is_active : existingWorkflow.is_active,
+        metadata,
+        id,
+        tenant_id
+      ];
+
+      const result = await pgPool.query(query, values);
+      const workflow = normalizeWorkflow(result.rows[0]);
+
+      res.json({
+        status: 'success',
+        data: workflow
+      });
+    } catch (error) {
+      console.error('Error updating workflow:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // DELETE /api/workflows/:id - Delete workflow
+  router.delete('/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { tenant_id } = req.query;
+
+      if (!tenant_id) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'tenant_id is required' 
+        });
+      }
+
+      const result = await pgPool.query(
+        'DELETE FROM workflow WHERE id = $1 AND tenant_id = $2 RETURNING id',
+        [id, tenant_id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ 
+          status: 'error', 
+          message: 'Workflow not found or access denied' 
+        });
+      }
+
+      res.json({
+        status: 'success',
+        data: { id: result.rows[0].id, deleted: true }
+      });
+    } catch (error) {
+      console.error('Error deleting workflow:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // Execute workflow by ID (no internal HTTP)
   router.post('/execute', async (req, res) => {
     try {

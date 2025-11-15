@@ -37,8 +37,8 @@ export default function WorkflowsPage() {
 
   const loadData = async () => {
     try {
-      // Call with empty filter object to trigger tenant_id inclusion from context
-      const workflowsData = await Workflow.list({});
+      // Fetch across tenants to ensure visibility when no tenant is selected
+      const workflowsData = await Workflow.list({ tenant_id: null });
       setWorkflows(workflowsData || []);
     } catch (error) {
       if (import.meta.env.DEV) {

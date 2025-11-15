@@ -4,7 +4,7 @@ import { createPageUrl } from "@/utils";
 import PasswordChangeModal from "@/components/auth/PasswordChangeModal";
 import {
   BarChart3,
-  BookOpen, // NEW: Added for Documentation and WorkflowGuide
+  BookOpen, // NEW: Added for Documentation
   Bot,
   Building2,
   Calendar,
@@ -29,7 +29,6 @@ import {
   UserPlus, // NEW: Added for Client Onboarding
   Users, // Changed Employees icon to Users
   Wrench,
-  Zap, // NEW: Added for Workflows
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -106,14 +105,12 @@ const navItems = [
   { href: "Employees", icon: Users, label: "Employees" }, // Changed icon to Users
   { href: "Reports", icon: BarChart3, label: "Reports" },
   { href: "Integrations", icon: Plug, label: "Integrations" }, // Changed icon to Plug
-  { href: "Workflows", icon: Zap, label: "Workflows" }, // NEW: Added Workflows
   { href: "PaymentPortal", icon: CreditCard, label: "Payment Portal" },
   { href: "Utilities", icon: Wrench, label: "Utilities" },
   { href: "ClientOnboarding", icon: UserPlus, label: "Client Onboarding" }, // Changed icon to UserPlus
 ];
 
 const secondaryNavItems = [
-  { href: "WorkflowGuide", icon: BookOpen, label: "Workflow Guide" }, // Changed icon to BookOpen
   { href: "Documentation", icon: BookOpen, label: "Documentation" }, // Changed icon to BookOpen
   {
     href: "Agent",
@@ -165,7 +162,7 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
   if (superadminOnlyPages.has(pageName) && user.role !== 'superadmin') return false;
 
   const pagesAllowedWithoutCRM = new Set([
-    "Documentation","Agent","Settings","AuditLog","UnitTests","WorkflowGuide","ClientRequirements","Workflows",
+    "Documentation","Agent","Settings","AuditLog","UnitTests","ClientRequirements",
   ]);
   if (user.crm_access === false) return pagesAllowedWithoutCRM.has(pageName);
 
@@ -189,7 +186,6 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     Agent: 'ai_agent',
     Utilities: 'utilities',
     ClientOnboarding: 'client_onboarding',
-    Workflows: 'workflows',
     DuplicateContacts: null,
     DuplicateAccounts: null,
     DuplicateLeads: null,
@@ -198,7 +194,6 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     Documentation: null,
     AuditLog: null,
     UnitTests: null,
-    WorkflowGuide: null,
     ClientRequirements: null,
   };
 
@@ -227,9 +222,9 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
   }
 
   if (pageName === 'Settings' && (user.role === 'superadmin' || user.role === 'admin')) return true;
-  if ((user.role === 'admin' || user.role === 'superadmin') && (
+    if ((user.role === 'admin' || user.role === 'superadmin') && (
       pageName === 'Documentation' || pageName === 'AuditLog' || pageName === 'Tenants' || pageName === 'Agent' ||
-      pageName === 'UnitTests' || pageName === 'WorkflowGuide' || pageName === 'ClientRequirements' || pageName === 'Workflows')) return true;
+      pageName === 'UnitTests' || pageName === 'ClientRequirements')) return true;
   if ((user.role === 'superadmin' || user.role === 'admin') && !selectedTenantId) return true;
 
   const defaultPermissions = getDefaultNavigationPermissions(user.role);
@@ -277,14 +272,12 @@ function getDefaultNavigationPermissions(role) {
       PaymentPortal: true,
       AICampaigns: true,
       Agent: true,
-      Workflows: true, // NEW: Added Workflows for superadmin
       Tenants: true,
       Settings: true,
       Documentation: true,
       AuditLog: true,
       Utilities: true,
       UnitTests: true,
-      WorkflowGuide: true,
       ClientOnboarding: true,
       ClientRequirements: true, // NEW
       DuplicateContacts: true,
@@ -310,14 +303,12 @@ function getDefaultNavigationPermissions(role) {
       PaymentPortal: true,
       AICampaigns: true,
       Agent: true,
-      Workflows: true, // NEW: Added Workflows for admin
       Tenants: true,
       Settings: true,
       Documentation: true,
       AuditLog: true,
       Utilities: true,
       UnitTests: true,
-      WorkflowGuide: true,
       ClientOnboarding: true,
       ClientRequirements: true, // NEW
       DuplicateContacts: true,
@@ -343,14 +334,12 @@ function getDefaultNavigationPermissions(role) {
       PaymentPortal: false,
       AICampaigns: true,
       Agent: true,
-      Workflows: true,
       Tenants: false,
       Settings: true,
       Documentation: true,
       AuditLog: true,
       Utilities: true,
       UnitTests: false,
-      WorkflowGuide: true,
       ClientOnboarding: true,
       ClientRequirements: false,
       DuplicateContacts: true,
@@ -367,25 +356,21 @@ function getDefaultNavigationPermissions(role) {
       Calendar: true,
       Documentation: true,
       Agent: true,
-      WorkflowGuide: true,
       ClientOnboarding: false,
       ClientRequirements: false,
-      Workflows: false,
     },
   };
 
   // Merge the basePermissions with role-specific permissions, ensuring role-specific explicit 'true's override 'false'
   const rolePermissions = { ...(defaults[role] || defaults.employee) };
 
-  // Explicitly ensure 'Settings', 'Documentation', 'Agent', 'WorkflowGuide' are accessible for all roles if CRM access is true
+  // Explicitly ensure 'Settings', 'Documentation', 'Agent' are accessible for all roles if CRM access is true
   // (CRM access check is done in hasPageAccess first)
   rolePermissions.Settings = rolePermissions.Settings || true;
   rolePermissions.Documentation = rolePermissions.Documentation || true;
   rolePermissions.Agent = rolePermissions.Agent || true;
-  rolePermissions.WorkflowGuide = rolePermissions.WorkflowGuide || true;
   rolePermissions.ClientRequirements = rolePermissions.ClientRequirements ||
     false; // NEW: Explicitly manage ClientRequirements access
-  rolePermissions.Workflows = rolePermissions.Workflows || false; // NEW: Explicitly manage Workflows access
 
   return rolePermissions;
 }

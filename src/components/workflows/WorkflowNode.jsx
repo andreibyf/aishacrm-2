@@ -71,6 +71,43 @@ export default function WorkflowNode({ node, isSelected, isConnecting, onClick, 
     }
   };
 
+  // Special diamond rendering for condition node
+  if (node.type === 'condition') {
+    return (
+      <div className={`relative mx-auto my-1 select-none ${isSelected ? 'ring-2 ring-purple-500' : ''} ${isConnecting ? 'ring-2 ring-yellow-500' : ''}`} onClick={onClick}>
+        <div className="relative w-28 h-28 mx-auto">
+          <div className="absolute inset-0 rotate-45 bg-yellow-600 rounded-sm shadow-lg flex items-center justify-center">
+            <span className="-rotate-45 text-white font-semibold text-sm">IF</span>
+          </div>
+        </div>
+        {/* Overlay controls */}
+        <div className="absolute -top-2 right-1 flex gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-white bg-yellow-600/70 hover:bg-yellow-600"
+            onClick={(e) => { e.stopPropagation(); onStartConnect(); }}
+            title="Connect"
+          >
+            <LinkIcon className="w-3 h-3" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-white bg-red-600/70 hover:bg-red-600"
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            title="Delete"
+          >
+            <Trash2 className="w-3 h-3" />
+          </Button>
+        </div>
+        <div className="text-center mt-1 text-xs text-slate-400">
+          Branch: <span className="text-green-400">TRUE</span> ↓ • <span className="text-red-400">FALSE</span> →
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Card 
       className={`w-80 cursor-pointer transition-all ${
