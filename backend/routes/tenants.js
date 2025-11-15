@@ -72,6 +72,50 @@ async function generateUniqueTenantId(supabase, name) {
 
 export default function createTenantRoutes(_pgPool) {
   const router = express.Router();
+  /**
+   * @openapi
+   * /api/tenants:
+   *   get:
+   *     summary: List tenants
+   *     tags: [tenants]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, nullable: true }
+   *       - in: query
+   *         name: status
+   *         schema: { type: string, nullable: true }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Tenants list
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   post:
+   *     summary: Create tenant
+   *     tags: [tenants]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: []
+   *     responses:
+   *       200:
+   *         description: Tenant created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
 
   // GET /api/tenants - List tenants
   router.get("/", async (req, res) => {
@@ -298,6 +342,61 @@ export default function createTenantRoutes(_pgPool) {
   });
 
   // GET /api/tenants/:id - Get single tenant (by tenant_id, not UUID)
+  /**
+   * @openapi
+   * /api/tenants/{id}:
+   *   get:
+   *     summary: Get tenant by ID or tenant_id
+   *     tags: [tenants]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Tenant details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   put:
+   *     summary: Update tenant
+   *     tags: [tenants]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *     responses:
+   *       200:
+   *         description: Tenant updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   delete:
+   *     summary: Delete tenant
+   *     tags: [tenants]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Tenant deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get("/:id", async (req, res) => {
     try {
       const { id } = req.params;

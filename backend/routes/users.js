@@ -18,6 +18,43 @@ import { createAuditLog, getUserEmailFromRequest, getClientIP } from "../lib/aud
 
 export default function createUserRoutes(_pgPool, _supabaseAuth) {
   const router = express.Router();
+  /**
+   * @openapi
+   * /api/users:
+   *   get:
+   *     summary: List users and employees
+   *     description: |
+   *       Returns global users and tenant employees. Supports filtering by tenant and email.
+   *     tags: [users]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, nullable: true }
+   *         description: Filter by tenant UUID (optional)
+   *       - in: query
+   *         name: email
+   *         schema: { type: string }
+   *         description: Exact email match (case-insensitive)
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50, minimum: 1, maximum: 200 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0, minimum: 0 }
+   *     responses:
+   *       200:
+   *         description: List of users
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       400:
+   *         description: Bad request
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
 
   // Lightweight, per-route in-memory rate limiter (dependency-free)
   // Use stricter limits for sensitive auth endpoints to satisfy CodeQL
@@ -247,6 +284,36 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
   // POST /api/users/sync-from-auth - Ensure CRM user exists based on Supabase Auth
   // Body: { email?: string } or Query: ?email=
+  /**
+   * @openapi
+   * /api/users/sync-from-auth:
+   *   post:
+   *     summary: Create CRM user from Supabase Auth
+   *     description: Ensures a CRM user/employee record exists for the provided email.
+   *     tags: [users]
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               email:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: User already existed or was created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       400:
+   *         description: Missing or invalid email
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   router.post("/sync-from-auth", async (req, res) => {
     try {
       const email = (req.body?.email || req.query?.email || "").trim();
@@ -387,6 +454,35 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
   });
 
   // GET /api/users/:id - Get single user (actually queries employees table)
+  /**
+   * @openapi
+   * /api/users/{id}:
+   *   get:
+   *     summary: Get user by ID
+   *     tags: [users]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         required: false
+   *         schema: { type: string, nullable: true }
+   *     responses:
+   *       200:
+   *         description: User record
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       404:
+   *         description: User not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   router.get("/:id", async (req, res) => {
     try {
       const { id } = req.params;
@@ -555,6 +651,38 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
   });
 
   // POST /api/users/heartbeat - Update last_seen and live_status
+  /**
+   * @openapi
+   * /api/users/heartbeat:
+   *   post:
+   *     summary: Update user heartbeat
+   *     description: Updates last_seen and live_status for the current user by JWT or email.
+   *     tags: [users]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               email:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: Heartbeat updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       400:
+   *         description: Missing email or token
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   router.post("/heartbeat", async (req, res) => {
     try {
       const { getSupabaseClient } = await import('../lib/supabase-db.js');

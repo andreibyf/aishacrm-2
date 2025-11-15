@@ -12,6 +12,117 @@ import { tenantScopedId, buildGetByIdSQL } from "../middleware/tenantScopedId.js
 
 export default function createAccountRoutes(_pgPool) {
   const router = express.Router();
+  /**
+   * @openapi
+   * /api/accounts:
+   *   get:
+   *     summary: List accounts
+   *     tags: [accounts]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, nullable: true }
+   *       - in: query
+   *         name: type
+   *         schema: { type: string, nullable: true }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Accounts list
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     accounts:
+   *                       type: array
+   *                       items:
+   *                         type: object
+   *                         properties:
+   *                           id:
+   *                             type: string
+   *                           tenant_id:
+   *                             type: string
+   *                             format: uuid
+   *                           name:
+   *                             type: string
+   *                           type:
+   *                             type: string
+   *                             example: customer
+   *                           industry:
+   *                             type: string
+   *                           website:
+   *                             type: string
+   *                           created_at:
+   *                             type: string
+   *                             format: date-time
+   *                           updated_at:
+   *                             type: string
+   *                             format: date-time
+   *   post:
+   *     summary: Create account
+   *     tags: [accounts]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, name]
+   *             properties:
+   *               tenant_id: { type: string }
+   *               name: { type: string }
+   *               type: { type: string }
+   *               industry: { type: string }
+   *               website: { type: string }
+   *           example:
+   *             tenant_id: "550e8400-e29b-41d4-a716-446655440000"
+   *             name: "Acme Corporation"
+   *             type: "customer"
+   *             industry: "Technology"
+   *             website: "https://acme.example.com"
+   *     responses:
+   *       200:
+   *         description: Account created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     id:
+   *                       type: string
+   *                     tenant_id:
+   *                       type: string
+   *                       format: uuid
+   *                     name:
+   *                       type: string
+   *                     type:
+   *                       type: string
+   *                     industry:
+   *                       type: string
+   *                     website:
+   *                       type: string
+   *                     created_at:
+   *                       type: string
+   *                       format: date-time
+   */
 
   // Apply tenant validation and employee data scope to all routes
   router.use(validateTenantAccess);
@@ -111,6 +222,64 @@ export default function createAccountRoutes(_pgPool) {
   });
 
   // GET /api/accounts/:id - Get single account (centralized tenant/id scoping)
+  /**
+   * @openapi
+   * /api/accounts/{id}:
+   *   get:
+   *     summary: Get account by ID
+   *     tags: [accounts]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, nullable: true }
+   *     responses:
+   *       200:
+   *         description: Account details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   put:
+   *     summary: Update account
+   *     tags: [accounts]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *     responses:
+   *       200:
+   *         description: Account updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   delete:
+   *     summary: Delete account
+   *     tags: [accounts]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Account deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get("/:id", tenantScopedId(), async (req, res) => {
     try {
       const { getSupabaseClient } = await import('../lib/supabase-db.js');

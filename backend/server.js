@@ -290,56 +290,43 @@ app.get("/health", (req, res) => {
 
 // Swagger API Documentation
 // Restrict framing for docs to known dev origins using CSP frame-ancestors on this route only
-app.use('/api-docs',
+// IMPORTANT: Remove global CSP header first, then set a route-specific CSP to avoid header merging
+app.use(
+  '/api-docs',
+  (req, res, next) => { res.removeHeader('Content-Security-Policy'); next(); },
   helmet({
     frameguard: false, // Use CSP frame-ancestors instead for this route only
     contentSecurityPolicy: {
       directives: {
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        // Allow Swagger UI assets and behavior
+        "default-src": ["'self'"],
+        "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "img-src": ["'self'", "data:", "blob:"],
+        "font-src": ["'self'", "data:"],
+        "connect-src": ["'self'", "http:", "https:"],
+        // If download links or workers are used by Swagger UI
+        "worker-src": ["'self'", "blob:"],
         "frame-ancestors": [
           "'self'",
           ...(process.env.ALLOWED_DOCS_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean) || [
             'http://localhost:5173',
-            'https://localhost:5173'
+            'https://localhost:5173',
+            'http://localhost:4000',
+            'https://localhost:4000'
           ])
         ]
       }
     },
-    // Swagger UI may load inline styles; relax only here if needed
     crossOriginEmbedderPolicy: false
   }),
   swaggerUi.serve,
   swaggerUi.setup(swaggerSpec, {
-  customCss: `
-    body { background-color: #1e293b; }
-    .swagger-ui .topbar { display: none }
-    .swagger-ui { background-color: #1e293b; color: #e2e8f0; }
-    .swagger-ui .wrapper { background-color: #1e293b; }
-    .swagger-ui .information-container { background-color: #1e293b; }
-    .swagger-ui .info .title { color: #f1f5f9; }
-    .swagger-ui .info { color: #cbd5e1; }
-    .swagger-ui .scheme-container { background: #334155; }
-    .swagger-ui .opblock-tag { color: #f1f5f9; border-color: #475569; }
-    .swagger-ui .opblock { background: #334155; border-color: #475569; }
-    .swagger-ui .opblock .opblock-summary { background: #475569; }
-    .swagger-ui .opblock-description-wrapper, .swagger-ui .opblock-external-docs-wrapper, .swagger-ui .opblock-title_normal { color: #cbd5e1; }
-    .swagger-ui table thead tr td, .swagger-ui table thead tr th { color: #f1f5f9; border-color: #475569; }
-    .swagger-ui .parameter__name, .swagger-ui .parameter__type { color: #e2e8f0; }
-    .swagger-ui .response-col_status { color: #f1f5f9; }
-    .swagger-ui .response-col_description { color: #cbd5e1; }
-    .swagger-ui section.models { border-color: #475569; }
-    .swagger-ui section.models .model-container { background: #334155; }
-    .swagger-ui .model-title { color: #f1f5f9; }
-    .swagger-ui .model { color: #cbd5e1; }
-    .swagger-ui .prop-type { color: #94a3b8; }
-    .swagger-ui input[type=text], .swagger-ui textarea, .swagger-ui select {
-      background: #1e293b;
-      color: #e2e8f0;
-      border-color: #475569;
-    }
-  `,
-  customSiteTitle: 'Aisha CRM API Documentation'
-}));
+    // Use default (light) Swagger UI theme
+    customSiteTitle: 'Aisha CRM API Documentation'
+  })
+);
 
 // Swagger JSON spec endpoint
 app.get('/api-docs.json', (req, res) => {
@@ -348,6 +335,21 @@ app.get('/api-docs.json', (req, res) => {
 });
 
 // Status endpoint (compatible with checkBackendStatus function)
+/**
+ * @openapi
+ * /api/status:
+ *   get:
+ *     summary: API status
+ *     description: Simple health/status endpoint for the API layer.
+ *     tags: [system]
+ *     responses:
+ *       200:
+ *         description: API is running
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Success'
+ */
 app.get("/api/status", (req, res) => {
   res.json({
     status: "success",

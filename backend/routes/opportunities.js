@@ -3,6 +3,125 @@ import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/va
 
 export default function createOpportunityRoutes(_pgPool) {
   const router = express.Router();
+  /**
+   * @openapi
+   * /api/opportunities:
+   *   get:
+   *     summary: List opportunities
+   *     tags: [opportunities]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Opportunities list
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     opportunities:
+   *                       type: array
+   *                       items:
+   *                         type: object
+   *                         properties:
+   *                           id:
+   *                             type: string
+   *                           tenant_id:
+   *                             type: string
+   *                             format: uuid
+   *                           name:
+   *                             type: string
+   *                           account_id:
+   *                             type: string
+   *                             nullable: true
+   *                           contact_id:
+   *                             type: string
+   *                             nullable: true
+   *                           stage:
+   *                             type: string
+   *                             example: prospecting
+   *                           amount:
+   *                             type: number
+   *                             format: float
+   *                           probability:
+   *                             type: integer
+   *                             minimum: 0
+   *                             maximum: 100
+   *                           close_date:
+   *                             type: string
+   *                             format: date
+   *                           created_at:
+   *                             type: string
+   *                             format: date-time
+   *   post:
+   *     summary: Create opportunity
+   *     tags: [opportunities]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id]
+   *           example:
+   *             tenant_id: "550e8400-e29b-41d4-a716-446655440000"
+   *             name: "Enterprise Software License"
+   *             account_id: "acc_12345"
+   *             stage: "prospecting"
+   *             amount: 50000
+   *             probability: 25
+   *             close_date: "2025-12-31"
+   *     responses:
+   *       201:
+   *         description: Opportunity created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     id:
+   *                       type: string
+   *                     tenant_id:
+   *                       type: string
+   *                       format: uuid
+   *                     name:
+   *                       type: string
+   *                     account_id:
+   *                       type: string
+   *                     stage:
+   *                       type: string
+   *                     amount:
+   *                       type: number
+   *                     probability:
+   *                       type: integer
+   *                     close_date:
+   *                       type: string
+   *                       format: date
+   *                     created_at:
+   *                       type: string
+   *                       format: date-time
+   */
 
   // Apply tenant validation and employee data scope to all routes
   router.use(validateTenantAccess);
@@ -93,6 +212,65 @@ export default function createOpportunityRoutes(_pgPool) {
   });
 
   // GET /api/opportunities/:id - Get single opportunity (tenant required)
+  /**
+   * @openapi
+   * /api/opportunities/{id}:
+   *   get:
+   *     summary: Get opportunity by ID
+   *     tags: [opportunities]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Opportunity details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   put:
+   *     summary: Update opportunity
+   *     tags: [opportunities]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *     responses:
+   *       200:
+   *         description: Opportunity updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   delete:
+   *     summary: Delete opportunity
+   *     tags: [opportunities]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Opportunity deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;

@@ -71,6 +71,35 @@ async function safeRecentActivities(_pgPool, tenantId, limit = 10) {
 export default function createReportRoutes(_pgPool) {
   const router = express.Router();
 
+  /**
+   * @openapi
+   * /api/reports/dashboard-stats:
+   *   get:
+   *     summary: Dashboard statistics overview
+   *     description: Returns high-level counts and recent activities for the tenant.
+   *     tags: [reports]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         required: true
+   *         description: Tenant UUID used to scope the statistics
+   *     responses:
+   *       200:
+   *         description: Dashboard statistics payload
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       400:
+   *         description: Missing tenant_id
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   // GET /api/reports/dashboard-stats - Get dashboard statistics
   router.get('/dashboard-stats', async (req, res) => {
     try {
@@ -110,6 +139,29 @@ export default function createReportRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/reports/dashboard-bundle:
+   *   get:
+   *     summary: Complete dashboard bundle
+   *     description: Returns a compact bundle used by the dashboard widgets.
+   *     tags: [reports]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         required: false
+   *         description: Tenant UUID used to scope data
+   *     responses:
+   *       200:
+   *         description: Dashboard bundle payload
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // GET /api/reports/dashboard-bundle - Get complete dashboard bundle
   router.get('/dashboard-bundle', async (req, res) => {
     try {
@@ -135,6 +187,38 @@ export default function createReportRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/reports/generate-custom:
+   *   post:
+   *     summary: Generate a custom report
+   *     description: Initiates generation of a custom report based on provided filters.
+   *     tags: [reports]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               tenant_id:
+   *                 type: string
+   *                 format: uuid
+   *                 description: Tenant UUID scope
+   *               report_type:
+   *                 type: string
+   *                 description: The report type to generate (e.g., overview, data-quality)
+   *               filters:
+   *                 type: object
+   *                 additionalProperties: true
+   *     responses:
+   *       200:
+   *         description: Report generation initiated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // POST /api/reports/generate-custom - Generate custom report
   router.post('/generate-custom', async (req, res) => {
     try {
@@ -154,6 +238,29 @@ export default function createReportRoutes(_pgPool) {
   });
   // Analytics: Opportunity pipeline by stage
   // GET /api/reports/pipeline - Opportunity counts by stage
+  /**
+   * @openapi
+   * /api/reports/pipeline:
+   *   get:
+   *     summary: Opportunity counts by stage
+   *     description: Aggregated pipeline breakdown by stage for the tenant.
+   *     tags: [reports]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         required: false
+   *         description: Tenant UUID scope
+   *     responses:
+   *       200:
+   *         description: Pipeline stages summary
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get('/pipeline', async (req, res) => {
     try {
       let { tenant_id } = req.query;
@@ -170,6 +277,29 @@ export default function createReportRoutes(_pgPool) {
   });
 
   // GET /api/reports/lead-status - Lead counts by status
+  /**
+   * @openapi
+   * /api/reports/lead-status:
+   *   get:
+   *     summary: Lead counts by status
+   *     description: Aggregated counts of leads grouped by status.
+   *     tags: [reports]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         required: false
+   *         description: Tenant UUID scope
+   *     responses:
+   *       200:
+   *         description: Lead status summary
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get('/lead-status', async (req, res) => {
     try {
       let { tenant_id } = req.query;
@@ -186,6 +316,43 @@ export default function createReportRoutes(_pgPool) {
   });
 
   // GET /api/reports/calendar - Calendar feed from activities
+  /**
+   * @openapi
+   * /api/reports/calendar:
+   *   get:
+   *     summary: Calendar feed from activities
+   *     description: Returns activity items suitable for a calendar view.
+   *     tags: [reports]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         required: false
+   *         description: Tenant UUID scope
+   *       - in: query
+   *         name: from_date
+   *         schema:
+   *           type: string
+   *           format: date
+   *         required: false
+   *         description: Inclusive start date filter (YYYY-MM-DD)
+   *       - in: query
+   *         name: to_date
+   *         schema:
+   *           type: string
+   *           format: date
+   *         required: false
+   *         description: Inclusive end date filter (YYYY-MM-DD)
+   *     responses:
+   *       200:
+   *         description: Calendar activity feed
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get('/calendar', async (req, res) => {
     try {
       let { tenant_id, from_date, to_date } = req.query;
@@ -205,6 +372,29 @@ export default function createReportRoutes(_pgPool) {
   });
 
   // GET /api/reports/data-quality - Analyze data quality across entities
+  /**
+   * @openapi
+   * /api/reports/data-quality:
+   *   get:
+   *     summary: Data quality analysis
+   *     description: Calculates missing or incomplete fields across core entities.
+   *     tags: [reports]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         required: false
+   *         description: Tenant UUID scope
+   *     responses:
+   *       200:
+   *         description: Data quality report
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get('/data-quality', async (req, res) => {
     try {
       let { tenant_id } = req.query;
@@ -340,6 +530,43 @@ export default function createReportRoutes(_pgPool) {
   });
 
   // GET /api/reports/export-pdf - Generate PDF report
+  /**
+   * @openapi
+   * /api/reports/export-pdf:
+   *   get:
+   *     summary: Export report as PDF
+   *     description: Generates a PDF for supported report types (e.g., overview, data-quality).
+   *     tags: [reports]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         required: false
+   *         description: Tenant UUID scope
+   *       - in: query
+   *         name: report_type
+   *         schema:
+   *           type: string
+   *           enum: [overview, dashboard-stats, data-quality]
+   *         required: false
+   *         description: The type of report to generate
+   *     responses:
+   *       200:
+   *         description: PDF document
+   *         content:
+   *           application/pdf:
+   *             schema:
+   *               type: string
+   *               format: binary
+   *       500:
+   *         description: Failed to generate PDF
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   router.get('/export-pdf', async (req, res) => {
     let browser;
     try {

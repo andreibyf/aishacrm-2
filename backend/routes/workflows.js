@@ -26,6 +26,50 @@ function normalizeWorkflow(row) {
 
 export default function createWorkflowRoutes(pgPool) {
   const router = express.Router();
+  /**
+   * @openapi
+   * /api/workflows:
+   *   get:
+   *     summary: List workflows
+   *     tags: [workflows]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, nullable: true }
+   *       - in: query
+   *         name: is_active
+   *         schema: { type: boolean, nullable: true }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Workflows list
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   post:
+   *     summary: Create workflow
+   *     tags: [workflows]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, name]
+   *     responses:
+   *       201:
+   *         description: Workflow created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   
   // Internal executor used by both /execute and /:id/test to avoid SSRF via internal HTTP
   async function executeWorkflowById(workflow_id, triggerPayload) {
@@ -570,6 +614,50 @@ export default function createWorkflowRoutes(pgPool) {
   });
 
   // PUT /api/workflows/:id - Update existing workflow
+  /**
+   * @openapi
+   * /api/workflows/{id}:
+   *   put:
+   *     summary: Update workflow
+   *     tags: [workflows]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *     responses:
+   *       200:
+   *         description: Workflow updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   delete:
+   *     summary: Delete workflow
+   *     tags: [workflows]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Workflow deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
@@ -682,6 +770,29 @@ export default function createWorkflowRoutes(pgPool) {
   });
 
   // Execute workflow by ID (no internal HTTP)
+  /**
+   * @openapi
+   * /api/workflows/execute:
+   *   post:
+   *     summary: Execute workflow by ID
+   *     tags: [workflows]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               workflow_id: { type: string }
+   *               payload: { type: object }
+   *     responses:
+   *       200:
+   *         description: Execution result
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.post('/execute', async (req, res) => {
     try {
       const { workflow_id, payload, input_data } = req.body || {};
@@ -697,6 +808,33 @@ export default function createWorkflowRoutes(pgPool) {
   });
 
   // POST /api/workflows/:id/test - Convenience endpoint to execute a workflow by ID with payload
+  /**
+   * @openapi
+   * /api/workflows/{id}/test:
+   *   post:
+   *     summary: Test-execute a workflow
+   *     tags: [workflows]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               payload: { type: object }
+   *     responses:
+   *       200:
+   *         description: Execution result
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.post('/:id/test', async (req, res) => {
     try {
       const { id } = req.params;

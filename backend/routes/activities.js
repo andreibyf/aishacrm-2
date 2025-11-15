@@ -3,6 +3,48 @@ import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/va
 
 export default function createActivityRoutes(_pgPool) {
   const router = express.Router();
+  /**
+   * @openapi
+   * /api/activities:
+   *   get:
+   *     summary: List activities
+   *     tags: [activities]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 1000 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Activities list
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   post:
+   *     summary: Create activity
+   *     tags: [activities]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id]
+   *     responses:
+   *       201:
+   *         description: Activity created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
 
   // Apply tenant validation and employee data scope to all routes
   router.use(validateTenantAccess);
@@ -187,6 +229,65 @@ export default function createActivityRoutes(_pgPool) {
   });
 
   // GET /api/activities/:id - Get single activity (tenant scoped when tenant_id provided)
+  /**
+   * @openapi
+   * /api/activities/{id}:
+   *   get:
+   *     summary: Get activity by ID
+   *     tags: [activities]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Activity details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   put:
+   *     summary: Update activity
+   *     tags: [activities]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *     responses:
+   *       200:
+   *         description: Activity updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   delete:
+   *     summary: Delete activity
+   *     tags: [activities]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Activity deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;

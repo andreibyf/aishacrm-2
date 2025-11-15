@@ -59,6 +59,27 @@ export default function createIntegrationRoutes(_pgPool) {
     }));
   }
 
+  /**
+   * @openapi
+   * /api/integrations/n8n/workflows:
+   *   get:
+   *     summary: List n8n workflows
+   *     description: Lists workflows from the configured n8n instance. Requires superadmin.
+   *     tags: [integrations]
+   *     responses:
+   *       200:
+   *         description: List of n8n workflows
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       403:
+   *         description: Superadmin required
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   // GET /api/integrations/n8n/workflows - List workflows from n8n
   router.get('/n8n/workflows', requireSuperadmin, async (_req, res) => {
     try {
@@ -76,6 +97,27 @@ export default function createIntegrationRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/integrations/n8n/health:
+   *   get:
+   *     summary: n8n health
+   *     description: Checks connectivity to n8n health endpoint. Requires superadmin.
+   *     tags: [integrations]
+   *     responses:
+   *       200:
+   *         description: n8n health status
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       403:
+   *         description: Superadmin required
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   // GET /api/integrations/n8n/health - Check n8n connectivity
   router.get('/n8n/health', requireSuperadmin, async (_req, res) => {
     try {
@@ -89,6 +131,33 @@ export default function createIntegrationRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/integrations/n8n/workflows/{id}:
+   *   get:
+   *     summary: Get n8n workflow
+   *     description: Fetches a single workflow by ID from n8n. Requires superadmin.
+   *     tags: [integrations]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Workflow details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       403:
+   *         description: Superadmin required
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   // GET /api/integrations/n8n/workflows/:id - Get single workflow
   router.get('/n8n/workflows/:id', requireSuperadmin, async (req, res) => {
     try {
@@ -108,6 +177,32 @@ export default function createIntegrationRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/integrations/n8n/trigger:
+   *   post:
+   *     summary: Trigger n8n workflow
+   *     description: Triggers a workflow by ID in n8n.
+   *     tags: [integrations]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               workflow_id:
+   *                 type: string
+   *               data:
+   *                 type: object
+   *     responses:
+   *       200:
+   *         description: Trigger acknowledged
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // POST /api/integrations/n8n/trigger - Trigger N8N workflow
   router.post('/n8n/trigger', requireSuperadmin, async (req, res) => {
     try {
@@ -126,6 +221,35 @@ export default function createIntegrationRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/integrations/openai/chat:
+   *   post:
+   *     summary: OpenAI chat completion
+   *     description: Proxies a chat completion request to OpenAI (placeholder).
+   *     tags: [integrations]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               messages:
+   *                 type: array
+   *                 items:
+   *                   type: object
+   *               model:
+   *                 type: string
+   *                 default: gpt-4
+   *     responses:
+   *       200:
+   *         description: Placeholder response
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // POST /api/integrations/openai/chat - OpenAI chat completion
   router.post('/openai/chat', async (req, res) => {
     try {
@@ -144,6 +268,35 @@ export default function createIntegrationRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/integrations/stripe/create-payment:
+   *   post:
+   *     summary: Create Stripe payment
+   *     description: Initiates a Stripe payment (placeholder).
+   *     tags: [integrations]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               amount:
+   *                 type: number
+   *               currency:
+   *                 type: string
+   *                 default: usd
+   *               customer_id:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: Placeholder response
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // POST /api/integrations/stripe/create-payment - Create Stripe payment
   router.post('/stripe/create-payment', async (req, res) => {
     try {
@@ -162,6 +315,32 @@ export default function createIntegrationRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/integrations/twilio/send-sms:
+   *   post:
+   *     summary: Send SMS via Twilio
+   *     description: Sends an SMS (placeholder).
+   *     tags: [integrations]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               to:
+   *                 type: string
+   *               message:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: Placeholder response
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // POST /api/integrations/twilio/send-sms - Send SMS via Twilio
   router.post('/twilio/send-sms', async (req, res) => {
     try {
@@ -180,6 +359,32 @@ export default function createIntegrationRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/integrations/slack/send-message:
+   *   post:
+   *     summary: Send Slack message
+   *     description: Sends a Slack message (placeholder).
+   *     tags: [integrations]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               channel:
+   *                 type: string
+   *               text:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: Placeholder response
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // POST /api/integrations/slack/send-message - Send Slack message
   router.post('/slack/send-message', async (req, res) => {
     try {

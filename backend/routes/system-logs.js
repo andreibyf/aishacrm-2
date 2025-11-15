@@ -14,7 +14,41 @@ export default function createSystemLogRoutes(_pgPool) {
     };
   };
 
-  // POST /api/system-logs - Create system log entry
+  /**
+   * @openapi
+   * /api/system-logs:
+   *   post:
+   *     summary: Create a system log entry
+   *     description: Creates a log entry, defaulting tenant_id to 'system' when not provided.
+   *     tags: [system-logs]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               tenant_id:
+   *                 type: string
+   *               level:
+   *                 type: string
+   *                 enum: [TRACE, DEBUG, INFO, WARNING, ERROR]
+   *               message:
+   *                 type: string
+   *               source:
+   *                 type: string
+   *               metadata:
+   *                 type: object
+   *               stack_trace:
+   *                 type: string
+   *     responses:
+   *       201:
+   *         description: Log entry created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.post("/", async (req, res) => {
     try {
       const {
@@ -74,7 +108,44 @@ export default function createSystemLogRoutes(_pgPool) {
     }
   });
 
-  // GET /api/system-logs - List system logs
+  /**
+   * @openapi
+   * /api/system-logs:
+   *   get:
+   *     summary: List system logs
+   *     description: Returns logs with optional tenant, level, and time filters.
+   *     tags: [system-logs]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: level
+   *         schema:
+   *           type: string
+   *           enum: [TRACE, DEBUG, INFO, WARNING, ERROR]
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *       - in: query
+   *         name: offset
+   *         schema:
+   *           type: integer
+   *       - in: query
+   *         name: hours
+   *         schema:
+   *           type: integer
+   *         description: Return only logs after now - hours
+   *     responses:
+   *       200:
+   *         description: System logs list
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get("/", async (req, res) => {
     try {
       const { tenant_id, level, limit = 100, offset = 0, hours } = req.query;
@@ -117,7 +188,33 @@ export default function createSystemLogRoutes(_pgPool) {
     }
   });
 
-  // DELETE /api/system-logs/:id - Delete a specific system log
+  /**
+   * @openapi
+   * /api/system-logs/{id}:
+   *   delete:
+   *     summary: Delete a specific system log
+   *     description: Deletes a single system log by ID.
+   *     tags: [system-logs]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Log deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       404:
+   *         description: Not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   router.delete("/:id", async (req, res) => {
     try {
       const { id } = req.params;
@@ -153,7 +250,39 @@ export default function createSystemLogRoutes(_pgPool) {
     }
   });
 
-  // DELETE /api/system-logs - Clear all system logs (with optional filters)
+  /**
+   * @openapi
+   * /api/system-logs:
+   *   delete:
+   *     summary: Bulk delete system logs
+   *     description: Deletes system logs by optional filters (tenant, level, hours, older_than_days).
+   *     tags: [system-logs]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: level
+   *         schema:
+   *           type: string
+   *           enum: [TRACE, DEBUG, INFO, WARNING, ERROR]
+   *       - in: query
+   *         name: hours
+   *         schema:
+   *           type: integer
+   *       - in: query
+   *         name: older_than_days
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Count of deleted logs
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.delete("/", async (req, res) => {
     try {
       const { tenant_id, level, older_than_days, hours } = req.query;

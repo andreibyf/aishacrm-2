@@ -9,6 +9,129 @@ import { logEntityTransition } from '../lib/transitions.js';
 
 export default function createLeadRoutes(_pgPool) {
   const router = express.Router();
+  /**
+   * @openapi
+   * /api/leads:
+   *   get:
+   *     summary: List leads
+   *     tags: [leads]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: status
+   *         schema: { oneOf: [ { type: string }, { type: object } ] }
+   *       - in: query
+   *         name: account_id
+   *         schema: { type: string, nullable: true }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Leads list
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     leads:
+   *                       type: array
+   *                       items:
+   *                         type: object
+   *                         properties:
+   *                           id:
+   *                             type: string
+   *                           tenant_id:
+   *                             type: string
+   *                             format: uuid
+   *                           first_name:
+   *                             type: string
+   *                           last_name:
+   *                             type: string
+   *                           email:
+   *                             type: string
+   *                             format: email
+   *                           phone:
+   *                             type: string
+   *                           company:
+   *                             type: string
+   *                           status:
+   *                             type: string
+   *                             example: new
+   *                           source:
+   *                             type: string
+   *                           account_id:
+   *                             type: string
+   *                             nullable: true
+   *                           created_at:
+   *                             type: string
+   *                             format: date-time
+   *   post:
+   *     summary: Create lead
+   *     tags: [leads]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, first_name, last_name]
+   *           example:
+   *             tenant_id: "550e8400-e29b-41d4-a716-446655440000"
+   *             first_name: "John"
+   *             last_name: "Smith"
+   *             email: "john.smith@example.com"
+   *             phone: "+1-555-9876"
+   *             company: "Smith Industries"
+   *             status: "new"
+   *             source: "website"
+   *     responses:
+   *       200:
+   *         description: Lead created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     id:
+   *                       type: string
+   *                     tenant_id:
+   *                       type: string
+   *                       format: uuid
+   *                     first_name:
+   *                       type: string
+   *                     last_name:
+   *                       type: string
+   *                     email:
+   *                       type: string
+   *                     phone:
+   *                       type: string
+   *                     company:
+   *                       type: string
+   *                     status:
+   *                       type: string
+   *                     created_at:
+   *                       type: string
+   *                       format: date-time
+   */
 
   // Apply tenant validation and employee data scope to all routes
   router.use(validateTenantAccess);
@@ -145,6 +268,65 @@ export default function createLeadRoutes(_pgPool) {
   });
 
   // GET /api/leads/:id - Get single lead (tenant required)
+  /**
+   * @openapi
+   * /api/leads/{id}:
+   *   get:
+   *     summary: Get lead by ID
+   *     tags: [leads]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Lead details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   put:
+   *     summary: Update lead
+   *     tags: [leads]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *     responses:
+   *       200:
+   *         description: Lead updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   delete:
+   *     summary: Delete lead
+   *     tags: [leads]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Lead deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
@@ -283,6 +465,40 @@ export default function createLeadRoutes(_pgPool) {
   });
 
   // POST /api/leads/:id/convert - Convert lead to contact/opportunity
+  /**
+   * @openapi
+   * /api/leads/{id}/convert:
+   *   post:
+   *     summary: Convert lead
+   *     description: Convert a lead into a contact and optionally create an account and opportunity.
+   *     tags: [leads]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               tenant_id: { type: string }
+   *               create_account: { type: boolean }
+   *               account_name: { type: string }
+   *               selected_account_id: { type: string, nullable: true }
+   *               create_opportunity: { type: boolean }
+   *               opportunity_name: { type: string }
+   *               opportunity_amount: { type: number }
+   *     responses:
+   *       200:
+   *         description: Lead converted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.post('/:id/convert', async (req, res) => {
     try {
       const { id } = req.params;

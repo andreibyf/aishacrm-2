@@ -8,6 +8,128 @@ import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/va
 
 export default function createContactRoutes(_pgPool) {
   const router = express.Router();
+  /**
+   * @openapi
+   * /api/contacts:
+   *   get:
+   *     summary: List contacts
+   *     tags: [contacts]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: status
+   *         schema: { type: string, nullable: true }
+   *       - in: query
+   *         name: account_id
+   *         schema: { type: string, nullable: true }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Contacts list
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     contacts:
+   *                       type: array
+   *                       items:
+   *                         type: object
+   *                         properties:
+   *                           id:
+   *                             type: string
+   *                           tenant_id:
+   *                             type: string
+   *                             format: uuid
+   *                           first_name:
+   *                             type: string
+   *                           last_name:
+   *                             type: string
+   *                           email:
+   *                             type: string
+   *                             format: email
+   *                           phone:
+   *                             type: string
+   *                           account_id:
+   *                             type: string
+   *                             nullable: true
+   *                           status:
+   *                             type: string
+   *                           created_at:
+   *                             type: string
+   *                             format: date-time
+   *   post:
+   *     summary: Create contact
+   *     tags: [contacts]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, first_name, last_name]
+   *             properties:
+   *               tenant_id: { type: string }
+   *               first_name: { type: string }
+   *               last_name: { type: string }
+   *               email: { type: string }
+   *               phone: { type: string }
+   *               account_id: { type: string, nullable: true }
+   *           example:
+   *             tenant_id: "550e8400-e29b-41d4-a716-446655440000"
+   *             first_name: "Jane"
+   *             last_name: "Doe"
+   *             email: "jane.doe@example.com"
+   *             phone: "+1-555-0123"
+   *             account_id: "acc_12345"
+   *     responses:
+   *       200:
+   *         description: Contact created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     id:
+   *                       type: string
+   *                     tenant_id:
+   *                       type: string
+   *                       format: uuid
+   *                     first_name:
+   *                       type: string
+   *                     last_name:
+   *                       type: string
+   *                     email:
+   *                       type: string
+   *                       format: email
+   *                     phone:
+   *                       type: string
+   *                     account_id:
+   *                       type: string
+   *                     created_at:
+   *                       type: string
+   *                       format: date-time
+   */
 
   // Apply tenant validation and employee data scope to all routes
   router.use(validateTenantAccess);
@@ -63,6 +185,35 @@ export default function createContactRoutes(_pgPool) {
   });
 
   // GET /api/contacts/search - Search contacts by name/email/phone
+  /**
+   * @openapi
+   * /api/contacts/search:
+   *   get:
+   *     summary: Search contacts
+   *     tags: [contacts]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: q
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 25 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Search results
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get('/search', async (req, res) => {
     try {
       let { tenant_id, q = '' } = req.query;
@@ -180,6 +331,65 @@ export default function createContactRoutes(_pgPool) {
   });
 
   // GET /api/contacts/:id - Get single contact (tenant required)
+  /**
+   * @openapi
+   * /api/contacts/{id}:
+   *   get:
+   *     summary: Get contact by ID
+   *     tags: [contacts]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Contact details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   put:
+   *     summary: Update contact
+   *     tags: [contacts]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *     responses:
+   *       200:
+   *         description: Contact updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   delete:
+   *     summary: Delete contact
+   *     tags: [contacts]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Contact deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;

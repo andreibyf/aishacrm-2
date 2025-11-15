@@ -9,6 +9,50 @@ import { validateTenantScopedId } from '../lib/validation.js';
 export default function createNoteRoutes(_pgPool) {
   const router = express.Router();
 
+  /**
+   * @openapi
+   * /api/notes:
+   *   get:
+   *     summary: List notes
+   *     description: Returns a paginated list of notes filtered by tenant and optional relation.
+   *     tags: [notes]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         required: false
+   *         description: Tenant UUID scope
+   *       - in: query
+   *         name: related_type
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: related_id
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *           minimum: 1
+   *           maximum: 200
+   *         description: Page size (default 50)
+   *       - in: query
+   *         name: offset
+   *         schema:
+   *           type: integer
+   *           minimum: 0
+   *         description: Pagination offset (default 0)
+   *     responses:
+   *       200:
+   *         description: List of notes
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // GET /api/notes - List notes
   router.get('/', async (req, res) => {
     try {
@@ -34,6 +78,39 @@ export default function createNoteRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/notes/{id}:
+   *   get:
+   *     summary: Get a note
+   *     description: Returns a single note by ID within the tenant scope.
+   *     tags: [notes]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         required: true
+   *     responses:
+   *       200:
+   *         description: Note details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       404:
+   *         description: Not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   // GET /api/notes/:id - Get single note (tenant scoped)
   router.get('/:id', async (req, res) => {
     try {
@@ -57,6 +134,50 @@ export default function createNoteRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/notes:
+   *   post:
+   *     summary: Create a note
+   *     description: Creates a note scoped to a tenant and optionally related to an entity.
+   *     tags: [notes]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, content]
+   *             properties:
+   *               tenant_id:
+   *                 type: string
+   *                 format: uuid
+   *               title:
+   *                 type: string
+   *               content:
+   *                 type: string
+   *               related_type:
+   *                 type: string
+   *               related_id:
+   *                 type: string
+   *               created_by:
+   *                 type: string
+   *               metadata:
+   *                 type: object
+   *     responses:
+   *       201:
+   *         description: Note created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       400:
+   *         description: Missing required fields
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   // POST /api/notes - Create note
   router.post('/', async (req, res) => {
     try {
@@ -88,6 +209,62 @@ export default function createNoteRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/notes/{id}:
+   *   put:
+   *     summary: Update a note
+   *     description: Updates allowed fields on a note within the tenant scope.
+   *     tags: [notes]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               title:
+   *                 type: string
+   *               content:
+   *                 type: string
+   *               related_type:
+   *                 type: string
+   *               related_id:
+   *                 type: string
+   *               metadata:
+   *                 type: object
+   *     responses:
+   *       200:
+   *         description: Note updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       400:
+   *         description: No valid fields
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *       404:
+   *         description: Not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   // PUT /api/notes/:id - Update note (tenant scoped)
   router.put('/:id', async (req, res) => {
     try {
@@ -121,6 +298,39 @@ export default function createNoteRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/notes/{id}:
+   *   delete:
+   *     summary: Delete a note
+   *     description: Deletes a note within the tenant scope.
+   *     tags: [notes]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     responses:
+   *       200:
+   *         description: Note deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       404:
+   *         description: Not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   // DELETE /api/notes/:id - Delete note (tenant scoped)
   router.delete('/:id', async (req, res) => {
     try {

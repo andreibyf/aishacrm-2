@@ -14,6 +14,51 @@ export default function createNotificationRoutes(_pgPool) {
     };
   };
 
+  /**
+   * @openapi
+   * /api/notifications:
+   *   get:
+   *     summary: List notifications
+   *     description: Returns notifications for a tenant and/or user with pagination.
+   *     tags: [notifications]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         required: false
+   *         description: Tenant UUID scope
+   *       - in: query
+   *         name: user_email
+   *         schema:
+   *           type: string
+   *           format: email
+   *         required: false
+   *         description: Filter notifications for a specific user
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *           minimum: 1
+   *           maximum: 200
+   *         required: false
+   *         description: Number of items to return (default 50)
+   *       - in: query
+   *         name: offset
+   *         schema:
+   *           type: integer
+   *           minimum: 0
+   *         required: false
+   *         description: Offset for pagination (default 0)
+   *     responses:
+   *       200:
+   *         description: List of notifications
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // GET /api/notifications - List notifications
   router.get('/', async (req, res) => {
     try {
@@ -55,6 +100,45 @@ export default function createNotificationRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/notifications:
+   *   post:
+   *     summary: Create a notification
+   *     description: Creates a notification record for a tenant/user.
+   *     tags: [notifications]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               tenant_id:
+   *                 type: string
+   *                 format: uuid
+   *               user_email:
+   *                 type: string
+   *                 format: email
+   *               title:
+   *                 type: string
+   *               message:
+   *                 type: string
+   *               type:
+   *                 type: string
+   *                 enum: [info, warning, error, success]
+   *               is_read:
+   *                 type: boolean
+   *               metadata:
+   *                 type: object
+   *     responses:
+   *       201:
+   *         description: Notification created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // POST /api/notifications - Create notification
   router.post('/', async (req, res) => {
     try {
@@ -102,6 +186,44 @@ export default function createNotificationRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/notifications/{id}:
+   *   put:
+   *     summary: Update a notification
+   *     description: Updates notification read status and/or metadata.
+   *     tags: [notifications]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               is_read:
+   *                 type: boolean
+   *               metadata:
+   *                 type: object
+   *     responses:
+   *       200:
+   *         description: Notification updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       404:
+   *         description: Notification not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   // PUT /api/notifications/:id - Update notification (mark as read)
   router.put('/:id', async (req, res) => {
     try {

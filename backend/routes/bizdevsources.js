@@ -16,6 +16,39 @@ export default function createBizDevSourceRoutes(pgPool) {
   // Enforce tenant scoping and defaults
   router.use(validateTenantAccess);
 
+  /**
+   * @openapi
+   * /api/bizdevsources:
+   *   get:
+   *     summary: List BizDev sources
+   *     description: Returns BizDev sources with optional filtering.
+   *     tags: [bizdevsources]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *       - in: query
+   *         name: status
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: source_type
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: priority
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: List of BizDev sources
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // Get all bizdev sources (with optional filtering)
   router.get('/', async (req, res) => {
     try {
@@ -61,6 +94,33 @@ export default function createBizDevSourceRoutes(pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/bizdevsources/{id}:
+   *   get:
+   *     summary: Get BizDev source by ID
+   *     description: Retrieves a BizDev source by ID for a tenant.
+   *     tags: [bizdevsources]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     responses:
+   *       200:
+   *         description: BizDev source details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // Get single bizdev source by ID (tenant scoped)
   router.get('/:id', async (req, res) => {
     try {
@@ -105,6 +165,64 @@ export default function createBizDevSourceRoutes(pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/bizdevsources:
+   *   post:
+   *     summary: Create a BizDev source
+   *     description: Creates a new BizDev source for a tenant.
+   *     tags: [bizdevsources]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, source_name]
+   *             properties:
+   *               tenant_id:
+   *                 type: string
+   *                 format: uuid
+   *               source_name:
+   *                 type: string
+   *               source_type:
+   *                 type: string
+   *               source_url:
+   *                 type: string
+   *               contact_person:
+   *                 type: string
+   *               contact_email:
+   *                 type: string
+   *               contact_phone:
+   *                 type: string
+   *               status:
+   *                 type: string
+   *               priority:
+   *                 type: string
+   *               leads_generated:
+   *                 type: integer
+   *               opportunities_created:
+   *                 type: integer
+   *               revenue_generated:
+   *                 type: number
+   *               notes:
+   *                 type: string
+   *               tags:
+   *                 type: array
+   *                 items:
+   *                   type: string
+   *               metadata:
+   *                 type: object
+   *               is_test_data:
+   *                 type: boolean
+   *     responses:
+   *       201:
+   *         description: BizDev source created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // Create new bizdev source
   router.post('/', async (req, res) => {
     try {
@@ -167,6 +285,72 @@ export default function createBizDevSourceRoutes(pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/bizdevsources/{id}:
+   *   put:
+   *     summary: Update a BizDev source
+   *     description: Updates a BizDev source by ID for a tenant.
+   *     tags: [bizdevsources]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               source_name:
+   *                 type: string
+   *               source_type:
+   *                 type: string
+   *               source_url:
+   *                 type: string
+   *               contact_person:
+   *                 type: string
+   *               contact_email:
+   *                 type: string
+   *               contact_phone:
+   *                 type: string
+   *               status:
+   *                 type: string
+   *               priority:
+   *                 type: string
+   *               leads_generated:
+   *                 type: integer
+   *               opportunities_created:
+   *                 type: integer
+   *               revenue_generated:
+   *                 type: number
+   *               notes:
+   *                 type: string
+   *               tags:
+   *                 type: array
+   *                 items:
+   *                   type: string
+   *               metadata:
+   *                 type: object
+   *               is_test_data:
+   *                 type: boolean
+   *     responses:
+   *       200:
+   *         description: BizDev source updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // Update bizdev source (tenant scoped)
   router.put('/:id', async (req, res) => {
     try {
@@ -244,6 +428,33 @@ export default function createBizDevSourceRoutes(pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/bizdevsources/{id}:
+   *   delete:
+   *     summary: Delete a BizDev source
+   *     description: Deletes a BizDev source by ID for a tenant.
+   *     tags: [bizdevsources]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     responses:
+   *       200:
+   *         description: BizDev source deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // Delete bizdev source (tenant scoped)
   router.delete('/:id', async (req, res) => {
     try {
@@ -280,6 +491,43 @@ export default function createBizDevSourceRoutes(pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/bizdevsources/{id}/promote:
+   *   post:
+   *     summary: Promote BizDev source to account
+   *     description: Converts a BizDev source into an account and optionally deletes the source.
+   *     tags: [bizdevsources]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id]
+   *             properties:
+   *               tenant_id:
+   *                 type: string
+   *                 format: uuid
+   *               performed_by:
+   *                 type: string
+   *               delete_source:
+   *                 type: boolean
+   *                 default: false
+   *     responses:
+   *       200:
+   *         description: Promotion completed
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // POST /api/bizdevsources/:id/promote - Promote bizdev source to account
   router.post('/:id/promote', async (req, res) => {
     const supportsTx = typeof pgPool.connect === 'function';
