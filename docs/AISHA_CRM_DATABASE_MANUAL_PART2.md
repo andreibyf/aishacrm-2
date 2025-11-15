@@ -744,6 +744,45 @@ ALTER TABLE contacts
 - ✅ No more slug → UUID conversions in application
 - ⚠️ Breaking change for API consumers
 
+### Tenant mapping and UUID-first guidance
+
+After `052_tenant_identifiers.sql` the system requires tenant UUIDs for all queries and API calls. The legacy slug value was preserved on the `tenant.slug` column during migration.
+
+- To look up a tenant UUID from a known slug:
+
+```sql
+SELECT id AS tenant_id
+FROM tenant
+WHERE slug = 'acme-corp'
+LIMIT 1;
+```
+
+- To find the slug for a given UUID:
+
+```sql
+SELECT slug
+FROM tenant
+WHERE id = '550e8400-e29b-41d4-a716-446655440000'::uuid
+LIMIT 1;
+```
+
+- Best practices:
+  - Always use the tenant UUID (`tenant.id`) in API requests and internal queries: `tenant_id = '<uuid>'`.
+  - If your client shows a friendly name, keep the slug only for UI display and map it to the UUID server-side.
+  - Avoid storing or passing the slug as `tenant_id` — do not rely on slugs for access control or RLS.
+  - Use the `tenant` table as the single source of truth for mapping (slug ↔ id).
+
+If you need to support legacy clients that still send slugs, implement a server-side translation layer that resolves the slug to the UUID and rejects ambiguous or missing mappings with a clear error (HTTP 400). Example Node snippet:
+
+```javascript
+// Resolve tenant slug to UUID (pseudo-code)
+async function resolveTenantId(slug, db) {
+  const res = await db.query('SELECT id FROM tenant WHERE slug = $1 LIMIT 1', [slug]);
+  if (!res.rows.length) throw new Error('Unknown tenant slug');
+  return res.rows[0].id;
+}
+```
+
 ---
 
 ### 7.5 Special Migrations

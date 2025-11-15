@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  braid-mcp:
+    build: .
+    env_file: .env
+    ports:
+      - "8000:8000"
+    environment:
+      # Use a dev Supabase project - override these in your local .env
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - CRM_BACKEND_URL=${CRM_BACKEND_URL}
+      - USE_DIRECT_SUPABASE_ACCESS=${USE_DIRECT_SUPABASE_ACCESS}
+    volumes:
+      - ./:/app
+    command: npm run dev

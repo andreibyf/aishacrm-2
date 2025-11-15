@@ -67,7 +67,14 @@ app.post("/mcp/run", async (req: Request, res: Response) => {
       createdAt: body.createdAt ?? new Date().toISOString(),
       client: body.client,
       channel: body.channel,
-      metadata: body.metadata ?? {},
+      // Propagate incoming metadata and attach HTTP info for audit purposes
+      metadata: {
+        ...(body.metadata ?? {}),
+        http: {
+          ip: req.ip,
+          user_agent: req.get("user-agent") || null,
+        },
+      },
     };
 
     const response = await executor.executeEnvelope(envelope);

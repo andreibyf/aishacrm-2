@@ -48,6 +48,31 @@ function normalizeKind(kind: string): SupportedKind | undefined {
   return undefined;
 }
 
+// Redact sensitive fields from audit payloads. Returns a deep-cloned object
+// with values replaced for keys that match common sensitive patterns.
+function redactSensitive(input: unknown): unknown {
+  const SENSITIVE_KEY_RE = /(email|ssn|social(_)?security|phone|card|creditcard|password|pwd)/i;
+
+  if (input === null || input === undefined) return input;
+  if (typeof input !== 'object') return input;
+
+  if (Array.isArray(input)) {
+    return input.map((v) => redactSensitive(v));
+  }
+
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+    if (SENSITIVE_KEY_RE.test(k)) {
+      out[k] = '[REDACTED]';
+    } else if (typeof v === 'object' && v !== null) {
+      out[k] = redactSensitive(v);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
 function buildSearchParams(
   tenantId: string,
   filters?: BraidFilter[],
@@ -144,6 +169,55 @@ async function callBackend(
       json && typeof json === "object" && (json as any).data !== undefined
         ? (json as any).data
         : json;
+
+    // Audit write operations (non-dry-run). Record minimal info to `audit_log`.
+    try {
+      const verb = method.toUpperCase();
+      if ((verb === "POST" || verb === "PUT" || verb === "DELETE") && !action.options?.dryRun) {
+        const supa = getSupabaseClient();
+
+        // Extract table name from path (/api/{table}/...)
+        let tableName: string | null = null;
+        const m = path.match(/^\/api\/([^\/\?]+)/);
+        if (m && m[1]) tableName = m[1];
+
+        const recordId = action.targetId ?? ((data && (data as any).id) || null);
+
+        // Map to existing audit_log schema: tenant_id, user_email, action, entity_type,
+        // entity_id, changes (jsonb), ip_address, user_agent, created_at (db default)
+        const tenantIdForAudit = getTenantId(action) ?? null;
+        const userEmailForAudit = (action.actor as any)?.email ?? (action.actor as any)?.id ?? null;
+        const entityType = tableName ?? action.resource?.kind ?? null;
+        const rawChanges = body ?? data ?? null;
+        // Redact known sensitive fields before storing in audit log
+        const changesObj = rawChanges ? redactSensitive(rawChanges) : null;
+        const ipAddr = action.metadata?.http?.ip ?? action.metadata?.ip ?? null;
+        const userAgent = action.metadata?.http?.user_agent ?? action.metadata?.userAgent ?? null;
+
+        const auditRow: any = {
+          tenant_id: tenantIdForAudit,
+          user_email: userEmailForAudit,
+          action: verb,
+          entity_type: entityType,
+          entity_id: recordId,
+          changes: changesObj,
+          ip_address: ipAddr,
+          user_agent: userAgent,
+        };
+
+        // Insert audit row, non-blocking for adapter success
+        void (async () => {
+          try {
+            await supa.from('audit_log').insert([auditRow]);
+            ctx.debug('Audit log inserted for CRM action', { actionId: action.id, entity: entityType });
+          } catch (e: any) {
+            ctx.warn('Failed to insert audit_log entry', { error: e?.message ?? String(e) });
+          }
+        })();
+      }
+    } catch (e) {
+      ctx.warn('Audit logging encountered an error', { error: (e as any)?.message ?? String(e) });
+    }
 
     return {
       actionId: action.id,
