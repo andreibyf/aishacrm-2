@@ -62,6 +62,7 @@
 - [9.2 Database Maintenance](#92-database-maintenance)
 - [9.3 Log Management](#93-log-management)
 - [9.4 Cleanup Operations](#94-cleanup-operations)
+- [9.5 Campaign Worker Management](#95-campaign-worker-management)
 
 ### Chapter 10: Troubleshooting
 - [10.1 Common Issues](#101-common-issues)
@@ -1219,7 +1220,330 @@ Invoke-RestMethod -Uri "http://localhost:4001/api/tenants/tenant-uuid" `
 
 ---
 
-*[Continue with Chapters 5-12...]*
+# Chapter 9: Maintenance Operations
+
+## 9.5 Campaign Worker Management
+
+### Overview
+
+The Campaign Worker is a background job processor that executes scheduled AI campaigns (email and call outreach). It runs within the backend process and uses Postgres advisory locks for safe multi-instance deployment.
+
+### Architecture
+
+```mermaid
+graph TD
+    A[Campaign Worker] -->|Poll every 30s| B[Find Scheduled Campaigns]
+    B --> C{Advisory Lock Acquired?}
+    C -->|Yes| D[Mark Running]
+    C -->|No| E[Skip - Another Worker Processing]
+    D --> F[Load Tenant Integration]
+    F --> G[Process Contacts]
+    G --> H{Campaign Type?}
+    H -->|Email| I[Send Emails]
+    H -->|Call| J[Trigger AI Calls]
+    I --> K[Update Progress]
+    J --> K
+    K --> L{More Contacts?}
+    L -->|Yes| G
+    L -->|No| M[Mark Completed/Failed]
+    M --> N[Emit Final Webhook]
+    N --> O[Release Lock]
+```
+
+### Key Features
+
+- **Advisory Locking**: Prevents duplicate processing when scaling horizontally (multiple backend pods/containers)
+- **Tenant-Safe**: Validates integration ownership server-side before execution
+- **Progress Tracking**: Real-time updates in `metadata.progress`
+- **Webhook Emissions**: Optional lifecycle events for n8n/automation
+- **Error Resilience**: Failed campaigns don't crash the worker
+
+### Configuration
+
+#### Environment Variables
+
+Add to `backend/.env`:
+
+```env
+# Campaign Worker (optional background job execution)
+# Enable with true to process scheduled campaigns automatically
+CAMPAIGN_WORKER_ENABLED=false
+CAMPAIGN_WORKER_INTERVAL_MS=30000
+
+# Webhooks (optional lifecycle event emissions)
+# Enable with true to emit webhook calls for campaign/entity events
+WEBHOOKS_ENABLED=false
+```
+
+**Variable Reference:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CAMPAIGN_WORKER_ENABLED` | `false` | Set to `true` to enable background campaign execution |
+| `CAMPAIGN_WORKER_INTERVAL_MS` | `30000` | Polling interval in milliseconds (30 seconds) |
+| `WEBHOOKS_ENABLED` | `false` | Enable webhook emissions for lifecycle events |
+
+### Enabling the Worker
+
+#### Development/Testing
+
+```powershell
+# Edit backend/.env
+CAMPAIGN_WORKER_ENABLED=true
+WEBHOOKS_ENABLED=true  # Optional for event tracking
+
+# Restart backend container
+docker-compose up -d --build backend
+
+# Or for local development
+cd backend
+npm run dev
+```
+
+#### Production Deployment
+
+```powershell
+# Set in production environment
+export CAMPAIGN_WORKER_ENABLED=true
+export CAMPAIGN_WORKER_INTERVAL_MS=30000
+
+# Deploy
+docker-compose -f docker-compose.prod.yml up -d backend
+```
+
+### Monitoring
+
+#### Log Output
+
+Worker logs include `[CampaignWorker]` prefix:
+
+```
+[CampaignWorker] Starting with 30000ms interval
+[CampaignWorker] Found 3 pending campaign(s)
+[CampaignWorker] Processing campaign abc-123 (Q4 Email Nurture)
+[CampaignWorker] Campaign abc-123 finished: completed
+```
+
+#### Check Worker Status
+
+```powershell
+# View backend logs
+docker logs aishacrm-backend --tail 100 --follow | Select-String "CampaignWorker"
+
+# Check for processing errors
+docker logs aishacrm-backend 2>&1 | Select-String "CampaignWorker.*error"
+```
+
+#### Campaign Progress
+
+Monitor via the Campaign Monitor UI or API:
+
+```powershell
+# Get campaign details with progress
+$campaign = Invoke-RestMethod -Uri "http://localhost:4001/api/aicampaigns/abc-123?tenant_id=uuid"
+
+# Check progress
+$campaign.metadata.progress
+# Output: { total: 100, processed: 45, success: 42, failed: 3 }
+```
+
+### Execution Flow
+
+#### 1. Polling Phase
+
+Every `CAMPAIGN_WORKER_INTERVAL_MS`:
+- Query for campaigns with `status='scheduled'`
+- Limit to 10 campaigns per poll
+- Order by `created_at ASC` (FIFO)
+
+#### 2. Locking Phase
+
+For each campaign:
+- Hash campaign UUID to 32-bit integer
+- Acquire Postgres advisory lock: `pg_try_advisory_lock(lock_id)`
+- If lock fails, another worker is processing - skip
+
+#### 3. Execution Phase
+
+**Email Campaigns:**
+1. Load `ai_email_config.sending_profile_id` from campaign metadata
+2. Fetch tenant integration credentials from `tenant_integrations`
+3. Validate tenant ownership (reject cross-tenant references)
+4. Personalize email template with contact data (`{{first_name}}`, etc.)
+5. Send via provider (Gmail/Outlook/Webhook)
+6. Update contact status and progress counters
+
+**Call Campaigns:**
+1. Load `ai_call_integration_id` from campaign metadata
+2. Fetch tenant integration credentials (CallFluent/Thoughtly)
+3. Validate tenant ownership
+4. Trigger AI call with configured agent/prompt
+5. Track call initiation (outcome tracked via provider webhook)
+
+#### 4. Progress Updates
+
+- Emit webhook every 10 contacts: `aicampaign.progress`
+- Update `metadata.progress`:
+  ```json
+  {
+    "total": 100,
+    "processed": 45,
+    "success": 42,
+    "failed": 3
+  }
+  ```
+
+#### 5. Completion Phase
+
+- Set final status: `completed` or `failed`
+- Stamp lifecycle: `metadata.lifecycle.completed_at` or `failed_at`
+- Emit final webhook: `aicampaign.completed` or `aicampaign.failed`
+- Release advisory lock: `pg_advisory_unlock(lock_id)`
+
+### Webhook Events
+
+When `WEBHOOKS_ENABLED=true`, the worker emits:
+
+| Event | When | Payload |
+|-------|------|---------|
+| `aicampaign.progress` | Every 10 contacts | `{ id, status, progress: { total, processed, success, failed } }` |
+| `aicampaign.completed` | Successful completion | `{ id, status: 'completed', progress, details }` |
+| `aicampaign.failed` | Execution failure | `{ id, status: 'failed', progress, details: { error } }` |
+
+Webhooks are read from `webhook` table (tenant-scoped, active, subscribed to event or `*`).
+
+### Troubleshooting
+
+#### Worker Not Starting
+
+**Check configuration:**
+```powershell
+# Verify env vars
+docker exec aishacrm-backend env | Select-String "CAMPAIGN"
+
+# Expected output:
+# CAMPAIGN_WORKER_ENABLED=true
+# CAMPAIGN_WORKER_INTERVAL_MS=30000
+```
+
+**Check logs:**
+```powershell
+docker logs aishacrm-backend | Select-String "CampaignWorker"
+
+# Should see:
+# [CampaignWorker] Starting with 30000ms interval
+# [CampaignWorker] Started
+```
+
+#### Campaigns Stuck in "Scheduled"
+
+**Possible causes:**
+
+1. **Worker disabled** - Check `CAMPAIGN_WORKER_ENABLED=true`
+2. **Lock contention** - Another worker crashed without releasing lock
+   ```sql
+   -- Force release all advisory locks (use with caution)
+   SELECT pg_advisory_unlock_all();
+   ```
+3. **Invalid integration** - Campaign references missing/inactive integration
+   ```sql
+   -- Check campaign metadata
+   SELECT metadata->>'ai_email_config' 
+   FROM ai_campaigns WHERE id = 'campaign-uuid';
+   
+   -- Verify integration exists and is active
+   SELECT * FROM tenant_integrations 
+   WHERE id = 'integration-id' AND is_active = true;
+   ```
+
+#### Execution Errors
+
+**Check error in campaign metadata:**
+```sql
+SELECT 
+  id, 
+  name, 
+  status, 
+  metadata->'error' as error_message,
+  metadata->'lifecycle'->>'failed_at' as failed_at
+FROM ai_campaigns
+WHERE status = 'failed';
+```
+
+**Common errors:**
+
+- `"No sending profile configured"` - Email campaign missing `ai_email_config.sending_profile_id`
+- `"Sending profile not found or inactive"` - Integration ID invalid or `is_active=false`
+- `"Unsupported campaign type"` - `metadata.campaign_type` not `email` or `call`
+- Provider-specific errors (rate limits, auth failures)
+
+#### High Memory Usage
+
+If processing large campaigns (10,000+ contacts):
+
+1. **Batch processing** - Worker processes contacts sequentially (not batched)
+2. **Increase interval** - Reduce polling frequency:
+   ```env
+   CAMPAIGN_WORKER_INTERVAL_MS=60000  # 1 minute
+   ```
+3. **Scale horizontally** - Run multiple backend instances (advisory locks prevent duplication)
+
+### Scaling for Production
+
+#### Horizontal Scaling
+
+Advisory locks ensure safe multi-instance deployment:
+
+```yaml
+# docker-compose.prod.yml
+services:
+  backend:
+    deploy:
+      replicas: 3  # Run 3 backend workers
+    environment:
+      - CAMPAIGN_WORKER_ENABLED=true
+```
+
+Each instance polls independently; only one acquires the lock per campaign.
+
+#### Rate Limiting
+
+To avoid provider rate limits:
+
+1. **Add delay between contacts** - Modify `campaignWorker.js`:
+   ```javascript
+   // After each contact send
+   await new Promise(resolve => setTimeout(resolve, 1000)); // 1s delay
+   ```
+
+2. **Configure provider-specific limits** - Store in `tenant_integrations.credentials`:
+   ```json
+   {
+     "max_emails_per_minute": 30,
+     "max_calls_per_hour": 100
+   }
+   ```
+
+#### Monitoring Recommendations
+
+- **Prometheus metrics** - Expose campaign worker metrics (future enhancement)
+- **Alert on failures** - Monitor `status='failed'` count
+- **Track throughput** - Log processed contacts per hour
+- **Webhook delivery** - Monitor n8n webhook success rates
+
+### Security Considerations
+
+✅ **Enforced by Design:**
+- Tenant validation before credential access
+- Server-side integration ownership checks
+- No cross-tenant references allowed
+- Credentials never exposed to frontend
+
+⚠️ **Admin Responsibilities:**
+- Rotate integration credentials regularly
+- Monitor failed webhook deliveries
+- Review `system_logs` for anomalies
+- Keep `tenant_integrations` audit trail
 
 ---
 

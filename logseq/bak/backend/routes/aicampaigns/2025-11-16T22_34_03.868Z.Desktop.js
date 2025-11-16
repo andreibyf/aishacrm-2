@@ -1,6 +1,5 @@
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
-import { emitTenantWebhooks } from '../lib/webhookEmitter.js';
 
 // Real routes for AI Campaigns backed by ai_campaigns table
 export default function createAICampaignRoutes(pgPool) {
@@ -79,10 +78,7 @@ export default function createAICampaignRoutes(pgPool) {
       `;
       const values = [tenant_id, name, status, description, target_contacts, performance_metrics, metadata];
       const result = await pgPool.query(insert, values);
-      const created = result.rows[0];
-      // Fire-and-forget webhook (optional)
-      emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.created', { id: created.id, name: created.name, status: created.status }).catch(() => undefined);
-      res.status(201).json({ status: 'success', data: created });
+      res.status(201).json({ status: 'success', data: result.rows[0] });
     } catch (err) {
       console.error('[AI Campaigns] Create error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
@@ -192,72 +188,13 @@ export default function createAICampaignRoutes(pgPool) {
       `;
       const updR = await pgPool.query(updQ, [tenant_id, id, newMeta]);
       const updated = updR.rows[0];
-      // Optional webhook emission for start
-      emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.start', {
-        id: updated.id,
-        status: updated.status,
-        type,
-        counts: { totalTargets: Array.isArray(updated.target_contacts) ? updated.target_contacts.length : 0 },
-      }).catch(() => undefined);
 
       // TODO: enqueue background job here (worker/cron) if available
+      // Optional: emit webhook event if configured (deferred for now)
+
       res.json({ status: 'success', data: updated });
     } catch (err) {
       console.error('[AI Campaigns] Start error:', err.message);
-      res.status(500).json({ status: 'error', message: err.message });
-    }
-  });
-
-  // POST /api/aicampaigns/:id/pause - pause a running/scheduled campaign
-  router.post('/:id/pause', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { tenant_id } = req.body || {};
-      if (!tenant_id) return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
-
-      const getR = await pgPool.query('SELECT * FROM ai_campaigns WHERE tenant_id = $1 AND id = $2 LIMIT 1', [tenant_id, id]);
-      if (getR.rows.length === 0) return res.status(404).json({ status: 'error', message: 'AI Campaign not found' });
-      const campaign = getR.rows[0];
-      const metadata = campaign.metadata || {};
-      const lifecycle = { ...(metadata.lifecycle || {}), paused_at: new Date().toISOString(), paused_by: req.user?.email || null };
-      const newMeta = { ...metadata, lifecycle };
-
-      const upd = await pgPool.query(
-        `UPDATE ai_campaigns SET status = 'paused', metadata = $3, updated_at = NOW() WHERE tenant_id = $1 AND id = $2 RETURNING *`,
-        [tenant_id, id, newMeta]
-      );
-      const updated = upd.rows[0];
-      emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.pause', { id: updated.id, status: updated.status }).catch(() => undefined);
-      res.json({ status: 'success', data: updated });
-    } catch (err) {
-      console.error('[AI Campaigns] Pause error:', err.message);
-      res.status(500).json({ status: 'error', message: err.message });
-    }
-  });
-
-  // POST /api/aicampaigns/:id/resume - resume a paused campaign (returns to scheduled)
-  router.post('/:id/resume', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { tenant_id } = req.body || {};
-      if (!tenant_id) return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
-
-      const getR = await pgPool.query('SELECT * FROM ai_campaigns WHERE tenant_id = $1 AND id = $2 LIMIT 1', [tenant_id, id]);
-      if (getR.rows.length === 0) return res.status(404).json({ status: 'error', message: 'AI Campaign not found' });
-      const campaign = getR.rows[0];
-      const metadata = campaign.metadata || {};
-      const lifecycle = { ...(metadata.lifecycle || {}), resumed_at: new Date().toISOString(), resumed_by: req.user?.email || null };
-      const newMeta = { ...metadata, lifecycle };
-
-      const upd = await pgPool.query(
-        `UPDATE ai_campaigns SET status = 'scheduled', metadata = $3, updated_at = NOW() WHERE tenant_id = $1 AND id = $2 RETURNING *`,
-        [tenant_id, id, newMeta]
-      );
-      const updated = upd.rows[0];
-      emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.resume', { id: updated.id, status: updated.status }).catch(() => undefined);
-      res.json({ status: 'success', data: updated });
-    } catch (err) {
-      console.error('[AI Campaigns] Resume error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });

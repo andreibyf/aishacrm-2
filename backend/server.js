@@ -16,6 +16,7 @@ import { initSupabaseDB, pool as supabasePool } from './lib/supabase-db.js';
 import { initializePerformanceLogBatcher } from './lib/perfLogBatcher.js';
 import { attachRequestContext } from './lib/requestContext.js';
 import { initMemoryClient as initMemory, isMemoryAvailable } from './lib/memoryClient.js';
+import { startCampaignWorker } from './lib/campaignWorker.js';
 
 // Load environment variables
 // Try .env.local first (for local development), then fall back to .env
@@ -768,6 +769,14 @@ server.listen(PORT, '0.0.0.0', () => {
       console.error("Failed to start heartbeat system:", err.message);
     }
   }, 1000); // Delay 1 second to ensure server is fully started
+
+  // Start campaign worker if enabled
+  if (process.env.CAMPAIGN_WORKER_ENABLED === 'true' && pgPool) {
+    const workerInterval = parseInt(process.env.CAMPAIGN_WORKER_INTERVAL_MS || '30000', 10);
+    startCampaignWorker(pgPool, workerInterval);
+  } else {
+    console.log('[CampaignWorker] Disabled (set CAMPAIGN_WORKER_ENABLED=true to enable)');
+  }
 
   // Keep-alive interval to prevent process from exiting
   setInterval(() => {

@@ -65,7 +65,6 @@ import ModuleManager from "../components/shared/ModuleManager";
 import BillingSettings from "../components/settings/BillingSettings";
 import CronJobManager from "../components/settings/CronJobManager";
 import SystemAnnouncements from "../components/settings/SystemAnnouncements";
-import DocumentationSeeder from "../components/settings/DocumentationSeeder"; // NEW: Documentation Seeder
 import SystemLogsViewer from "../components/settings/SystemLogsViewer"; // NEW: System Logs Viewer
 import ApiHealthDashboard from "../components/settings/ApiHealthDashboard"; // NEW: API Health Monitor
 
@@ -166,7 +165,6 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
       { id: 'cron', label: 'Cron Jobs', icon: Clock, color: 'yellow', roles: ['superadmin'] },
       { id: 'security', label: 'Security', icon: Lock, color: 'purple', roles: ['superadmin'] },
       { id: 'apikeys', label: 'API Keys', icon: Key, color: 'green', roles: ['superadmin'] },
-      { id: 'advanced', label: 'Advanced', icon: Cog, color: 'slate', roles: ['superadmin'] },
       { id: 'announcements', label: 'Announcements', icon: Megaphone, color: 'slate', roles: ['superadmin'] },
 
       // Data Management
@@ -526,28 +524,6 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                     <SystemAnnouncements />
                   </CardContent>
                 </Card>
-              )}
-
-              {/* NEW: Advanced Settings Tab Content */}
-              {activeTab === 'advanced' && isAdmin && (
-                <div className="space-y-6">
-                  <Card className="bg-slate-800 border-slate-700">
-                    <CardHeader>
-                      <CardTitle className="text-slate-100">Advanced Settings</CardTitle>
-                      <CardDescription className="text-slate-400">
-                        System configuration and advanced features
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-slate-300">
-                        Manage critical system-level configurations and utilities.
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  {/* NEW: Documentation Seeder */}
-                  <DocumentationSeeder />
-                </div>
               )}
 
               {/* Data Management */}

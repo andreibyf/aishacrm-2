@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import AICampaignForm from "../components/campaigns/AICampaignForm";
 import AICampaignDetailPanel from "../components/campaigns/AICampaignDetailPanel";
+import CampaignMonitor from "../components/campaigns/CampaignMonitor";
 import Pagination from "../components/shared/Pagination";
 import { getTenantFilter } from "../components/shared/tenantUtils";
 import { useTenant } from "../components/shared/tenantContext";
@@ -335,6 +336,10 @@ export default function AICampaigns() {
 
       {/* Search Bar and Table */}
       <div className="bg-slate-800 border border-slate-700 rounded-lg">
+        {/* Lightweight Monitor for active campaigns */}
+        <div className="p-4">
+          <CampaignMonitor />
+        </div>
         <div className="p-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
