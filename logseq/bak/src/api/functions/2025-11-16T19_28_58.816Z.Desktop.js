@@ -8,9 +8,27 @@ const callMCPServerDirect = async (payload) => {
   if (!MCP_SERVER_URL) {
     throw new Error('MCP server URL not configured (VITE_MCP_SERVER_URL)');
   }
+  // Support optional API key from env or per-tenant local storage for authenticated MCP servers
+  const headers = { 'Content-Type': 'application/json' };
+  const envApiKey = import.meta.env.VITE_MCP_SERVER_API_KEY || null;
+  if (envApiKey) {
+    headers['x-api-key'] = envApiKey;
+  } else {
+    try {
+      // Try to infer tenant_id from payload.params or payload.context
+      const tenantId = payload?.params?.tenant_id || payload?.params?.tenantId || payload?.context?.tenant_id || 'local-tenant-001';
+      const storageKey = `local_user_api_key_${tenantId}`;
+      const stored = localStorage.getItem(storageKey);
+      if (stored) headers['x-api-key'] = stored;
+    } catch (err) {
+      // ignore localStorage read errors
+      void err;
+    }
+  }
+
   const response = await fetch(MCP_SERVER_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(payload)
   });
   if (!response.ok) {
@@ -146,7 +164,17 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'testSuites') {
-        console.log('[Local Dev Mode] testSuites: returning mock test suites');
+        try {
+          const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+          const response = await fetch(`${BACKEND_URL}/api/testing/suites`);
+          if (response.ok) {
+            const result = await response.json();
+            return { data: result.data };
+          }
+        } catch (error) {
+          console.error('[Backend API] Error fetching test suites:', error);
+        }
+        // Fallback to mock data
         return {
           data: {
             suites: [
@@ -209,7 +237,37 @@ const createFunctionProxy = (functionName) => {
       // ========================================
       
       if (functionName === 'listPerformanceLogs') {
-        console.log('[Local Dev Mode] listPerformanceLogs: returning mock performance data');
+        try {
+          const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+          const response = await fetch(`${BACKEND_URL}/api/metrics/performance`);
+          if (response.ok) {
+            const result = await response.json();
+            // Convert backend metrics format to expected log format
+            const metrics = result.data;
+            const logs = [
+              { 
+                timestamp: new Date().toISOString(), 
+                operation: 'system_check', 
+                duration: Math.round(metrics.uptime * 1000), 
+                status: 'success',
+                details: {
+                  memory: metrics.memory,
+                  cpu: metrics.cpu
+                }
+              }
+            ];
+            return {
+              data: {
+                logs,
+                count: logs.length,
+                metrics
+              }
+            };
+          }
+        } catch (error) {
+          console.error('[Backend API] Error fetching performance logs:', error);
+        }
+        // Fallback to mock data
         return {
           data: {
             logs: [

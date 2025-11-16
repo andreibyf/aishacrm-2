@@ -3,17 +3,6 @@ import express from 'express';
 export default function createOpportunityRoutes(pgPool) {
   const router = express.Router();
 
-// Helper function to expand metadata fields to top-level properties
-  const expandMetadata = (record) => {
-    if (!record) return record;
-    const { metadata = {}, ...rest } = record;
-    return {
-      ...rest,
-      ...metadata,
-      metadata,
-    };
-  };
-
   // GET /api/opportunities - List opportunities with filtering
   router.get('/', async (req, res) => {
     try {
@@ -96,23 +85,25 @@ export default function createOpportunityRoutes(pgPool) {
 
       const query = `
         INSERT INTO opportunities (
-          tenant_id, name, account_id, contact_id, amount, stage, 
-          probability, close_date, metadata, created_at
+          tenant_id, name, account_id, amount, stage, 
+          probability, close_date, description, assigned_to, 
+          created_by, created_date
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()
         ) RETURNING *
       `;
       
       const values = [
         opp.tenant_id,
         opp.name,
-        opp.account_id || null,
-        opp.contact_id || null,
+        opp.account_id,
         opp.amount || 0,
         opp.stage || 'prospecting',
         opp.probability || 0,
-        opp.close_date || null,
-        opp.metadata || {}
+        opp.close_date,
+        opp.description,
+        opp.assigned_to,
+        opp.created_by
       ];
       
       const result = await pgPool.query(query, values);

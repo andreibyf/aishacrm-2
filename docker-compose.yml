@@ -26,6 +26,28 @@ services:
       timeout: 5s
       retries: 5
 
+  # Redis/Valkey - Ephemeral memory layer for agent sessions
+  redis:
+    image: valkey/valkey:7-alpine
+    container_name: aishacrm-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: valkey-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
   # Backend API
   # ⚠️ CRITICAL: Uses Supabase Cloud database ONLY (see DATABASE_CONFIGURATION.md)
   # DATABASE_URL points to Supabase Cloud, NOT local PostgreSQL
@@ -36,6 +58,9 @@ services:
     container_name: aishacrm-backend
     restart: unless-stopped
     # REMOVED db dependency - we use Supabase Cloud, not local PostgreSQL
+    depends_on:
+      redis:
+        condition: service_healthy
     ports:
       - "4001:3001"  # External port 4001 maps to internal 3001
     env_file:
@@ -49,6 +74,11 @@ services:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4000}
       # Enforce SSL for all Postgres connections (validation script & any pg usage)
       - PGSSLMODE=require
+      # Redis connection for ephemeral memory
+      - REDIS_URL=redis://redis:6379
+      - SYSTEM_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
+      # Tenant resolution cache configuration
+      - TENANT_RESOLVE_CACHE_TTL_MS=${TENANT_RESOLVE_CACHE_TTL_MS:-300000}
     # Removed extra_hosts override for Supabase host; it broke SSL by redirecting to host gateway.
     dns:
       - 8.8.8.8
@@ -84,6 +114,8 @@ services:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - USE_DIRECT_SUPABASE_ACCESS=true
+      # Redis connection for agent memory
+      - REDIS_URL=redis://redis:6379
       # OpenAI configuration
       - DEFAULT_OPENAI_MODEL=${DEFAULT_OPENAI_MODEL:-gpt-4o-mini}
       # GitHub token for GitHub MCP tools
@@ -172,4 +204,6 @@ volumes:
   postgres_data:
     driver: local
   n8n_data:
+    driver: local
+  redis_data:
     driver: local

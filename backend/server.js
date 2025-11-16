@@ -15,6 +15,7 @@ import { swaggerSpec } from './lib/swagger.js';
 import { initSupabaseDB, pool as supabasePool } from './lib/supabase-db.js';
 import { initializePerformanceLogBatcher } from './lib/perfLogBatcher.js';
 import { attachRequestContext } from './lib/requestContext.js';
+import { initMemoryClient as initMemory, isMemoryAvailable } from './lib/memoryClient.js';
 
 // Load environment variables
 // Try .env.local first (for local development), then fall back to .env
@@ -63,6 +64,14 @@ await (async () => {
 
   console.warn("⚠ No database configured - set USE_SUPABASE_PROD=true with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
 })();
+
+// Initialize Redis/Valkey memory client (non-blocking for app startup)
+try {
+  await initMemory(process.env.REDIS_URL);
+  console.log(`✓ Memory layer ${isMemoryAvailable() ? 'available' : 'unavailable'} (${process.env.REDIS_URL ? 'configured' : 'no REDIS_URL'})`);
+} catch (e) {
+  console.warn('⚠ Memory client init skipped/failed:', e?.message || e);
+}
 
 // Use Supabase client wrapper for performance logging (replaces direct pg.Pool)
 // This ensures consistency with ESLint policy while maintaining performance logging capability
@@ -408,6 +417,7 @@ import createModuleSettingsRoutes from "./routes/modulesettings.js";
 import createTenantIntegrationRoutes from "./routes/tenant-integrations.js";
 import createBizDevSourceRoutes from "./routes/bizdevsources.js";
 import createTenantRoutes from "./routes/tenants.js";
+import createTenantResolveRoutes from "./routes/tenant-resolve.js";
 import createAnnouncementRoutes from "./routes/announcements.js";
 import createApikeyRoutes from "./routes/apikeys.js";
 import createNoteRoutes from "./routes/notes.js";
@@ -415,6 +425,7 @@ import createSystemBrandingRoutes from "./routes/systembrandings.js";
 import createSyncHealthRoutes from "./routes/synchealths.js";
 import createAICampaignRoutes from "./routes/aicampaigns.js";
 import createSecurityRoutes from "./routes/security.js";
+import createMemoryRoutes from "./routes/memory.js";
 
 // Use the pgPool directly; per-request DB time is measured inside the DB adapter
 const measuredPgPool = pgPool;
@@ -459,6 +470,7 @@ app.use("/api/audit-logs", createAuditLogRoutes(measuredPgPool));
 app.use("/api/modulesettings", createModuleSettingsRoutes(measuredPgPool));
 app.use("/api/tenantintegrations", createTenantIntegrationRoutes(measuredPgPool));
 app.use("/api/tenants", createTenantRoutes(measuredPgPool));
+app.use("/api/tenantresolve", createTenantResolveRoutes(measuredPgPool));
 app.use("/api/announcements", createAnnouncementRoutes(measuredPgPool));
 app.use("/api/apikeys", createApikeyRoutes(measuredPgPool));
 app.use("/api/notes", createNoteRoutes(measuredPgPool));
@@ -466,6 +478,8 @@ app.use("/api/systembrandings", createSystemBrandingRoutes(measuredPgPool));
 app.use("/api/synchealths", createSyncHealthRoutes(measuredPgPool));
 app.use("/api/aicampaigns", createAICampaignRoutes(measuredPgPool));
 app.use("/api/security", createSecurityRoutes(measuredPgPool, pgPool));
+// Memory routes use Redis/Valkey; DB pool not required
+app.use("/api/memory", createMemoryRoutes());
 
 // 404 handler
 app.use((req, res) => {

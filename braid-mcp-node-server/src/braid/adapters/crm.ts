@@ -6,6 +6,7 @@ import {
   BraidSort,
 } from "../types";
 import { getSupabaseClient } from "../../lib/supabase";
+import { appendEvent as memAppendEvent } from "../../lib/memory";
 
 // Node 18+ provides a global fetch; declare for TypeScript.
 declare const fetch: any;
@@ -34,6 +35,48 @@ function getTenantId(action: BraidAction): string | undefined {
     (payload.tenant_id as string | undefined) ||
     (payload.tenantId as string | undefined)
   );
+}
+
+function getUserId(action: BraidAction): string | undefined {
+  const metadata = (action.metadata || {}) as Record<string, unknown>;
+  const payload = (action.payload || {}) as Record<string, unknown>;
+  return (
+    (metadata.user_id as string | undefined) ||
+    (metadata.userId as string | undefined) ||
+    (payload.user_id as string | undefined) ||
+    (payload.userId as string | undefined)
+  );
+}
+
+function getSessionId(action: BraidAction): string | undefined {
+  const metadata = (action.metadata || {}) as Record<string, unknown>;
+  const payload = (action.payload || {}) as Record<string, unknown>;
+  return (
+    (metadata.session_id as string | undefined) ||
+    (metadata.sessionId as string | undefined) ||
+    (payload.session_id as string | undefined) ||
+    (payload.sessionId as string | undefined) ||
+    action.targetId
+  );
+}
+
+function logToMemory(action: BraidAction, ctx: BraidAdapterContext, event: Record<string, unknown>) {
+  try {
+    const tenantId = getTenantId(action);
+    const userId = getUserId(action);
+    const sessionId = getSessionId(action);
+    if (tenantId && userId && sessionId) {
+      void memAppendEvent(tenantId, userId, sessionId, {
+        system: 'crm',
+        verb: action.verb,
+        resource: action.resource?.kind,
+        targetId: action.targetId,
+        ...event,
+      });
+    }
+  } catch (e: any) {
+    ctx.debug('Memory trace (CRM) failed', { error: e?.message ?? String(e) });
+  }
 }
 
 function normalizeKind(kind: string): SupportedKind | undefined {
@@ -151,7 +194,7 @@ async function callBackend(
         status: response.status,
         body: json,
       });
-      return {
+      const errResult = {
         actionId: action.id,
         status: "error",
         resource: action.resource,
@@ -162,7 +205,10 @@ async function callBackend(
         details: {
           response: json as any,
         },
-      };
+      } as BraidActionResult;
+      // memory trace
+      logToMemory(action, ctx, { ok: false, httpStatus: response.status, error: (errResult as any).errorMessage });
+      return errResult;
     }
 
     const data =
@@ -221,23 +267,27 @@ async function callBackend(
       ctx.warn('Audit logging encountered an error', { error: (e as any)?.message ?? String(e) });
     }
 
-    return {
+    const okResult: BraidActionResult = {
       actionId: action.id,
       status: "success",
       resource: action.resource,
       data,
     };
+    logToMemory(action, ctx, { ok: true, size: Array.isArray(data) ? data.length : (data ? 1 : 0) });
+    return okResult;
   } catch (err: any) {
     ctx.error("CRM backend call threw error", {
       error: err?.message ?? String(err),
     });
-    return {
+    const thrown: BraidActionResult = {
       actionId: action.id,
       status: "error",
       resource: action.resource,
       errorCode: "NETWORK_ERROR",
       errorMessage: err?.message ?? String(err),
     };
+    logToMemory(action, ctx, { ok: false, error: thrown.errorMessage, code: 'NETWORK_ERROR' });
+    return thrown;
   }
 }
 

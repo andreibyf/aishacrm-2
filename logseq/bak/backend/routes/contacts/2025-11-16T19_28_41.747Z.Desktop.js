@@ -1,34 +1,24 @@
 /**
- * Lead Routes
+ * Contact Routes
  * Full CRUD operations with PostgreSQL database
  */
 
 import express from 'express';
 
-export default function createLeadRoutes(pgPool) {
+export default function createContactRoutes(pgPool) {
   const router = express.Router();
 
-// Helper function to expand metadata fields to top-level properties
-  const expandMetadata = (record) => {
-    if (!record) return record;
-    const { metadata = {}, ...rest } = record;
-    return {
-      ...rest,
-      ...metadata,
-      metadata,
-    };
-  };
-
-  // GET /api/leads - List leads
+  // GET /api/contacts - List contacts
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, status, limit = 50, offset = 0 } = req.query;
+      const { tenant_id, limit = 50, offset = 0, status } = req.query;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
-      let query = 'SELECT * FROM leads WHERE tenant_id = $1';
+      // Build query with optional filters
+      let query = 'SELECT * FROM contacts WHERE tenant_id = $1';
       const params = [tenant_id];
       
       if (status) {
@@ -41,7 +31,8 @@ export default function createLeadRoutes(pgPool) {
 
       const result = await pgPool.query(query, params);
       
-      let countQuery = 'SELECT COUNT(*) FROM leads WHERE tenant_id = $1';
+      // Get total count
+      let countQuery = 'SELECT COUNT(*) FROM contacts WHERE tenant_id = $1';
       const countParams = [tenant_id];
       if (status) {
         countParams.push(status);
@@ -51,26 +42,31 @@ export default function createLeadRoutes(pgPool) {
 
       res.json({
         status: 'success',
-        data: { leads: result.rows, total: parseInt(countResult.rows[0].count), status, limit: parseInt(limit), offset: parseInt(offset) },
+        data: {
+          contacts: result.rows,
+          total: parseInt(countResult.rows[0].count),
+          limit: parseInt(limit),
+          offset: parseInt(offset)
+        },
       });
     } catch (error) {
-      console.error('Error listing leads:', error);
+      console.error('Error listing contacts:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
-  // POST /api/leads - Create lead
+  // POST /api/contacts - Create contact
   router.post('/', async (req, res) => {
     try {
-      const { tenant_id, first_name, last_name, email, phone, company, job_title, status = 'new', source } = req.body;
+      const { tenant_id, first_name, last_name, email, phone, account_id, status = 'active' } = req.body;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
       const query = `
-        INSERT INTO leads (tenant_id, first_name, last_name, email, phone, company, job_title, status, source, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+        INSERT INTO contacts (tenant_id, first_name, last_name, email, phone, account_id, status, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
         RETURNING *
       `;
       
@@ -80,32 +76,30 @@ export default function createLeadRoutes(pgPool) {
         last_name,
         email,
         phone,
-        company,
-        job_title,
-        status,
-        source
+        account_id || null,
+        status
       ]);
 
       res.json({
         status: 'success',
-        message: 'Lead created',
+        message: 'Contact created',
         data: result.rows[0],
       });
     } catch (error) {
-      console.error('Error creating lead:', error);
+      console.error('Error creating contact:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
-  // GET /api/leads/:id - Get single lead
+  // GET /api/contacts/:id - Get single contact
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
 
-      const result = await pgPool.query('SELECT * FROM leads WHERE id = $1', [id]);
+      const result = await pgPool.query('SELECT * FROM contacts WHERE id = $1', [id]);
       
       if (result.rows.length === 0) {
-        return res.status(404).json({ status: 'error', message: 'Lead not found' });
+        return res.status(404).json({ status: 'error', message: 'Contact not found' });
       }
 
       res.json({
@@ -113,17 +107,18 @@ export default function createLeadRoutes(pgPool) {
         data: result.rows[0],
       });
     } catch (error) {
-      console.error('Error fetching lead:', error);
+      console.error('Error fetching contact:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
-  // PUT /api/leads/:id - Update lead
+  // PUT /api/contacts/:id - Update contact
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { first_name, last_name, email, phone, company, job_title, status, source } = req.body;
+      const { first_name, last_name, email, phone, account_id, status } = req.body;
 
+      // Build dynamic update query
       const updates = [];
       const values = [];
       let paramCount = 1;
@@ -144,21 +139,13 @@ export default function createLeadRoutes(pgPool) {
         updates.push(`phone = $${paramCount++}`);
         values.push(phone);
       }
-      if (company !== undefined) {
-        updates.push(`company = $${paramCount++}`);
-        values.push(company);
-      }
-      if (job_title !== undefined) {
-        updates.push(`job_title = $${paramCount++}`);
-        values.push(job_title);
+      if (account_id !== undefined) {
+        updates.push(`account_id = $${paramCount++}`);
+        values.push(account_id);
       }
       if (status !== undefined) {
         updates.push(`status = $${paramCount++}`);
         values.push(status);
-      }
-      if (source !== undefined) {
-        updates.push(`source = $${paramCount++}`);
-        values.push(source);
       }
 
       if (updates.length === 0) {
@@ -168,58 +155,42 @@ export default function createLeadRoutes(pgPool) {
       updates.push(`updated_at = NOW()`);
       values.push(id);
 
-      const query = `UPDATE leads SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`;
+      const query = `UPDATE contacts SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`;
       const result = await pgPool.query(query, values);
 
       if (result.rows.length === 0) {
-        return res.status(404).json({ status: 'error', message: 'Lead not found' });
+        return res.status(404).json({ status: 'error', message: 'Contact not found' });
       }
 
       res.json({
         status: 'success',
-        message: 'Lead updated',
+        message: 'Contact updated',
         data: result.rows[0],
       });
     } catch (error) {
-      console.error('Error updating lead:', error);
+      console.error('Error updating contact:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
-  // DELETE /api/leads/:id - Delete lead
+  // DELETE /api/contacts/:id - Delete contact
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
 
-      const result = await pgPool.query('DELETE FROM leads WHERE id = $1 RETURNING id', [id]);
+      const result = await pgPool.query('DELETE FROM contacts WHERE id = $1 RETURNING id', [id]);
 
       if (result.rows.length === 0) {
-        return res.status(404).json({ status: 'error', message: 'Lead not found' });
+        return res.status(404).json({ status: 'error', message: 'Contact not found' });
       }
 
       res.json({
         status: 'success',
-        message: 'Lead deleted',
+        message: 'Contact deleted',
         data: { id: result.rows[0].id },
       });
     } catch (error) {
-      console.error('Error deleting lead:', error);
-      res.status(500).json({ status: 'error', message: error.message });
-    }
-  });
-
-  // POST /api/leads/:id/convert - Convert lead to contact/opportunity
-  router.post('/:id/convert', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { create_opportunity, create_account } = req.body;
-
-      res.json({
-        status: 'success',
-        message: 'Lead converted',
-        data: { lead_id: id, create_opportunity, create_account },
-      });
-    } catch (error) {
+      console.error('Error deleting contact:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

@@ -783,6 +783,86 @@ async function resolveTenantId(slug, db) {
 }
 ```
 
+#### 075_agent_memory_archive.sql
+**Date:** 2025-11-16  
+**Purpose:** Introduce long-term archival tables for ephemeral agent memory.
+
+**Tables Created:**
+- `agent_sessions_archive` – Archived session metadata and payload
+- `agent_events_archive` – Archived individual agent events
+
+**Features:**
+- JSONB payload storage for flexible schema evolution
+- Service-role controlled (RLS enabled, only backend writes)
+- Indexed by `tenant_id`, `user_id`, `session_id`, `created_at` for efficient querying
+
+#### 076_agent_sessions_archive_unique.sql
+**Date:** 2025-11-16  
+**Purpose:** Enforce uniqueness and idempotent archival.
+
+**Actions:**
+1. Deduplicate existing rows keeping earliest per `(tenant_id, user_id, session_id)`.
+2. Add unique constraint `agent_sessions_archive_unique`.
+3. Update archival job to use `UPSERT` on conflict for idempotent writes.
+
+**Operational Impact:**
+- Multiple archive attempts for the same session do not create duplicates.
+- Prevents compliance/audit tooling from miscounting session volume.
+
+### Canonical Tenant Resolution & Caching
+To support UUID-first enforcement while allowing legacy identifiers, a canonical resolver normalizes inputs and adds light caching:
+
+**Backend Module:** `backend/lib/tenantCanonicalResolver.js`
+
+**Endpoints:**
+- Single resolve: `GET /api/tenantresolve/:identifier?stats=true`
+- Batch resolve: `GET /api/tenantresolve?ids=a,b,c&stats=true`
+- Reset cache: `POST /api/tenantresolve/reset`
+- Prometheus metrics: `GET /api/tenantresolve/metrics`
+
+**Response Fields:**
+- `uuid` – Canonical tenant UUID (or null if unresolved)
+- `slug` – Display-friendly slug (or original input if unknown)
+- `found` – Boolean indicating successful DB lookup
+- `source` – Resolution path (`env`, `db-id`, `db-slug`, `uuid-input`, etc.), with `-cache` suffix for cached responses
+- `cache` – (Optional, when `?stats=true`) Object containing `{ ttlMs, size, hits, misses, hitRatio }`
+
+**Caching:** In-memory TTL (default 60s via `TENANT_RESOLVE_CACHE_TTL_MS`) reduces repeat Supabase lookups under load.
+
+**Cache Instrumentation:**
+- **Hit/Miss Counters:** Track cache efficiency with global counters (`_cacheHits`, `_cacheMisses`)
+- **Stats Export:** Append `?stats=true` to resolve endpoints to include cache metrics in JSON response
+- **Prometheus Metrics:** Visit `/api/tenantresolve/metrics` for scraper-compatible text format:
+  - `tenant_resolve_cache_size` (gauge) - Current cache entries
+  - `tenant_resolve_cache_hits_total` (counter) - Cumulative hits
+  - `tenant_resolve_cache_misses_total` (counter) - Cumulative misses
+  - `tenant_resolve_cache_hit_ratio` (gauge) - Hit ratio 0-1
+  - `tenant_resolve_cache_ttl_ms` (gauge) - TTL configuration
+- **Cache Reset:** `POST /api/tenantresolve/reset` clears all cached entries and resets hit/miss counters (useful after tenant schema changes or for testing)
+
+**System Tenant:** Set `SYSTEM_TENANT_ID` in `backend/.env` so `'system'` always resolves to a stable UUID.
+
+**Archival Provenance:** Archived session/event JSON includes `_tenant` object for auditing:
+```json
+{
+  "_tenant": {
+    "input": "system",
+    "slug": "system",
+    "uuid": "a11dfb63-4b18-4eb8-872e-747af2e37c46",
+    "source": "env"
+  }
+}
+```
+
+**Best Practices:**
+1. Resolve tenant once at session start; reuse UUID.
+2. Reject ambiguous or missing identifiers early (HTTP 400).
+3. Never perform authorization logic on slugs; always use UUID.
+4. Monitor cache hit ratio via `/api/tenantresolve/metrics` and tune `TENANT_RESOLVE_CACHE_TTL_MS` based on workload.
+5. Use `POST /api/tenantresolve/reset` after bulk tenant operations to ensure fresh data.
+6. Integrate `/api/tenantresolve/metrics` with your Prometheus/Grafana stack for continuous monitoring.
+
+
 ---
 
 ### 7.5 Special Migrations

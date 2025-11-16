@@ -81,6 +81,7 @@ import SecurityMonitor from "../components/settings/SecurityMonitor";
 import PerformanceMonitor from '../components/settings/PerformanceMonitor';
 import SystemHealthDashboard from "../components/settings/SystemHealthDashboard"; // NEW: SystemHealthDashboard
 import QaConsole from "../components/settings/QaConsole"; // NEW: QA Console (E2E triggers)
+import TenantResolveCacheMonitor from "../components/settings/TenantResolveCacheMonitor"; // NEW: Cache Monitor
 
 export default function SettingsPage() { // Renamed from Settings to SettingsPage as per outline
   const [currentUser, setCurrentUser] = useState(null);
@@ -174,6 +175,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
       // Monitoring & Health
       { id: 'performance', label: 'Performance', icon: Activity, color: 'emerald', roles: ['superadmin'] },
+      { id: 'cache-monitor', label: 'Cache Monitor', icon: Database, color: 'emerald', roles: ['superadmin'] },
       { id: 'sync-health', label: 'Sync Health', icon: RefreshCw, color: 'emerald', roles: ['superadmin'] },
       { id: 'mcp-monitor', label: 'MCP Monitor', icon: Server, color: 'emerald', roles: ['superadmin'] },
       { id: 'security-monitor', label: 'Security', icon: Shield, color: 'red', roles: ['superadmin'] },
@@ -601,6 +603,18 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                     </CardContent>
                   </Card>
                 </div>
+              )}
+
+              {activeTab === 'cache-monitor' && isAdmin && (
+                <Card className="bg-slate-800 border-slate-700">
+                  <CardHeader>
+                    <CardTitle className="text-slate-100">Tenant Resolve Cache Monitor</CardTitle>
+                    <CardDescription className="text-slate-400">Monitor cache performance and hit ratios for tenant identity resolution</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <TenantResolveCacheMonitor />
+                  </CardContent>
+                </Card>
               )}
 
               {activeTab === 'sync-health' && isAdmin && ( // New tab content

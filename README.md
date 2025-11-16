@@ -235,6 +235,54 @@ The AiSHA Braid LLM kit can treat the MCP server as a remote tool via:
 
 Any Braid action with `resource.system: "crm"` sent to this endpoint will be handled by the CRM adapter in `braid-mcp-node-server`, which delegates to the existing AiSHA CRM backend routes.
 
+## Tenant Resolution & Archival
+
+### Canonical Tenant Resolution
+All APIs and internal jobs operate **UUID-first** for tenant identity. A shared resolver normalizes any identifier (UUID, legacy slug, or the special `system` slug) to a canonical form:
+
+- Endpoint (single): `GET /api/tenantresolve/:identifier?stats=true`
+- Endpoint (batch): `GET /api/tenantresolve?ids=a,b,c&stats=true`
+- Endpoint (reset): `POST /api/tenantresolve/reset` - clear cache and reset counters
+- Endpoint (metrics): `GET /api/tenantresolve/metrics` - Prometheus-style metrics
+- Response fields: `uuid`, `slug`, `found`, `source` (with `-cache` suffix when served from in-memory cache)
+- Environment: Set `SYSTEM_TENANT_ID` in `backend/.env` so `'system'` resolves to a stable UUID.
+
+The resolver includes an in‑memory TTL cache (default 60s, override with `TENANT_RESOLVE_CACHE_TTL_MS`) to reduce repeated Supabase lookups under high concurrency.
+
+**Cache Instrumentation:**
+- Pass `?stats=true` to any resolve endpoint to include cache statistics in the response
+- Visit `/api/tenantresolve/metrics` for Prometheus-compatible metrics:
+  - `tenant_resolve_cache_size` - Current cache entries
+  - `tenant_resolve_cache_hits_total` - Total cache hits
+  - `tenant_resolve_cache_misses_total` - Total cache misses
+  - `tenant_resolve_cache_hit_ratio` - Hit ratio (0-1)
+  - `tenant_resolve_cache_ttl_ms` - Cache TTL in milliseconds
+- Use `POST /api/tenantresolve/reset` to clear cache and reset counters (useful for testing or after tenant schema changes)
+
+### Memory Archival
+Ephemeral agent sessions/events stored in Redis are persisted via the archival job:
+- Tables: `agent_sessions_archive`, `agent_events_archive` (migration 075)
+- Uniqueness: Migration 076 adds a unique constraint on `(tenant_id, user_id, session_id)` to prevent duplicate session rows.
+- Upsert Logic: Archival uses `upsert` (conflict on tenant/user/session) ensuring idempotency.
+- Provenance: Each archived record embeds a `_tenant` object: `{ input, slug, uuid, source }` aiding audits and trace reviews.
+
+### Operational Guarantees
+- Duplicate archiving attempts are safe (no constraint violation).
+- Legacy clients sending slugs can rely on the resolve endpoints before invoking CRUD operations.
+- Audit and compliance tooling can batch-resolve historical slugs quickly using the batch endpoint.
+
+### Example Batch Resolve
+```bash
+curl "http://localhost:4001/api/tenantresolve?ids=system,acme-corp,550e8400-e29b-41d4-a716-446655440000"
+```
+
+### Recommended Usage Pattern
+1. Resolve all external tenant identifiers once at session start.
+2. Cache result locally (frontend or MCP adapter) for duration of interaction.
+3. Pass canonical UUID (`tenant_id`) in all mutating API calls.
+4. Store slug only for display; never for authorization decisions.
+
+
 ## Development Features
 
 ### Auto-Restart

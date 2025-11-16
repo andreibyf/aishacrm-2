@@ -1,5 +1,6 @@
 import { BraidAdapter, BraidAdapterContext } from "../index";
 import { BraidAction, BraidActionResult } from "../types";
+import { appendEvent as memAppendEvent } from "../../lib/memory";
 
 // Node 18+ provides a global fetch
 declare const fetch: any;
@@ -46,6 +47,11 @@ export const WebAdapter: BraidAdapter = {
     const kind = action.resource.kind.toLowerCase();
     const payload = (action.payload || {}) as Record<string, unknown>;
 
+    const metadata = (action.metadata || {}) as Record<string, unknown>;
+    const tenantId = (metadata.tenant_id as string) || (payload.tenant_id as string) as any;
+    const userId = (metadata.user_id as string) || (payload.user_id as string) as any;
+    const sessionId = (metadata.session_id as string) || (payload.session_id as string) || (action.targetId as string);
+
     try {
       if (kind === "wikipedia-search" || kind === "search_wikipedia") {
         const query = payload.q || payload.query;
@@ -60,6 +66,9 @@ export const WebAdapter: BraidAdapter = {
         }
 
         const results = await searchWikipedia(query, ctx);
+        if (tenantId && userId && sessionId) {
+          void memAppendEvent(tenantId, userId, sessionId, { system: 'web', kind: 'wikipedia-search', q: query, ok: true, count: Array.isArray(results) ? results.length : 0 });
+        }
 
         return {
           actionId: action.id,
@@ -82,6 +91,9 @@ export const WebAdapter: BraidAdapter = {
         }
 
         const page = await getWikipediaPage(String(pageid), ctx);
+        if (tenantId && userId && sessionId) {
+          void memAppendEvent(tenantId, userId, sessionId, { system: 'web', kind: 'wikipedia-page', pageid: String(pageid), ok: true });
+        }
 
         return {
           actionId: action.id,
@@ -100,6 +112,9 @@ export const WebAdapter: BraidAdapter = {
       };
     } catch (err: any) {
       ctx.error("Web adapter error", { error: err?.message ?? String(err) });
+      if (tenantId && userId && sessionId) {
+        void memAppendEvent(tenantId, userId, sessionId, { system: 'web', kind, ok: false, error: err?.message ?? String(err) });
+      }
       return {
         actionId: action.id,
         status: "error",

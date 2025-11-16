@@ -7,7 +7,9 @@ import { CrmAdapter } from "./braid/adapters/crm";
 import { WebAdapter } from "./braid/adapters/web";
 import { GitHubAdapter } from "./braid/adapters/github";
 import { LlmAdapter } from "./braid/adapters/llm";
+import { MemoryAdapter } from "./braid/adapters/memory";
 import { BraidRequestEnvelope } from "./braid/types";
+import { initMemory, isMemoryAvailable, getStatus as getMemoryStatus } from "./lib/memory";
 
 const app = express();
 
@@ -38,14 +40,35 @@ registry.registerAdapter(CrmAdapter);
 registry.registerAdapter(WebAdapter);
 registry.registerAdapter(GitHubAdapter);
 registry.registerAdapter(LlmAdapter);
+registry.registerAdapter(MemoryAdapter);
 
 const executor = new BraidExecutor(registry, {
   logger: createConsoleLogger(),
 });
 
+// Initialize memory (non-fatal)
+void (async () => {
+  try {
+    await initMemory(process.env.REDIS_URL);
+    console.log(`[MCP] Memory layer ${isMemoryAvailable() ? 'available' : 'unavailable'}`);
+  } catch (e: any) {
+    console.warn('[MCP] Memory init failed:', e?.message || String(e));
+  }
+})();
+
 // Health check
 app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "ok", service: "braid-mcp-server" });
+});
+
+// Memory quick status (debug)
+app.get("/memory/status", async (_req: Request, res: Response) => {
+  try {
+    const st = await getMemoryStatus();
+    res.json({ status: 'success', data: st });
+  } catch (e: any) {
+    res.status(500).json({ status: 'error', message: e?.message || String(e) });
+  }
 });
 
 // MCP-style endpoint for executing Braid envelopes
