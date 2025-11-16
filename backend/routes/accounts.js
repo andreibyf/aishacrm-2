@@ -8,7 +8,7 @@ import {
   enforceEmployeeDataScope,
   validateTenantAccess,
 } from "../middleware/validateTenant.js";
-import { tenantScopedId, buildGetByIdSQL } from "../middleware/tenantScopedId.js";
+import { tenantScopedId, buildGetByIdSQL as _buildGetByIdSQL } from "../middleware/tenantScopedId.js";
 
 export default function createAccountRoutes(_pgPool) {
   const router = express.Router();

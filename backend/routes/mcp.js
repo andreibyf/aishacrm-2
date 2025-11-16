@@ -8,7 +8,7 @@ import fetch from "node-fetch";
 import { getSupabaseClient } from "../lib/supabase-db.js";
 import { createChatCompletion } from "../lib/aiProvider.js";
 
-export default function createMCPRoutes(pgPool) {
+export default function createMCPRoutes(_pgPool) {
   const router = express.Router();
   const supa = getSupabaseClient();
 

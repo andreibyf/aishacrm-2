@@ -24,8 +24,9 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
     return connections.filter(c => c.from === nodeId);
   };
 
-  const getNodeType = (nodeId) => {
-    return nodes.find(n => n.id === nodeId)?.type;
+  const _getNodeType = (_type) => {
+    // Placeholder function - not currently used
+    return 'default';
   };
 
   const renderConnector = (node, nodeConnections) => {

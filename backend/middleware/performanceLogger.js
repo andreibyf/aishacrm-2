@@ -3,7 +3,8 @@
  * Tracks API request performance metrics
  */
 import { getRequestDbTime } from '../lib/requestContext.js';
-import { getSupabaseClient } from '../lib/supabase-db.js';
+import { getRedisClient } from '../lib/redis.js';
+import { getSupabaseClient as _getSupabaseClient } from '../lib/supabase-db.js';
 import { enqueuePerformanceLog } from '../lib/perfLogBatcher.js';
 
 export function performanceLogger(pgPool) {

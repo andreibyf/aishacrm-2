@@ -1,7 +1,7 @@
 import express from 'express';
 import { resolveCanonicalTenant, getTenantResolveCacheStats, clearTenantResolveCache } from '../lib/tenantCanonicalResolver.js';
 
-export default function createTenantResolveRoutes(pgPool) { // pgPool unused but kept for signature consistency
+export default function createTenantResolveRoutes(_pgPool) { // pgPool unused but kept for signature consistency
   const router = express.Router();
 
   // GET /api/tenantresolve/metrics - Prometheus-style metrics (must be before /:identifier)
@@ -74,7 +74,7 @@ export default function createTenantResolveRoutes(pgPool) { // pgPool unused but
   });
 
   // GET /api/tenantresolve/:identifier?stats=true - resolve canonical tenant
-  router.get('/:identifier', async (req, res) => {
+  router.get('/:identifier', async (req, res, _pgPool) => {
     try {
       const { identifier } = req.params;
       const result = await resolveCanonicalTenant(identifier);

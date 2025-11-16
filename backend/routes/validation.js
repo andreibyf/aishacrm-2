@@ -35,7 +35,7 @@ async function findDuplicatesInDbSupabase(supabase, entityTable, tenantId, field
   }
 
   // Build GROUP BY key: coalesce each field to empty string to avoid null grouping issues
-  const keyExpr = safeFields
+  const _keyExpr = safeFields
     .map((f) => `COALESCE(${f}::text, '')`)
     .join(` || '|' || `);
 

@@ -18,19 +18,17 @@ import {
   CheckCircle,
   CheckCircle2,
   Clock,
-  Database,
   Eye,
   FileText,
   Globe,
   Loader2,
   Lock,
-  RefreshCw,
   Server,
   Shield,
   TrendingUp,
   Zap,
 } from "lucide-react";
-import { mcpServerPublic } from "@/api/functions";
+import { mcpServerPublic as _mcpServerPublic } from "@/api/functions";
 
 export default function MCPServerMonitor() {
   const BRAID_MCP_URL = "http://localhost:8000";
@@ -39,7 +37,7 @@ export default function MCPServerMonitor() {
   // State management
   const [isTesting, setIsTesting] = useState(false);
   const [isRunningFullTests, setIsRunningFullTests] = useState(false);
-  const [testResults, setTestResults] = useState(null);
+  const [_testResults, _setTestResults] = useState(null);
   const [fullTestResults, setFullTestResults] = useState(null);
   const [logs, setLogs] = useState([]);
   const logIdCounter = React.useRef(0);
@@ -429,7 +427,7 @@ export default function MCPServerMonitor() {
           lastChecked: new Date().toISOString()
         }));
 
-        setTestResults({
+        _setTestResults({
           status: "success",
           message: "Server is operational"
         });
@@ -457,7 +455,7 @@ export default function MCPServerMonitor() {
         lastDowntime: new Date().toISOString(),
         lastChecked: new Date().toISOString()
       }));
-      setTestResults({
+      _setTestResults({
         status: "error",
         error: error.message
       });
