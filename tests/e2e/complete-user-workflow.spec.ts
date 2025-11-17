@@ -1,5 +1,5 @@
 /**
- * Complete End-to-End User Workflow Test
+ * Complete End-to-End User Workflow Test (NOT tagged @smoke intentionally)
  * 
  * This test simulates a realistic user journey through the entire CRM system:
  * 1. Create a lead (inbound inquiry)
@@ -197,7 +197,7 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
       localStorage.setItem('E2E_TEST_MODE', 'true');
       localStorage.setItem('tenant_id', 'local-tenant-001');
       localStorage.setItem('selected_tenant_id', 'local-tenant-001');
-      window.__e2eUser = {
+      (window as any).__e2eUser = {
         id: 'e2e-test-user-id',
         email: 'e2e@example.com',
         role: 'superadmin',
