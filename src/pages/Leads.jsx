@@ -354,16 +354,15 @@ export default function LeadsPage() {
       }
 
       if (searchTerm) {
-        const searchRegex = { $regex: searchTerm, $options: "i" };
         currentFilter = {
           ...currentFilter,
           $or: [
-            { first_name: searchRegex },
-            { last_name: searchRegex },
-            { email: searchRegex },
-            { phone: searchRegex },
-            { company: searchRegex },
-            { job_title: searchRegex },
+            { first_name: { $icontains: searchTerm } },
+            { last_name: { $icontains: searchTerm } },
+            { email: { $icontains: searchTerm } },
+            { phone: { $icontains: searchTerm } },
+            { company: { $icontains: searchTerm } },
+            { job_title: { $icontains: searchTerm } },
           ],
         };
       }
