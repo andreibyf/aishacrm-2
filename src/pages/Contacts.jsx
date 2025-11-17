@@ -279,6 +279,18 @@ export default function ContactsPage() {
     try {
       const scopedFilter = getTenantFilter();
 
+      // Add search filter using $or for multiple fields
+      if (searchTerm) {
+        scopedFilter.$or = [
+          { first_name: { $icontains: searchTerm } },
+          { last_name: { $icontains: searchTerm } },
+          { email: { $icontains: searchTerm } },
+          { phone: { $icontains: searchTerm } },
+          { job_title: { $icontains: searchTerm } },
+          { account_name: { $icontains: searchTerm } },
+        ];
+      }
+
       if (!scopedFilter.tenant_id && user.role !== "superadmin") {
         logger.warning(
           "No explicit tenant_id in scopedFilter for non-superadmin user. This might indicate incomplete tenant context.",
@@ -301,18 +313,7 @@ export default function ContactsPage() {
 
       let filtered = allContacts || [];
 
-      if (searchTerm) {
-        const search = searchTerm.toLowerCase();
-        filtered = filtered.filter((contact) =>
-          contact.first_name?.toLowerCase().includes(search) ||
-          contact.last_name?.toLowerCase().includes(search) ||
-          contact.email?.toLowerCase().includes(search) ||
-          contact.phone?.includes(searchTerm) ||
-          contact.job_title?.toLowerCase().includes(search) ||
-          contact.account_name?.toLowerCase().includes(search)
-        );
-      }
-
+      // Apply client-side filters for status and tags
       if (statusFilter !== "all") {
         filtered = filtered.filter((contact) =>
           contact.status === statusFilter
