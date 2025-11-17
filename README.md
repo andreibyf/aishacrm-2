@@ -182,12 +182,19 @@ Braid is an **AI-native language designed by LLMs, for LLMs** with:
 - [DEV_QUICK_START.md](./DEV_QUICK_START.md) - Development workflow guide
 - **🆕 [CALL_FLOW_QUICK_TEST.md](./CALL_FLOW_QUICK_TEST.md)** - Test telephony integration
 
+**Having Git Issues?**
+- [GIT_SOLUTION_SUMMARY.md](./GIT_SOLUTION_SUMMARY.md) - **START HERE** for all git help
+- [GIT_QUICK_REFERENCE.md](./GIT_QUICK_REFERENCE.md) - Common git commands & fixes
+- [GIT_CONFLICT_RESOLUTION.md](./GIT_CONFLICT_RESOLUTION.md) - Fix merge conflicts & clean up branches
+- [EXAMPLE_CONFLICT_RESOLUTION.md](./EXAMPLE_CONFLICT_RESOLUTION.md) - Step-by-step walkthrough
+
 **TL;DR:**
 1. ALWAYS run `Get-Location` before executing commands
 2. Use separate terminals for backend, frontend, and your work
 3. Verify directory location - never assume where you are
-4. See **[User Guide](./docs/AISHA_CRM_USER_GUIDE.md)** for feature documentation
-5. See **[Database Manual](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md)** for database operations
+ 4. See **[User Guide](./docs/AISHA_CRM_USER_GUIDE.md)** for feature documentation
+ 5. See **[Database Manual](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md)** for database operations
+ 6. Having git issues? Run `\.\cleanup-branches.ps1` or `./cleanup-branches.sh`
 
 ## Getting Started
 
@@ -375,6 +382,13 @@ Both frontend and backend automatically restart when you save changes:
 - Requirements: Copilot for Pull Requests must be enabled for your org/repo. You can also enable the built-in setting at Settings → Copilot → Pull requests → “Automatically request a review from GitHub Copilot”.
 - Tweaks: adjust the branch condition in the workflow if you want Copilot on other target branches.
 
+### Copilot Instructions & Tasks
+This repository includes comprehensive configuration for GitHub Copilot coding agent:
+
+- **Instructions:** `.github/copilot-instructions.md` - Project-specific guidance covering architecture, workflows, conventions, testing practices, and common pitfalls
+- **Tasks:** `.copilot/tasks.yml` - Pre-defined task templates for code refactoring, bug fixes, test improvements, and documentation updates
+- **Usage:** Assign issues to Copilot with clear descriptions and it will follow these instructions to maintain code quality and consistency
+
 ## Building the app
 
 ```bash
@@ -383,11 +397,18 @@ npm run build
 
 ## Scripts
 
+### Development Scripts
 - `npm run dev` - Start development server
 - `npm run build` - Build for production
 - `npm run preview` - Preview production build locally
 - `npm run lint` - Run ESLint
 - `npm audit` - Check for security vulnerabilities
+
+### Utility Scripts
+- `.\start-all.ps1` - Start both frontend and backend (PowerShell)
+- `.\cleanup-branches.ps1` - Clean up git branches (PowerShell)
+- `./cleanup-branches.sh` - Clean up git branches (Bash)
+- `.\stop-all.ps1` - Stop all background processes
 
 ## Project Structure
 
@@ -401,7 +422,7 @@ npm run build
 - `src/entities/` - 47 data entity schemas
 - `src/components/` - Reusable React components organized by domain
 - `src/pages/` - Page-level components and routes
-- `src/utils/` - Utility functions and helpers
+- `src/utils/` - **NEW:** Shared utility modules (logging, validation, permissions) - See `src/utils/README.md`
 - `src/hooks/` - Custom React hooks
 
 **See [Developer Manual - Ch 4: Frontend Development](./docs/AISHA_CRM_DEVELOPER_MANUAL.md#chapter-4-frontend-development) for details.**
@@ -409,6 +430,7 @@ npm run build
 ### Backend
 - `backend/server.js` - Express server with **210+ API endpoints**
 - `backend/routes/` - API route handlers (**28 categories**)
+- `backend/utils/` - **NEW:** Backend utility modules (logging, error handling)
 - `backend/.env` - Backend configuration
 - `backend/migrations/` - Database migrations (52+ files)
 - **🆕 `backend/lib/callFlowHandler.js`** - Telephony webhook processing
