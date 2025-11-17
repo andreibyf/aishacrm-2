@@ -1,15 +1,18 @@
 // transitions.js - helper to record entity move/conversion events
 
-async function resolveTenantIdForTransitions(pgPool, tenantSlugOrId) {
+async function resolveTenantIdForTransitions(supabase, tenantSlugOrId) {
   // Some environments use TEXT slug for tenant_id, but entity_transitions.tenant_id may be UUID
   // Try to resolve the tenant UUID by slug; fall back to provided value if not found
   try {
-    const res = await pgPool.query(
-      'SELECT id FROM tenant WHERE tenant_id = $1 LIMIT 1',
-      [tenantSlugOrId]
-    );
-    if (res?.rows?.length && res.rows[0].id) {
-      return res.rows[0].id; // UUID
+    const { data, error } = await supabase
+      .from('tenants')
+      .select('id')
+      .eq('tenant_id', tenantSlugOrId)
+      .limit(1)
+      .single();
+    
+    if (!error && data?.id) {
+      return data.id; // UUID
     }
   } catch {
     // Ignore lookup errors and fall back
@@ -17,7 +20,7 @@ async function resolveTenantIdForTransitions(pgPool, tenantSlugOrId) {
   return tenantSlugOrId;
 }
 
-export async function logEntityTransition(pgPool, {
+export async function logEntityTransition(supabase, {
   tenant_id,
   from_table,
   from_id,
@@ -27,19 +30,23 @@ export async function logEntityTransition(pgPool, {
   performed_by,
   snapshot,
 }) {
-  const tenantForInsert = await resolveTenantIdForTransitions(pgPool, tenant_id);
-  const q = `INSERT INTO entity_transitions
-    (tenant_id, from_table, from_id, to_table, to_id, action, performed_by, snapshot)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`;
-  const params = [
-    tenantForInsert,
-    from_table,
-    from_id,
-    to_table,
-    to_id,
-    action,
-    performed_by || null,
-    snapshot || null,
-  ];
-  await pgPool.query(q, params);
+  const tenantForInsert = await resolveTenantIdForTransitions(supabase, tenant_id);
+  
+  const { error } = await supabase
+    .from('entity_transitions')
+    .insert([{
+      tenant_id: tenantForInsert,
+      from_table,
+      from_id,
+      to_table,
+      to_id,
+      action,
+      performed_by: performed_by || null,
+      snapshot: snapshot || null,
+    }]);
+  
+  if (error) {
+    console.warn('[Transitions] Failed to log entity transition:', error.message);
+    // Don't throw - logging transition failures shouldn't break the main operation
+  }
 }
