@@ -197,6 +197,26 @@ export async function addMessage(conversation, { role, content, file_urls = [] }
 }
 
 /**
+ * Optional helper to provide a WhatsApp connect URL for the agent chat button.
+ * Returns null by default unless a valid URL is configured in localStorage.
+ * Configure by setting localStorage key 'whatsapp_connect_url' to a full https URL.
+ * @param {string} agent_name
+ * @returns {string|null}
+ */
+export function getWhatsAppConnectURL(agent_name) {
+  void agent_name;
+  try {
+    const url = localStorage.getItem('whatsapp_connect_url');
+    if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
+      return url;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+/**
  * Subscribe to conversation updates via Server-Sent Events (SSE)
  * @param {string} conversationId - Conversation ID
  * @param {Function} callback - Callback function for updates
@@ -247,4 +267,5 @@ export default {
   deleteConversation,
   addMessage,
   subscribeToConversation,
+  getWhatsAppConnectURL,
 };
