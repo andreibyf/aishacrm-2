@@ -63,6 +63,8 @@
 - [9.3 Log Management](#93-log-management)
 - [9.4 Cleanup Operations](#94-cleanup-operations)
 - [9.5 Campaign Worker Management](#95-campaign-worker-management)
+- [9.6 Call Flow System](#96-call-flow-system)
+- [9.7 Braid MCP Server](#97-braid-mcp-server)
 
 ### Chapter 10: Troubleshooting
 - [10.1 Common Issues](#101-common-issues)
@@ -1544,6 +1546,581 @@ To avoid provider rate limits:
 - Monitor failed webhook deliveries
 - Review `system_logs` for anomalies
 - Keep `tenant_integrations` audit trail
+
+---
+
+## 9.6 Call Flow System
+
+### Overview
+
+The Call Flow System processes inbound and outbound call webhooks from telephony providers (Twilio, SignalWire, CallFluent, Thoughtly), automatically creating leads, logging activities, analyzing transcripts with AI, and managing follow-up tasks.
+
+### Architecture
+
+```mermaid
+graph TD
+    A[Telephony Provider] -->|Webhook| B[Call Flow Handler]
+    B --> C{Inbound/Outbound?}
+    
+    C -->|Inbound| D[Find/Create Contact]
+    C -->|Outbound| E[Validate Contact]
+    
+    D --> F[Phone Lookup]
+    F -->|Found| G[Existing Contact]
+    F -->|Not Found| H[Create Lead]
+    
+    E --> I[Log Call Activity]
+    G --> I
+    H --> I
+    
+    I --> J{Transcript Provided?}
+    J -->|Yes| K[Analyze with AI]
+    J -->|No| L[Basic Logging Only]
+    
+    K --> M[Extract Action Items]
+    M --> N[Create Formatted Note]
+    N --> O[Create Follow-up Activities]
+    O --> P[Complete Fulfilled Activities]
+    
+    P --> Q[Update Campaign Progress]
+    L --> Q
+    Q --> R[Emit Webhook]
+```
+
+### Key Features
+
+- **Automatic Lead Creation**: Unknown callers become leads with AI-extracted names/emails
+- **AI Transcript Analysis**: GPT-4 extracts action items, sentiment, customer requests
+- **Smart Activity Management**: Auto-creates follow-up tasks, auto-completes fulfilled actions
+- **Campaign Integration**: Tracks outbound call outcomes, updates progress
+- **Provider Adapters**: Normalizes webhooks from multiple telephony providers
+- **Contact Context Preparation**: Provides AI agents with full contact details and talking points
+
+### Configuration
+
+#### Environment Variables
+
+Add to `backend/.env`:
+
+```env
+# Call Flow & Transcript Analysis
+USE_BRAID_MCP_TRANSCRIPT_ANALYSIS=true
+BRAID_MCP_URL=http://braid-mcp-server:8000
+TRANSCRIPT_ANALYSIS_MODEL=gpt-4o-mini
+```
+
+**Variable Reference:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `USE_BRAID_MCP_TRANSCRIPT_ANALYSIS` | `false` | Enable AI-powered transcript analysis via Braid MCP |
+| `BRAID_MCP_URL` | `http://braid-mcp-server:8000` | Braid MCP Server endpoint |
+| `TRANSCRIPT_ANALYSIS_MODEL` | `gpt-4o-mini` | OpenAI model for transcript analysis |
+
+#### Webhook Endpoints
+
+Configure these URLs in your telephony provider dashboard:
+
+**Inbound Calls:**
+```
+https://your-domain.com/api/telephony/webhook/{provider}/inbound?tenant_id={UUID}
+```
+
+**Outbound Calls:**
+```
+https://your-domain.com/api/telephony/webhook/{provider}/outbound?tenant_id={UUID}
+```
+
+**Supported Providers:** `twilio`, `signalwire`, `callfluent`, `thoughtly`
+
+### Monitoring
+
+#### Log Output
+
+Call flow logs include `[CallFlow]` prefix:
+
+```
+[CallFlow] Processing inbound call from +15551234567
+[CallFlow] Contact not found, creating lead
+[CallFlow] Analyzing transcript (342 chars)
+[CallFlow] Using Braid MCP AI analysis
+[CallFlow] Created 2 action activities
+[CallFlow] ✓ Auto-completed activity 123: Send pricing information
+```
+
+#### Check Call Activities
+
+```sql
+-- Recent call activities
+SELECT 
+    id, 
+    related_type, 
+    subject, 
+    created_at,
+    metadata->'call_sid' as call_sid,
+    metadata->'duration' as duration,
+    metadata->'sentiment' as sentiment
+FROM activities 
+WHERE type = 'call' 
+ORDER BY created_at DESC 
+LIMIT 10;
+```
+
+#### Check Auto-Created Activities
+
+```sql
+-- Auto-created follow-up tasks
+SELECT 
+    id,
+    type,
+    subject,
+    status,
+    due_date,
+    metadata->'priority' as priority,
+    metadata->'auto_created' as auto_created
+FROM activities
+WHERE metadata->>'auto_created' = 'true'
+ORDER BY created_at DESC
+LIMIT 20;
+```
+
+#### Check Auto-Completed Activities
+
+```sql
+-- Activities closed by transcript analysis
+SELECT 
+    id,
+    subject,
+    status,
+    completed_at,
+    metadata->'completion_note' as what_was_done,
+    metadata->'auto_completed' as auto_completed
+FROM activities
+WHERE metadata->>'auto_completed' = 'true'
+ORDER BY completed_at DESC
+LIMIT 20;
+```
+
+### AI Transcript Analysis
+
+The system supports two analysis modes:
+
+#### 1. Braid MCP Server (Recommended)
+
+**Benefits:**
+- Tenant-specific OpenAI key resolution
+- Structured JSON responses
+- Better action item extraction
+- Redis-backed agent memory
+- Unified AI operations interface
+
+**How It Works:**
+1. Transcript sent to Braid MCP Server
+2. Braid resolves API key (tenant → system → env var)
+3. GPT-4o-mini analyzes transcript
+4. Returns structured JSON with action items, sentiment, requests
+5. System creates notes and activities automatically
+
+#### 2. Pattern Matching (Fallback)
+
+If Braid MCP unavailable, uses regex patterns to extract:
+- "send me..." → Email task
+- "schedule..." → Meeting task
+- "call me back" → Follow-up call
+- "I sent..." → Completion detection
+
+### Action Item Extraction
+
+**What Gets Extracted:**
+
+1. **Customer Requests**: "Can you send me pricing?"
+2. **Commitments Made**: "I'll email you by Friday"
+3. **Action Items**: Tasks with priority (high/medium/low) and type (email/call/meeting)
+4. **Fulfilled Actions**: Past-tense actions ("I sent", "I scheduled")
+5. **Sentiment**: Positive/neutral/negative
+
+**What Gets Created:**
+
+- **Note**: Formatted summary with action items and emojis
+- **Activities**: High/medium priority tasks with due dates
+- **Completions**: Matching pending activities marked as complete
+
+### Contact Context Preparation
+
+For outbound AI calls, the system prepares rich context:
+
+```powershell
+# Prepare call context
+POST /api/telephony/prepare-call
+{
+  "tenant_id": "uuid",
+  "contact_id": "uuid",
+  "campaign_id": "uuid"  # Optional
+}
+```
+
+**Returns:**
+- Contact details (name, phone, email, company, title)
+- Recent interactions (last 5 activities)
+- Campaign script and goals
+- **Talking points** (7 personalized conversation prompts)
+
+### Troubleshooting
+
+#### No Transcript Analysis
+
+**Check Braid MCP Status:**
+```powershell
+Invoke-RestMethod -Uri "http://localhost:8000/health"
+```
+
+**Check Logs:**
+```powershell
+docker logs aishacrm-backend | Select-String "CallFlow.*transcript"
+```
+
+**Common Issues:**
+- Braid MCP not running: `docker-compose up -d braid-mcp-server`
+- No OpenAI key configured
+- Transcript field empty in webhook payload
+
+#### Activities Not Auto-Creating
+
+**Check:**
+1. Transcript provided in webhook
+2. Action items extracted (check note metadata)
+3. Priority is high or medium (low doesn't auto-create)
+
+```sql
+-- Check action items in notes
+SELECT 
+    content,
+    metadata->'action_items' as action_items
+FROM notes
+WHERE related_id = 'contact-uuid'
+ORDER BY created_at DESC
+LIMIT 1;
+```
+
+#### Activities Not Auto-Completing
+
+**Fulfillment patterns must be present:**
+- "I sent..." or "emailed you"
+- "I scheduled" or "booked"
+- "Following up as promised"
+
+**Check for pending activities:**
+```sql
+-- Must have pending activity to complete
+SELECT * FROM activities
+WHERE related_id = 'contact-uuid'
+  AND status = 'pending'
+  AND type IN ('email', 'call', 'meeting')
+ORDER BY created_at DESC;
+```
+
+### Security Considerations
+
+✅ **Enforced by Design:**
+- Tenant ID required in all webhook URLs
+- Phone number validation
+- Provider signature verification (production)
+- Rate limiting on webhook endpoints
+
+⚠️ **Admin Responsibilities:**
+- Configure webhook URLs with correct tenant_id
+- Enable webhook signature verification in production
+- Monitor for suspicious call patterns
+- Review auto-created leads regularly
+
+### Documentation
+
+See also:
+- `backend/CALL_FLOW_DOCUMENTATION.md` - Complete technical reference
+- `CALL_FLOW_QUICK_TEST.md` - PowerShell test examples
+- `CALL_FLOW_IMPLEMENTATION_SUMMARY.md` - Implementation overview
+
+---
+
+## 9.7 Braid MCP Server
+
+### Overview
+
+The Braid MCP Server is a unified AI operations hub that provides a standardized interface for AI interactions across the CRM. It handles LLM operations, CRM data access, web research, and GitHub integration through a Braid v0 framework.
+
+### Architecture
+
+```mermaid
+graph TD
+    A[Call Flow System] -->|Transcript Analysis| B[Braid MCP Server]
+    C[Campaign Worker] -->|AI Operations| B
+    D[Frontend AI Tools] -->|Requests| B
+    
+    B --> E[LLM Adapter]
+    B --> F[CRM Adapter]
+    B --> G[Web Adapter]
+    B --> H[GitHub Adapter]
+    B --> I[Memory Adapter]
+    
+    E -->|API Key Resolution| J[Tenant Integrations]
+    E -->|Fallback| K[System Settings]
+    E -->|Last Resort| L[Environment Variable]
+    
+    E -->|Analyze| M[OpenAI GPT-4]
+    F -->|Query/Update| N[Supabase Database]
+    G -->|Research| O[Wikipedia API]
+    H -->|Code Operations| P[GitHub API]
+    I -->|Session Memory| Q[Redis/Valkey]
+```
+
+### Key Features
+
+- **Unified AI Interface**: Single API for all AI operations
+- **Smart Key Resolution**: Automatic tenant-specific OpenAI key selection
+- **Multi-Adapter Architecture**: CRM, LLM, Web, GitHub, Memory adapters
+- **Redis Memory Layer**: Persistent agent context across conversations
+- **Direct Supabase Access**: Optional direct database queries for performance
+- **Type-Safe TypeScript**: Comprehensive type definitions
+
+### Configuration
+
+#### Environment Variables
+
+Add to `braid-mcp-server/.env`:
+
+```env
+# Server Configuration
+NODE_ENV=production
+PORT=8000
+
+# Backend API (fallback for CRM operations)
+CRM_BACKEND_URL=http://backend:3001
+
+# Supabase (direct database access)
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+USE_DIRECT_SUPABASE_ACCESS=true
+
+# Redis (agent memory)
+REDIS_URL=redis://redis:6379
+
+# OpenAI
+DEFAULT_OPENAI_MODEL=gpt-4o-mini
+
+# GitHub
+GITHUB_TOKEN=your-github-token
+```
+
+**Variable Reference:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8000` | HTTP server port |
+| `CRM_BACKEND_URL` | `http://backend:3001` | Aisha CRM backend URL |
+| `USE_DIRECT_SUPABASE_ACCESS` | `false` | Bypass backend, query Supabase directly |
+| `DEFAULT_OPENAI_MODEL` | `gpt-4o-mini` | Default LLM model |
+| `REDIS_URL` | - | Redis connection string for agent memory |
+
+### Starting the Server
+
+```powershell
+# Docker Compose (recommended)
+docker-compose up -d braid-mcp-server
+
+# Local development
+cd braid-mcp-node-server
+npm install
+npm run build
+npm start
+
+# Check health
+Invoke-RestMethod -Uri "http://localhost:8000/health"
+# Expected: {"status":"ok","service":"braid-mcp-server"}
+```
+
+### Adapters
+
+#### LLM Adapter (`system: "llm"`)
+
+OpenAI integration with intelligent API key resolution.
+
+**Supported Operations:**
+- `generate-json` - Generate structured JSON from prompts
+
+**Key Resolution Priority:**
+1. Explicit `api_key` in payload
+2. Tenant integration (`tenant_integrations` table)
+3. System settings (`system_settings` table)
+4. Environment variable `OPENAI_API_KEY`
+
+**Example:**
+```json
+POST /mcp/run
+{
+  "requestId": "req-123",
+  "actor": { "id": "system", "type": "system" },
+  "actions": [{
+    "id": "analyze",
+    "system": "llm",
+    "resource": { "kind": "generate-json", "id": "1" },
+    "verb": "create",
+    "payload": {
+      "prompt": "Analyze this call transcript...",
+      "model": "gpt-4o-mini",
+      "temperature": 0.2
+    },
+    "metadata": { "tenant_id": "uuid" }
+  }]
+}
+```
+
+#### CRM Adapter (`system: "crm"`)
+
+Direct Supabase or backend API access for CRM operations.
+
+**Supported Kinds:**
+- `accounts`, `leads`, `contacts`, `opportunities`, `activities`
+
+**Supported Verbs:**
+- `read`, `search`, `create`, `update`, `delete`
+
+#### Web Adapter (`system: "web"`)
+
+Wikipedia research for market intelligence.
+
+**Supported Kinds:**
+- `wikipedia-search` - Search articles
+- `wikipedia-page` - Fetch full content
+
+#### Memory Adapter (`system: "memory"`)
+
+Redis-backed agent memory for multi-turn conversations.
+
+**Supported Operations:**
+- Store/retrieve conversation context
+- Agent session persistence
+- Cross-request memory
+
+### Monitoring
+
+#### Health Check
+
+```powershell
+# Server health
+Invoke-RestMethod -Uri "http://localhost:8000/health"
+
+# Memory status
+Invoke-RestMethod -Uri "http://localhost:8000/memory/status"
+```
+
+#### Logs
+
+```powershell
+# Docker
+docker logs braid-mcp-server -f --tail 100
+
+# Look for errors
+docker logs braid-mcp-server 2>&1 | Select-String "error"
+```
+
+#### Performance Metrics
+
+```powershell
+# Check container stats
+docker stats braid-mcp-server
+
+# Check Redis memory usage
+docker exec braid-mcp-server redis-cli INFO memory
+```
+
+### Integration with Call Flow
+
+The call flow system uses Braid MCP for transcript analysis:
+
+1. Call webhook received → `callFlowHandler.js`
+2. If `USE_BRAID_MCP_TRANSCRIPT_ANALYSIS=true`:
+   - Sends transcript to Braid MCP
+   - Braid resolves tenant's OpenAI key
+   - GPT-4 analyzes and returns structured JSON
+3. Call flow creates notes and activities from AI response
+4. Falls back to pattern matching if Braid unavailable
+
+### Troubleshooting
+
+#### Server Won't Start
+
+**Check:**
+```powershell
+# View logs
+docker logs braid-mcp-server
+
+# Common issues:
+# - Port 8000 already in use
+# - Missing environment variables
+# - Redis not running
+```
+
+**Fix:**
+```powershell
+# Restart Redis
+docker-compose up -d redis
+
+# Rebuild and restart
+docker-compose up -d --build braid-mcp-server
+```
+
+#### LLM Operations Failing
+
+**Check API Key Resolution:**
+```sql
+-- Check tenant integration
+SELECT * FROM tenant_integrations
+WHERE tenant_id = 'uuid'
+  AND integration_type = 'openai'
+  AND is_active = true;
+
+-- Check system settings
+SELECT * FROM system_settings
+WHERE setting_key = 'openai_api_key';
+```
+
+**Check Logs:**
+```powershell
+docker logs braid-mcp-server | Select-String "OpenAI"
+```
+
+#### Memory Layer Unavailable
+
+**Check Redis:**
+```powershell
+# Test Redis connection
+docker exec braid-mcp-server redis-cli PING
+# Expected: PONG
+
+# Check Redis is running
+docker ps | Select-String "redis"
+```
+
+### Security Considerations
+
+✅ **Enforced by Design:**
+- Tenant validation before database access
+- OpenAI API key isolation per tenant
+- No cross-tenant data leakage
+- Redis memory isolation by tenant_id
+
+⚠️ **Admin Responsibilities:**
+- Secure `SUPABASE_SERVICE_ROLE_KEY` (bypasses RLS)
+- Monitor OpenAI usage per tenant
+- Review Redis memory usage
+- Rate limit MCP endpoint in production
+
+### Documentation
+
+See also:
+- `braid-mcp-node-server/README-braid-mcp-node.md` - Complete reference
+- Braid v0 Framework documentation
+- OpenAI API documentation
 
 ---
 

@@ -384,117 +384,22 @@ async function sendEmail(integrationType, credentials, toEmail, _subject, _body)
 /**
  * Trigger AI call via integration
  */
-async function triggerAICall(integrationType, credentials, phone, metadata) {
+async function triggerAICall(integrationType, credentials, phone, _metadata) {
+  // Stub implementation - to be expanded with actual providers
   console.log(`[CampaignWorker] Triggering AI call via ${integrationType} to ${phone}`);
   
-  // Step 1: Prepare call context with contact details and talking points
-  const { contact_id, campaign_id, tenant_id } = metadata;
-  
-  let callContext;
-  try {
-    const { prepareOutboundCall } = await import('./callFlowHandler.js');
-    const { pgPool } = await import('../config/db.js');
-    
-    callContext = await prepareOutboundCall(pgPool, {
-      tenant_id,
-      contact_id,
-      campaign_id
-    });
-  } catch (error) {
-    console.error('[CampaignWorker] Failed to prepare call context:', error);
-    throw new Error('Failed to prepare call context');
-  }
-  
-  // Step 2: Trigger call with full context via provider
   switch (integrationType) {
     case 'callfluent':
-      return await triggerCallFluentCall(credentials, callContext, campaign_id);
+      // TODO: Implement CallFluent API
+      throw new Error('CallFluent integration not yet implemented');
       
     case 'thoughtly':
-      return await triggerThoughtlyCall(credentials, callContext, campaign_id);
+      // TODO: Implement Thoughtly API
+      throw new Error('Thoughtly integration not yet implemented');
       
     default:
       throw new Error(`Unsupported call integration: ${integrationType}`);
   }
-}
-
-/**
- * Trigger CallFluent AI call with full contact context
- */
-async function triggerCallFluentCall(credentials, callContext, _campaign_id) {
-  const { api_key: _api_key, agent_id: _agent_id } = credentials;
-  
-  // TODO: Integrate with CallFluent API
-  // const response = await fetch('https://api.callfluent.com/v1/calls', {
-  //   method: 'POST',
-  //   headers: {
-  //     'Authorization': `Bearer ${api_key}`,
-  //     'Content-Type': 'application/json'
-  //   },
-  //   body: JSON.stringify({
-  //     agent_id: agent_id,
-  //     to: callContext.contact.phone,
-  //     context: {
-  //       contact_name: callContext.contact.name,
-  //       contact_email: callContext.contact.email,
-  //       contact_company: callContext.contact.company,
-  //       call_purpose: callContext.call_context.purpose,
-  //       talking_points: callContext.call_context.talking_points,
-  //       campaign_id: campaign_id
-  //     },
-  //     webhook_url: `${process.env.BACKEND_URL}/api/telephony/webhook/callfluent/outbound`
-  //   })
-  // });
-  
-  console.log('[CampaignWorker] CallFluent call triggered (stub):', {
-    to: callContext.contact.phone,
-    name: callContext.contact.name,
-    purpose: callContext.call_context.purpose,
-    talking_points: callContext.call_context.talking_points
-  });
-  
-  return { success: true, provider: 'callfluent', status: 'initiated' };
-}
-
-/**
- * Trigger Thoughtly AI call with full contact context
- */
-async function triggerThoughtlyCall(credentials, callContext, _campaign_id) {
-  const { api_key: _api_key, agent_id: _agent_id } = credentials;
-  
-  // TODO: Integrate with Thoughtly API
-  // const response = await fetch('https://api.thoughtly.ai/v1/calls', {
-  //   method: 'POST',
-  //   headers: {
-  //     'Authorization': `Bearer ${api_key}`,
-  //     'Content-Type': 'application/json'
-  //   },
-  //   body: JSON.stringify({
-  //     agent_id: agent_id,
-  //     phone_number: callContext.contact.phone,
-  //     contact_info: {
-  //       name: callContext.contact.name,
-  //       email: callContext.contact.email,
-  //       company: callContext.contact.company
-  //     },
-  //     script: callContext.call_context.purpose,
-  //     talking_points: callContext.call_context.talking_points,
-  //     metadata: {
-  //       campaign_id: campaign_id,
-  //       contact_id: callContext.contact.id
-  //     },
-  //     callback_url: `${process.env.BACKEND_URL}/api/telephony/webhook/thoughtly/outbound`
-  //   })
-  // });
-  
-  console.log('[CampaignWorker] Thoughtly call triggered (stub):', {
-    to: callContext.contact.phone,
-    name: callContext.contact.name,
-    purpose: callContext.call_context.purpose,
-    talking_points: callContext.call_context.talking_points
-  });
-  
-  return { success: true, provider: 'thoughtly', status: 'initiated' };
 }
 
 /**
