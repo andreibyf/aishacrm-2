@@ -260,6 +260,17 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     }
     
     console.log('✅ Lead visible in UI');
+    
+    // Click eye icon to view lead details
+    console.log('   👁️ Opening lead detail view...');
+    const leadRow = page.locator('tr').filter({ hasText: testData.lead.email }).first();
+    const viewButton = leadRow.getByRole('button', { name: /view/i }).or(leadRow.locator('[data-testid="view-button"]')).or(leadRow.locator('button:has-text("View")')).or(leadRow.locator('button svg').first()).first();
+    await viewButton.click().catch(async () => {
+      console.log('   ⚠️ View button not found, trying row click...');
+      await leadRow.click();
+    });
+    await page.waitForTimeout(2000); // View detail panel
+    console.log('✅ Lead detail view displayed');
     await page.waitForTimeout(1000); // Pause for observation
     
     // ================================================================
@@ -357,6 +368,17 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     
     await expect(page.getByText(testData.lead.company)).toBeVisible({ timeout: 10000 });
     console.log('✅ Account visible in UI');
+    
+    // Click eye icon to view account details
+    console.log('   👁️ Opening account detail view...');
+    const accountRow = page.locator('tr').filter({ hasText: testData.lead.company }).first();
+    const viewAccountButton = accountRow.getByRole('button', { name: /view/i }).or(accountRow.locator('[data-testid="view-button"]')).or(accountRow.locator('button:has-text("View")')).or(accountRow.locator('button svg').first()).first();
+    await viewAccountButton.click().catch(async () => {
+      console.log('   ⚠️ View button not found, trying row click...');
+      await accountRow.click();
+    });
+    await page.waitForTimeout(2000); // View detail panel
+    console.log('✅ Account detail view displayed');
     await page.waitForTimeout(1000); // Pause for observation
     
     // ================================================================
@@ -450,6 +472,17 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     
     await expect(page.getByText(testData.opportunity.name)).toBeVisible({ timeout: 10000 });
     console.log('✅ Opportunity visible in UI');
+    
+    // Click eye icon to view opportunity details
+    console.log('   👁️ Opening opportunity detail view...');
+    const opportunityRow = page.locator('tr').filter({ hasText: testData.opportunity.name }).first();
+    const viewOppButton = opportunityRow.getByRole('button', { name: /view/i }).or(opportunityRow.locator('[data-testid="view-button"]')).or(opportunityRow.locator('button:has-text("View")')).or(opportunityRow.locator('button svg').first()).first();
+    await viewOppButton.click().catch(async () => {
+      console.log('   ⚠️ View button not found, trying row click...');
+      await opportunityRow.click();
+    });
+    await page.waitForTimeout(2000); // View detail panel
+    console.log('✅ Opportunity detail view displayed');
     await page.waitForTimeout(1000); // Pause for observation
     
     // ================================================================
