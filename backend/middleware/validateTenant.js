@@ -39,17 +39,36 @@ export function validateTenantAccess(req, res, next) {
     });
   }
 
-  // Superadmins bypass all tenant restrictions
-  if (user.role === 'superadmin') {
-    return next();
-  }
-
   // Get tenant_id from various request sources
   const requestedTenantId = 
     req.body.tenant_id || 
     req.query.tenant_id || 
     req.params.tenant_id ||
     req.params.tenantId; // Support both snake_case and camelCase
+
+  // Superadmins have special privileges:
+  // - READ operations: can access ANY tenant's data (cross-tenant read access)
+  // - WRITE operations: must specify a valid tenant_id (no global writes)
+  if (user.role === 'superadmin') {
+    const isReadOperation = req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS';
+    
+    if (isReadOperation) {
+      // Allow read access to any tenant or no tenant (global view)
+      return next();
+    }
+    
+    // For write operations (POST, PUT, PATCH, DELETE), require a tenant_id
+    if (!requestedTenantId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Superadmin write operations require a tenant_id to be specified',
+        hint: 'Select a tenant from the dropdown before creating or modifying data'
+      });
+    }
+    
+    // Allow the write operation with the specified tenant
+    return next();
+  }
 
   // Admin/Manager/Employee must have a tenant_id assigned
   if (!user.tenant_id) {

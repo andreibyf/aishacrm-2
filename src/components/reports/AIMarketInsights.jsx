@@ -20,8 +20,7 @@ import {
   XCircle,
   Zap,
 } from "lucide-react";
-import { InvokeLLM } from "@/api/integrations";
-import { isLocalDevMode } from "@/api/mockData";
+// All generations are routed through the backend MCP server/tools for consistency
 // Note: Charts removed; keeping UI minimal with indicator cards only.
 
 const INDUSTRY_LABELS = {
@@ -97,16 +96,7 @@ export default function AIMarketInsights({ tenant }) {
   const [insights, setInsights] = useState(null);
   const [error, setError] = useState(null);
 
-  // Safer HTML-to-text sanitizer than regex tag stripping
-  const sanitizeToText = (html) => {
-    try {
-      const div = document.createElement('div');
-      div.innerHTML = String(html ?? '');
-      return (div.textContent || div.innerText || '').trim();
-    } catch {
-      return String(html ?? '');
-    }
-  };
+  // (no-op) sanitizer removed; backend returns plain text fields
 
   // Helper function to format large numbers with B/M/K suffixes
   const formatLargeNumber = (num) => {
@@ -169,311 +159,32 @@ export default function AIMarketInsights({ tenant }) {
     try {
       const industryLabel = INDUSTRY_LABELS[tenant.industry] || tenant.industry;
       const businessModel = tenant.business_model || "B2B";
-      const geographicFocus = GEOGRAPHIC_LABELS[tenant.geographic_focus] ||
-        "North America";
+      const geographicFocus = GEOGRAPHIC_LABELS[tenant.geographic_focus] || "North America";
 
-      // Build location string with increasing specificity
-      let locationContext = geographicFocus;
-      if (tenant.country) {
-        locationContext = tenant.country;
-        if (tenant.major_city) {
-          locationContext = `${tenant.major_city}, ${tenant.country}`;
-        }
-      }
-
-      console.log("Generating insights for:", {
-        industryLabel,
-        businessModel,
-        locationContext,
+      // Unified backend orchestration: call single endpoint
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || "http://localhost:4001";
+      const tenantId = tenant?.id || tenant?.tenant_id || "local-tenant-001";
+      const res = await fetch(`${BACKEND_URL}/api/mcp/market-insights`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-tenant-id": tenantId,
+        },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          industry: industryLabel,
+          business_model: businessModel,
+          geographic_focus: geographicFocus,
+          model: undefined, // use backend default
+        }),
       });
-
-      const prompt =
-        `You are an expert market research analyst. Provide a comprehensive, data-driven market analysis for a company operating in the ${industryLabel} industry.
-
-**Company Context:**
-- Industry: ${industryLabel}
-- Business Model: ${businessModel}
-- Location: ${locationContext}
-- Company: ${tenant.name || "A company"}
-
-**Generate a detailed analysis with the following sections:**
-
-1. **Market Overview**: A brief summary of the current state and size of the ${industryLabel} market in ${locationContext}.
-2. **SWOT Analysis**:
-   - Strengths: 3-5 key strengths for companies in this industry/location
-   - Weaknesses: 3-5 common weaknesses or vulnerabilities
-   - Opportunities: 3-5 emerging growth opportunities
-   - Threats: 3-5 external threats or challenges
-3. **Competitive Landscape**: Analysis of major competitors, market share distribution, and competitive advantages in ${locationContext}.
-4. **Major News & Events**: 3-5 recent significant news items or events affecting the ${industryLabel} industry in ${locationContext} (last 6 months).
-5. **Strategic Recommendations**: 3-5 actionable recommendations based on current market conditions and data for a company in this space.
-6. **Economic Indicators**: Key economic data points relevant to this industry (provide 5 data points with values for trending charts).
-
-Ensure the output is specific to ${locationContext} and the ${industryLabel} industry. Format perfectly as JSON according to the schema.`;
-
-      // Prefer Core.InvokeLLM when available (cloud). In local dev, fall back to backend MCP tools.
-      let response;
-      if (!isLocalDevMode() && typeof InvokeLLM === "function") {
-        response = await InvokeLLM({
-          prompt,
-          add_context_from_internet: true,
-          response_json_schema: {
-            type: "object",
-            properties: {
-              market_overview: { type: "string" },
-              swot_analysis: {
-                type: "object",
-                properties: {
-                  strengths: { type: "array", items: { type: "string" } },
-                  weaknesses: { type: "array", items: { type: "string" } },
-                  opportunities: { type: "array", items: { type: "string" } },
-                  threats: { type: "array", items: { type: "string" } },
-                },
-                required: [
-                  "strengths",
-                  "weaknesses",
-                  "opportunities",
-                  "threats",
-                ],
-              },
-              competitive_landscape: {
-                type: "object",
-                properties: {
-                  overview: { type: "string" },
-                  major_competitors: {
-                    type: "array",
-                    items: { type: "string" },
-                  },
-                  market_dynamics: { type: "string" },
-                },
-                required: ["overview", "major_competitors"],
-              },
-              major_news: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    title: { type: "string" },
-                    description: { type: "string" },
-                    date: { type: "string" },
-                    impact: {
-                      type: "string",
-                      enum: ["positive", "negative", "neutral"],
-                    },
-                  },
-                  required: ["title", "description", "date", "impact"],
-                },
-              },
-              recommendations: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    title: { type: "string" },
-                    description: { type: "string" },
-                    priority: {
-                      type: "string",
-                      enum: ["high", "medium", "low"],
-                    },
-                  },
-                  required: ["title", "description", "priority"],
-                },
-              },
-              economic_indicators: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    name: { type: "string" },
-                    current_value: { type: "number" },
-                    trend: { type: "string", enum: ["up", "down", "stable"] },
-                    unit: { type: "string" },
-                  },
-                  required: ["name", "current_value", "trend", "unit"],
-                },
-              },
-            },
-            required: [
-              "market_overview",
-              "swot_analysis",
-              "competitive_landscape",
-              "major_news",
-              "recommendations",
-              "economic_indicators",
-            ],
-          },
-        });
-      } else {
-        // Local Dev Fallback: Build insights using backend MCP web + crm tools
-        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-          "http://localhost:3001";
-        const execTool = async (server_id, tool_name, parameters) => {
-          const res = await fetch(`${BACKEND_URL}/api/mcp/execute-tool`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ server_id, tool_name, parameters }),
-          });
-          const json = await res.json();
-          if (json.status !== "success") {
-            throw new Error(json.message || "MCP tool error");
-          }
-          return json.data;
-        };
-
-        // 1) Get tenant stats to ground recommendations
-        const tenantId = tenant?.id || tenant?.tenant_id || "local-tenant-001";
-        let tenantStats = null;
-        try {
-          tenantStats = await execTool("crm", "crm.get_tenant_stats", {
-            tenant_id: tenantId,
-          });
-        } catch { /* non-fatal */ }
-
-        // 2) Do a quick Wikipedia search for industry/location context
-        const searchQuery = `${industryLabel} market ${locationContext}`;
-        const searchResults = await execTool("web", "web.search_wikipedia", {
-          q: searchQuery,
-        });
-        let overview = "";
-        try {
-          const first = Array.isArray(searchResults) ? searchResults[0] : null;
-          if (first?.pageid) {
-            const page = await execTool("web", "web.get_wikipedia_page", {
-              pageid: String(first.pageid),
-            });
-            overview = page?.extract || "";
-          }
-        } catch { /* ignore */ }
-
-        // 3) Assemble a basic insights JSON compatible with UI schema
-        const makeArray = (
-          arr,
-        ) => (Array.isArray(arr) && arr.length ? arr : []);
-        const majorNews = makeArray(searchResults).slice(0, 5).map((r) => ({
-          title: r?.title || "Industry update",
-          // Use DOM-based text extraction instead of regex-based tag stripping
-          description: sanitizeToText(r?.snippet || ""),
-          date: new Date().toISOString().slice(0, 10),
-          impact: "neutral",
-        }));
-
-        // Basic, sensible defaults; refined by stats if available
-        const swot = {
-          strengths: [
-            `${industryLabel} demand resilience in ${locationContext}`,
-            `Growing digital adoption in ${locationContext}`,
-          ],
-          weaknesses: [
-            `Operational costs volatility`,
-            `Talent acquisition challenges`,
-          ],
-          opportunities: [
-            `Niche positioning within ${industryLabel}`,
-            `Automation and AI-driven efficiency`,
-          ],
-          threats: [
-            `Competitive pressure from incumbents and startups`,
-            `Regulatory uncertainty`,
-          ],
-        };
-
-        const recs = [
-          {
-            title: "Tighten ICP and messaging",
-            description:
-              `Focus on segments with strong fit in ${locationContext}; align outreach with ${industryLabel} pain points.`,
-            priority: "high",
-          },
-          {
-            title: "Double down on pipeline hygiene",
-            description:
-              `Improve conversion tracking and deal reviews to increase forecast accuracy.`,
-            priority: "medium",
-          },
-        ];
-
-        if (tenantStats) {
-          if ((tenantStats.activities || 0) < 10) {
-            recs.push({
-              title: "Increase sales activity",
-              description:
-                `Low recent activity detected; run outreach sprints to boost top-of-funnel.`,
-              priority: "high",
-            });
-          }
-          if ((tenantStats.opportunities || 0) === 0) {
-            recs.push({
-              title: "Kickstart opportunities",
-              description:
-                `No active pipeline found; run targeted campaigns and warm intros to seed opportunities.`,
-              priority: "high",
-            });
-          }
-        }
-
-        response = {
-          data: {
-            market_overview: overview ||
-              `Market context for ${industryLabel} in ${locationContext}.`,
-            swot_analysis: swot,
-            competitive_landscape: {
-              overview:
-                `Competitive environment in ${locationContext} features both established players and challengers. Differentiate on niche focus and velocity.`,
-              major_competitors: makeArray(searchResults).slice(0, 3).map((r) =>
-                r?.title || "Key competitor"
-              ),
-              market_dynamics:
-                `Monitor pricing pressure and emerging substitutes; emphasize speed-to-value.`,
-            },
-            major_news: majorNews,
-            recommendations: recs,
-            economic_indicators: [
-              {
-                name: "GDP Growth",
-                current_value: 2.2,
-                trend: "up",
-                unit: "percent",
-              },
-              {
-                name: "Inflation",
-                current_value: 3.1,
-                trend: "down",
-                unit: "percent",
-              },
-              {
-                name: "Unemployment",
-                current_value: 4.0,
-                trend: "stable",
-                unit: "percent",
-              },
-              {
-                name: "Venture Funding",
-                current_value: 12.5,
-                trend: "up",
-                unit: "USD (B)",
-              },
-              {
-                name: "Industry Index",
-                current_value: 108,
-                trend: "up",
-                unit: "index",
-              },
-            ],
-          },
-        };
+      const json = await res.json();
+      if (json.status !== "success") {
+        throw new Error(json.message || "Failed to generate insights");
       }
-
-      console.log("LLM Response:", response);
-
-      // InvokeLLM returns data directly when response_json_schema is provided (cloud)
-      // For local fallback, we already shaped 'response' as { data: {...} }
-      if (response && (response.data || typeof response === "object")) {
-        // functions proxy returns { data: <payload> } in some cases; handle both shapes
-        const payload = response.data || response;
-        setInsights(payload);
-      } else {
-        setError("Failed to generate insights. Please try again.");
-      }
+      const payload = json?.data?.insights || json?.data || null;
+      if (!payload) throw new Error("No insights returned");
+      setInsights(payload);
     } catch (error) {
       console.error("Error generating AI insights:", error);
       setError(error.message || "An error occurred while generating insights.");

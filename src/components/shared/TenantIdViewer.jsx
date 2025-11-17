@@ -3,34 +3,34 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tenant } from "@/api/entities"; // Internal entity, remains Tenant
-import { User } from "@/api/entities"; // Internal entity, remains User
 import { Loader2, Copy, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useUser } from '@/components/shared/useUser.js';
 
 export default function TenantIdViewer() { // Component name remains TenantIdViewer, as per existing file
   const [tenants, setTenants] = useState([]); // Internal state variable, remains tenants
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState(null);
+  
+  // Use global user context instead of local User.me()
+  const { user: currentUser } = useUser();
 
   useEffect(() => {
     const loadData = async () => {
+      if (!currentUser) return;
       setLoading(true);
       try {
-        const user = await User.me();
-        setCurrentUser(user);
-
-        if (user.role === 'admin' || user.role === 'superadmin') {
+        if (currentUser.role === 'admin' || currentUser.role === 'superadmin') {
           // Admins can see all tenants (internal logic)
           const tenantsData = await Tenant.list(); // Internal entity method, remains Tenant.list
           setTenants(tenantsData);
-        } else if (user.tenant_id) { // Internal ID, remains tenant_id
+        } else if (currentUser.tenant_id) { // Internal ID, remains tenant_id
           // Non-admins should only see their own client ID
           try {
-            const myTenant = await Tenant.get(user.tenant_id); // Internal entity method, remains Tenant.get
-            setTenants(myTenant ? [myTenant] : [{ id: user.tenant_id, name: 'Your Client' }]); // User-facing text changed
+            const myTenant = await Tenant.get(currentUser.tenant_id); // Internal entity method, remains Tenant.get
+            setTenants(myTenant ? [myTenant] : [{ id: currentUser.tenant_id, name: 'Your Client' }]); // User-facing text changed
           } catch {
-            setTenants([{ id: user.tenant_id, name: "Your Client" }]); // User-facing text changed
+            setTenants([{ id: currentUser.tenant_id, name: "Your Client" }]); // User-facing text changed
           }
         }
       } catch (error) {
@@ -43,7 +43,7 @@ export default function TenantIdViewer() { // Component name remains TenantIdVie
     };
 
     loadData();
-  }, []);
+  }, [currentUser]);
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);

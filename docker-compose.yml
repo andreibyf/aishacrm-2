@@ -1,11 +1,16 @@
 services:
-  # PostgreSQL Database (local development only)
-  # NOTE: Not currently used - backend connects to Supabase via USE_SUPABASE_PROD=true
-  # Kept for offline development and migration testing
+  # PostgreSQL Database (DISABLED - Using Supabase Cloud)
+  # ⚠️ CRITICAL: This local database is NOT USED for development/production
+  # ALL data operations use Supabase Cloud (see DATABASE_CONFIGURATION.md)
+  # This service is kept for migration testing only and must remain STOPPED
+  # To start for migration testing: docker compose start db
+  # To stop again: docker compose stop db
   db:
     image: postgres:15-alpine
     container_name: aishacrm-db
-    restart: unless-stopped
+    restart: "no"  # Changed from "unless-stopped" - DO NOT auto-restart
+    profiles:
+      - migration-testing  # Requires explicit profile to start: docker compose --profile migration-testing up db
     ports:
       - "5432:5432"
     environment:
@@ -21,15 +26,40 @@ services:
       timeout: 5s
       retries: 5
 
+  # Redis/Valkey - Ephemeral memory layer for agent sessions
+  redis:
+    image: valkey/valkey:7-alpine
+    container_name: aishacrm-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: valkey-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
   # Backend API
+  # ⚠️ CRITICAL: Uses Supabase Cloud database ONLY (see DATABASE_CONFIGURATION.md)
+  # DATABASE_URL points to Supabase Cloud, NOT local PostgreSQL
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: aishacrm-backend
     restart: unless-stopped
+    # REMOVED db dependency - we use Supabase Cloud, not local PostgreSQL
     depends_on:
-      db:
+      redis:
         condition: service_healthy
     ports:
       - "4001:3001"  # External port 4001 maps to internal 3001
@@ -39,13 +69,17 @@ services:
       - NODE_ENV=development
       - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
       - PORT=${PORT:-3001}
-      # Don't override DATABASE_URL - let backend/.env control Supabase vs local
-      # - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@db:5432/aishacrm}
+      # DATABASE_URL loaded from backend/.env (points to Supabase for performance logging)
       # Supabase vars loaded from backend/.env via env_file above
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4000}
-    # Force IPv4 resolution for Supabase direct connection
-    extra_hosts:
-      - "db.ehjlenywplgyiahgxkfj.supabase.co:host-gateway"
+      # Enforce SSL for all Postgres connections (validation script & any pg usage)
+      - PGSSLMODE=require
+      # Redis connection for ephemeral memory
+      - REDIS_URL=redis://redis:6379
+      - SYSTEM_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
+      # Tenant resolution cache configuration
+      - TENANT_RESOLVE_CACHE_TTL_MS=${TENANT_RESOLVE_CACHE_TTL_MS:-300000}
+    # Removed extra_hosts override for Supabase host; it broke SSL by redirecting to host gateway.
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -61,10 +95,42 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Braid MCP Node Server (CRM MCP-style bridge)
+  braid-mcp-server:
+    build:
+      context: ./braid-mcp-node-server
+      dockerfile: Dockerfile
+    container_name: braid-mcp-server
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8000:8000"
+    environment:
+      - NODE_ENV=production
+      # Point MCP server at backend API inside compose network
+      - CRM_BACKEND_URL=http://backend:3001
+      # Supabase connection for direct database access
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - USE_DIRECT_SUPABASE_ACCESS=true
+      # Redis connection for agent memory
+      - REDIS_URL=redis://redis:6379
+      # OpenAI configuration
+      - DEFAULT_OPENAI_MODEL=${DEFAULT_OPENAI_MODEL:-gpt-4o-mini}
+      # GitHub token for GitHub MCP tools
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GH_TOKEN=${GH_TOKEN}
+
   # Frontend (Vite dev server for development, or built static for production-like testing)
   frontend:
     build:
       context: .
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_AISHACRM_BACKEND_URL: ${VITE_AISHACRM_BACKEND_URL:-http://localhost:4001}
+        VITE_CURRENT_BRANCH: ${VITE_CURRENT_BRANCH:-main}
       dockerfile: Dockerfile
     container_name: aishacrm-frontend
     restart: unless-stopped
@@ -72,14 +138,8 @@ services:
       - backend
     ports:
       - "4000:3000"  # External port 4000 maps to internal 3000
-    env_file:
-      - ./.env
     environment:
       - PORT=${FRONTEND_PORT:-3000}
-      - VITE_AISHACRM_BACKEND_URL=${VITE_AISHACRM_BACKEND_URL:-http://localhost:4001}
-      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-      - VITE_CURRENT_BRANCH=${VITE_CURRENT_BRANCH:-main}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
       interval: 30s
@@ -87,7 +147,63 @@ services:
       retries: 3
       start_period: 15s
 
+  # n8n (optional) - local automation
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: aishacrm-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_PORT=5678
+      - N8N_HOST=0.0.0.0
+      - GENERIC_TIMEZONE=UTC
+      - N8N_DIAGNOSTICS_ENABLED=false
+      # Allow iframe embedding in CRM
+      - N8N_EDITOR_BASE_URL=http://localhost:5679
+      - N8N_SECURE_COOKIE=false
+      - N8N_SKIP_WEBHOOK_DEREGISTRATION_SHUTDOWN=true
+      # Disable frame-ancestors CSP to allow iframe embedding
+      - N8N_HIRING_BANNER_ENABLED=false
+      - VUE_APP_URL_BASE_API=http://localhost:5679
+      # Load custom MCP node
+      - N8N_CUSTOM_EXTENSIONS=/home/node/.n8n/custom
+      # Optional: enable Basic Auth to allow backend to use legacy /rest endpoints
+      - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE:-false}
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-nodes-mcp:/home/node/.n8n/custom:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5678/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # nginx proxy for n8n to strip X-Frame-Options header
+  n8n-proxy:
+    image: nginx:alpine
+    container_name: aishacrm-n8n-proxy
+    restart: unless-stopped
+    depends_on:
+      - n8n
+    ports:
+      - "5679:5679"
+    volumes:
+      - ./nginx-n8n.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5679/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 volumes:
   postgres_data:
     driver: local
-
+  n8n_data:
+    driver: local
+  redis_data:
+    driver: local

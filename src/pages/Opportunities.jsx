@@ -3,7 +3,7 @@ import { Opportunity } from "@/api/entities";
 import { Account } from "@/api/entities";
 import { Contact } from "@/api/entities";
 import { Lead } from "@/api/entities";
-import { User } from "@/api/entities";
+// User entity not needed here; user comes from context
 import { Employee } from "@/api/entities";
 import { useApiManager } from "../components/shared/ApiManager";
 import OpportunityCard from "../components/opportunities/OpportunityCard";
@@ -57,6 +57,7 @@ import SimpleModal from "../components/shared/SimpleModal";
 import StatusHelper from "../components/shared/StatusHelper";
 import { loadUsersSafely } from "../components/shared/userLoader";
 import { useConfirmDialog } from "../components/shared/ConfirmDialog";
+import { useUser } from "@/components/shared/useUser.js";
 
 const stageColors = {
   prospecting: "bg-blue-900/20 text-blue-300 border-blue-700",
@@ -85,7 +86,7 @@ export default function OpportunitiesPage() {
   );
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
   const { selectedTenantId } = useTenant();
   const [detailOpportunity, setDetailOpportunity] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -118,79 +119,40 @@ export default function OpportunitiesPage() {
   const supportingDataLoaded = useRef(false); // NEW: Track if supporting data is loaded
   const [supportingDataReady, setSupportingDataReady] = useState(false); // trigger renders when supporting data completes
 
-  // Load user once
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        // In E2E mode, use injected mock user to avoid failed User.me() calls
-        if (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser) {
-          if (import.meta.env.DEV) {
-            console.log("[Opportunities] E2E mock user loaded:", {
-              email: window.__e2eUser.email,
-              role: window.__e2eUser.role,
-              tenant_id: window.__e2eUser.tenant_id,
-            });
-          }
-          setUser(window.__e2eUser);
-          return;
-        }
-        
-        const currentUser = await User.me();
-        if (import.meta.env.DEV) {
-          console.log("[Opportunities] User loaded:", {
-            email: currentUser.email,
-            role: currentUser.role,
-            employee_role: currentUser.employee_role,
-            tenant_id: currentUser.tenant_id,
-          });
-        }
-        setUser(currentUser);
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.error("Failed to load user:", error);
-        }
-        toast.error("Failed to load user information");
-      }
-    };
-    loadUser();
-  }, []);
-
+  // Centralized tenant filter builder
   const getTenantFilter = useCallback(() => {
     if (!user) return {};
 
     let filter = {};
 
     // Tenant filtering
-    if (user.role === "superadmin" || user.role === "admin") {
+    if (user.role === 'superadmin' || user.role === 'admin') {
       if (selectedTenantId) {
         filter.tenant_id = selectedTenantId;
       }
+      // If no tenant selected (admin views all), backend may enforce scope; callers guard accordingly
     } else if (user.tenant_id) {
       filter.tenant_id = user.tenant_id;
     }
 
-    // Employee scope filtering from context
-    if (selectedEmail && selectedEmail !== "all") {
-      if (selectedEmail === "unassigned") {
-        filter.$or = [{ assigned_to: null }, { assigned_to: "" }];
+    // Employee scope
+    if (selectedEmail && selectedEmail !== 'all') {
+      if (selectedEmail === 'unassigned') {
+        filter.$or = [{ assigned_to: null }, { assigned_to: '' }];
       } else {
         filter.assigned_to = selectedEmail;
       }
-    } else if (
-      user.employee_role === "employee" && user.role !== "admin" &&
-      user.role !== "superadmin"
-    ) {
-      // Regular employees only see their own data
+    } else if (user.employee_role === 'employee' && user.role !== 'admin' && user.role !== 'superadmin') {
       filter.assigned_to = user.email;
     }
 
-    // Test data filtering
+    // Test data filtering (only exclude when toggled off)
     if (!showTestData) {
-      filter.is_test_data = { $ne: true };
+      filter.is_test_data = false;
     }
 
     return filter;
-  }, [user, selectedTenantId, showTestData, selectedEmail]);
+  }, [user, selectedTenantId, selectedEmail, showTestData]);
 
   // Load supporting data (accounts, contacts, users, employees) ONCE - OPTIMIZED WITH CONCURRENT FETCHING
   useEffect(() => {
@@ -200,6 +162,16 @@ export default function OpportunitiesPage() {
     const loadSupportingData = async () => {
       try {
         const tenantFilter = getTenantFilter();
+
+        // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
+        if ((user.role === 'superadmin' || user.role === 'admin') && !tenantFilter.tenant_id) {
+          if (import.meta.env.DEV) {
+            console.log("[Opportunities] Skipping data load - no tenant selected");
+          }
+          supportingDataLoaded.current = true;
+          setSupportingDataReady(true);
+          return;
+        }
 
         if (import.meta.env.DEV) {
           console.log(
@@ -290,6 +262,20 @@ export default function OpportunitiesPage() {
     try {
       const effectiveFilter = getTenantFilter();
 
+      // Guard: Don't load stats if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !effectiveFilter.tenant_id) {
+        setTotalStats({
+          total: 0,
+          prospecting: 0,
+          qualification: 0,
+          proposal: 0,
+          negotiation: 0,
+          closed_won: 0,
+          closed_lost: 0,
+        });
+        return;
+      }
+
       console.log(
         "[Opportunities] Loading stats with filter:",
         effectiveFilter,
@@ -350,6 +336,14 @@ export default function OpportunitiesPage() {
     setLoading(true);
     try {
       let effectiveFilter = getTenantFilter();
+
+      // Guard: Don't load opportunities if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !effectiveFilter.tenant_id) {
+        setOpportunities([]);
+        setTotalItems(0);
+        setLoading(false);
+        return;
+      }
 
       // Apply stage filter
       if (stageFilter !== "all") {
@@ -507,11 +501,6 @@ export default function OpportunitiesPage() {
       loadOpportunities(wasCreating ? 1 : currentPage, pageSize),
       loadTotalStats(),
     ]);
-    toast.success(
-      editingOpportunity
-        ? "Opportunity updated successfully"
-        : "Opportunity created successfully",
-    );
   };
 
   const handleDelete = async (id) => {
@@ -921,16 +910,30 @@ export default function OpportunitiesPage() {
 
   const handleStageChange = async (opportunityId, newStage) => {
     try {
-      await Opportunity.update(opportunityId, { stage: newStage });
+      console.log('[Opportunities] handleStageChange:', { opportunityId, newStage, tenant: selectedTenantId });
+      
+      // Include tenant_id in the update - use selectedTenantId from useTenant hook
+      const updateData = {
+        stage: newStage,
+        tenant_id: selectedTenantId
+      };
+      
+      await Opportunity.update(opportunityId, updateData);
+      console.log('[Opportunities] Stage update successful, clearing cache and reloading...');
+      
       clearCache("Opportunity");
       await Promise.all([
         loadOpportunities(currentPage, pageSize),
         loadTotalStats(),
       ]);
-      toast.success(`Opportunity moved to ${newStage.replace(/_/g, " ")}`); // Updated toast message as per outline
-      return await Opportunity.filter({ id: opportunityId }, "id", 1).then(
+      
+      toast.success(`Opportunity moved to ${newStage.replace(/_/g, " ")}`);
+      
+      const updated = await Opportunity.filter({ id: opportunityId, tenant_id: selectedTenantId }, "id", 1).then(
         (r) => r[0],
       );
+      console.log('[Opportunities] Retrieved updated opportunity:', updated);
+      return updated;
     } catch (error) {
       console.error("Error updating opportunity stage:", error);
       toast.error("Failed to update opportunity stage");
@@ -972,22 +975,9 @@ export default function OpportunitiesPage() {
             contacts={contacts}
             users={users}
             leads={leads}
-            onSubmit={async (payload) => {
-              try {
-                console.log("[Opportunities] Form submitted:", {
-                  isEdit: !!editingOpportunity,
-                  payload,
-                });
-                if (editingOpportunity) {
-                  await Opportunity.update(editingOpportunity.id, payload);
-                } else {
-                  await Opportunity.create(payload);
-                }
-                await handleSave();
-              } catch (error) {
-                console.error("Error saving opportunity:", error);
-                toast.error("Failed to save opportunity");
-              }
+            onSubmit={async (result) => {
+              console.log("[Opportunities] Form submitted with result:", result);
+              await handleSave();
             }}
             onCancel={() => {
               console.log("[Opportunities] Form cancelled");

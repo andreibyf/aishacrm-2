@@ -3,25 +3,35 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Note: Build context is the repo root (set in docker-compose). Use explicit paths.
 
-# Install dependencies (only production needed for backend)
-RUN npm ci --omit=dev
+# Copy backend package files and install production deps
+COPY backend/package*.json ./backend/
+RUN cd backend && npm ci --omit=dev
 
-# Copy source code
-COPY . .
+# Copy backend source code
+COPY backend ./backend
+
+# Copy Braid SDK sources into image
+COPY braid-llm-kit ./braid-llm-kit
+
+# Install local Braid SDK into backend (provides @braid/sdk in node_modules)
+RUN cd backend && npm install --omit=dev ../braid-llm-kit
 
 # Production stage
 FROM node:22-alpine AS runner
 
-WORKDIR /app
+# App lives in /app/backend for clarity
+WORKDIR /app/backend
 
-# Copy node_modules from builder
-COPY --from=builder /app/node_modules ./node_modules
+# Copy backend node_modules from builder
+COPY --from=builder /app/backend/node_modules ./node_modules
 
-# Copy application files
-COPY --from=builder /app .
+# Copy backend application files
+COPY --from=builder /app/backend .
+
+# Also include Braid SDK sources for runtime access to .braid files
+COPY --from=builder /app/braid-llm-kit /app/braid-llm-kit
 
 # Set environment
 ENV NODE_ENV=production

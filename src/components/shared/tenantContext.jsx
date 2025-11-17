@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { isValidId } from "./tenantUtils";
+import { useUser } from "./useUser.js";
 
 window.__fixPrototype = (obj) => {
   if (!obj || typeof obj !== "object") return obj;
@@ -109,6 +110,7 @@ export const TenantProvider = ({ children }) => {
   const [lastSyncedTenantId, setLastSyncedTenantId] = useState(null);
   const persistenceAttempted = useRef(false);
   const isSettingTenant = useRef(false); // Guard against rapid changes
+  const { user } = useUser();
 
   // Helper: reflect tenant selection in the URL (e.g., ?tenant=<uuid>) without reloading
   const updateUrlTenantParam = useCallback((tenantId) => {
@@ -157,8 +159,12 @@ export const TenantProvider = ({ children }) => {
       try {
         if (sanitized === null) {
           localStorage.removeItem("selected_tenant_id");
+          // Legacy key cleanup for compatibility
+          try { localStorage.removeItem("tenant_id"); } catch { /* ignore */ }
         } else {
           localStorage.setItem("selected_tenant_id", sanitized);
+          // Legacy compatibility: mirror to old key until all callers migrate
+          try { localStorage.setItem("tenant_id", sanitized); } catch { /* ignore */ }
         }
         // Also reflect in URL for persistence across reloads/deep links
         updateUrlTenantParam(sanitized);
@@ -210,6 +216,18 @@ export const TenantProvider = ({ children }) => {
         saved === null || saved === "null" || saved === "undefined" ||
         saved === ""
       ) {
+        // Attempt legacy migration from 'tenant_id' key
+        try {
+          const legacy = localStorage.getItem("tenant_id");
+          if (legacy && isValidId(String(legacy))) {
+            const migrated = String(legacy);
+            setSelectedTenantIdState(migrated);
+            try { localStorage.setItem("selected_tenant_id", migrated); } catch { /* ignore */ }
+            logTenantEvent("INFO", "Migrated tenant selection from legacy key", { tenantId: migrated });
+            return;
+          }
+        } catch { /* ignore */ }
+
         // No tenant or explicitly null - keep as null (No Client)
         setSelectedTenantIdState(null);
         logTenantEvent("INFO", "No tenant selected (No Client)", {
@@ -249,6 +267,26 @@ export const TenantProvider = ({ children }) => {
       });
     }
   }, []); // Empty dependency array means this runs once on mount
+
+  // Auto-select tenant for non-superadmin users when none chosen yet
+  useEffect(() => {
+    // Only apply if we have a loaded user, user has a tenant_id, and no explicit selection yet
+    if (!user) return;
+    if (selectedTenantId !== null) return; // user already picked or restored
+    const role = (user.role || '').toLowerCase();
+    if (role && role !== 'superadmin' && user.tenant_id) {
+      logTenantEvent('INFO', 'Auto-selecting tenant based on user.tenant_id', {
+        autoTenantId: user.tenant_id,
+        userRole: role,
+      });
+      setSelectedTenantIdState(user.tenant_id);
+      try {
+        localStorage.setItem('selected_tenant_id', user.tenant_id);
+        localStorage.setItem('tenant_id', user.tenant_id); // legacy mirror
+      } catch { /* ignore storage errors */ }
+      updateUrlTenantParam(user.tenant_id);
+    }
+  }, [user, selectedTenantId, updateUrlTenantParam]);
 
   useEffect(() => {
     if (selectedTenantId && selectedTenantId !== lastSyncedTenantId) {

@@ -20,12 +20,14 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Send, ShieldCheck } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { inviteUser } from "@/api/functions";
 import {
   canAssignCRMAccess,
   getAssignableRoles,
   validateUserPermissions,
 } from "@/utils/permissions";
+
+// Backend API URL
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
 
 export default function InviteUserDialog(
   { open, onOpenChange, onSuccess, tenants, currentUser },
@@ -112,26 +114,35 @@ export default function InviteUserDialog(
         },
       };
 
-      const response = await inviteUser(payload, currentUser);
+      const response = await fetch(`${BACKEND_URL}/api/users/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload)
+      });
 
-      if (response?.status === 200 && response?.data?.success) {
-        const data = response.data;
+      const data = await response.json();
+      console.log("[InviteUserDialog] Response:", { status: response.status, data });
 
+      if (response.ok && data?.success) {
         toast({
           title: "User Created Successfully",
           description: data.message ||
             `${formData.email} has been added to the system.`,
+          duration: 5000, // Auto-dismiss after 5 seconds
         });
 
         onOpenChange(false);
         if (onSuccess) onSuccess();
       } else {
-        const errorMsg = response?.data?.error || response?.data?.message ||
+        const errorMsg = data?.error || data?.message ||
           "Failed to create user";
+        console.error("[InviteUserDialog] Error response:", { status: response.status, data });
         toast({
           variant: "destructive",
           title: "User Creation Failed",
           description: errorMsg,
+          duration: 5000, // Auto-dismiss after 5 seconds
         });
       }
     } catch (error) {
@@ -140,6 +151,7 @@ export default function InviteUserDialog(
         variant: "destructive",
         title: "Error",
         description: error?.message || "An error occurred",
+        duration: 5000, // Auto-dismiss after 5 seconds
       });
     } finally {
       setSubmitting(false);

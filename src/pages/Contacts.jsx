@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Contact } from "@/api/entities";
 import { Account } from "@/api/entities";
-import { User } from "@/api/entities";
+// User entity not needed; using user from context
 import { Employee } from "@/api/entities";
 import { useApiManager } from "../components/shared/ApiManager";
 import { loadUsersSafely } from "../components/shared/userLoader";
@@ -54,6 +54,8 @@ import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+import { useUser } from "@/components/shared/useUser.js";
+
 export default function ContactsPage() {
   const [contacts, setContacts] = useState([]);
   const [accounts, setAccounts] = useState([]);
@@ -68,7 +70,7 @@ export default function ContactsPage() {
   const [selectedContacts, setSelectedContacts] = useState(() => new Set());
   const [, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
   const { selectedTenantId } = useTenant();
   const [detailContact, setDetailContact] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -97,36 +99,7 @@ export default function ContactsPage() {
   const initialLoadDone = useRef(false);
   const supportingDataLoaded = useRef(false);
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        // In E2E mode, use injected mock user to avoid failed User.me() calls
-        if (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser) {
-          setUser(window.__e2eUser);
-          logger.info("E2E mock user loaded", "ContactsPage", {
-            userId: window.__e2eUser.id || window.__e2eUser.email,
-            role: window.__e2eUser.role,
-          });
-          return;
-        }
-        
-        const currentUser = await User.me();
-        setUser(currentUser);
-        logger.info("Current user loaded", "ContactsPage", {
-          userId: currentUser.id || currentUser.email,
-          role: currentUser.role,
-        });
-      } catch (error) {
-        console.error("Failed to load user:", error);
-        toast.error("Failed to load user information");
-        logger.error("Failed to load user information", "ContactsPage", {
-          error: error.message,
-          stack: error.stack,
-        });
-      }
-    };
-    loadUser();
-  }, [logger]);
+  // Removed per-page user fetch; user comes from global context and is logged elsewhere
 
   const getTenantFilter = useCallback(() => {
     if (!user) return {};
@@ -134,9 +107,14 @@ export default function ContactsPage() {
     let filter = {};
 
     // Tenant filtering
+    // Previous logic required selectedTenantId for admin/superadmin and skipped user.tenant_id fallback
+    // This caused missing tenant_id (400) until tenant dropdown was manually chosen.
+    // New logic: always fall back to user.tenant_id when selectedTenantId is absent.
     if (user.role === "superadmin" || user.role === "admin") {
       if (selectedTenantId) {
         filter.tenant_id = selectedTenantId;
+      } else if (user.tenant_id) {
+        filter.tenant_id = user.tenant_id; // fallback ensures data loads immediately after login
       }
     } else if (user.tenant_id) {
       filter.tenant_id = user.tenant_id;
@@ -428,72 +406,39 @@ export default function ContactsPage() {
     }
   }, [searchTerm, statusFilter, selectedTags, selectedEmail]);
 
-  const handleCreate = async (contactData) => {
+  const handleCreate = async (result) => {
+    // ContactForm now handles persistence internally, we just receive the result
     const tenantIdentifier = user?.tenant_id || selectedTenantId;
-    logger.info("Attempting to create new contact", "ContactsPage", {
-      contactData: { ...contactData, tenant_id: tenantIdentifier },
+    logger.info("Contact created by form", "ContactsPage", {
+      contactId: result?.id,
+      contactName: `${result?.first_name} ${result?.last_name}`,
       userId: user?.id || user?.email,
+      tenantId: tenantIdentifier,
     });
-    try {
-      const newContact = await Contact.create({
-        ...contactData,
-        tenant_id: tenantIdentifier,
-      });
-      toast.success("Contact created successfully");
-      setIsFormOpen(false);
-      setEditingContact(null);
-      setCurrentPage(1); // Reset to page 1 to show the newly created contact
-      clearCache("Contact");
-      loadContacts();
-      loadTotalStats();
-      logger.info("Contact created successfully", "ContactsPage", {
-        contactId: newContact.id,
-        contactName: `${newContact.first_name} ${newContact.last_name}`,
-        userId: user?.id || user?.email,
-        tenantId: tenantIdentifier,
-      });
-    } catch (error) {
-      console.error("Error creating contact:", error);
-      toast.error("Failed to create contact");
-      logger.error("Error creating contact", "ContactsPage", {
-        error: error.message,
-        stack: error.stack,
-        contactData: { ...contactData, tenant_id: tenantIdentifier },
-        userId: user?.id || user?.email,
-      });
-    }
+    
+    // Just handle post-save actions
+    setIsFormOpen(false);
+    setEditingContact(null);
+    setCurrentPage(1); // Reset to page 1 to show the newly created contact
+    clearCache("Contact");
+    loadContacts();
+    loadTotalStats();
   };
 
-  const handleUpdate = async (contactData) => {
-    logger.info("Attempting to update contact", "ContactsPage", {
-      contactId: editingContact.id,
-      contactData,
+  const handleUpdate = async (result) => {
+    // ContactForm now handles persistence internally, we just receive the result
+    logger.info("Contact updated by form", "ContactsPage", {
+      contactId: result?.id,
+      contactName: `${result?.first_name} ${result?.last_name}`,
       userId: user?.id || user?.email,
     });
-    try {
-      await Contact.update(editingContact.id, contactData);
-      toast.success("Contact updated successfully");
-      setIsFormOpen(false);
-      setEditingContact(null);
-      clearCache("Contact");
-      loadContacts();
-      loadTotalStats();
-      logger.info("Contact updated successfully", "ContactsPage", {
-        contactId: editingContact.id,
-        contactName: `${contactData.first_name} ${contactData.last_name}`,
-        userId: user?.id || user?.email,
-      });
-    } catch (error) {
-      console.error("Error updating contact:", error);
-      toast.error("Failed to update contact");
-      logger.error("Error updating contact", "ContactsPage", {
-        error: error.message,
-        stack: error.stack,
-        contactId: editingContact.id,
-        contactData,
-        userId: user?.id || user?.email,
-      });
-    }
+    
+    // Just handle post-save actions
+    setIsFormOpen(false);
+    setEditingContact(null);
+    clearCache("Contact");
+    loadContacts();
+    loadTotalStats();
   };
 
   const handleDelete = async (id) => {

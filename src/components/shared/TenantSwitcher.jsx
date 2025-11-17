@@ -75,13 +75,14 @@ export default function TenantSwitcher({ user }) {
   }, [cachedRequest, selectedTenantId, setSelectedTenantId]);
 
   useEffect(() => {
-    if (user?.role === "admin" || user?.role === "superadmin") {
+    // Only superadmins can switch between tenants
+    if (user?.role === "superadmin") {
       loadTenants();
     }
   }, [user, loadTenants]);
 
-  // Only show for admin/superadmin users
-  if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+  // Only show for superadmin users (NOT tenant admins)
+  if (!user || user.role !== "superadmin") {
     return null;
   }
 

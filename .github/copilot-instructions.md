@@ -6,6 +6,28 @@
 - Backend: Node.js Express server with 197 API endpoints across 26 categories, using PostgreSQL (Supabase).
 - Focus: Zero vendor dependency with automatic Base44 → local backend failover.
 
+## 🐳 CRITICAL: Docker Development Environment
+**THIS PROJECT RUNS IN DOCKER CONTAINERS - ALWAYS REMEMBER THIS:**
+
+- **Frontend Container:** Runs on `http://localhost:4000` (NOT 5173 or 3000)
+- **Backend Container:** Runs on `http://localhost:4001` (NOT 3001)
+- **Port Configuration:** NEVER suggest changing ports - they are fixed in Docker setup
+- **Environment Files:**
+  - Root `.env`: `VITE_AISHACRM_BACKEND_URL=http://localhost:4001`
+  - Backend `.env`: `ALLOWED_ORIGINS` includes `http://localhost:4000`, `FRONTEND_URL=http://localhost:4000`
+- **Starting Services:** Use `docker-compose up -d` to start both containers (runs in background)
+- **Code Changes:** 
+  - Frontend changes require rebuild: `docker-compose up -d --build frontend`
+  - Backend changes require rebuild: `docker-compose up -d --build backend`
+  - Rebuild both: `docker-compose up -d --build`
+- **Debugging:** Check `docker ps` for container status; use `docker logs aishacrm-frontend` or `docker logs aishacrm-backend` for output
+- **Common Mistakes to Avoid:**
+  - ❌ DON'T assume standard Vite port (5173) or Express port (3001)
+  - ❌ DON'T suggest `npm run dev` without Docker context
+  - ❌ DON'T modify port configuration without explicit user request
+  - ✅ DO verify Docker containers are running before troubleshooting
+  - ✅ DO use container ports (4000/4001) in all URLs and CORS config
+
 ## Architecture & Data Flow
 - **Frontend:** Components in `src/components/` by domain; pages in `src/pages/`; API clients in `src/api/` with fallback logic.
 - **Backend:** Express server in `backend/server.js`; routes in `backend/routes/` (26 categories); database via Supabase PostgreSQL.
@@ -40,13 +62,29 @@
    ```
 
 ### Standard Workflows
-- **Setup:** `npm install` (root & backend); copy `.env.example` to `.env`; configure `VITE_AISHACRM_BACKEND_URL` and database credentials.
-- **Dev Server:** `.\start-all.ps1` (starts both in background) OR `npm run dev` (frontend); `cd backend && npm run dev` (backend) in separate terminals.
+- **Setup:** `npm install` (root & backend); copy `.env.example` to `.env`; configure `VITE_AISHACRM_BACKEND_URL=http://localhost:4001` (Docker backend port) and database credentials.
+- **Dev Server (Docker):** `docker-compose up -d --build` starts both containers on ports 4000 (frontend) and 4001 (backend). Runs in background.
+- **Dev Server (Alternative):** `npm run dev` (frontend) and `cd backend && npm run dev` (backend) in separate terminals if NOT using Docker.
+- **Rebuild After Changes:** `docker-compose up -d --build` (both) or `docker-compose up -d --build frontend` (frontend only) or `docker-compose up -d --build backend` (backend only)
+- **Accessing App:** Frontend at `http://localhost:4000`, backend API at `http://localhost:4001/api/*`
 - **Build:** `npm run build` (frontend); backend runs via `npm start`.
 - **Linting:** `npm run lint` (frontend); check `eslint-results.json` for issues.
 - **Database:** Use Supabase; run migrations from `backend/migrations/`; seed with `npm run seed`.
 - **Testing:** Custom tests in `src/pages/UnitTests.jsx`; backend tests via `npm test`.
+- **Docker Status:** Check `docker ps` to see running containers; `docker logs aishacrm-frontend` or `docker logs aishacrm-backend` for debugging.
 - **Backend Issues:** If server exits immediately, see `backend/TROUBLESHOOTING_NODE_ESM.md` for ESM-specific debugging.
+
+### Windows + Git Notes
+- Reserved filenames: Avoid adding files named `nul`, `con`, `prn`, etc. If accidentally staged, remove with `git rm --cached --ignore-unmatch nul`.
+- PowerShell quoting: When referencing paths with `$` (e.g., `backend/routes/$_`), wrap in single quotes to prevent variable expansion: `'backend/routes/$_'`.
+- CRLF warnings: Messages like "CRLF will be replaced by LF" are informational under `.gitattributes` rules and can be ignored. To reduce noise on Windows: `git config core.autocrlf true`.
+- Ignored files: `test-results` is intentionally ignored. Only force-add with `git add -f` if truly required.
+- Safer staging: Prefer `git add -A` instead of enumerating many paths inline to avoid shell quirks.
+
+### Cache & UI Refresh
+- Frontend cache: `useApiManager()` exposes `cachedRequest`, `clearCache`, and `clearCacheByKey` (alias) for cache invalidation. Use `clearCacheByKey("Account")` after mutations.
+- Optimistic updates: For snappy UX, optimistically update local state (e.g., remove deleted item from list) and then revalidate with `load*()` calls.
+- Pagination guard: After bulk deletes, ensure page indices are clamped to avoid empty pages.
 
 ## Project-Specific Conventions
 - Components: Function-based React, domain-grouped; use `ConfirmDialog` instead of `window.confirm()`.
@@ -77,6 +115,12 @@
 - **AI Features:** Custom assistants in `src/components/ai/`; MCP server example in `src/functions/mcpServer.js`.
 - **Security:** Helmet.js, CORS, rate limiting in backend; never commit `.env`.
 
+### Tenant Identifiers (UUID-First)
+- Source of truth: Use UUIDs for `tenant_id` across backend and frontend; do not convert to or filter by slug.
+- Backend routes: All filters and joins must use UUID `tenant_id` (or `tenants.id`). Avoid any UUID→slug mapping.
+- Frontend params: Always pass the tenant UUID; do not send legacy slug values.
+- Migration note: Legacy `tenant_id` (slug) can exist on records; do not rely on it for filtering.
+
 ## Testing Best Practices
 - **Frontend:** Custom tests in `src/pages/UnitTests.jsx`; add tests for new components when possible.
 - **Backend:** Run `npm test` in backend directory; test API endpoints and business logic.
@@ -89,7 +133,7 @@
 - **Database connection fails:** Verify `.env` credentials; check Supabase console for issues.
 - **Frontend shows "undefined" errors:** Check for null/undefined values; add optional chaining (`?.`).
 - **API failover not working:** Verify `VITE_AISHACRM_BACKEND_URL` is set; check `fallbackFunctions.js` logic.
-- **Git conflicts:** See `GIT_SOLUTION_SUMMARY.md`; run `.\cleanup-branches.ps1` or `./cleanup-branches.sh`.
+- **Git conflicts:** See `GIT_SOLUTION_SUMMARY.md`; run `\.\cleanup-branches.ps1` or `./cleanup-branches.sh`.
 - **Terminal issues:** ALWAYS verify directory with `Get-Location` or `pwd` before commands.
 - **Dependencies:** Run `npm install` in both root and `backend/` after pulling changes.
 

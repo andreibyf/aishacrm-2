@@ -36,12 +36,20 @@ export default function LeadAgeReport(props) {
         
         console.log('LeadAgeReport: Using tenant filter from Dashboard:', tenantFilter);
 
+        // Guard: Don't fetch if no tenant_id is present
+        if (!tenantFilter?.tenant_id) {
+          setLeads([]);
+          setEmployees([]);
+          setLoading(false);
+          return;
+        }
+
         // If prefetched leads are provided, use them and skip fetching
         if (Array.isArray(props?.leadsData)) {
           const filtered = props.leadsData.filter(l => {
             const statusOk = !['converted', 'lost'].includes(l.status);
             const tenantOk = !tenantFilter?.tenant_id || l.tenant_id === tenantFilter.tenant_id;
-            const testOk = tenantFilter?.is_test_data?.$ne === true ? !l.is_test_data : true;
+            const testOk = tenantFilter?.is_test_data === false ? !l.is_test_data : true;
             return statusOk && tenantOk && testOk;
           });
           

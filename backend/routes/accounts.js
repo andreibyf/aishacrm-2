@@ -8,10 +8,121 @@ import {
   enforceEmployeeDataScope,
   validateTenantAccess,
 } from "../middleware/validateTenant.js";
-import { tenantScopedId, buildGetByIdSQL } from "../middleware/tenantScopedId.js";
+import { tenantScopedId, buildGetByIdSQL as _buildGetByIdSQL } from "../middleware/tenantScopedId.js";
 
-export default function createAccountRoutes(pgPool) {
+export default function createAccountRoutes(_pgPool) {
   const router = express.Router();
+  /**
+   * @openapi
+   * /api/accounts:
+   *   get:
+   *     summary: List accounts
+   *     tags: [accounts]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, nullable: true }
+   *       - in: query
+   *         name: type
+   *         schema: { type: string, nullable: true }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Accounts list
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     accounts:
+   *                       type: array
+   *                       items:
+   *                         type: object
+   *                         properties:
+   *                           id:
+   *                             type: string
+   *                           tenant_id:
+   *                             type: string
+   *                             format: uuid
+   *                           name:
+   *                             type: string
+   *                           type:
+   *                             type: string
+   *                             example: customer
+   *                           industry:
+   *                             type: string
+   *                           website:
+   *                             type: string
+   *                           created_at:
+   *                             type: string
+   *                             format: date-time
+   *                           updated_at:
+   *                             type: string
+   *                             format: date-time
+   *   post:
+   *     summary: Create account
+   *     tags: [accounts]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, name]
+   *             properties:
+   *               tenant_id: { type: string }
+   *               name: { type: string }
+   *               type: { type: string }
+   *               industry: { type: string }
+   *               website: { type: string }
+   *           example:
+   *             tenant_id: "550e8400-e29b-41d4-a716-446655440000"
+   *             name: "Acme Corporation"
+   *             type: "customer"
+   *             industry: "Technology"
+   *             website: "https://acme.example.com"
+   *     responses:
+   *       200:
+   *         description: Account created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     id:
+   *                       type: string
+   *                     tenant_id:
+   *                       type: string
+   *                       format: uuid
+   *                     name:
+   *                       type: string
+   *                     type:
+   *                       type: string
+   *                     industry:
+   *                       type: string
+   *                     website:
+   *                       type: string
+   *                     created_at:
+   *                       type: string
+   *                       format: date-time
+   */
 
   // Apply tenant validation and employee data scope to all routes
   router.use(validateTenantAccess);
@@ -31,64 +142,29 @@ export default function createAccountRoutes(pgPool) {
   // GET /api/accounts - List accounts
   router.get("/", async (req, res) => {
     try {
-      const { tenant_id, type, limit = 50, offset = 0 } = req.query;
+      let { tenant_id, type } = req.query;
+      const limit = parseInt(req.query.limit || '50', 10);
+      const offset = parseInt(req.query.offset || '0', 10);
 
-      // Build dynamic query based on tenant_id presence
-      let query = "SELECT * FROM accounts";
-      const params = [];
-      const whereClauses = [];
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      let q = supabase.from('accounts').select('*', { count: 'exact' });
+      if (tenant_id) q = q.eq('tenant_id', tenant_id);
+      if (type) q = q.eq('type', type);
+      q = q.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
 
-      // Add tenant_id filter if provided (optional for superadmins)
-      if (tenant_id) {
-        params.push(tenant_id);
-        whereClauses.push(`tenant_id = $${params.length}`);
-      }
+      const { data, error, count } = await q;
+      if (error) throw new Error(error.message);
 
-      if (type) {
-        params.push(type);
-        whereClauses.push(`type = $${params.length}`);
-      }
-
-      if (whereClauses.length > 0) {
-        query += " WHERE " + whereClauses.join(" AND ");
-      }
-
-      query += " ORDER BY created_at DESC LIMIT $" + (params.length + 1) +
-        " OFFSET $" + (params.length + 2);
-      params.push(parseInt(limit), parseInt(offset));
-
-      const result = await pgPool.query(query, params);
-
-      // Build count query with same filters
-      let countQuery = "SELECT COUNT(*) FROM accounts";
-      const countParams = [];
-      const countWhereClauses = [];
-
-      if (tenant_id) {
-        countParams.push(tenant_id);
-        countWhereClauses.push(`tenant_id = $${countParams.length}`);
-      }
-      if (type) {
-        countParams.push(type);
-        countWhereClauses.push(`type = $${countParams.length}`);
-      }
-
-      if (countWhereClauses.length > 0) {
-        countQuery += " WHERE " + countWhereClauses.join(" AND ");
-      }
-
-      const countResult = await pgPool.query(countQuery, countParams);
-
-      // Expand metadata for all accounts
-      const accounts = result.rows.map(expandMetadata);
+      const accounts = (data || []).map(expandMetadata);
 
       res.json({
         status: "success",
         data: {
           accounts,
-          total: parseInt(countResult.rows[0].count),
-          limit: parseInt(limit),
-          offset: parseInt(offset),
+          total: count || 0,
+          limit,
+          offset,
         },
       });
     } catch (error) {
@@ -116,24 +192,28 @@ export default function createAccountRoutes(pgPool) {
         });
       }
 
-      const query = `
-        INSERT INTO accounts (tenant_id, name, type, industry, website, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-        RETURNING *
-      `;
-
-      const result = await pgPool.query(query, [
-        tenant_id,
-        name,
-        type,
-        industry,
-        website,
-      ]);
+      const nowIso = new Date().toISOString();
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('accounts')
+        .insert([{
+          tenant_id,
+          name,
+          type,
+          industry,
+          website,
+          created_at: nowIso,
+          updated_at: nowIso,
+        }])
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
 
       res.json({
         status: "success",
         message: "Account created",
-        data: result.rows[0],
+        data,
       });
     } catch (error) {
       console.error("Error creating account:", error);
@@ -142,23 +222,108 @@ export default function createAccountRoutes(pgPool) {
   });
 
   // GET /api/accounts/:id - Get single account (centralized tenant/id scoping)
+  /**
+   * @openapi
+   * /api/accounts/{id}:
+   *   get:
+   *     summary: Get account by ID
+   *     tags: [accounts]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, nullable: true }
+   *     responses:
+   *       200:
+   *         description: Account details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   put:
+   *     summary: Update account
+   *     tags: [accounts]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *     responses:
+   *       200:
+   *         description: Account updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   delete:
+   *     summary: Delete account
+   *     tags: [accounts]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Account deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get("/:id", tenantScopedId(), async (req, res) => {
     try {
-      const { text, params } = buildGetByIdSQL("accounts", req.idScope);
-      const result = await pgPool.query(text, params);
-
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      let q = supabase.from('accounts').select('*').eq('id', req.idScope.id);
+      if (req.idScope.tenant_id) q = q.eq('tenant_id', req.idScope.tenant_id);
+      const { data, error } = await q.single();
+      if (error?.code === 'PGRST116') {
         return res.status(404).json({
           status: "error",
           message: "Account not found",
         });
       }
+      if (error) throw new Error(error.message);
 
-      const account = expandMetadata(result.rows[0]);
+      const account = expandMetadata(data);
       res.json({ status: "success", data: account });
     } catch (error) {
       console.error("Error fetching account:", error);
       res.status(500).json({ status: "error", message: error.message });
+    }
+  });
+
+  // GET /api/accounts/:id/related-people - Contacts and Leads under the Account
+  router.get('/:id/related-people', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { tenant_id } = req.query || {};
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('v_account_related_people')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .eq('account_id', id)
+        .order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return res.json({ status: 'success', data: { people: data || [] } });
+    } catch (error) {
+      console.error('[Accounts] related-people error:', error);
+      return res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
@@ -169,69 +334,49 @@ export default function createAccountRoutes(pgPool) {
       const { name, type, industry, website, metadata, ...otherFields } =
         req.body;
 
-      // First, get current account to merge metadata
-      const currentAccount = await pgPool.query(
-        "SELECT metadata FROM accounts WHERE id = $1",
-        [id],
-      );
-
-      if (currentAccount.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data: current, error: fetchErr } = await supabase
+        .from('accounts')
+        .select('metadata')
+        .eq('id', id)
+        .single();
+      if (fetchErr?.code === 'PGRST116') {
         return res.status(404).json({
           status: "error",
           message: "Account not found",
         });
       }
+      if (fetchErr) throw new Error(fetchErr.message);
 
-      // Merge metadata - preserve existing and add/update new fields
-      const currentMetadata = currentAccount.rows[0].metadata || {};
+      const currentMetadata = current?.metadata || {};
       const updatedMetadata = {
         ...currentMetadata,
         ...(metadata || {}),
-        ...otherFields, // Any unknown fields go into metadata
+        ...otherFields,
       };
 
-      const updates = [];
-      const values = [];
-      let paramCount = 1;
+      const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
+      if (name !== undefined) payload.name = name;
+      if (type !== undefined) payload.type = type;
+      if (industry !== undefined) payload.industry = industry;
+      if (website !== undefined) payload.website = website;
 
-      if (name !== undefined) {
-        updates.push(`name = $${paramCount++}`);
-        values.push(name);
-      }
-      if (type !== undefined) {
-        updates.push(`type = $${paramCount++}`);
-        values.push(type);
-      }
-      if (industry !== undefined) {
-        updates.push(`industry = $${paramCount++}`);
-        values.push(industry);
-      }
-      if (website !== undefined) {
-        updates.push(`website = $${paramCount++}`);
-        values.push(website);
-      }
-
-      // Always update metadata with merged data
-      updates.push(`metadata = $${paramCount++}`);
-      values.push(updatedMetadata);
-
-      updates.push(`updated_at = NOW()`);
-      values.push(id);
-
-      const query = `UPDATE accounts SET ${
-        updates.join(", ")
-      } WHERE id = $${paramCount} RETURNING *`;
-      const result = await pgPool.query(query, values);
-
-      if (result.rows.length === 0) {
+      const { data, error } = await supabase
+        .from('accounts')
+        .update(payload)
+        .eq('id', id)
+        .select('*')
+        .single();
+      if (error?.code === 'PGRST116') {
         return res.status(404).json({
           status: "error",
           message: "Account not found",
         });
       }
+      if (error) throw new Error(error.message);
 
-      // Expand metadata in response
-      const updatedAccount = expandMetadata(result.rows[0]);
+      const updatedAccount = expandMetadata(data);
 
       res.json({
         status: "success",
@@ -249,22 +394,24 @@ export default function createAccountRoutes(pgPool) {
     try {
       const { id } = req.params;
 
-      const result = await pgPool.query(
-        "DELETE FROM accounts WHERE id = $1 RETURNING id",
-        [id],
-      );
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({
-          status: "error",
-          message: "Account not found",
-        });
-      }
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('accounts')
+        .delete()
+        .eq('id', id)
+        .select('id')
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) return res.status(404).json({
+        status: "error",
+        message: "Account not found",
+      });
 
       res.json({
         status: "success",
         message: "Account deleted",
-        data: { id: result.rows[0].id },
+        data: { id: data.id },
       });
     } catch (error) {
       console.error("Error deleting account:", error);

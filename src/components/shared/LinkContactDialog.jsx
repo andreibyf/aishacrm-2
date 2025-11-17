@@ -3,13 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Link as LinkIcon, User as UserIcon, PlusCircle } from 'lucide-react';
-import { Contact, User } from '@/api/entities';
+import { Contact } from '@/api/entities';
 import { getTenantFilter } from './tenantUtils';
 import { useTenant } from './tenantContext';
 import { toast } from 'sonner';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useUser } from '@/components/shared/useUser.js';
 
 export default function LinkContactDialog({ open, onOpenChange, accountId, onContactLinked }) {
   const [unassignedContacts, setUnassignedContacts] = useState([]);
@@ -18,6 +19,9 @@ export default function LinkContactDialog({ open, onOpenChange, accountId, onCon
   const [selectedContacts, setSelectedContacts] = useState([]);
   const { selectedTenantId } = useTenant();
   const [activeTab, setActiveTab] = useState('existing');
+  
+  // Use global user context instead of local User.me()
+  const { user } = useUser();
 
   // State for new contact form
   const [newContactFirstName, setNewContactFirstName] = useState('');
@@ -27,10 +31,9 @@ export default function LinkContactDialog({ open, onOpenChange, accountId, onCon
 
   useEffect(() => {
     const fetchUnassignedContacts = async () => {
-      if (!open || activeTab !== 'existing') return; // Only fetch if dialog is open and on existing tab
+      if (!open || activeTab !== 'existing' || !user) return; // Only fetch if dialog is open and on existing tab
       setLoading(true);
       try {
-        const user = await User.me();
         const tenantFilter = getTenantFilter(user, selectedTenantId);
         const allContacts = await Contact.filter(tenantFilter);
         
@@ -46,7 +49,7 @@ export default function LinkContactDialog({ open, onOpenChange, accountId, onCon
     };
 
     fetchUnassignedContacts();
-  }, [open, selectedTenantId, activeTab]); // Depend on activeTab to refetch when switching to existing
+  }, [open, selectedTenantId, activeTab, user]); // Depend on activeTab to refetch when switching to existing
 
   const handleLinkExistingContacts = async () => {
     if (selectedContacts.length === 0) {

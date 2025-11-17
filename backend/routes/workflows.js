@@ -26,6 +26,50 @@ function normalizeWorkflow(row) {
 
 export default function createWorkflowRoutes(pgPool) {
   const router = express.Router();
+  /**
+   * @openapi
+   * /api/workflows:
+   *   get:
+   *     summary: List workflows
+   *     tags: [workflows]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, nullable: true }
+   *       - in: query
+   *         name: is_active
+   *         schema: { type: boolean, nullable: true }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Workflows list
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   post:
+   *     summary: Create workflow
+   *     tags: [workflows]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, name]
+   *     responses:
+   *       201:
+   *         description: Workflow created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   
   // Internal executor used by both /execute and /:id/test to avoid SSRF via internal HTTP
   async function executeWorkflowById(workflow_id, triggerPayload) {
@@ -103,6 +147,89 @@ export default function createWorkflowRoutes(pgPool) {
           switch (node.type) {
             case 'webhook_trigger': {
               log.output = { payload: context.payload };
+              break;
+            }
+            case 'http_request': {
+              const method = (cfg.method || 'POST').toUpperCase();
+              const url = replaceVariables(cfg.url || '');
+              
+              if (!url || url === cfg.url) {
+                log.status = 'error';
+                log.error = 'URL is required and must be properly configured';
+                break;
+              }
+
+              // Build headers
+              const headers = { 'Content-Type': 'application/json' };
+              if (cfg.headers && Array.isArray(cfg.headers)) {
+                for (const h of cfg.headers) {
+                  if (h.key && h.value) {
+                    headers[h.key] = replaceVariables(h.value);
+                  }
+                }
+              }
+
+              // Build body based on configuration
+              let requestBody = null;
+              if (method !== 'GET' && method !== 'HEAD') {
+                if (cfg.body_type === 'raw') {
+                  requestBody = replaceVariables(cfg.body || '{}');
+                  // Try to parse as JSON if it looks like JSON
+                  try {
+                    requestBody = JSON.parse(requestBody);
+                  } catch {
+                    // Keep as string if not valid JSON
+                  }
+                } else if (cfg.body_mappings && Array.isArray(cfg.body_mappings)) {
+                  requestBody = {};
+                  for (const mapping of cfg.body_mappings) {
+                    if (mapping.key && mapping.value) {
+                      const value = replaceVariables(`{{${mapping.value}}}`);
+                      // Don't include unresolved template variables
+                      if (value !== `{{${mapping.value}}}`) {
+                        requestBody[mapping.key] = value;
+                      }
+                    }
+                  }
+                }
+              }
+
+              try {
+                const fetchOptions = {
+                  method,
+                  headers,
+                  ...(requestBody && { body: typeof requestBody === 'string' ? requestBody : JSON.stringify(requestBody) })
+                };
+
+                const response = await fetch(url, fetchOptions);
+                const contentType = response.headers.get('content-type');
+                let responseData;
+                
+                if (contentType && contentType.includes('application/json')) {
+                  responseData = await response.json().catch(() => null);
+                } else {
+                  responseData = await response.text();
+                }
+
+                log.output = {
+                  status_code: response.status,
+                  status_text: response.statusText,
+                  headers: Object.fromEntries(response.headers.entries()),
+                  data: responseData
+                };
+                
+                context.variables.last_http_response = responseData;
+                context.variables.last_http_status = response.status;
+
+                // Mark as error if HTTP status >= 400
+                if (response.status >= 400) {
+                  log.status = 'error';
+                  log.error = `HTTP ${response.status}: ${response.statusText}`;
+                }
+              } catch (err) {
+                log.status = 'error';
+                log.error = `HTTP request failed: ${err.message}`;
+              }
               break;
             }
             case 'send_email': {
@@ -422,7 +549,250 @@ export default function createWorkflowRoutes(pgPool) {
     }
   });
 
+  // POST /api/workflows - Create new workflow
+  router.post('/', async (req, res) => {
+    try {
+      const { tenant_id, name, description, trigger, nodes, connections, is_active } = req.body;
+
+      if (!tenant_id || !name) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'tenant_id and name are required' 
+        });
+      }
+
+      // Build metadata object containing nodes and connections
+      const metadata = {
+        nodes: nodes || [],
+        connections: connections || [],
+        webhook_url: null, // Will be set after creation
+        execution_count: 0,
+        last_executed: null
+      };
+
+      // Extract trigger type and config
+      const trigger_type = trigger?.type || 'webhook';
+      const trigger_config = trigger?.config || {};
+
+      const query = `
+        INSERT INTO workflow (tenant_id, name, description, trigger_type, trigger_config, is_active, metadata)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *
+      `;
+
+      const values = [
+        tenant_id,
+        name,
+        description || null,
+        trigger_type,
+        trigger_config,
+        is_active !== undefined ? is_active : true,
+        metadata
+      ];
+
+      const result = await pgPool.query(query, values);
+      const workflow = normalizeWorkflow(result.rows[0]);
+
+      // Update webhook URL in metadata now that we have the ID
+      if (trigger_type === 'webhook') {
+        const webhookUrl = `/api/workflows/${workflow.id}/webhook`;
+        await pgPool.query(
+          `UPDATE workflow SET metadata = metadata || $1 WHERE id = $2`,
+          [JSON.stringify({ webhook_url: webhookUrl }), workflow.id]
+        );
+        workflow.webhook_url = webhookUrl;
+      }
+
+      res.status(201).json({
+        status: 'success',
+        data: workflow
+      });
+    } catch (error) {
+      console.error('Error creating workflow:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // PUT /api/workflows/:id - Update existing workflow
+  /**
+   * @openapi
+   * /api/workflows/{id}:
+   *   put:
+   *     summary: Update workflow
+   *     tags: [workflows]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *     responses:
+   *       200:
+   *         description: Workflow updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   delete:
+   *     summary: Delete workflow
+   *     tags: [workflows]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Workflow deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
+  router.put('/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { tenant_id, name, description, trigger, nodes, connections, is_active } = req.body;
+
+      if (!tenant_id) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'tenant_id is required' 
+        });
+      }
+
+      // Verify workflow exists and belongs to tenant
+      const checkResult = await pgPool.query(
+        'SELECT * FROM workflow WHERE id = $1 AND tenant_id = $2',
+        [id, tenant_id]
+      );
+
+      if (checkResult.rows.length === 0) {
+        return res.status(404).json({ 
+          status: 'error', 
+          message: 'Workflow not found or access denied' 
+        });
+      }
+
+      const existingWorkflow = checkResult.rows[0];
+      const existingMetadata = existingWorkflow.metadata || {};
+
+      // Build updated metadata
+      const metadata = {
+        ...existingMetadata,
+        nodes: nodes !== undefined ? nodes : existingMetadata.nodes || [],
+        connections: connections !== undefined ? connections : existingMetadata.connections || []
+      };
+
+      // Extract trigger type and config if provided
+      const trigger_type = trigger?.type || existingWorkflow.trigger_type;
+      const trigger_config = trigger?.config || existingWorkflow.trigger_config;
+
+      const query = `
+        UPDATE workflow 
+        SET name = $1, 
+            description = $2, 
+            trigger_type = $3, 
+            trigger_config = $4, 
+            is_active = $5, 
+            metadata = $6,
+            updated_at = NOW()
+        WHERE id = $7 AND tenant_id = $8
+        RETURNING *
+      `;
+
+      const values = [
+        name !== undefined ? name : existingWorkflow.name,
+        description !== undefined ? description : existingWorkflow.description,
+        trigger_type,
+        trigger_config,
+        is_active !== undefined ? is_active : existingWorkflow.is_active,
+        metadata,
+        id,
+        tenant_id
+      ];
+
+      const result = await pgPool.query(query, values);
+      const workflow = normalizeWorkflow(result.rows[0]);
+
+      res.json({
+        status: 'success',
+        data: workflow
+      });
+    } catch (error) {
+      console.error('Error updating workflow:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // DELETE /api/workflows/:id - Delete workflow
+  router.delete('/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { tenant_id } = req.query;
+
+      if (!tenant_id) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'tenant_id is required' 
+        });
+      }
+
+      const result = await pgPool.query(
+        'DELETE FROM workflow WHERE id = $1 AND tenant_id = $2 RETURNING id',
+        [id, tenant_id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ 
+          status: 'error', 
+          message: 'Workflow not found or access denied' 
+        });
+      }
+
+      res.json({
+        status: 'success',
+        data: { id: result.rows[0].id, deleted: true }
+      });
+    } catch (error) {
+      console.error('Error deleting workflow:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // Execute workflow by ID (no internal HTTP)
+  /**
+   * @openapi
+   * /api/workflows/execute:
+   *   post:
+   *     summary: Execute workflow by ID
+   *     tags: [workflows]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               workflow_id: { type: string }
+   *               payload: { type: object }
+   *     responses:
+   *       200:
+   *         description: Execution result
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.post('/execute', async (req, res) => {
     try {
       const { workflow_id, payload, input_data } = req.body || {};
@@ -438,6 +808,33 @@ export default function createWorkflowRoutes(pgPool) {
   });
 
   // POST /api/workflows/:id/test - Convenience endpoint to execute a workflow by ID with payload
+  /**
+   * @openapi
+   * /api/workflows/{id}/test:
+   *   post:
+   *     summary: Test-execute a workflow
+   *     tags: [workflows]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               payload: { type: object }
+   *     responses:
+   *       200:
+   *         description: Execution result
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.post('/:id/test', async (req, res) => {
     try {
       const { id } = req.params;

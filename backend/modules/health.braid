@@ -1,0 +1,11 @@
+// Health check endpoint demonstrating Braid transpiler MVP
+
+@route(method: "GET", path: "/api/braid/health")
+fn health_check() -> String !io {
+  "Braid module system operational"
+}
+
+@route(method: "GET", path: "/api/braid/status")
+fn status_check() -> String !io {
+  "OK"
+}

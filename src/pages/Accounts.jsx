@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Account } from "@/api/entities";
 import { Contact } from "@/api/entities";
-import { User } from "@/api/entities";
 import { Employee } from "@/api/entities";
 import { useApiManager } from "../components/shared/ApiManager";
-import { loadUsersSafely } from "../components/shared/userLoader";
+import { loadUsersSafely } from "../components/shared/userLoader"; // TODO: remove after refactor if unused
+import { useUser } from "@/components/shared/useUser.js";
 import AccountCard from "../components/accounts/AccountCard";
 import AccountForm from "../components/accounts/AccountForm";
 import AccountDetailPanel from "../components/accounts/AccountDetailPanel";
@@ -65,7 +65,7 @@ export default function AccountsPage() {
   const [selectedAccounts, setSelectedAccounts] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
   const { selectedTenantId } = useTenant();
   const [detailAccount, setDetailAccount] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -135,25 +135,13 @@ export default function AccountsPage() {
 
     // Test data filtering
     if (!showTestData) {
-      filter.is_test_data = { $ne: true };
+      filter.is_test_data = false; // Simple boolean, not complex operator
     }
 
     return filter;
   }, [user, selectedTenantId, showTestData, selectedEmail]);
 
-  // Load user once
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Failed to load user:", error);
-        toast.error("Failed to load user information");
-      }
-    };
-    loadUser();
-  }, []);
+  // User provided by global context
 
   // Load supporting data (contacts, users, employees) ONCE with delays and error handling
   useEffect(() => {
@@ -173,6 +161,15 @@ export default function AccountsPage() {
           }
         } else if (user.tenant_id) {
           baseTenantFilter.tenant_id = user.tenant_id;
+        }
+
+        // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
+        if ((user.role === 'superadmin' || user.role === 'admin') && !baseTenantFilter.tenant_id) {
+          if (import.meta.env.DEV) {
+            console.log("[Accounts] Skipping data load - no tenant selected");
+          }
+          supportingDataLoaded.current = true;
+          return;
         }
 
         // Load contacts
@@ -243,6 +240,19 @@ export default function AccountsPage() {
 
     try {
       const currentTenantFilter = getTenantFilter();
+      
+      // Guard: Don't load stats if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !currentTenantFilter.tenant_id) {
+        setTotalStats({
+          total: 0,
+          customer: 0,
+          prospect: 0,
+          partner: 0,
+          inactive: 0,
+        });
+        return;
+      }
+      
       const allAccounts = await cachedRequest(
         "Account",
         "filter",
@@ -271,6 +281,14 @@ export default function AccountsPage() {
     setLoading(true);
     try {
       const currentTenantFilter = getTenantFilter();
+
+      // Guard: Don't load accounts if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !currentTenantFilter.tenant_id) {
+        setAccounts([]);
+        setTotalItems(0);
+        setLoading(false);
+        return;
+      }
 
       const allAccounts = await cachedRequest(
         "Account",
@@ -310,8 +328,14 @@ export default function AccountsPage() {
 
       setTotalItems(filtered.length);
 
-      // Apply pagination
+      // Apply pagination with out-of-range guard (e.g., after deletions)
       const startIndex = (currentPage - 1) * pageSize;
+      if (startIndex >= filtered.length && currentPage > 1) {
+        setCurrentPage(currentPage - 1);
+        setLoading(false);
+        return;
+      }
+
       const endIndex = startIndex + pageSize;
       const paginatedAccounts = filtered.slice(startIndex, endIndex);
 
@@ -426,6 +450,15 @@ export default function AccountsPage() {
     }
 
     try {
+      // Optimistically update UI for instant feedback
+      setAccounts((prev) => prev.filter((a) => a.id !== id));
+      setTotalItems((t) => Math.max(0, (t || 0) - 1));
+      setSelectedAccounts((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+
       await Account.delete(id);
       clearCacheByKey("Account");
       await Promise.all([
@@ -436,6 +469,8 @@ export default function AccountsPage() {
     } catch (error) {
       console.error("Failed to delete account:", error);
       toast.error("Failed to delete account");
+      // Ensure UI consistency by reloading on failure
+      await loadAccounts();
     }
   };
 
@@ -516,6 +551,10 @@ export default function AccountsPage() {
         await Promise.all(
           [...selectedAccounts].map((id) => Account.delete(id)),
         );
+        // Optimistically update UI for selected deletions
+        const idsToRemove = new Set(selectedAccounts);
+        setAccounts((prev) => prev.filter((a) => !idsToRemove.has(a.id)));
+        setTotalItems((t) => Math.max(0, (t || 0) - idsToRemove.size));
         setSelectedAccounts(new Set());
         clearCacheByKey("Account");
         await Promise.all([
@@ -526,6 +565,7 @@ export default function AccountsPage() {
       } catch (error) {
         console.error("Failed to delete accounts:", error);
         toast.error("Failed to delete accounts");
+        await loadAccounts();
       }
     }
   };
@@ -801,7 +841,11 @@ export default function AccountsPage() {
             </DialogHeader>
             <AccountForm
               account={editingAccount}
-              onSuccess={handleSave}
+              // AccountForm now handles Account.create/update internally, just handle refresh
+              onSubmit={async (result) => {
+                console.log('[Accounts] Account saved:', result);
+                await handleSave();
+              }}
               onCancel={() => {
                 setIsFormOpen(false);
                 setEditingAccount(null);

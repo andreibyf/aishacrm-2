@@ -17,8 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -28,13 +26,6 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Bail out if DATABASE_URL is missing
-        if: env.DATABASE_URL == ''
-        run: |
-          echo "DATABASE_URL secret is not configured; skipping RLS check."
-          exit 0
-        shell: bash
-
       - name: Install backend deps
         working-directory: backend
         run: npm ci
@@ -42,5 +33,3 @@ jobs:
       - name: Run CI RLS check
         working-directory: backend
         run: npm run ci:check-rls
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}

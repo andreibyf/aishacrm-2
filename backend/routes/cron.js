@@ -6,7 +6,7 @@
 import express from 'express';
 import { executeJob } from '../lib/cronExecutors.js';
 
-export default function createCronRoutes(pgPool) {
+export default function createCronRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/cron/jobs - List cron jobs
@@ -14,31 +14,30 @@ export default function createCronRoutes(pgPool) {
     try {
       const { tenant_id, is_active } = req.query;
       
-      let query = 'SELECT * FROM cron_job WHERE 1=1';
-      const params = [];
-      let paramCount = 1;
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      
+      let query = supabase
+        .from('cron_job')
+        .select('*')
+        .order('created_at', { ascending: false });
 
       if (tenant_id) {
-        query += ` AND tenant_id = $${paramCount}`;
-        params.push(tenant_id);
-        paramCount++;
+        query = query.eq('tenant_id', tenant_id);
       }
 
       if (is_active !== undefined) {
-        query += ` AND is_active = $${paramCount}`;
-        params.push(is_active === 'true');
-        paramCount++;
+        query = query.eq('is_active', is_active === 'true');
       }
 
-      query += ' ORDER BY created_at DESC';
-
-      const result = await pgPool.query(query, params);
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
 
       res.json({
         status: 'success',
         data: { 
-          jobs: result.rows,
-          total: result.rows.length
+          jobs: data || [],
+          total: data?.length || 0
         },
       });
     } catch (error) {
@@ -52,12 +51,17 @@ export default function createCronRoutes(pgPool) {
     try {
       const { id } = req.params;
       
-      const result = await pgPool.query(
-        'SELECT * FROM cron_job WHERE id = $1',
-        [id]
-      );
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      
+      const { data, error } = await supabase
+        .from('cron_job')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
 
-      if (result.rows.length === 0) {
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) {
         return res.status(404).json({
           status: 'error',
           message: 'Cron job not found'
@@ -66,7 +70,7 @@ export default function createCronRoutes(pgPool) {
 
       res.json({
         status: 'success',
-        data: { job: result.rows[0] }
+        data: { job: data }
       });
     } catch (error) {
       console.error('Error getting cron job:', error);
@@ -96,17 +100,32 @@ export default function createCronRoutes(pgPool) {
       // Calculate initial next_run time
       const next_run = calculateNextRun(schedule, new Date());
 
-      const result = await pgPool.query(
-        `INSERT INTO cron_job (tenant_id, name, schedule, function_name, is_active, next_run, metadata, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-         RETURNING *`,
-        [tenant_id || null, name, schedule, function_name, is_active, next_run, metadata]
-      );
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const nowIso = new Date().toISOString();
+      
+      const { data, error } = await supabase
+        .from('cron_job')
+        .insert([{
+          tenant_id: tenant_id || null,
+          name,
+          schedule,
+          function_name,
+          is_active,
+          next_run: next_run?.toISOString() || null,
+          metadata,
+          created_at: nowIso,
+          updated_at: nowIso
+        }])
+        .select('*')
+        .single();
+      
+      if (error) throw new Error(error.message);
 
       res.json({
         status: 'success',
         message: 'Cron job created',
-        data: { job: result.rows[0] },
+        data: { job: data },
       });
     } catch (error) {
       console.error('Error creating cron job:', error);
@@ -120,60 +139,37 @@ export default function createCronRoutes(pgPool) {
       const { id } = req.params;
       const { name, schedule, function_name, is_active, metadata } = req.body;
 
-      const updates = [];
-      const values = [];
-      let paramCount = 1;
-
-      if (name !== undefined) {
-        updates.push(`name = $${paramCount}`);
-        values.push(name);
-        paramCount++;
-      }
-
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      
+      const updatePayload = {};
+      if (name !== undefined) updatePayload.name = name;
       if (schedule !== undefined) {
-        updates.push(`schedule = $${paramCount}`);
-        values.push(schedule);
-        paramCount++;
-        
-        // Recalculate next_run if schedule changed
+        updatePayload.schedule = schedule;
         const next_run = calculateNextRun(schedule, new Date());
-        updates.push(`next_run = $${paramCount}`);
-        values.push(next_run);
-        paramCount++;
+        updatePayload.next_run = next_run?.toISOString() || null;
       }
+      if (function_name !== undefined) updatePayload.function_name = function_name;
+      if (is_active !== undefined) updatePayload.is_active = is_active;
+      if (metadata !== undefined) updatePayload.metadata = metadata;
+      updatePayload.updated_at = new Date().toISOString();
 
-      if (function_name !== undefined) {
-        updates.push(`function_name = $${paramCount}`);
-        values.push(function_name);
-        paramCount++;
-      }
-
-      if (is_active !== undefined) {
-        updates.push(`is_active = $${paramCount}`);
-        values.push(is_active);
-        paramCount++;
-      }
-
-      if (metadata !== undefined) {
-        updates.push(`metadata = $${paramCount}`);
-        values.push(metadata);
-        paramCount++;
-      }
-
-      if (updates.length === 0) {
+      if (Object.keys(updatePayload).length === 1 && updatePayload.updated_at) {
         return res.status(400).json({
           status: 'error',
           message: 'No fields to update'
         });
       }
 
-      updates.push(`updated_at = NOW()`);
-      values.push(id);
+      const { data, error } = await supabase
+        .from('cron_job')
+        .update(updatePayload)
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
 
-      const query = `UPDATE cron_job SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`;
-      const result = await pgPool.query(query, values);
-
-      if (result.rows.length === 0) {
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) {
         return res.status(404).json({
           status: 'error',
           message: 'Cron job not found'
@@ -183,7 +179,7 @@ export default function createCronRoutes(pgPool) {
       res.json({
         status: 'success',
         message: 'Cron job updated',
-        data: { job: result.rows[0] }
+        data: { job: data }
       });
     } catch (error) {
       console.error('Error updating cron job:', error);
@@ -196,12 +192,18 @@ export default function createCronRoutes(pgPool) {
     try {
       const { id } = req.params;
       
-      const result = await pgPool.query(
-        'DELETE FROM cron_job WHERE id = $1 RETURNING *',
-        [id]
-      );
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      
+      const { data, error } = await supabase
+        .from('cron_job')
+        .delete()
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
 
-      if (result.rows.length === 0) {
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) {
         return res.status(404).json({
           status: 'error',
           message: 'Cron job not found'
@@ -211,7 +213,7 @@ export default function createCronRoutes(pgPool) {
       res.json({
         status: 'success',
         message: 'Cron job deleted',
-        data: { job: result.rows[0] }
+        data: { job: data }
       });
     } catch (error) {
       console.error('Error deleting cron job:', error);
@@ -225,56 +227,59 @@ export default function createCronRoutes(pgPool) {
     
     try {
       const now = new Date();
+      const nowIso = now.toISOString();
+      
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
       
       // Fetch all active jobs that are due to run
-      const result = await pgPool.query(
-        `SELECT * FROM cron_job 
-         WHERE is_active = true 
-         AND (next_run IS NULL OR next_run <= $1)
-         ORDER BY next_run ASC NULLS FIRST`,
-        [now]
-      );
+      const { data: jobs, error: fetchErr } = await supabase
+        .from('cron_job')
+        .select('*')
+        .eq('is_active', true)
+        .or(`next_run.is.null,next_run.lte.${nowIso}`)
+        .order('next_run', { ascending: true, nullsFirst: true });
+      
+      if (fetchErr) throw new Error(fetchErr.message);
 
-      const jobs = result.rows;
       const executed = [];
       const skipped = [];
       const failed = [];
 
-      for (const job of jobs) {
+      for (const job of jobs || []) {
         try {
           // Calculate next run time
           const nextRun = calculateNextRun(job.schedule, now);
           
           // Update job metadata
-          await pgPool.query(
-            `UPDATE cron_job 
-             SET last_run = $1, 
-                 next_run = $2,
-                 metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb,
-                 updated_at = NOW()
-             WHERE id = $4`,
-            [
-              now, 
-              nextRun, 
-              JSON.stringify({
-                last_execution: now.toISOString(),
-                execution_count: (parseInt(job.metadata?.execution_count) || 0) + 1
-              }),
-              job.id
-            ]
-          );
+          const newMeta = {
+            ...(job.metadata || {}),
+            last_execution: nowIso,
+            execution_count: (parseInt(job.metadata?.execution_count) || 0) + 1
+          };
+          
+          await supabase
+            .from('cron_job')
+            .update({
+              last_run: nowIso,
+              next_run: nextRun?.toISOString() || null,
+              metadata: newMeta,
+              updated_at: nowIso
+            })
+            .eq('id', job.id);
 
           executed.push({
             id: job.id,
             name: job.name,
             function_name: job.function_name,
             next_run: nextRun?.toISOString(),
-            executed_at: now.toISOString()
+            executed_at: nowIso
           });
 
           // Execute the actual job function via the job registry
           if (job.function_name) {
-            await executeJob(job.function_name, pgPool, job.metadata || {});
+            // Note: executeJob needs access to database - pass supabase client via metadata
+            await executeJob(job.function_name, null, { ...job.metadata || {}, supabase });
           }
           
         } catch (error) {
@@ -287,19 +292,19 @@ export default function createCronRoutes(pgPool) {
           });
 
           // Update error count
-          await pgPool.query(
-            `UPDATE cron_job 
-             SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb,
-                 updated_at = NOW()
-             WHERE id = $2`,
-            [
-              JSON.stringify({
-                last_error: error.message,
-                error_count: (parseInt(job.metadata?.error_count) || 0) + 1
-              }),
-              job.id
-            ]
-          );
+          const errorMeta = {
+            ...(job.metadata || {}),
+            last_error: error.message,
+            error_count: (parseInt(job.metadata?.error_count) || 0) + 1
+          };
+          
+          await supabase
+            .from('cron_job')
+            .update({
+              metadata: errorMeta,
+              updated_at: nowIso
+            })
+            .eq('id', job.id);
         }
       }
 
@@ -307,7 +312,7 @@ export default function createCronRoutes(pgPool) {
         status: 'success',
         data: {
           summary: {
-            total: jobs.length,
+            total: jobs?.length || 0,
             executed: executed.length,
             skipped: skipped.length,
             failed: failed.length,

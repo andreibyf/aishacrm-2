@@ -2,7 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { performanceCache } from './PerformanceCache';
-import { User } from '@/api/entities';
+import { useUser as useGlobalUser } from './useUser.js';
 
 // UI Imports (assuming Shadcn/ui and lucide-react)
 import { Badge } from '@/components/ui/badge';
@@ -65,38 +65,9 @@ export const useDataPrefetch = (user) => {
 };
 
 // Memoized user getter to avoid repeated API calls
+// NOTE: This hook is deprecated - use useUser from UserContext instead
 export const useOptimizedUser = () => {
-  const [user, setUser] = React.useState(null);
-  const [loading, setLoading] = React.useState(true);
-
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        // Try cache first
-        const cachedUser = performanceCache.getFromCache('User', 'me', {}, 10 * 60 * 1000); // 10 min cache
-        if (cachedUser) {
-          setUser(cachedUser);
-          setLoading(false);
-          return;
-        }
-
-        // Load from API
-        const userData = await performanceCache.throttledRequest(async () => {
-          return await User.me();
-        }, 'high');
-
-        performanceCache.setCache('User', 'me', {}, userData);
-        setUser(userData);
-      } catch (error) {
-        console.error('Failed to load user:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadUser();
-  }, []);
-
+  const { user, loading } = useGlobalUser();
   return { user, loading };
 };
 

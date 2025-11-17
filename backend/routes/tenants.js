@@ -5,6 +5,7 @@
 
 import express from "express";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createAuditLog, getUserEmailFromRequest, getClientIP } from "../lib/auditLogger.js";
 
 function getSupabaseAdmin() {
   const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -18,8 +19,103 @@ function getBucketName() {
   return process.env.SUPABASE_STORAGE_BUCKET || "tenant-assets";
 }
 
+/**
+ * Generate a unique tenant_id slug from a company name
+ * If the base slug exists, appends a counter: acme-corp-2, acme-corp-3, etc.
+ */
+async function generateUniqueTenantId(supabase, name) {
+  // Create base slug: lowercase, alphanumeric + hyphens only
+  let slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '') // Remove special chars except spaces and hyphens
+    .trim()
+    .replace(/\s+/g, '-') // Replace spaces with hyphens
+    .replace(/-+/g, '-'); // Collapse multiple hyphens
+
+  // Check if base slug is available
+  const { data: existing } = await supabase
+    .from('tenant')
+    .select('tenant_id')
+    .eq('tenant_id', slug)
+    .maybeSingle();
+
+  if (!existing) {
+    console.log(`[generateUniqueTenantId] Generated slug: ${slug}`);
+    return slug;
+  }
+
+  // Base slug exists, append counter
+  let counter = 2;
+  let candidate = `${slug}-${counter}`;
+  
+  while (true) {
+    const { data: check } = await supabase
+      .from('tenant')
+      .select('tenant_id')
+      .eq('tenant_id', candidate)
+      .maybeSingle();
+    
+    if (!check) {
+      console.log(`[generateUniqueTenantId] Generated slug with counter: ${candidate}`);
+      return candidate;
+    }
+    
+    counter++;
+    candidate = `${slug}-${counter}`;
+    
+    // Safety check to prevent infinite loops
+    if (counter > 1000) {
+      throw new Error(`Unable to generate unique tenant_id for name: ${name}`);
+    }
+  }
+}
+
 export default function createTenantRoutes(_pgPool) {
   const router = express.Router();
+  /**
+   * @openapi
+   * /api/tenants:
+   *   get:
+   *     summary: List tenants
+   *     tags: [tenants]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, nullable: true }
+   *       - in: query
+   *         name: status
+   *         schema: { type: string, nullable: true }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Tenants list
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   post:
+   *     summary: Create tenant
+   *     tags: [tenants]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: []
+   *     responses:
+   *       200:
+   *         description: Tenant created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
 
   // GET /api/tenants - List tenants
   router.get("/", async (req, res) => {
@@ -40,7 +136,8 @@ export default function createTenantRoutes(_pgPool) {
         .order('created_at', { ascending: false })
         .range(from, to);
 
-      if (tenant_id) q = q.eq('tenant_id', tenant_id);
+      // Filter by UUID id (primary key), not tenant_id slug
+      if (tenant_id) q = q.eq('id', tenant_id);
       if (status) q = q.eq('status', status);
 
       const { data, count, error } = await q;
@@ -55,15 +152,15 @@ export default function createTenantRoutes(_pgPool) {
         accent_color: r.branding_settings?.accent_color ||
           r.metadata?.accent_color || null,
         settings: r.branding_settings || {}, // For backward compatibility
-        // Extract metadata fields to top-level for UI
-        country: r.metadata?.country || "",
-        major_city: r.metadata?.major_city || "",
-        industry: r.metadata?.industry || "other",
-        business_model: r.metadata?.business_model || "b2b",
-        geographic_focus: r.metadata?.geographic_focus || "north_america",
-        elevenlabs_agent_id: r.metadata?.elevenlabs_agent_id || "",
-        display_order: r.metadata?.display_order ?? 0,
-        domain: r.metadata?.domain || "",
+        // Use direct columns (migrated from metadata JSONB)
+        country: r.country || "",
+        major_city: r.major_city || "",
+        industry: r.industry || "other",
+        business_model: r.business_model || "b2b",
+        geographic_focus: r.geographic_focus || "north_america",
+        elevenlabs_agent_id: r.elevenlabs_agent_id || "",
+        display_order: r.display_order ?? 0,
+        domain: r.domain || "",
       }));
 
       res.json({
@@ -84,7 +181,9 @@ export default function createTenantRoutes(_pgPool) {
   // POST /api/tenants - Create tenant
   router.post("/", async (req, res) => {
     try {
-      const {
+      console.log("[Tenants POST] Received request body:", JSON.stringify(req.body, null, 2));
+      
+      let {
         tenant_id,
         name,
         branding_settings,
@@ -105,10 +204,21 @@ export default function createTenantRoutes(_pgPool) {
         domain,
       } = req.body;
 
+      console.log("[Tenants POST] Parsed tenant_id:", tenant_id, "name:", name);
+
+      // Auto-generate tenant_id from name if not provided
+      if (!tenant_id && name) {
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
+        tenant_id = await generateUniqueTenantId(supabase, name);
+        console.log("[Tenants POST] Auto-generated tenant_id:", tenant_id);
+      }
+
       if (!tenant_id) {
+        console.warn("[Tenants POST] Missing tenant_id and name in request");
         return res.status(400).json({
           status: "error",
-          message: "tenant_id is required",
+          message: "Either tenant_id or name is required",
         });
       }
       // Build branding_settings from individual fields or use provided object
@@ -119,17 +229,9 @@ export default function createTenantRoutes(_pgPool) {
         ...(accent_color !== undefined ? { accent_color } : {}),
       };
 
-      // Build metadata from individual fields or use provided object
+      // Keep metadata for other fields not yet migrated to columns
       const finalMetadata = {
         ...(metadata || {}),
-        ...(country !== undefined ? { country } : {}),
-        ...(major_city !== undefined ? { major_city } : {}),
-        ...(industry !== undefined ? { industry } : {}),
-        ...(business_model !== undefined ? { business_model } : {}),
-        ...(geographic_focus !== undefined ? { geographic_focus } : {}),
-        ...(elevenlabs_agent_id !== undefined ? { elevenlabs_agent_id } : {}),
-        ...(display_order !== undefined ? { display_order } : {}),
-        ...(domain !== undefined ? { domain } : {}),
       };
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
@@ -141,16 +243,53 @@ export default function createTenantRoutes(_pgPool) {
         branding_settings: finalBrandingSettings,
         status: status || 'active',
         metadata: finalMetadata,
+        // Direct column assignments (migrated from metadata)
+        country: country || null,
+        major_city: major_city || null,
+        industry: industry || null,
+        business_model: business_model || null,
+        geographic_focus: geographic_focus || null,
+        elevenlabs_agent_id: elevenlabs_agent_id || null,
+        display_order: display_order ?? 0,
+        domain: domain || null,
         created_at: nowIso,
         updated_at: nowIso,
       };
 
+      console.log("[Tenants POST] Attempting to insert:", JSON.stringify(insertData, null, 2));
+      
       const { data: created, error } = await supabase
         .from('tenant')
         .insert([insertData])
         .select()
         .single();
-      if (error) throw new Error(error.message);
+      
+      if (error) {
+        console.error("[Tenants POST] Database error:", error);
+        throw new Error(error.message);
+      }
+      
+      console.log("[Tenants POST] Tenant created successfully:", created?.id);
+
+      // Create audit log for tenant creation
+      try {
+        await createAuditLog(supabase, {
+          tenant_id: created?.tenant_id || 'system',
+          user_email: getUserEmailFromRequest(req),
+          action: 'create',
+          entity_type: 'tenant',
+          entity_id: created?.id,
+          changes: {
+            name: created?.name,
+            status: created?.status,
+            tenant_id: created?.tenant_id,
+          },
+          ip_address: getClientIP(req),
+          user_agent: req.headers['user-agent'],
+        });
+      } catch (auditError) {
+        console.warn('[AUDIT] Failed to log tenant creation:', auditError.message);
+      }
 
       // Auto-provision tenant storage prefix by creating a placeholder object
       try {
@@ -203,6 +342,61 @@ export default function createTenantRoutes(_pgPool) {
   });
 
   // GET /api/tenants/:id - Get single tenant (by tenant_id, not UUID)
+  /**
+   * @openapi
+   * /api/tenants/{id}:
+   *   get:
+   *     summary: Get tenant by ID or tenant_id
+   *     tags: [tenants]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Tenant details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   put:
+   *     summary: Update tenant
+   *     tags: [tenants]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *     responses:
+   *       200:
+   *         description: Tenant updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   delete:
+   *     summary: Delete tenant
+   *     tags: [tenants]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Tenant deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get("/:id", async (req, res) => {
     try {
       const { id } = req.params;
@@ -299,43 +493,59 @@ export default function createTenantRoutes(_pgPool) {
         paramCount++;
       }
 
-      // Handle metadata - merge with existing and add new fields
-      const shouldUpdateMetadata = metadata !== undefined ||
-        country !== undefined ||
-        major_city !== undefined || industry !== undefined ||
-        business_model !== undefined ||
-        geographic_focus !== undefined || elevenlabs_agent_id !== undefined ||
-        display_order !== undefined || domain !== undefined ||
-        settings !== undefined;
-
-      if (shouldUpdateMetadata) {
-        // Fetch existing metadata to merge
-        const { getSupabaseClient } = await import('../lib/supabase-db.js');
-        const supabase = getSupabaseClient();
-        const selMeta = supabase.from('tenant').select('metadata');
-        const { data: cur, error: metaErr } = isUUID
-          ? await selMeta.eq('id', id).single()
-          : await selMeta.eq('tenant_id', id).single();
-        if (metaErr && metaErr.code !== 'PGRST116') throw new Error(metaErr.message);
-        const existingMetadata = cur?.metadata || {};
-
-        // Merge all metadata fields
-        const mergedMetadata = {
-          ...existingMetadata,
-          ...metadata,
-          ...(settings || {}), // Legacy settings field
-          ...(country !== undefined ? { country } : {}),
-          ...(major_city !== undefined ? { major_city } : {}),
-          ...(industry !== undefined ? { industry } : {}),
-          ...(business_model !== undefined ? { business_model } : {}),
-          ...(geographic_focus !== undefined ? { geographic_focus } : {}),
-          ...(elevenlabs_agent_id !== undefined ? { elevenlabs_agent_id } : {}),
-          ...(display_order !== undefined ? { display_order } : {}),
-          ...(domain !== undefined ? { domain } : {}),
-        };
-
+      // Handle metadata - keep for fields not yet migrated to columns
+      if (metadata !== undefined) {
         updates.push(`metadata = $${paramCount}`);
-        params.push(mergedMetadata);
+        params.push(metadata);
+        paramCount++;
+      }
+
+      // Handle individual tenant fields (migrated from metadata to direct columns)
+      if (country !== undefined) {
+        updates.push(`country = $${paramCount}`);
+        params.push(country);
+        paramCount++;
+      }
+
+      if (major_city !== undefined) {
+        updates.push(`major_city = $${paramCount}`);
+        params.push(major_city);
+        paramCount++;
+      }
+
+      if (industry !== undefined) {
+        updates.push(`industry = $${paramCount}`);
+        params.push(industry);
+        paramCount++;
+      }
+
+      if (business_model !== undefined) {
+        updates.push(`business_model = $${paramCount}`);
+        params.push(business_model);
+        paramCount++;
+      }
+
+      if (geographic_focus !== undefined) {
+        updates.push(`geographic_focus = $${paramCount}`);
+        params.push(geographic_focus);
+        paramCount++;
+      }
+
+      if (elevenlabs_agent_id !== undefined) {
+        updates.push(`elevenlabs_agent_id = $${paramCount}`);
+        params.push(elevenlabs_agent_id);
+        paramCount++;
+      }
+
+      if (display_order !== undefined) {
+        updates.push(`display_order = $${paramCount}`);
+        params.push(display_order);
+        paramCount++;
+      }
+
+      if (domain !== undefined) {
+        updates.push(`domain = $${paramCount}`);
+        params.push(domain);
         paramCount++;
       }
 
@@ -505,6 +715,25 @@ export default function createTenantRoutes(_pgPool) {
           status: "error",
           message: "Tenant not found",
         });
+      }
+
+      // Create audit log for tenant deletion
+      try {
+        await createAuditLog(supabase, {
+          tenant_id: data?.tenant_id || 'system',
+          user_email: getUserEmailFromRequest(req),
+          action: 'delete',
+          entity_type: 'tenant',
+          entity_id: id,
+          changes: {
+            name: data?.name,
+            tenant_id: data?.tenant_id,
+          },
+          ip_address: getClientIP(req),
+          user_agent: req.headers['user-agent'],
+        });
+      } catch (auditError) {
+        console.warn('[AUDIT] Failed to log tenant deletion:', auditError.message);
       }
 
       res.json({

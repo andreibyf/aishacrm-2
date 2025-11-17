@@ -1,0 +1,32 @@
+{
+  "$id": "ast.schema.json",
+  "type": "object",
+  "required": [
+    "node"
+  ],
+  "properties": {
+    "node": {
+      "type": "string"
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "$ref": "#"
+      }
+    },
+    "span": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "integer"
+        },
+        "end": {
+          "type": "integer"
+        }
+      }
+    },
+    "doc": {
+      "type": "string"
+    }
+  }
+}

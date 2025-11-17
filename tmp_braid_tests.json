@@ -1,0 +1,46 @@
+{
+  "total": 4,
+  "failed": 0,
+  "results": [
+    {
+      "test": "01_types.test.json",
+      "file": "examples/01_types.braid",
+      "expected": [],
+      "actual": [],
+      "exitCode": 0,
+      "pass": true,
+      "stderr": ""
+    },
+    {
+      "test": "02_attributes.test.json",
+      "file": "examples/06_attributes_policy.braid",
+      "expected": [],
+      "actual": [],
+      "exitCode": 0,
+      "pass": true,
+      "stderr": ""
+    },
+    {
+      "test": "03_async_actor.test.json",
+      "file": "examples/04_async_actor.braid",
+      "expected": [],
+      "actual": [],
+      "exitCode": 0,
+      "pass": true,
+      "stderr": ""
+    },
+    {
+      "test": "04_forbidden_effect.test.json",
+      "file": "examples/08_forbidden_effect.braid",
+      "expected": [
+        "BRAD201"
+      ],
+      "actual": [
+        "BRAD201"
+      ],
+      "exitCode": 1,
+      "pass": true,
+      "stderr": ""
+    }
+  ]
+}

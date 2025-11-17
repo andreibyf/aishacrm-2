@@ -52,7 +52,7 @@ export function injectMockUser(email = 'e2e@example.com', role = 'superadmin', t
  * @param {Page} page - Playwright page object
  * @param {string} email - E2E user email
  */
-export async function waitForUserPage(page, email = 'e2e@example.com') {
+export async function waitForUserPage(page, email = 'e2e@example.com', tenantId) {
   console.log('[waitForUserPage] Starting...');
   
   // Wait for page to load
@@ -60,16 +60,18 @@ export async function waitForUserPage(page, email = 'e2e@example.com') {
   console.log('[waitForUserPage] DOM content loaded');
   
   // CRITICAL: Re-inject E2E user IMMEDIATELY before React mounts
-  await page.evaluate((userEmail) => {
+  const effectiveTenantId = tenantId || process.env.E2E_TENANT_ID || 'local-tenant-001';
+  await page.evaluate(({ userEmail, tId }) => {
     console.log('[E2E] Setting __e2eUser before React checks for it');
     window.__e2eUser = {
       id: 'e2e-test-user-id',
       email: userEmail || 'e2e@example.com',
       role: 'superadmin',
-      tenant_id: 'local-tenant-001'
+      tenant_id: tId
     };
     localStorage.setItem('E2E_TEST_MODE', 'true');
-  }, email);
+    try { localStorage.setItem('selected_tenant_id', tId); } catch { /* ignore */ }
+  }, { userEmail: email, tId: effectiveTenantId });
   console.log('[waitForUserPage] User injected');
   
   // Wait for React to process - increased from 500ms to 2000ms
@@ -100,15 +102,16 @@ export async function waitForUserPage(page, email = 'e2e@example.com') {
       // Last resort - reload page
       console.log('[waitForUserPage] No content found, reloading page...');
       await page.reload({ waitUntil: 'domcontentloaded' });
-      await page.evaluate((userEmail) => {
+      await page.evaluate(({ userEmail, tId }) => {
         window.__e2eUser = {
           id: 'e2e-test-user-id',
           email: userEmail || 'e2e@example.com',
           role: 'superadmin',
-          tenant_id: 'local-tenant-001'
+          tenant_id: tId
         };
         localStorage.setItem('E2E_TEST_MODE', 'true');
-      }, email);
+        try { localStorage.setItem('selected_tenant_id', tId); } catch { /* ignore */ }
+      }, { userEmail: email, tId: effectiveTenantId });
       await page.waitForTimeout(3000);  // Longer wait after reload
       // One more spinner wait attempt
       await page.waitForSelector('[class*="animate-spin"]', { state: 'hidden', timeout: 15000 }).catch(() => {

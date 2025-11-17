@@ -23,7 +23,6 @@ import {
   Users,
   XCircle,
 } from "lucide-react";
-import { User } from "@/api/entities";
 import { useTenant } from "../components/shared/tenantContext";
 import { analyzeDataQuality } from "@/api/functions";
 import { Progress } from "@/components/ui/progress";
@@ -32,12 +31,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { useUser } from "../components/shared/useUser.js";
 
 export default function DataQualityReport() {
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [report, setReport] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
   const [error, setError] = useState(null);
   const [expandedSections, setExpandedSections] = useState({
     contacts: false,
@@ -48,25 +48,11 @@ export default function DataQualityReport() {
   const { selectedTenantId } = useTenant();
 
   useEffect(() => {
-    loadUser();
-  }, []);
-
-  useEffect(() => {
     if (currentUser) {
       runAnalysis();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, selectedTenantId]);
-
-  const loadUser = async () => {
-    try {
-      const user = await User.me();
-      setCurrentUser(user);
-    } catch (error) {
-      console.error("Failed to load user:", error);
-      setError("Failed to load user information");
-    }
-  };
 
   const runAnalysis = async () => {
     setLoading(true);

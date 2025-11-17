@@ -9,6 +9,31 @@ export default function createModuleSettingsRoutes(pool) {
   router.use(requireAdminRole);
 
   // GET /api/modulesettings - List module settings with filters
+  /**
+   * @openapi
+   * /api/modulesettings:
+   *   get:
+   *     summary: List module settings
+   *     description: Returns module settings filtered by tenant and/or module name. Admin access required.
+   *     tags: [modulesettings]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *       - in: query
+   *         name: module_name
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: List of module settings
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get('/', async (req, res) => {
   try {
     const { tenant_id, module_name } = req.query;
@@ -36,17 +61,68 @@ export default function createModuleSettingsRoutes(pool) {
   }
 });
 
-// GET /api/modulesettings/:id - Get single module setting
+// GET /api/modulesettings/:id - Get single module setting (tenant required)
+  /**
+   * @openapi
+   * /api/modulesettings/{id}:
+   *   get:
+   *     summary: Get a module setting
+   *     description: Returns a single module setting for a tenant. Admin access required.
+   *     tags: [modulesettings]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     responses:
+   *       200:
+   *         description: Module setting
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       400:
+   *         description: Missing tenant_id
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *       404:
+   *         description: Not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('SELECT * FROM modulesettings WHERE id = $1', [id]);
+    const { tenant_id } = req.query || {};
+
+    if (!tenant_id) {
+      return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+    }
+
+    const result = await pool.query('SELECT * FROM modulesettings WHERE tenant_id = $1 AND id = $2 LIMIT 1', [tenant_id, id]);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ status: 'error', message: 'Module setting not found' });
     }
+
+    const row = result.rows[0];
+    if (row.id !== id || row.tenant_id !== tenant_id) {
+      console.error('[ModuleSettings GET /:id] Mismatched row returned', { expected: { id, tenant_id }, got: { id: row.id, tenant_id: row.tenant_id } });
+      return res.status(404).json({ status: 'error', message: 'Module setting not found' });
+    }
     
-    res.json({ status: 'success', data: result.rows[0] });
+    res.json({ status: 'success', data: row });
   } catch (error) {
     console.error('Error fetching module setting:', error);
     res.status(500).json({ status: 'error', message: error.message });
@@ -54,6 +130,37 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/modulesettings - Create new module setting
+  /**
+   * @openapi
+   * /api/modulesettings:
+   *   post:
+   *     summary: Create or upsert module setting
+   *     description: Creates a new module setting or updates an existing pair (tenant_id, module_name). Admin required.
+   *     tags: [modulesettings]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               tenant_id:
+   *                 type: string
+   *                 format: uuid
+   *               module_name:
+   *                 type: string
+   *               settings:
+   *                 type: object
+   *               is_enabled:
+   *                 type: boolean
+   *     responses:
+   *       201:
+   *         description: Module setting created/updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
 router.post('/', async (req, res) => {
   try {
     const { tenant_id, module_name, settings, is_enabled } = req.body;
@@ -75,6 +182,55 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/modulesettings/:id - Update module setting
+  /**
+   * @openapi
+   * /api/modulesettings/{id}:
+   *   put:
+   *     summary: Update module setting
+   *     description: Updates fields of a module setting by ID. Admin required.
+   *     tags: [modulesettings]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               tenant_id:
+   *                 type: string
+   *                 format: uuid
+   *               module_name:
+   *                 type: string
+   *               settings:
+   *                 type: object
+   *               is_enabled:
+   *                 type: boolean
+   *     responses:
+   *       200:
+   *         description: Module setting updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       400:
+   *         description: No fields to update
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *       404:
+   *         description: Not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -123,6 +279,33 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/modulesettings/:id - Delete module setting
+  /**
+   * @openapi
+   * /api/modulesettings/{id}:
+   *   delete:
+   *     summary: Delete module setting
+   *     description: Deletes a module setting by ID. Admin required.
+   *     tags: [modulesettings]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Module setting deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       404:
+   *         description: Not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;

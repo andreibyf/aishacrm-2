@@ -1,0 +1,156 @@
+// Braid Standard Library: CRM Domain Types
+// Version: 0.2.0 - Production-ready type system for AI-enabled CRM
+
+// Core Result/Option types (algebraic data types)
+type Result<T, E> = Ok<T> | Err<E>
+type Option<T> = Some<T> | None
+
+// CRM Entity Types with field schemas (matched to actual database schema)
+type Account = {
+  id: String,
+  name: String,
+  annual_revenue: Number,
+  industry: String,
+  website: String,
+  email: String,
+  phone: String,
+  assigned_to: String,
+  tenant_id: String,
+  metadata: JSONB,
+  created_at: String,
+  updated_at: String
+}
+
+type AccountMetadata = {
+  num_employees: Number,
+  notes: String
+}
+
+type Lead = {
+  id: String,
+  first_name: String,
+  last_name: String,
+  email: String,
+  company: String,
+  status: String,
+  source: String,
+  assigned_to: String,
+  tenant_id: String,
+  metadata: JSONB,
+  created_at: String
+}
+
+type LeadMetadata = {
+  score: Number,
+  notes: String,
+  campaign: String
+}
+
+type Contact = {
+  id: String,
+  first_name: String,
+  last_name: String,
+  email: String,
+  phone: String,
+  job_title: String,
+  account_id: String,
+  assigned_to: String,
+  tenant_id: String,
+  metadata: JSONB,
+  created_at: String,
+  updated_at: String
+}
+
+type Opportunity = {
+  id: String,
+  name: String,
+  description: String,
+  amount: Number,
+  stage: String,
+  probability: Number,
+  close_date: String,
+  account_id: String,
+  assigned_to: String,
+  tenant_id: String,
+  metadata: JSONB,
+  created_at: String,
+  updated_at: String
+}
+
+type OpportunityMetadata = {
+  next_step: String,
+  competitors: String,
+  source: String
+}
+
+type Activity = {
+  id: String,
+  type: String,
+  subject: String,
+  body: String,
+  status: String,
+  due_date: String,
+  assigned_to: String,
+  tenant_id: String,
+  metadata: JSONB,
+  created_at: String
+}
+
+// Snapshot aggregate type
+type Snapshot = {
+  accounts: Array<Account>,
+  leads: Array<Lead>,
+  contacts: Array<Contact>,
+  opportunities: Array<Opportunity>,
+  activities: Array<Activity>,
+  summary: SnapshotSummary,
+  metadata: SnapshotMetadata
+}
+
+type SnapshotSummary = {
+  accounts_count: Number,
+  leads_count: Number,
+  contacts_count: Number,
+  opportunities_count: Number,
+  activities_count: Number,
+  total_revenue: Number,
+  total_forecast: Number
+}
+
+type SnapshotMetadata = {
+  tenant_id: String,
+  tenant_uuid: String,
+  fetched_at: String,
+  scope: String,
+  accounts_fallback_used: Boolean,
+  leads_fallback_used: Boolean
+}
+
+// Policy types for capability system
+type Policy = {
+  allow_effects: Array<String>,
+  tenant_isolation: Boolean,
+  audit_log: Boolean,
+  max_execution_ms: Number
+}
+
+type CapabilityRequest = {
+  effect: String,
+  context: CapabilityContext
+}
+
+type CapabilityContext = {
+  tenant_id: String,
+  user_id: String,
+  operation: String,
+  timestamp: String
+}
+
+// Error types for proper error handling
+type CRMError = 
+  | NotFound { entity: String, id: String }
+  | ValidationError { field: String, message: String }
+  | PermissionDenied { operation: String, reason: String }
+  | NetworkError { url: String, code: Number }
+  | DatabaseError { query: String, message: String }
+  | PolicyViolation { effect: String, policy: String }

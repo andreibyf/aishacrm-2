@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Clock, Zap, Database, AlertCircle, Activity } from 'lucide-react';
+import { Clock, Zap, Database, AlertCircle, Activity, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BACKEND_URL } from '@/api/entities';
@@ -20,7 +20,7 @@ const formatTrend = (trend) => {
   return `${sign}${trend}%`;
 };
 
-export default function PerformanceMonitor({ user }) {
+export default function PerformanceMonitor() {
   const [metrics, setMetrics] = useState({
     avgResponseTime: 0,
     functionExecutionTime: 0,
@@ -45,16 +45,13 @@ export default function PerformanceMonitor({ user }) {
     try {
       setLoading(true);
       
-      // Get tenant_id from user context
-      const tenantId = user?.tenant_id || 'local-tenant-001';
-      
       // Calculate hours based on time range
       const days = parseInt(timeRange) || 1;
       const hours = days * 24;
       
-      // Load performance logs from backend metrics API (more complete than Base44 function)
+      // Load ALL performance logs (system-wide monitoring, no tenant filter)
       const limit =  Math.min(5000, Math.max(500, days * 200));
-  const resp = await fetch(`${BACKEND_URL}/api/metrics/performance?tenant_id=${tenantId}&limit=${limit}&hours=${hours}`);
+      const resp = await fetch(`${BACKEND_URL}/api/metrics/performance?limit=${limit}&hours=${hours}`);
       const response = await resp.json();
 
       const logs = Array.isArray(response?.data?.logs) ? response.data.logs : [];
@@ -96,7 +93,12 @@ export default function PerformanceMonitor({ user }) {
       setMetrics(newMetrics);
 
       // Group by time buckets for chart (reuse days variable from above)
-      const groupBy = days <= 2 ? 'hour' : 'day';
+      // hour: <= 2 days, 6hour: 3-10 days, day: > 10 days
+      let groupBy;
+      if (days <= 2) groupBy = 'hour';
+      else if (days <= 10) groupBy = '6hour';
+      else groupBy = 'day';
+      
       const now = new Date();
       const cutoffTime = new Date(now.getTime() - (days * 24 * 60 * 60 * 1000));
       
@@ -105,41 +107,78 @@ export default function PerformanceMonitor({ user }) {
         return logDate >= cutoffTime;
       });
 
-      // Group logs dynamically by hour (<=2 days) or by day (>2 days)
+      // Pre-populate buckets for entire time range to show proper X-axis
       const buckets = {};
+      const msPerBucket = groupBy === 'hour' ? 3600000 : groupBy === '6hour' ? 21600000 : 86400000;
+      let currentTs = cutoffTime.getTime();
+      // Snap to bucket boundary
+      if (groupBy === 'hour') {
+        const d = new Date(currentTs);
+        currentTs = new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), 0, 0, 0).getTime();
+      } else if (groupBy === '6hour') {
+        const d = new Date(currentTs);
+        const hour6 = Math.floor(d.getHours() / 6) * 6;
+        currentTs = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hour6, 0, 0, 0).getTime();
+      } else {
+        const d = new Date(currentTs);
+        currentTs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0);
+      }
+      
+      while (currentTs <= now.getTime()) {
+        const d = new Date(currentTs);
+        let bucketLabel;
+        if (groupBy === 'hour') {
+          bucketLabel = `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:00`;
+        } else if (groupBy === '6hour') {
+          bucketLabel = `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:00`;
+        } else {
+          bucketLabel = `${d.getMonth() + 1}/${d.getDate()}`;
+        }
+        buckets[currentTs] = {
+          ts: currentTs,
+          time: bucketLabel,
+          calls: 0,
+          totalTime: 0,
+          errors: 0
+        };
+        currentTs += msPerBucket;
+      }
+
+      // Fill buckets with actual data
       recentLogs.forEach(log => {
         const logDate = new Date(log.created_at);
-        const bucketTs = groupBy === 'hour'
-          ? new Date(
-              logDate.getFullYear(),
-              logDate.getMonth(),
-              logDate.getDate(),
-              logDate.getHours(), 0, 0, 0
-            ).getTime()
-          : new Date(
-              logDate.getFullYear(),
-              logDate.getMonth(),
-              logDate.getDate(), 0, 0, 0, 0
-            ).getTime();
-
-        const bucketLabel = groupBy === 'hour'
-          ? `${logDate.getMonth() + 1}/${logDate.getDate()} ${logDate.getHours()}:00`
-          : `${logDate.getMonth() + 1}/${logDate.getDate()}`;
-
-        if (!buckets[bucketTs]) {
-          buckets[bucketTs] = {
-            ts: bucketTs,
-            time: bucketLabel,
-            calls: 0,
-            totalTime: 0,
-            errors: 0
-          };
+        let bucketTs;
+        
+        if (groupBy === 'hour') {
+          bucketTs = new Date(
+            logDate.getFullYear(),
+            logDate.getMonth(),
+            logDate.getDate(),
+            logDate.getHours(), 0, 0, 0
+          ).getTime();
+        } else if (groupBy === '6hour') {
+          // Snap to nearest 6-hour window (0, 6, 12, 18)
+          const hour6 = Math.floor(logDate.getHours() / 6) * 6;
+          bucketTs = new Date(
+            logDate.getFullYear(),
+            logDate.getMonth(),
+            logDate.getDate(),
+            hour6, 0, 0, 0
+          ).getTime();
+        } else {
+          bucketTs = Date.UTC(
+            logDate.getUTCFullYear(),
+            logDate.getUTCMonth(),
+            logDate.getUTCDate(), 0, 0, 0, 0
+          );
         }
 
-        buckets[bucketTs].calls++;
-        buckets[bucketTs].totalTime += Number(log.duration_ms) || 0;
-        if (log.status_code >= 400) {
-          buckets[bucketTs].errors++;
+        if (buckets[bucketTs]) {
+          buckets[bucketTs].calls++;
+          buckets[bucketTs].totalTime += Number(log.duration_ms) || 0;
+          if (log.status_code >= 400) {
+            buckets[bucketTs].errors++;
+          }
         }
       });
 
@@ -153,7 +192,17 @@ export default function PerformanceMonitor({ user }) {
           errorRate: bucket.calls > 0 ? Math.round((bucket.errors / bucket.calls) * 100) : 0
         }))
         .sort((a, b) => a.ts - b.ts)
-        .slice(-(groupBy === 'hour' ? days * 24 : days));
+        .slice(-(groupBy === 'hour' ? days * 24 : groupBy === '6hour' ? days * 4 : days));
+
+      // Debug logging
+      console.log('📊 PerformanceMonitor Chart Data:', {
+        totalBuckets: chartDataArray.length,
+        firstThree: chartDataArray.slice(0, 3),
+        lastThree: chartDataArray.slice(-3),
+        nonZeroBuckets: chartDataArray.filter(b => b.calls > 0).length,
+        totalCalls: chartDataArray.reduce((sum, b) => sum + b.calls, 0),
+        maxAvgResponseTime: Math.max(...chartDataArray.map(b => b.avgResponseTime))
+      });
 
       setChartData(chartDataArray);
       setLastUpdate(new Date());
@@ -163,7 +212,7 @@ export default function PerformanceMonitor({ user }) {
     } finally {
       setLoading(false);
     }
-  }, [timeRange, user]); // Dependencies: timeRange and user only (previousMetricsRef doesn't need to be a dependency)
+  }, [timeRange]); // Only timeRange is a dependency now
 
   useEffect(() => {
     loadRealPerformanceData();
@@ -199,8 +248,8 @@ export default function PerformanceMonitor({ user }) {
   };
 
   const getChangeIcon = (value) => {
-    if (value === 0) return '→';
-    return value > 0 ? '↑' : '↓';
+    if (value === 0) return <Minus className="w-3 h-3 inline" />;
+    return value > 0 ? <TrendingUp className="w-3 h-3 inline" /> : <TrendingDown className="w-3 h-3 inline" />;
   };
 
   return (
@@ -263,11 +312,11 @@ export default function PerformanceMonitor({ user }) {
                 <Clock className="w-4 h-4 text-blue-400" />
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-slate-100">{metrics.avgResponseTime}</span>
+                <span className="text-3xl font-bold text-slate-100">{Math.round(metrics.avgResponseTime)}</span>
                 <span className="text-sm text-slate-400">ms</span>
               </div>
-              <div className={`text-xs mt-1 ${getChangeColor(trends.avgResponseTime)}`}>
-                {getChangeIcon(trends.avgResponseTime)} {formatTrend(trends.avgResponseTime)}
+              <div className={`text-xs mt-1 flex items-center gap-1 ${getChangeColor(trends.avgResponseTime)}`}>
+                {getChangeIcon(trends.avgResponseTime)} <span>{formatTrend(trends.avgResponseTime)}</span>
               </div>
             </div>
 
@@ -277,11 +326,11 @@ export default function PerformanceMonitor({ user }) {
                 <Zap className="w-4 h-4 text-purple-400" />
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-slate-100">{metrics.functionExecutionTime}</span>
+                <span className="text-3xl font-bold text-slate-100">{Math.round(metrics.functionExecutionTime)}</span>
                 <span className="text-sm text-slate-400">ms</span>
               </div>
-              <div className={`text-xs mt-1 ${getChangeColor(trends.functionExecutionTime)}`}>
-                {getChangeIcon(trends.functionExecutionTime)} {formatTrend(trends.functionExecutionTime)}
+              <div className={`text-xs mt-1 flex items-center gap-1 ${getChangeColor(trends.functionExecutionTime)}`}>
+                {getChangeIcon(trends.functionExecutionTime)} <span>{formatTrend(trends.functionExecutionTime)}</span>
               </div>
             </div>
 
@@ -291,11 +340,11 @@ export default function PerformanceMonitor({ user }) {
                 <Database className="w-4 h-4 text-green-400" />
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-slate-100">{metrics.databaseQueryTime}</span>
+                <span className="text-3xl font-bold text-slate-100">{Math.round(metrics.databaseQueryTime)}</span>
                 <span className="text-sm text-slate-400">ms</span>
               </div>
-              <div className={`text-xs mt-1 ${getChangeColor(trends.databaseQueryTime)}`}>
-                {getChangeIcon(trends.databaseQueryTime)} {formatTrend(trends.databaseQueryTime)}
+              <div className={`text-xs mt-1 flex items-center gap-1 ${getChangeColor(trends.databaseQueryTime)}`}>
+                {getChangeIcon(trends.databaseQueryTime)} <span>{formatTrend(trends.databaseQueryTime)}</span>
               </div>
             </div>
 
@@ -305,11 +354,11 @@ export default function PerformanceMonitor({ user }) {
                 <AlertCircle className="w-4 h-4 text-red-400" />
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-slate-100">{metrics.errorRate}</span>
+                <span className="text-3xl font-bold text-slate-100">{metrics.errorRate.toFixed(2)}</span>
                 <span className="text-sm text-slate-400">%</span>
               </div>
-              <div className={`text-xs mt-1 ${getChangeColor(trends.errorRate)}`}>
-                {getChangeIcon(trends.errorRate)} {formatTrend(trends.errorRate)}
+              <div className={`text-xs mt-1 flex items-center gap-1 ${getChangeColor(trends.errorRate)}`}>
+                {getChangeIcon(trends.errorRate)} <span>{formatTrend(trends.errorRate)}</span>
               </div>
             </div>
           </div>

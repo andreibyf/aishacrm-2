@@ -25,15 +25,18 @@ import { Tenant } from "@/api/entities";
 import { SystemBranding } from "@/api/entities"; // NEW
 import { UploadFile } from "@/api/integrations";
 import { useTenant } from "../shared/tenantContext";
+import { useUser } from "@/components/shared/useUser.js";
 
 export default function BrandingSettings() {
-  const [user, setUser] = useState(null);
   const [tenant, setTenant] = useState(null); // NEW: active tenant being edited (if admin)
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
   const { selectedTenantId } = useTenant(); // NEW: from header switcher
+  
+  // Use global user context instead of direct User.me()
+  const { user } = useUser();
 
   const [brandingData, setBrandingData] = useState({
     companyName: "Ai-SHA CRM",
@@ -53,17 +56,12 @@ export default function BrandingSettings() {
 
   const canEdit = !!me && (me.role === "admin" || me.role === "superadmin");
 
-  // NEW: Fetch current user for permissions
+  // NEW: Fetch current user for permissions from global context
   React.useEffect(() => {
-    (async () => {
-      try {
-        const u = await User.me();
-        setMe(u);
-      } catch (e) {
-        console.error("Failed to fetch current user for permissions:", e);
-      }
-    })();
-  }, []);
+    if (user) {
+      setMe(user);
+    }
+  }, [user]);
 
   // NEW: Fetch global footer branding data
   React.useEffect(() => {
@@ -92,22 +90,21 @@ export default function BrandingSettings() {
   useEffect(() => {
     let mounted = true;
     (async () => {
+      if (!user) return;
       try {
-        const u = await User.me();
         if (!mounted) return;
-        setUser(u);
 
-        const isAdmin = u?.role === "admin" || u?.role === "superadmin";
+        const isAdmin = user?.role === "admin" || user?.role === "superadmin";
         // Determine which tenant to load for admins; regular users will only view their own if any
         const targetTenantId = (isAdmin && selectedTenantId)
           ? selectedTenantId
-          : (isAdmin && u?.tenant_id)
-          ? u.tenant_id
+          : (isAdmin && user?.tenant_id)
+          ? user.tenant_id
           : null;
 
-        if (isAdmin && (targetTenantId || u?.tenant_id)) {
+        if (isAdmin && (targetTenantId || user?.tenant_id)) {
           // Admin editing tenant branding
-          const t = await Tenant.get(targetTenantId || u.tenant_id);
+          const t = await Tenant.get(targetTenantId || user.tenant_id);
           if (!mounted) return;
           setTenant(t);
           const bs = t?.branding_settings || {};
@@ -119,9 +116,9 @@ export default function BrandingSettings() {
             footerLogoUrl: bs.footerLogoUrl || "",
           });
           setMessage(`Editing tenant branding: ${t?.name || "Tenant"}`);
-        } else if (u?.tenant_id && !isAdmin) {
+        } else if (user?.tenant_id && !isAdmin) {
           // Non-admin users: view personal overrides only (user-level)
-          const bs = u?.branding_settings || {};
+          const bs = user?.branding_settings || {};
           setBrandingData({
             companyName: bs.companyName || "Ai-SHA CRM",
             logoUrl: bs.logoUrl || "",
@@ -132,7 +129,7 @@ export default function BrandingSettings() {
           setMessage("Personal branding (does not override tenant theme)");
         } else {
           // No tenant context; fall back to user-level
-          const bs = u?.branding_settings || {};
+          const bs = user?.branding_settings || {};
           setBrandingData({
             companyName: bs.companyName || "Ai-SHA CRM",
             logoUrl: bs.logoUrl || "",
@@ -151,7 +148,7 @@ export default function BrandingSettings() {
     return () => {
       mounted = false;
     };
-  }, [selectedTenantId]);
+  }, [user, selectedTenantId]);
 
   const onChange = (key, val) => {
     setBrandingData((prev) => ({ ...prev, [key]: val }));
@@ -167,12 +164,65 @@ export default function BrandingSettings() {
     }
     setUploading(true);
     try {
-      const result = await UploadFile({ file });
+      // Determine target tenant_id for upload scoping
+      const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+      const uploadTenantId = isAdmin 
+        ? (tenant?.id || selectedTenantId || user?.tenant_id)
+        : user?.tenant_id;
+      
+      console.log("[BrandingSettings] Upload context:", {
+        isAdmin,
+        tenantId: tenant?.id,
+        selectedTenantId,
+        userTenantId: user?.tenant_id,
+        uploadTenantId,
+        fileName: file.name,
+      });
+      
+      const result = await UploadFile({ file, tenant_id: uploadTenantId });
+
+      console.log("[BrandingSettings] Upload result:", result);
 
       // Check if upload was successful
       if (result?.file_url) {
         setBrandingData((prev) => ({ ...prev, [key]: result.file_url }));
-        setMessage("Image uploaded successfully.");
+        // Auto-save immediately after successful upload
+        try {
+          const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+          if (isAdmin && (tenant?.id || selectedTenantId || user?.tenant_id)) {
+            // Save to tenant immediately (partial update)
+            const tenantIdToUpdate = tenant?.id || selectedTenantId || user?.tenant_id;
+            // Build minimal payload depending on which field was uploaded
+            const payload = {};
+            if (key === "logoUrl") {
+              payload.logo_url = result.file_url;
+            }
+            if (key === "footerLogoUrl") {
+              payload.branding_settings = {
+                ...(tenant?.branding_settings || {}),
+                footerLogoUrl: result.file_url,
+              };
+            }
+            if (Object.keys(payload).length > 0) {
+              await Tenant.update(tenantIdToUpdate, payload);
+              setMessage("Logo uploaded and saved. Refreshing to apply…");
+              // Refresh to ensure CSS vars and images update everywhere
+              setTimeout(() => window.location.reload(), 600);
+            } else {
+              // Fallback: nothing to persist (unexpected key)
+              setMessage("Image uploaded successfully.");
+            }
+          } else {
+            // Non-admin: persist to user profile branding_settings immediately
+            const next = { ...brandingData, [key]: result.file_url };
+            await User.updateMyUserData({ branding_settings: next });
+            setMessage("Image uploaded and saved. Refreshing to apply…");
+            setTimeout(() => window.location.reload(), 600);
+          }
+        } catch (saveErr) {
+          console.error("[BrandingSettings] Autosave after upload failed:", saveErr);
+          setMessage("Image uploaded, but save failed: " + (saveErr?.message || "Unknown error"));
+        }
       } else {
         // Local dev or integration unavailable: inline the image as data URL for preview and save
         const toDataUrl = (f) =>
@@ -207,38 +257,7 @@ export default function BrandingSettings() {
     }
   };
 
-  // NEW: handleUpload for global footer logo
-  const handleGlobalFooterUpload = async (file) => {
-    if (!file) return;
-    if (file.size > 3 * 1024 * 1024) {
-      setMessage("File size must be less than 3MB");
-      setTimeout(() => setMessage(""), 3000);
-      return;
-    }
-    setUploading(true);
-    try {
-      const result = await UploadFile({ file });
-
-      // Check if upload was successful
-      if (result?.file_url) {
-        setFooterLogoUrl(result.file_url);
-        setMessage("Footer logo uploaded successfully.");
-      } else if (result?.success === false) {
-        // Local dev mode - show helpful message
-        setMessage(
-          "File upload not available in local dev mode. Please paste an image URL instead.",
-        );
-      } else {
-        setMessage("Upload failed: Unexpected response format");
-      }
-      setTimeout(() => setMessage(""), 3000);
-    } catch (e) {
-      setMessage(e?.message || "Global footer logo upload failed");
-      setTimeout(() => setMessage(""), 3000);
-    } finally {
-      setUploading(false);
-    }
-  };
+  // Global footer logo is static - no upload needed
 
   const handleSave = async () => { // This is for tenant/user branding
     setSaving(true);
@@ -541,39 +560,13 @@ export default function BrandingSettings() {
                             </span>
                           )}
                       </div>
-                      {canEdit && (
-                        <div>
-                          <Input
-                            id="footer-logo-file"
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) =>
-                              handleGlobalFooterUpload(e.target.files?.[0])}
-                            disabled={uploading}
-                          />
-                          <Button
-                            asChild
-                            variant="outline"
-                            className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
-                            disabled={uploading}
-                          >
-                            <label
-                              htmlFor="footer-logo-file"
-                              className="cursor-pointer"
-                            >
-                              Upload
-                            </label>
-                          </Button>
-                        </div>
-                      )}
                     </div>
                     <p className="text-xs text-slate-500">
                       Recommended: transparent PNG or SVG, height ~64px.
                     </p>
                     {canEdit && (
                       <Input
-                        placeholder="Or paste a direct image URL…"
+                        placeholder="Paste a direct image URL…"
                         value={footerLogoUrl || ""}
                         onChange={(e) => setFooterLogoUrl(e.target.value)}
                         className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400"

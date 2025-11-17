@@ -1,0 +1,9 @@
+// ai:intent {"service":"rest","auth":"jwt"}
+fn main(http: Http, clock: Clock) !net,clock {
+  let app = http.app();
+  app.get("/time", |req| -> Result[Response, HttpError] {
+    let now = clock.now();
+    Ok(Response::json({ "epoch": now.to_unix() }))
+  });
+  http.serve(app, Addr::ipv4(0,0,0,0,8080))?
+}

@@ -1,0 +1,63 @@
+{:blocks (
+{:block/created-at 1763321440516
+:block/properties 
+{:ls-type :whiteboard-shape
+:logseq.tldraw.shape 
+{:index 0
+:scale [1 1]
+:type "html"
+:size [436.06414794921875 51.013526916503906]
+:id "bc58dc90-c322-11f0-927b-8b8bce89fec4"
+:isLocked false
+:point [94.96058654785156 181.25000762939453]
+:parentId "691a265e-2d25-484c-9a15-ee22ba534ada"
+:nonce 1763321440475
+:html "<ul style=\"padding-inline-start: 24px; margin-bottom: 0px; color: rgb(204, 204, 204); font-family: &quot;Segoe WPC&quot;, &quot;Segoe UI&quot;, sans-serif; font-size: 13px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: normal; background-color: rgb(24, 24, 24); text-decoration-thickness: initial; text-decoration-style: initial; text-decoration-color: initial;\"><li>run the rebuild and smoke-test these endpoints now, or</li><li>proceed to wire the Braid MCP server to use<span>&nbsp;</span><code style=\"font-family: Consolas, &quot;Courier New&quot;, monospace; font-size: 11.999px; color: rgb(208, 208, 208); background-color: rgb(60, 60, 60); padding: 1px 3px; border-radius: 4px; white-space: pre-wrap;\">memoryClient</code><span>&nbsp;</span>directly?</li></ul>"}}
+:block/updated-at 1763321440516} 
+{:block/content "┌─────────────────┐\r\n│  Frontend       │\r\n│  (React)        │\r\n└────────┬────────┘\r\n         │ HTTP\r\n         ▼\r\n┌─────────────────┐      ┌──────────────┐\r\n│  Backend API    │◄────►│  Redis       │\r\n│  (Express)      │      │  (Memory)    │\r\n└────────┬────────┘      └──────────────┘\r\n         │                       ▲\r\n         │ HTTP                  │ Direct\r\n         ▼                       │\r\n┌─────────────────┐             │\r\n│  Braid MCP      │─────────────┘\r\n│  (Agent Server) │\r\n└─────────────────┘"
+:block/format :markdown
+:block/left 
+{:block/uuid #uuid "691a265e-2d25-484c-9a15-ee22ba534ada"}
+:block/parent 
+{:block/uuid #uuid "691a265e-2d25-484c-9a15-ee22ba534ada"}
+:block/uuid #uuid "691a2679-d289-4020-90c5-74847b9a50e8"} 
+{:block/created-at 1763321521181
+:block/properties 
+{:ls-type :whiteboard-shape
+:logseq.tldraw.shape 
+{:index 1
+:scale [1 1]
+:type "image"
+:assetId "e93ae1e0-c322-11f0-927b-8b8bce89fec4"
+:size [542.9549551156852 464.36936950683594]
+:opacity 1
+:id "e93cddb0-c322-11f0-927b-8b8bce89fec4"
+:isAspectRatioLocked true
+:isLocked false
+:objectFit "fill"
+:point [712 -61.36936950683594]
+:parentId "691a265e-2d25-484c-9a15-ee22ba534ada"
+:nonce 1763321515875
+:clipping 0}}
+:block/updated-at 1763321521181})
+:pages (
+{:block/uuid #uuid "691a265e-2d25-484c-9a15-ee22ba534ada"
+:block/properties 
+{:ls-type :whiteboard-page
+:logseq.tldraw.page 
+{:id "691a265e-2d25-484c-9a15-ee22ba534ada"
+:name "691a265e-2d25-484c-9a15-ee22ba534ada"
+:bindings 
+{}
+:nonce 1
+:assets [
+{:id "e93ae1e0-c322-11f0-927b-8b8bce89fec4"
+:type "image"
+:src "../assets/image_1763321515762_0.png"
+:size [456 390]}]
+:shapes-index ("bc58dc90-c322-11f0-927b-8b8bce89fec4" "e93cddb0-c322-11f0-927b-8b8bce89fec4")}}
+:block/updated-at 1763321521181
+:block/created-at 1763321438424
+:block/type "whiteboard"
+:block/name "691a265e-2d25-484c-9a15-ee22ba534ada"
+:block/original-name "691a265e-2d25-484c-9a15-ee22ba534ada"})}

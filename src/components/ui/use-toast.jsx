@@ -1,8 +1,10 @@
 // Inspired by react-hot-toast library
 import { useState, useEffect } from 'react'
 
+// Maximum number of concurrent toasts
 const TOAST_LIMIT = 20;
-const TOAST_REMOVE_DELAY = 1000000;
+// Default auto-dismiss duration (ms)
+const TOAST_REMOVE_DELAY = 7000; // reduced from ~16 minutes to 7 seconds
 
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
@@ -110,7 +112,7 @@ function dispatch(action) {
   });
 }
 
-function toast({ ...props }) {
+function toast({ duration, ...props }) {
   const id = genId();
 
   const update = (props) =>
@@ -131,8 +133,19 @@ function toast({ ...props }) {
       onOpenChange: (open) => {
         if (!open) dismiss();
       },
+      // Persist the requested duration so UI could read it if needed
+      _duration: duration || TOAST_REMOVE_DELAY,
     },
   });
+
+  // Auto-dismiss after specified duration (fall back to default)
+  const autoDuration = typeof duration === 'number' ? duration : TOAST_REMOVE_DELAY;
+  if (autoDuration > 0) {
+    setTimeout(() => {
+      // Trigger graceful close -> will enqueue removal
+      dismiss();
+    }, autoDuration);
+  }
 
   return {
     id,

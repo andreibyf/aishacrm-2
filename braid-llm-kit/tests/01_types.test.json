@@ -1,0 +1,6 @@
+{
+  "file": "examples/01_types.braid",
+  "expect": {
+    "errors": []
+  }
+}

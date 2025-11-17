@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 
 export default function BizDevSourceCard({ source, onEdit, onClick, isSelected, onSelect }) {
+  const isPromoted = source.status === 'Promoted' || source.status === 'converted';
+  
   const getStatusColor = (status) => {
     switch (status) {
       case "Active":
@@ -64,7 +66,11 @@ export default function BizDevSourceCard({ source, onEdit, onClick, isSelected, 
 
   return (
     <Card
-      className={`hover:shadow-lg transition-all duration-200 cursor-pointer bg-slate-800 border-slate-700 ${
+      className={`hover:shadow-lg transition-all duration-200 cursor-pointer ${
+        isPromoted 
+          ? 'bg-slate-900/50 border-slate-600 opacity-70' 
+          : 'bg-slate-800 border-slate-700'
+      } ${
         isSelected ? 'ring-2 ring-blue-500' : ''
       }`}
       onClick={handleCardClick}
@@ -91,7 +97,12 @@ export default function BizDevSourceCard({ source, onEdit, onClick, isSelected, 
                 <Building2 className="w-5 h-5 text-blue-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-semibold text-slate-100">{source.company_name}</h3>
+                <h3 className={`text-lg font-semibold ${isPromoted ? 'text-slate-400 line-through' : 'text-slate-100'}`}>
+                  {source.company_name}
+                  {isPromoted && source.account_name && (
+                    <span className="ml-2 text-sm font-normal text-blue-400">→ {source.account_name}</span>
+                  )}
+                </h3>
                 {source.dba_name && (
                   <p className="text-sm text-slate-400">DBA: {source.dba_name}</p>
                 )}
@@ -115,7 +126,7 @@ export default function BizDevSourceCard({ source, onEdit, onClick, isSelected, 
               )}
             </div>
           </div>
-          {onEdit && (
+          {onEdit && !isPromoted && (
             <Button
               variant="ghost"
               size="icon"

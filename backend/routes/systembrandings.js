@@ -5,7 +5,7 @@
 
 import express from 'express';
 
-export default function createSystemBrandingRoutes(pgPool) {
+export default function createSystemBrandingRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/systembrandings - List systembranding records
@@ -13,27 +13,20 @@ export default function createSystemBrandingRoutes(pgPool) {
     try {
       const { limit = 50, offset = 0 } = req.query;
 
-      if (!pgPool) {
-        return res.status(503).json({ 
-          status: 'error', 
-          message: 'Database not configured' 
-        });
-      }
-
-      const query = 'SELECT * FROM systembranding ORDER BY created_at DESC LIMIT $1 OFFSET $2';
-      const params = [parseInt(limit), parseInt(offset)];
-
-      const result = await pgPool.query(query, params);
-
-      // Get total count
-      const countResult = await pgPool.query('SELECT COUNT(*) FROM systembranding');
-      const total = parseInt(countResult.rows[0].count);
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error, count } = await supabase
+        .from('systembranding')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+      if (error) throw new Error(error.message);
 
       res.json({
         status: 'success',
         data: { 
-          systembrandings: result.rows, 
-          total, 
+          systembrandings: data || [], 
+          total: count || 0, 
           limit: parseInt(limit), 
           offset: parseInt(offset) 
         },
@@ -49,26 +42,25 @@ export default function createSystemBrandingRoutes(pgPool) {
     try {
       const { id } = req.params;
 
-      if (!pgPool) {
-        return res.status(503).json({ 
-          status: 'error', 
-          message: 'Database not configured' 
-        });
-      }
-
-      const query = 'SELECT * FROM systembranding WHERE id = $1';
-      const result = await pgPool.query(query, [id]);
-
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('systembranding')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error?.code === 'PGRST116') {
         return res.status(404).json({
           status: 'error',
           message: 'SystemBranding record not found',
         });
       }
+      if (error) throw new Error(error.message);
 
       res.json({
         status: 'success',
-        data: result.rows[0],
+        data,
       });
     } catch (error) {
       console.error('Error getting systembranding:', error);
@@ -81,25 +73,25 @@ export default function createSystemBrandingRoutes(pgPool) {
     try {
       const { footer_logo_url, footer_legal_html, is_active = true } = req.body;
 
-      if (!pgPool) {
-        return res.status(503).json({ 
-          status: 'error', 
-          message: 'Database not configured' 
-        });
-      }
-
-      const query = `
-        INSERT INTO systembranding (footer_logo_url, footer_legal_html, is_active, created_at, created_date)
-        VALUES ($1, $2, $3, NOW(), NOW())
-        RETURNING *
-      `;
-      const params = [footer_logo_url || null, footer_legal_html || null, is_active];
-
-      const result = await pgPool.query(query, params);
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const nowIso = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('systembranding')
+        .insert([{
+          footer_logo_url: footer_logo_url || null,
+          footer_legal_html: footer_legal_html || null,
+          is_active,
+          created_at: nowIso,
+          created_date: nowIso
+        }])
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
 
       res.status(201).json({
         status: 'success',
-        data: result.rows[0],
+        data,
       });
     } catch (error) {
       console.error('Error creating systembranding:', error);
@@ -113,48 +105,37 @@ export default function createSystemBrandingRoutes(pgPool) {
       const { id } = req.params;
       const { footer_logo_url, footer_legal_html, is_active } = req.body;
 
-      if (!pgPool) {
-        return res.status(503).json({ 
-          status: 'error', 
-          message: 'Database not configured' 
-        });
-      }
-
-      const updates = [];
-      const params = [];
-      let paramCount = 1;
-
+      const payload = {};
       if (footer_logo_url !== undefined) {
-        updates.push(`footer_logo_url = $${paramCount}`);
-        params.push(footer_logo_url);
-        paramCount++;
+        payload.footer_logo_url = footer_logo_url;
       }
 
       if (footer_legal_html !== undefined) {
-        updates.push(`footer_legal_html = $${paramCount}`);
-        params.push(footer_legal_html);
-        paramCount++;
+        payload.footer_legal_html = footer_legal_html;
       }
 
       if (is_active !== undefined) {
-        updates.push(`is_active = $${paramCount}`);
-        params.push(is_active);
-        paramCount++;
+        payload.is_active = is_active;
       }
 
-      if (updates.length === 0) {
+      if (Object.keys(payload).length === 0) {
         return res.status(400).json({
           status: 'error',
           message: 'No fields to update',
         });
       }
 
-      params.push(id);
-      const query = `UPDATE systembranding SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`;
-
-      const result = await pgPool.query(query, params);
-
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('systembranding')
+        .update(payload)
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
+      
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) {
         return res.status(404).json({
           status: 'error',
           message: 'SystemBranding record not found',
@@ -163,7 +144,7 @@ export default function createSystemBrandingRoutes(pgPool) {
 
       res.json({
         status: 'success',
-        data: result.rows[0],
+        data,
       });
     } catch (error) {
       console.error('Error updating systembranding:', error);
@@ -176,17 +157,17 @@ export default function createSystemBrandingRoutes(pgPool) {
     try {
       const { id } = req.params;
 
-      if (!pgPool) {
-        return res.status(503).json({ 
-          status: 'error', 
-          message: 'Database not configured' 
-        });
-      }
-
-      const query = 'DELETE FROM systembranding WHERE id = $1 RETURNING *';
-      const result = await pgPool.query(query, [id]);
-
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('systembranding')
+        .delete()
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
+      
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) {
         return res.status(404).json({
           status: 'error',
           message: 'SystemBranding record not found',
@@ -196,7 +177,7 @@ export default function createSystemBrandingRoutes(pgPool) {
       res.json({
         status: 'success',
         message: 'SystemBranding deleted successfully',
-        data: result.rows[0],
+        data,
       });
     } catch (error) {
       console.error('Error deleting systembranding:', error);

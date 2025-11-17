@@ -1,0 +1,40 @@
+// Example: Update Account Revenue
+// Demonstrates: PATCH operations, optional types, direct field update
+
+import { Result, Account, CRMError } from "../spec/types.braid"
+
+fn updateAccountRevenue(accountId: String, newRevenue: Number, tenant: String) -> Result<Account, CRMError> !net {
+  // Fetch current account
+  let fetchUrl = "/api/accounts/" + accountId;
+  let getResponse = http.get(fetchUrl, { params: { tenant: tenant } });
+  
+  return match getResponse {
+    Ok{data} => {
+      // Update annual_revenue field directly (top-level field, not metadata)
+      let payload = {
+        annual_revenue: newRevenue
+      };
+      
+      // PUT request
+      let updateUrl = "/api/accounts/" + accountId;
+      let patchResponse = http.put(updateUrl, { body: payload });
+      
+      return match patchResponse {
+        Ok{updated} => Ok(updated),
+        Err{error} => Err(DatabaseError{
+          query: "UPDATE accounts",
+          message: error.message
+        }),
+        _ => Err(DatabaseError{ query: "UPDATE accounts", message: "Update failed" })
+      };
+    },
+    Err{error} => Err(NotFound{
+      entity: "Account",
+      id: accountId
+    }),
+    _ => Err(NotFound{ entity: "Account", id: accountId })
+  };
+}
+
+// AI Tool Usage:
+// const result = await updateAccountRevenue(policy, deps, "acc_123", 500000, "acme");

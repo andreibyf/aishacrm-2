@@ -1,0 +1,13 @@
+#!/usr/bin/env node
+import fs from "fs";
+const wasmPath = process.argv[2] || "out/app.wasm";
+const policyArgIdx = process.argv.indexOf("--policy");
+const policyPath = policyArgIdx>0 ? process.argv[policyArgIdx+1] : null;
+let policy = null;
+if (policyPath) {
+  try { policy = JSON.parse(fs.readFileSync(policyPath,"utf8")); }
+  catch { /* ignore */ }
+}
+const event = { event:"start", wasm: wasmPath, policy: !!policy, timestamp: Date.now() };
+process.stdout.write(JSON.stringify(event)+"\n");
+process.exit(0);

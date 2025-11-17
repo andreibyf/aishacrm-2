@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2 } from "lucide-react";
-import { Contact, Account, User } from "@/api/entities";
+import { Contact, Account } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import { toast } from "sonner";
 
 function splitName(full = "") {
@@ -17,7 +18,7 @@ function splitName(full = "") {
 
 export default function QuickCreateContactDialog({ open, onOpenChange, initialData }) {
   const [saving, setSaving] = React.useState(false);
-  const [user, setUser] = React.useState(null);
+  const { user } = useUser();
 
   const defaults = React.useMemo(() => {
     const { first_name, last_name } = splitName(initialData?.name || initialData?.title || "");
@@ -39,16 +40,7 @@ export default function QuickCreateContactDialog({ open, onOpenChange, initialDa
     setForm(defaults);
   }, [defaults]);
 
-  React.useEffect(() => {
-    (async () => {
-      try {
-        const me = await User.me();
-        setUser(me);
-      } catch {
-        setUser(null);
-      }
-    })();
-  }, []);
+  // User is provided by global UserContext via useUser
 
   const handleChange = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
 

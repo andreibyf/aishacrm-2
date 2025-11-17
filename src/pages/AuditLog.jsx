@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { AuditLog, User, BACKEND_URL } from '@/api/entities';
+import { AuditLog, BACKEND_URL } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Search, Calendar, Shield, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
+import { useUser } from '../components/shared/useUser.js';
 
 export default function AuditLogPage() {
   const [auditLogs, setAuditLogs] = useState([]);
@@ -19,12 +20,15 @@ export default function AuditLogPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [actionFilter, setActionFilter] = useState('all');
   const [entityFilter, setEntityFilter] = useState('all');
-  const [, setCurrentUser] = useState(null);
+  const { user: currentUser, loading: userLoading } = useUser();
   const [showClearDialog, setShowClearDialog] = useState(false);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (!userLoading && currentUser) {
+      loadData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userLoading, currentUser]);
 
   useEffect(() => {
     // Filter logs logic moved directly into useEffect
@@ -52,15 +56,11 @@ export default function AuditLogPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [user, logs] = await Promise.all([
-        User.me(),
-        AuditLog.list({}, '-created_at', 100) // Get last 100 entries, sorted by created_at descending
-      ]);
+      const logs = await AuditLog.list({}, '-created_at', 100); // Get last 100 entries, sorted by created_at descending
       
-      console.log('[AuditLog] Loaded user:', user?.email);
+      console.log('[AuditLog] Loaded user:', currentUser?.email);
       console.log('[AuditLog] Loaded logs:', logs?.length || 0, 'entries');
       
-      setCurrentUser(user);
       setAuditLogs(Array.isArray(logs) ? logs : []);
     } catch (error) {
       console.error('[AuditLog] Error loading audit logs:', error);
@@ -73,8 +73,7 @@ export default function AuditLogPage() {
 
   const handleClearLogs = async () => {
     try {
-      const user = await User.me();
-      const tenantId = user?.tenant_id || 'local-tenant-001';
+      const tenantId = currentUser?.tenant_id || 'local-tenant-001';
       
       if (import.meta.env.DEV) {
         console.log('Clearing audit logs for tenant:', tenantId);
@@ -134,7 +133,7 @@ export default function AuditLogPage() {
     }
   };
 
-  if (loading) {
+  if (loading || userLoading) {
     return (
       <div className="p-6 bg-slate-900 min-h-screen">
         <div className="animate-pulse space-y-4">

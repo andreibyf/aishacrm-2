@@ -19,6 +19,8 @@ const statusColors = {
 };
 
 export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClick, isSelected, onSelect, onConvert, user }) {
+  const isConverted = lead.status === 'converted';
+  
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -26,6 +28,7 @@ export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClic
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.2 }}
       data-testid={`lead-card-${lead.email}`}
+      className={isConverted ? 'opacity-70' : ''}
     >
       <Card 
         className={`hover:shadow-lg transition-all duration-200 cursor-pointer bg-slate-800 border-slate-700 ${
@@ -43,7 +46,7 @@ export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClic
                 className="border-slate-600 data-[state=checked]:bg-blue-600"
               />
               <div className="flex-1">
-                <h3 className="font-semibold text-lg text-slate-100">
+                <h3 className={`font-semibold text-lg text-slate-100 ${isConverted ? 'line-through' : ''}`}>
                   {lead.first_name} {lead.last_name}
                 </h3>
                 {lead.job_title && (
@@ -66,7 +69,11 @@ export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClic
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700 text-slate-200">
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(lead); }} className="hover:bg-slate-700">
+                <DropdownMenuItem 
+                  onClick={(e) => { e.stopPropagation(); onEdit(lead); }} 
+                  className="hover:bg-slate-700"
+                  disabled={isConverted}
+                >
                   <Edit className="w-4 h-4 mr-2" />
                   Edit
                 </DropdownMenuItem>
@@ -80,7 +87,11 @@ export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClic
                     Convert to Contact
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(lead.id); }} className="text-red-400 hover:bg-slate-700 focus:text-red-400">
+                <DropdownMenuItem 
+                  onClick={(e) => { e.stopPropagation(); onDelete(lead.id); }} 
+                  className="text-red-400 hover:bg-slate-700 focus:text-red-400"
+                  disabled={isConverted}
+                >
                   <Trash2 className="w-4 h-4 mr-2" />
                   Delete
                 </DropdownMenuItem>
@@ -171,6 +182,7 @@ export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClic
               size="sm"
               onClick={(e) => { e.stopPropagation(); onEdit(lead); }}
               className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
+              disabled={isConverted}
             >
               <Edit className="w-3 h-3 mr-1" />
               Edit
@@ -190,6 +202,7 @@ export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClic
             size="icon"
             onClick={(e) => { e.stopPropagation(); onDelete(lead.id); }}
             className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
+            disabled={isConverted}
           >
             <Trash2 className="w-4 h-4" />
           </Button>

@@ -4,61 +4,180 @@
  */
 
 import express from 'express';
+import { validateTenantScopedId } from '../lib/validation.js';
 
-export default function createNoteRoutes(pgPool) {
+export default function createNoteRoutes(_pgPool) {
   const router = express.Router();
 
+  /**
+   * @openapi
+   * /api/notes:
+   *   get:
+   *     summary: List notes
+   *     description: Returns a paginated list of notes filtered by tenant and optional relation.
+   *     tags: [notes]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         required: false
+   *         description: Tenant UUID scope
+   *       - in: query
+   *         name: related_type
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: related_id
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *           minimum: 1
+   *           maximum: 200
+   *         description: Page size (default 50)
+   *       - in: query
+   *         name: offset
+   *         schema:
+   *           type: integer
+   *           minimum: 0
+   *         description: Pagination offset (default 0)
+   *     responses:
+   *       200:
+   *         description: List of notes
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // GET /api/notes - List notes
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, related_type, related_id, limit = 50, offset = 0 } = req.query;
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
+      const { tenant_id, related_type, related_id } = req.query;
+      const limit = parseInt(req.query.limit || '50', 10);
+      const offset = parseInt(req.query.offset || '0', 10);
 
-      let query = 'SELECT * FROM note WHERE 1=1';
-      const params = [];
-      let pc = 1;
-      if (tenant_id) { query += ` AND tenant_id = $${pc}`; params.push(tenant_id); pc++; }
-      if (related_type) { query += ` AND related_type = $${pc}`; params.push(related_type); pc++; }
-      if (related_id) { query += ` AND related_id = $${pc}`; params.push(related_id); pc++; }
-      query += ` ORDER BY created_at DESC LIMIT $${pc} OFFSET $${pc + 1}`;
-      params.push(parseInt(limit), parseInt(offset));
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      let q = supabase.from('note').select('*', { count: 'exact' });
+      if (tenant_id) q = q.eq('tenant_id', tenant_id);
+      if (related_type) q = q.eq('related_type', related_type);
+      if (related_id) q = q.eq('related_id', related_id);
+      q = q.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
 
-      const result = await pgPool.query(query, params);
-      
-      let countQuery = 'SELECT COUNT(*) FROM note WHERE 1=1';
-      const countParams = [];
-      let cpc = 1;
-      if (tenant_id) { countQuery += ` AND tenant_id = $${cpc}`; countParams.push(tenant_id); cpc++; }
-      if (related_type) { countQuery += ` AND related_type = $${cpc}`; countParams.push(related_type); cpc++; }
-      if (related_id) { countQuery += ` AND related_id = $${cpc}`; countParams.push(related_id); }
-      const countResult = await pgPool.query(countQuery, countParams);
+      const { data, error, count } = await q;
+      if (error) throw new Error(error.message);
 
-      res.json({ status: 'success', data: { notes: result.rows, total: parseInt(countResult.rows[0].count) } });
+      res.json({ status: 'success', data: { notes: data || [], total: count || 0 } });
     } catch (error) {
       console.error('Error fetching notes:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
-  // GET /api/notes/:id - Get single note (tenant scoped when tenant_id provided)
+  /**
+   * @openapi
+   * /api/notes/{id}:
+   *   get:
+   *     summary: Get a note
+   *     description: Returns a single note by ID within the tenant scope.
+   *     tags: [notes]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         required: true
+   *     responses:
+   *       200:
+   *         description: Note details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       404:
+   *         description: Not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
+  // GET /api/notes/:id - Get single note (tenant scoped)
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query || {};
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      let result;
-      if (tenant_id) {
-        result = await pgPool.query('SELECT * FROM note WHERE id = $1 AND tenant_id = $2', [id, tenant_id]);
-      } else {
-        result = await pgPool.query('SELECT * FROM note WHERE id = $1', [id]);
-      }
-      if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
-      res.json({ status: 'success', data: { note: result.rows[0] } });
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('note')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .single();
+      if (error?.code === 'PGRST116') return res.status(404).json({ status: 'error', message: 'Not found' });
+      if (error) throw new Error(error.message);
+      res.json({ status: 'success', data: { note: data } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
+  /**
+   * @openapi
+   * /api/notes:
+   *   post:
+   *     summary: Create a note
+   *     description: Creates a note scoped to a tenant and optionally related to an entity.
+   *     tags: [notes]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, content]
+   *             properties:
+   *               tenant_id:
+   *                 type: string
+   *                 format: uuid
+   *               title:
+   *                 type: string
+   *               content:
+   *                 type: string
+   *               related_type:
+   *                 type: string
+   *               related_id:
+   *                 type: string
+   *               created_by:
+   *                 type: string
+   *               metadata:
+   *                 type: object
+   *     responses:
+   *       201:
+   *         description: Note created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       400:
+   *         description: Missing required fields
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   // POST /api/notes - Create note
   router.post('/', async (req, res) => {
     try {
@@ -66,55 +185,172 @@ export default function createNoteRoutes(pgPool) {
       if (!n.tenant_id || !n.content) {
         return res.status(400).json({ status: 'error', message: 'tenant_id and content required' });
       }
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
-      const query = `INSERT INTO note (tenant_id, title, content, related_type, related_id, created_by, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`;
-      const vals = [n.tenant_id, n.title || null, n.content, n.related_type || null, n.related_id || null, n.created_by || null, JSON.stringify(n.metadata || {})];
-      const result = await pgPool.query(query, vals);
-      res.status(201).json({ status: 'success', message: 'Created', data: { note: result.rows[0] } });
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('note')
+        .insert([{
+          tenant_id: n.tenant_id,
+          title: n.title || null,
+          content: n.content,
+          related_type: n.related_type || null,
+          related_id: n.related_id || null,
+          created_by: n.created_by || null,
+          metadata: n.metadata || {},
+        }])
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
+      res.status(201).json({ status: 'success', message: 'Created', data: { note: data } });
     } catch (error) {
       console.error('Error creating note:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
-  // PUT /api/notes/:id - Update note
+  /**
+   * @openapi
+   * /api/notes/{id}:
+   *   put:
+   *     summary: Update a note
+   *     description: Updates allowed fields on a note within the tenant scope.
+   *     tags: [notes]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               title:
+   *                 type: string
+   *               content:
+   *                 type: string
+   *               related_type:
+   *                 type: string
+   *               related_id:
+   *                 type: string
+   *               metadata:
+   *                 type: object
+   *     responses:
+   *       200:
+   *         description: Note updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       400:
+   *         description: No valid fields
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *       404:
+   *         description: Not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
+  // PUT /api/notes/:id - Update note (tenant scoped)
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      const { tenant_id } = req.query || {};
       const u = req.body;
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
       const allowed = ['title', 'content', 'related_type', 'related_id', 'metadata'];
-      const sets = [], vals = [];
-      let pc = 1;
+      const payload = { updated_at: new Date().toISOString() };
       Object.entries(u).forEach(([k, v]) => {
-        if (allowed.includes(k)) {
-          sets.push(`${k} = $${pc}`);
-          vals.push(k === 'metadata' ? JSON.stringify(v) : v);
-          pc++;
-        }
+        if (allowed.includes(k)) payload[k] = v;
       });
-      if (sets.length === 0) return res.status(400).json({ status: 'error', message: 'No valid fields' });
-      sets.push(`updated_at = NOW()`);
-      vals.push(id);
-      const result = await pgPool.query(`UPDATE note SET ${sets.join(', ')} WHERE id = $${pc} RETURNING *`, vals);
-      if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
-      res.json({ status: 'success', message: 'Updated', data: { note: result.rows[0] } });
+      if (Object.keys(payload).length === 1) return res.status(400).json({ status: 'error', message: 'No valid fields' });
+
+      const { data, error } = await supabase
+        .from('note')
+        .update(payload)
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .select('*')
+        .single();
+      if (error?.code === 'PGRST116') return res.status(404).json({ status: 'error', message: 'Not found' });
+      if (error) throw new Error(error.message);
+      res.json({ status: 'success', message: 'Updated', data: { note: data } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
-  // DELETE /api/notes/:id - Delete note
+  /**
+   * @openapi
+   * /api/notes/{id}:
+   *   delete:
+   *     summary: Delete a note
+   *     description: Deletes a note within the tenant scope.
+   *     tags: [notes]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     responses:
+   *       200:
+   *         description: Note deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       404:
+   *         description: Not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
+  // DELETE /api/notes/:id - Delete note (tenant scoped)
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      const result = await pgPool.query('DELETE FROM note WHERE id = $1 RETURNING id', [id]);
-      if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
-      res.json({ status: 'success', message: 'Deleted', data: { id: result.rows[0].id } });
+      const { tenant_id } = req.query || {};
+
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('note')
+        .delete()
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .select('id')
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) return res.status(404).json({ status: 'error', message: 'Not found' });
+      res.json({ status: 'success', message: 'Deleted', data: { id: data.id } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }

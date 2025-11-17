@@ -1,0 +1,8 @@
+enum Auth { Anonymous, Bearer(token: String) }
+
+fn header(a: Auth) -> String {
+  match a {
+    Anonymous => "Authorization: none",
+    Bearer(t) => "Authorization: Bearer " + t
+  }
+}

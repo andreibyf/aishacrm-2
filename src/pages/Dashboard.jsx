@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { User } from "@/api/entities";
 import { Lead } from "@/api/entities";
 import { Contact } from "@/api/entities";
@@ -19,6 +19,7 @@ import LeadAgeReport from "../components/dashboard/LeadAgeReport";
 import { Loader2 } from "lucide-react";
 import WidgetPickerModal from "../components/dashboard/WidgetPickerModal";
 import { toast } from "sonner";
+import { useUser } from "@/components/shared/useUser.js";
 import { useLogger } from "../components/shared/Logger";
 
 const ALL_WIDGETS = [
@@ -55,7 +56,8 @@ const ALL_WIDGETS = [
 ];
 
 export default function DashboardPage() {
-  const [user, setUser] = useState(null);
+  // Use global user context (centralized User.me())
+  const { user, reloadUser } = useUser();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalContacts: 0,
@@ -81,40 +83,7 @@ export default function DashboardPage() {
   const { selectedEmail } = useEmployeeScope();
   const logger = useLogger();
 
-  const userLoadAttempted = useRef(false);
-
-  // Load user (only once) - Use cache to prevent race with Layout
-  useEffect(() => {
-    if (userLoadAttempted.current) return;
-    userLoadAttempted.current = true;
-
-    const loadUser = async () => {
-      try {
-        // Use cachedRequest - Layout already called User.me(), so this will be cached
-        const currentUser = await cachedRequest(
-          "User",
-          "me",
-          {},
-          () => User.me(),
-        );
-        setUser(currentUser);
-        logger.info("User loaded successfully for Dashboard", "Dashboard", {
-          userId: currentUser?.email,
-        });
-      } catch (error) {
-        logger.error("Failed to load user for Dashboard", "Dashboard", {
-          error: error.message,
-          stack: error.stack,
-        });
-        console.error("User load failed:", error);
-        setUser(null);
-      }
-    };
-
-    // Small delay to let Layout's User.me() populate cache first
-    const timer = setTimeout(loadUser, 50);
-    return () => clearTimeout(timer);
-  }, [cachedRequest, logger]);
+  // Removed per-page user loading; user comes from context
 
   // Load widget preferences (only after user is loaded)
   useEffect(() => {
@@ -158,12 +127,18 @@ export default function DashboardPage() {
     let filter = {};
 
     // Tenant filtering
-    if (user.role === "superadmin" || user.role === "admin") {
+    // Updated: Always prefer an explicit selectedTenantId; fallback to user.tenant_id for all non-superadmin roles.
+    if (user.role === "superadmin") {
+      if (selectedTenantId) {
+        filter.tenant_id = selectedTenantId; // superadmin scoped view when chosen
+      } // else superadmin global view (no tenant_id added)
+    } else {
+      // admin / manager / employee: MUST be tenant-scoped
       if (selectedTenantId) {
         filter.tenant_id = selectedTenantId;
+      } else if (user.tenant_id) {
+        filter.tenant_id = user.tenant_id; // fallback auto-scope
       }
-    } else if (user.tenant_id) {
-      filter.tenant_id = user.tenant_id;
     }
 
     // Employee scope filtering from context
@@ -181,9 +156,10 @@ export default function DashboardPage() {
       filter.assigned_to = user.email;
     }
 
-    // Test data filtering
+    // Test data filtering - only add if we want to EXCLUDE test data
+    // When showTestData is true, we omit this filter to see all data
     if (!showTestData) {
-      filter.is_test_data = { $ne: true };
+      filter.is_test_data = false; // Simple boolean, not complex operator
     }
 
     return filter;
@@ -203,13 +179,17 @@ export default function DashboardPage() {
         // Inline tenant filter logic to avoid dependency issues
         let tenantFilter = {};
 
-        // Tenant filtering
-        if (user.role === "superadmin" || user.role === "admin") {
+        // Tenant filtering (mirrors getTenantFilter logic)
+        if (user.role === "superadmin") {
           if (selectedTenantId) {
             tenantFilter.tenant_id = selectedTenantId;
           }
-        } else if (user.tenant_id) {
-          tenantFilter.tenant_id = user.tenant_id;
+        } else {
+          if (selectedTenantId) {
+            tenantFilter.tenant_id = selectedTenantId;
+          } else if (user.tenant_id) {
+            tenantFilter.tenant_id = user.tenant_id;
+          }
         }
 
         // Employee scope filtering from context
@@ -227,22 +207,35 @@ export default function DashboardPage() {
           tenantFilter.assigned_to = user.email;
         }
 
-        // Test data filtering
+        // Test data filtering - use simple boolean
         if (!showTestData) {
-          tenantFilter.is_test_data = { $ne: true };
+          tenantFilter.is_test_data = false;
         }
 
         // Guard: ensure we have a valid tenant_id before loading data
-        if (!tenantFilter || !tenantFilter.tenant_id) {
-          logger.warning(
-            "Waiting for tenant context before loading dashboard data",
-            "Dashboard",
-            {
-              userId: user.email,
-              selectedTenantId,
-              tenantFilter,
+        // For non-superadmin roles, tenantFilter.tenant_id MUST be present; guard just superadmin global.
+        if (user.role !== 'superadmin' && (!tenantFilter || !tenantFilter.tenant_id)) {
+          logger.error('Tenant scoping failure: expected tenant_id for user role', 'Dashboard', {
+            userId: user.email,
+            userRole: user.role,
+            selectedTenantId,
+            tenantFilter,
+          });
+          toast.error('Tenant context missing. Please re-login.');
+          setStats({
+            totalContacts: 0,
+            newLeads: 0,
+            activeOpportunities: 0,
+            pipelineValue: 0,
+            activitiesLogged: 0,
+            trends: {
+              contacts: null,
+              newLeads: null,
+              activeOpportunities: null,
+              pipelineValue: null,
+              activitiesLogged: null,
             },
-          );
+          });
           setLoading(false);
           return;
         }
@@ -380,13 +373,14 @@ export default function DashboardPage() {
         return;
       }
 
-      const updatedUser = await User.updateMyUserData({
+      await User.updateMyUserData({
         permissions: {
           ...user.permissions,
           dashboard_widgets: newPreferences,
         },
       });
-      setUser(updatedUser);
+      // Reload global user (non-blocking)
+      reloadUser?.();
       setWidgetPreferences(newPreferences);
       logger.info("Dashboard preferences saved!", "Dashboard", {
         userId: user.email,

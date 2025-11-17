@@ -7,6 +7,16 @@ export const AICampaignSchema = {
   "name": "AICampaign",
   "type": "object",
   "properties": {
+    "campaign_type": {
+      "type": "string",
+      "enum": [
+        "call",
+        "email",
+        "sequence"
+      ],
+      "default": "call",
+      "description": "Type of campaign: phone calls, emails, or multi-step sequence"
+    },
     "tenant_id": {
       "type": "string",
       "description": "The ID of the tenant this AI campaign belongs to"
@@ -49,6 +59,24 @@ export const AICampaignSchema = {
     "ai_prompt_template": {
       "type": "string",
       "description": "AI prompt template with variables like {{contact_name}}, {{company}}"
+    },
+    "ai_email_config": {
+      "type": "object",
+      "properties": {
+        "subject": {
+          "type": "string",
+          "description": "Email subject line template"
+        },
+        "body_template": {
+          "type": "string",
+          "description": "Email body template (supports {{contact_name}}, {{company}}, {{company_name}})"
+        },
+        "sending_profile_id": {
+          "type": "string",
+          "description": "Optional email sending profile identifier"
+        }
+      },
+      "description": "Configuration for email-based campaigns"
     },
     "call_objective": {
       "type": "string",
@@ -222,8 +250,7 @@ export const AICampaignSchema = {
   "required": [
     "tenant_id",
     "name",
-    "ai_prompt_template",
-    "call_objective"
+    "ai_prompt_template"
   ],
   "rls": {
     "read": {

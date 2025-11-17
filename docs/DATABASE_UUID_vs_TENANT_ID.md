@@ -57,7 +57,7 @@ All CRM tables follow this pattern:
 | `leads` | ✅ uuid | ✅ text (tenant reference) |
 | `opportunities` | ✅ uuid | ✅ text (tenant reference) |
 | `employees` | ✅ uuid | ✅ text (tenant reference) |
-| `users` | ✅ uuid | ❌ no tenant_id (auth table) |
+| `users` | ✅ uuid | ✅ text (tenant reference via tenant_id slug) + tenant_uuid (FK) |
 | `activities` | ✅ uuid | ✅ text (tenant reference) |
 | `notes` | ✅ uuid | ✅ text (tenant reference) |
 
@@ -171,6 +171,24 @@ const newContact = await Contact.create({
   // NOT account.tenant_id!
 });
 ```
+
+### Creating Users with Tenant Linkage
+
+When creating admin or tenant-scoped users, populate BOTH the human-readable slug and the canonical UUID:
+
+```sql
+-- Ensure both columns are set atomically from the tenant slug
+INSERT INTO users (email, first_name, last_name, role, tenant_id, tenant_uuid, metadata, created_at, updated_at)
+VALUES (
+  $1, $2, $3, 'admin', $4,
+  (SELECT id FROM tenant WHERE tenant_id = $4 LIMIT 1),
+  $5, NOW(), NOW()
+);
+```
+
+Notes:
+- Superadmins remain global and should have both `tenant_id` and `tenant_uuid` as NULL.
+- A backfill migration exists to populate `users.tenant_uuid` from `users.tenant_id` (see migration 038).
 
 ## Migration Strategy
 

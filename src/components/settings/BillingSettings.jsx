@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { testStripeConnection } from "@/api/functions";
+import { useUser } from '@/components/shared/useUser.js';
 
 const AdminStripeConfig = ({ user, onUpdate }) => {
   const [config, setConfig] = useState({ secret_key: '', publishable_key: '', webhook_secret: '', is_connected: false });
@@ -161,25 +162,25 @@ export default function BillingSettings() {
   const [allSubscriptions, setAllSubscriptions] = useState([]);
   const [allTenants, setAllTenants] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Use global user context instead of local User.me()
+  const { user } = useUser();
 
   useEffect(() => {
+    if (!user) return;
     fetchData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [plansData, userData] = await Promise.all([
-        SubscriptionPlan.list('display_order'),
-        User.me()
-      ]);
+      const plansData = await SubscriptionPlan.list('display_order');
       setPlans(plansData);
-      setUser(userData);
       
       // Admin-specific data
-      if (userData?.role === 'admin' || userData?.role === 'superadmin') {
+      if (user?.role === 'admin' || user?.role === 'superadmin') {
         const [subsData, tenantsData] = await Promise.all([
             Subscription.list(),
             Tenant.list()
@@ -189,8 +190,8 @@ export default function BillingSettings() {
       }
 
       // User-specific data (for both admins and regular users)
-      if (userData?.tenant_id) {
-        const subscriptions = await Subscription.filter({ tenant_id: userData.tenant_id });
+      if (user?.tenant_id) {
+        const subscriptions = await Subscription.filter({ tenant_id: user.tenant_id });
         if (subscriptions.length > 0) {
           setCurrentSubscription(subscriptions[0]);
         }

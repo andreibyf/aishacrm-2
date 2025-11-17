@@ -1,7 +1,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { AICampaign } from "@/api/entities";
-import { User } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import AICampaignForm from "../components/campaigns/AICampaignForm";
 import AICampaignDetailPanel from "../components/campaigns/AICampaignDetailPanel";
+import CampaignMonitor from "../components/campaigns/CampaignMonitor";
 import Pagination from "../components/shared/Pagination";
 import { getTenantFilter } from "../components/shared/tenantUtils";
 import { useTenant } from "../components/shared/tenantContext";
@@ -67,7 +68,7 @@ export default function AICampaigns() {
   const [showForm, setShowForm] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState(null);
   const [selectedCampaign, setSelectedCampaign] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -82,20 +83,16 @@ export default function AICampaigns() {
     loadCampaigns();
   };
 
-  useEffect(() => {
-    const fetchCurrentUser = async () => {
-      try {
-        const user = await User.me();
-        setCurrentUser(user);
-      } catch (error) {
-        console.error("Error fetching current user:", error);
-      }
-    };
-    fetchCurrentUser();
-  }, []);
+  // User provided by global context
 
   const loadCampaigns = useCallback(async () => {
     if (!currentUser) return;
+    // Guard: superadmin/admin must select tenant before loading campaigns
+    if ((currentUser.role === 'superadmin' || currentUser.role === 'admin') && !selectedTenantId) {
+      setCampaigns([]);
+      setAllCounts({ all: 0, draft: 0, scheduled: 0, running: 0, paused: 0, completed: 0, cancelled: 0 });
+      return;
+    }
 
     setLoading(true);
     try {
@@ -104,6 +101,15 @@ export default function AICampaigns() {
       let baseFilter = { ...tenantFilter };
       if (searchTerm) {
         baseFilter._search = searchTerm;
+      }
+
+      // Avoid hitting backend if tenant filter is empty (prevents 404 spam before route exists)
+      if (!baseFilter.tenant_id) {
+        setCampaigns([]);
+        setAllCounts({ all: 0, draft: 0, scheduled: 0, running: 0, paused: 0, completed: 0, cancelled: 0 });
+        setTotalItems(0);
+        setLoading(false);
+        return;
       }
 
       const allFilteredCampaigns = await AICampaign.filter(baseFilter);
@@ -330,6 +336,10 @@ export default function AICampaigns() {
 
       {/* Search Bar and Table */}
       <div className="bg-slate-800 border border-slate-700 rounded-lg">
+        {/* Lightweight Monitor for active campaigns */}
+        <div className="p-4">
+          <CampaignMonitor />
+        </div>
         <div className="p-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />

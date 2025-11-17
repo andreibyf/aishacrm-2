@@ -15,7 +15,8 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
-import { analyzeDataQuality } from "@/api/functions";
+
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
 
 export default function DataQualityReport({ tenantFilter }) {
   const [loading, setLoading] = useState(true);
@@ -31,7 +32,18 @@ export default function DataQualityReport({ tenantFilter }) {
       // Extract tenant_id from tenantFilter for the backend call
       const tenant_id = tenantFilter?.tenant_id || null;
 
-      const result = await analyzeDataQuality({ tenant_id });
+      // Call backend API directly
+      const url = new URL(`${BACKEND_URL}/api/reports/data-quality`);
+      if (tenant_id) {
+        url.searchParams.append('tenant_id', tenant_id);
+      }
+
+      const response = await fetch(url.toString());
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
       console.log("DataQualityReport: Raw result:", result);
 
       // Check if we got a valid response

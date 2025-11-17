@@ -68,7 +68,6 @@ export async function notifyAdminOnInvite({
   let adminEmail = adminEmailOverride || null;
   let adminPhone = adminPhoneOverride || null;
   let currentUserMe = null;
-
   try {
     currentUserMe = await User.me();
     if (!adminEmail && currentUserMe?.email) adminEmail = currentUserMe.email;

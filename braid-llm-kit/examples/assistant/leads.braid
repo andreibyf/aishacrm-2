@@ -1,0 +1,102 @@
+// Executive Assistant Tools - Lead Management
+// Create, update, convert leads to accounts
+
+import { Result, Lead, CRMError } from "../../spec/types.braid"
+
+fn createLead(
+  tenant: String,
+  first_name: String,
+  last_name: String,
+  email: String,
+  company: String,
+  phone: String,
+  source: String
+) -> Result<Lead, CRMError> !net {
+  let url = "/api/leads";
+  let body = {
+    tenant_id: tenant,
+    first_name: first_name,
+    last_name: last_name,
+    email: email,
+    company: company,
+    phone: phone,
+    source: source,
+    status: "new",
+    metadata: {}
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn deleteLead(
+  tenant: String,
+  lead_id: String
+) -> Result<Boolean, CRMError> !net {
+  let url = "/api/leads/" + lead_id;
+  let response = http.delete(url, {});
+  return match response {
+    Ok{value} => Ok(true),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn updateLead(
+  tenant: String,
+  lead_id: String,
+  updates: Object
+) -> Result<Lead, CRMError> !net {
+  let url = "/api/leads/" + lead_id;
+  
+  let response = http.put(url, { body: updates });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn convertLeadToAccount(
+  tenant: String,
+  lead_id: String,
+  options: Object
+) -> Result<Object, CRMError> !net {
+  let url = "/api/leads/" + lead_id + "/convert";
+  let body = options;
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn listLeads(
+  tenant: String,
+  status: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/leads";
+  let params = {
+    tenant_id: tenant,
+    status: status,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

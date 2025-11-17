@@ -75,9 +75,17 @@ export default function RecentActivities(props) {
         return;
       }
 
+      // Guard: Don't fetch if no tenant_id is present
+      if (!memoTenantFilter?.tenant_id) {
+        setActivities([]);
+        setLastUpdated(Date.now());
+        setLoading(false);
+        return;
+      }
+
       const effectiveFilter = memoShowTestData
         ? { ...memoTenantFilter }
-        : { ...memoTenantFilter, is_test_data: { $ne: true } };
+        : { ...memoTenantFilter, is_test_data: false };
       
       const recentActivities = await cachedRequest(
         "Activity",

@@ -20,29 +20,44 @@ export default function SalesPipeline(props) {
 
     // Helper function to compute pipeline data from a list of opportunities
     const computeFromOpps = (opps) => {
+      // Canonical stage buckets (include legacy mappings for won/lost)
       const stages = {
         prospecting: { name: "Prospecting", count: 0, value: 0 },
         qualification: { name: "Qualification", count: 0, value: 0 },
         proposal: { name: "Proposal", count: 0, value: 0 },
         negotiation: { name: "Negotiation", count: 0, value: 0 },
         closed_won: { name: "Closed Won", count: 0, value: 0 },
-        closed_lost: { name: "Closed Lost", count: 0, value: 0 }
+        closed_lost: { name: "Closed Lost", count: 0, value: 0 },
       };
 
-      (opps || []).forEach(opp => { // Ensure opps is an array
-        if (stages[opp.stage]) {
-          stages[opp.stage].count++;
-          // Parse amount as float to handle string values from database
+      const stageAliasMap = {
+        won: "closed_won",
+        lost: "closed_lost",
+        closedwon: "closed_won",
+        closedlost: "closed_lost",
+      };
+
+      (opps || []).forEach((opp) => {
+        let stageKey = opp.stage;
+        if (stageAliasMap[stageKey]) stageKey = stageAliasMap[stageKey];
+        if (stages[stageKey]) {
+          stages[stageKey].count++;
           const amount = parseFloat(opp.amount) || 0;
-          stages[opp.stage].value += amount;
+          stages[stageKey].value += amount;
         }
       });
 
-      // Renamed 'name' to 'stage' to match the dataKey in the BarChart
-      const processedData = Object.values(stages).map(stage => ({
-        stage: stage.name, // Use 'stage' as dataKey for XAxis
-        value: stage.value // Use the raw value
+      const processedData = Object.values(stages).map((stage) => ({
+        stage: stage.name,
+        value: stage.value,
+        count: stage.count,
       }));
+
+      // If all values are zero but there are counts, fall back to using counts
+      const allValuesZero = processedData.every((s) => s.value === 0);
+      if (allValuesZero && processedData.some((s) => s.count > 0)) {
+        return processedData.map((s) => ({ stage: s.stage, value: s.count, isCount: true }));
+      }
       return processedData;
     };
 
@@ -61,12 +76,22 @@ export default function SalesPipeline(props) {
         }
 
         const tenantFilter = props?.tenantFilter || {};
+        
+        // Guard: Don't fetch if no tenant_id is present
+        if (!tenantFilter.tenant_id) {
+          if (mounted) {
+            setPipelineData([]);
+            setLoading(false);
+          }
+          return;
+        }
+        
         const showTestData = props?.showTestData; // Access showTestData from props
 
         // Re-introduce the effectiveFilter logic from original code, now using props.showTestData
         const effectiveFilter = showTestData
           ? { ...tenantFilter }
-          : { ...tenantFilter, is_test_data: { $ne: true } };
+          : { ...tenantFilter, is_test_data: false };
         
         // Determine if we need to call filter or list based on effectiveFilter
         const hasFilter = Object.keys(effectiveFilter).length > 0;
@@ -149,15 +174,22 @@ export default function SalesPipeline(props) {
                       borderRadius: '8px',
                       color: '#f1f5f9'
                     }}
-                    formatter={(value) => `$${value.toLocaleString()}`}
+                    formatter={(value, _name, props) => {
+                      // If we fell back to counts (isCount flag), show count formatting
+                      if (props?.payload?.isCount) return [`${value}`, 'Opportunities'];
+                      return [`$${value.toLocaleString()}`, 'Pipeline Value'];
+                    }}
                     labelFormatter={(label) => `Stage: ${label}`}
                   />
                   <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]}>
-                    <LabelList 
-                      dataKey="value" 
-                      position="top" 
+                    <LabelList
+                      dataKey="value"
+                      position="top"
                       style={{ fill: '#94a3b8', fontSize: '12px' }}
-                      formatter={(value) => `$${value.toLocaleString()}`}
+                      formatter={(value, _name, props) => {
+                        if (props?.payload?.isCount) return `${value}`;
+                        return `$${value.toLocaleString()}`;
+                      }}
                     />
                   </Bar>
                 </BarChart>

@@ -39,7 +39,7 @@ export { checkScheduledAICalls } from './telephony/checkScheduledAICalls';
 export { cleanupUserData } from './users/cleanupUserData';
 export { updateUserRole } from './users/updateUserRole';
 export { inviteUser } from './users/inviteUser';
-// updateLastLogin - removed, now handled by backend /api/users/login and heartbeat
+export { updateLastLogin } from './users/updateLastLogin';
 export { checkUserRecord } from './users/checkUserRecord';
 export { userExistsByEmail } from './users/userExistsByEmail';
 export { listTenantUsers } from './users/listTenantUsers';

@@ -34,15 +34,17 @@ export default function InternalPerformanceDashboard({ user }) {
   const loadMetrics = useCallback(async () => {
     setLoading(true);
     try {
-      // Get tenant_id from user context
+      // Build metrics URL: superadmin sees global metrics (no tenant filter)
+      const isSuperAdmin = user?.role === 'superadmin';
       const tenantId = user?.tenant_id || 'local-tenant-001';
-      
-      const [
-        perfLogsResp
-      ] = await timeApiCall('dashboard.loadAllMetrics', () => Promise.all([
-        // Use backend metrics API endpoint
-        fetch(`${BACKEND_URL}/api/metrics/performance?tenant_id=${tenantId}&limit=500`).then(r => r.json())
-      ]));
+      const metricsUrl = isSuperAdmin
+        ? `${BACKEND_URL}/api/metrics/performance?limit=500`
+        : `${BACKEND_URL}/api/metrics/performance?tenant_id=${tenantId}&limit=500`;
+
+      const [ perfLogsResp ] = await timeApiCall(
+        'dashboard.loadAllMetrics',
+        () => Promise.all([ fetch(metricsUrl).then(r => r.json()) ])
+      );
 
       // Backend returns logs in data.logs and metrics in data.metrics
       const perfLogs = Array.isArray(perfLogsResp?.data?.logs) ? perfLogsResp.data.logs : [];

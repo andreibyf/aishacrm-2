@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Trash2, ShieldCheck, Edit, Search, RefreshCw, Plus, X, Copy } from "lucide-react";
+import { Loader2, Trash2, ShieldCheck, Edit, Search, RefreshCw, Plus, X, Copy, Mail } from "lucide-react";
 // Reserved for future use: Users, AlertTriangle
 import { User as _UserEntity } from "@/api/entities";
 import { User } from "@/api/entities";
@@ -21,8 +21,11 @@ import InviteUserDialog from './InviteUserDialog';
 import { Switch } from "@/components/ui/switch";
 import { format } from 'date-fns';
 import { updateEmployeeSecure } from "@/api/functions";
-import { deleteUser } from "@/functions/users/deleteUser";
 import { canDeleteUser } from "@/utils/permissions";
+import { useUser } from '@/components/shared/useUser.js';
+
+// Backend API URL
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
@@ -152,6 +155,12 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        
+        // Prevent double-submission
+        if (saving) {
+            return;
+        }
+        
         setSaving(true);
         try {
             // 1) Persist employee manager relationship
@@ -252,25 +261,27 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
                         </p>
                     </div>
 
-                    {/* Client */}
-                    <div>
-                        <Label htmlFor="tenant_id" className="text-slate-200">Client</Label>
-                        <Select
-                            value={formData.tenant_id}
-                            onValueChange={(value) => setFormData(prev => ({ ...prev, tenant_id: value }))}
-                        >
-                            <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
-                                <SelectValue placeholder="Select client" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                                {tenants.map(tenant => (
-                                    <SelectItem key={tenant.id} value={tenant.tenant_id}>
-                                        {tenant.name}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
+                    {/* Client - Only superadmins can change tenant assignment */}
+                    {currentUser?.role === 'superadmin' && (
+                        <div>
+                            <Label htmlFor="tenant_id" className="text-slate-200">Client</Label>
+                            <Select
+                                value={formData.tenant_id}
+                                onValueChange={(value) => setFormData(prev => ({ ...prev, tenant_id: value }))}
+                            >
+                                <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
+                                    <SelectValue placeholder="Select client" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                                    {tenants.map(tenant => (
+                                        <SelectItem key={tenant.id} value={tenant.tenant_id}>
+                                            {tenant.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
 
                     {/* SIMPLIFIED: Only Employee Role - No confusing "Role/Status" field */}
                     {/* Hide CRM Role for Admins/SuperAdmins - they have full access automatically */}
@@ -495,7 +506,6 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
 export default function EnhancedUserManagement() {
     const [users, setUsers] = useState([]);
     const [allTenants, setAllTenants] = useState([]);
-    const [currentUser, setCurrentUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [editingUser, setEditingUser] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -503,22 +513,33 @@ export default function EnhancedUserManagement() {
     const [isInviteModalOpen, setInviteModalOpen] = useState(false);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [userToDelete, setUserToDelete] = useState(null);
+    
+    // Use global user context instead of local User.me()
+    const { user: currentUser } = useUser();
 
     useEffect(() => {
+        if (!currentUser) return;
         loadData();
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentUser]);
 
     const loadData = async () => {
+        if (!currentUser) return;
         setLoading(true);
         try {
-            const [usersData, tenantsData, userData] = await Promise.all([
-                User.list({ tenant_id: null }), // Pass null to get ALL users across all tenants
-                Tenant.list(),
-                User.me()
+            // Tenant admins can only see users from their own tenant
+            // Superadmins can see all users
+            const userFilter = currentUser.role === 'superadmin' 
+                ? { tenant_id: null } // null = get ALL users across all tenants
+                : { tenant_id: currentUser.tenant_id }; // Filter by admin's tenant
+            
+            const [usersData, tenantsData] = await Promise.all([
+                User.list(userFilter),
+                currentUser.role === 'superadmin' ? Tenant.list() : Promise.resolve([])
             ]);
+            
             setUsers(usersData);
             setAllTenants(tenantsData);
-            setCurrentUser(userData);
         } catch (error) {
             console.error("Failed to load data:", error);
             toast.error("Failed to load user and tenant data.");
@@ -622,19 +643,46 @@ export default function EnhancedUserManagement() {
         if (!userToDelete) return;
 
         try {
-            const response = await deleteUser(userToDelete.id, userToDelete.tenant_id, currentUser);
+            const response = await fetch(`${BACKEND_URL}/api/users/${userToDelete.id}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ tenant_id: userToDelete.tenant_id })
+            });
             
-            if (response.status === 200) {
+            if (response.ok) {
                 toast.success(`User ${userToDelete.email} has been deleted`);
                 setDeleteConfirmOpen(false);
                 setUserToDelete(null);
                 await loadData(); // Refresh user list
             } else {
-                toast.error(`Failed to delete user: ${response.data?.error || 'Unknown error'}`);
+                const data = await response.json();
+                toast.error(`Failed to delete user: ${data?.error || 'Unknown error'}`);
             }
         } catch (error) {
             console.error("Error deleting user:", error);
             toast.error(`Failed to delete user: ${error.message}`);
+        }
+    };
+
+    // Handler for resending invite
+    const handleResendInvite = async (user) => {
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/users/${user.id}/resend-invite`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include'
+            });
+            const result = await response.json();
+            
+            if (response.ok && result.success) {
+                toast.success(`Invitation email sent to ${user.email}`);
+            } else {
+                toast.error(result.message || "Failed to resend invitation");
+            }
+        } catch (error) {
+            console.error("Error resending invite:", error);
+            toast.error(`Failed to resend invitation: ${error.message}`);
         }
     };
 
@@ -657,8 +705,9 @@ export default function EnhancedUserManagement() {
     };
 
     const filteredUsers = users.filter(user => {
-        // Only show global users (from users table), not employees
-        if (user.user_type !== 'global') {
+        // Show both global users (superadmins) and tenant-scoped admins from users table
+        // Exclude employees (they should be managed via tenant-specific employee management)
+        if (user.user_type === 'employee') {
             return false;
         }
 
@@ -778,7 +827,7 @@ export default function EnhancedUserManagement() {
                                     </TableRow>
                                 ) : (
                                     filteredUsers.map((user) => {
-                                        const tenant = allTenants.find(t => t.tenant_id === user.tenant_id);
+                                        const tenant = allTenants.find(t => t.id === user.tenant_id);
                                         const isCreator = currentUser && user.id === currentUser.id && user.role === 'superadmin';
                                         
                                         // managerCanEdit now only checks for admin role to edit specific permissions
@@ -890,6 +939,17 @@ export default function EnhancedUserManagement() {
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     <div className="flex gap-2 justify-end">
+                                                        {statusText === 'Invited' && (
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() => handleResendInvite(user)}
+                                                                className="bg-blue-700 border-blue-600 text-blue-100 hover:bg-blue-600"
+                                                            >
+                                                                <Mail className="w-4 h-4 mr-1" />
+                                                                Resend Invite
+                                                            </Button>
+                                                        )}
                                                         <Button
                                                             variant="outline"
                                                             size="sm"

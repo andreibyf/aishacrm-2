@@ -5,9 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch"; // Added import for Switch
-import { User } from "@/api/entities";
-import { Tenant } from "@/api/entities";
-import { Employee } from "@/api/entities";
+import { Tenant, Employee, Opportunity } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import { useTenant } from "../shared/tenantContext";
 import { Plus } from 'lucide-react'
 import SearchableAccountSelector from "../shared/SearchableAccountSelector";
@@ -15,8 +14,20 @@ import SearchableContactSelector from "../shared/SearchableContactSelector";
 import TagInput from "../shared/TagInput";
 import CreateAccountDialog from "../accounts/CreateAccountDialog";
 import LinkContactDialog from "../shared/LinkContactDialog";
+import { toast } from "sonner";
 
-export default function OpportunityForm({ opportunity, onSubmit, onCancel, contacts: propContacts, accounts: propAccounts, users: _propUsers, leads: propLeads }) {
+export default function OpportunityForm({ 
+  opportunity: opportunityProp, 
+  initialData, 
+  onSubmit, 
+  onCancel, 
+  contacts: propContacts, 
+  accounts: propAccounts, 
+  users: _propUsers, 
+  leads: propLeads 
+}) {
+  // Unified contract: support both new and legacy prop names
+  const opportunity = initialData || opportunityProp;
   const { selectedTenantId } = useTenant();
   const [formData, setFormData] = useState({
     name: "",
@@ -36,7 +47,7 @@ export default function OpportunityForm({ opportunity, onSubmit, onCancel, conta
     lead_id: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
   const [currentTenant, setCurrentTenant] = useState(null);
 
   const [accounts, setAccounts] = useState(Array.isArray(propAccounts) ? propAccounts : []);
@@ -50,57 +61,37 @@ export default function OpportunityForm({ opportunity, onSubmit, onCancel, conta
   const [showLinkContact, setShowLinkContact] = useState(false);
 
   const isB2C = currentTenant?.business_model === 'b2c';
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin'; // Define isAdmin here
+  const isSuperadmin = currentUser?.role === 'superadmin';
 
   // Load current user and tenant
   useEffect(() => {
-    const loadUserAndTenant = async () => {
+    const hydrateTenantAndEmployees = async () => {
       try {
-        const user = await User.me();
-        setCurrentUser(user);
-        
-        const tenantId = selectedTenantId || user.tenant_id;
+        if (!currentUser) return; // wait for user
+        const tenantId = selectedTenantId || currentUser.tenant_id;
         if (tenantId) {
           const tenants = await Tenant.list();
           const tenant = tenants.find(t => t.id === tenantId);
           setCurrentTenant(tenant);
         }
-
-        // CRITICAL FIX: Load employees filtered by tenant
         const tenantFilter = {};
-        
-        // Determine which tenant to filter by
-        if (user.role === 'superadmin' || user.role === 'admin') {
-          // Admins can see employees from selected tenant or their own
-          if (selectedTenantId) {
-            tenantFilter.tenant_id = selectedTenantId;
-          } else if (user.tenant_id) {
-            tenantFilter.tenant_id = user.tenant_id;
-          }
-        } else {
-          // Regular users only see employees from their own tenant
-          if (user.tenant_id) {
-            tenantFilter.tenant_id = user.tenant_id;
-          }
+        if (currentUser.role === 'superadmin' || currentUser.role === 'admin') {
+          if (selectedTenantId) tenantFilter.tenant_id = selectedTenantId; else if (currentUser.tenant_id) tenantFilter.tenant_id = currentUser.tenant_id;
+        } else if (currentUser.tenant_id) {
+          tenantFilter.tenant_id = currentUser.tenant_id;
         }
-
-        console.log('[OpportunityForm] Loading employees with filter:', tenantFilter);
-
-        // Load employees with tenant filter and only those with CRM access
         const empList = await Employee.filter({
           ...tenantFilter,
           has_crm_access: true,
           is_active: true
         });
-        
-        console.log('[OpportunityForm] Loaded employees:', empList?.length || 0);
         setEmployees(empList || []);
       } catch (error) {
-        console.error("Failed to load user/tenant/employees:", error);
+        console.error('[OpportunityForm] Tenant/employee hydrate failed:', error);
       }
     };
-    loadUserAndTenant();
-  }, [selectedTenantId]);
+    hydrateTenantAndEmployees();
+  }, [selectedTenantId, currentUser]);
 
   // Update local state when props change
   useEffect(() => {
@@ -181,9 +172,9 @@ export default function OpportunityForm({ opportunity, onSubmit, onCancel, conta
     const isE2E = localStorage.getItem('E2E_TEST_MODE') === 'true';
     if (isE2E) console.log('[E2E] OpportunityForm handleSubmit called');
     
-    if (!formData.name || !formData.amount || !formData.close_date) {
-      if (isE2E) console.log('[E2E] OpportunityForm validation failed: missing required fields');
-      alert("Please fill in all required fields: Name, Amount, and Close Date");
+    if (!formData.name?.trim()) {
+      if (isE2E) console.log('[E2E] OpportunityForm validation failed: missing required name');
+      toast.error("Please fill in the required field: Name");
       return;
     }
 
@@ -202,7 +193,25 @@ export default function OpportunityForm({ opportunity, onSubmit, onCancel, conta
       };
 
       if (isE2E) console.log('[E2E] OpportunityForm submitting with payload:', payload);
-      await onSubmit(payload);
+      
+      // Perform persistence internally (unified contract pattern)
+      let result;
+      if (opportunity) {
+        // Update existing opportunity
+        result = await Opportunity.update(opportunity.id, payload);
+        if (isE2E) console.log('[E2E] OpportunityForm updated:', result);
+        toast.success("Opportunity updated successfully");
+      } else {
+        // Create new opportunity
+        result = await Opportunity.create(payload);
+        if (isE2E) console.log('[E2E] OpportunityForm created:', result);
+        toast.success("Opportunity created successfully");
+      }
+      
+      // Call success callback with result object
+      if (onSubmit && typeof onSubmit === 'function') {
+        await onSubmit(result);
+      }
       
       // Set success flag for E2E tests
       if (isE2E) {
@@ -212,7 +221,7 @@ export default function OpportunityForm({ opportunity, onSubmit, onCancel, conta
     } catch (error) {
       console.error("Error submitting opportunity:", error);
       if (isE2E) console.log('[E2E] OpportunityForm save error:', error);
-      alert("Failed to save opportunity. Please try again.");
+      toast.error("Failed to save opportunity. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -253,7 +262,7 @@ export default function OpportunityForm({ opportunity, onSubmit, onCancel, conta
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="opp-amount" className="text-slate-300">
-                Amount <span className="text-red-400">*</span>
+                Amount
               </Label>
               <Input 
                 id="opp-amount" 
@@ -262,7 +271,6 @@ export default function OpportunityForm({ opportunity, onSubmit, onCancel, conta
                 step="0.01"
                 value={formData.amount} 
                 onChange={e => handleChange('amount', e.target.value)} 
-                required 
                 className="bg-slate-700 border-slate-600 text-white" 
                 placeholder="0.00"
               />
@@ -270,7 +278,7 @@ export default function OpportunityForm({ opportunity, onSubmit, onCancel, conta
 
             <div>
               <Label htmlFor="opp-close-date" className="text-slate-300">
-                Expected Close Date <span className="text-red-400">*</span>
+                Expected Close Date
               </Label>
               <Input 
                 id="opp-close-date" 
@@ -278,7 +286,6 @@ export default function OpportunityForm({ opportunity, onSubmit, onCancel, conta
                 type="date" 
                 value={formData.close_date} 
                 onChange={e => handleChange('close_date', e.target.value)} 
-                required 
                 className="bg-slate-700 border-slate-600 text-white" 
               />
             </div>
@@ -502,7 +509,7 @@ export default function OpportunityForm({ opportunity, onSubmit, onCancel, conta
           </div>
 
           {/* Test Data Toggle (Admin only) */}
-          {isAdmin && (
+          {isSuperadmin && (
             <div className="flex items-center space-x-2 p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
               <Switch
                 id="is_test_data"
@@ -514,7 +521,7 @@ export default function OpportunityForm({ opportunity, onSubmit, onCancel, conta
                 Mark as Test Data
               </Label>
               <span className="text-xs text-amber-400 ml-2">
-                (For admin cleanup purposes)
+                (For Superadmin cleanup purposes)
               </span>
             </div>
           )}

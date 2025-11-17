@@ -1,0 +1,35 @@
+{
+  "name": "braid",
+  "displayName": "Braid",
+  "publisher": "aisha",
+  "version": "0.0.2",
+  "engines": {
+    "vscode": "^1.86.0"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "braid",
+        "extensions": [
+          ".braid"
+        ],
+        "aliases": [
+          "Braid"
+        ]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "braid",
+        "scopeName": "source.braid",
+        "path": "./syntaxes/braid.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "braid",
+        "path": "./snippets/core.json"
+      }
+    ]
+  }
+}

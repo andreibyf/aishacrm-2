@@ -20,7 +20,6 @@ import {
   Zap,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { User } from "@/api/entities";
 import AdminOpenAISettings from "./AdminOpenAISettings";
 import WebhookEmailSettings from "./WebhookEmailSettings";
 import SecuritySettings from "./SecuritySettings";
@@ -34,6 +33,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { checkBackendStatus } from "@/api/functions"; // Added direct import for checkBackendStatus
+import { useUser } from "@/components/shared/useUser.js";
 
 // Construct the correct, clean base URL for webhooks (remove preview subdomain)
 const WEBHOOK_BASE_URL = (() => {
@@ -121,15 +121,12 @@ const copyToClipboard = (text, type) => {
 export default function IntegrationSettings() {
   const [backendEnabled, setBackendEnabled] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser, loading: userLoading } = useUser();
 
   useEffect(() => {
     const checkStatus = async () => {
       setIsChecking(true);
       try {
-        const user = await User.me();
-        setCurrentUser(user);
-
         try {
           // Using proper function import instead of dynamic import
           await checkBackendStatus();
@@ -145,15 +142,17 @@ export default function IntegrationSettings() {
         }
       } catch (error) {
         if (import.meta.env.DEV) {
-          console.warn("Could not load user or check backend status:", error);
+          console.warn("Backend status check failed:", error);
         }
         setBackendEnabled(false);
       } finally {
         setIsChecking(false);
       }
     };
-    checkStatus();
-  }, []);
+    if (!userLoading) {
+      checkStatus();
+    }
+  }, [userLoading]);
 
   if (isChecking) {
     return (

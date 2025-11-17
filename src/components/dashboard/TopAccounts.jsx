@@ -10,11 +10,18 @@ export default function TopAccounts({ tenantFilter, showTestData }) {
   React.useEffect(() => {
     const loadTopAccounts = async () => {
       try {
+        // Guard: Don't fetch if no tenant_id is present
+        if (!tenantFilter?.tenant_id) {
+          setAccounts([]);
+          setLoading(false);
+          return;
+        }
+        
         const { Account, Opportunity, Contact } = await import("@/api/entities");
         
         let filter = { ...tenantFilter };
         if (!showTestData) {
-          filter.is_test_data = { $ne: true };
+          filter.is_test_data = false;
         }
         
         // Load all necessary data

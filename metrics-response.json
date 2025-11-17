@@ -1,0 +1,110 @@
+{
+    "status": "success",
+    "data": {
+        "logs": [
+            {
+                "id": "00bf4300-9006-479a-b62c-eafa1975f6ca",
+                "tenant_id": "local-tenant-001",
+                "method": "GET",
+                "endpoint": "/api/tenants?tenant_id=local-tenant-001",
+                "status_code": 200,
+                "duration_ms": 109,
+                "response_time_ms": null,
+                "db_query_time_ms": 0,
+                "user_email": null,
+                "ip_address": "172.19.0.1",
+                "user_agent": "curl/8.14.1",
+                "error_message": null,
+                "error_stack": null,
+                "created_at": "2025-11-06T16:31:27.62215+00:00"
+            },
+            {
+                "id": "499adb98-9b66-42ae-9558-1e4b531df291",
+                "tenant_id": "local-tenant-001",
+                "method": "GET",
+                "endpoint": "/api/metrics/performance?tenant_id=local-tenant-001&limit=5000&hours=720",
+                "status_code": 200,
+                "duration_ms": 199,
+                "response_time_ms": null,
+                "db_query_time_ms": 0,
+                "user_email": null,
+                "ip_address": "172.19.0.1",
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0",
+                "error_message": null,
+                "error_stack": null,
+                "created_at": "2025-11-06T16:30:40.955144+00:00"
+            },
+            {
+                "id": "ee4fc440-5fc3-4f9f-887f-cdd04b0411d5",
+                "tenant_id": "local-tenant-001",
+                "method": "GET",
+                "endpoint": "/api/tenants?tenant_id=local-tenant-001",
+                "status_code": 200,
+                "duration_ms": 81,
+                "response_time_ms": null,
+                "db_query_time_ms": 0,
+                "user_email": null,
+                "ip_address": "172.19.0.1",
+                "user_agent": "curl/8.14.1",
+                "error_message": null,
+                "error_stack": null,
+                "created_at": "2025-11-06T16:30:15.43909+00:00"
+            },
+            {
+                "id": "fa085e9e-a9f2-464f-b4ad-7cddd9be51c6",
+                "tenant_id": "local-tenant-001",
+                "method": "GET",
+                "endpoint": "/api/tenants?tenant_id=local-tenant-001",
+                "status_code": 200,
+                "duration_ms": 186,
+                "response_time_ms": null,
+                "db_query_time_ms": 0,
+                "user_email": null,
+                "ip_address": "172.19.0.1",
+                "user_agent": "curl/8.14.1",
+                "error_message": null,
+                "error_stack": null,
+                "created_at": "2025-11-06T16:26:26.475638+00:00"
+            },
+            {
+                "id": "4732bcea-020e-479d-8c06-85bf3189aec2",
+                "tenant_id": "local-tenant-001",
+                "method": "GET",
+                "endpoint": "/api/system/status?tenant_id=local-tenant-001",
+                "status_code": 200,
+                "duration_ms": 1,
+                "response_time_ms": null,
+                "db_query_time_ms": 0,
+                "user_email": null,
+                "ip_address": "172.19.0.1",
+                "user_agent": "curl/8.14.1",
+                "error_message": null,
+                "error_stack": null,
+                "created_at": "2025-11-06T16:26:13.52926+00:00"
+            }
+        ],
+        "count": 5,
+        "metrics": {
+            "totalCalls": 0,
+            "avgResponseTime": 0,
+            "maxResponseTime": 0,
+            "minResponseTime": 0,
+            "errorRate": 0,
+            "errorCount": 0,
+            "serverErrorCount": 0,
+            "successCount": 0,
+            "uptime": 38.522686277,
+            "memory": {
+                "rss": 91525120,
+                "heapTotal": 24375296,
+                "heapUsed": 21991584,
+                "external": 3854715,
+                "arrayBuffers": 108537
+            },
+            "cpu": {
+                "user": 623855,
+                "system": 301993
+            }
+        }
+    }
+}

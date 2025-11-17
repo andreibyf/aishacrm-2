@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Workflow } from '@/api/entities';
-import { User } from '@/api/entities';
+import { useUser } from '@/components/shared/useUser.js';
 import { BACKEND_URL } from '@/api/entities';
 import { Webhook, Search, Save, Plus, X, Copy, Check, RefreshCw } from 'lucide-react';
 import WorkflowCanvas from './WorkflowCanvas';
@@ -18,7 +18,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   const [description, setDescription] = useState(workflow?.description || '');
   const [nodes, setNodes] = useState(workflow?.nodes || []);
   const [connections, setConnections] = useState(workflow?.connections || []);
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
   const [saving, setSaving] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [testPayload, setTestPayload] = useState(null);
@@ -34,9 +34,6 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   const [executionLimit, setExecutionLimit] = useState(10);
   const [executionOffset, setExecutionOffset] = useState(0);
 
-  useEffect(() => {
-    User.me().then(setUser);
-  }, []);
 
   useEffect(() => {
     if (!workflow && nodes.length === 0) {
@@ -724,6 +721,223 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           </div>
         );
 
+      case 'http_request':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">HTTP Method</Label>
+              <Select
+                value={node.config?.method || 'POST'}
+                onValueChange={(value) => {
+                  updateNodeConfig(node.id, { ...node.config, method: value });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="GET">GET</SelectItem>
+                  <SelectItem value="POST">POST</SelectItem>
+                  <SelectItem value="PUT">PUT</SelectItem>
+                  <SelectItem value="PATCH">PATCH</SelectItem>
+                  <SelectItem value="DELETE">DELETE</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label className="text-slate-200">URL</Label>
+              <Input
+                value={node.config?.url || ''}
+                onChange={(e) => {
+                  updateNodeConfig(node.id, { ...node.config, url: e.target.value });
+                }}
+                placeholder="https://api.example.com/endpoint"
+                className="bg-slate-800 border-slate-700 text-slate-200"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Supports {'{{field_name}}'} variables
+              </p>
+            </div>
+
+            <div>
+              <Label className="text-slate-200">Headers</Label>
+              <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                {(node.config?.headers || []).map((header, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      value={header.key}
+                      onChange={(e) => {
+                        const newHeaders = [...(node.config?.headers || [])];
+                        newHeaders[index] = { ...header, key: e.target.value };
+                        updateNodeConfig(node.id, { ...node.config, headers: newHeaders });
+                      }}
+                      placeholder="Header name"
+                      className="bg-slate-800 border-slate-700 text-slate-200 flex-1"
+                    />
+                    <Input
+                      value={header.value}
+                      onChange={(e) => {
+                        const newHeaders = [...(node.config?.headers || [])];
+                        newHeaders[index] = { ...header, value: e.target.value };
+                        updateNodeConfig(node.id, { ...node.config, headers: newHeaders });
+                      }}
+                      placeholder="Header value"
+                      className="bg-slate-800 border-slate-700 text-slate-200 flex-1"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        const newHeaders = (node.config?.headers || []).filter((_, i) => i !== index);
+                        updateNodeConfig(node.id, { ...node.config, headers: newHeaders });
+                      }}
+                      className="text-red-400 hover:text-red-300"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const newHeaders = [...(node.config?.headers || []), { key: '', value: '' }];
+                  updateNodeConfig(node.id, { ...node.config, headers: newHeaders });
+                }}
+                className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 mt-2 w-full"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Header
+              </Button>
+            </div>
+
+            {node.config?.method !== 'GET' && node.config?.method !== 'HEAD' && (
+              <div>
+                <Label className="text-slate-200">Body Type</Label>
+                <Select
+                  value={node.config?.body_type || 'mappings'}
+                  onValueChange={(value) => {
+                    updateNodeConfig(node.id, { ...node.config, body_type: value });
+                  }}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    <SelectItem value="mappings">Field Mappings (JSON)</SelectItem>
+                    <SelectItem value="raw">Raw JSON</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {node.config?.body_type === 'raw' ? (
+                  <div className="mt-2">
+                    <Label className="text-slate-200">JSON Body</Label>
+                    <textarea
+                      value={node.config?.body || '{}'}
+                      onChange={(e) => {
+                        updateNodeConfig(node.id, { ...node.config, body: e.target.value });
+                      }}
+                      placeholder='{"key": "{{value}}"}'
+                      className="w-full min-h-[120px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2 font-mono text-xs"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                      Use {'{{field_name}}'} to inject webhook data
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-2">
+                    <Label className="text-slate-200">Body Field Mappings</Label>
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2 mt-2">
+                      {(node.config?.body_mappings || []).map((mapping, index) => (
+                        <div key={index} className="flex gap-2">
+                          <Input
+                            value={mapping.key}
+                            onChange={(e) => {
+                              const newMappings = [...(node.config?.body_mappings || [])];
+                              newMappings[index] = { ...mapping, key: e.target.value };
+                              updateNodeConfig(node.id, { ...node.config, body_mappings: newMappings });
+                            }}
+                            placeholder="JSON key"
+                            className="bg-slate-800 border-slate-700 text-slate-200 flex-1"
+                          />
+                          {getAvailableFields().length > 0 ? (
+                            <Select
+                              value={mapping.value}
+                              onValueChange={(value) => {
+                                const newMappings = [...(node.config?.body_mappings || [])];
+                                newMappings[index] = { ...mapping, value };
+                                updateNodeConfig(node.id, { ...node.config, body_mappings: newMappings });
+                              }}
+                            >
+                              <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200 flex-1">
+                                <SelectValue placeholder="Select field" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-slate-800 border-slate-700">
+                                {getAvailableFields().map(field => (
+                                  <SelectItem key={field} value={field}>{field}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              value={mapping.value}
+                              onChange={(e) => {
+                                const newMappings = [...(node.config?.body_mappings || [])];
+                                newMappings[index] = { ...mapping, value: e.target.value };
+                                updateNodeConfig(node.id, { ...node.config, body_mappings: newMappings });
+                              }}
+                              placeholder="webhook_field"
+                              className="bg-slate-800 border-slate-700 text-slate-200 flex-1"
+                            />
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              const newMappings = (node.config?.body_mappings || []).filter((_, i) => i !== index);
+                              updateNodeConfig(node.id, { ...node.config, body_mappings: newMappings });
+                            }}
+                            className="text-red-400 hover:text-red-300"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const newMappings = [...(node.config?.body_mappings || []), { key: '', value: '' }];
+                        updateNodeConfig(node.id, { ...node.config, body_mappings: newMappings });
+                      }}
+                      className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 mt-2 w-full"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Field
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-3">
+              <p className="text-sm text-blue-300 font-semibold mb-2">
+                💡 Common Use Cases:
+              </p>
+              <ul className="text-xs text-blue-400 space-y-1 ml-4 list-disc">
+                <li>Send to Slack: POST to webhook URL</li>
+                <li>Add to Google Sheets: Use Sheets API</li>
+                <li>Update Airtable: POST to Airtable API</li>
+                <li>Send SMS via Twilio: POST to Twilio API</li>
+                <li>Trigger another workflow: POST to any webhook</li>
+              </ul>
+            </div>
+          </div>
+        );
+
       case 'send_email':
         return (
           <div className="space-y-4">
@@ -884,8 +1098,27 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
     setSaving(true);
     try {
+      // Resolve tenant id with robust fallbacks
+      let tenantId = user?.tenant_id ?? null;
+      try {
+        if (!tenantId && typeof window !== 'undefined') {
+          const selected = localStorage.getItem('selected_tenant_id');
+          if (selected) tenantId = selected;
+        }
+      } catch { /* noop */ }
+      if (!tenantId && import.meta.env.DEV) {
+        // Dev fallback to seeded tenant
+        tenantId = 'local-tenant-001';
+      }
+
+      if (!tenantId) {
+        toast.error('No tenant selected. Please choose a tenant and try again.');
+        setSaving(false);
+        return;
+      }
+
       const workflowData = {
-        tenant_id: user.tenant_id,
+        tenant_id: tenantId,
         name,
         description,
         is_active: true,
@@ -947,12 +1180,12 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-h-0">
         <div className="w-64 border-r border-slate-700 overflow-y-auto p-4 flex-shrink-0">
           <NodeLibrary onAddNode={handleAddNode} />
         </div>
 
-        <div className="flex-1 bg-slate-950 overflow-auto">
+        <div className="flex-1 bg-slate-950 overflow-y-auto min-h-0">
           <WorkflowCanvas
             nodes={nodes}
             connections={connections}
