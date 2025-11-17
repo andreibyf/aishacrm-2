@@ -340,6 +340,7 @@ export default function LeadsPage() {
     setLoading(true);
     try {
       let currentFilter = getTenantFilter();
+      let searchFilter = null;
 
       // Guard: Don't load leads if no tenant_id for superadmin
       if ((user.role === 'superadmin' || user.role === 'admin') && !currentFilter.tenant_id) {
@@ -354,8 +355,8 @@ export default function LeadsPage() {
       }
 
       if (searchTerm) {
-        currentFilter = {
-          ...currentFilter,
+        // Separate search filter to be passed as 'filter' query param
+        searchFilter = {
           $or: [
             { first_name: { $icontains: searchTerm } },
             { last_name: { $icontains: searchTerm } },
@@ -365,6 +366,7 @@ export default function LeadsPage() {
             { job_title: { $icontains: searchTerm } },
           ],
         };
+        currentFilter = { ...currentFilter, filter: JSON.stringify(searchFilter) };
       }
 
       if (selectedTags.length > 0) {

@@ -281,14 +281,17 @@ export default function ContactsPage() {
 
       // Add search filter using $or for multiple fields
       if (searchTerm) {
-        scopedFilter.$or = [
-          { first_name: { $icontains: searchTerm } },
-          { last_name: { $icontains: searchTerm } },
-          { email: { $icontains: searchTerm } },
-          { phone: { $icontains: searchTerm } },
-          { job_title: { $icontains: searchTerm } },
-          { account_name: { $icontains: searchTerm } },
-        ];
+        const searchFilterObj = {
+          $or: [
+            { first_name: { $icontains: searchTerm } },
+            { last_name: { $icontains: searchTerm } },
+            { email: { $icontains: searchTerm } },
+            { phone: { $icontains: searchTerm } },
+            { job_title: { $icontains: searchTerm } },
+            { account_name: { $icontains: searchTerm } },
+          ],
+        };
+        scopedFilter.filter = JSON.stringify(searchFilterObj);
       }
 
       if (!scopedFilter.tenant_id && user.role !== "superadmin") {
