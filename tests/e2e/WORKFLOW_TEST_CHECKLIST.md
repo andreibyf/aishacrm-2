@@ -1,54 +1,105 @@
 # Complete User Workflow Test - Checklist
 
+## 🎯 Phase 0 Smoke Suite - COMPLETED ✅
+
+**Status:** All 13 API smoke tests passing (1 UI test skipped)
+**Execution Time:** 4.7 seconds
+**Last Run:** November 17, 2025
+
+### Phase 0 Coverage (see `PHASE0_SMOKE_RESULTS.md`)
+- ✅ Authentication & Authorization (unauthenticated API access)
+- ✅ AI Assistant Chat (conversation creation, message posting)
+- ✅ Calendar Feed (activity array structure)
+- ✅ Duplicate Detection (unique & duplicate lead validation)
+- ✅ ElevenLabs Integration (tenant agent ID, speech generation)
+- ✅ Multi-Tenancy RLS (cross-tenant isolation)
+- ✅ Permissions RBAC (roles endpoint, grant placeholder)
+- ✅ Stripe Integration (placeholder payment endpoint)
+- ✅ Telephony Webhooks (Twilio inbound normalization)
+
+**Run Command:**
+```bash
+# Quick run
+npx playwright test tests/e2e --grep @smoke
+
+# With browser visibility
+pwsh tests/e2e/run-phase0-smoke.ps1 -Headed
+```
+
+---
+
+## 🎯 Phase 1 Core Flow - COMPLETED ✅
+
+**Status:** All 8 Phase 1 tests passing
+**Execution Time:** 18.5 seconds
+**Last Run:** November 17, 2025
+
+### Phase 1 Coverage (see `PHASE1_RESULTS.md`)
+- ✅ Lead Management (API create, status=new, UI presence, search)
+- ✅ Notes (qualification note on Lead, linkage verified)
+- ✅ Activities (call/meeting/email creation, completion, UI presence)
+- ✅ Lead Conversion (account/contact/opportunity created, lead → converted)
+- ✅ Accounts/Opportunities UI (visible and searchable)
+- ✅ Opportunity Stages (qualification → proposal → negotiation → closed_won, persisted)
+- ✅ Activity Timeline (discovery, demo, proposal, follow-up present)
+
+**Run Command:**
+```bash
+npx playwright test tests/e2e --grep @phase1
+pwsh tests/e2e/run-phase1.ps1 -Headed -Workers 1
+```
+
+---
+
 ## 📋 Test Coverage Checklist
 
 ### ✅ Lead Management
-- [ ] Create new lead via API
-- [ ] Verify lead appears in Leads page UI
-- [ ] Search/filter for lead by email
-- [ ] Lead status is "new"
-- [ ] Lead data integrity (name, email, phone, company, title)
+- [x] Create new lead via API
+- [x] Verify lead appears in Leads page UI
+- [x] Search/filter for lead by email
+- [x] Lead status is "new"
+- [x] Lead data integrity (name, email, phone, company, title)
 
 ### ✅ Notes & Documentation
-- [ ] Add qualification note to lead
+- [x] Add qualification note to lead
 - [ ] Add demo feedback note to opportunity
 - [ ] Add negotiation notes to opportunity
-- [ ] Notes are properly linked to entities
+- [x] Notes are properly linked to entities
 - [ ] Notes appear in UI (if applicable)
 
 ### ✅ Activities - Calls
-- [ ] Create scheduled call activity
-- [ ] Link call to lead
-- [ ] Call appears in Activities page
-- [ ] Complete call (change status to completed)
+- [x] Create scheduled call activity
+- [x] Link call to lead
+- [x] Call appears in Activities page
+- [x] Complete call (change status to completed)
 - [ ] Verify completed call shows in timeline
 
 ### ✅ Activities - Meetings
-- [ ] Create scheduled meeting activity
+- [x] Create scheduled meeting activity
 - [ ] Link meeting to opportunity
-- [ ] Meeting appears in Activities page
-- [ ] Complete meeting
-- [ ] Verify meeting shows in timeline
+- [x] Meeting appears in Activities page
+- [x] Complete meeting
+- [x] Verify meeting shows in timeline
 
 ### ✅ Activities - Emails
-- [ ] Create email activity
+- [x] Create email activity
 - [ ] Link email to opportunity
-- [ ] Email appears in Activities page
+- [x] Email appears in Activities page
 - [ ] Verify email content/body is stored
 
 ### ✅ Lead Conversion
-- [ ] Convert lead via API
-- [ ] Conversion creates account
-- [ ] Conversion creates primary contact
-- [ ] Conversion creates opportunity
+- [x] Convert lead via API
+- [x] Conversion creates account
+- [x] Conversion creates primary contact
+- [x] Conversion creates opportunity
 - [ ] All entities properly linked (foreign keys)
-- [ ] Lead status changes to "converted"
+- [x] Lead status changes to "converted"
 - [ ] Original lead data preserved
 
 ### ✅ Account Management
-- [ ] Account created with correct name
-- [ ] Account appears in Accounts page UI
-- [ ] Search/filter for account
+- [x] Account created with correct name
+- [x] Account appears in Accounts page UI
+- [x] Search/filter for account
 - [ ] Account data integrity
 
 ### ✅ Contact Management
@@ -59,26 +110,26 @@
 - [ ] Contact data integrity (name, email, phone, title)
 
 ### ✅ Opportunity Management
-- [ ] Opportunity created during conversion
+- [x] Opportunity created during conversion
 - [ ] Opportunity linked to account
 - [ ] Opportunity has correct amount ($75,000)
 - [ ] Opportunity has close date set
-- [ ] Opportunity appears in Opportunities page UI
-- [ ] Search/filter for opportunity
+- [x] Opportunity appears in Opportunities page UI
+- [x] Search/filter for opportunity
 
 ### ✅ Opportunity Stage Progression
-- [ ] Initial stage: "qualification"
-- [ ] Move to "proposal" stage
-- [ ] Move to "negotiation" stage
-- [ ] Move to "closed_won" stage
-- [ ] Stage changes persist in database
+- [x] Initial stage: "qualification"
+- [x] Move to "proposal" stage
+- [x] Move to "negotiation" stage
+- [x] Move to "closed_won" stage
+- [x] Stage changes persist in database
 - [ ] UI reflects current stage
 
 ### ✅ Activity Timeline
-- [ ] Discovery call visible in timeline
-- [ ] Product demo visible in timeline
-- [ ] Proposal email visible in timeline
-- [ ] Follow-up call visible in timeline
+- [x] Discovery call visible in timeline
+- [x] Product demo visible in timeline
+- [x] Proposal email visible in timeline
+- [x] Follow-up call visible in timeline
 - [ ] Activities sorted by date
 - [ ] Activities show correct status
 
@@ -87,22 +138,22 @@
 - [ ] Contacts linked to correct account
 - [ ] Opportunity linked to correct account
 - [ ] Activities linked to correct entities
-- [ ] Notes linked to correct entities
+- [x] Notes linked to correct entities
 - [ ] No orphaned records
 
 ### ✅ UI Navigation & Display
-- [ ] Navigate to Leads page successfully
-- [ ] Navigate to Accounts page successfully
-- [ ] Navigate to Opportunities page successfully
-- [ ] Navigate to Activities page successfully
+- [x] Navigate to Leads page successfully
+- [x] Navigate to Accounts page successfully
+- [x] Navigate to Opportunities page successfully
+- [x] Navigate to Activities page successfully
 - [ ] Search functionality works on each page
 - [ ] Data loads without errors
 - [ ] No JavaScript console errors
 
 ### ✅ Multi-Entity Workflow
-- [ ] Lead → Account flow works
-- [ ] Lead → Contact flow works
-- [ ] Lead → Opportunity flow works
+- [x] Lead → Account flow works
+- [x] Lead → Contact flow works
+- [x] Lead → Opportunity flow works
 - [ ] Account → Multiple Contacts works
 - [ ] Opportunity → Multiple Activities works
 - [ ] Notes work across entity types

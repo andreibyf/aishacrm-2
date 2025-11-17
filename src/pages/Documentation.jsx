@@ -39,10 +39,42 @@ export default function DocumentationPage() {
   const isAdmin = currentUser?.role === 'admin';
   const isSuperadmin = currentUser?.role === 'superadmin';
   
-  const handleDownloadPDF = () => {
-    // Create a link to the PDF version of the user guide
+  const handleDownloadPDF = async () => {
+    // Prefer PDFs copied to public/guides via build/dev script
+    // Fallback to repo raw file if not available locally
+    const candidates = [
+      '/guides/Ai-SHA-CRM-User-Guide-2025-10-26.pdf',
+      '/guides/AISHA_CRM_USER_GUIDE.pdf',
+      // Raw GitHub fallback (repo: andreibyf/aishacrm-2)
+      'https://raw.githubusercontent.com/andreibyf/aishacrm-2/main/docs/Ai-SHA-CRM-User-Guide-2025-10-26.pdf',
+    ];
+
+    let urlToDownload = null;
+    for (const url of candidates) {
+      try {
+        // Use HEAD where possible; some CDNs may block HEAD so allow GET with no-cors fallback
+        const res = await fetch(url, { method: 'HEAD' });
+        if (res.ok) { urlToDownload = url; break; }
+      } catch {
+        // ignore and try next
+      }
+    }
+
+    if (!urlToDownload) {
+      // Last resort: try backend overview PDF to at least return a PDF
+      const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || '';
+      if (backendUrl) {
+        urlToDownload = `${backendUrl.replace(/\/$/, '')}/api/reports/export-pdf?report_type=overview`;
+      }
+    }
+
+    if (!urlToDownload) {
+      alert('Unable to locate the User Guide PDF. Please check with your administrator.');
+      return;
+    }
+
     const link = document.createElement('a');
-    link.href = '/docs/AISHA_CRM_USER_GUIDE.pdf'; // This would be generated from markdown
+    link.href = urlToDownload;
     link.download = 'Aisha_CRM_User_Guide.pdf';
     document.body.appendChild(link);
     link.click();

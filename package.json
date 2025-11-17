@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node dev-frontend.js",
+    "dev": "node scripts/copy-docs-to-public.js && node dev-frontend.js",
     "dev:vite": "vite",
-    "build": "vite build",
+    "build": "node scripts/copy-docs-to-public.js && vite build",
     "lint": "eslint .",
     "format": "prettier . --write",
     "format:check": "prettier . --check",

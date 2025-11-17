@@ -11,21 +11,21 @@ Write-Host "Headed: $($Headed.IsPresent) | HTML Report: $($Html.IsPresent) | Wor
 $root = Split-Path $MyInvocation.MyCommand.Path -Parent | Split-Path -Parent
 Set-Location $root
 
-# Build Playwright base args
-$args = @('playwright','test','tests/e2e','--grep','@smoke','--workers', $Workers)
-if ($Headed) { $args += '--headed' }
-if ($Html) { $args += '--reporter=html' } else { $args += '--reporter=line' }
+# Build Playwright command
+$playwrightArgs = @('test','tests/e2e','--grep','@smoke','--workers',$Workers)
+if ($Headed) { $playwrightArgs += '--headed' }
+if ($Html) { $playwrightArgs += '--reporter=html' } else { $playwrightArgs += '--reporter=line' }
 
-Write-Host "Running: npx $($args -join ' ')" -ForegroundColor Yellow
+Write-Host "Running: npx playwright $($playwrightArgs -join ' ')" -ForegroundColor Yellow
 
-$env:FORCE_COLOR=1
-$proc = Start-Process -FilePath 'npx' -ArgumentList $args -NoNewWindow -PassThru -Wait
+$env:FORCE_COLOR='1'
+npx playwright @playwrightArgs
 
-if ($proc.ExitCode -eq 0) {
-  Write-Host "Smoke suite PASSED" -ForegroundColor Green
+if ($LASTEXITCODE -eq 0) {
+  Write-Host "`nSmoke suite PASSED" -ForegroundColor Green
   if ($Html) { Write-Host "Open report: npx playwright show-report" -ForegroundColor Green }
   exit 0
 } else {
-  Write-Host "Smoke suite FAILED (exit $($proc.ExitCode))" -ForegroundColor Red
-  exit $proc.ExitCode
+  Write-Host "`nSmoke suite FAILED (exit $LASTEXITCODE)" -ForegroundColor Red
+  exit $LASTEXITCODE
 }
