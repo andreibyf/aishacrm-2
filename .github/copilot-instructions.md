@@ -1,10 +1,14 @@
 # Copilot Instructions for AI Agents
 
 ## Project Overview
-- Aisha CRM: Independent CRM system transitioning from Base44 to your own infrastructure.
-- Frontend: Vite + React app with domain-organized components (accounts, activities, ai, etc.).
-- Backend: Node.js Express server with 197 API endpoints across 26 categories, using PostgreSQL (Supabase).
-- Focus: Zero vendor dependency with automatic Base44 → local backend failover.
+- **Aisha CRM:** Independent CRM system with AI Executive Assistant capabilities powered by Braid SDK
+- **Architecture:** 
+  - Frontend: Vite + React (domain-organized components)
+  - Backend: Node.js Express (210+ API endpoints, 28 categories)
+  - Database: PostgreSQL via Supabase Cloud (50+ tables, RLS enabled)
+  - AI: Braid SDK with 27+ production tools, MCP server for transcript analysis
+- **Key Differentiator:** Automatic Base44 → local backend failover ensures zero downtime
+- **Multi-Tenant:** UUID-first tenant isolation with row-level security
 
 ## 🐳 CRITICAL: Docker Development Environment
 **THIS PROJECT RUNS IN DOCKER CONTAINERS - ALWAYS REMEMBER THIS:**
@@ -29,10 +33,37 @@
   - ✅ DO use container ports (4000/4001) in all URLs and CORS config
 
 ## Architecture & Data Flow
-- **Frontend:** Components in `src/components/` by domain; pages in `src/pages/`; API clients in `src/api/` with fallback logic.
-- **Backend:** Express server in `backend/server.js`; routes in `backend/routes/` (26 categories); database via Supabase PostgreSQL.
-- **Data Flow:** API calls auto-failover from Base44 SDK to local backend; local functions in `src/functions/` for browser-side fallbacks.
-- **Why Independent:** Prevents downtime when Base44 is unavailable; full control over data and functions.
+
+### Frontend Architecture
+- **Components:** Domain-organized in `src/components/` (accounts/, activities/, ai/, shared/, ui/)
+- **Pages:** Route components in `src/pages/`
+- **API Layer:** `src/api/` with automatic Base44 → backend failover via `fallbackFunctions.js`
+- **Path Alias:** `@/` resolves to `src/` (configured in vite.config.js, jsconfig.json)
+- **State Management:** React hooks + ApiManager for request caching (30s TTL)
+- **UI Framework:** Tailwind CSS + shadcn/ui (Radix UI primitives in `src/components/ui/`)
+
+### Backend Architecture
+- **Server:** Express in `backend/server.js` with 210+ endpoints across 28 categories
+- **Routes:** Organized by domain in `backend/routes/` (accounts.js, leads.js, ai.js, etc.)
+- **Database Access:** Supabase JS client (no raw pgPool queries) with RLS enforcement
+- **Middleware:** 
+  - `tenantScopedId()` - validates tenant access to resources
+  - `validateTenantAccess` - enforces tenant isolation
+  - Helmet.js security headers, CORS, rate limiting
+- **Background Workers:** Campaign execution, call flow processing, memory archival
+
+### Data Flow
+1. **Frontend:** Component → `src/api/fallbackFunctions.js` → Base44 health check
+2. **Failover Logic:** If Base44 down/slow (>5s), switch to local backend automatically
+3. **Backend API:** Express routes → Supabase client → PostgreSQL with RLS
+4. **Caching:** ApiManager caches GET requests for 30s, invalidate with `clearCache(pattern)`
+5. **AI Tools:** OpenAI Chat → `backend/routes/ai.js` → Braid executor → Backend API
+
+### Why Independent Backend
+- ✅ Zero downtime when Base44 is unavailable
+- ✅ Full control over data, security, and scaling
+- ✅ Can run on-premise or own cloud infrastructure
+- ✅ No vendor lock-in or usage limits
 
 ## Developer Workflows
 
@@ -83,8 +114,15 @@
 
 ### Cache & UI Refresh
 - Frontend cache: `useApiManager()` exposes `cachedRequest`, `clearCache`, and `clearCacheByKey` (alias) for cache invalidation. Use `clearCacheByKey("Account")` after mutations.
+- Cache TTL: 30 seconds, stored in memory (Map), deduplicated requests via promise tracking
 - Optimistic updates: For snappy UX, optimistically update local state (e.g., remove deleted item from list) and then revalidate with `load*()` calls.
 - Pagination guard: After bulk deletes, ensure page indices are clamped to avoid empty pages.
+
+### Vite Development Proxy
+- **Dev Mode Only:** Vite proxies `/api`, `/health`, `/api-docs` to backend (port 3001 or 4001)
+- **Purpose:** Avoids CORS issues during development, frontend can call `/api/*` directly
+- **Production:** Frontend must use full `VITE_AISHACRM_BACKEND_URL` (no proxy)
+- **Config:** `vite.config.js` → `server.proxy` object
 
 ## Project-Specific Conventions
 - Components: Function-based React, domain-grouped; use `ConfirmDialog` instead of `window.confirm()`.
@@ -116,10 +154,16 @@
 - **Security:** Helmet.js, CORS, rate limiting in backend; never commit `.env`.
 
 ### Tenant Identifiers (UUID-First)
-- Source of truth: Use UUIDs for `tenant_id` across backend and frontend; do not convert to or filter by slug.
-- Backend routes: All filters and joins must use UUID `tenant_id` (or `tenants.id`). Avoid any UUID→slug mapping.
-- Frontend params: Always pass the tenant UUID; do not send legacy slug values.
-- Migration note: Legacy `tenant_id` (slug) can exist on records; do not rely on it for filtering.
+- **Critical Distinction:** Database has TWO identifier columns:
+  - `id` (uuid): Primary key for RLS, foreign keys, database relationships
+  - `tenant_id` (text): Business identifier for multi-tenancy (e.g., "local-tenant-001")
+- **Source of truth:** Use UUIDs for `tenant_id` across backend and frontend; do not convert to or filter by slug.
+- **Backend routes:** All filters and joins must use UUID `tenant_id` (or `tenants.id`). Avoid any UUID→slug mapping.
+- **Frontend params:** Always pass the tenant UUID; do not send legacy slug values.
+- **Foreign Keys:** ALWAYS use UUIDs (e.g., `contacts.account_id` → `accounts.id`), never text tenant_id
+- **Common Error:** `ERROR: invalid input syntax for type uuid: "local-tenant-001"` - using text slug where UUID expected
+- **Migration note:** Legacy `tenant_id` (slug) can exist on records; do not rely on it for filtering.
+- **Documentation:** See `docs/DATABASE_UUID_vs_TENANT_ID.md` for detailed patterns and examples
 
 ## Testing Best Practices
 - **Frontend:** Custom tests in `src/pages/UnitTests.jsx`; add tests for new components when possible.
@@ -138,12 +182,14 @@
 - **Dependencies:** Run `npm install` in both root and `backend/` after pulling changes.
 
 ## Backend Route Categories
-The backend exposes 197 API endpoints across 26 categories:
+The backend exposes 210+ API endpoints across 28 categories:
 - **accounts** - Account management operations
 - **activities** - Activity logging and tracking
 - **ai** - AI-powered features and assistants
+- **aicampaigns** - AI campaign automation (8 endpoints)
 - **announcements** - System announcements and notifications
 - **apikeys** - API key management
+- **audit-logs** - System audit logging
 - **billing** - Billing and payment operations
 - **bizdev** - Business development tools
 - **bizdevsources** - Business development data sources
@@ -167,7 +213,7 @@ The backend exposes 197 API endpoints across 26 categories:
 - **storage** - File storage operations
 - **system-logs** - System logging and auditing
 - **system** - Health checks, diagnostics, status
-- **telephony** - Phone and communication features
+- **telephony** - Phone and communication features (8 webhook endpoints)
 - **tenant-integrations** - Multi-tenant integrations
 - **tenants** - Multi-tenant management
 - **testing** - Testing utilities and endpoints
@@ -176,13 +222,17 @@ The backend exposes 197 API endpoints across 26 categories:
 - **validation** - Data validation and duplicate detection
 - **webhooks** - Webhook handling
 - **workflows** - Workflow automation
+- **workflowexecutions** - Workflow execution tracking
 
 ## Key Files & Directories
 - `src/api/` — API clients with Base44 → local failover (`fallbackFunctions.js`)
 - `src/functions/` — 197 browser-side functions; export via `index.js`
-- `backend/server.js` — Express server with 197 endpoints
-- `backend/routes/` — 26 route categories (accounts.js, leads.js, etc.)
-- `backend/migrations/` — Supabase schema migrations
+- `backend/server.js` — Express server with 210+ endpoints
+- `backend/routes/` — 28 route categories (accounts.js, leads.js, telephony.js, etc.)
+- `backend/lib/` — Core business logic (callFlowHandler.js, campaignWorker.js)
+- `backend/migrations/` — Supabase schema migrations (52+)
+- `braid-llm-kit/` — Braid SDK with 27+ AI tools for Executive Assistant
+- `braid-mcp-node-server/` — MCP server for transcript analysis (standalone Docker stack)
 - `src/components/` — Domain-specific React components
 - `src/pages/` — Route/view components
 - `vite.config.js`, `tailwind.config.js`, `eslint.config.js` — Build, style, lint config
