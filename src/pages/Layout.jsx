@@ -1766,7 +1766,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
         });
-      } catch (e) {
+      } catch (_e) {
         // ignore network errors, still navigate out
       }
       window.location.href = "/";

@@ -130,7 +130,6 @@ setup('authenticate as superadmin', async ({ page, request }) => {
         } else if (await submitBtnText.isVisible().catch(() => false)) {
           console.log('Clicking submit button via role=button');
           await submitBtnText.click();
-          clicked = true;
         } else {
           console.log('No visible submit button found, trying generic click');
           await submitBtn.click().catch(() => submitBtnText.click());

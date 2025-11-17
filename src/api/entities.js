@@ -1019,8 +1019,9 @@ export const User = {
     
     // First, try cookie-based session via backend (disabled for now)
     try {
+      let meResp = null;
       if (!skipCookieAuth) {
-        const meResp = await fetch(`${BACKEND_URL}/api/auth/me`, {
+        meResp = await fetch(`${BACKEND_URL}/api/auth/me`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -1028,7 +1029,7 @@ export const User = {
       } else {
         throw new Error('Cookie auth disabled');
       }
-      if (false && meResp && meResp.ok) {
+      if (meResp && meResp.ok) {
         const meJson = await meResp.json();
         const payload = meJson?.data?.user || {};
         const email = (payload.email || '').toLowerCase();
