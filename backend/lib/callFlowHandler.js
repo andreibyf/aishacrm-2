@@ -753,7 +753,23 @@ async function analyzeTranscript(transcript, tenant_id = null) {
  * Analyze transcript via Braid MCP Server (AI-powered)
  */
 async function analyzeTranscriptViaBraid(transcript, tenant_id) {
-  const braidUrl = process.env.BRAID_MCP_URL || 'http://braid-mcp-server:8000';
+  // Support multiple MCP nodes for horizontal scaling: BRAID_MCP_NODE_HOSTS=host1:8000,host2:8000
+  // Fallback to single BRAID_MCP_URL or legacy service name.
+  const nodeHosts = (process.env.BRAID_MCP_NODE_HOSTS || '')
+    .split(',')
+    .map(h => h.trim())
+    .filter(Boolean);
+  const primaryUrl = process.env.BRAID_MCP_URL || 'http://braid-mcp-server:8000';
+  const candidateUrls = [];
+  // Normalize hosts into full URLs if needed
+  for (const host of nodeHosts) {
+    if (/^https?:\/\//i.test(host)) candidateUrls.push(host);
+    else candidateUrls.push(`http://${host}`);
+  }
+  if (!candidateUrls.includes(primaryUrl)) candidateUrls.unshift(primaryUrl);
+
+  let braidUrl = primaryUrl;
+  let lastError = null;
   
   const prompt = `Analyze this call transcript and extract structured information.
 
@@ -804,17 +820,31 @@ Focus on:
     }]
   };
 
-  const response = await fetch(`${braidUrl}/mcp/run`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(envelope)
-  });
-
-  if (!response.ok) {
-    throw new Error(`Braid MCP request failed: ${response.status}`);
+  // Try each MCP node until one succeeds
+  let result = null; let response = null;
+  for (const url of candidateUrls) {
+    try {
+      braidUrl = url; // current attempt
+      response = await fetch(`${braidUrl}/mcp/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(envelope)
+      });
+      if (!response.ok) {
+        lastError = new Error(`MCP node ${braidUrl} failed: ${response.status}`);
+        continue; // try next
+      }
+      result = await response.json();
+      break; // success
+    } catch (err) {
+      lastError = err;
+      continue;
+    }
   }
 
-  const result = await response.json();
+  if (!result) {
+    throw lastError || new Error('No MCP nodes responded');
+  }
   
   if (result.status !== 'success' || !result.results?.[0]) {
     throw new Error('Braid MCP returned no results');

@@ -8,6 +8,22 @@ import express from 'express';
 export default function createIntegrationRoutes(_pgPool) {
   const router = express.Router();
 
+  // Index route for service discovery and health
+  router.get('/', async (req, res) => {
+    try {
+      return res.json({
+        status: 'success',
+        service: 'integrations',
+        endpoints: [
+          'GET /api/integrations/n8n/workflows',
+          'GET /api/integrations/n8n/status'
+        ],
+      });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // ---- n8n helpers ----
   function requireSuperadmin(req, res, next) {
     // Dev-friendly fallback like validateTenantAccess: create mock superadmin when unauthenticated in dev

@@ -25,11 +25,12 @@ export const AI_CONFIG = {
    * Polling settings for message updates
    */
   polling: {
-    // Interval between polls in milliseconds
-    intervalMs: 1000,
-    
-    // Maximum number of poll attempts after sending a message
-    maxAttempts: 20,
+    // Interval between polls in milliseconds (increased to reduce load)
+    intervalMs: 3000,
+    // Maximum number of poll attempts after sending a message (slightly fewer attempts)
+    maxAttempts: 12,
+    // Pause polling when tab/window not focused to avoid wasted cycles
+    pauseWhenUnfocused: true,
   },
 
   /**

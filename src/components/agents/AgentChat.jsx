@@ -311,33 +311,30 @@ export default function AgentChat({
       const result = await agentSDK.addMessage(conversation, { 
         role: "user", 
         content: messageWithContext
-      });
+      }, currentUser);
       
       console.log('[AgentChat] Message sent successfully:', result);
       setInput("");
       
-      // Poll for updates (AI response may take a few seconds)
-      console.log('[AgentChat] Starting polling for AI response...');
-      let pollAttempts = 0;
-      const pollInterval = setInterval(async () => {
+      // Ensure SSE subscription is active (fallback to re-subscribe if missing)
+      if (!unsubRef.current && conversation?.id) {
         try {
-          pollAttempts++;
-          const updatedConvo = await agentSDK.getConversation(conversation.id);
-          const updatedMessages = (updatedConvo?.messages || []).filter(m => m.role !== 'system');
-          
-          console.log(`[AgentChat] Poll #${pollAttempts}: ${updatedMessages.length} messages`);
-          setMessages(updatedMessages);
-          
-          // Stop polling after max attempts
-          if (pollAttempts >= AI_CONFIG.polling.maxAttempts) {
-            console.log('[AgentChat] Stopping polling after max attempts');
-            clearInterval(pollInterval);
+          console.log('[AgentChat] SSE subscription missing after send; re-subscribing');
+          unsubRef.current = agentSDK.subscribeToConversation(conversation.id, (data) => {
+            const filteredMessages = (data.messages || []).filter(m => m.role !== 'system');
+            setMessages(filteredMessages);
+          });
+        } catch (subErr) {
+          console.warn('[AgentChat] SSE re-subscribe failed; manual refresh fallback:', subErr);
+          try {
+            const updatedConvo = await agentSDK.getConversation(conversation.id);
+            const updatedMessages = (updatedConvo?.messages || []).filter(m => m.role !== 'system');
+            setMessages(updatedMessages);
+          } catch (fallbackErr) {
+            console.error('[AgentChat] Fallback refresh failed:', fallbackErr);
           }
-        } catch (refreshError) {
-          console.error('[AgentChat] Polling error:', refreshError);
-          clearInterval(pollInterval);
         }
-      }, AI_CONFIG.polling.intervalMs);
+      }
     } catch (e) {
       console.error("[AgentChat] Send failed:", e);
       alert(`Failed to send message: ${e.message}`);

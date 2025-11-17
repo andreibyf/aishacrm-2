@@ -18,6 +18,7 @@ fn createActivity(
     tenant_id: tenant,
     subject: subject,
     activity_type: activity_type,
+    type: activity_type, // Added for backend normalization compatibility
     due_date: due_date,
     assigned_to: assigned_to,
     related_to_type: related_to_type,
@@ -104,6 +105,7 @@ fn scheduleMeeting(
     tenant_id: tenant,
     subject: subject,
     activity_type: "meeting",
+    type: "meeting", // Added for backend normalization compatibility
     due_date: date_time,
     assigned_to: assigned_to,
     body: "Attendees: meeting",

@@ -313,6 +313,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     throw new Error(`Network error: ${error.message}`);
   }
 
+  // Distinguish genuine network/HTTP errors from empty-success responses
   if (!response.ok) {
     const errorText = await response.text();
     const errorContext = {
@@ -360,7 +361,15 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
 
   let result;
   try {
-    result = await response.json();
+    // Handle empty 200 responses gracefully (treat as empty array for list ops)
+    const text = await response.text();
+    if (!text) {
+      if (method === 'GET' && !id) {
+        return []; // Empty list success
+      }
+      return null; // Single-entity empty success
+    }
+    result = JSON.parse(text);
   } catch (e) {
     if (isOpportunity) {
       console.warn('[API Debug] Failed to parse JSON response', { url, error: e.message });

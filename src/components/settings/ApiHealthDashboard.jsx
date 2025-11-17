@@ -14,6 +14,8 @@ export default function ApiHealthDashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTestingEndpoints, setIsTestingEndpoints] = useState(false);
   const [testResults, setTestResults] = useState(null);
+  const [isFullScan, setIsFullScan] = useState(false);
+  const [fullScanResults, setFullScanResults] = useState(null);
 
   const refreshReport = () => {
     setIsRefreshing(true);
@@ -458,6 +460,43 @@ export default function ApiHealthDashboard() {
                 </>
               )}
             </Button>
+            <Button
+              onClick={async () => {
+                setIsFullScan(true);
+                setFullScanResults(null);
+                try {
+                  // Force internal base_url usage for accurate container-network scanning
+                  const scanUrl = `${BACKEND_URL}/api/testing/full-scan?tenant_id=test-tenant-001&base_url=internal`;
+                  const resp = await fetch(scanUrl);
+                  const json = await resp.json().catch(() => ({}));
+                  if (resp.ok && json?.data) {
+                    setFullScanResults(json.data);
+                    toast.success('Full endpoint scan complete', { description: `${json.data.summary.passed}/${json.data.summary.total} responsive` });
+                  } else {
+                    toast.error('Full scan failed', { description: json.message || `Status ${resp.status}` });
+                  }
+                } catch (err) {
+                  toast.error('Full scan network error', { description: err.message });
+                } finally {
+                  setIsFullScan(false);
+                }
+              }}
+              disabled={isFullScan}
+              variant="outline"
+              className="border-purple-600 text-purple-400 hover:bg-purple-600 hover:text-white"
+            >
+              {isFullScan ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Scanning...
+                </>
+              ) : (
+                <>
+                  <PlayCircle className="h-4 w-4 mr-2" />
+                  Full Scan
+                </>
+              )}
+            </Button>
           </div>
         </CardHeader>
         
@@ -521,6 +560,50 @@ export default function ApiHealthDashboard() {
                   </div>
                 ))}
               </div>
+            </div>
+          </CardContent>
+        )}
+        {fullScanResults && (
+          <CardContent>
+            <div className="mt-6 space-y-4">
+              <h4 className="text-sm font-semibold text-slate-300">Full Endpoint Scan</h4>
+              <div className="grid grid-cols-3 md:grid-cols-5 gap-4 mb-3">
+                <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                  <div className="text-xs text-slate-400 mb-1">Total</div>
+                  <div className="text-2xl font-bold text-slate-100">{fullScanResults.summary.total}</div>
+                </div>
+                <div className="bg-green-900/20 p-3 rounded-lg border border-green-700/50">
+                  <div className="text-xs text-green-400 mb-1">Passed</div>
+                  <div className="text-2xl font-bold text-green-300">{fullScanResults.summary.passed}</div>
+                </div>
+                <div className="bg-yellow-900/20 p-3 rounded-lg border border-yellow-700/50">
+                  <div className="text-xs text-yellow-400 mb-1">Warnings</div>
+                  <div className="text-2xl font-bold text-yellow-300">{fullScanResults.summary.warn}</div>
+                </div>
+                <div className="bg-red-900/20 p-3 rounded-lg border border-red-700/50">
+                  <div className="text-xs text-red-400 mb-1">Failed</div>
+                  <div className="text-2xl font-bold text-red-300">{fullScanResults.summary.failed}</div>
+                </div>
+                <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                  <div className="text-xs text-slate-400 mb-1">Avg Latency (ms)</div>
+                  <div className="text-2xl font-bold text-slate-100">{fullScanResults.summary.avg_latency_ms}</div>
+                </div>
+              </div>
+              <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
+                {fullScanResults.results.map((r, i) => (
+                  <div key={i} className={`text-xs flex items-center justify-between px-2 py-1 rounded border ${r.classification === 'PASS' ? 'bg-green-900/15 border-green-700/40 text-green-300' : r.classification === 'WARN' ? 'bg-yellow-900/15 border-yellow-700/40 text-yellow-300' : 'bg-red-900/15 border-red-700/40 text-red-300'}`}>
+                    <div className="flex items-center gap-2">
+                      <code className="px-1 py-0.5 bg-slate-700 rounded text-slate-200">{r.method}</code>
+                      <span className="font-mono">{r.path}</span>
+                    </div>
+                    <span className="font-semibold flex items-center gap-2">
+                      <span>{r.status}</span>
+                      <span className="text-[10px] opacity-70">{r.latency_ms}ms</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="text-[10px] text-slate-500">Scan performed at {new Date(fullScanResults.timestamp).toLocaleTimeString()} | Max latency {fullScanResults.summary.max_latency_ms}ms | Expected statuses: {fullScanResults.summary.expected_statuses.join(', ')}</div>
             </div>
           </CardContent>
         )}

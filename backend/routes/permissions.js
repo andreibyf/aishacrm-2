@@ -8,6 +8,22 @@ import express from 'express';
 export default function createPermissionRoutes(_pgPool) {
   const router = express.Router();
 
+  // Index route for service discovery and health
+  router.get('/', async (req, res) => {
+    try {
+      return res.json({
+        status: 'success',
+        service: 'permissions',
+        endpoints: [
+          'GET /api/permissions/roles',
+          'POST /api/permissions/grant'
+        ],
+      });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   /**
    * @openapi
    * /api/permissions/roles:

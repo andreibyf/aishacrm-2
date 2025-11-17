@@ -71,10 +71,23 @@ export default function createActivityRoutes(_pgPool) {
         try { meta = JSON.parse(row.metadata); } catch { meta = {}; }
       }
     }
-    // Map body -> description for the UI and spread metadata back to top-level (non-destructive)
+    // Promote commonly used fields with fallback to metadata (legacy inserts may have only metadata values)
+    const description = row.body ?? meta.description ?? null;
+    const status = row.status ?? meta.status ?? null;
+    const due_date = row.due_date ?? meta.due_date ?? null;
+    const due_time = row.due_time ?? meta.due_time ?? null;
+    const assigned_to = row.assigned_to ?? meta.assigned_to ?? null;
+    const priority = row.priority ?? meta.priority ?? null;
+    const location = row.location ?? meta.location ?? null;
     return {
       ...row,
-      description: row.body ?? meta.description ?? null,
+      description,
+      status,
+      due_date,
+      due_time,
+      assigned_to,
+      priority,
+      location,
       ...meta,
     };
   }
@@ -341,18 +354,62 @@ export default function createActivityRoutes(_pgPool) {
           message: 'tenant_id is required'
         });
       }
-
       const bodyText = activity.description ?? activity.body ?? null;
+
+      // Extract first-class fields we want to promote out of metadata
       const {
         tenant_id,
         type,
         subject,
         related_id,
+        status,
+        due_date,
+        due_time,
+        assigned_to,
+        priority,
+        location,
+        created_by,
+        related_to,
+        // leave remaining fields inside rest for metadata capture
         ...rest
       } = activity || {};
 
-      const normalizedType = activity?.activity_type ?? type;
-      const meta = { ...rest, description: bodyText };
+      const allowedTypes = ['task','email','call','meeting','demo','proposal','note','scheduled_ai_call','scheduled_ai_email'];
+      let normalizedType = activity?.activity_type ?? type ?? 'task';
+      if (!allowedTypes.includes(normalizedType)) {
+        normalizedType = 'note';
+      }
+
+      // Normalize status (convert legacy planned -> scheduled)
+      let normalizedStatus = status ?? rest.status ?? null;
+      if (normalizedStatus === 'planned') normalizedStatus = 'scheduled';
+      // Provide default status if missing
+      if (!normalizedStatus) {
+        normalizedStatus = due_date || due_time ? 'scheduled' : 'in-progress';
+      }
+
+      // Parse due_date when an ISO timestamp is passed; extract date/time parts
+      let datePart = due_date || null;
+      let timePart = due_time || null;
+      if (datePart && /T/.test(datePart)) {
+        const d = new Date(datePart);
+        if (!isNaN(d.getTime())) {
+          // Format date as YYYY-MM-DD for DATE column
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth()+1).padStart(2,'0');
+          const dd = String(d.getDate()).padStart(2,'0');
+          datePart = `${yyyy}-${mm}-${dd}`;
+          if (!timePart) {
+            const hh = String(d.getHours()).padStart(2,'0');
+            const min = String(d.getMinutes()).padStart(2,'0');
+            timePart = `${hh}:${min}`;
+          }
+        }
+      }
+
+      // Build metadata excluding promoted fields
+      const promotedKeys = new Set(['tenant_id','type','activity_type','subject','related_id','status','due_date','due_time','assigned_to','priority','location','created_by','related_to','description','body']);
+      const meta = { ...Object.fromEntries(Object.entries(rest).filter(([k]) => !promotedKeys.has(k))), description: bodyText };
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
@@ -360,10 +417,19 @@ export default function createActivityRoutes(_pgPool) {
         .from('activities')
         .insert([{
           tenant_id,
-          type: normalizedType || 'task',
+          type: normalizedType,
           subject: subject || null,
           body: bodyText,
           related_id: related_id || null,
+          status: normalizedStatus,
+          due_date: datePart || null,
+          due_time: timePart || null,
+          assigned_to: assigned_to || null,
+          // Provide default priority when omitted
+          priority: (priority ?? 'normal'),
+          location: location || null,
+          created_by: created_by || null,
+          related_to: related_to || null,
           metadata: meta,
         }])
         .select('*')

@@ -343,6 +343,18 @@ export default function createMCPRoutes(_pgPool) {
               message: "type is required",
             });
           }
+          
+          // Extract user email from authorization header
+          const userEmail = req.user?.email || req.headers['x-user-email'] || null;
+          
+          // Build metadata with assigned_to defaulting to current user
+          const activityMetadata = {
+            ...metadata,
+            assigned_to: metadata?.assigned_to || userEmail,
+            status: metadata?.status || 'scheduled',
+            description: body || null
+          };
+          
           const { data, error } = await supa
             .from('activities')
             .insert({
@@ -351,7 +363,7 @@ export default function createMCPRoutes(_pgPool) {
               subject: subject || null,
               body: body || null,
               related_id: related_id || null,
-              metadata: metadata || {},
+              metadata: activityMetadata,
               created_at: new Date().toISOString()
             })
             .select()

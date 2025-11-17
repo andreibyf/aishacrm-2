@@ -31,6 +31,7 @@ export default function SystemHealthDashboard({ onViewMore }) {
   const [lastCheck, setLastCheck] = useState(null);
   const [metrics, setMetrics] = useState({ errorRate: 0, errorCount: 0, serverErrorCount: 0, logs: [] });
   const [rangeHours, setRangeHours] = useState(1); // time range for dashboard metrics
+  const [containerStatus, setContainerStatus] = useState({ services: [], timestamp: null });
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
 
   const isBenignSqlValidation = (msg = "") => {
@@ -61,6 +62,20 @@ export default function SystemHealthDashboard({ onViewMore }) {
     }
   };
 
+  const loadContainerStatus = async () => {
+    try {
+      const resp = await fetch(`${BACKEND_URL}/api/system/containers-status`);
+      if (resp.ok) {
+        const result = await resp.json();
+        if (result.status === 'success' && result.data) {
+          setContainerStatus({ services: result.data.services || [], timestamp: result.data.timestamp });
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load container status:", e.message);
+    }
+  };
+
   const loadMetrics = useCallback(async () => {
     try {
       const tenantParam = selectedTenantId ? `&tenant_id=${encodeURIComponent(selectedTenantId)}` : "";
@@ -83,7 +98,11 @@ export default function SystemHealthDashboard({ onViewMore }) {
   useEffect(() => {
     checkHealth();
     loadMetrics();
-    const interval = setInterval(checkHealth, 60000); // Check every minute
+    loadContainerStatus();
+    const interval = setInterval(() => {
+      checkHealth();
+      loadContainerStatus();
+    }, 60000); // Check every minute
     return () => clearInterval(interval);
   }, [selectedTenantId, loadMetrics]);
 
@@ -298,6 +317,62 @@ export default function SystemHealthDashboard({ onViewMore }) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Container Status Grid */}
+      <Card className="bg-slate-800 border-slate-700">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+            <Database className="w-5 h-5" />
+            Container Status
+          </CardTitle>
+          {containerStatus.timestamp && (
+            <p className="text-xs text-slate-400 mt-1">
+              Last updated: {new Date(containerStatus.timestamp).toLocaleTimeString()}
+            </p>
+          )}
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {containerStatus.services.map((svc, idx) => (
+              <div
+                key={idx}
+                className={`p-4 rounded-lg border ${
+                  svc.reachable
+                    ? 'bg-green-900/20 border-green-700/50'
+                    : 'bg-red-900/20 border-red-700/50'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-slate-200">{svc.name}</span>
+                  {svc.reachable ? (
+                    <CheckCircle2 className="w-5 h-5 text-green-400" />
+                  ) : (
+                    <XCircle className="w-5 h-5 text-red-400" />
+                  )}
+                </div>
+                <div className="text-xs text-slate-400 space-y-1">
+                  <div>Status: {svc.reachable ? 'Running' : 'Not reachable'}</div>
+                  {svc.status_code !== null && svc.status_code !== undefined && (
+                    <div>Code: {svc.status_code}</div>
+                  )}
+                  {svc.latency_ms !== undefined && (
+                    <div>Latency: {svc.latency_ms}ms</div>
+                  )}
+                  {svc.note && (
+                    <div className="text-yellow-400">Note: {svc.note}</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          {containerStatus.services.length === 0 && (
+            <div className="text-center text-slate-400 py-8">
+              <Activity className="w-12 h-12 mx-auto mb-2 opacity-50" />
+              <p>No container status data available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Critical Errors */}
       {filteredCriticalCount > 0 && (

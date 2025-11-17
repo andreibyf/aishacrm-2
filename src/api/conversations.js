@@ -170,20 +170,31 @@ export async function deleteConversation(conversationId) {
  * @param {string} message.role - Message role ('user', 'assistant', 'system')
  * @param {string} message.content - Message content
  * @param {Array} message.file_urls - Optional file URLs
+ * @param {Object} [user] - Current user object (for passing context to backend)
  * @returns {Promise<Object>} Created message
  */
-export async function addMessage(conversation, { role, content, file_urls = [] }) {
+export async function addMessage(conversation, { role, content, file_urls = [] }, user = null) {
   const metadata = {};
   if (file_urls.length > 0) {
     metadata.file_urls = file_urls;
   }
   const tenantId = resolveTenantId();
+  
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-tenant-id': tenantId,
+  };
+  
+  // Pass user name to backend for AI context
+  if (user) {
+    if (user.first_name) headers['x-user-first-name'] = user.first_name;
+    if (user.last_name) headers['x-user-last-name'] = user.last_name;
+    if (user.email) headers['x-user-email'] = user.email;
+  }
+  
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations/${conversation.id}/messages`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-tenant-id': tenantId,
-    },
+    headers,
     credentials: 'include',
     body: JSON.stringify({ role, content, metadata }),
   });

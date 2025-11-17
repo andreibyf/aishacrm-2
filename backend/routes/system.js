@@ -49,6 +49,11 @@ export default function createSystemRoutes(_pgPool) {
     }
   });
 
+  // GET /api/system/health - Simple health check (lightweight, always fast)
+  router.get('/health', (req, res) => {
+    res.json({ status: 'success', data: { service: 'backend', healthy: true, timestamp: new Date().toISOString() } });
+  });
+
   // GET /api/system/runtime - Runtime diagnostics (non-secret)
   router.get('/runtime', async (req, res) => {
     try {
@@ -121,6 +126,72 @@ export default function createSystemRoutes(_pgPool) {
         message: error.message,
       });
     }
+  });
+
+  // GET /api/system/containers-status - Report reachability of core docker services
+  // NOTE: This does not inspect Docker directly; it performs HTTP probes to service DNS names.
+  // For non-HTTP services (redis), returns type unsupported.
+  router.get('/containers-status', async (req, res) => {
+    const services = [
+      { name: 'backend', url: 'http://backend:3001/api/system/health' },
+      { name: 'frontend', url: 'http://frontend:4000/' },
+      { name: 'mcp-dev', url: 'http://braid-mcp:8000/health' },
+      { name: 'mcp-legacy', url: 'http://braid-mcp-server:8000/health' },
+      { name: 'n8n', url: 'http://n8n:5678/' },
+      { name: 'n8n-proxy', url: 'http://n8n-proxy:80/' },
+      { name: 'redis', url: null, type: 'tcp' }
+    ];
+
+    const results = [];
+    const memoryClient = req.app?.locals?.memoryClient; // Established during server bootstrap
+    for (const svc of services) {
+      if (!svc.url) {
+        // Implement a lightweight Redis probe using existing memory client if available
+        if (svc.name === 'redis' && svc.type === 'tcp') {
+          const start = performance.now ? performance.now() : Date.now();
+          let reachable = false; let note = 'no_client';
+          try {
+            if (memoryClient) {
+              // Try a PING if library supports it; otherwise rely on ready state
+              if (typeof memoryClient.ping === 'function') {
+                const pong = await Promise.race([
+                  memoryClient.ping(),
+                  new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 750))
+                ]);
+                if (pong) {
+                  reachable = true;
+                  note = 'pong';
+                }
+              } else if (memoryClient.isReady || memoryClient.status === 'ready') {
+                reachable = true;
+                note = 'ready_state';
+              }
+            }
+          } catch (err) {
+            note = `error:${err.message}`.substring(0,120);
+          }
+          const latencyMs = Math.round((performance.now ? performance.now() : Date.now()) - start);
+          results.push({ name: svc.name, type: 'tcp', reachable, status_code: reachable ? 200 : 0, latency_ms: latencyMs, note });
+          continue;
+        }
+        results.push({ name: svc.name, type: svc.type || 'http', reachable: false, status_code: null, note: 'probe_not_implemented' });
+        continue;
+      }
+      const start = performance.now ? performance.now() : Date.now();
+      let statusCode = 0; let reachable = false;
+      try {
+        const resp = await fetch(svc.url, { method: 'GET' });
+        statusCode = resp.status;
+        reachable = resp.ok || (statusCode >= 200 && statusCode < 500);
+      } catch (err) {
+        statusCode = 0;
+        reachable = false;
+      }
+      const latencyMs = Math.round((performance.now ? performance.now() : Date.now()) - start);
+      results.push({ name: svc.name, url: svc.url, reachable, status_code: statusCode, latency_ms: latencyMs });
+    }
+
+    res.json({ status: 'success', data: { services: results, timestamp: new Date().toISOString() } });
   });
 
   // GET /api/system/logs - Get system logs

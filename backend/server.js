@@ -405,7 +405,7 @@ import createCashflowRoutes from "./routes/cashflow.js";
 import createCronRoutes from "./routes/cron.js";
 import createMetricsRoutes from "./routes/metrics.js";
 import createUtilsRoutes from "./routes/utils.js";
-import createBizdevRoutes from "./routes/bizdev.js";
+import createBizDevRoutes from "./routes/bizdev.js";
 import createClientRoutes from "./routes/clients.js";
 import createWorkflowRoutes from "./routes/workflows.js";
 import createWorkflowExecutionRoutes from "./routes/workflowexecutions.js";
@@ -457,7 +457,7 @@ app.use("/api/cron", createCronRoutes(measuredPgPool));
 // Metrics routes read from performance_logs; use resilient wrapper to avoid ended pool errors
 app.use("/api/metrics", createMetricsRoutes(resilientPerfDb));
 app.use("/api/utils", createUtilsRoutes(measuredPgPool));
-app.use("/api/bizdev", createBizdevRoutes(measuredPgPool));
+app.use("/api/bizdev", createBizDevRoutes(measuredPgPool));
 app.use("/api/bizdevsources", createBizDevSourceRoutes(measuredPgPool));
 app.use("/api/clients", createClientRoutes(measuredPgPool));
 app.use("/api/workflows", createWorkflowRoutes(measuredPgPool));
@@ -478,7 +478,8 @@ app.use("/api/notes", createNoteRoutes(measuredPgPool));
 app.use("/api/systembrandings", createSystemBrandingRoutes(measuredPgPool));
 app.use("/api/synchealths", createSyncHealthRoutes(measuredPgPool));
 app.use("/api/aicampaigns", createAICampaignRoutes(measuredPgPool));
-app.use("/api/security", createSecurityRoutes(measuredPgPool, pgPool));
+// Security routes require a Supabase client for reading system_logs; use admin client
+app.use("/api/security", createSecurityRoutes(measuredPgPool, getSupabaseAdmin()));
 // Memory routes use Redis/Valkey; DB pool not required
 app.use("/api/memory", createMemoryRoutes());
 

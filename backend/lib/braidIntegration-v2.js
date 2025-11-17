@@ -213,7 +213,9 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
       user_id: userId || null
     }
   };
-  const deps = createBackendDeps('http://localhost:3001', tenantRecord.tenant_id, userId);
+  // CRITICAL: Use tenantRecord.id (UUID) not tenant_id (slug) for API calls
+  const tenantUuid = tenantRecord?.id || tenantRecord?.tenant_id || null;
+  const deps = createBackendDeps('http://localhost:3001', tenantUuid, userId);
   
   // Convert args object to array for Braid function
   const argArray = Object.values(args);

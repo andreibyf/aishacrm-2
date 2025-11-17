@@ -224,9 +224,9 @@ export default function createAIRoutes(pgPool) {
     }
   };
 
-  const executeToolCall = async ({ toolName, args, tenantRecord }) => {
+  const executeToolCall = async ({ toolName, args, tenantRecord, userEmail = null }) => {
     // Route execution through Braid SDK tool registry
-    return await executeBraidTool(toolName, args || {}, tenantRecord, null);
+    return await executeBraidTool(toolName, args || {}, tenantRecord, userEmail);
   };
 
   const generateAssistantResponse = async ({
@@ -235,6 +235,8 @@ export default function createAIRoutes(pgPool) {
     tenantIdentifier,
     conversation,
     requestDescriptor = {},
+    userEmail = null,
+    userName = null,
   }) => {
     try {
       const tenantSlug = tenantRecord?.tenant_id || tenantIdentifier || null;
@@ -293,15 +295,17 @@ export default function createAIRoutes(pgPool) {
         .order('created_date', { ascending: true });
 
       const tenantName = conversationMetadata?.tenant_name || tenantRecord?.name || tenantSlug || 'CRM Tenant';
+      const userContext = userName ? `\n\n**CURRENT USER:**\n- Name: ${userName}\n- Email: ${userEmail}\n- When creating activities or assigning tasks, use this user's name ("${userName}") unless explicitly asked to assign to someone else.` : '';
       const systemPrompt = `${buildSystemPrompt({ tenantName })}
 
-${BRAID_SYSTEM_PROMPT}
+${BRAID_SYSTEM_PROMPT}${userContext}
 
 **CRITICAL INSTRUCTIONS:**
 - You MUST call fetch_tenant_snapshot tool before answering ANY questions about CRM data
 - NEVER assume or guess data - always use tools to fetch current information
 - When asked about revenue, accounts, leads, or any CRM metrics, fetch the data first
-- Only reference data returned by the tools to guarantee tenant isolation`;
+- Only reference data returned by the tools to guarantee tenant isolation
+- When creating activities without a specified assignee, assign them to the current user (${userName || 'yourself'})`;
 
       const messages = [
         { role: 'system', content: systemPrompt },
@@ -387,6 +391,7 @@ ${BRAID_SYSTEM_PROMPT}
                 toolName,
                 args: parsedArgs,
                 tenantRecord,
+                userEmail,
               });
             } catch (toolError) {
               toolResult = { error: toolError.message || String(toolError) };
@@ -1216,12 +1221,19 @@ ${BRAID_SYSTEM_PROMPT}
         };
 
         setImmediate(() => {
+          const userFirstName = req.headers['x-user-first-name'] || req.user?.first_name || '';
+          const userLastName = req.headers['x-user-last-name'] || req.user?.last_name || '';
+          const userName = [userFirstName, userLastName].filter(Boolean).join(' ').trim() || null;
+          const userEmail = req.headers['x-user-email'] || req.user?.email || null;
+          
           generateAssistantResponse({
             conversationId: id,
             tenantRecord,
             tenantIdentifier,
             conversation: { ...conversation, metadata: conversationMetadata },
             requestDescriptor,
+            userEmail,
+            userName,
           }).catch((err) => {
             console.error('[AI Routes] Async agent follow-up error:', err);
           });

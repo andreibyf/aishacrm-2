@@ -329,5 +329,164 @@ export default function createTestingRoutes(_pgPool) {
     }
   });
 
+  // GET /api/testing/full-scan - Run comprehensive endpoint availability scan
+  // Query params:
+  //   tenant_id=<uuid or test placeholder>
+  //   base_url=internal|http://override   (internal maps to docker service hostname backend:3001)
+  //   expected_statuses=200,201,204        (comma-separated list; default OK statuses)
+  // Returns: { status: 'success', data: { summary: { total, passed, failed, warn, avg_latency_ms, max_latency_ms }, results: [...] } }
+  router.get('/full-scan', async (req, res) => {
+    try {
+      const tenantId = req.query.tenant_id || 'test-tenant-001';
+      const explicitBase = req.query.base_url;
+      let baseUrl = explicitBase || process.env.INTERNAL_BASE_URL || 'http://localhost:4001';
+      if (baseUrl === 'internal') baseUrl = 'http://backend:3001';
+      if (/localhost:4001$/i.test(baseUrl)) baseUrl = 'http://backend:3001';
+      if (!/^https?:\/\//i.test(baseUrl)) baseUrl = `http://${baseUrl}`;
+
+      // Expected OK statuses (classification PASS); allow query override
+      // Default: treat all 2xx as success
+      const expectedStatusesParam = req.query.expected_statuses;
+      let expectedStatuses = [];
+      if (expectedStatusesParam) {
+        expectedStatuses = String(expectedStatusesParam)
+          .split(',')
+          .map(s => parseInt(s.trim(), 10))
+          .filter(n => !isNaN(n));
+      } else {
+        // Default: all 2xx codes are PASS
+        for (let i = 200; i < 300; i++) expectedStatuses.push(i);
+      }
+
+      // Optional health probe to validate reachability
+      let probeOk = false;
+      try {
+        const probeResp = await fetch(`${baseUrl}/api/testing/ping`, { method: 'GET' });
+        probeOk = probeResp.ok;
+      } catch {
+        // Leave probeOk false; will record as network failures later
+      }
+
+      // Define endpoints (method + path); {TENANT_ID} placeholder replaced
+      const endpoints = [
+        { method: 'GET', path: '/' },
+        { method: 'GET', path: '/health' },
+        { method: 'GET', path: '/api/status' },
+        { method: 'GET', path: '/api/system/status' },
+        { method: 'GET', path: '/api/system/runtime' },
+        { method: 'GET', path: `/api/system/logs?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/reports/dashboard-stats?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/accounts?tenant_id={TENANT_ID}` },
+        { method: 'POST', path: '/api/accounts', body: { tenant_id: tenantId, name: 'Scan Account' } },
+        { method: 'GET', path: `/api/contacts?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/leads?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/opportunities?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/activities?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/notes?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/users?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/employees?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: '/api/tenants' },
+        { method: 'GET', path: `/api/aicampaigns?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/workflows?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/cashflow?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/bizdev?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/bizdevsources?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/permissions?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/modulesettings?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: '/api/systembrandings' },
+        { method: 'GET', path: `/api/integrations?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/tenantintegrations?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/system-logs?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/audit-logs?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/metrics/performance?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/synchealths?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: '/api/storage/bucket' },
+        { method: 'GET', path: `/api/documents?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/documentationfiles?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/notifications?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/announcements?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: '/api/testing/ping' },
+        { method: 'GET', path: '/api/utils/health' },
+        { method: 'GET', path: `/api/webhooks?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: '/api/cron/jobs' },
+        { method: 'GET', path: `/api/apikeys?tenant_id={TENANT_ID}` },
+      ];
+
+      const results = [];
+      let passed = 0; let failed = 0; let warn = 0;
+      let networkFailures = 0;
+      let totalLatency = 0; let maxLatency = 0;
+
+      for (const ep of endpoints) {
+        const fullPath = ep.path.replace('{TENANT_ID}', tenantId);
+        const url = `${baseUrl}${fullPath}`;
+        let statusCode = 0;
+        const start = performance.now ? performance.now() : Date.now();
+        try {
+          const fetchOpts = { method: ep.method, headers: { 'Content-Type': 'application/json' } };
+          if (ep.body) fetchOpts.body = JSON.stringify(ep.body);
+          const resp = await fetch(url, fetchOpts);
+          statusCode = resp.status;
+        } catch (err) {
+          statusCode = 0;
+        }
+        const end = performance.now ? performance.now() : Date.now();
+        const latencyMs = Math.round(end - start);
+        totalLatency += latencyMs; if (latencyMs > maxLatency) maxLatency = latencyMs;
+
+        let classification = 'FAIL';
+        if (statusCode === 0) {
+          classification = 'FAIL';
+          networkFailures++;
+          failed++;
+        } else if (expectedStatuses.includes(statusCode)) {
+          classification = 'PASS';
+          passed++;
+        } else if (statusCode >= 200 && statusCode < 600) {
+          // Responsive but unexpected status (e.g., 404, 400, 500)
+          classification = 'WARN';
+          warn++;
+        } else {
+          classification = 'FAIL';
+          failed++;
+        }
+
+        results.push({
+          method: ep.method,
+          path: fullPath,
+          status: statusCode,
+          classification,
+          latency_ms: latencyMs,
+          expected: expectedStatuses.includes(statusCode),
+          network_failure: statusCode === 0
+        });
+      }
+
+      res.json({
+        status: 'success',
+        data: {
+          summary: {
+            total: results.length,
+            passed,
+            warn,
+            failed,
+            network_failures: networkFailures,
+            probe_ok: probeOk,
+            avg_latency_ms: results.length ? Math.round(totalLatency / results.length) : 0,
+            max_latency_ms: maxLatency,
+            expected_statuses: expectedStatuses
+          },
+          tenant_id: tenantId,
+          base_url: baseUrl,
+          results,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      console.error('Full scan error:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   return router;
 }
