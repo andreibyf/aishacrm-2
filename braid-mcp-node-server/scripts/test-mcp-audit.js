@@ -67,7 +67,7 @@ async function detectTenantTable() {
   if (cachedTenantTable) return cachedTenantTable;
   for (const table of TENANT_TABLE_NAMES) {
     try {
-      const { data, error } = await supa.from(table).select('id').limit(1);
+      const { data: _data, error } = await supa.from(table).select('id').limit(1);
       if (!error) {
         cachedTenantTable = table;
         return table;

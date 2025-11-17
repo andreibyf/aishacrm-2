@@ -5,6 +5,7 @@
 
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
+import { logEntityTransition as _logEntityTransition } from '../lib/auditLogger.js';
 
 export default function createLeadRoutes(_pgPool) {
   const router = express.Router();

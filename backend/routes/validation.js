@@ -550,10 +550,10 @@ export default function createValidationRoutes(_pgPool) {
 
           // Build INSERT query dynamically
           const fields = Object.keys(record);
-          const values = Object.values(record);
-          const placeholders = fields.map((_, idx) => `$${idx + 1}`).join(', ');
+          const _values = Object.values(record);
+          const _placeholders = fields.map((_, idx) => `$${idx + 1}`).join(', ');
 
-          const { data: insertData, error: insertErr } = await supabase
+          const { data: _insertData, error: insertErr } = await supabase
             .from(table)
             .insert([record])
             .select('*')

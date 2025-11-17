@@ -87,7 +87,7 @@ export default function createIntegrationRoutes(_pgPool) {
       let raw;
       try {
         raw = await fetchFromN8n('/api/v1/workflows?limit=100');
-      } catch {
+      } catch (_e) {
         raw = await fetchFromN8n('/rest/workflows');
       }
       const workflows = normalizeWorkflows(raw);
@@ -165,7 +165,7 @@ export default function createIntegrationRoutes(_pgPool) {
       let raw;
       try {
         raw = await fetchFromN8n(`/api/v1/workflows/${encodeURIComponent(id)}`);
-      } catch {
+      } catch (_e) {
         raw = await fetchFromN8n(`/rest/workflows/${encodeURIComponent(id)}`);
       }
 

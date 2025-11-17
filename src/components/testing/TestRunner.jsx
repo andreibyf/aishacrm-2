@@ -45,7 +45,7 @@ export default function TestRunner({ testSuites }) {
       if (ls) return JSON.parse(ls);
       const ss = sessionStorage.getItem(TEST_CONFIG_KEY);
       if (ss) return JSON.parse(ss);
-    } catch (e) { /* ignore config restore error */ }
+    } catch { /* ignore config restore error */ }
     return { workers: 1, rate: 0, delayMs: 0 };
   });
   // Named profiles: save/load/delete (persisted to localStorage)
@@ -53,7 +53,7 @@ export default function TestRunner({ testSuites }) {
     try {
       const raw = typeof window !== 'undefined' ? window.localStorage?.getItem('unit_test_profiles') : null;
       if (raw) return JSON.parse(raw) || {};
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
     return {};
   });
   const [activeProfile, setActiveProfile] = useState('');
@@ -75,7 +75,7 @@ export default function TestRunner({ testSuites }) {
         const arr = JSON.parse(raw);
         if (Array.isArray(arr)) return new Set(arr);
       }
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
     return new Set(allSuiteNames);
   });
   useEffect(() => {
@@ -83,7 +83,7 @@ export default function TestRunner({ testSuites }) {
       if (typeof window !== 'undefined') {
         window.localStorage?.setItem('unit_test_selected_categories', JSON.stringify(Array.from(selectedCategories)));
       }
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
   }, [selectedCategories]);
   // Keep selection in sync if suites change
   useEffect(() => {
@@ -95,7 +95,7 @@ export default function TestRunner({ testSuites }) {
       for (const n of Array.from(next)) if (!allSuiteNames.includes(n)) next.delete(n);
       return next;
     });
-  }, [allSuiteNames.join('|')]);
+  }, [allSuiteNames]);
 
   const effectiveSuites = useMemo(() => testSuites.filter((s) => selectedCategories.has(s.name)), [testSuites, selectedCategories]);
 
@@ -116,14 +116,14 @@ export default function TestRunner({ testSuites }) {
       if (typeof window !== 'undefined') {
         window.localStorage?.setItem(TEST_CONFIG_KEY, JSON.stringify(config));
       }
-    } catch (e) { /* ignore config persist error */ }
+    } catch { /* ignore config persist error */ }
   }, [config]);
   useEffect(() => {
     try {
       if (typeof window !== 'undefined') {
         window.localStorage?.setItem('unit_test_profiles', JSON.stringify(profiles));
       }
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
   }, [profiles]);
 
   const loadProfile = useCallback((name) => {
@@ -135,7 +135,7 @@ export default function TestRunner({ testSuites }) {
         setSelectedCategories(new Set(p.categories));
       }
       setActiveProfile(name);
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
   }, [profiles]);
 
   const saveProfile = useCallback(() => {
@@ -325,7 +325,7 @@ export default function TestRunner({ testSuites }) {
     startAtRef.current = Date.now();
     const originalFetch = (typeof window !== 'undefined' && window.fetch) ? window.fetch : null;
     rateLimited429Ref.current = 0;
-    try {
+      try {
       if (typeof window !== 'undefined' && originalFetch) {
         window.fetch = async (...args) => {
           const res = await originalFetch(...args);
@@ -333,11 +333,11 @@ export default function TestRunner({ testSuites }) {
             if (res && res.status === 429) {
               rateLimited429Ref.current = (rateLimited429Ref.current || 0) + 1;
             }
-          } catch (_) { /* ignore */ }
+            } catch { /* ignore */ }
           return res;
         };
       }
-    } catch (_) { /* ignore */ }
+      } catch { /* ignore */ }
 
     const flushResults = () => {
       // Batch UI/state updates to reduce flicker
@@ -438,7 +438,7 @@ export default function TestRunner({ testSuites }) {
         if (typeof window !== 'undefined' && originalFetch && window.fetch !== originalFetch) {
           window.fetch = originalFetch;
         }
-      } catch (_) { /* ignore */ }
+      } catch { /* ignore */ }
       const elapsed = Math.max(1, Date.now() - (startAtRef.current || Date.now()));
       const avgRps = (allResults.length / (elapsed / 1000)).toFixed(1);
       console.log(`[TestRunner] Stats: completed=${allResults.length}, rps_avg=${avgRps}, rate_limited_429=${rateLimited429Ref.current || 0}`);

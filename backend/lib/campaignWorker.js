@@ -201,7 +201,7 @@ async function processCampaign(campaign) {
  * Execute a campaign based on its type
  */
 async function executeCampaign(campaign, client) {
-  const { id, tenant_id, metadata, target_contacts, campaign_type } = campaign;
+  const { id: _id, tenant_id: _tenant_id, metadata, target_contacts, campaign_type } = campaign;
   
   const type = metadata?.campaign_type || campaign_type || 'call';
   const contacts = Array.isArray(target_contacts) ? target_contacts : [];
