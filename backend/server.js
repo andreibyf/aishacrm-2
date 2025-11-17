@@ -411,6 +411,7 @@ import createTestingRoutes from "./routes/testing.js";
 import createDocumentRoutes from "./routes/documents.js";
 import createDocumentationFileRoutes from "./routes/documentationfiles.js";
 import createReportRoutes from "./routes/reports.js";
+import createDocumentationRoutes from "./routes/documentation.js";
 import createCashflowRoutes from "./routes/cashflow.js";
 import createCronRoutes from "./routes/cron.js";
 import createMetricsRoutes from "./routes/metrics.js";
@@ -462,6 +463,7 @@ app.use("/api/testing", createTestingRoutes(measuredPgPool));
 app.use("/api/documents", createDocumentRoutes(measuredPgPool));
 app.use("/api/documentationfiles", createDocumentationFileRoutes(measuredPgPool));
 app.use("/api/reports", createReportRoutes(measuredPgPool));
+app.use("/api/documentation", createDocumentationRoutes(measuredPgPool));
 app.use("/api/cashflow", createCashflowRoutes(measuredPgPool));
 app.use("/api/cron", createCronRoutes(measuredPgPool));
 // Metrics routes read from performance_logs; use resilient wrapper to avoid ended pool errors

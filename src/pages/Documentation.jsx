@@ -40,14 +40,16 @@ export default function DocumentationPage() {
   const isSuperadmin = currentUser?.role === 'superadmin';
   
   const handleDownloadPDF = async () => {
-    // Prefer PDFs copied to public/guides via build/dev script
-    // Fallback to repo raw file if not available locally
+    // Prefer backend-generated PDF from our markdown-based User Guide
+    const backendUrl = (import.meta.env.VITE_AISHACRM_BACKEND_URL || '').replace(/\/$/, '');
     const candidates = [
+      backendUrl ? `${backendUrl}/api/documentation/user-guide.pdf` : null,
+      // Local static fallbacks if present
       '/guides/Ai-SHA-CRM-User-Guide-2025-10-26.pdf',
       '/guides/AISHA_CRM_USER_GUIDE.pdf',
       // Raw GitHub fallback (repo: andreibyf/aishacrm-2)
       'https://raw.githubusercontent.com/andreibyf/aishacrm-2/main/docs/Ai-SHA-CRM-User-Guide-2025-10-26.pdf',
-    ];
+    ].filter(Boolean);
 
     let urlToDownload = null;
     for (const url of candidates) {
@@ -60,12 +62,9 @@ export default function DocumentationPage() {
       }
     }
 
-    if (!urlToDownload) {
-      // Last resort: try backend overview PDF to at least return a PDF
-      const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || '';
-      if (backendUrl) {
-        urlToDownload = `${backendUrl.replace(/\/$/, '')}/api/reports/export-pdf?report_type=overview`;
-      }
+    if (!urlToDownload && backendUrl) {
+      // Last resort: overview report as a PDF
+      urlToDownload = `${backendUrl}/api/reports/export-pdf?report_type=overview`;
     }
 
     if (!urlToDownload) {

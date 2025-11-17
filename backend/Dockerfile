@@ -24,6 +24,18 @@ FROM node:22-alpine AS runner
 # App lives in /app/backend for clarity
 WORKDIR /app/backend
 
+# Install system dependencies for headless Chromium used by Puppeteer
+RUN apk add --no-cache \
+  chromium \
+  nss \
+  freetype \
+  harfbuzz \
+  ca-certificates \
+  ttf-freefont
+
+# Hint Puppeteer to use system Chromium
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
 # Copy backend node_modules from builder
 COPY --from=builder /app/backend/node_modules ./node_modules
 

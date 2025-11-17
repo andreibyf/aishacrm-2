@@ -42,10 +42,13 @@ Thumbs.db
 docs
 *.md
 !README.md
+!docs/*.pdf
+!docs/user-guide.md
 
 # Scripts
 scripts
 *.ps1
+!scripts/copy-docs-to-public.js
 # Don't ignore frontend-entrypoint.sh (needed for Docker runtime)
 # *.sh
 
