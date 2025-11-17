@@ -50,6 +50,7 @@ import { User } from "@/api/entities";
 import { Tenant } from "@/api/entities";
 import { ModuleSettings } from "@/api/entities";
 import { Employee } from "@/api/entities";
+import { supabase } from "@/api/base44Client";
 import NotificationPanel from "../components/notifications/NotificationPanel";
 import { TenantProvider, useTenant } from "../components/shared/tenantContext";
 import { isValidId } from "../components/shared/tenantUtils";
@@ -1759,7 +1760,15 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         console.warn("Agent guard reset failed on logout:", e);
       }
 
-      await User.logout();
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        });
+      } catch (e) {
+        // ignore network errors, still navigate out
+      }
       window.location.href = "/";
     } catch (error) {
       console.error("User logout failed:", error);
@@ -2097,13 +2106,19 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               const password = e.target.password.value;
 
               try {
-                console.log("[Login] Attempting sign in with:", email);
-                await User.signIn(email, password);
-                console.log("[Login] Sign in successful, reloading...");
-                window.location.reload(); // Reload to update app state
+                console.log("[Login] Attempting Supabase auth login:", email);
+                const { error } = await supabase.auth.signInWithPassword({
+                  email,
+                  password,
+                });
+                if (error) {
+                  throw error;
+                }
+                console.log("[Login] Supabase auth successful, reloading...");
+                window.location.reload();
               } catch (error) {
-                console.error("[Login] Sign in failed:", error);
-                alert("Login failed: " + error.message);
+                console.error("[Login] Login failed:", error);
+                alert("Login failed: " + (error?.message || "Unknown error"));
               }
             }}
           >

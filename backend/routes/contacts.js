@@ -149,7 +149,7 @@ export default function createContactRoutes(_pgPool) {
   // GET /api/contacts - List contacts
   router.get('/', async (req, res) => {
     try {
-      let { tenant_id, status, account_id } = req.query;
+      let { tenant_id, status, account_id, filter } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
@@ -160,6 +160,34 @@ export default function createContactRoutes(_pgPool) {
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       let q = supabase.from('contacts').select('*', { count: 'exact' }).eq('tenant_id', tenant_id);
+      
+      // Handle $or filter for dynamic search (frontend passes filter as JSON string)
+      if (filter) {
+        let parsedFilter = filter;
+        if (typeof filter === 'string' && filter.startsWith('{')) {
+          try {
+            parsedFilter = JSON.parse(filter);
+          } catch {
+            // treat as literal
+          }
+        }
+        
+        if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
+          // Build OR condition: match any of the $or criteria
+          const orConditions = parsedFilter.$or.map(condition => {
+            const [field, opObj] = Object.entries(condition)[0];
+            if (opObj && opObj.$icontains) {
+              return `${field}.ilike.%${opObj.$icontains}%`;
+            }
+            return null;
+          }).filter(Boolean);
+          
+          if (orConditions.length > 0) {
+            q = q.or(orConditions.join(','));
+          }
+        }
+      }
+      
       if (status) q = q.eq('status', status);
       if (account_id) q = q.eq('account_id', account_id);
       q = q.order('created_at', { ascending: false }).range(offset, offset + limit - 1);

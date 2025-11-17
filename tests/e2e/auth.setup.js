@@ -40,16 +40,30 @@ setup('authenticate as superadmin', async ({ page, request }) => {
   setup.setTimeout(180_000);
   page.setDefaultNavigationTimeout(120_000);
   
-  // Set up E2E mode via addInitScript BEFORE any navigation
+  // Capture console messages for debugging
+  page.on('console', (msg) => {
+    const prefix = `[Browser Console ${msg.type().toUpperCase()}]`;
+    if (msg.type() === 'error' || msg.type() === 'warn' || msg.text().includes('[Login]')) {
+      console.log(prefix, msg.text());
+    }
+  });
+  
+  // Capture network responses for auth endpoints
+  page.on('response', (response) => {
+    const url = response.url();
+    if (url.includes('/auth') || url.includes('/api')) {
+      console.log(`[Network] ${response.status()} ${url}`);
+      if (!response.ok() && url.includes('/auth')) {
+        response.text().then(body => console.log('[Auth Error Response]', body)).catch(() => {});
+      }
+    }
+  });
+  
+  // Remove E2E mock mode - use real cookie auth instead
   await page.addInitScript(() => {
-    localStorage.setItem('E2E_TEST_MODE', 'true');
-    window.__e2eUser = {
-      id: 'e2e-test-user-id',
-      email: 'e2e@example.com',
-      role: 'superadmin',
-      tenant_id: 'local-tenant-001'
-    };
-    console.log('[Auth Setup] E2E mode enabled, mock user injected');
+    localStorage.setItem('tenant_id', 'local-tenant-001');
+    localStorage.setItem('selected_tenant_id', 'local-tenant-001');
+    console.log('[Auth Setup] Tenant context initialized for real auth');
   });
   
   // If running against a remote backend, block until DB is healthy to avoid transient 401/500 noise
@@ -95,17 +109,43 @@ setup('authenticate as superadmin', async ({ page, request }) => {
 
     if (didFindLogin) {
       if (SUPERADMIN_EMAIL && SUPERADMIN_PASSWORD) {
-        console.log('Login form detected, performing login...');
+        console.log('Login form detected, performing Supabase auth login...');
+        
+        // Fill credentials
         await emailInput.fill(SUPERADMIN_EMAIL);
+        console.log('Email field filled:', SUPERADMIN_EMAIL);
+        
         await passwordInput.fill(SUPERADMIN_PASSWORD);
-        await page.click('button[type="submit"]');
-        // After submit, give the app time to authenticate and mount the layout header
+        console.log('Password field filled');
+        
+        // Click submit button - try multiple selector strategies
+        const submitBtn = page.locator('button[type="submit"]').first();
+        const submitBtnText = page.getByRole('button', { name: /sign in/i }).first();
+        
+        let clicked = false;
+        if (await submitBtn.isVisible().catch(() => false)) {
+          console.log('Clicking submit button via [type="submit"]');
+          await submitBtn.click();
+          clicked = true;
+        } else if (await submitBtnText.isVisible().catch(() => false)) {
+          console.log('Clicking submit button via role=button');
+          await submitBtnText.click();
+          clicked = true;
+        } else {
+          console.log('No visible submit button found, trying generic click');
+          await submitBtn.click().catch(() => submitBtnText.click());
+        }
+        
+        console.log('Submit button clicked, waiting for authentication...');
+        
+        // Wait for authentication to complete and redirect
+        // The app will reload and show the header if successful
         await loadingText.waitFor({ state: 'detached', timeout: 45000 }).catch(() => {});
         await expect(header).toBeVisible({ timeout: 45000 });
-        console.log('Login successful, main app loaded');
+        console.log('Supabase auth login successful, main app loaded');
         authed = true;
       } else {
-        console.warn('[Auth Setup] SUPERADMIN_EMAIL/PASSWORD not provided; skipping login.');
+        throw new Error('[Auth Setup] SUPERADMIN_EMAIL and SUPERADMIN_PASSWORD environment variables are required for E2E tests');
       }
     } else {
       // Neither header nor login form visible; try one more reload
@@ -127,10 +167,10 @@ setup('authenticate as superadmin', async ({ page, request }) => {
   if (authed) {
     await expect(header).toBeVisible({ timeout: 20000 });
   } else {
-    console.warn('[Auth Setup] Proceeding without persisted auth state (no credentials provided).');
+    throw new Error('[Auth Setup] Authentication failed - could not establish session');
   }
 
-  // Persist storage for reuse by all projects
+  // Persist storage (including cookies) for reuse by all projects
   await page.context().storageState({ path: authFile });
   console.log(`Auth state saved to ${authFile}`);
 });

@@ -28,6 +28,8 @@ function computeDelay(count) {
 }
 
 async function fetchWithBackoff(input, init) {
+  const BACKEND_URL = (import.meta?.env?.VITE_AISHACRM_BACKEND_URL) || 'http://localhost:4001';
+
   const urlString = typeof input === 'string' ? input : (input && input.url) || '';
   let key = 'unknown';
   try {
@@ -46,7 +48,17 @@ async function fetchWithBackoff(input, init) {
     throw err;
   }
 
-  const resp = await originalFetch(input, init);
+  // Ensure cookies are sent by default unless explicitly overridden
+  const initWithCreds = { ...(init || {}) };
+  if (!('credentials' in initWithCreds)) {
+    initWithCreds.credentials = 'include';
+  }
+
+  // Normalize headers to a plain object to allow mutation
+  const hdrs = new Headers(initWithCreds.headers || {});
+  initWithCreds.headers = hdrs;
+
+  const resp = await originalFetch(input, initWithCreds);
 
   if (resp && resp.status === 429) {
     state.count += 1;
@@ -57,6 +69,32 @@ async function fetchWithBackoff(input, init) {
     backoffState[key] = state;
     window.__rateLimitStats[key] = { ...state };
     return resp; // Let caller inspect 429 body (CORS headers now present)
+  }
+
+  // Seamless short-lived auth: if 401 from backend, attempt refresh once then retry
+  try {
+    const u = new URL(urlString, window.location.origin);
+    const isBackendCall = u.pathname.startsWith('/api') || u.origin === new URL(BACKEND_URL, window.location.origin).origin;
+    const isRefreshCall = u.pathname === '/api/auth/refresh';
+    const alreadyRetried = hdrs.get('x-auth-retry') === '1';
+    if (resp && resp.status === 401 && isBackendCall && !isRefreshCall && !alreadyRetried) {
+      // Call refresh endpoint
+      const refreshUrl = '/api/auth/refresh';
+      const refreshResp = await originalFetch(refreshUrl, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (refreshResp && refreshResp.ok) {
+        // Retry original once
+        const retryInit = { ...initWithCreds, headers: new Headers(hdrs) };
+        retryInit.headers.set('x-auth-retry', '1');
+        const retryResp = await originalFetch(input, retryInit);
+        return retryResp;
+      }
+    }
+  } catch {
+    // ignore refresh path errors; fall through to response handling
   }
 
   // Non-429 -> reset

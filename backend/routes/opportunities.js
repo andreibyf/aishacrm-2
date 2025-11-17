@@ -164,7 +164,7 @@ export default function createOpportunityRoutes(_pgPool) {
   // GET /api/opportunities - List opportunities with filtering
   router.get('/', async (req, res) => {
     try {
-      let { tenant_id } = req.query;
+      let { tenant_id, filter } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
@@ -177,12 +177,41 @@ export default function createOpportunityRoutes(_pgPool) {
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
-      const { data, error, count } = await supabase
+      let q = supabase
         .from('opportunities')
         .select('*', { count: 'exact' })
-        .eq('tenant_id', tenant_id)
-        .order('created_date', { ascending: false })
+        .eq('tenant_id', tenant_id);
+
+      // Handle $or filter for dynamic search
+      if (filter) {
+        let parsedFilter = filter;
+        if (typeof filter === 'string' && filter.startsWith('{')) {
+          try {
+            parsedFilter = JSON.parse(filter);
+          } catch {
+            // treat as literal
+          }
+        }
+        
+        if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
+          const orConditions = parsedFilter.$or.map(condition => {
+            const [field, opObj] = Object.entries(condition)[0];
+            if (opObj && opObj.$icontains) {
+              return `${field}.ilike.%${opObj.$icontains}%`;
+            }
+            return null;
+          }).filter(Boolean);
+          
+          if (orConditions.length > 0) {
+            q = q.or(orConditions.join(','));
+          }
+        }
+      }
+      
+      q = q.order('created_date', { ascending: false })
         .range(offset, offset + limit - 1);
+      
+      const { data, error, count } = await q;
       if (error) throw new Error(error.message);
       
       const opportunities = (data || []).map(expandMetadata);

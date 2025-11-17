@@ -7,6 +7,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+import cookieParser from "cookie-parser";
 import compression from "compression";
 import dotenv from "dotenv";
 import { createServer } from "http";
@@ -117,6 +118,7 @@ const supabaseAuth = initSupabaseAuth();
 app.use(helmet()); // Security headers (no insecure overrides globally)
 app.use(compression()); // Compress responses
 app.use(morgan("combined")); // Logging
+app.use(cookieParser()); // Cookie parsing for auth cookies
 // Attach request-scoped context for accumulating DB timing
 app.use(attachRequestContext);
 
@@ -438,6 +440,7 @@ import createSyncHealthRoutes from "./routes/synchealths.js";
 import createAICampaignRoutes from "./routes/aicampaigns.js";
 import createSecurityRoutes from "./routes/security.js";
 import createMemoryRoutes from "./routes/memory.js";
+import createAuthRoutes from "./routes/auth.js";
 
 // Use the pgPool directly; per-request DB time is measured inside the DB adapter
 const measuredPgPool = pgPool;
@@ -493,6 +496,8 @@ app.use("/api/aicampaigns", createAICampaignRoutes(measuredPgPool));
 app.use("/api/security", createSecurityRoutes(measuredPgPool));
 // Memory routes use Redis/Valkey; DB pool not required
 app.use("/api/memory", createMemoryRoutes());
+// Auth routes (cookie-based login/refresh/logout)
+app.use("/api/auth", createAuthRoutes(measuredPgPool));
 
 // 404 handler
 app.use((req, res) => {

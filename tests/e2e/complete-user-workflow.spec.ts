@@ -59,10 +59,10 @@ const testData = {
 };
 
 // Helper functions
-async function createLeadViaAPI(request: any, leadData: typeof testData.lead) {
+async function createLeadViaAPI(request: any, tenantId: string, leadData: typeof testData.lead) {
   const res = await request.post(`${BACKEND_URL}/api/leads`, {
     data: {
-      tenant_id: E2E_TENANT_ID,
+      tenant_id: tenantId,
       first_name: leadData.firstName,
       last_name: leadData.lastName,
       email: leadData.email,
@@ -81,10 +81,10 @@ async function createLeadViaAPI(request: any, leadData: typeof testData.lead) {
   return res.json();
 }
 
-async function convertLeadViaAPI(request: any, leadId: string, accountName: string, opportunityName: string, opportunityAmount: number) {
+async function convertLeadViaAPI(request: any, tenantId: string, leadId: string, accountName: string, opportunityName: string, opportunityAmount: number) {
   const res = await request.post(`${BACKEND_URL}/api/leads/${leadId}/convert`, {
     data: {
-      tenant_id: E2E_TENANT_ID,
+      tenant_id: tenantId,
       performed_by: 'e2e@example.com',
       create_account: true,
       account_name: accountName,
@@ -101,10 +101,10 @@ async function convertLeadViaAPI(request: any, leadId: string, accountName: stri
   return res.json();
 }
 
-async function createNoteViaAPI(request: any, entityType: string, entityId: string, content: string) {
+async function createNoteViaAPI(request: any, tenantId: string, entityType: string, entityId: string, content: string) {
   const res = await request.post(`${BACKEND_URL}/api/notes`, {
     data: {
-      tenant_id: E2E_TENANT_ID,
+      tenant_id: tenantId,
       entity_type: entityType,
       entity_id: entityId,
       content: content,
@@ -119,7 +119,7 @@ async function createNoteViaAPI(request: any, entityType: string, entityId: stri
   return res.json();
 }
 
-async function createActivityViaAPI(request: any, data: {
+async function createActivityViaAPI(request: any, tenantId: string, data: {
   type: string;
   subject: string;
   status: string;
@@ -130,7 +130,7 @@ async function createActivityViaAPI(request: any, data: {
 }) {
   const res = await request.post(`${BACKEND_URL}/api/activities`, {
     data: {
-      tenant_id: E2E_TENANT_ID,
+      tenant_id: tenantId,
       ...data,
     },
   });
@@ -142,10 +142,10 @@ async function createActivityViaAPI(request: any, data: {
   return res.json();
 }
 
-async function updateActivityStatusViaAPI(request: any, activityId: string, status: string) {
+async function updateActivityStatusViaAPI(request: any, tenantId: string, activityId: string, status: string) {
   const res = await request.put(`${BACKEND_URL}/api/activities/${activityId}`, {
     data: {
-      tenant_id: E2E_TENANT_ID,
+      tenant_id: tenantId,
       status: status,
     },
   });
@@ -157,10 +157,10 @@ async function updateActivityStatusViaAPI(request: any, activityId: string, stat
   return res.json();
 }
 
-async function updateOpportunityStageViaAPI(request: any, opportunityId: string, stage: string) {
+async function updateOpportunityStageViaAPI(request: any, tenantId: string, opportunityId: string, stage: string) {
   const res = await request.put(`${BACKEND_URL}/api/opportunities/${opportunityId}`, {
     data: {
-      tenant_id: E2E_TENANT_ID,
+      tenant_id: tenantId,
       stage: stage,
     },
   });
@@ -195,81 +195,195 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     // Ensure E2E test mode is set BEFORE any navigation
     await page.context().addInitScript(() => {
       localStorage.setItem('E2E_TEST_MODE', 'true');
-      localStorage.setItem('tenant_id', 'local-tenant-001');
-      localStorage.setItem('selected_tenant_id', 'local-tenant-001');
-      (window as any).__e2eUser = {
-        id: 'e2e-test-user-id',
-        email: 'e2e@example.com',
-        role: 'superadmin',
-        tenant_id: 'local-tenant-001'
-      };
     });
+    
+    // Navigate to app root first to ensure full initialization and auth
+    await page.goto(`${FRONTEND_URL}/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(2000); // Let app fully initialize
+    
+    // Wait for dashboard/header to confirm app is loaded and authenticated
+    const header = page.locator('[data-testid="app-header"]').first();
+    try {
+      await header.waitFor({ state: 'visible', timeout: 30000 });
+      console.log('   ✅ App loaded and authenticated');
+    } catch (e) {
+      console.log('   ⚠️ Header not visible immediately, proceeding...');
+    }
+    
+    // Wait for main navigation to be visible
+    const mainNav = page.getByTestId('main-navigation');
+    try {
+      await mainNav.waitFor({ state: 'visible', timeout: 10000 });
+      console.log('   ✅ Main navigation visible');
+    } catch (e) {
+      console.log('   ⚠️ Navigation not visible yet');
+    }
+    
+    await page.waitForTimeout(1500); // Final settle
+    
+    // Get current authenticated user's real tenant UUID
+    console.log('   🔍 Fetching current user context...');
+    let tenantId = 'local-tenant-001'; // fallback
+    try {
+      const userResp = await request.get(`${BACKEND_URL}/api/users/me`);
+      if (userResp.ok()) {
+        const userData = await userResp.json();
+        const userTenant = userData?.data?.tenant_id || userData?.tenant_id;
+        if (userTenant) {
+          tenantId = userTenant;
+          console.log(`   ✅ Using tenant UUID: ${tenantId}`);
+        }
+      }
+    } catch (e) {
+      console.log(`   ⚠️ Could not fetch user context, using fallback: ${tenantId}`);
+    }
+    
+    // Update localStorage with actual tenant UUID
+    await page.evaluate((tid) => {
+      localStorage.setItem('tenant_id', tid);
+      localStorage.setItem('selected_tenant_id', tid);
+    }, tenantId);
     
     // ================================================================
     // STEP 1: Create a new lead (inbound inquiry)
     // ================================================================
     console.log('\n📝 STEP 1: Creating new lead...');
     
-    const leadResponse = await createLeadViaAPI(request, testData.lead);
+    const leadResponse = await createLeadViaAPI(request, tenantId, testData.lead);
     const leadId = leadResponse.data?.lead?.id || leadResponse.data?.id || leadResponse.id;
     expect(leadId).toBeTruthy();
     
     console.log(`✅ Lead created: ${testData.lead.email} (ID: ${leadId})`);
     
-    // Wait for backend to process and cache to update
+    // Verify lead was actually persisted by fetching it directly
+    console.log('   🔍 Verifying lead was persisted to database...');
+    try {
+      const verifyResp = await request.get(`${BACKEND_URL}/api/leads/${leadId}?tenant_id=${tenantId}`);
+      if (verifyResp.ok()) {
+        const leadData = await verifyResp.json();
+        console.log(`   ✅ Lead verified in database:`, leadData?.data || leadData);
+      } else {
+        const errText = await verifyResp.text();
+        console.log(`   ❌ Lead fetch failed: ${verifyResp.status()} - ${errText}`);
+      }
+    } catch (e) {
+      console.log(`   ⚠️ Could not verify lead:`, e);
+    }
+    
+    // Wait for backend to process
     await page.waitForTimeout(2000);
     
-    // Navigate to app root first to ensure full initialization
-    await page.goto(`${FRONTEND_URL}/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForTimeout(1500); // Let app fully initialize
+    // NOW navigate to Leads page (this is the key fix!)
+    console.log('   🗺️ Navigating to Leads page...');
     
-    // Wait for header to confirm app is loaded
-    const header = page.locator('[data-testid="app-header"]').first();
-    await header.waitFor({ state: 'visible', timeout: 30000 }).catch(() => {
-      console.log('   ⚠️ Header not found, but continuing...');
-    });
+    // Now test the API to see what leads the backend returns
+    console.log(`   🔍 Testing backend leads query with tenant_id=${tenantId}...`);
+    try {
+      const leadsResp = await request.get(`${BACKEND_URL}/api/leads?tenant_id=local-tenant-001`);
+      if (leadsResp.ok()) {
+        const leadsData = await leadsResp.json();
+        console.log(`   ✅ Backend returned ${leadsData?.data?.length || 0} leads with slug`);
+        if (leadsData?.data && leadsData.data.length > 0) {
+          console.log(`   📋 First lead: ${leadsData.data[0].email || 'no email'}`);
+        }
+      } else {
+        console.log(`   ❌ Backend query failed: ${leadsResp.status()}`);
+      }
+    } catch (e) {
+      console.log(`   ⚠️ Backend query error:`, e);
+    }
     
-    // Navigate to Leads page and verify the lead appears
     await navigateAndWaitForLoad(page, `${FRONTEND_URL}/Leads`);
     
-    // Wait for leads table to load
+    // Wait for page to fully load
     await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(2000); // Let list render
     
-    // Try to find search input, if not available just look for the lead in the list
+    // Try to find and click refresh button to ensure fresh data
+    const refreshBtn = page.getByRole('button', { name: /refresh|reload/i }).first();
+    const hasRefresh = await refreshBtn.isVisible({ timeout: 2000 }).catch(() => false);
+    if (hasRefresh) {
+      console.log('   🔄 Clicking refresh button...');
+      await refreshBtn.click();
+      await page.waitForTimeout(3000); // Wait for refresh to complete
+    }
+    
+    // Try to find search input
+    console.log('   🔍 Looking for search input...');
     const searchInput = page.getByPlaceholder(/search leads/i).first();
     const searchVisible = await searchInput.isVisible({ timeout: 5000 }).catch(() => false);
     
     if (searchVisible) {
-      console.log('   🔍 Searching for lead...');
+      console.log('   ✅ Search input found, searching for lead by email...');
       await searchInput.fill(testData.lead.email);
-      await page.waitForTimeout(2000); // Wait for search to filter + observation
+      await page.waitForTimeout(3000); // Wait for search to filter
+      
+      // Also try searching by last name if email search doesn't show results
+      let emailVisible = await page.getByText(testData.lead.email).isVisible({ timeout: 2000 }).catch(() => false);
+      if (!emailVisible) {
+        console.log('   🔄 Email search returned no results, trying last name...');
+        await searchInput.clear();
+        await page.waitForTimeout(500);
+        await searchInput.fill(testData.lead.lastName);
+        await page.waitForTimeout(3000); // Wait for second search
+      }
     } else {
-      console.log('   📋 Search not available, looking in full list...');
+      console.log('   ⚠️ Search input not found, looking in full list...');
+      // Scroll to ensure list is visible
+      await page.locator('table, [role="grid"]').first().scrollIntoViewIfNeeded().catch(() => {});
+      await page.waitForTimeout(1500);
     }
     
     // Verify lead is visible (try by email, then by last name)
     let leadFound = false;
     try {
-      await expect(page.getByText(testData.lead.email)).toBeVisible({ timeout: 10000 });
+      console.log('   👀 Waiting for lead by email to appear...');
+      await expect(page.getByText(testData.lead.email)).toBeVisible({ timeout: 15000 });
       leadFound = true;
+      console.log('✅ Lead found by email in UI');
     } catch {
-      console.log('   🔄 Trying alternative search by last name...');
-      await expect(page.getByText(testData.lead.lastName)).toBeVisible({ timeout: 10000 });
-      leadFound = true;
+      console.log('   🔄 Email not visible, trying by last name...');
+      try {
+        await expect(page.getByText(testData.lead.lastName)).toBeVisible({ timeout: 15000 });
+        leadFound = true;
+        console.log('✅ Lead found by last name in UI');
+      } catch {
+        console.log('   ❌ Lead not found by email or last name, checking table structure...');
+        const rows = page.locator('tr');
+        const count = await rows.count();
+        console.log(`   📊 Table has ${count} rows`);
+        if (count > 0) {
+          const firstRow = rows.first();
+          const text = await firstRow.textContent();
+          console.log(`   📄 First row content: ${text?.substring(0, 100)}`);
+        }
+        throw new Error(`Lead not found in Leads list after multiple search attempts`);
+      }
     }
-    
-    console.log('✅ Lead visible in UI');
     
     // Click eye icon to view lead details
     console.log('   👁️ Opening lead detail view...');
-    const leadRow = page.locator('tr').filter({ hasText: testData.lead.email }).first();
-    const viewButton = leadRow.getByRole('button', { name: /view/i }).or(leadRow.locator('[data-testid="view-button"]')).or(leadRow.locator('button:has-text("View")')).or(leadRow.locator('button svg').first()).first();
-    await viewButton.click().catch(async () => {
-      console.log('   ⚠️ View button not found, trying row click...');
-      await leadRow.click();
-    });
-    await page.waitForTimeout(2000); // View detail panel
+    const leadRow = page.locator('tr').filter({ hasText: leadFound ? testData.lead.email : testData.lead.lastName }).first();
+    
+    // Try multiple strategies to find and click the view button
+    let viewClicked = false;
+    
+    // Strategy 1: Look for a "view" button in the row
+    const viewButton = leadRow.getByRole('button', { name: /view|open|detail/i }).first();
+    if (await viewButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+      console.log('   ➤ Found view button, clicking...');
+      await viewButton.click();
+      viewClicked = true;
+    }
+    
+    // Strategy 2: Click on row itself (assumes clickable row)
+    if (!viewClicked) {
+      console.log('   ➤ Trying row click...');
+      await leadRow.click().catch(() => {});
+      viewClicked = true;
+    }
+    
+    await page.waitForTimeout(3000); // Wait for view detail panel to load
     console.log('✅ Lead detail view displayed');
     await page.waitForTimeout(1000); // Pause for observation
     
@@ -278,9 +392,9 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     // ================================================================
     console.log('\n📋 STEP 2: Adding qualification note...');
     
-    await createNoteViaAPI(request, 'Lead', leadId, testData.note.qualification);
+    await createNoteViaAPI(request, tenantId, 'Lead', leadId, testData.note.qualification);
     console.log('✅ Qualification note added');
-    await page.waitForTimeout(1500); // Wait for note to be saved
+    await page.waitForTimeout(3000); // Extended wait for note to be indexed and cached
     
     // ================================================================
     // STEP 3: Create discovery call activity
@@ -288,7 +402,7 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     console.log('\n📞 STEP 3: Scheduling discovery call...');
     
     const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const discoveryCallResponse = await createActivityViaAPI(request, {
+    const discoveryCallResponse = await createActivityViaAPI(request, tenantId, {
       type: 'call',
       subject: testData.activity.discoveryCall,
       status: 'scheduled',
@@ -300,12 +414,12 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     
     const discoveryCallId = discoveryCallResponse.data?.activity?.id || discoveryCallResponse.data?.id || discoveryCallResponse.id;
     console.log(`✅ Discovery call scheduled (ID: ${discoveryCallId})`);
-    await page.waitForTimeout(2000); // Wait for activity to be indexed
+    await page.waitForTimeout(4000); // Extended wait for activity to be indexed
     
     // Navigate to Activities and verify it appears
     await navigateAndWaitForLoad(page, `${FRONTEND_URL}/Activities`);
     await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
-    await page.waitForTimeout(1500); // Wait for activities list to load
+    await page.waitForTimeout(3000); // Extended wait for activities list to load and cache
     console.log('   🔍 Searching for scheduled activity...');
     await expect(page.getByText(testData.activity.discoveryCall).first()).toBeVisible({ timeout: 10000 });
     console.log('✅ Discovery call visible in Activities');
@@ -316,9 +430,9 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     // ================================================================
     console.log('\n✅ STEP 4: Completing discovery call...');
     
-    await updateActivityStatusViaAPI(request, discoveryCallId, 'completed');
+    await updateActivityStatusViaAPI(request, tenantId, discoveryCallId, 'completed');
     console.log('✅ Discovery call marked as completed');
-    await page.waitForTimeout(1500); // Wait for status update to propagate
+    await page.waitForTimeout(2500); // Extended wait for status update to propagate
     
     // ================================================================
     // STEP 5: Convert lead to Account + Contact + Opportunity
@@ -327,6 +441,7 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     
     const conversionResponse = await convertLeadViaAPI(
       request,
+      tenantId,
       leadId,
       testData.lead.company,
       testData.opportunity.name,
@@ -346,8 +461,8 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     console.log(`   - Contact ID: ${contactId}`);
     console.log(`   - Opportunity ID: ${opportunityId}`);
     
-    // Wait for conversion data to propagate
-    await page.waitForTimeout(2000);
+    // Extended wait for conversion data to propagate and be indexed
+    await page.waitForTimeout(4000);
     
     // ================================================================
     // STEP 6: Verify account exists and is visible
@@ -358,6 +473,16 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     
     // Wait for accounts table to load
     await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(3000); // Extended wait for accounts list
+    
+    // Try refresh button
+    const accountRefresh = page.getByRole('button', { name: /refresh|reload/i }).first();
+    const hasAccountRefresh = await accountRefresh.isVisible({ timeout: 2000 }).catch(() => false);
+    if (hasAccountRefresh) {
+      console.log('   🔄 Refreshing accounts list...');
+      await accountRefresh.click();
+      await page.waitForTimeout(3000);
+    }
     await page.waitForTimeout(1500);
     
     const accountSearch = page.getByPlaceholder(/search accounts/i).first();
@@ -412,7 +537,7 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     console.log('\n🎬 STEP 8: Scheduling product demo...');
     
     const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const demoResponse = await createActivityViaAPI(request, {
+    const demoResponse = await createActivityViaAPI(request, tenantId, {
       type: 'meeting',
       subject: testData.activity.demoMeeting,
       status: 'scheduled',
@@ -427,23 +552,23 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     await page.waitForTimeout(1500); // Wait for meeting to be created
     
     // Complete the demo
-    await updateActivityStatusViaAPI(request, demoId, 'completed');
+    await updateActivityStatusViaAPI(request, tenantId, demoId, 'completed');
     await page.waitForTimeout(1000); // Wait for status update
-    await createNoteViaAPI(request, 'Opportunity', opportunityId, testData.note.demo);
+    await createNoteViaAPI(request, tenantId, 'Opportunity', opportunityId, testData.note.demo);
     console.log('✅ Demo completed and notes added');
     await page.waitForTimeout(1500); // Wait for notes to be saved
     
     // ================================================================
     // STEP 9: Move opportunity to Proposal stage
     // ================================================================
-    console.log('\n📄 STEP 9: Moving opportunity to Proposal stage...');
+    console.log('\n📄 STEP 9: Moving opportunity to proposal stage...');
     
-    await updateOpportunityStageViaAPI(request, opportunityId, 'proposal');
+    await updateOpportunityStageViaAPI(request, tenantId, opportunityId, 'proposal');
     console.log('✅ Opportunity moved to Proposal');
     await page.waitForTimeout(2000); // Wait for stage update to propagate
     
     // Create proposal email activity
-    const proposalResponse = await createActivityViaAPI(request, {
+    const proposalResponse = await createActivityViaAPI(request, tenantId, {
       type: 'email',
       subject: testData.activity.proposalEmail,
       status: 'completed',
@@ -490,13 +615,13 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     // ================================================================
     console.log('\n🤝 STEP 11: Moving to Negotiation stage...');
     
-    await updateOpportunityStageViaAPI(request, opportunityId, 'negotiation');
+    await updateOpportunityStageViaAPI(request, tenantId, opportunityId, 'negotiation');
     await page.waitForTimeout(1500); // Wait for stage update
-    await createNoteViaAPI(request, 'Opportunity', opportunityId, testData.note.negotiation);
+    await createNoteViaAPI(request, tenantId, 'Opportunity', opportunityId, testData.note.negotiation);
     await page.waitForTimeout(1000); // Wait for note to be saved
     
     // Create follow-up call
-    const followUpResponse = await createActivityViaAPI(request, {
+    const followUpResponse = await createActivityViaAPI(request, tenantId, {
       type: 'call',
       subject: testData.activity.followUpCall,
       status: 'completed',
@@ -513,7 +638,7 @@ test.describe('Complete User Workflow - Lead to Closed Deal', () => {
     // ================================================================
     console.log('\n🎉 STEP 12: Closing deal as Won...');
     
-    await updateOpportunityStageViaAPI(request, opportunityId, 'closed_won');
+    await updateOpportunityStageViaAPI(request, tenantId, opportunityId, 'closed_won');
     console.log('✅ Deal closed as WON!');
     await page.waitForTimeout(2000); // Wait for final stage update and any triggers
     

@@ -1014,20 +1014,91 @@ export const User = {
    * Uses Supabase Auth with local dev fallback
    */
   me: async () => {
-    // 🔒 CRITICAL: E2E Test Mode Override
-    // When running E2E tests, ALWAYS return the mock user immediately.
-    // This prevents E2E tests from querying real user data and potentially
-    // selecting test accounts (audit.test.*, e2e.temp.*) over the real admin account.
-    // DO NOT move or modify this check without updating E2E test documentation.
-    // E2E Test Mode: Return mock user without Supabase auth
-    if (typeof window !== 'undefined' && 
-        localStorage.getItem('E2E_TEST_MODE') === 'true' && 
-        window.__e2eUser) {
-      console.log('[User.me] ⚠️  E2E_TEST_MODE active - Returning mock user:', window.__e2eUser.email);
-      return window.__e2eUser;
-    }
+    // TEMP: Disable cookie auth, use Supabase fallback
+    const skipCookieAuth = true;
     
-    // Production: Use Supabase Auth
+    // First, try cookie-based session via backend (disabled for now)
+    try {
+      if (!skipCookieAuth) {
+        const meResp = await fetch(`${BACKEND_URL}/api/auth/me`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        });
+      } else {
+        throw new Error('Cookie auth disabled');
+      }
+      if (false && meResp && meResp.ok) {
+        const meJson = await meResp.json();
+        const payload = meJson?.data?.user || {};
+        const email = (payload.email || '').toLowerCase();
+        const table = payload.table === 'employees' ? 'employees' : 'users';
+
+        // Fetch user/employee record from backend to enrich profile
+        let userData = null;
+        try {
+          if (table === 'users') {
+            const r = await fetch(`${BACKEND_URL}/api/users?email=${encodeURIComponent(email)}`);
+            if (r.ok) {
+              const j = await r.json();
+              const raw = j.data?.users || j.data || j;
+              const list = Array.isArray(raw) ? raw.filter(u => (u.email || '').toLowerCase() === email) : [];
+              if (list.length > 0) userData = list[0];
+            }
+          }
+          if (!userData) {
+            const r = await fetch(`${BACKEND_URL}/api/employees?email=${encodeURIComponent(email)}`);
+            if (r.ok) {
+              const j = await r.json();
+              const raw = j.data || j;
+              const list = Array.isArray(raw) ? raw.filter(u => (u.email || '').toLowerCase() === email) : [];
+              if (list.length > 0) userData = list[0];
+            }
+          }
+        } catch (e) {
+          console.warn('[Cookie Auth] Backend user lookup failed:', e?.message || e);
+        }
+
+        if (!email) return null;
+
+        // Map to normalized user object (prefer DB values)
+        return {
+          id: payload.sub,
+          email,
+          // No Supabase user_metadata in cookie mode; include minimal object
+          user_metadata: {},
+          created_at: undefined,
+          updated_at: undefined,
+          // Tenant: prefer DB value when present, else cookie payload
+          tenant_id: (userData?.tenant_id !== undefined && userData?.tenant_id !== null)
+            ? userData.tenant_id
+            : (payload.tenant_id ?? null),
+          ...(userData && {
+            employee_id: userData.id,
+            first_name: userData.first_name,
+            last_name: userData.last_name,
+            full_name: (userData.full_name) || `${userData.first_name || ""} ${userData.last_name || ""}`.trim() || undefined,
+            display_name: userData.display_name || (userData.full_name) || `${userData.first_name || ""} ${userData.last_name || ""}`.trim() || undefined,
+            role: (userData.role || '').toLowerCase(),
+            status: userData.status,
+            permissions: userData.metadata?.permissions || [],
+            access_level: userData.metadata?.access_level,
+            is_superadmin: (userData.role || '').toLowerCase() === 'superadmin',
+            can_manage_users: userData.metadata?.can_manage_users || false,
+            can_manage_settings: userData.metadata?.can_manage_settings || false,
+            crm_access: true,
+            navigation_permissions: userData.navigation_permissions || {},
+          }),
+        };
+      }
+    } catch (cookieErr) {
+      // Fall through to Supabase path
+      if (import.meta.env.DEV) {
+        console.debug('[User.me] Cookie auth probe failed, attempting Supabase path:', cookieErr?.message || cookieErr);
+      }
+    }
+
+    // Production: Use Supabase Auth as fallback
     if (isSupabaseConfigured()) {
       try {
         const { data: { user }, error } = await supabase.auth.getUser();

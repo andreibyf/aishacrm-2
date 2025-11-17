@@ -16,17 +16,6 @@ export function UserProvider({ children }) {
   const loadUser = useCallback(async () => {
     setLoading(true);
     try {
-      // E2E mode: use injected mock user if present
-      if (typeof window !== 'undefined' &&
-          localStorage.getItem('E2E_TEST_MODE') === 'true' &&
-          window.__e2eUser) {
-        if (import.meta.env.DEV) {
-          console.log('[UserContext] Using E2E mock user:', window.__e2eUser.email);
-        }
-        setUser(window.__e2eUser);
-        return;
-      }
-
       const u = await User.me();
       const normalized = normalizeUser(u);
       if (import.meta.env.DEV && u && normalized && u !== normalized) {

@@ -150,7 +150,7 @@ export default function createLeadRoutes(_pgPool) {
   // GET /api/leads - List leads
   router.get('/', async (req, res) => {
     try {
-      let { tenant_id, status, account_id } = req.query;
+      let { tenant_id, status, account_id, filter } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
@@ -161,6 +161,36 @@ export default function createLeadRoutes(_pgPool) {
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       let q = supabase.from('leads').select('*', { count: 'exact' }).eq('tenant_id', tenant_id);
+
+      // Handle $or filter for dynamic search (frontend passes filter as JSON string)
+      if (filter) {
+        let parsedFilter = filter;
+        if (typeof filter === 'string' && filter.startsWith('{')) {
+          try {
+            parsedFilter = JSON.parse(filter);
+          } catch {
+            // treat as literal
+          }
+        }
+        
+        if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
+          // Build OR condition: match any of the $or criteria
+          // Use Supabase's or() method for multiple OR conditions
+          const orConditions = parsedFilter.$or.map(condition => {
+            // Each condition is like { first_name: { $icontains: "search_term" } }
+            const [field, opObj] = Object.entries(condition)[0];
+            if (opObj && opObj.$icontains) {
+              return `${field}.ilike.%${opObj.$icontains}%`;
+            }
+            return null;
+          }).filter(Boolean);
+          
+          if (orConditions.length > 0) {
+            // Use Supabase or() to combine conditions with OR logic
+            q = q.or(orConditions.join(','));
+          }
+        }
+      }
 
       if (status) {
         let parsedStatus = status;
