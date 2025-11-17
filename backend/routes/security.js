@@ -18,7 +18,7 @@ import {
   clearTrackingData
 } from "../middleware/intrusionDetection.js";
 
-export default function createSecurityRoutes(pgPool, supabase) {
+export default function createSecurityRoutes(pgPool) {
   const router = express.Router();
 
   /**
@@ -36,6 +36,9 @@ export default function createSecurityRoutes(pgPool, supabase) {
         start_date,
         end_date
       } = req.query;
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
 
       let query = supabase
         .from('system_logs')
@@ -110,6 +113,9 @@ export default function createSecurityRoutes(pgPool, supabase) {
       const { tenant_id, days = 7 } = req.query;
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - parseInt(days));
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
 
       let query = supabase
         .from('system_logs')
@@ -226,6 +232,9 @@ export default function createSecurityRoutes(pgPool, supabase) {
 
       manuallyBlockIP(ip, duration_ms);
 
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+
       // Log the manual block
       await supabase.from('system_logs').insert({
         tenant_id: 'system',
@@ -273,6 +282,9 @@ export default function createSecurityRoutes(pgPool, supabase) {
 
       unblockIP(ip);
 
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+
       // Log the unblock
       await supabase.from('system_logs').insert({
         tenant_id: 'system',
@@ -311,6 +323,9 @@ export default function createSecurityRoutes(pgPool, supabase) {
       const { days = 30 } = req.query;
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - parseInt(days));
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
 
       const { data, error } = await supabase
         .from('system_logs')
@@ -437,6 +452,9 @@ export default function createSecurityRoutes(pgPool, supabase) {
   router.delete("/clear-tracking", async (req, res) => {
     try {
       clearTrackingData();
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
 
       await supabase.from('system_logs').insert({
         tenant_id: 'system',

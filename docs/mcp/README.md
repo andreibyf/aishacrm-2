@@ -215,7 +215,7 @@ The production container is built from a multi-stage Dockerfile for smaller size
 
 ```powershell
 docker compose -f braid-mcp-node-server/docker-compose.yml up --build -d
-docker logs braid-mcp-server --tail=50
+docker logs braid-mcp-node-server --tail=50
 ```
 
 ### Failure Diagnosis

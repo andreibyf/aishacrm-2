@@ -130,15 +130,25 @@ export default function createSystemRoutes(_pgPool) {
 
   // GET /api/system/containers-status - Report reachability of core docker services
   // NOTE: This does not inspect Docker directly; it performs HTTP probes to service DNS names.
-  // For non-HTTP services (redis), returns type unsupported.
+  // For non-HTTP services (redis), uses the initialized memory client for a lightweight ping.
   router.get('/containers-status', async (req, res) => {
+    const mcpNodeCandidates = [
+      process.env.MCP_NODE_HEALTH_URL,
+      'http://braid-mcp-node-server:8000/health', // same Docker network (separate stack)
+      'http://host.docker.internal:8000/health',  // host gateway from container
+      'http://localhost:8000/health',             // when backend runs outside Docker
+    ].filter(Boolean);
+
     const services = [
-      { name: 'backend', url: 'http://backend:3001/api/system/health' },
-      { name: 'frontend', url: 'http://frontend:4000/' },
-      { name: 'mcp-dev', url: 'http://braid-mcp:8000/health' },
-      { name: 'mcp-legacy', url: 'http://braid-mcp-server:8000/health' },
+      // Internal Docker DNS names should target internal container ports
+      { name: 'backend', url: 'http://backend:3001/health' },
+      { name: 'frontend', url: 'http://frontend:3000/' },
+      // Legacy MCP (should be absent) left for visibility
+      { name: 'mcp-legacy', url: 'http://braid-mcp:8000/health' },
+      // Correct MCP server; try multiple candidates for portability
+      { name: 'mcp-node', url: mcpNodeCandidates },
       { name: 'n8n', url: 'http://n8n:5678/' },
-      { name: 'n8n-proxy', url: 'http://n8n-proxy:80/' },
+      { name: 'n8n-proxy', url: 'http://n8n-proxy:5679/' },
       { name: 'redis', url: null, type: 'tcp' }
     ];
 
@@ -177,18 +187,25 @@ export default function createSystemRoutes(_pgPool) {
         results.push({ name: svc.name, type: svc.type || 'http', reachable: false, status_code: null, note: 'probe_not_implemented' });
         continue;
       }
-      const start = performance.now ? performance.now() : Date.now();
-      let statusCode = 0; let reachable = false;
-      try {
-        const resp = await fetch(svc.url, { method: 'GET' });
-        statusCode = resp.status;
-        reachable = resp.ok || (statusCode >= 200 && statusCode < 500);
-      } catch (err) {
-        statusCode = 0;
-        reachable = false;
+      const urls = Array.isArray(svc.url) ? svc.url : [svc.url];
+      let usedUrl = urls[0];
+      let statusCode = 0; let reachable = false; let latencyMs = 0;
+      for (const url of urls) {
+        const start = performance.now ? performance.now() : Date.now();
+        try {
+          const resp = await fetch(url, { method: 'GET' });
+          statusCode = resp.status;
+          reachable = resp.ok || (statusCode >= 200 && statusCode < 500);
+          latencyMs = Math.round((performance.now ? performance.now() : Date.now()) - start);
+          usedUrl = url;
+          if (reachable) break;
+        } catch (err) {
+          statusCode = 0;
+          latencyMs = Math.round((performance.now ? performance.now() : Date.now()) - start);
+          // Try next candidate
+        }
       }
-      const latencyMs = Math.round((performance.now ? performance.now() : Date.now()) - start);
-      results.push({ name: svc.name, url: svc.url, reachable, status_code: statusCode, latency_ms: latencyMs });
+      results.push({ name: svc.name, url: usedUrl, reachable, status_code: statusCode, latency_ms: latencyMs });
     }
 
     res.json({ status: 'success', data: { services: results, timestamp: new Date().toISOString() } });

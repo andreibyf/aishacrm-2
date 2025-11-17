@@ -26,7 +26,7 @@ export class Mcp implements INodeType {
 				displayName: 'MCP Server URL',
 				name: 'mcpServerUrl',
 				type: 'string',
-				default: 'http://braid-mcp-server:8000',
+				default: 'http://braid-mcp-node-server:8000',
 				required: true,
 				description: 'The URL of your MCP server',
 			},

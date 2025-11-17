@@ -3,7 +3,7 @@
 ## Prerequisites
 
 1. Backend running: `docker-compose up -d` or `cd backend && npm run dev`
-2. **Braid MCP Server running**: `docker-compose up -d braid-mcp-server` (for AI transcript analysis)
+2. **Braid MCP Server running**: `cd braid-mcp-node-server && docker compose up -d --build` (for AI transcript analysis)
 3. Database connected (Supabase)
 4. Valid tenant_id from your tenants table
 
@@ -12,7 +12,7 @@
 Enable AI-powered transcript analysis in `backend/.env`:
 ```bash
 USE_BRAID_MCP_TRANSCRIPT_ANALYSIS=true
-BRAID_MCP_URL=http://braid-mcp-server:8000
+BRAID_MCP_URL=http://braid-mcp-node-server:8000
 TRANSCRIPT_ANALYSIS_MODEL=gpt-4o-mini
 ```
 
@@ -20,7 +20,7 @@ TRANSCRIPT_ANALYSIS_MODEL=gpt-4o-mini
 ```powershell
 # Verify Braid MCP is running
 Invoke-RestMethod -Uri "http://localhost:8000/health"
-# Expected: {"status":"ok","service":"braid-mcp-server"}
+# Expected: {"status":"ok","service":"braid-mcp-node-server"}
 
 # Check memory status
 Invoke-RestMethod -Uri "http://localhost:8000/memory/status"
@@ -729,7 +729,7 @@ foreach ($provider in $providers) {
 The call flow system now uses the Braid MCP Server for AI-powered transcript analysis:
 
 **What Changed:**
-- ✅ Transcript analysis now routes through `braid-mcp-server:8000`
+- ✅ Transcript analysis now routes through `braid-mcp-node-server:8000`
 - ✅ Automatic tenant-specific OpenAI key resolution
 - ✅ Better action item extraction with GPT-4o-mini
 - ✅ Pattern-based fallback if Braid MCP unavailable

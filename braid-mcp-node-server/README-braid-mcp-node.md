@@ -112,11 +112,11 @@ npm run dev
 Build and run directly:
 
 ```bash
-docker build -t braid-mcp-server .
+docker build -t braid-mcp-node-server .
 docker run -p 8000:8000 \
   -e SUPABASE_URL=https://your-project.supabase.co \
   -e SUPABASE_SERVICE_ROLE_KEY=your-key \
-  --name braid-mcp braid-mcp-server
+  --name braid-mcp braid-mcp-node-server
 ```
 
 ### Docker Compose
@@ -124,7 +124,7 @@ docker run -p 8000:8000 \
 The server is integrated into the main Aisha CRM docker-compose setup:
 
 ```bash
-docker compose up -d braid-mcp-server
+docker compose -f braid-mcp-node-server/docker-compose.yml up -d --build
 ```
 
 Service will be available at `http://localhost:8000`.
@@ -139,7 +139,7 @@ Health check endpoint.
 ```json
 {
   "status": "ok",
-  "service": "braid-mcp-server"
+  "service": "braid-mcp-node-server"
 }
 ```
 
@@ -361,7 +361,7 @@ The Braid server is designed to be called from:
 Check container logs:
 
 ```bash
-docker logs braid-mcp-server --tail 50 -f
+docker logs braid-mcp-node-server --tail 50 -f
 ```
 
 Health endpoint monitoring:
@@ -427,7 +427,7 @@ braid-mcp-node-server/
 The Braid server is stateless and can be scaled horizontally:
 
 ```bash
-docker compose up -d --scale braid-mcp-server=3
+docker compose -f braid-mcp-node-server/docker-compose.yml up -d --scale braid-mcp-node-server=3
 ```
 
 Consider adding a load balancer for production deployments.
@@ -460,7 +460,7 @@ export async function executeBraidAction(action) {
 const fetch = require('node-fetch');
 
 async function executeBraidEnvelope(envelope) {
-  const response = await fetch('http://braid-mcp-server:8000/mcp/run', {
+  const response = await fetch('http://braid-mcp-node-server:8000/mcp/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(envelope)

@@ -58,7 +58,7 @@ void (async () => {
 
 // Health check
 app.get("/health", (_req: Request, res: Response) => {
-  res.json({ status: "ok", service: "braid-mcp-server" });
+  res.json({ status: "ok", service: "braid-mcp-node-server" });
 });
 
 // Memory quick status (debug)

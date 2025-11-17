@@ -8,7 +8,7 @@ The MCP Server Monitor in Settings has been completely redesigned to provide com
 - ✅ **Original Backed Up**: `src/components/settings/MCPServerMonitor.jsx.backup`
 - ✅ **Frontend Container Rebuilt**: Successfully built and deployed
 - ✅ **Braid MCP Server Running**: Operational on port 8000
-- ✅ **All Containers Operational**: frontend (4000), backend (4001), braid-mcp-server (8000)
+- ✅ **All Containers Operational**: frontend (4000), backend (4001), braid-mcp-node-server (8000)
 
 ## Accessing the Enhanced Monitor
 1. Open the application at `http://localhost:4000`
@@ -143,7 +143,7 @@ directDbAccess = true when CRM tests pass (indicates USE_DIRECT_SUPABASE_ACCESS 
 
 ### Endpoints Used
 1. **GET /health**
-   - Returns: `{ "status": "ok", "service": "braid-mcp-server" }`
+   - Returns: `{ "status": "ok", "service": "braid-mcp-node-server" }`
    - Purpose: Quick availability check
 
 2. **POST /mcp/run**
@@ -206,20 +206,20 @@ directDbAccess = true when CRM tests pass (indicates USE_DIRECT_SUPABASE_ACCESS 
 
 ### Issue: Test Failures (Red X on Test Results)
 **Possible Causes**:
-1. Braid MCP server not running → Check `docker ps | grep braid-mcp-server`
+1. Braid MCP server not running → Check `docker ps | Select-String "braid-mcp-node-server"`
 2. Supabase credentials missing → Verify `docker-compose.yml` has SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
 3. Network connectivity → Ensure localhost:8000 is accessible
 
 **Solution**:
 ```powershell
 # Verify container status
-docker ps --filter "name=braid-mcp-server"
+docker ps --filter "name=braid-mcp-node-server"
 
 # Check logs
-docker logs braid-mcp-server
+docker logs braid-mcp-node-server
 
 # Restart if needed
-docker-compose restart braid-mcp-server
+docker-compose restart braid-mcp-node-server
 ```
 
 ### Issue: "Direct DB Access" Not Showing Green Checkmark
@@ -227,14 +227,14 @@ docker-compose restart braid-mcp-server
 **Solution**:
 1. Check `docker-compose.yml` has `USE_DIRECT_SUPABASE_ACCESS=true`
 2. Verify SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set
-3. Rebuild: `docker-compose up -d --build braid-mcp-server`
+3. Rebuild: `docker-compose up -d --build braid-mcp-node-server`
 
 ### Issue: High Error Rate (>10%)
 **Cause**: Network latency, database overload, or adapter configuration issues
 **Solution**:
 1. Run tests again to confirm (transient errors)
 2. Check activity logs for specific error messages
-3. Review Braid server logs: `docker logs braid-mcp-server`
+3. Review Braid server logs: `docker logs braid-mcp-node-server`
 4. Verify database connection in backend
 
 ### Issue: Frontend Not Loading Enhanced Monitor

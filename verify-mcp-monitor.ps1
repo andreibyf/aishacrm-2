@@ -8,7 +8,7 @@ Write-Host "Checking deployment status...`n" -ForegroundColor Gray
 Write-Host "1. Container Status:" -ForegroundColor Yellow
 $frontendStatus = docker ps --filter "name=aishacrm-frontend" --format "{{.Status}}"
 $backendStatus = docker ps --filter "name=aishacrm-backend" --format "{{.Status}}"
-$braidStatus = docker ps --filter "name=braid-mcp-server" --format "{{.Status}}"
+$braidStatus = docker ps --filter "name=braid-mcp-node-server" --format "{{.Status}}"
 
 if ($frontendStatus -like "*Up*") {
     Write-Host "   ✓ Frontend: $frontendStatus" -ForegroundColor Green

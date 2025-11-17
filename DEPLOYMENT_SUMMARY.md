@@ -231,9 +231,9 @@ const { result, responseTime } = await executeBraidAction({
 ### Issue: Tests Failing
 **Solution**: Check Braid MCP container
 ```powershell
-docker ps | grep braid-mcp-server
-docker logs braid-mcp-server
-docker-compose restart braid-mcp-server
+docker ps | Select-String "braid-mcp-node-server"
+docker logs braid-mcp-node-server
+docker-compose restart braid-mcp-node-server
 ```
 
 ### Issue: Component Not Loading

@@ -1605,7 +1605,7 @@ Add to `backend/.env`:
 ```env
 # Call Flow & Transcript Analysis
 USE_BRAID_MCP_TRANSCRIPT_ANALYSIS=true
-BRAID_MCP_URL=http://braid-mcp-server:8000
+BRAID_MCP_URL=http://braid-mcp-node-server:8000
 TRANSCRIPT_ANALYSIS_MODEL=gpt-4o-mini
 ```
 
@@ -1614,7 +1614,7 @@ TRANSCRIPT_ANALYSIS_MODEL=gpt-4o-mini
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `USE_BRAID_MCP_TRANSCRIPT_ANALYSIS` | `false` | Enable AI-powered transcript analysis via Braid MCP |
-| `BRAID_MCP_URL` | `http://braid-mcp-server:8000` | Braid MCP Server endpoint |
+| `BRAID_MCP_URL` | `http://braid-mcp-node-server:8000` | Braid MCP Server endpoint |
 | `TRANSCRIPT_ANALYSIS_MODEL` | `gpt-4o-mini` | OpenAI model for transcript analysis |
 
 #### Webhook Endpoints
@@ -1780,7 +1780,7 @@ docker logs aishacrm-backend | Select-String "CallFlow.*transcript"
 ```
 
 **Common Issues:**
-- Braid MCP not running: `docker-compose up -d braid-mcp-server`
+- Braid MCP not running: `cd braid-mcp-node-server && docker compose up -d --build`
 - No OpenAI key configured
 - Transcript field empty in webhook payload
 
@@ -1886,7 +1886,7 @@ graph TD
 
 #### Environment Variables
 
-Add to `braid-mcp-server/.env`:
+Add to `braid-mcp-node-server/.env`:
 
 ```env
 # Server Configuration
@@ -1925,7 +1925,8 @@ GITHUB_TOKEN=your-github-token
 
 ```powershell
 # Docker Compose (recommended)
-docker-compose up -d braid-mcp-server
+cd braid-mcp-node-server
+docker compose up -d --build
 
 # Local development
 cd braid-mcp-node-server
@@ -1935,7 +1936,7 @@ npm start
 
 # Check health
 Invoke-RestMethod -Uri "http://localhost:8000/health"
-# Expected: {"status":"ok","service":"braid-mcp-server"}
+# Expected: {"status":"ok","service":"braid-mcp-node-server"}
 ```
 
 ### Adapters
@@ -2017,20 +2018,20 @@ Invoke-RestMethod -Uri "http://localhost:8000/memory/status"
 
 ```powershell
 # Docker
-docker logs braid-mcp-server -f --tail 100
+docker logs braid-mcp-node-server -f --tail 100
 
 # Look for errors
-docker logs braid-mcp-server 2>&1 | Select-String "error"
+docker logs braid-mcp-node-server 2>&1 | Select-String "error"
 ```
 
 #### Performance Metrics
 
 ```powershell
 # Check container stats
-docker stats braid-mcp-server
+docker stats braid-mcp-node-server
 
 # Check Redis memory usage
-docker exec braid-mcp-server redis-cli INFO memory
+docker exec braid-mcp-node-server redis-cli INFO memory
 ```
 
 ### Integration with Call Flow
@@ -2052,7 +2053,7 @@ The call flow system uses Braid MCP for transcript analysis:
 **Check:**
 ```powershell
 # View logs
-docker logs braid-mcp-server
+docker logs braid-mcp-node-server
 
 # Common issues:
 # - Port 8000 already in use
@@ -2063,10 +2064,11 @@ docker logs braid-mcp-server
 **Fix:**
 ```powershell
 # Restart Redis
-docker-compose up -d redis
+docker compose up -d redis
 
 # Rebuild and restart
-docker-compose up -d --build braid-mcp-server
+cd braid-mcp-node-server
+docker compose up -d --build
 ```
 
 #### LLM Operations Failing
@@ -2086,7 +2088,7 @@ WHERE setting_key = 'openai_api_key';
 
 **Check Logs:**
 ```powershell
-docker logs braid-mcp-server | Select-String "OpenAI"
+docker logs braid-mcp-node-server | Select-String "OpenAI"
 ```
 
 #### Memory Layer Unavailable
@@ -2094,7 +2096,7 @@ docker logs braid-mcp-server | Select-String "OpenAI"
 **Check Redis:**
 ```powershell
 # Test Redis connection
-docker exec braid-mcp-server redis-cli PING
+docker exec braid-mcp-node-server redis-cli PING
 # Expected: PONG
 
 # Check Redis is running

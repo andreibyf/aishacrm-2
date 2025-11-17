@@ -15,7 +15,7 @@ import { swaggerSpec } from './lib/swagger.js';
 import { initSupabaseDB, pool as supabasePool } from './lib/supabase-db.js';
 import { initializePerformanceLogBatcher } from './lib/perfLogBatcher.js';
 import { attachRequestContext } from './lib/requestContext.js';
-import { initMemoryClient as initMemory, isMemoryAvailable } from './lib/memoryClient.js';
+import { initMemoryClient as initMemory, isMemoryAvailable, getMemoryClient } from './lib/memoryClient.js';
 import { startCampaignWorker } from './lib/campaignWorker.js';
 
 // Load environment variables
@@ -70,6 +70,16 @@ await (async () => {
 try {
   await initMemory(process.env.REDIS_URL);
   console.log(`✓ Memory layer ${isMemoryAvailable() ? 'available' : 'unavailable'} (${process.env.REDIS_URL ? 'configured' : 'no REDIS_URL'})`);
+  // Expose memory client for diagnostics/probes (e.g., containers-status)
+  try {
+    const client = getMemoryClient();
+    if (client) {
+      // Attach to app.locals for lightweight reachability checks
+      app.locals.memoryClient = client;
+    }
+  } catch {
+    // getMemoryClient throws when unavailable; leave unset
+  }
 } catch (e) {
   console.warn('⚠ Memory client init skipped/failed:', e?.message || e);
 }
@@ -478,8 +488,7 @@ app.use("/api/notes", createNoteRoutes(measuredPgPool));
 app.use("/api/systembrandings", createSystemBrandingRoutes(measuredPgPool));
 app.use("/api/synchealths", createSyncHealthRoutes(measuredPgPool));
 app.use("/api/aicampaigns", createAICampaignRoutes(measuredPgPool));
-// Security routes require a Supabase client for reading system_logs; use admin client
-app.use("/api/security", createSecurityRoutes(measuredPgPool, getSupabaseAdmin()));
+app.use("/api/security", createSecurityRoutes(measuredPgPool));
 // Memory routes use Redis/Valkey; DB pool not required
 app.use("/api/memory", createMemoryRoutes());
 

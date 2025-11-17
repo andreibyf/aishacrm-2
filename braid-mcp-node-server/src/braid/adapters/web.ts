@@ -12,7 +12,12 @@ async function searchWikipedia(
   ctx.debug("Searching Wikipedia", { query });
 
   const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=5&srsearch=${encodeURIComponent(query)}`;
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": "AishaCRM/1.0 (https://github.com/andreibyf/aishacrm-2; support@aishacrm.local) node-fetch",
+      "Accept": "application/json"
+    }
+  });
   const json = await response.json();
 
   return json?.query?.search || [];
@@ -25,7 +30,12 @@ async function getWikipediaPage(
   ctx.debug("Fetching Wikipedia page", { pageid });
 
   const url = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&format=json&pageids=${encodeURIComponent(pageid)}`;
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": "AishaCRM/1.0 (https://github.com/andreibyf/aishacrm-2; support@aishacrm.local) node-fetch",
+      "Accept": "application/json"
+    }
+  });
   const json = await response.json();
 
   return json?.query?.pages?.[pageid] || null;

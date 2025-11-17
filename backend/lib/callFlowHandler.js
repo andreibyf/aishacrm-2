@@ -759,7 +759,7 @@ async function analyzeTranscriptViaBraid(transcript, tenant_id) {
     .split(',')
     .map(h => h.trim())
     .filter(Boolean);
-  const primaryUrl = process.env.BRAID_MCP_URL || 'http://braid-mcp-server:8000';
+  const primaryUrl = process.env.BRAID_MCP_URL || 'http://braid-mcp-node-server:8000';
   const candidateUrls = [];
   // Normalize hosts into full URLs if needed
   for (const host of nodeHosts) {

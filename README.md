@@ -285,17 +285,18 @@ This repo includes a Dockerized Node.js MCP-style Braid server under `braid-mcp-
 
 There are two ways to run the MCP server:
 
-- **Standalone (server only)**:
+- **Standalone (recommended):**
+  ```bash
+  # From repo root
+  docker compose -f braid-mcp-node-server/docker-compose.yml up -d --build
+  # Server available at http://localhost:8000
+  ```
+
+- **Local dev script (if provided):**
   ```bash
   npm run serve:braid
   ```
-  This uses `braid-mcp-node-server/docker-compose.yml` and binds the server to `http://localhost:8000`.
-
-- **Full stack with backend (recommended for real CRM calls & telephony)**:
-  ```bash
-  docker compose up --build backend braid-mcp-server
-  ```
-  In this mode, the `braid-mcp-server` service (defined in root `docker-compose.yml`) talks to the backend container at `http://backend:3001` via `CRM_BACKEND_URL` and exposes `http://localhost:8000` on the host.
+  This uses `braid-mcp-node-server/docker-compose.yml` to bind the server to `http://localhost:8000`.
 
 ### LLM kit integration
 
@@ -304,7 +305,7 @@ The AiSHA Braid LLM kit can treat the MCP server as a remote tool via:
 - `braid-llm-kit/tools/mcp-braid-server.json`:
   ```json
   {
-    "toolName": "braid-mcp-server",
+    "toolName": "braid-mcp-node-server",
     "type": "http",
     "endpoint": "http://localhost:8000/mcp/run",
     "requestFormat": "BraidRequestEnvelope",

@@ -61,7 +61,7 @@ Then set the `N8N_CUSTOM_EXTENSIONS` environment variable to point to the node_m
 ## Configuration
 
 The MCP Server node requires:
-- **MCP Server URL**: The URL of your MCP server (default: `http://braid-mcp-server:8000`)
+- **MCP Server URL**: The URL of your MCP server (default: `http://braid-mcp-node-server:8000`)
 - **Tenant ID**: Your CRM tenant identifier (default: `local-tenant-001`)
 
 ## Usage

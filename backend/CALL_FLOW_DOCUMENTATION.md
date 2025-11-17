@@ -476,18 +476,18 @@ ORDER BY completed_at DESC;
 
 #### 1. **Braid MCP Server Integration** (Recommended)
 
-Uses the braid-mcp-server for AI-powered transcript analysis with intelligent tenant-specific API key resolution.
+Uses the braid-mcp-node-server for AI-powered transcript analysis with intelligent tenant-specific API key resolution.
 
 **Enable in `.env`:**
 ```bash
 USE_BRAID_MCP_TRANSCRIPT_ANALYSIS=true
-BRAID_MCP_URL=http://braid-mcp-server:8000
+BRAID_MCP_URL=http://braid-mcp-node-server:8000
 TRANSCRIPT_ANALYSIS_MODEL=gpt-4o-mini
 ```
 
 **Start Braid MCP Server:**
 ```bash
-docker-compose up -d braid-mcp-server
+cd braid-mcp-node-server && docker compose up -d --build
 ```
 
 **Benefits:**
@@ -501,7 +501,7 @@ docker-compose up -d braid-mcp-server
 - ✅ Context-aware customer requests
 
 **How It Works:**
-1. Call flow sends transcript to `http://braid-mcp-server:8000/mcp/run`
+1. Call flow sends transcript to `http://braid-mcp-node-server:8000/mcp/run`
 2. Braid MCP resolves OpenAI API key:
    - Checks `tenant_integrations` table for tenant-specific key
    - Falls back to `system_settings` table

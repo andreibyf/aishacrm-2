@@ -1,7 +1,7 @@
 # MCP Monitor - User Acceptance Testing Checklist
 
 ## Pre-Testing Setup
-- [ ] All Docker containers running (frontend, backend, braid-mcp-server)
+- [ ] All Docker containers running (frontend, backend, braid-mcp-node-server)
 - [ ] Frontend accessible at http://localhost:4000
 - [ ] Braid MCP accessible at http://localhost:8000
 - [ ] Logged into application with valid credentials
@@ -165,7 +165,7 @@ docker-compose up -d --build frontend
 ### Validation
 If "Direct DB Access" is not checked:
 1. Verify `docker-compose.yml` has `USE_DIRECT_SUPABASE_ACCESS=true`
-2. Check logs: `docker logs braid-mcp-server`
+2. Check logs: `docker logs braid-mcp-node-server`
 3. Look for "Direct Supabase search successful" messages
 
 ---
@@ -226,10 +226,10 @@ If "Direct DB Access" is not checked:
 **Objective**: Test error handling when server is unavailable
 
 ### Steps
-1. [ ] Stop Braid MCP container: `docker stop braid-mcp-server`
+1. [ ] Stop Braid MCP container: `docker stop braid-mcp-node-server`
 2. [ ] In UI, click "Quick Health Check"
 3. [ ] Observe failure handling
-4. [ ] Restart container: `docker start braid-mcp-server`
+4. [ ] Restart container: `docker start braid-mcp-node-server`
 5. [ ] Run health check again
 
 ### Expected Results When Offline
@@ -307,8 +307,8 @@ If "Direct DB Access" is not checked:
 ### Issue: No tests passing (0/9)
 **Check**:
 ```powershell
-docker ps  # Verify braid-mcp-server is running
-docker logs braid-mcp-server  # Check for errors
+docker ps  # Verify braid-mcp-node-server is running
+docker logs braid-mcp-node-server  # Check for errors
 ```
 
 ### Issue: CRM tests failing (tests 4-6)
