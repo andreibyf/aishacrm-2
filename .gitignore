@@ -57,3 +57,6 @@ test-results/
 *.tmp
 *.temp
 .cache/
+ 
+# Local knowledge-base/editor backups
+logseq/
