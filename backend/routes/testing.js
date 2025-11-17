@@ -303,14 +303,14 @@ export default function createTestingRoutes(_pgPool) {
               const count = Array.isArray(data) ? data.length : 0;
               results[`${table}_unflagged`] = { deleted: count, success: true, window_days: windowDays };
               totalDeleted += count;
-            } catch (err) {
-              console.error(`Unflagged cleanup error for ${table}:`, err);
-              results[`${table}_unflagged`] = { deleted: 0, success: false, error: err.message };
+            } catch (unflaggedErr) {
+              console.error(`Unflagged cleanup error for ${table}:`, unflaggedErr);
+              results[`${table}_unflagged`] = { deleted: 0, success: false, error: unflaggedErr.message };
             }
           }
-        } catch (err) {
-          console.error('Unflagged cleanup block error:', err);
-          results['unflagged_cleanup'] = { success: false, error: err.message };
+        } catch (unflaggedBlockErr) {
+          console.error('Unflagged cleanup block error:', unflaggedBlockErr);
+          results['unflagged_cleanup'] = { success: false, error: unflaggedBlockErr.message };
         }
       }
 
@@ -427,7 +427,7 @@ export default function createTestingRoutes(_pgPool) {
           if (ep.body) fetchOpts.body = JSON.stringify(ep.body);
           const resp = await fetch(url, fetchOpts);
           statusCode = resp.status;
-        } catch (err) {
+        } catch {
           statusCode = 0;
         }
         const end = performance.now ? performance.now() : Date.now();

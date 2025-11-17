@@ -87,7 +87,7 @@ export default function createDocumentationRoutes(_pgPool) {
       });
       const page = await browser.newPage();
       await page.setViewport({ width: 1200, height: 800 });
-      await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+      await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 60000 });
 
       const pdfBuffer = await page.pdf({
         format: 'A4',
@@ -112,7 +112,7 @@ export default function createDocumentationRoutes(_pgPool) {
       return res.status(500).json({ status: 'error', message: err?.message || 'Failed to generate PDF' });
     } finally {
       if (browser) {
-        try { await browser.close(); } catch {}
+        try { await browser.close(); } catch { /* no-op */ }
       }
     }
   });

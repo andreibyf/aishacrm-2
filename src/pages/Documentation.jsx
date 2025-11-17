@@ -18,7 +18,6 @@ import {
   FileText,
   Info,
   Puzzle,
-  Route,
   Search,
   Settings,
   Shield,
@@ -124,7 +123,7 @@ Welcome to the complete Aisha CRM User Guide. This comprehensive 14-chapter guid
 
 The full User Guide with detailed screenshots, step-by-step instructions, and best practices is available as a downloadable PDF document.
 
-**Click the "Download PDF Guide" button** at the top of this page to get the complete documentation.
+**Click the &quot;Download PDF Guide&quot; button** at the top of this page to get the complete documentation.
 
 ## 🎯 Key Features Covered
 
@@ -212,7 +211,7 @@ Use the search function above to find specific topics quickly. The User Guide in
 
 ## Your Admin Role
 
-As a **Tenant Administrator**, you have full control over your organization's CRM instance:
+As a **Tenant Administrator**, you have full control over your organization&apos;s CRM instance:
 
 ✓ Manage users within your tenant
 ✓ Configure tenant settings and branding
@@ -229,7 +228,7 @@ As a **Tenant Administrator**, you have full control over your organization's CR
 1. Navigate to **Settings** → **User Management**
 2. Click **"+ Invite User"**
 3. Fill in user details:
-   - **Email Address** - User's work email
+   - **Email Address** - User&apos;s work email
    - **First Name** and **Last Name**
    - **Job Title** and **Department**
 4. Select **CRM Role**:
@@ -256,7 +255,7 @@ The user will receive an email with a signup link.
 - View only their own records
 - View records assigned to them
 - Limited export (own data only)
-- Cannot see other employees' data
+- Cannot see other employees&apos; data
 - Cannot assign records
 
 ### Managing Existing Users
@@ -474,7 +473,7 @@ As admin, you can:
 - At least one special character
 
 **User Password Reset**
-1. User clicks "Forgot Password"
+1. User clicks &quot;Forgot Password&quot;
 2. System sends reset email
 3. User creates new password
 4. Admin cannot see passwords
@@ -598,7 +597,7 @@ Contacts are individuals you interact with - potential customers, existing clien
 ## Best Practices
 
 ✓ **Link contacts to accounts** for better organization
-✓ **Use tags** to segment your contacts (e.g., "VIP", "Newsletter")
+✓ **Use tags** to segment your contacts (e.g., &quot;VIP&quot;, &quot;Newsletter&quot;)
 ✓ **Keep notes updated** after each interaction
 ✓ **Assign ownership** for accountability
 ✓ **Regular cleanup** - mark inactive contacts
@@ -712,7 +711,7 @@ When a lead is qualified, convert to:
 
 ## Best Practices
 
-✓ **Qualify quickly** - don't let leads stagnate
+✓ **Qualify quickly** - don&apos;t let leads stagnate
 ✓ **Use lead scoring** to prioritize outreach
 ✓ **Track lead sources** for ROI analysis
 ✓ **Add notes** at each touchpoint
@@ -920,7 +919,7 @@ Track industry-specific licenses:
 
 ## Best Practices
 
-✓ **Use descriptive source names** (e.g., "ABC Directory 2025 Q1")
+✓ **Use descriptive source names** (e.g., &quot;ABC Directory 2025 Q1&quot;)
 ✓ **Regular cleanup** - archive old sources
 ✓ **Track conversion rates** - which sources perform best
 ✓ **Don't promote prematurely** - wait until deal is won
@@ -1007,7 +1006,7 @@ Set up repeating transactions:
 
 ## Best Practices
 
-✓ **Record promptly** - don't wait until month-end
+✓ **Record promptly** - don&apos;t wait until month-end
 ✓ **Use categories consistently** - easier to analyze
 ✓ **Upload receipts** - for tax compliance
 ✓ **Set up recurring** - for predictable expenses
@@ -1091,7 +1090,7 @@ AI suggests appropriate tax categories:
 
 ## Best Practices
 
-✓ **Process immediately** - don't let cards pile up
+✓ **Process immediately** - don&apos;t let cards pile up
 ✓ **Review AI extraction** - verify accuracy
 ✓ **Add notes** - context for later
 ✓ **Organize files** - use consistent naming
@@ -1194,7 +1193,7 @@ All reports support:
 ✓ **Share with team** - transparency builds accountability
 ✓ **Set benchmarks** - track against goals
 ✓ **Export regularly** - for board meetings and reviews
-✓ **Act on insights** - don't just collect data
+✓ **Act on insights** - don&apos;t just collect data
       `,
     },
     {
@@ -1330,9 +1329,9 @@ The AI Agent can:
 ### Using the Agent
 
 **Voice Commands** (if mic enabled):
-- "Show me all high-value opportunities"
-- "Create a new contact for John Smith at Acme Corp"
-- "What's my pipeline value this month?"
+- &quot;Show me all high-value opportunities&quot;
+- &quot;Create a new contact for John Smith at Acme Corp&quot;
+- &quot;What&apos;s my pipeline value this month?&quot;
 
 **Text Chat**:
 - Type natural language queries
@@ -1696,7 +1695,7 @@ Activities color-coded by:
 ## Best Practices
 
 ✓ **Block time** - Schedule focused work periods
-✓ **Set realistic durations** - Don't overbook
+✓ **Set realistic durations** - Don&apos;t overbook
 ✓ **Use recurring** - For regular meetings
 ✓ **Update promptly** - Mark as complete when done
 ✓ **Review weekly** - Plan upcoming week on Fridays
@@ -1862,7 +1861,7 @@ Configure retention policies:
 ## Best Practices
 
 ✓ **Run quality checks monthly** - Stay on top of data hygiene
-✓ **Merge duplicates promptly** - Don't let them multiply
+✓ **Merge duplicates promptly** - Don&apos;t let them multiply
 ✓ **Import carefully** - Validate data before bulk import
 ✓ **Regular exports** - Backup your data externally
 ✓ **Archive old data** - Keep system performant
@@ -1883,7 +1882,7 @@ Personalize your Aisha CRM experience and manage your user profile.
 
 ### Profile Information
 1. Click your profile avatar (top-right corner)
-2. Select **"Profile Settings"**
+2. Select **&quot;Profile Settings&quot;**
 3. Update your information:
    - **Full Name** - Your display name
    - **Email Address** - Login email (cannot be changed)
@@ -1921,7 +1920,7 @@ Manage real-time alerts:
 - System updates
 
 ### Quiet Hours
-Set times when you don't want notifications:
+Set times when you don&apos;t want notifications:
 - Start time (e.g., 8:00 PM)
 - End time (e.g., 7:00 AM)
 - Weekend notifications (on/off)
@@ -1962,7 +1961,7 @@ Set times when you don't want notifications:
 
 ### Password Management
 1. Navigate to **Settings** → **Security**
-2. Click **"Change Password"**
+2. Click **&quot;Change Password&quot;**
 3. Enter current password
 4. Enter new password (min 8 characters)
 5. Confirm new password
@@ -1990,7 +1989,7 @@ View and manage your active login sessions:
 ### Data Export
 Request a copy of your personal data:
 1. **Settings** → **Privacy**
-2. Click **"Request Data Export"**
+2. Click **&quot;Request Data Export&quot;**
 3. Receive download link via email (24-48 hours)
 4. Download ZIP file with all your data
 

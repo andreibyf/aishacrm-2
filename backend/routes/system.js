@@ -25,8 +25,8 @@ export default function createSystemRoutes(_pgPool) {
         } else {
           dbStatus = 'connected';
         }
-      } catch (err) {
-        dbStatus = 'error: ' + err.message;
+      } catch (_) {
+        dbStatus = 'error: ' + _.message;
       }
 
       res.json({
@@ -112,8 +112,8 @@ export default function createSystemRoutes(_pgPool) {
           .limit(1);
         diagnostics.database.connected = !error;
         if (error) diagnostics.database.error = error.message;
-      } catch (err) {
-        diagnostics.database.error = err.message;
+      } catch {
+        diagnostics.database.error = 'An unknown error occurred during diagnostics.';
       }
 
       res.json({
@@ -216,7 +216,7 @@ export default function createSystemRoutes(_pgPool) {
         statusCode = first.status;
         latencyMs = first.dt;
         reachable = true;
-      } catch (_err) {
+      } catch (err) {
         // All failed
         statusCode = 0;
         latencyMs = Math.round((performance.now ? performance.now() : Date.now()) - startAll);
@@ -305,8 +305,8 @@ export default function createSystemRoutes(_pgPool) {
           const count = Array.isArray(data) ? data.length : 0;
           summary[table] = { deleted: count };
           totalDeleted += count;
-        } catch (e) {
-          summary[table] = { error: e.message };
+        } catch (err) {
+          summary[table] = { error: err.message };
         }
       }
 
@@ -325,3 +325,4 @@ export default function createSystemRoutes(_pgPool) {
 
   return router;
 }
+

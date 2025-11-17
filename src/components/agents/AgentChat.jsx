@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import * as agentSDK from "@/api/conversations";
 import { Card } from "@/components/ui/card";
@@ -341,7 +340,7 @@ export default function AgentChat({
     } finally {
       setSending(false);
     }
-  }, [input, conversation, sending, tenantId, tenantName]);
+  }, [input, conversation, sending, tenantId, tenantName, currentUser]);
 
   // Listen for voice input results from MicButton
   useEffect(() => {

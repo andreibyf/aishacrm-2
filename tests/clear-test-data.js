@@ -22,7 +22,7 @@ async function clearTestData() {
   for (const table of tables) {
     try {
       // Delete records where email contains @acmecorp.test
-      const { error, count } = await supabase
+      const { error } = await supabase
         .from(table)
         .delete()
         .like('email', '%@acmecorp.test');

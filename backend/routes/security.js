@@ -18,7 +18,7 @@ import {
   clearTrackingData
 } from "../middleware/intrusionDetection.js";
 
-export default function createSecurityRoutes(pgPool) {
+export default function createSecurityRoutes(_pgPool) {
   const router = express.Router();
 
   /**
