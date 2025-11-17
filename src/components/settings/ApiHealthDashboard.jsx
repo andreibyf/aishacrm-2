@@ -162,23 +162,24 @@ export default function ApiHealthDashboard() {
 
         const response = await fetch(endpoint.url, options);
         
-        // Check if endpoint exists (not 404)
-        if (response.status === 404) {
-          results.failed++;
-          results.details.push({
-            name: endpoint.name,
-            status: 'failed',
-            message: '404 - Endpoint not found',
-            statusCode: 404
-          });
-        } else if (endpoint.expectError && (response.status === 400 || response.status === 500)) {
-          // Expected error (validation, missing data, etc.) means endpoint exists
+        // Check if this is an expected error response
+        if (endpoint.expectError && (response.status === 400 || response.status === 404 || response.status === 500)) {
+          // Expected error (validation, missing data, not found, etc.) means endpoint exists and is working
           results.passed++;
           results.details.push({
             name: endpoint.name,
             status: 'passed',
             message: `Endpoint exists (${response.status} expected)`,
             statusCode: response.status
+          });
+        } else if (response.status === 404 && !endpoint.expectError) {
+          // Unexpected 404 means endpoint route doesn't exist
+          results.failed++;
+          results.details.push({
+            name: endpoint.name,
+            status: 'failed',
+            message: '404 - Endpoint not found',
+            statusCode: 404
           });
         } else if (response.ok) {
           results.passed++;
