@@ -273,6 +273,8 @@ Use the convenience script to start everything at once:
 
 ## Braid MCP Node Server Integration
 
+Networking note: this repo defines a shared Docker bridge network named `aishanet` so the backend and MCP server can communicate by service name across separate Compose projects. See `docs/SHARED_NETWORK.md`.
+
 This repo includes a Dockerized Node.js MCP-style Braid server under `braid-mcp-node-server/`. It exposes the Braid v0 executor (including the CRM adapter) over HTTP for use as a remote tool.
 
 - Health check: `GET http://localhost:8000/health`
@@ -297,6 +299,8 @@ There are two ways to run the MCP server:
   npm run serve:braid
   ```
   This uses `braid-mcp-node-server/docker-compose.yml` to bind the server to `http://localhost:8000`.
+
+When both stacks are up, the backend addresses the MCP at `http://braid-mcp-node-server:8000` via the shared `aishanet` network. The System Health dashboard probes MCP over the shared network first, then uses environment overrides.
 
 ### LLM kit integration
 

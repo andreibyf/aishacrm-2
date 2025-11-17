@@ -47,6 +47,8 @@ services:
       options:
         max-size: "5m"
         max-file: "2"
+    networks:
+      - aishanet
 
   # Backend API
   # ⚠️ CRITICAL: Uses Supabase Cloud database ONLY (see DATABASE_CONFIGURATION.md)
@@ -94,6 +96,8 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    networks:
+      - aishanet
 
   # (Removed) braid-mcp-server was deprecated in favor of braid-mcp-node-server standalone stack
 
@@ -121,6 +125,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    networks:
+      - aishanet
 
   # n8n (optional) - local automation
   n8n:
@@ -156,6 +162,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    networks:
+      - aishanet
 
   # nginx proxy for n8n to strip X-Frame-Options header
   n8n-proxy:
@@ -174,6 +182,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks:
+      - aishanet
 
 volumes:
   postgres_data:
@@ -182,3 +192,8 @@ volumes:
     driver: local
   redis_data:
     driver: local
+
+networks:
+  aishanet:
+    name: aishanet
+    driver: bridge
