@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useApiOptimizer } from './ApiOptimizer';
-import { User } from '@/api/entities';
 import { Tenant } from '@/api/entities';
 import { Notification } from '@/api/entities';
 import { Employee } from '@/api/entities';
+import { useUser } from '@/components/shared/useUser.js';
 
 /**
  * Hook to batch load common initial data
@@ -17,6 +17,7 @@ export function useBatchedInitialData(options = {}) {
   } = options;
 
   const { batchLoad } = useApiOptimizer();
+  const { user } = useUser();
   const [data, setData] = useState({
     user: null,
     tenant: null,
@@ -37,7 +38,7 @@ export function useBatchedInitialData(options = {}) {
             entity: 'User',
             method: 'me',
             params: {},
-            fn: () => User.me(),
+            fn: async () => user,
             options: { enableCache: true, cacheTime: 10 * 60 * 1000 },
           });
         }
@@ -60,7 +61,7 @@ export function useBatchedInitialData(options = {}) {
             method: 'filter',
             params: { is_read: false },
             fn: async () => {
-              const user = await User.me();
+              if (!user?.email) return [];
               return Notification.filter({ user_email: user.email, is_read: false });
             },
             options: { enableCache: true, cacheTime: 2 * 60 * 1000 },
@@ -74,7 +75,7 @@ export function useBatchedInitialData(options = {}) {
             method: 'list',
             params: {},
             fn: async () => {
-              const user = await User.me();
+              if (!user?.tenant_id) return [];
               return Employee.filter({ tenant_id: user.tenant_id });
             },
             options: { enableCache: true, cacheTime: 5 * 60 * 1000 },
@@ -104,8 +105,10 @@ export function useBatchedInitialData(options = {}) {
       }
     };
 
-    load();
-  }, [batchLoad, loadUser, loadTenant, loadNotifications, loadEmployees]);
+    if (user || !loadUser) {
+      load();
+    }
+  }, [batchLoad, loadUser, loadTenant, loadNotifications, loadEmployees, user]);
 
   return data;
 }

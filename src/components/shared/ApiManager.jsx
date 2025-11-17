@@ -53,8 +53,13 @@ export const ApiProvider = ({ children }) => {
     keysToDelete.forEach(key => cacheRef.current.delete(key));
   }, []);
 
+  // Backward-compatible alias expected by some pages (e.g., Accounts.jsx)
+  const clearCacheByKey = useCallback((pattern) => {
+    return clearCache(pattern);
+  }, [clearCache]);
+
   return (
-    <ApiContext.Provider value={{ cachedRequest, clearCache }}>
+    <ApiContext.Provider value={{ cachedRequest, clearCache, clearCacheByKey }}>
       {children}
     </ApiContext.Provider>
   );

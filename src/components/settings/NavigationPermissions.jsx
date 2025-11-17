@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { User } from "@/api/entities";
+import { User } from "@/api/entities"; // still needed for update & schema
+import { useUser } from "@/components/shared/useUser.js";
 import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 
@@ -29,11 +30,11 @@ const ORDER = [
 ];
 
 export default function NavigationPermissions({ value, onChange, disabled = false, className = "" }) {
+  const { user } = useUser();
   const [keys, setKeys] = useState([]);
   const [_defaults, setDefaults] = useState({}); // Reserved for future default values feature
   const [local, setLocal] = useState(value || {});
   const [saving, setSaving] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Load user and schema
@@ -41,10 +42,6 @@ export default function NavigationPermissions({ value, onChange, disabled = fals
     let mounted = true;
     (async () => {
       try {
-        const user = await User.me();
-        if (!mounted) return;
-        setCurrentUser(user);
-
         const schema = await User.schema();
         const props = schema?.properties?.navigation_permissions?.properties || {};
         const ks = Object.keys(props);
@@ -52,35 +49,29 @@ export default function NavigationPermissions({ value, onChange, disabled = fals
           acc[k] = props[k]?.default !== undefined ? props[k].default : true;
           return acc;
         }, {});
-        
+
         if (mounted) {
           setKeys(ks);
           setDefaults(defs);
-          
-          // Load user's actual navigation permissions from database
           const userNavPerms = user?.navigation_permissions || {};
-          console.log('[NavigationPermissions] Loaded user nav perms:', userNavPerms);
-          
-          // Merge defaults with user's saved permissions
           const merged = { ...defs, ...userNavPerms };
-          setLocal(merged);
+          setLocal({ ...merged, ...value });
         }
       } catch (e) {
-        console.error('[NavigationPermissions] Error loading:', e);
-        // Fallback to a safe static list
+        console.error('[NavigationPermissions] Error loading schema:', e);
         const ks = [...ORDER];
         const defs = ks.reduce((acc, k) => { acc[k] = true; return acc; }, {});
         if (mounted) {
           setKeys(ks);
           setDefaults(defs);
-          setLocal(prev => ({ ...defs, ...(value || prev) }));
+          setLocal(prev => ({ ...defs, ...value, ...prev }));
         }
       } finally {
         if (mounted) setLoading(false);
       }
     })();
     return () => { mounted = false; };
-  }, [value]);
+  }, [user, value]);
 
   // Update local state when value prop changes (for external updates)
   useEffect(() => {
@@ -90,13 +81,13 @@ export default function NavigationPermissions({ value, onChange, disabled = fals
     }
   }, [value]);
 
-  const sortedKeys = React.useMemo(() => {
+  const sortedKeys = useMemo(() => {
     const inOrder = ORDER.filter(k => keys.includes(k));
     const extras = keys.filter(k => !ORDER.includes(k)).sort();
     return [...inOrder, ...extras];
   }, [keys]);
 
-  const handleToggle = (k, checked) => {
+  const handleToggle = useCallback((k, checked) => {
     console.log('[NavigationPermissions] Toggle:', k, '=', checked);
     const next = { ...local, [k]: !!checked };
     setLocal(next);
@@ -105,11 +96,11 @@ export default function NavigationPermissions({ value, onChange, disabled = fals
     if (typeof onChange === "function") {
       onChange(next);
     }
-  };
+  }, [local, onChange]);
 
   const handleSave = async () => {
-    if (!currentUser) {
-      toast.error("No user logged in");
+    if (!user) {
+      toast.error("No user loaded");
       return;
     }
 
@@ -118,13 +109,13 @@ export default function NavigationPermissions({ value, onChange, disabled = fals
       console.log('[NavigationPermissions] Saving:', local);
       
       // Save to User entity
-      await User.update(currentUser.id, {
+      await User.update(user.id, {
         navigation_permissions: local
       });
 
       // Verify it saved by re-fetching
-      const updatedUser = await User.me();
-      console.log('[NavigationPermissions] After save, user nav perms:', updatedUser?.navigation_permissions);
+      // We rely on a full page reload to refresh context; optional re-fetch omitted
+      console.log('[NavigationPermissions] Saved navigation permissions.');
 
       toast.success("Navigation permissions saved successfully!");
       

@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { TrendingUp, Calendar, DollarSign, Target, Loader2, AlertCircle } from 'lucide-react';
 import { Opportunity, Lead } from '@/api/entities';
-import { User } from '@/api/entities';
+import { useUser } from '@/components/shared/useUser.js';
 import { getTenantFilter } from '../shared/tenantUtils';
 import { useTenant } from '../shared/tenantContext';
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -13,7 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 export default function ForecastingDashboard() {
   const [loading, setLoading] = useState(true);
   const [forecastPeriod, setForecastPeriod] = useState('90');
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
   const [forecastData, setForecastData] = useState([]);
   const [pipelineMetrics, setPipelineMetrics] = useState({
     totalPipeline: 0,
@@ -22,18 +22,6 @@ export default function ForecastingDashboard() {
     conversionRate: 0
   });
   const { selectedTenantId } = useTenant();
-
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error('Error loading user:', error);
-      }
-    };
-    loadUser();
-  }, []);
 
   const getDefaultProbability = useCallback((stage) => {
     const stageProbabilities = {

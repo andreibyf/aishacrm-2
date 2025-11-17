@@ -1,0 +1,37 @@
+{
+  "$id": "doc-index.schema.json",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "symbol",
+      "sig"
+    ],
+    "properties": {
+      "symbol": {
+        "type": "string"
+      },
+      "sig": {
+        "type": "string"
+      },
+      "caps": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "effects": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "examples": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

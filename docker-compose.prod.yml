@@ -1,0 +1,74 @@
+services:
+  redis:
+    image: valkey/valkey:7-alpine
+    container_name: aishacrm-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: valkey-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: aishacrm-backend
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "4001:3001"
+    env_file:
+      - ./backend/.env
+    environment:
+      - NODE_ENV=production
+      - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
+      - PORT=${PORT:-3001}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:4000}
+      - PGSSLMODE=require
+      - REDIS_URL=redis://redis:6379
+      - SYSTEM_TENANT_ID=${SYSTEM_TENANT_ID:-a11dfb63-4b18-4eb8-872e-747af2e37c46}
+      - TENANT_RESOLVE_CACHE_TTL_MS=${TENANT_RESOLVE_CACHE_TTL_MS:-300000}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: .
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_AISHACRM_BACKEND_URL: ${VITE_AISHACRM_BACKEND_URL:-http://localhost:4001}
+        VITE_CURRENT_BRANCH: ${VITE_CURRENT_BRANCH:-main}
+      dockerfile: Dockerfile
+    container_name: aishacrm-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "4000:3000"
+    environment:
+      - PORT=${FRONTEND_PORT:-3000}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  redis_data:
+    driver: local

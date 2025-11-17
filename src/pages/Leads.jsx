@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Lead } from "@/api/entities";
 import { Account } from "@/api/entities";
-import { User } from "@/api/entities";
+// User entity no longer needed here; user comes from context
+import { useUser } from "@/components/shared/useUser.js";
 import { Employee } from "@/api/entities";
 import { useApiManager } from "../components/shared/ApiManager";
 import LeadCard from "../components/leads/LeadCard";
@@ -63,10 +64,11 @@ import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
 export default function LeadsPage() {
+  const { user } = useUser();
   const [leads, setLeads] = useState([]);
   const [users, setUsers] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [, setAccounts] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -77,7 +79,7 @@ export default function LeadsPage() {
   const [selectedLeads, setSelectedLeads] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [user, setUser] = useState(null);
+  // Removed local user state; using global context
   const { selectedTenantId } = useTenant();
   const [detailLead, setDetailLead] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -150,10 +152,10 @@ export default function LeadsPage() {
       user.employee_role === "manager";
   }, [user]);
 
-  // Derived state for admin role for controlling test data visibility
-  const isAdmin = useMemo(() => {
+  // Derived state for Superadmin role for controlling test data visibility
+  const isSuperadmin = useMemo(() => {
     if (!user) return false;
-    return user.role === "admin" || user.role === "superadmin";
+    return user.role === "superadmin";
   }, [user]);
 
   // Stats for ALL leads (not just current page)
@@ -180,24 +182,7 @@ export default function LeadsPage() {
   const supportingDataLoaded = useRef(false);
 
   // Load user once
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        // In E2E mode, use injected mock user to avoid failed User.me() calls
-        if (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser) {
-          setUser(window.__e2eUser);
-          return;
-        }
-        
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Failed to load user:", error);
-        toast.error("Failed to load user information");
-      }
-    };
-    loadUser();
-  }, []);
+  // Removed per-page user fetch; user comes from global context
 
   // New getTenantFilter function, moved here from tenantContext
   const getTenantFilter = useCallback(() => {
@@ -231,7 +216,7 @@ export default function LeadsPage() {
 
     // Test data filtering
     if (!showTestData) {
-      filter.is_test_data = { $ne: true };
+      filter.is_test_data = false; // Simple boolean, not complex operator
     }
 
     return filter;
@@ -251,6 +236,15 @@ export default function LeadsPage() {
           }
         } else if (user.tenant_id) {
           baseTenantFilter.tenant_id = user.tenant_id;
+        }
+
+        // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
+        if ((user.role === 'superadmin' || user.role === 'admin') && !baseTenantFilter.tenant_id) {
+          if (import.meta.env.DEV) {
+            console.log("[Leads] Skipping data load - no tenant selected");
+          }
+          supportingDataLoaded.current = true;
+          return;
         }
 
         // Load accounts
@@ -294,6 +288,20 @@ export default function LeadsPage() {
       // Use the new getTenantFilter which includes employee scope and test data filter
       let filter = getTenantFilter();
 
+      // Guard: Don't load stats if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !filter.tenant_id) {
+        setTotalStats({
+          total: 0,
+          new: 0,
+          contacted: 0,
+          qualified: 0,
+          unqualified: 0,
+          converted: 0,
+          lost: 0,
+        });
+        return;
+      }
+
       // Get up to 10000 leads for stats calculation
       const allLeads = await Lead.filter(filter, "id", 10000);
 
@@ -332,6 +340,14 @@ export default function LeadsPage() {
     setLoading(true);
     try {
       let currentFilter = getTenantFilter();
+
+      // Guard: Don't load leads if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !currentFilter.tenant_id) {
+        setLeads([]);
+        setTotalItems(0);
+        setLoading(false);
+        return;
+      }
 
       if (statusFilter !== "all") {
         currentFilter = { ...currentFilter, status: statusFilter };
@@ -487,40 +503,10 @@ export default function LeadsPage() {
     }, {});
   }, [employees]);
 
-  const handleSave = async (leadData) => {
-    console.log("[Leads.handleSave] Starting save with data:", leadData);
+  const handleSave = async (result) => {
+    console.log("[Leads.handleSave] Received result from LeadForm:", result);
 
     try {
-      // Guard: Ensure user is available
-      if (!user) {
-        console.error("[Leads.handleSave] User is undefined");
-        toast.error(
-          "Cannot save lead: User not loaded. Please refresh the page.",
-        );
-        return;
-      }
-
-      // Ensure tenant_id is set based on user
-      const dataWithTenant = {
-        ...leadData,
-        tenant_id: user.role === "superadmin" && selectedTenantId
-          ? selectedTenantId
-          : user.tenant_id,
-      };
-
-      console.log("[Leads.handleSave] Data with tenant:", dataWithTenant);
-
-      if (editingLead) {
-        console.log("[Leads.handleSave] Updating lead:", editingLead.id);
-        await Lead.update(editingLead.id, dataWithTenant);
-        toast.success("Lead updated successfully");
-      } else {
-        console.log("[Leads.handleSave] Creating new lead");
-        const result = await Lead.create(dataWithTenant);
-        console.log("[Leads.handleSave] Lead created:", result);
-        toast.success("Lead created successfully");
-      }
-
       // Close form and clear editing state
       setIsFormOpen(false);
       setEditingLead(null);
@@ -539,15 +525,12 @@ export default function LeadsPage() {
       ]);
       console.log("[Leads.handleSave] Data reloaded successfully");
     } catch (error) {
-      console.error("[Leads.handleSave] Failed to save lead:", {
+      console.error("[Leads.handleSave] Failed to reload data after save:", {
         error,
         message: error?.message,
         stack: error?.stack,
-        leadData,
+        result,
       });
-      toast.error(
-        editingLead ? "Failed to update lead" : "Failed to create lead",
-      );
     }
   };
 
@@ -939,9 +922,22 @@ export default function LeadsPage() {
     setIsConversionDialogOpen(true);
   };
 
-  const handleConversionSuccess = async () => {
+  const handleConversionSuccess = async (result) => {
+    // Optimistically update the lead status in the local state
+    if (convertingLead) {
+      setLeads(prevLeads => 
+        prevLeads.map(l => 
+          l.id === convertingLead.id 
+            ? { ...l, status: 'converted', converted_contact_id: result?.contact?.id, converted_account_id: result?.accountId }
+            : l
+        )
+      );
+    }
+    
     setIsConversionDialogOpen(false);
     setConvertingLead(null);
+    
+    // Refresh data from server
     clearCache("Lead");
     clearCache("Contact");
     clearCache("Account");
@@ -1040,9 +1036,10 @@ export default function LeadsPage() {
 
         <LeadConversionDialog
           lead={convertingLead}
+          accounts={accounts}
           open={isConversionDialogOpen}
-          onOpenChange={setIsConversionDialogOpen}
-          onSuccess={handleConversionSuccess}
+          onClose={() => setIsConversionDialogOpen(false)}
+          onConvert={handleConversionSuccess}
         />
 
         <LeadDetailPanel
@@ -1078,7 +1075,7 @@ export default function LeadsPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {isAdmin && (
+            {isSuperadmin && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -1463,12 +1460,13 @@ export default function LeadsPage() {
                       {leads.map((lead) => {
                         const age = calculateLeadAge(lead.created_date);
                         const ageBucket = getLeadAgeBucket(lead);
+                        const isConverted = lead.status === 'converted';
 
                         return (
                           <tr
                             key={lead.id}
                             data-testid={`lead-row-${lead.email}`}
-                            className="hover:bg-slate-700/30 transition-colors"
+                            className={`hover:bg-slate-700/30 transition-colors ${isConverted ? 'opacity-70' : ''}`}
                           >
                             <td className="px-4 py-3">
                               <Checkbox
@@ -1479,7 +1477,9 @@ export default function LeadsPage() {
                               />
                             </td>
                             <td className="px-4 py-3 text-sm text-slate-300">
-                              {lead.first_name} {lead.last_name}
+                              <span className={isConverted ? 'line-through' : ''}>
+                                {lead.first_name} {lead.last_name}
+                              </span>
                             </td>
                             <td
                               className="px-4 py-3 text-sm text-slate-300"
@@ -1586,6 +1586,7 @@ export default function LeadsPage() {
                                         setIsFormOpen(true);
                                       }}
                                       className="h-8 w-8 text-slate-400 hover:text-blue-400"
+                                      disabled={isConverted}
                                     >
                                       <Edit className="w-4 h-4" />
                                     </Button>
@@ -1624,6 +1625,7 @@ export default function LeadsPage() {
                                         handleDelete(lead.id);
                                       }}
                                       className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                                      disabled={isConverted}
                                     >
                                       <Trash2 className="w-4 h-4" />
                                     </Button>

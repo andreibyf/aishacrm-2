@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { Activity, User } from "@/api/entities";
+import { Activity } from "@/api/entities";
 import { getTenantFilter as getTenantFilterHelper } from "../components/shared/tenantUtils";
 import { useTenant } from "../components/shared/tenantContext";
 import { useApiManager } from "../components/shared/ApiManager";
+import { useUser } from "@/components/shared/useUser.js";
 import CalendarToolbar from "../components/calendar/CalendarToolbar";
 import MonthGrid from "../components/calendar/MonthGrid";
 import WeekView from "../components/calendar/WeekView";
@@ -15,7 +16,7 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, ad
 import CalendarQuickActions from "../components/calendar/CalendarQuickActions";
 
 export default function CalendarPage() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
   const [view, setView] = useState("month");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [activities, setActivities] = useState([]);
@@ -24,18 +25,22 @@ export default function CalendarPage() {
   const { selectedTenantId } = useTenant();
   const { cachedRequest } = useApiManager();
 
-  useEffect(() => {
-    (async () => {
-      const u = await User.me();
-      setCurrentUser(u);
-    })();
-  }, []);
+  // User provided by context
 
   const loadActivities = useCallback(async () => {
     if (!currentUser) return;
 
     const tenantFilter = getTenantFilterHelper(currentUser, selectedTenantId);
     let filter = { ...tenantFilter };
+
+    // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
+    if ((currentUser.role === 'superadmin' || currentUser.role === 'admin') && !filter.tenant_id) {
+      if (import.meta.env.DEV) {
+        console.log("[Calendar] Skipping data load - no tenant selected");
+      }
+      setActivities([]);
+      return;
+    }
 
     const isAdminLike = currentUser.role === "admin" || currentUser.role === "superadmin";
     const isManager = currentUser.employee_role === "manager";

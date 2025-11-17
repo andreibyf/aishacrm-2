@@ -44,9 +44,9 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { useUser } from '@/components/shared/useUser.js';
 import { DragDropContext, Draggable, Droppable } from "@hello-pangea/dnd";
 import { Tenant } from "@/api/entities";
-import { User } from "@/api/entities";
 import { createTenantWithR2Bucket } from "@/api/functions";
 import { deleteTenantWithData } from "@/api/functions";
 import { toast } from "sonner";
@@ -800,23 +800,25 @@ export default function TenantSetup() {
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingTenant, setEditingTenant] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
   const [debugInfo, setDebugInfo] = useState(null);
+  
+  // Use global user context instead of local User.me()
+  const { user: currentUser } = useUser();
 
   useEffect(() => {
+    if (!currentUser) return;
     loadUserAndTenants();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser]);
 
   const loadUserAndTenants = async () => {
+    if (!currentUser) return;
     setLoading(true);
     setDebugInfo(null); // Clear debug info on new load attempt
     try {
-      // First, get current user info for debugging
-      const user = await User.me();
-      setCurrentUser(user);
-      console.log("Current user:", user);
+      console.log("Current user:", currentUser);
       setDebugInfo(
-        `User role: ${user.role}, Client ID: ${user.tenant_id || "N/A"}`,
+        `User role: ${currentUser.role}, Client ID: ${currentUser.tenant_id || "N/A"}`,
       );
 
       // Try to load tenants

@@ -74,16 +74,18 @@ test.describe('User Management - Permission System', () => {
   });
 
   test.beforeEach(async ({ page }) => {
-    // Inject E2E mock user before any navigation
-    await page.addInitScript(() => {
-      window.__e2eUser = {
-        id: 'e2e-test-user-id',
-        email: 'e2e@example.com',
-        role: 'superadmin',
-        tenant_id: 'local-tenant-001'
-      };
-      console.log('[E2E Test] Mock user injected:', window.__e2eUser.email);
-    });
+      // Inject E2E mock user before any navigation
+      const TENANT_ID = process.env.E2E_TENANT_ID || 'local-tenant-001';
+      await page.addInitScript((tId) => {
+        window.__e2eUser = {
+          id: 'e2e-test-user-id',
+          email: 'e2e@example.com',
+          role: 'superadmin',
+          tenant_id: tId
+        };
+    try { localStorage.setItem('selected_tenant_id', tId); } catch { /* ignore */ }
+        console.log('[E2E Test] Mock user injected:', window.__e2eUser.email);
+      }, TENANT_ID);
     
     // Auto-accept dialogs
     page.on('dialog', dialog => dialog.accept());

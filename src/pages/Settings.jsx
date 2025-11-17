@@ -35,6 +35,7 @@ import {
   Bug, // for TestDataManager
   RefreshCw, // for SyncHealthMonitor
   Server, // for MCPServerMonitor
+  Workflow, // for n8n integration
 } from "lucide-react";
 import { User as UserEntity } from "@/api/entities";
 
@@ -64,7 +65,6 @@ import ModuleManager from "../components/shared/ModuleManager";
 import BillingSettings from "../components/settings/BillingSettings";
 import CronJobManager from "../components/settings/CronJobManager";
 import SystemAnnouncements from "../components/settings/SystemAnnouncements";
-import DocumentationSeeder from "../components/settings/DocumentationSeeder"; // NEW: Documentation Seeder
 import SystemLogsViewer from "../components/settings/SystemLogsViewer"; // NEW: System Logs Viewer
 import ApiHealthDashboard from "../components/settings/ApiHealthDashboard"; // NEW: API Health Monitor
 
@@ -76,9 +76,11 @@ import TestDataManager from "../components/settings/TestDataManager";
 import InternalPerformanceDashboard from "../components/settings/InternalPerformanceDashboard";
 import SyncHealthMonitor from "../components/settings/SyncHealthMonitor";
 import MCPServerMonitor from "../components/settings/MCPServerMonitor";
+import SecurityMonitor from "../components/settings/SecurityMonitor";
 import PerformanceMonitor from '../components/settings/PerformanceMonitor';
 import SystemHealthDashboard from "../components/settings/SystemHealthDashboard"; // NEW: SystemHealthDashboard
 import QaConsole from "../components/settings/QaConsole"; // NEW: QA Console (E2E triggers)
+import TenantResolveCacheMonitor from "../components/settings/TenantResolveCacheMonitor"; // NEW: Cache Monitor
 
 export default function SettingsPage() { // Renamed from Settings to SettingsPage as per outline
   const [currentUser, setCurrentUser] = useState(null);
@@ -131,50 +133,60 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
   // Define all tabs based on the outline, preserving existing components by creating new tabs where necessary
   const tabsConfig = [
+    // Basic user settings - everyone gets these
     { id: 'profile', label: 'My Profile', icon: User, color: 'blue', roles: ['any'] },
     { id: 'branding', label: 'Branding', icon: Palette, color: 'blue', roles: ['any'] },
-    { id: 'regional', label: 'Regional', icon: Globe, color: 'blue', roles: ['any'] }, // New tab for TimezoneSettings
-    { id: 'billing', label: 'Billing', icon: CreditCard, color: 'blue', roles: ['any'] }, // New tab for BillingSettings
+    { id: 'regional', label: 'Regional', icon: Globe, color: 'blue', roles: ['any'] },
+    { id: 'billing', label: 'Billing', icon: CreditCard, color: 'blue', roles: ['any'] },
 
-    // Admin & Manager accessible tabs
-    ...(isAdmin || isManager ? [
-      { id: 'global-integrations', label: 'Global Integrations', icon: Plug, color: 'orange', roles: ['admin', 'superadmin', 'manager'] },
-      { id: 'tenant-integrations', label: 'Tenant Integrations', icon: Puzzle, color: 'orange', roles: ['admin', 'superadmin', 'manager'] },
-      { id: 'api-docs', label: 'API Documentation', icon: BookOpen, color: 'blue', roles: ['admin', 'superadmin', 'manager'] },
-
-      { id: 'data-consistency', label: 'Data Consistency', icon: Database, color: 'cyan', roles: ['admin', 'superadmin', 'manager'] },
+    // Tenant Admin tabs (limited access - only user management)
+    ...(isAdmin && !isSuperadmin ? [
+      { id: 'users', label: 'User Management', icon: Users, color: 'green', roles: ['admin'] },
     ] : []),
 
-    // Admin-specific tabs
-    ...(isAdmin ? [
-      { id: 'users', label: 'User Management', icon: Users, color: 'green', roles: ['admin', 'superadmin'] },
-      { id: 'tenants', label: 'Client Management', icon: Building2, color: 'indigo', roles: ['admin', 'superadmin'] },
-      { id: 'modules', label: 'Module Settings', icon: LayoutGrid, color: 'slate', roles: ['admin', 'superadmin'] },
-      { id: 'cron', label: 'Cron Jobs', icon: Clock, color: 'yellow', roles: ['admin', 'superadmin'] },
-      { id: 'security', label: 'Security', icon: Lock, color: 'purple', roles: ['admin', 'superadmin'] },
-      { id: 'apikeys', label: 'API Keys', icon: Key, color: 'green', roles: ['admin', 'superadmin'] }, // Changed from Superadmin to Admin as per original code
+    // Manager accessible tabs (no admin features)
+    ...(isManager && !isAdmin ? [
+      { id: 'data-consistency', label: 'Data Consistency', icon: Database, color: 'cyan', roles: ['manager'] },
+    ] : []),
 
-      { id: 'advanced', label: 'Advanced', icon: Cog, color: 'slate', roles: ['admin', 'superadmin'] }, // NEW: Advanced Settings Tab
+    // Superadmin-only tabs (full system access)
+    ...(isSuperadmin ? [
+      { id: 'users', label: 'User Management', icon: Users, color: 'green', roles: ['superadmin'] },
+      { id: 'tenants', label: 'Client Management', icon: Building2, color: 'indigo', roles: ['superadmin'] },
 
-      { id: 'announcements', label: 'Announcements', icon: Megaphone, color: 'slate', roles: ['admin', 'superadmin'] }, // New tab for SystemAnnouncements
+      // Integrations
+      { id: 'global-integrations', label: 'Global Integrations', icon: Plug, color: 'orange', roles: ['superadmin'] },
+      { id: 'tenant-integrations', label: 'Tenant Integrations', icon: Puzzle, color: 'orange', roles: ['superadmin'] },
+      { id: 'n8n', label: 'n8n Workflows', icon: Workflow, color: 'purple', roles: ['superadmin'] },
+      { id: 'api-docs', label: 'API Documentation', icon: BookOpen, color: 'blue', roles: ['superadmin'] },
 
-      { id: 'test-data', label: 'Test Data', icon: Bug, color: 'cyan', roles: ['admin', 'superadmin'] },
+      // System Configuration
+      { id: 'modules', label: 'Module Settings', icon: LayoutGrid, color: 'slate', roles: ['superadmin'] },
+      { id: 'cron', label: 'Cron Jobs', icon: Clock, color: 'yellow', roles: ['superadmin'] },
+      { id: 'security', label: 'Security', icon: Lock, color: 'purple', roles: ['superadmin'] },
+      { id: 'apikeys', label: 'API Keys', icon: Key, color: 'green', roles: ['superadmin'] },
+      { id: 'announcements', label: 'Announcements', icon: Megaphone, color: 'slate', roles: ['superadmin'] },
 
-      { id: 'performance', label: 'Performance', icon: Activity, color: 'emerald', roles: ['admin', 'superadmin'] }, // Combined Performance Dashboard
-      { id: 'sync-health', label: 'Sync Health', icon: RefreshCw, color: 'emerald', roles: ['admin', 'superadmin'] },
-      { id: 'mcp-monitor', label: 'MCP Monitor', icon: Server, color: 'emerald', roles: ['admin', 'superadmin'] },
-      { id: 'system-health', label: 'System Health', icon: Activity, color: 'emerald', roles: ['admin', 'superadmin'] }, // NEW: System Health Dashboard
-      { id: 'system-logs', label: 'System Logs', icon: FileText, color: 'slate', roles: ['admin', 'superadmin'] }, // NEW: System Logs
+      // Data Management
+      { id: 'data-consistency', label: 'Data Consistency', icon: Database, color: 'cyan', roles: ['superadmin'] },
+      { id: 'test-data', label: 'Test Data', icon: Bug, color: 'cyan', roles: ['superadmin'] },
+
+      // Monitoring & Health
+      { id: 'performance', label: 'Performance', icon: Activity, color: 'emerald', roles: ['superadmin'] },
+      { id: 'cache-monitor', label: 'Cache Monitor', icon: Database, color: 'emerald', roles: ['superadmin'] },
+      { id: 'sync-health', label: 'Sync Health', icon: RefreshCw, color: 'emerald', roles: ['superadmin'] },
+      { id: 'mcp-monitor', label: 'MCP Monitor', icon: Server, color: 'emerald', roles: ['superadmin'] },
+      { id: 'security-monitor', label: 'Security', icon: Shield, color: 'red', roles: ['superadmin'] },
+      { id: 'system-health', label: 'System Health', icon: Activity, color: 'emerald', roles: ['superadmin'] },
+      { id: 'system-logs', label: 'System Logs', icon: FileText, color: 'slate', roles: ['superadmin'] },
 
       // Testing & Diagnostics
-      { id: 'unit-tests', label: 'Unit Tests', icon: TestTube2, color: 'blue', roles: ['admin', 'superadmin'] }, // NEW: Unit Tests tab
-      { id: 'qa-console', label: 'QA Console', icon: TestTube2, color: 'blue', roles: ['admin', 'superadmin'] }, // NEW: QA Console tab
-      { id: 'external-tools', label: 'External Tools', icon: ExternalLink, color: 'orange', roles: ['admin', 'superadmin'] }, // NEW: External Tools tab
-      { id: 'api-health', label: 'API Health', icon: Activity, color: 'red', roles: ['admin', 'superadmin'] }, // NEW: API Health Monitor
-    ] : []),
+      { id: 'unit-tests', label: 'Unit Tests', icon: TestTube2, color: 'blue', roles: ['superadmin'] },
+      { id: 'qa-console', label: 'QA Console', icon: TestTube2, color: 'blue', roles: ['superadmin'] },
+      { id: 'external-tools', label: 'External Tools', icon: ExternalLink, color: 'orange', roles: ['superadmin'] },
+      { id: 'api-health', label: 'API Health', icon: Activity, color: 'red', roles: ['superadmin'] },
 
-    // Superadmin-specific tabs
-    ...(isSuperadmin ? [
+      // Client Management
       { id: 'offboarding', label: 'Client Offboarding', icon: Trash2, color: 'red', roles: ['superadmin'] },
     ] : []),
   ];
@@ -360,6 +372,47 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                 </Card>
               )}
 
+              {activeTab === 'n8n' && isSuperadmin && (
+                <Card className="bg-slate-800 border-slate-700">
+                  <CardHeader>
+                    <CardTitle className="text-slate-100 flex items-center gap-2">
+                      <Workflow className="w-5 h-5 text-purple-400" />
+                      n8n Workflow Automation
+                    </CardTitle>
+                    <CardDescription className="text-slate-400">
+                      Create and manage automated workflows with 400+ integrations
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="bg-purple-900/20 border border-purple-700/50 rounded-lg p-3 flex items-center justify-between">
+                        <p className="text-sm text-purple-300">
+                          <strong>n8n Workflow Editor</strong> - Visual automation platform embedded below
+                        </p>
+                        <a
+                          href="http://localhost:5679"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition-colors"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          Open in New Tab
+                        </a>
+                      </div>
+                      
+                      <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
+                        <iframe
+                          src="http://localhost:5679"
+                          className="w-full border-0"
+                          style={{ height: 'calc(100vh - 300px)', minHeight: '600px' }}
+                          title="n8n Workflow Editor"
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {activeTab === 'api-docs' && (isAdmin || isManager) && (
                 <Card className="bg-slate-800 border-slate-700">
                   <CardHeader>
@@ -377,9 +430,9 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                         <p className="text-sm text-blue-300 mb-2">
                           <strong>Full API documentation available at:</strong>
                         </p>
-                        <a 
-                          href={`${BACKEND_URL}/api-docs`} 
-                          target="_blank" 
+                        <a
+                          href={`${BACKEND_URL}/api-docs`}
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-400 hover:text-blue-300 underline flex items-center gap-2"
                         >
@@ -473,28 +526,6 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                 </Card>
               )}
 
-              {/* NEW: Advanced Settings Tab Content */}
-              {activeTab === 'advanced' && isAdmin && (
-                <div className="space-y-6">
-                  <Card className="bg-slate-800 border-slate-700">
-                    <CardHeader>
-                      <CardTitle className="text-slate-100">Advanced Settings</CardTitle>
-                      <CardDescription className="text-slate-400">
-                        System configuration and advanced features
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-slate-300">
-                        Manage critical system-level configurations and utilities.
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  {/* NEW: Documentation Seeder */}
-                  <DocumentationSeeder />
-                </div>
-              )}
-
               {/* Data Management */}
               {activeTab === 'data-consistency' && (isAdmin || isManager) && ( // New tab content
                 <Card className="bg-slate-800 border-slate-700">
@@ -550,6 +581,18 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                 </div>
               )}
 
+              {activeTab === 'cache-monitor' && isAdmin && (
+                <Card className="bg-slate-800 border-slate-700">
+                  <CardHeader>
+                    <CardTitle className="text-slate-100">Tenant Resolve Cache Monitor</CardTitle>
+                    <CardDescription className="text-slate-400">Monitor cache performance and hit ratios for tenant identity resolution</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <TenantResolveCacheMonitor />
+                  </CardContent>
+                </Card>
+              )}
+
               {activeTab === 'sync-health' && isAdmin && ( // New tab content
                 <Card className="bg-slate-800 border-slate-700">
                   <CardHeader>
@@ -570,6 +613,23 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                   </CardHeader>
                   <CardContent>
                     <MCPServerMonitor />
+                  </CardContent>
+                </Card>
+              )}
+
+              {activeTab === 'security-monitor' && isAdmin && ( // New Security Monitor tab
+                <Card className="bg-slate-800 border-slate-700">
+                  <CardHeader>
+                    <CardTitle className="text-slate-100 flex items-center gap-2">
+                      <Shield className="w-5 h-5 text-red-400" />
+                      Security & Intrusion Detection
+                    </CardTitle>
+                    <CardDescription className="text-slate-400">
+                      Monitor security alerts, track unauthorized access attempts, and manage blocked IPs
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <SecurityMonitor />
                   </CardContent>
                 </Card>
               )}

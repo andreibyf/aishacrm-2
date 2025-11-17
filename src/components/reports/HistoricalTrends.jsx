@@ -60,7 +60,7 @@ export default function HistoricalTrends({ tenantFilter }) {
       // Load data with tenant filter
       const effectiveFilter = { ...tenantFilter };
       if (!("is_test_data" in effectiveFilter)) {
-        effectiveFilter.is_test_data = { $ne: true };
+        effectiveFilter.is_test_data = false;
       }
 
       const [contacts, leads, opportunities] = await Promise.all([

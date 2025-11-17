@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+// Removed local user loading state; using global context instead
 import {
   Card,
   CardContent,
@@ -28,7 +28,8 @@ import {
   Webhook,
   Zap,
 } from "lucide-react";
-import { User } from "@/api/entities";
+// Removed direct User.me() call; rely on global user context
+import { useUser } from "../components/shared/useUser.js";
 import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
 
@@ -253,22 +254,8 @@ const integrationCategories = [
 ];
 
 export default function IntegrationsPage() {
-  const [, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Failed to load user:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadUser();
-  }, []);
+  const { loading: userLoading } = useUser();
+  const loading = userLoading; // Preserve existing variable usage
 
   const copyWebhookUrl = (webhook) => {
     const baseUrl = window.location.origin;

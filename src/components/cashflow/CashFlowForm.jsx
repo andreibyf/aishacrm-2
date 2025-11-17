@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { CashFlow } from "@/api/entities";
-import { User } from "@/api/entities";
+import { useUser } from '@/components/shared/useUser.js';
 import { getTenantFilter } from "../shared/tenantUtils";
 import { useTenant } from "../shared/tenantContext";
 import { Button } from "@/components/ui/button";
@@ -52,21 +52,10 @@ export default function CashFlowForm({ transaction, onSubmit, onCancel }) {
   });
 
   const [loading, setLoading] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
   const { selectedTenantId } = useTenant();
   const logger = useLogger();
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const user = await User.me();
-        setCurrentUser(sanitizeObject(user));
-      } catch (error) {
-        console.error("Failed to load user:", error);
-      }
-    };
-    loadUser();
-  }, []);
 
   useEffect(() => {
     if (!transaction) return;

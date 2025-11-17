@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Account } from "@/api/entities";
 import { Lead } from "@/api/entities";
-import { User } from "@/api/entities";
+import { useUser } from '@/components/shared/useUser.js';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,19 +47,8 @@ export default function CreateAccountDialog({ open, onOpenChange, onAccountCreat
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
 
-  React.useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const user = await User.me();
-        setCurrentUser(user);
-      } catch (error) {
-        console.error("Failed to load user:", error);
-      }
-    };
-    loadUser();
-  }, []);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));

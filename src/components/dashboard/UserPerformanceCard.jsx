@@ -38,6 +38,14 @@ export default function UserPerformanceCard({ currentUser, tenantFilter }) {
         return;
       }
 
+      // Guard: Don't fetch if no tenant_id is present
+      if (!tenantFilter?.tenant_id) {
+        setIsLoading(false);
+        setUserPerformance(null);
+        setRank(0);
+        return;
+      }
+
       setIsLoading(true);
       setError(null);
       setUserPerformance(null); // Clear previous data

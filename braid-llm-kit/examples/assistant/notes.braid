@@ -1,0 +1,105 @@
+// Executive Assistant Tools - Notes Management
+// Create, read, update, search notes
+
+import { Result, Note, CRMError } from "../../spec/types.braid"
+
+fn createNote(
+  tenant: String,
+  title: String,
+  content: String,
+  assigned_to: String,
+  related_to_type: String,
+  related_to_id: String
+) -> Result<Note, CRMError> !net {
+  let url = "/api/notes";
+  let body = {
+    tenant_id: tenant,
+    title: title,
+    content: content,
+  assigned_to: assigned_to,
+    related_to_type: related_to_type,
+    related_to_id: related_to_id,
+    metadata: {}
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn updateNote(
+  tenant: String,
+  note_id: String,
+  updates: Object
+) -> Result<Note, CRMError> !net {
+  let url = "/api/notes/" + note_id;
+  
+  let response = http.put(url, { body: updates });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn searchNotes(
+  tenant: String,
+  query: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/notes/search";
+  let params = {
+    tenant_id: tenant,
+    q: query,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getNotesForRecord(
+  tenant: String,
+  related_to_type: String,
+  related_to_id: String
+) -> Result<Array, CRMError> !net {
+  let url = "/api/notes";
+  let params = {
+    tenant_id: tenant,
+    related_to_type: related_to_type,
+    related_to_id: related_to_id
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn deleteNote(
+  tenant: String,
+  note_id: String
+) -> Result<Boolean, CRMError> !net {
+  let url = "/api/notes/" + note_id;
+  
+  let response = http.delete(url, {});
+  
+  return match response {
+    Ok{value} => Ok(true),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

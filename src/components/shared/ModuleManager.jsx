@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ModuleSettings } from "@/api/entities";
-import { User } from "@/api/entities";
+import { useUser } from '@/components/shared/useUser.js';
 import {
   Card,
   CardContent,
@@ -260,36 +260,29 @@ const defaultModules = [
     ],
   },
   {
-    id: "workflows",
-    name: "Workflows (Experimental)",
-    description:
-      "Automate business processes with custom workflows and triggers",
-    icon: Zap,
+    id: "ai_agent",
+    name: "AI Agent",
+    description: "Intelligent AI assistant for CRM tasks and queries",
+    icon: BrainCircuit,
     features: [
-      "Visual Workflow Builder",
-      "Custom Triggers",
-      "Multi-step Automation",
-      "Conditional Logic",
-      "Email & Notification Actions",
+      "Natural Language Queries",
+      "Data Analysis",
+      "Task Automation",
+      "Smart Recommendations",
+      "Context-Aware Assistance",
     ],
-    experimental: true,
   },
 ];
 
 export default function ModuleManager() {
   const [moduleSettings, setModuleSettings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [currentUser] = await Promise.all([User.me()]);
-      setUser(currentUser);
+      const currentUser = user;
 
       let currentModuleSettings = [];
       try {
@@ -328,7 +321,13 @@ export default function ModuleManager() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      loadData();
+    }
+  }, [user, loadData]);
 
   const toggleModule = async (moduleId, currentStatus) => {
     if (!user) return;

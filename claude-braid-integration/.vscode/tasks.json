@@ -1,0 +1,15 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Braid: Format current file",
+      "type": "shell",
+      "command": "node tools/braid-fmt < ${file} > ${file}"
+    },
+    {
+      "label": "Braid: Check current file",
+      "type": "shell",
+      "command": "node tools/braid-check ${file}"
+    }
+  ]
+}

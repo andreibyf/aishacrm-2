@@ -27,7 +27,8 @@ export function Toaster() {
           </Toast>
         );
       })}
-      <ToastViewport />
+      {/* Position in bottom-right and allow enough offset from page bottom */}
+      <ToastViewport className="sm:bottom-6 sm:right-6" />
     </ToastProvider>
   );
 } 

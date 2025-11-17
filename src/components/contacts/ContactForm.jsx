@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,8 @@ import { Switch } from "@/components/ui/switch";
 import { X, Save, AlertCircle, AlertTriangle, Loader2 } from "lucide-react";
 import PhoneInput from "../shared/PhoneInput";
 import AddressFields from "../shared/AddressFields";
-import { User, Contact, Lead } from "@/api/entities";
+import { Contact, Lead } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useTenant } from "../shared/tenantContext";
 import { generateUniqueId } from "@/api/functions";
@@ -44,59 +45,30 @@ const statusOptions = [
   { value: "inactive", label: "Inactive" },
 ];
 
-export default function ContactForm({ contact, onSuccess, onCancel, user: userProp }) {
+export default function ContactForm({ 
+  contact: contactProp,      // Legacy prop
+  initialData,               // New unified prop
+  onSuccess: onSuccessProp,  // Legacy callback
+  onSubmit,                  // New unified callback
+  onCancel, 
+  user: userProp 
+}) {
+  // Unified contract: Support both old and new prop names
+  const contact = initialData || contactProp;
+  const onSuccess = onSubmit || onSuccessProp;
+  
   console.log('[ContactForm] === COMPONENT MOUNT ===');
   console.log('[ContactForm] contact:', contact?.id, contact?.first_name, contact?.last_name);
   console.log('[ContactForm] userProp:', userProp?.email, userProp?.role);
   
-  // CRITICAL FIX: Load our own user if parent doesn't provide one
-  const [internalUser, setInternalUser] = useState(null);
-  const [userLoading, setUserLoading] = useState(!userProp); // Start loading if no user prop provided
-  
-  // Use either the prop user or our internally loaded user
-  const user = userProp || internalUser;
+  // Use global user unless an explicit override is provided via props
+  const { user: contextUser, loading: contextUserLoading } = useUser();
+  const user = userProp || contextUser;
+  const userLoading = userProp ? false : contextUserLoading;
   
   const { toast } = useToast();
 
-  // Load user if not provided via props
-  useEffect(() => {
-    if (!userProp) {
-      console.log('[ContactForm] No user prop provided, loading user ourselves...');
-      const loadUser = async () => {
-        setUserLoading(true);
-        try {
-          const currentUser = await User.me();
-          console.log('[ContactForm] Successfully loaded user:', currentUser?.email);
-          setInternalUser(currentUser);
-        } catch (error) {
-          console.error('[ContactForm] Failed to load user:', error);
-          if (error.response && error.response.status === 401) {
-            // User not logged in, or session expired, handle accordingly
-            toast({
-              title: "Authentication Error",
-              description: "Your session has expired or you are not logged in. Please log in again.",
-              variant: "destructive",
-            });
-            // Optionally redirect to login
-            // window.location.href = '/login'; 
-          } else {
-            toast({
-              title: "Error",
-              description: "Failed to load user information. Please refresh the page.",
-              variant: "destructive",
-            });
-          }
-        } finally {
-          setUserLoading(false);
-        }
-      };
-      loadUser();
-    } else {
-      console.log('[ContactForm] User provided via props, using it');
-      setInternalUser(userProp); // Ensure internalUser is set if userProp exists for consistency, though 'user' var handles it
-      setUserLoading(false); // If prop is provided, no loading needed
-    }
-  }, [userProp, toast]);
+  // User is now provided by global context (no local User.me() calls)
 
   const [formData, setFormData] = useState({
     first_name: contact?.first_name || "",
@@ -140,13 +112,19 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
   const { cachedRequest, clearCache } = useApiManager();
   const { logError } = useErrorLog();
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  const isSuperadmin = user?.role === 'superadmin';
 
-  console.log('[ContactForm] Initial state set, isAdmin:', isAdmin);
+  console.log('[ContactForm] Initial state set, isSuperadmin:', isSuperadmin);
   console.log('[ContactForm] Current user state:', user?.email, 'Loading:', userLoading);
+
+  const dupCheckAvailableRef = useRef(true);
 
   const checkForDuplicates = useCallback(async (data) => {
     console.log('[ContactForm] checkForDuplicates called');
+    if (!dupCheckAvailableRef.current) {
+      console.log('[ContactForm] Duplicate check disabled for this session (unavailable).');
+      return;
+    }
     
     // Skip duplicate check for test data
     if (data.is_test_data) {
@@ -212,12 +190,19 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
       if (logError) {
         logError(handleApiError('Contact Form - Duplicate Check', error));
       }
+      // If function isn't available in production, disable further checks to avoid noisy re-renders
+      if (String(error?.message || '').includes('not available')) {
+        dupCheckAvailableRef.current = false;
+      }
       setDuplicateWarning(null);
     } finally {
       console.log('[ContactForm] Duplicate check complete');
       setCheckingDuplicates(false);
     }
   }, [contact, user, selectedTenantId, cachedRequest, logError]);
+
+  // Initialize form state once per open session (avoid resets on unrelated re-renders)
+  const initializedRef = useRef(false);
 
   useEffect(() => {
     console.log('[ContactForm] === useEffect: loadInitialFormData ===');
@@ -246,7 +231,13 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
           is_test_data: contact.is_test_data || false,
         });
         console.log('[ContactForm] Form data loaded for existing contact');
+        initializedRef.current = true;
       } else {
+        // For new contact, only initialize once per open to avoid wiping user input
+        if (initializedRef.current) {
+          console.log('[ContactForm] Skipping re-initialization (already initialized)');
+          return;
+        }
         console.log('[ContactForm] Creating new contact form');
         const urlParams = new URLSearchParams(window.location.search);
         const accountId = urlParams.get('accountId');
@@ -273,8 +264,15 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
           is_test_data: false,
           tags: [],
         };
-        setFormData(newContactInitialState);
-        console.log('[ContactForm] New contact form initialized');
+        // IMPORTANT: Do NOT overwrite user-entered names if the user started typing before context user finished loading.
+        // Preserve existing first_name / last_name if they are already populated in formData.
+        setFormData(prev => ({
+          ...newContactInitialState,
+          first_name: prev.first_name || newContactInitialState.first_name,
+          last_name: prev.last_name || newContactInitialState.last_name,
+        }));
+        initializedRef.current = true;
+        console.log('[ContactForm] New contact form initialized (preserving existing name fields if present)');
         
         // Only check for duplicates if we have email or phone and user is available
         if (user && (newContactInitialState.email || newContactInitialState.phone)) {
@@ -290,7 +288,11 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
     } else {
       console.log('[ContactForm] Waiting for user to load form data...');
     }
-  }, [contact, user, selectedTenantId, checkForDuplicates]);
+  // Important: do NOT depend on checkForDuplicates or selectedTenantId here to prevent resets
+  // We intentionally omit checkForDuplicates from deps to avoid re-initializing the form
+  // after user starts typing. Safe because we only call it once on initial load when needed.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contact, user]);
 
   // Separate effect for loading tags
   useEffect(() => {
@@ -352,6 +354,11 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
     setFormData(prev => {
       const updated = { ...prev, [field]: value };
 
+      // FUTURE: Potential enhancement - if email is entered and first/last names are blank,
+      // attempt to infer names from the local-part of the email (e.g., john.doe@ -> John Doe)
+      // but DO NOT overwrite existing names. This addresses prior user report of names clearing
+      // while preserving manual input. (Not implemented yet; just documenting rationale.)
+
       if (!contact && user && (field === 'email' || field === 'phone')) {
         console.log('[ContactForm] Email/phone changed, checking for duplicates...');
         checkForDuplicates(updated);
@@ -383,24 +390,32 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
       last_name: ''
     };
 
-    if (!formData.first_name?.trim()) {
-      errors.first_name = 'First name is required';
-    }
-
-    if (!formData.last_name?.trim()) {
-      errors.last_name = 'Last name is required';
-    }
-
-    // If there are validation errors, set them and stop submission
-    if (errors.first_name || errors.last_name) {
-      console.log('[ContactForm] ERROR: Missing required fields (first_name, last_name)');
+    // Require at least first name OR last name (not both mandatory) for UX,
+    // but note: backend currently requires BOTH. The submit button is also
+    // disabled unless both are present; this check is a safety net.
+    if (!formData.first_name?.trim() && !formData.last_name?.trim()) {
+      errors.first_name = 'First name or last name is required';
+      errors.last_name = 'First name or last name is required';
+      console.log('[ContactForm] ERROR: Missing required fields (need at least first_name OR last_name)');
       setFieldErrors(errors);
       toast({
         title: "Missing Information",
-        description: "First name and last name are required.",
+        description: "At least first name or last name is required.",
         variant: "destructive",
       });
-      setSubmitError("First name and last name are required.");
+      setSubmitError("At least first name or last name is required.");
+      return;
+    }
+
+    // Superadmin must have a selected tenant for writes (backend enforces this)
+    if (user?.role === 'superadmin' && !selectedTenantId) {
+      console.log('[ContactForm] ERROR: Superadmin write without selected tenant');
+      toast({
+        title: 'Select a tenant',
+        description: 'As superadmin, please pick a tenant (top-right selector) before creating a contact.',
+        variant: 'destructive',
+      });
+      setSubmitError('Tenant is required for superadmin writes.');
       return;
     }
 
@@ -685,12 +700,14 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
           <h3 className="text-lg font-semibold text-slate-200 mb-3">Basic Information</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="first_name" className="text-slate-200">First Name *</Label>
+              <Label htmlFor="first_name" className="text-slate-200">
+                First Name <span className="text-red-400">*</span>
+                <span className="text-xs text-slate-400 ml-2">(or Last Name required)</span>
+              </Label>
               <Input
                 id="first_name"
                 value={formData.first_name}
                 onChange={(e) => handleChange('first_name', e.target.value)}
-                required
                 aria-invalid={!!fieldErrors.first_name}
                 aria-describedby={fieldErrors.first_name ? "first_name-error" : undefined}
                 className={`mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500 ${
@@ -704,12 +721,14 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
               )}
             </div>
             <div>
-              <Label htmlFor="last_name" className="text-slate-200">Last Name *</Label>
+              <Label htmlFor="last_name" className="text-slate-200">
+                Last Name <span className="text-red-400">*</span>
+                <span className="text-xs text-slate-400 ml-2">(or First Name required)</span>
+              </Label>
               <Input
                 id="last_name"
                 value={formData.last_name}
                 onChange={(e) => handleChange('last_name', e.target.value)}
-                required
                 aria-invalid={!!fieldErrors.last_name}
                 aria-describedby={fieldErrors.last_name ? "last_name-error" : undefined}
                 className={`mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500 ${
@@ -878,7 +897,7 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
             </div>
           </div>
 
-          {isAdmin && (
+          {isSuperadmin && (
             <div className="flex items-center space-x-2 p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
               <Switch
                 id="is_test_data"
@@ -890,7 +909,7 @@ export default function ContactForm({ contact, onSuccess, onCancel, user: userPr
                 Mark as Test Data
               </Label>
               <span className="text-xs text-amber-400 ml-2">
-                (For admin cleanup purposes)
+                (For Superadmin cleanup purposes)
               </span>
             </div>
           )}

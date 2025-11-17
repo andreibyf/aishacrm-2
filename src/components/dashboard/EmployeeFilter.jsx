@@ -2,24 +2,20 @@ import { useState, useEffect } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { User as UserIcon, Users } from "lucide-react";
 import { Employee } from "@/api/entities";
-import { User } from "@/api/entities";
+import { useUser } from '@/components/shared/useUser.js';
 import { Label } from "@/components/ui/label";
 
 export default function EmployeeFilter({ value, onChange, className = "" }) {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
 
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       try {
-        const user = await User.me();
-        setCurrentUser(user);
-
-        // Only show filter for managers and admins
-        if (user.role === 'admin' || user.role === 'superadmin' || user.employee_role === 'manager') {
-          const tenantFilter = user.tenant_id ? { tenant_id: user.tenant_id } : {};
+        if (currentUser?.role === 'admin' || currentUser?.role === 'superadmin' || currentUser?.employee_role === 'manager') {
+          const tenantFilter = currentUser.tenant_id ? { tenant_id: currentUser.tenant_id } : {};
           const empList = await Employee.filter(tenantFilter, "first_name");
           setEmployees(empList || []);
         }
@@ -30,8 +26,8 @@ export default function EmployeeFilter({ value, onChange, className = "" }) {
         setLoading(false);
       }
     };
-    loadData();
-  }, []);
+    if (currentUser) loadData();
+  }, [currentUser]);
 
   // Don't show filter for regular employees (they only see their own data)
   if (!currentUser || (currentUser.employee_role === 'employee' && currentUser.role !== 'admin' && currentUser.role !== 'superadmin')) {

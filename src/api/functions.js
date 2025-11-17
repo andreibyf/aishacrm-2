@@ -1,4 +1,3 @@
-import { base44 } from './base44Client';
 import { isLocalDevMode } from './mockData';
 
 // Optional direct MCP server URL (useful for connecting your own MCP instance)
@@ -43,6 +42,49 @@ const createFunctionProxy = (functionName) => {
   // Provide local fallbacks for functions used by Settings checks and CRUD operations
   // so the UI works in standalone mode without backend/cloud-functions running.
   return async (...args) => {
+    // Unified handler for chat: always call backend /api/ai/chat so ChatInterface works
+    if (functionName === 'processChatCommand') {
+      try {
+        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+        const opts = args[0] || {};
+        // Unified tenant ID resolution: explicit opts.tenantId > selected_tenant_id (new) > tenant_id (legacy) > ''
+        let tenantId = opts.tenantId || '';
+        if (!tenantId && typeof localStorage !== 'undefined') {
+          tenantId = localStorage.getItem('selected_tenant_id') || '';
+          if (!tenantId) {
+            // Legacy fallback if older key still present
+            tenantId = localStorage.getItem('tenant_id') || '';
+          }
+        }
+        const messages = Array.isArray(opts.messages)
+          ? opts.messages
+          : [{ role: 'user', content: String(opts.message || '').trim() }].filter(m => m.content);
+        const body = {
+          messages,
+          model: opts.model,
+          temperature: typeof opts.temperature === 'number' ? opts.temperature : undefined,
+          api_key: opts.api_key
+        };
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (tenantId) headers['x-tenant-id'] = tenantId;
+        else if (import.meta.env.DEV) {
+          console.warn('[processChatCommand] Missing tenantId (superadmin global view or not selected). Header omitted.');
+        }
+
+        const resp = await fetch(`${BACKEND_URL}/api/ai/chat`, {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify(body)
+        });
+        const json = await resp.json().catch(() => ({}));
+        return { status: resp.status, data: json };
+      } catch (err) {
+        return { status: 500, data: { status: 'error', message: err?.message || String(err) } };
+      }
+    }
+
     if (isLocalDevMode()) {
       // ========================================
       // Workflows (Local Backend)
@@ -322,7 +364,8 @@ const createFunctionProxy = (functionName) => {
           data: {
             success: true,
             message: 'Orphaned data cleanup (local-dev mock)',
-            deleted: 0
+            deleted: 0,
+            summary: {}
           }
         };
       }
@@ -380,11 +423,15 @@ const createFunctionProxy = (functionName) => {
       // User & Tenant Management
       // ========================================
       
-      // inviteUser: Call the REAL implementation instead of mocking
+      // inviteUser: Route to backend (this function should be called directly via backend API)
       if (functionName === 'inviteUser') {
-        // Import and call the actual backend function
-        const { inviteUser: actualInviteUser } = await import('../functions/users/inviteUser.js');
-        return actualInviteUser(args[0], args[1]);
+        console.warn('[Functions] inviteUser should be called directly via backend API at /api/users/invite');
+        return {
+          data: {
+            success: false,
+            message: 'inviteUser should be called directly via backend API'
+          }
+        };
       }
       
       if (functionName === 'cleanupUserData') {
@@ -556,15 +603,144 @@ const createFunctionProxy = (functionName) => {
         };
       }
 
+      // ========================================
+      // CSV Import & Validation
+      // ========================================
+      
+      if (functionName === 'validateAndImport') {
+        try {
+          const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+          const payload = args[0] || {};
+          const response = await fetch(`${BACKEND_URL}/api/validation/validate-and-import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(payload),
+          });
+          const json = await response.json();
+          if (!response.ok) {
+            return { data: { status: 'error', error: json?.message || response.statusText } };
+          }
+          return { data: json.data || json };
+        } catch (err) {
+          console.warn(`[Local Dev Mode] validateAndImport backend call failed: ${err?.message || err}`);
+          return { data: { status: 'error', error: err?.message || String(err) } };
+        }
+      }
+
       // Default behavior for other functions in local dev mode: warn + no-op
       console.warn(`[Local Dev Mode] Function '${functionName}' called but not available in local dev mode.`);
       return Promise.resolve({ data: { success: false, message: 'Function not available in local dev mode' } });
     }
 
-    // Not local-dev: call the real function if present on base44.functions
-    return base44.functions?.[functionName]?.(...args);
+    // Non-local mode: Use backend routes for all functions
+    if (functionName === 'testSystemOpenAI') {
+      const payload = args[0] || {};
+      const { api_key, model = 'gpt-4o-mini' } = payload;
+      if (!api_key) {
+        return { data: { success: false, error: 'OpenAI API key is required for connectivity test.' } };
+      }
+
+      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+      const headers = { 'Content-Type': 'application/json' };
+      const tenantHeader = payload.tenantId || payload.tenant_id;
+      if (tenantHeader) headers['x-tenant-id'] = tenantHeader;
+
+      const messages = Array.isArray(payload.messages) && payload.messages.length
+        ? payload.messages
+        : [
+            { role: 'system', content: 'You are performing a diagnostic connectivity check for the Aisha CRM platform.' },
+            { role: 'user', content: 'Please reply with a short confirmation that the OpenAI connectivity test succeeded.' }
+          ];
+
+      const body = {
+        messages,
+        model,
+        temperature: typeof payload.temperature === 'number' ? payload.temperature : 0.2,
+        api_key
+      };
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/ai/chat`, {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify(body)
+        });
+
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok || json?.status !== 'success') {
+          const errorMessage = json?.message || `OpenAI test failed with status ${response.status}`;
+          return { data: { success: false, error: errorMessage, details: json?.data || null } };
+        }
+
+        return {
+          data: {
+            success: true,
+            message: json?.data?.response ? 'OpenAI connection verified.' : 'OpenAI connection verified with empty response.',
+            response: json?.data?.response || '',
+            usage: json?.data?.usage || null,
+            model: json?.data?.model || model
+          }
+        };
+      } catch (err) {
+        console.error('[testSystemOpenAI] Backend call failed:', err);
+        throw err;
+      }
+    }
+
+    if (functionName === 'cleanupOrphanedData') {
+      try {
+        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+        const response = await fetch(`${BACKEND_URL}/api/system/cleanup-orphans`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include'
+        });
+        const json = await response.json();
+        if (!response.ok) {
+          return { data: { success: false, message: json.message || 'Cleanup failed', error: json.message } };
+        }
+        return { data: { success: true, message: json.message, summary: json.data?.summary || {}, total_deleted: json.data?.total_deleted || 0 } };
+      } catch (err) {
+        return { data: { success: false, message: err?.message || 'Cleanup failed', error: err?.message } };
+      }
+    }
+    // Non-local: call backend validate-and-import directly when Base44 doesn't expose it
+    if (functionName === 'validateAndImport') {
+      console.log('[validateAndImport] Non-local mode handler called');
+      try {
+        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+        const payload = args[0] || {};
+        console.log('[validateAndImport] Calling', `${BACKEND_URL}/api/validation/validate-and-import`, 'with payload:', payload);
+        const response = await fetch(`${BACKEND_URL}/api/validation/validate-and-import`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+        const json = await response.json();
+        console.log('[validateAndImport] Response status:', response.status, 'json:', json);
+        if (!response.ok) {
+          return { data: { status: 'error', error: json?.message || response.statusText } };
+        }
+        return { data: json.data || json };
+      } catch (err) {
+        console.error('[validateAndImport] Error:', err);
+        return { data: { status: 'error', error: err?.message || String(err) } };
+      }
+    }
+
+    // Fallback: warn if function not found
+    console.warn(`[Production Mode] Function '${functionName}' not available. Use backend routes.`);
+    return Promise.reject(new Error(`Function '${functionName}' not available. Use backend routes.`));
   };
 };
+
+// Functions we always override with our proxy implementation even if Base44 exposes them.
+// Rationale: We need custom logic (e.g., direct backend call + logging + response shape normalization)
+// that the Base44 stub either doesn't provide or returns in a different shape.
+const OVERRIDE_FUNCTIONS = new Set(['validateAndImport']);
 
 // Create a Proxy handler that wraps all function access
 const functionsProxy = new Proxy({}, {
@@ -590,12 +766,12 @@ const functionsProxy = new Proxy({}, {
       return createFunctionProxy(prop);
     }
 
-    // If Base44 provides the function, use it
-    if (base44.functions && base44.functions[prop]) {
-      return base44.functions[prop];
+    // Always override certain functions with custom implementation
+    if (OVERRIDE_FUNCTIONS.has(String(prop))) {
+      return createFunctionProxy(prop);
     }
 
-    // Fallback: return the local dev proxy (no-op) if function not present
+    // Production mode: all functions use backend routes
     return createFunctionProxy(prop);
   }
 });

@@ -1,0 +1,70 @@
+// Example: CRM Snapshot Fetcher (Production-Ready)
+// Demonstrates: Type safety, effect declaration, tenant isolation, error handling
+
+import { Result, Snapshot, CRMError } from "../spec/types.braid"
+
+fn fetchSnapshot(tenant: String, scope: String, limit: Number) -> Result<Snapshot, CRMError> !net, clock {
+  // Note: In production, this calls the backend's native fetchTenantSnapshot function
+  // which queries Supabase directly. Braid is used for type safety and capability enforcement.
+  
+  // The backend returns: { tenant_id, generated_at, summary{}, accounts[], leads[], etc. }
+  // Accounts have: id, name, annual_revenue, industry, website, owner_id, metadata (JSONB)
+  
+  let url = "/api/ai/snapshot-internal";  // Internal endpoint
+  let params = {
+    tenant: tenant,
+    scope: scope,
+    limit: limit
+  };
+  
+  // HTTP call with tenant isolation (injected by runtime if policy.tenant_isolation = true)
+  let response = http.get(url, { params: params });
+  
+  // Pattern matching on Result type
+  return match response {
+    Ok{data} => {
+      // Validate required fields
+      if data.accounts {
+        let timestamp = clock.now();
+        let enriched = {
+          accounts: data.accounts,
+          leads: data.leads,
+          contacts: data.contacts,
+          opportunities: data.opportunities,
+          activities: data.activities,
+          summary: data.summary,
+          metadata: {
+            tenant_id: tenant,
+            fetched_at: timestamp,
+            scope: scope,
+            accounts_fallback_used: false,
+            leads_fallback_used: false
+          }
+        };
+        return Ok(enriched);
+      }
+      return Err(ValidationError{
+        field: "accounts",
+        message: "Missing accounts array in snapshot"
+      });
+    },
+    Err{error} => {
+      return Err(NetworkError{
+        url: url,
+        code: error.status
+      });
+    },
+    _ => return Err(NetworkError{ url: url, code: 500 })
+  };
+}
+
+// AI Tool Usage Example:
+// const policy = CRM_POLICIES.READ_ONLY;  // tenant_isolation=true, allow_effects=['net']
+// const result = await fetchSnapshot(policy, deps, "acme", "accounts", 10);
+// match result { 
+//   Ok{value} => {
+//     // Access: value.accounts[0].annual_revenue (top-level field)
+//     // NOT: value.accounts[0].metadata.revenue_actual (wrong!)
+//   }, 
+//   Err{error} => handleError(error) 
+// }

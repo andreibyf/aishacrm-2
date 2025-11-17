@@ -26,53 +26,39 @@ export default function EmployeeScopeFilter({ user, selectedTenantId }) {
 
   useEffect(() => {
     const loadEmployees = async () => {
-      if (!user || !shouldShowFilter) {
+      // Early exit conditions to reduce log noise & unnecessary fetches
+      if (!shouldShowFilter) {
         setLoading(false);
-        return;
+        return; // User doesn't have scope privileges
+      }
+      if (!user) {
+        setLoading(false);
+        return; // Wait until user context is available
+      }
+      // Admin viewing all tenants but no tenant selected yet — avoid global employee scan
+      if (isAdmin && !selectedTenantId && !user.tenant_id) {
+        setLoading(false);
+        return; // Prevent broad unfiltered Employee.list() query
       }
 
       try {
         setLoading(true);
+        const effectiveTenantId = (isAdmin && selectedTenantId)
+          ? selectedTenantId
+          : user.tenant_id || null;
 
-        // Build filter based on tenant
-        const filter = {};
-
-        // For admins managing a specific tenant
-        if (isAdmin && selectedTenantId) {
-          filter.tenant_id = selectedTenantId;
-        } // For managers and power users, use their own tenant
-        else if (user.tenant_id) {
-          filter.tenant_id = user.tenant_id;
+        if (!effectiveTenantId) {
+          // Still no tenant to scope employees — abort silently
+          setEmployees([]);
+          setLoading(false);
+          return;
         }
 
-        console.log(
-          "[EmployeeScopeFilter] Loading employees with filter:",
-          filter,
-        );
-
-        // Load all active employees for this tenant using list() with tenant_id
-        const employeeList = await Employee.list({
-          tenant_id: filter.tenant_id,
-          // Note: is_active filtering may need to be done client-side if not supported by backend
-        });
-
-        console.log(
-          "[EmployeeScopeFilter] Loaded employees:",
-          employeeList?.length || 0,
-        );
-
-        // Filter to only employees with CRM access and active status
+        const employeeList = await Employee.list({ tenant_id: effectiveTenantId });
         const crmEmployees = (employeeList || []).filter((emp) => {
-          // Only show employees who have CRM access and are active
           const isActive = emp.is_active !== false && emp.status !== "inactive";
           return isActive && emp.has_crm_access === true && emp.user_email;
         });
-
-        console.log(
-          "[EmployeeScopeFilter] CRM-enabled employees:",
-          crmEmployees.length,
-        );
-
         setEmployees(crmEmployees);
       } catch (error) {
         console.error("[EmployeeScopeFilter] Failed to load employees:", error);
@@ -81,7 +67,6 @@ export default function EmployeeScopeFilter({ user, selectedTenantId }) {
         setLoading(false);
       }
     };
-
     loadEmployees();
   }, [user, selectedTenantId, shouldShowFilter, isAdmin]);
 
@@ -99,14 +84,9 @@ export default function EmployeeScopeFilter({ user, selectedTenantId }) {
     );
   }
 
-  // If no employees found, show a message
+  // If no employees found, hide the filter to avoid noisy banner
   if (employees.length === 0) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-slate-400">
-        <Users className="w-4 h-4" />
-        <span>No employees with CRM access</span>
-      </div>
-    );
+    return null;
   }
 
   return (

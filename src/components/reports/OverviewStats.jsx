@@ -23,9 +23,10 @@ import {
 } from "recharts";
 import { Account, Lead, Opportunity } from "@/api/entities";
 import TrendIndicator from "./TrendIndicator";
-import { getDashboardStats } from "@/api/functions";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+
+const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
 
 export default function OverviewStats({ tenantFilter }) {
   const [stats, setStats] = useState({
@@ -56,27 +57,39 @@ export default function OverviewStats({ tenantFilter }) {
       try {
         console.log("OverviewStats: Fetching stats with filter:", tenantFilter);
 
-        // Use the same function as Dashboard to ensure consistency
-        const response = await getDashboardStats({ tenantFilter });
-
         // Ensure test data is excluded unless explicitly included for direct entity fetches
         const effectiveFilter = { ...tenantFilter };
         if (!("is_test_data" in effectiveFilter)) {
-          effectiveFilter.is_test_data = { $ne: true };
+          effectiveFilter.is_test_data = false;
         }
 
-        // Fetch additional data for charts and specific stats that getDashboardStats might not provide as totals
+        // Build query params for backend API call
+        const queryParams = new URLSearchParams();
+        if (effectiveFilter.tenant_id) {
+          queryParams.append('tenant_id', effectiveFilter.tenant_id);
+        }
+
+        // Call backend API endpoint for dashboard stats
+        const response = await fetch(`${BACKEND_URL}/api/reports/dashboard-stats?${queryParams.toString()}`);
+        
+        if (!response.ok) {
+          throw new Error(`Backend API error: ${response.status} ${response.statusText}`);
+        }
+
+        const result = await response.json();
+
+        // Fetch additional data for charts and specific stats that backend might not provide
         const [allLeads, allOpportunities, allAccounts] = await Promise.all([
           Lead.filter(effectiveFilter),
           Opportunity.filter(effectiveFilter),
           Account.filter(effectiveFilter),
         ]);
 
-        if (response.data && response.data.stats) {
-          const dashboardStats = response.data.stats;
+        if (result.status === 'success' && result.data) {
+          const dashboardStats = result.data;
 
           console.log(
-            "OverviewStats: Received dashboard stats from getDashboardStats:",
+            "OverviewStats: Received dashboard stats from backend:",
             dashboardStats,
           );
           console.log(
@@ -88,13 +101,19 @@ export default function OverviewStats({ tenantFilter }) {
             },
           );
 
+          // Calculate pipeline value from opportunities
+          const pipelineValue = allOpportunities.reduce((sum, opp) => {
+            const value = parseFloat(opp.value) || 0;
+            return sum + value;
+          }, 0);
+
           setStats({
             contacts: dashboardStats.totalContacts || 0,
             accounts: allAccounts.length, // Use actual count from direct fetch for accuracy
             leads: allLeads.length, // Use actual total leads from direct fetch
             opportunities: allOpportunities.length, // Use actual total opportunities from direct fetch
-            activities: dashboardStats.activitiesLogged || 0, // Assuming this aligns with 'Activities This Month' contextually from dashboard
-            pipelineValue: dashboardStats.pipelineValue || 0,
+            activities: dashboardStats.totalActivities || 0, // Use total activities from backend
+            pipelineValue: pipelineValue, // Calculate from actual opportunity values
           });
 
           // Set trends if available
@@ -103,7 +122,7 @@ export default function OverviewStats({ tenantFilter }) {
           }
         } else {
           console.warn(
-            "OverviewStats: No stats data received from getDashboardStats.",
+            "OverviewStats: No stats data received from backend API.",
           );
         }
 

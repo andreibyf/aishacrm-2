@@ -26,7 +26,7 @@ import { getBackendUrl } from '@/api/backendUrl';
  */
 
 const BACKEND_URL = getBackendUrl();
-const TEST_TENANT_ID = 'unit-test-tenant';
+const TEST_TENANT_ID = 'local-tenant-001';
 
 // Helper to generate unique test data
 const generateTestData = () => {
@@ -134,13 +134,16 @@ export const crudTests = {
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
         assert.exists(result.data, 'Response should contain created contact data');
-        assert.exists(result.data.id, 'Created contact should have an ID');
-        assert.equal(result.data.email, testData.contact.email, 'Email should match');
         
-        console.log(`✅ Created contact: ${result.data.first_name} ${result.data.last_name} (ID: ${result.data.id})`);
+        // Handle wrapped response: { data: { contact: {...} } } or direct { data: {...} }
+        const contact = result.data.contact || result.data;
+        assert.exists(contact.id, 'Created contact should have an ID');
+        assert.equal(contact.email, testData.contact.email, 'Email should match');
+        
+        console.log(`✅ Created contact: ${contact.first_name} ${contact.last_name} (ID: ${contact.id})`);
         
         // Store ID for next tests
-        window.__test_contact_id = result.data.id;
+        window.__test_contact_id = contact.id;
       }
     },
     {
@@ -159,9 +162,12 @@ export const crudTests = {
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
         assert.exists(result.data, 'Response should contain contact data');
-        assert.equal(result.data.id, contactId, 'Contact ID should match');
         
-        console.log(`✅ Read contact: ${result.data.first_name} ${result.data.last_name}`);
+        // Handle wrapped response
+        const contact = result.data.contact || result.data;
+        assert.equal(contact.id, contactId, 'Contact ID should match');
+        
+        console.log(`✅ Read contact: ${contact.first_name} ${contact.last_name}`);
       }
     },
     {
@@ -186,10 +192,13 @@ export const crudTests = {
         
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
-        assert.equal(result.data.phone, '555-9999', 'Phone should be updated');
-        assert.equal(result.data.status, 'inactive', 'Status should be updated');
         
-        console.log(`✅ Updated contact: phone=${result.data.phone}, status=${result.data.status}`);
+        // Handle wrapped response
+        const contact = result.data.contact || result.data;
+        assert.equal(contact.phone, '555-9999', 'Phone should be updated');
+        assert.equal(contact.status, 'inactive', 'Status should be updated');
+        
+        console.log(`✅ Updated contact: phone=${contact.phone}, status=${contact.status}`);
       }
     },
     {
@@ -239,12 +248,15 @@ export const crudTests = {
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
         assert.exists(result.data, 'Response should contain created lead data');
-        assert.exists(result.data.id, 'Created lead should have an ID');
-        assert.equal(result.data.email, testData.lead.email, 'Email should match');
         
-        console.log(`✅ Created lead: ${result.data.first_name} ${result.data.last_name} (ID: ${result.data.id})`);
+        // Handle wrapped response: { data: { lead: {...} } } or direct { data: {...} }
+        const lead = result.data.lead || result.data;
+        assert.exists(lead.id, 'Created lead should have an ID');
+        assert.equal(lead.email, testData.lead.email, 'Email should match');
         
-        window.__test_lead_id = result.data.id;
+        console.log(`✅ Created lead: ${lead.first_name} ${lead.last_name} (ID: ${lead.id})`);
+        
+        window.__test_lead_id = lead.id;
       }
     },
     {
@@ -263,9 +275,12 @@ export const crudTests = {
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
         assert.exists(result.data, 'Response should contain lead data');
-        assert.equal(result.data.id, leadId, 'Lead ID should match');
         
-        console.log(`✅ Read lead: ${result.data.first_name} ${result.data.last_name}`);
+        // Handle wrapped response
+        const lead = result.data.lead || result.data;
+        assert.equal(lead.id, leadId, 'Lead ID should match');
+        
+        console.log(`✅ Read lead: ${lead.first_name} ${lead.last_name}`);
       }
     },
     {
@@ -290,9 +305,12 @@ export const crudTests = {
         
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
-        assert.equal(result.data.status, 'qualified', 'Status should be updated');
         
-        console.log(`✅ Updated lead: status=${result.data.status}`);
+        // Handle wrapped response
+        const lead = result.data.lead || result.data;
+        assert.equal(lead.status, 'qualified', 'Status should be updated');
+        
+        console.log(`✅ Updated lead: status=${lead.status}`);
       }
     },
     {
@@ -333,12 +351,15 @@ export const crudTests = {
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
         assert.exists(result.data, 'Response should contain created account data');
-        assert.exists(result.data.id, 'Created account should have an ID');
-        assert.equal(result.data.name, testData.account.name, 'Name should match');
         
-        console.log(`✅ Created account: ${result.data.name} (ID: ${result.data.id})`);
+        // Handle wrapped response: { data: { account: {...} } } or direct { data: {...} }
+        const account = result.data.account || result.data;
+        assert.exists(account.id, 'Created account should have an ID');
+        assert.equal(account.name, testData.account.name, 'Name should match');
         
-        window.__test_account_id = result.data.id;
+        console.log(`✅ Created account: ${account.name} (ID: ${account.id})`);
+        
+        window.__test_account_id = account.id;
       }
     },
     {
@@ -357,9 +378,12 @@ export const crudTests = {
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
         assert.exists(result.data, 'Response should contain account data');
-        assert.equal(result.data.id, accountId, 'Account ID should match');
         
-        console.log(`✅ Read account: ${result.data.name}`);
+        // Handle wrapped response
+        const account = result.data.account || result.data;
+        assert.equal(account.id, accountId, 'Account ID should match');
+        
+        console.log(`✅ Read account: ${account.name}`);
       }
     },
     {
@@ -384,10 +408,13 @@ export const crudTests = {
         
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
-        assert.equal(result.data.industry, 'finance', 'Industry should be updated');
-        assert.equal(result.data.type, 'partner', 'Type should be updated');
         
-        console.log(`✅ Updated account: industry=${result.data.industry}, type=${result.data.type}`);
+        // Handle wrapped response
+        const account = result.data.account || result.data;
+        assert.equal(account.industry, 'finance', 'Industry should be updated');
+        assert.equal(account.type, 'partner', 'Type should be updated');
+        
+        console.log(`✅ Updated account: industry=${account.industry}, type=${account.type}`);
       }
     },
     {

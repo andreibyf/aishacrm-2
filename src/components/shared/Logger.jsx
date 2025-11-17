@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext } from "react";
 import { SystemLog } from "@/api/entities";
-import { User } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 
 const LoggerContext = createContext(null);
 
@@ -51,8 +51,8 @@ async function rawLog(level, message, source, metadata = {}) {
     : "INFO";
 
   try {
-    const user = await User.me().catch(() => null);
-
+    // Prefer global user injected via window when available (non-React consumers may set window.__currentUser)
+    const user = (typeof window !== 'undefined' && window.__currentUser) ? window.__currentUser : null;
     const logEntry = {
       level: safeLevel,
       message: String(message),
@@ -128,6 +128,7 @@ async function rawLog(level, message, source, metadata = {}) {
 }
 
 export const LoggerProvider = ({ children }) => {
+  const { user: contextUser } = useUser();
   const log = useCallback(async (level, message, source, metadata = {}) => {
     // Validate level parameter
     const validLevels = ["DEBUG", "INFO", "WARNING", "ERROR"];
@@ -139,8 +140,7 @@ export const LoggerProvider = ({ children }) => {
       : "INFO";
 
     try {
-      const user = await User.me().catch(() => null);
-
+      const user = contextUser || (typeof window !== 'undefined' && window.__currentUser) || null;
       const logEntry = {
         level: safeLevel,
         message: String(message),
@@ -195,7 +195,7 @@ export const LoggerProvider = ({ children }) => {
     } catch (error) {
       console.error("Logging failed:", error);
     }
-  }, []);
+  }, [contextUser]);
 
   const debug = useCallback((message, source, metadata) => {
     return log(LOG_LEVELS.DEBUG, message, source, metadata);

@@ -26,11 +26,35 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingOpportunity, setEditingOpportunity] = useState(null);
   const [localOpportunities, setLocalOpportunities] = useState(opportunities);
+  // Track ids with an in-flight stage update to prevent premature reversion from parent prop sync
+  const [pendingStageIds, setPendingStageIds] = useState(new Set());
 
-  // Sync local state with props
+  // Sync local state with props unless an optimistic stage change is pending for specific ids.
   React.useEffect(() => {
-    setLocalOpportunities(opportunities);
-  }, [opportunities]);
+    console.log('[Kanban] Prop sync triggered. Pending IDs:', Array.from(pendingStageIds));
+    console.log('[Kanban] Incoming opportunities count:', opportunities.length);
+    
+    if (!pendingStageIds.size) {
+      console.log('[Kanban] No pending - replacing all local state with props');
+      setLocalOpportunities(opportunities);
+      return;
+    }
+    
+    // Merge: keep optimistic versions for pending ids, use fresh data for the rest
+    setLocalOpportunities(prev => {
+      const prevById = new Map(prev.map(o => [String(o.id), o]));
+      const merged = opportunities.map(o => {
+        const idStr = String(o.id);
+        if (pendingStageIds.has(idStr) && prevById.has(idStr)) {
+          console.log('[Kanban] Preserving optimistic stage for ID:', idStr, 'stage:', prevById.get(idStr).stage);
+          return prevById.get(idStr);
+        }
+        return o;
+      });
+      console.log('[Kanban] Merged opportunities count:', merged.length);
+      return merged;
+    });
+  }, [opportunities, pendingStageIds]);
 
   const getDisplayInfo = (opp) => {
     if (opp.account_id) {
@@ -56,37 +80,83 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
 
   const onDragEnd = async (result) => {
     const { destination, source, draggableId } = result;
-    
     if (!destination) return;
+
+    console.log('[Kanban] Drag ended:', { draggableId, from: source.droppableId, to: destination.droppableId });
+
+    // If moving within same column and position changed, reorder locally (no persistence server-side)
+    if (destination.droppableId === source.droppableId && destination.index !== source.index) {
+      setLocalOpportunities(prev => {
+        const stageId = source.droppableId;
+        const stageItems = prev.filter(o => o.stage === stageId);
+        const otherItems = prev.filter(o => o.stage !== stageId);
+
+        // Remove dragged item from stage list
+        const fromIndex = source.index;
+        const [moved] = stageItems.splice(fromIndex, 1);
+        // Insert at new index
+        stageItems.splice(destination.index, 0, moved);
+
+        // Rebuild list preserving order inside the stage
+        return [
+          ...otherItems,
+          ...stageItems
+        ];
+      });
+      return; // Done - no backend call for ordering yet
+    }
+
+    // If dropped back to original spot, do nothing
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
-    
-    // Stage changed - optimistic update
+
+    // Moving to a different stage
     if (destination.droppableId !== source.droppableId) {
       const newStage = destination.droppableId;
-      
-      // OPTIMISTIC UPDATE: Update UI immediately
-      setLocalOpportunities(prev => 
-        prev.map(opp => 
-          opp.id === draggableId 
+      const idStr = String(draggableId);
+
+      console.log('[Kanban] Stage change:', { id: idStr, oldStage: source.droppableId, newStage });
+
+      // Mark id as pending so parent prop sync won't overwrite optimistic state
+      setPendingStageIds(prev => {
+        const next = new Set(prev).add(idStr);
+        console.log('[Kanban] Pending IDs after add:', Array.from(next));
+        return next;
+      });
+
+      // OPTIMISTIC UPDATE
+      setLocalOpportunities(prev => {
+        const updated = prev.map(opp => (
+          String(opp.id) === idStr
             ? { ...opp, stage: newStage }
             : opp
-        )
-      );
-      
+        ));
+        console.log('[Kanban] Optimistic update applied for', idStr);
+        return updated;
+      });
+
       try {
-        // Make the API call in the background
-        await onStageChange(draggableId, newStage);
+        console.log('[Kanban] Calling onStageChange...');
+        const result = await onStageChange(draggableId, newStage);
+        console.log('[Kanban] onStageChange result:', result);
         
-        // Refresh to ensure data is in sync
+        // Refresh (optional) - keep small delay to let backend commit fully
         if (onDataRefresh) {
+          console.log('[Kanban] Calling onDataRefresh...');
           await onDataRefresh();
+          console.log('[Kanban] onDataRefresh complete');
         }
       } catch (error) {
         console.error('[Kanban] Error updating stage:', error);
         toast.error('Failed to move opportunity');
-        
-        // REVERT on error: restore original data
-        setLocalOpportunities(opportunities);
+        setLocalOpportunities(opportunities); // revert
+      } finally {
+        // Remove id from pending so future prop syncs include updated record
+        setPendingStageIds(prev => {
+          const next = new Set(prev);
+          next.delete(idStr);
+          console.log('[Kanban] Pending IDs after remove:', Array.from(next));
+          return next;
+        });
       }
     }
   };

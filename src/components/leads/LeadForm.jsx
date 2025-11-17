@@ -65,7 +65,19 @@ const statusOptions = [
   { value: "lost", label: "Lost" }
 ];
 
-export default function LeadForm({ lead, onSave, onCancel, user, employees = [], isManager }) {
+export default function LeadForm({ 
+  lead: leadProp, 
+  initialData, 
+  onSave: onSaveProp, 
+  onSubmit, 
+  onCancel, 
+  user, 
+  employees = [], 
+  isManager 
+}) {
+  // Unified contract: support both new and legacy prop names
+  const lead = initialData || leadProp;
+  const onSuccess = onSubmit || onSaveProp;
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -118,7 +130,7 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
     return employees.filter(e => e.user_email === user.email && e.has_crm_access);
   }, [employees, user, isManager]);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  const isSuperadmin = user?.role === 'superadmin';
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -279,18 +291,12 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
       last_name: ''
     };
 
-    if (!formData.first_name?.trim()) {
-      errors.first_name = 'First name is required';
-    }
-
-    if (!formData.last_name?.trim()) {
-      errors.last_name = 'Last name is required';
-    }
-
-    // If there are validation errors, set them and stop submission
-    if (errors.first_name || errors.last_name) {
+    // Require at least first name OR last name (not both mandatory)
+    if (!formData.first_name?.trim() && !formData.last_name?.trim()) {
+      errors.first_name = 'First name or last name is required';
+      errors.last_name = 'First name or last name is required';
       setFieldErrors(errors);
-      toast.error("First name and last name are required.");
+      toast.error("At least first name or last name is required.");
       return;
     }
 
@@ -298,13 +304,6 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
     if (!user) {
       console.error('LeadForm.Submit: User is undefined');
       toast.error("Cannot save lead: User not loaded. Please refresh the page.");
-      return;
-    }
-
-    // Guard: Ensure onSave callback exists
-    if (!onSave || typeof onSave !== 'function') {
-      console.error('LeadForm.Submit: onSave callback is not a function', { onSave });
-      toast.error("Cannot save lead: Invalid save handler. Please refresh the page.");
       return;
     }
 
@@ -392,19 +391,26 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
       submissionData.do_not_call = !!submissionData.do_not_call;
       submissionData.do_not_text = !!submissionData.do_not_text;
 
-
-      console.log('LeadForm.Submit: Passing data to parent for submission:', submissionData);
+      console.log('LeadForm.Submit: Saving lead to database:', submissionData);
       
-      // Pass the prepared data to the parent for submission
-      await onSave(submissionData);
+      // Perform persistence internally (unified contract pattern)
+      let result;
+      if (lead) {
+        // Update existing lead
+        result = await Lead.update(lead.id, submissionData);
+        console.log('LeadForm.Submit: Lead updated successfully:', result);
+      } else {
+        // Create new lead
+        result = await Lead.create(submissionData);
+        console.log('LeadForm.Submit: Lead created successfully:', result);
+      }
 
-      console.log('LeadForm.Submit: Save completed successfully');
+      // Call success callback with result object
+      if (onSuccess && typeof onSuccess === 'function') {
+        await onSuccess(result);
+      }
 
-      toast({
-        title: "Success!",
-        description: lead ? "Lead updated successfully!" : "Lead created successfully!",
-        variant: "default",
-      });
+      toast.success(lead ? "Lead updated successfully!" : "Lead created successfully!");
 
     } catch (error) {
       console.error("LeadForm.Submit: Error during form submission:", {
@@ -452,12 +458,14 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="first_name" className="text-slate-200">First Name *</Label>
+                <Label htmlFor="first_name" className="text-slate-200">
+                  First Name <span className="text-red-400">*</span>
+                  <span className="text-xs text-slate-400 ml-2">(or Last Name required)</span>
+                </Label>
                 <Input
                   id="first_name"
                   value={formData.first_name || ""}
                   onChange={(e) => handleChange('first_name', e.target.value)}
-                  required
                   aria-invalid={!!fieldErrors.first_name}
                   aria-describedby={fieldErrors.first_name ? "first_name-error" : undefined}
                   className={`mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500 ${
@@ -471,12 +479,14 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
                 )}
               </div>
               <div>
-                <Label htmlFor="last_name" className="text-slate-200">Last Name *</Label>
+                <Label htmlFor="last_name" className="text-slate-200">
+                  Last Name <span className="text-red-400">*</span>
+                  <span className="text-xs text-slate-400 ml-2">(or First Name required)</span>
+                </Label>
                 <Input
                   id="last_name"
                   value={formData.last_name || ""}
                   onChange={(e) => handleChange('last_name', e.target.value)}
-                  required
                   aria-invalid={!!fieldErrors.last_name}
                   aria-describedby={fieldErrors.last_name ? "last_name-error" : undefined}
                   className={`mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500 ${
@@ -698,7 +708,7 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
               />
             </div>
 
-            {isAdmin && (
+            {isSuperadmin && (
               <div className="flex items-center space-x-2 p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
                 <Switch
                   id="is_test_data"

@@ -5,21 +5,28 @@
 
 import express from 'express';
 
-export default function createSystemRoutes(pgPool) {
+export default function createSystemRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/system/status - System status check
   router.get('/status', async (req, res) => {
     try {
       let dbStatus = 'disconnected';
-      
-      if (pgPool) {
-        try {
-          await pgPool.query('SELECT 1');
+      try {
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
+        // Lightweight connectivity check
+        const { error } = await supabase
+          .from('system_logs')
+          .select('id', { count: 'exact', head: true })
+          .limit(1);
+        if (error) {
+          dbStatus = 'error: ' + error.message;
+        } else {
           dbStatus = 'connected';
-        } catch (err) {
-          dbStatus = 'error: ' + err.message;
         }
+      } catch (err) {
+        dbStatus = 'error: ' + err.message;
       }
 
       res.json({
@@ -57,8 +64,8 @@ export default function createSystemRoutes(pgPool) {
           ipv4first_applied: !!locals.ipv4FirstApplied,
         },
         database: {
-          configured: !!pgPool,
-          connection_type: locals.dbConnectionType || 'none',
+          configured: true,
+          connection_type: 'supabase',
           using_supabase_prod: usingSupabaseProd,
           db_config_path: locals.dbConfigPath || (usingSupabaseProd ? 'supabase_discrete' : (process.env.DATABASE_URL ? 'database_url' : 'none')),
           database_url_present: Boolean(process.env.DATABASE_URL),
@@ -80,7 +87,7 @@ export default function createSystemRoutes(pgPool) {
       const diagnostics = {
         timestamp: new Date().toISOString(),
         database: {
-          configured: !!pgPool,
+          configured: true,
           connected: false,
         },
         functions: {
@@ -91,15 +98,17 @@ export default function createSystemRoutes(pgPool) {
           total: 47,
         },
       };
-
-      if (pgPool) {
-        try {
-          const result = await pgPool.query('SELECT version()');
-          diagnostics.database.connected = true;
-          diagnostics.database.version = result.rows[0].version;
-        } catch (err) {
-          diagnostics.database.error = err.message;
-        }
+      try {
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
+        const { error } = await supabase
+          .from('tenants')
+          .select('id', { count: 'exact', head: true })
+          .limit(1);
+        diagnostics.database.connected = !error;
+        if (error) diagnostics.database.error = error.message;
+      } catch (err) {
+        diagnostics.database.error = err.message;
       }
 
       res.json({
@@ -125,39 +134,87 @@ export default function createSystemRoutes(pgPool) {
           message: 'tenant_id is required'
         });
       }
-
-      // Build query with filters
-      let query = 'SELECT * FROM system_logs WHERE tenant_id = $1';
-      const params = [tenant_id];
-      let paramCount = 1;
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      let query = supabase
+        .from('system_logs')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .order('created_at', { ascending: false })
+        .limit(parseInt(limit));
 
       if (level && level !== 'all') {
-        paramCount++;
-        query += ` AND level = $${paramCount}`;
-        params.push(level);
+        query = query.eq('level', level);
       }
-
       if (source && source !== 'all') {
-        paramCount++;
-        query += ` AND source = $${paramCount}`;
-        params.push(source);
+        query = query.eq('source', source);
       }
 
-      query += ' ORDER BY created_at DESC LIMIT $' + (paramCount + 1);
-      params.push(parseInt(limit));
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
 
-      const result = await pgPool.query(query, params);
-
-      res.json({
-        status: 'success',
-        data: result.rows
-      });
+      res.json({ status: 'success', data });
     } catch (error) {
       console.error('Error fetching system logs:', error);
       res.status(500).json({
         status: 'error',
         message: error.message,
       });
+    }
+  });
+
+  // POST /api/system/cleanup-orphans - Remove records with tenant_id IS NULL across entities
+  // Safeguards:
+  // - Does NOT touch users table (global superadmins/admins may be tenant-less by design)
+  // - Deletes from employees and business entities only where tenant_id IS NULL
+  // - Returns per-table counts
+  router.post('/cleanup-orphans', async (req, res) => {
+    try {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+
+      const tables = [
+        'contacts',
+        'leads',
+        'accounts',
+        'opportunities',
+        'activities',
+        'notes',
+        'employees', // employees without tenant assignment are considered orphan records
+      ];
+
+      const summary = {};
+      let totalDeleted = 0;
+
+      for (const table of tables) {
+        try {
+          const { data, error } = await supabase
+            .from(table)
+            .delete()
+            .is('tenant_id', null)
+            .select('id');
+          if (error) {
+            summary[table] = { error: error.message };
+            continue;
+          }
+          const count = Array.isArray(data) ? data.length : 0;
+          summary[table] = { deleted: count };
+          totalDeleted += count;
+        } catch (e) {
+          summary[table] = { error: e.message };
+        }
+      }
+
+      return res.json({
+        status: 'success',
+        data: {
+          total_deleted: totalDeleted,
+          summary,
+        },
+        message: `Cleanup complete. Deleted ${totalDeleted} orphan record(s).`,
+      });
+    } catch (error) {
+      return res.status(500).json({ status: 'error', message: error.message });
     }
   });
 

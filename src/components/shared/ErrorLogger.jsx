@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useState, useEffect, createContext, useContext } from 'react';
-import { User, SystemLog } from '@/api/entities';
+import { useState, createContext, useContext } from 'react';
+import { SystemLog } from '@/api/entities';
+import { useUser } from '@/components/shared/useUser.js';
 
 // Client-side error log storage
 const errorLog = [];
@@ -14,11 +15,7 @@ export function useErrorLog() {
 
 export function ErrorLogProvider({ children }) {
   const [errors, setErrors] = useState([]);
-  const [user, setUser] = useState(null);
-
-  useEffect(() => {
-    User.me().then(setUser).catch(() => {});
-  }, []);
+  const { user } = useUser();
 
   const logError = (error) => {
     const errorEntry = {

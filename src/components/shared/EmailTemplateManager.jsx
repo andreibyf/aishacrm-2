@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge"; // Added import for Badge
-import { EmailTemplate, User } from "@/api/entities";
+import { EmailTemplate } from "@/api/entities";
+import { useUser } from '@/components/shared/useUser.js';
 import { Loader2, Plus, Edit, Trash2, Save, ArrowLeft, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { getTenantFilter } from './tenantUtils';
@@ -23,11 +24,13 @@ export default function EmailTemplateManager({ open, onOpenChange, onTemplatesUp
 
   const { selectedTenantId } = useTenant();
 
+  const { user: currentUser } = useUser();
+
   const loadTemplatesAndTags = useCallback(async () => {
     setLoading(true);
     try {
-      const user = await User.me();
-      const filter = getTenantFilter(user, selectedTenantId);
+      if (!currentUser) return; // Guard if user not loaded yet
+      const filter = getTenantFilter(currentUser, selectedTenantId);
       const fetchedTemplates = await EmailTemplate.filter(filter);
       setTemplates(fetchedTemplates);
 
@@ -45,7 +48,7 @@ export default function EmailTemplateManager({ open, onOpenChange, onTemplatesUp
     } finally {
       setLoading(false);
     }
-  }, [selectedTenantId]);
+  }, [selectedTenantId, currentUser]);
 
   useEffect(() => {
     if (open) {
@@ -102,8 +105,11 @@ export default function EmailTemplateManager({ open, onOpenChange, onTemplatesUp
     
     setIsSaving(true);
     try {
-      const user = await User.me();
-      const dataToSave = { ...formData, tenant_id: user.tenant_id };
+      if (!currentUser) {
+        toast.error('User context not ready. Please wait and try again.');
+        return;
+      }
+      const dataToSave = { ...formData, tenant_id: currentUser.tenant_id };
 
       if (selectedTemplate) {
         await EmailTemplate.update(selectedTemplate.id, dataToSave);

@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from "react"; // React is used for JSX, so it is required.
 import { Employee } from "@/api/entities";
-import { User } from "@/api/entities";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTenant } from "./tenantContext";
 import { getTenantFilter } from "./tenantUtils"; // Updated import to use tenantUtils.js
+import { useUser } from "@/components/shared/useUser.js";
 
 export default function LazyEmployeeSelector({ 
   value, 
@@ -16,20 +16,8 @@ export default function LazyEmployeeSelector({
 }) {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [user, setUser] = useState(null);
   const { selectedTenantId } = useTenant();
-
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Failed to load user:", error);
-      }
-    };
-    loadUser();
-  }, []);
+  const { user } = useUser();
 
   useEffect(() => {
     const loadEmployees = async () => {

@@ -21,11 +21,9 @@ const normalizeBackendUrl = (url) => {
 };
 
 // Exported so other modules (CronHeartbeat, AuditLog, etc.) can consume the same normalized URL
-// In production, prefer runtime env (window.__ENV) over build-time env for containerized deployments
 export const BACKEND_URL = import.meta.env.DEV
   ? ''
   : normalizeBackendUrl(
-      (typeof window !== 'undefined' && window.__ENV?.VITE_AISHACRM_BACKEND_URL) ||
       import.meta.env.VITE_AISHACRM_BACKEND_URL ||
       "http://localhost:3001"
     );
@@ -91,16 +89,110 @@ const makeDevFallback = (entityName, method, data, id) => {
 
 // Helper to call independent backend API
 const callBackendAPI = async (entityName, method, data = null, id = null) => {
+  // ENTRY POINT DEBUG - log exactly what we receive
+  if (method === 'POST') {
+    console.log('[callBackendAPI ENTRY]', {
+      entityName,
+      method,
+      dataReceived: data,
+      dataKeys: data ? Object.keys(data) : null,
+      id
+    });
+  }
+  
+  // Diagnostic logging for key entities during tests
+  const isOpportunity = entityName === 'Opportunity';
+  const isDebugEntity = isOpportunity || entityName === 'Employee' || entityName === 'Account' || entityName === 'Contact';
   const entityPath = pluralize(entityName);
   let url = `${BACKEND_URL}/api/${entityPath}`;
 
-  // Get tenant_id from mock user for local dev
+  // Determine tenant_id preference order:
+  // 1) Explicit data.tenant_id (including null to indicate cross-tenant reads for superadmin)
+  // 2) URL param (?tenant=...)
+  // 3) Persisted TenantContext selection (localStorage: selected_tenant_id)
+  // 4) Local dev mock user (when isLocalDevMode())
+  // 5) Otherwise: null (do NOT fall back to "local-tenant-001" in production)
+
+  const getSelectedTenantFromClient = () => {
+    try {
+      if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href);
+
+        // For the UnitTests page, always force the dedicated test tenant UUID
+        if (url.pathname.toLowerCase().includes('unittests')) {
+          return '11111111-1111-1111-1111-111111111111';
+        }
+
+        const urlTenant = url.searchParams.get('tenant');
+        if (urlTenant) return urlTenant;
+        const stored = localStorage.getItem('selected_tenant_id');
+        if (stored) return stored;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  };
+
   const mockUser = isLocalDevMode() ? createMockUser() : null;
-  const defaultTenantId = mockUser?.tenant_id || "local-tenant-001";
+
+  // Resolve tenant_id with robust fallbacks and cache
+  const resolveTenantId = async () => {
+    // 1) Explicit in data (including null)
+    if (data && Object.prototype.hasOwnProperty.call(data, 'tenant_id')) {
+      return data.tenant_id;
+    }
+    // 2) URL/localStorage selection
+    const clientSelected = getSelectedTenantFromClient();
+    if (clientSelected) return clientSelected;
+    // 3) Cached effective user tenant (set after first lookup)
+    try {
+      if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem('effective_user_tenant_id');
+        if (cached !== null && cached !== undefined) {
+          // Allow empty string to represent null if previously cached incorrectly
+          return cached === '' ? null : cached;
+        }
+      }
+    } catch { /* noop */ }
+
+    // 4) Supabase-authenticated user profile lookup (production)
+    if (isSupabaseConfigured()) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && user.email) {
+          const resp = await fetch(`${BACKEND_URL}/api/users?email=${encodeURIComponent(user.email)}`);
+          if (resp.ok) {
+            const json = await resp.json();
+            const rawUsers = json.data?.users || json.data || json;
+            const users = Array.isArray(rawUsers) ? rawUsers : [];
+            // Prefer record with non-null tenant_id for non-superadmin
+            const exact = users.find(u => (u.email || '').toLowerCase() === user.email.toLowerCase());
+            const tenant = exact?.tenant_id ?? null;
+            try {
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('effective_user_tenant_id', tenant ?? '');
+              }
+            } catch { /* noop */ }
+            return tenant;
+          }
+        }
+      } catch {
+        // Ignore auth lookup errors and continue fallbacks
+      }
+    }
+
+    // 5) Local dev mock user
+    if (mockUser?.tenant_id) return mockUser.tenant_id;
+    // 6) Final fallback: null (no forced default)
+    return null;
+  };
+
+  const defaultTenantId = await resolveTenantId();
 
   // Use provided tenant_id from data, or fall back to default
   // This allows explicit tenant_id values (including 'none') to be preserved
-  const tenantId = data?.tenant_id !== undefined
+  const tenantId = (data && Object.prototype.hasOwnProperty.call(data, 'tenant_id'))
     ? data.tenant_id
     : defaultTenantId;
 
@@ -155,6 +247,12 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
         : { ...data, tenant_id: tenantId };
       options.body = JSON.stringify(bodyData);
     }
+
+    // Special-case Opportunity PUT: also append tenant_id as query param to avoid any body parsing ambiguity
+    if (entityName === 'Opportunity' && method === 'PUT' && tenantId !== undefined) {
+      const delimiter = url.includes('?') ? '&' : '?';
+      url += `${delimiter}tenant_id=${encodeURIComponent(tenantId)}`;
+    }
   } else if (data && method !== "GET") {
     // POST and other methods - include data in body, no ID in URL
     const bodyData = data.tenant_id !== undefined
@@ -163,9 +261,39 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     options.body = JSON.stringify(bodyData);
   }
 
+  if (isDebugEntity) {
+    console.log('[API Debug] Preparing request', {
+      entity: entityName,
+      method,
+      id,
+      initialUrl: url,
+      incomingDataKeys: data ? Object.keys(data) : [],
+    });
+  }
+
+  // Enhanced debug for all POST requests during tests
+  if (method === 'POST' || isDebugEntity) {
+    console.log('[API Debug] Final request configuration', {
+      entity: entityName,
+      method,
+      url,
+      hasBody: !!options.body,
+      bodyPreview: options.body ? (() => { try { const parsed = JSON.parse(options.body); return { keys: Object.keys(parsed), stage: parsed.stage, tenant_id: parsed.tenant_id, first_name: parsed.first_name, last_name: parsed.last_name, name: parsed.name, fullBody: parsed }; } catch { return 'unparseable'; } })() : null,
+    });
+  }
+
   let response;
   try {
     response = await fetch(url, options);
+    if (isDebugEntity) {
+      console.log('[API Debug] Fetch completed', {
+        url,
+        status: response.status,
+        statusText: response.statusText,
+        method,
+        id,
+      });
+    }
   } catch (error) {
     // Network errors (connection refused, DNS failure, etc)
     apiHealthMonitor.reportNetworkError(url, {
@@ -201,6 +329,8 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       apiHealthMonitor.reportMissingEndpoint(url, errorContext);
     } else if (response.status === 401 || response.status === 403) {
       apiHealthMonitor.reportAuthError(url, response.status, errorContext);
+     } else if (response.status === 400) {
+       apiHealthMonitor.reportValidationError(url, errorContext);
     } else if (response.status === 429) {
       apiHealthMonitor.reportRateLimitError(url, errorContext);
     } else if (response.status >= 500 && response.status < 600) {
@@ -213,10 +343,41 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       );
       return makeDevFallback(entityName, method, data, id);
     }
+    // Enhanced Opportunity-specific logging
+    if (isDebugEntity) {
+      console.error('[API Debug] Request failed', {
+        url,
+        method,
+        id,
+        status: response.status,
+        statusText: response.statusText,
+        errorSnippet: errorText?.slice(0,300),
+        tenantId,
+      });
+    }
     throw new Error(`Backend API error: ${response.statusText} - ${errorText}`);
   }
 
-  const result = await response.json();
+  let result;
+  try {
+    result = await response.json();
+  } catch (e) {
+    if (isOpportunity) {
+      console.warn('[API Debug] Failed to parse JSON response', { url, error: e.message });
+    }
+    throw e;
+  }
+
+  if (isDebugEntity) {
+    // Log stage-related fields if present
+    const stageVal = result?.data?.stage || result?.stage;
+    console.log('[API Debug] Parsed response JSON', {
+      url,
+      hasData: !!result?.data,
+      topLevelKeys: Object.keys(result || {}),
+      stage: stageVal,
+    });
+  }
 
   // Backend returns { status: "success", data: { entityName: [...] } }
   // Extract the actual data array/object
@@ -230,6 +391,34 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     }
     // For single item operations (get, create, update), return the data directly
     if (!Array.isArray(result.data)) {
+      // If it's already an entity-like object (has an id), return as-is
+      if (Object.prototype.hasOwnProperty.call(result.data, 'id')) {
+        return result.data;
+      }
+
+      // Known wrapper keys for single-entity responses
+      const wrapperKeys = new Set([
+        'employee','account','contact','lead','opportunity','user','tenant','activity','opportunities','employees','accounts','contacts','users','tenants','activities'
+      ]);
+
+      // Prefer unwrapping a known wrapper key
+      const knownWrapperKey = Object.keys(result.data).find((key) =>
+        key !== 'tenant_id' && wrapperKeys.has(key) &&
+        result.data[key] && typeof result.data[key] === 'object' && !Array.isArray(result.data[key])
+      );
+      if (knownWrapperKey) {
+        return result.data[knownWrapperKey];
+      }
+
+      // As a last resort, if the object has exactly one nested object value, unwrap that
+      const nestedObjects = Object.keys(result.data).filter((key) =>
+        key !== 'tenant_id' && result.data[key] && typeof result.data[key] === 'object' && !Array.isArray(result.data[key])
+      );
+      if (nestedObjects.length === 1) {
+        return result.data[nestedObjects[0]];
+      }
+
+      // Default: return as-is
       return result.data;
     }
   }
@@ -258,6 +447,11 @@ const createEntity = (entityName) => {
     },
     // Update
     update: async (id, data) => {
+      // For Opportunities explicitly append tenant_id as query param to avoid body-only ambiguity
+      if (entityName === 'Opportunity') {
+        const enriched = { ...data };
+        return await callBackendAPI(entityName, "PUT", enriched, id);
+      }
       return callBackendAPI(entityName, "PUT", data, id);
     },
     // Delete
@@ -278,184 +472,8 @@ const createEntity = (entityName) => {
 
 export const Contact = createEntity("Contact");
 
-// Account entity - direct backend API calls
-export const Account = {
-  async list(filters = {}, _orderBy = "-created_at", limit = 100) {
-    try {
-      // Use centralized, normalized BACKEND_URL
-
-      const params = new URLSearchParams();
-      if (filters.tenant_id) params.append("tenant_id", filters.tenant_id);
-      if (filters.name) params.append("name", filters.name);
-      if (filters.industry) params.append("industry", filters.industry);
-      if (filters.status) params.append("status", filters.status);
-      if (limit) params.append("limit", limit);
-      params.append("offset", filters.offset || 0);
-
-      const url = `${BACKEND_URL}/api/accounts?${params}`;
-      console.log("[Account.list] Fetching from:", url);
-
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          "Pragma": "no-cache",
-        },
-      });
-
-      console.log(
-        "[Account.list] Response status:",
-        response.status,
-        response.statusText,
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log("[Account.list] Response data:", result);
-
-      if (result.status === "success" && result.data && result.data.accounts) {
-        console.log(
-          "[Account.list] Returning",
-          result.data.accounts.length,
-          "accounts",
-        );
-        return result.data.accounts;
-      }
-
-      console.log("[Account.list] Using fallback return format");
-      return result.data || result;
-    } catch (error) {
-      console.error("[Account.list] Error fetching accounts:", error);
-      return [];
-    }
-  },
-
-  async get(id) {
-    try {
-      console.log("[Account.get] Fetching account:", id);
-
-      const response = await fetch(`${BACKEND_URL}/api/accounts/${id}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      console.log("[Account.get] Response status:", response.status);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      return result.data || result;
-    } catch (error) {
-      console.error(`[Account.get] Error fetching account ${id}:`, error);
-      throw error;
-    }
-  },
-
-  async create(data) {
-    try {
-      console.log("[Account.create] Creating account with data:", data);
-
-      const response = await fetch(`${BACKEND_URL}/api/accounts`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-      });
-
-      console.log("[Account.create] Response status:", response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("[Account.create] Error response:", errorText);
-        throw new Error(
-          `HTTP error! status: ${response.status} - ${errorText}`,
-        );
-      }
-
-      const result = await response.json();
-      console.log("[Account.create] Response data:", result);
-      return result.data || result;
-    } catch (error) {
-      console.error("[Account.create] Error creating account:", error);
-      throw error;
-    }
-  },
-
-  async update(id, data) {
-    try {
-      console.log("[Account.update] Updating account:", id, "with data:", data);
-
-      const response = await fetch(`${BACKEND_URL}/api/accounts/${id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-      });
-
-      console.log(
-        "[Account.update] Response status:",
-        response.status,
-        response.statusText,
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("[Account.update] Error response:", errorText);
-        throw new Error(
-          `HTTP error! status: ${response.status} - ${errorText}`,
-        );
-      }
-
-      const result = await response.json();
-      console.log("[Account.update] Response data:", result);
-      return result.data || result;
-    } catch (error) {
-      console.error(`[Account.update] Error updating account ${id}:`, error);
-      throw error;
-    }
-  },
-
-  async delete(id) {
-    try {
-      console.log("[Account.delete] Deleting account:", id);
-
-      const response = await fetch(`${BACKEND_URL}/api/accounts/${id}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      console.log("[Account.delete] Response status:", response.status);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      return result.data || result;
-    } catch (error) {
-      console.error(`[Account.delete] Error deleting account ${id}:`, error);
-      throw error;
-    }
-  },
-
-  // Alias for list() - some components use filter() instead
-  async filter(filters = {}, orderBy = "-created_at", limit = 100) {
-    console.log("[Account.filter] Called with filters:", filters);
-    return this.list(filters, orderBy, limit);
-  },
-};
+// Account entity - use standard createEntity with tenant resolution
+export const Account = createEntity("Account");
 
 export const Lead = createEntity("Lead");
 
@@ -836,17 +854,114 @@ export const ImportLog = createEntity("ImportLog");
 export const BizDevSource = {
   ...createEntity("BizDevSource"),
   schema: async () => {
-    // Return default schema structure
-    return {
-      properties: {
-        name: { type: "string" },
-        description: { type: "string" },
-        url: { type: "string" },
-        category: { type: "string" },
-        tenant_id: { type: "string" },
-      },
-      required: ["name"],
-    };
+    // Import and return the full BizDevSource schema
+    const { BizDevSourceSchema } = await import('../entities/BizDevSource.js');
+    return BizDevSourceSchema;
+  },
+  /**
+   * Override update to ensure tenant_id is passed via query string per backend route requirements.
+   * Generic createEntity update doesn't append tenant_id, causing 400 errors.
+   */
+  update: async (id, data) => {
+    try {
+      const tenant_id = data?.tenant_id || data?.tenantId;
+      if (!tenant_id) {
+        throw new Error('tenant_id is required for BizDevSource.update');
+      }
+      const url = `${BACKEND_URL}/api/bizdevsources/${id}?tenant_id=${encodeURIComponent(tenant_id)}`;
+      console.log('[BizDevSource.update] PUT', { url, id, tenant_id });
+      // Exclude tenant_id from body (route expects it only in query for validation)
+      const { tenant_id: _omit, tenantId: _omit2, ...rest } = data || {};
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rest),
+      });
+      console.log('[BizDevSource.update] Response', { status: response.status, ok: response.ok });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[BizDevSource.update] Error', errorData);
+        throw new Error(errorData.message || `Failed to update BizDevSource: ${response.status}`);
+      }
+      const result = await response.json();
+      console.log('[BizDevSource.update] Success', result);
+      return result.data || result;
+    } catch (err) {
+      console.error('[BizDevSource.update] Exception', err);
+      throw err;
+    }
+  },
+  /**
+   * Promote a BizDev source to an Account
+   * @param {string} id - BizDev source ID
+   * @param {string} tenant_id - Tenant ID
+   * @returns {Promise<{account: Object, contact: Object|null, bizdev_source_id: string}>}
+   */
+  promote: async (id, tenant_id) => {
+    try {
+      const url = `${BACKEND_URL}/api/bizdevsources/${id}/promote`;
+      const startedAt = performance.now();
+      console.log('[BizDevSource.promote] Making API call:', { url, id, tenant_id, startedAt });
+
+      // Abort after 8s to avoid infinite spinner when network stalls
+      const controller = new AbortController();
+      const timeoutMs = 8000;
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
+
+      let response;
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // Keep source after promotion so UI can gray it out and stats reflect immediately
+          body: JSON.stringify({ tenant_id, delete_source: false }),
+          signal: controller.signal,
+        });
+      } catch (fetchErr) {
+        const elapsed = Math.round(performance.now() - startedAt);
+        if (fetchErr?.name === 'AbortError') {
+          console.error('[BizDevSource.promote] Timeout abort', { id, tenant_id, elapsed, timeoutMs });
+          throw new Error('PROMOTE_TIMEOUT');
+        }
+        console.error('[BizDevSource.promote] Network fetch error before response', { error: fetchErr, elapsed });
+        throw fetchErr;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      const afterFetch = performance.now();
+      console.log('[BizDevSource.promote] Response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        elapsedMs: Math.round(afterFetch - startedAt)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[BizDevSource.promote] API error:', { errorData, status: response.status });
+        // Distinguish production safety guard / rate limit / generic errors
+        const isGuard = errorData?.code === 'PRODUCTION_SAFETY_GUARD' || response.status === 403;
+        const isRateLimit = response.status === 429;
+        if (isGuard) {
+          throw new Error('PROMOTE_BLOCKED_PRODUCTION_GUARD');
+        }
+        if (isRateLimit) {
+          throw new Error('PROMOTE_RATE_LIMITED');
+        }
+        throw new Error(errorData.message || `Failed to promote bizdev source: ${response.status}`);
+      }
+
+      const parseStarted = performance.now();
+      const result = await response.json();
+      console.log('[BizDevSource.promote] Success:', { result, parseElapsedMs: Math.round(performance.now() - parseStarted) });
+      return result.data;
+    } catch (error) {
+      console.error('[BizDevSource.promote] Error:', error);
+      throw error;
+    }
   },
 };
 
@@ -928,6 +1043,7 @@ export const User = {
           );
           if (response.ok) {
             const result = await response.json();
+            console.log('[User.me] RAW API response:', result); // DEBUG: See what backend actually returns
             const rawUsers = result.data?.users || result.data || result;
             const users = Array.isArray(rawUsers) ? rawUsers.filter(u => (u.email || '').toLowerCase() === user.email.toLowerCase()) : [];
 
@@ -1086,6 +1202,7 @@ export const User = {
             can_manage_users: userData.metadata?.can_manage_users || false,
             can_manage_settings: userData.metadata?.can_manage_settings || false,
             crm_access: true, // Grant CRM access to authenticated users with records
+            navigation_permissions: userData.navigation_permissions || {}, // CRITICAL: Include navigation_permissions from backend
           }),
         };
       } catch (err) {

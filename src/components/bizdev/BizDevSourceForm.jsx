@@ -11,10 +11,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { X } from "lucide-react";
-import { Lead } from "@/api/entities"; // Added Lead entity import
-import { User } from "@/api/entities"; // Assuming User entity is needed for current user and tenant_id
+import { Lead, BizDevSource } from "@/api/entities";
+import { useEntityForm } from "@/hooks/useEntityForm";
+import { toast } from "sonner";
 
-export default function BizDevSourceForm({ source, onSubmit, onCancel }) {
+// Unified form contract: supports legacy `source` prop and new `initialData` prop
+// Parent should pass `onSubmit(result)` after persistence. This form now handles create/update directly.
+export default function BizDevSourceForm({ source: legacySource, initialData, onSubmit, onCancel }) {
+  const source = initialData || legacySource || null;
+  const { ensureTenantId, isSubmitting, normalizeError } = useEntityForm();
   const [formData, setFormData] = useState({
     source: "",
     batch_id: "",
@@ -38,29 +43,28 @@ export default function BizDevSourceForm({ source, onSubmit, onCancel }) {
     status: "Active",
   });
 
-  const [leads, setLeads] = useState([]); // State to hold available leads
-  const [currentUser, setCurrentUser] = useState(null); // State to hold current user for tenant_id
+  const [leads, setLeads] = useState([]);
 
-  // Effect to load current user and leads on component mount
+  // Load leads using resolved tenant_id (standardized tenant resolution)
   useEffect(() => {
-    const loadData = async () => {
+    let cancelled = false;
+    const loadLeads = async () => {
       try {
-        const user = await User.me(); // Fetch current user
-        setCurrentUser(user);
-
-        // Fetch leads filtered by the current user's tenant_id
-        if (user && user.tenant_id) {
-          const leadList = await Lead.filter({ tenant_id: user.tenant_id });
-          setLeads(leadList || []);
+        const tenantId = await ensureTenantId();
+        if (!tenantId) {
+          setLeads([]);
+          return;
         }
-      } catch (error) {
-        console.error("Failed to load data:", error);
-        // In case of error, ensure leads array is empty to prevent issues
-        setLeads([]);
+        const leadList = await Lead.filter({ tenant_id: tenantId });
+        if (!cancelled) setLeads(Array.isArray(leadList) ? leadList : []);
+      } catch (err) {
+        console.error('[BizDevSourceForm] Failed to load leads:', err);
+        if (!cancelled) setLeads([]);
       }
     };
-    loadData();
-  }, []); // Empty dependency array ensures this runs once on mount
+    loadLeads();
+    return () => { cancelled = true; };
+  }, [ensureTenantId]);
 
   useEffect(() => {
     if (source) {
@@ -89,16 +93,43 @@ export default function BizDevSourceForm({ source, onSubmit, onCancel }) {
     }
   }, [source]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.source) {
-      console.error("Source name is required.");
+    if (!onSubmit || typeof onSubmit !== 'function') {
+      console.error('[BizDevSourceForm] Missing onSubmit handler');
+      toast.error('Form error: submit handler missing');
       return;
     }
-    if (currentUser?.tenant_id) {
-      onSubmit({ ...formData, tenant_id: currentUser.tenant_id });
-    } else {
-      console.error("Tenant ID is missing. Cannot submit form.");
+    if (!formData.source) {
+      toast.error('Source name is required');
+      return;
+    }
+
+    try {
+      const tenantId = await ensureTenantId();
+      if (!tenantId) {
+        toast.error('Cannot save: Tenant context unavailable');
+        return;
+      }
+
+      // Clean payload: convert empty strings to null for consistency
+      const payload = { ...formData, tenant_id: tenantId };
+      Object.keys(payload).forEach(k => {
+        if (payload[k] === '' && typeof payload[k] === 'string') payload[k] = null;
+      });
+
+      let result;
+      if (source?.id) {
+        result = await BizDevSource.update(source.id, payload);
+        toast.success('BizDev source updated');
+      } else {
+        result = await BizDevSource.create(payload);
+        toast.success('BizDev source created');
+      }
+      await onSubmit(result);
+    } catch (err) {
+      console.error('[BizDevSourceForm] Submit failed:', err);
+      toast.error(normalizeError(err));
     }
   };
 
@@ -120,7 +151,7 @@ export default function BizDevSourceForm({ source, onSubmit, onCancel }) {
     <form onSubmit={handleSubmit} className="p-6 space-y-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl font-bold text-slate-100">
-          {source ? "Edit BizDev Source" : "Add BizDev Source"}
+          {source?.id ? "Edit BizDev Source" : "Add BizDev Source"}
         </h2>
         <Button
           type="button"
@@ -447,7 +478,7 @@ export default function BizDevSourceForm({ source, onSubmit, onCancel }) {
           Cancel
         </Button>
         <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
-          {source ? "Update Source" : "Create Source"}
+          {isSubmitting ? (source?.id ? 'Saving...' : 'Creating...') : (source?.id ? "Update Source" : "Create Source")}
         </Button>
       </div>
     </form>

@@ -5,19 +5,12 @@
 
 import express from 'express';
 
-export default function createDatabaseRoutes(pgPool) {
+export default function createDatabaseRoutes(_pgPool) {
   const router = express.Router();
 
   // POST /api/database/sync - Sync data from Base44 to PostgreSQL
   router.post('/sync', async (req, res) => {
     try {
-      if (!pgPool) {
-        return res.status(503).json({
-          status: 'error',
-          message: 'Database not configured - set DATABASE_URL in .env',
-        });
-      }
-
       const { tenant_id, entities } = req.body;
 
       res.json({
@@ -40,13 +33,6 @@ export default function createDatabaseRoutes(pgPool) {
   // GET /api/database/check-volume - Check data volume
   router.get('/check-volume', async (req, res) => {
     try {
-      if (!pgPool) {
-        return res.status(503).json({
-          status: 'error',
-          message: 'Database not configured',
-        });
-      }
-
       const { tenant_id } = req.query;
 
       if (!tenant_id) {
@@ -56,19 +42,11 @@ export default function createDatabaseRoutes(pgPool) {
         });
       }
 
-      const result = await pgPool.query(`
-        SELECT 
-          schemaname,
-          tablename,
-          pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size
-        FROM pg_tables
-        WHERE schemaname = 'public'
-        ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
-      `);
-
+      // Return summary of table sizes (placeholder - real implementation would use Supabase RPC)
       res.json({
         status: 'success',
-        data: result.rows,
+        message: 'Volume check requires database admin access',
+        data: []
       });
     } catch (error) {
       res.status(500).json({
@@ -117,13 +95,6 @@ export default function createDatabaseRoutes(pgPool) {
   // POST /api/database/nuclear-cleanup - DELETE ALL DATA (use with extreme caution!)
   router.post('/nuclear-cleanup', async (req, res) => {
     try {
-      if (!pgPool) {
-        return res.status(503).json({
-          status: 'error',
-          message: 'Database not configured',
-        });
-      }
-
       const { confirm } = req.body;
 
       if (confirm !== 'DELETE_ALL_DATA') {
@@ -133,28 +104,31 @@ export default function createDatabaseRoutes(pgPool) {
         });
       }
 
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      
       // Delete from all entity tables (in correct order to respect foreign keys)
       const results = {};
 
       // Activities first (has foreign keys to other tables)
-      const activitiesResult = await pgPool.query('DELETE FROM activities RETURNING id');
-      results.activities = activitiesResult.rowCount;
+      const { data: activitiesData } = await supabase.from('activities').delete().neq('id', '00000000-0000-0000-0000-000000000000').select('id');
+      results.activities = activitiesData?.length || 0;
 
       // Opportunities
-      const oppsResult = await pgPool.query('DELETE FROM opportunities RETURNING id');
-      results.opportunities = oppsResult.rowCount;
+      const { data: oppsData } = await supabase.from('opportunities').delete().neq('id', '00000000-0000-0000-0000-000000000000').select('id');
+      results.opportunities = oppsData?.length || 0;
 
       // Accounts
-      const accountsResult = await pgPool.query('DELETE FROM accounts RETURNING id');
-      results.accounts = accountsResult.rowCount;
+      const { data: accountsData } = await supabase.from('accounts').delete().neq('id', '00000000-0000-0000-0000-000000000000').select('id');
+      results.accounts = accountsData?.length || 0;
 
       // Leads
-      const leadsResult = await pgPool.query('DELETE FROM leads RETURNING id');
-      results.leads = leadsResult.rowCount;
+      const { data: leadsData } = await supabase.from('leads').delete().neq('id', '00000000-0000-0000-0000-000000000000').select('id');
+      results.leads = leadsData?.length || 0;
 
       // Contacts
-      const contactsResult = await pgPool.query('DELETE FROM contacts RETURNING id');
-      results.contacts = contactsResult.rowCount;
+      const { data: contactsData } = await supabase.from('contacts').delete().neq('id', '00000000-0000-0000-0000-000000000000').select('id');
+      results.contacts = contactsData?.length || 0;
 
       const totalDeleted = Object.values(results).reduce((sum, count) => sum + count, 0);
 

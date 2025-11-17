@@ -6,6 +6,7 @@ import { Contact } from "@/api/entities";
 import { Lead } from "@/api/entities";
 import { Opportunity } from "@/api/entities";
 import { User } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import { Employee } from "@/api/entities";
 import { useApiManager } from "../components/shared/ApiManager";
 import ActivityCard from "../components/activities/ActivityCard";
@@ -73,7 +74,8 @@ export default function ActivitiesPage() {
   const [selectedActivities, setSelectedActivities] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [user, setUser] = useState(null);
+  // Use global user context instead of per-page fetch
+  const { user } = useUser();
   const { selectedTenantId } = useTenant();
   const [detailActivity, setDetailActivity] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -103,24 +105,7 @@ export default function ActivitiesPage() {
   
   const initialLoadDone = useRef(false);
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        // In E2E mode, use injected mock user to avoid failed User.me() calls
-        if (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser) {
-          setUser(window.__e2eUser);
-          return;
-        }
-        
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Failed to load user:", error);
-        toast.error("Failed to load user information");
-      }
-    };
-    loadUser();
-  }, []);
+  // Removed per-page user fetch; context handles loading and E2E override
 
   const buildFilter = useCallback(() => {
     if (!user) return {};
@@ -168,7 +153,7 @@ export default function ActivitiesPage() {
     }
 
     if (!showTestData) {
-      filter.is_test_data = { $ne: true };
+      filter.is_test_data = false; // Simple boolean, not complex operator
     }
 
     return filter;
@@ -187,6 +172,14 @@ export default function ActivitiesPage() {
           }
         } else if (user.tenant_id) {
           supportingDataTenantFilter.tenant_id = user.tenant_id;
+        }
+        
+        // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
+        if ((user.role === 'superadmin' || user.role === 'admin') && !supportingDataTenantFilter.tenant_id) {
+          if (import.meta.env.DEV) {
+            console.log("[Activities] Skipping data load - no tenant selected");
+          }
+          return;
         }
         
         const [usersData, employeesData, accountsData, contactsData, leadsData, opportunitiesData] = await Promise.all([
@@ -217,6 +210,19 @@ export default function ActivitiesPage() {
 
     try {
       const baseFilter = buildFilter();
+      
+      // Guard: Don't load stats if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !baseFilter.tenant_id) {
+        setTotalStats({
+          total: 0,
+          scheduled: 0,
+          in_progress: 0,
+          overdue: 0,
+          completed: 0,
+          cancelled: 0
+        });
+        return;
+      }
       
       const allActivities = await Activity.filter(baseFilter, 'id', 10000);
       
@@ -252,6 +258,14 @@ export default function ActivitiesPage() {
     setLoading(true);
     try {
       let currentFilter = buildFilter();
+      
+      // Guard: Don't load activities if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !currentFilter.tenant_id) {
+        setActivities([]);
+        setTotalItems(0);
+        setLoading(false);
+        return;
+      }
       
       if (searchTerm) {
         const searchRegex = { $regex: searchTerm, $options: 'i' };

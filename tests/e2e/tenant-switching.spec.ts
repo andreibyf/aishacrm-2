@@ -8,6 +8,8 @@ async function getAnyTenantId(request: any) {
   if (!res.ok()) return ['local-tenant-001'];
   const body = await res.json();
   const tenants = body?.data?.tenants || [];
+  const envTenant = process.env.E2E_TENANT_ID;
+  if (envTenant) return [envTenant, envTenant];
   const ids = tenants.map((t: any) => t.tenant_id).filter(Boolean);
   return ids.length ? ids : ['local-tenant-001'];
 }
@@ -16,7 +18,7 @@ test('tenant switching persists and scopes data', async ({ page, request }) => {
   // Discover 1-2 tenants
   const ids = await getAnyTenantId(request);
   const a = ids[0];
-  const b = ids[1] || 'unit-test-tenant';
+  const b = ids[1] || (process.env.E2E_TENANT_ID ? process.env.E2E_TENANT_ID : 'unit-test-tenant');
 
   // Set tenant A in storage and navigate
   await page.addInitScript((id) => localStorage.setItem('selected_tenant_id', id as string), a);

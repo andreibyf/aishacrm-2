@@ -213,16 +213,17 @@ For complex schedules, use the `cron:` prefix:
 Add to `backend/lib/cronExecutors.js`:
 
 ```javascript
-export async function myNewJob(pgPool, jobMetadata = {}) {
+export async function myNewJob(supabase, jobMetadata = {}) {
   const config = jobMetadata.my_config || 'default';
   
   try {
-    // Your job logic here
-    const result = await pgPool.query('SELECT ...');
+    // Your job logic here using Supabase client
+    const { data, error } = await supabase.from('table_name').select('*');
+    if (error) throw error;
     
     return {
       success: true,
-      processed: result.rowCount,
+      processed: data?.length || 0,
       config
     };
   } catch (error) {

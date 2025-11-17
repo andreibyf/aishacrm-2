@@ -13,8 +13,8 @@ function normalizeString(str) {
 }
 
 // Helper: dynamic duplicate finder for a given entity and fields (Postgres only)
-async function findDuplicatesInDb(pgPool, entityTable, tenantId, fields = []) {
-  if (!pgPool || !entityTable || !tenantId || fields.length === 0) {
+async function findDuplicatesInDbSupabase(supabase, entityTable, tenantId, fields = []) {
+  if (!supabase || !entityTable || !tenantId || fields.length === 0) {
     return { total: 0, groups: [] };
   }
 
@@ -35,31 +35,38 @@ async function findDuplicatesInDb(pgPool, entityTable, tenantId, fields = []) {
   }
 
   // Build GROUP BY key: coalesce each field to empty string to avoid null grouping issues
-  const keyExpr = safeFields
+  const _keyExpr = safeFields
     .map((f) => `COALESCE(${f}::text, '')`)
     .join(` || '|' || `);
 
-  const sql = `
-    SELECT ${keyExpr} AS dup_key, COUNT(*) AS cnt
-    FROM ${entityTable}
-    WHERE tenant_id = $1
-    GROUP BY ${keyExpr}
-    HAVING COUNT(*) > 1
-    ORDER BY cnt DESC
-    LIMIT 200
-  `;
-
+  // Fetch a capped set of rows and aggregate in-memory to avoid server-side GROUP BY
+  // Safety cap to control payload size
+  const CAP = 5000;
   try {
-    const result = await pgPool.query(sql, [tenantId]);
-    const groups = (result.rows || []).map((r) => ({ key: r.dup_key, count: Number(r.cnt) }));
+    const { data, error } = await supabase
+      .from(entityTable)
+      .select([...new Set(['id', 'tenant_id', ...safeFields])].join(','))
+      .eq('tenant_id', tenantId)
+      .limit(CAP);
+    if (error) throw new Error(error.message);
+    const map = new Map();
+    for (const row of data || []) {
+      const key = safeFields.map((f) => String(row[f] ?? '')).join('|');
+      const count = (map.get(key) || 0) + 1;
+      map.set(key, count);
+    }
+    const groups = Array.from(map.entries())
+      .filter(([_, cnt]) => cnt > 1)
+      .map(([key, cnt]) => ({ key, count: cnt }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 200);
     return { total: groups.length, groups };
   } catch {
-    // Table might not exist yet — return empty result
     return { total: 0, groups: [] };
   }
 }
 
-export default function createValidationRoutes(pgPool) {
+export default function createValidationRoutes(_pgPool) {
   const router = express.Router();
 
   // POST /api/validation/find-duplicates - Find duplicate records
@@ -81,7 +88,9 @@ export default function createValidationRoutes(pgPool) {
       };
       const table = tableMap[entity_type] || entity_type.toLowerCase();
 
-      const result = await findDuplicatesInDb(pgPool, table, tenant_id, fields);
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const result = await findDuplicatesInDbSupabase(supabase, table, tenant_id, fields);
       res.json({ status: 'success', data: { ...result, fields, tenant_id, entity_type } });
     } catch (error) {
       res.status(500).json({
@@ -94,18 +103,145 @@ export default function createValidationRoutes(pgPool) {
   // POST /api/validation/analyze-data-quality - Analyze data quality
   router.post('/analyze-data-quality', async (req, res) => {
     try {
-      const { tenant_id, entity_type } = req.body || {};
+      const { tenant_id } = req.body || {};
 
-      const analysis = {
-        completeness: 0,
-        accuracy: 0,
-        consistency: 0,
-        issues: [],
-        recommendations: [],
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id required' });
+      }
+
+      // Fetch all data
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const [contactsRes, accountsRes, leadsRes, opportunitiesRes] = await Promise.all([
+        supabase.from('contacts').select('*').eq('tenant_id', tenant_id),
+        supabase.from('accounts').select('*').eq('tenant_id', tenant_id),
+        supabase.from('leads').select('*').eq('tenant_id', tenant_id),
+        supabase.from('opportunities').select('*').eq('tenant_id', tenant_id),
+      ]);
+      const contacts = contactsRes.data || [];
+      const accounts = accountsRes.data || [];
+      const leads = leadsRes.data || [];
+      const opportunities = opportunitiesRes.data || [];
+
+      // Helper to check email validity
+      const isValidEmail = (email) => {
+        if (!email) return false;
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
       };
 
-      res.json({ status: 'success', data: analysis, tenant_id, entity_type });
+      // Helper to check name has invalid characters
+      const hasInvalidNameChars = (name) => {
+        if (!name) return false;
+        // Allow letters, spaces, hyphens, apostrophes, periods
+        const invalidRegex = /[^a-zA-Z\s\-'.]/;
+        return invalidRegex.test(name);
+      };
+
+      // Analyze Contacts
+      const contactsData = contacts;
+      const contactsIssues = {
+        missing_first_name: 0,
+        missing_last_name: 0,
+        invalid_email: 0,
+        missing_contact_info: 0,
+        invalid_name_characters: 0,
+      };
+
+      contactsData.forEach((contact) => {
+        if (!contact.first_name) contactsIssues.missing_first_name++;
+        if (!contact.last_name) contactsIssues.missing_last_name++;
+        if (contact.email && !isValidEmail(contact.email)) contactsIssues.invalid_email++;
+        if (!contact.email && !contact.phone && !contact.mobile) contactsIssues.missing_contact_info++;
+        if (hasInvalidNameChars(contact.first_name) || hasInvalidNameChars(contact.last_name)) {
+          contactsIssues.invalid_name_characters++;
+        }
+      });
+
+      const contactsTotal = contactsData.length || 1; // Avoid division by zero
+      const contactsIssuesCount = Object.values(contactsIssues).reduce((sum, count) => sum + count, 0);
+      const contactsIssuesPercentage = (contactsIssuesCount / contactsTotal) * 100;
+
+      // Analyze Accounts
+      const accountsData = accounts;
+      const accountsIssues = {
+        invalid_email: 0,
+        missing_contact_info: 0,
+        invalid_name_characters: 0,
+      };
+
+      accountsData.forEach((account) => {
+        if (account.email && !isValidEmail(account.email)) accountsIssues.invalid_email++;
+        if (!account.email && !account.phone) accountsIssues.missing_contact_info++;
+        if (hasInvalidNameChars(account.name)) accountsIssues.invalid_name_characters++;
+      });
+
+      const accountsTotal = accountsData.length || 1;
+      const accountsIssuesCount = Object.values(accountsIssues).reduce((sum, count) => sum + count, 0);
+      const accountsIssuesPercentage = (accountsIssuesCount / accountsTotal) * 100;
+
+      // Analyze Leads
+      const leadsData = leads;
+      const leadsIssues = {
+        missing_first_name: 0,
+        missing_last_name: 0,
+        invalid_email: 0,
+        missing_contact_info: 0,
+        invalid_name_characters: 0,
+      };
+
+      leadsData.forEach((lead) => {
+        if (!lead.first_name) leadsIssues.missing_first_name++;
+        if (!lead.last_name) leadsIssues.missing_last_name++;
+        if (lead.email && !isValidEmail(lead.email)) leadsIssues.invalid_email++;
+        if (!lead.email && !lead.phone) leadsIssues.missing_contact_info++;
+        if (hasInvalidNameChars(lead.first_name) || hasInvalidNameChars(lead.last_name)) {
+          leadsIssues.invalid_name_characters++;
+        }
+      });
+
+      const leadsTotal = leadsData.length || 1;
+      const leadsIssuesCount = Object.values(leadsIssues).reduce((sum, count) => sum + count, 0);
+      const leadsIssuesPercentage = (leadsIssuesCount / leadsTotal) * 100;
+
+      // Analyze Opportunities
+      const opportunitiesData = opportunities;
+      const opportunitiesIssues = {};
+
+      const opportunitiesTotal = opportunitiesData.length || 1;
+      const opportunitiesIssuesCount = 0;
+      const opportunitiesIssuesPercentage = 0;
+
+      const report = {
+        contacts: {
+          total: contactsTotal,
+          issues: contactsIssues,
+          issues_count: contactsIssuesCount,
+          issues_percentage: contactsIssuesPercentage,
+        },
+        accounts: {
+          total: accountsTotal,
+          issues: accountsIssues,
+          issues_count: accountsIssuesCount,
+          issues_percentage: accountsIssuesPercentage,
+        },
+        leads: {
+          total: leadsTotal,
+          issues: leadsIssues,
+          issues_count: leadsIssuesCount,
+          issues_percentage: leadsIssuesPercentage,
+        },
+        opportunities: {
+          total: opportunitiesTotal,
+          issues: opportunitiesIssues,
+          issues_count: opportunitiesIssuesCount,
+          issues_percentage: opportunitiesIssuesPercentage,
+        },
+      };
+
+      res.json({ status: 'success', data: { report }, tenant_id });
     } catch (error) {
+      console.error('analyze-data-quality error:', error);
       res.status(500).json({
         status: 'error',
         message: error.message,
@@ -158,15 +294,19 @@ export default function createValidationRoutes(pgPool) {
       };
       const table = tableMap[entity_type];
 
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+
       if (entity_type === 'Contact' || entity_type === 'Lead') {
         // Check email
         if (data.email) {
-          const emailMatches = await pgPool.query(
-            `SELECT * FROM ${table} WHERE tenant_id = $1 AND email = $2`,
-            [tenant_id, data.email]
-          );
-
-          emailMatches.rows.forEach((match) => {
+          const { data: emailRows, error } = await supabase
+            .from(table)
+            .select('*')
+            .eq('tenant_id', tenant_id)
+            .eq('email', data.email);
+          if (error) throw new Error(error.message);
+          (emailRows || []).forEach((match) => {
             potentialDuplicates.push({
               ...match,
               reason: 'Same email address',
@@ -177,12 +317,12 @@ export default function createValidationRoutes(pgPool) {
         // Check phone
         if (data.phone) {
           const phoneNorm = normalizeString(data.phone);
-          const allRecords = await pgPool.query(
-            `SELECT * FROM ${table} WHERE tenant_id = $1`,
-            [tenant_id]
-          );
-
-          allRecords.rows.forEach((record) => {
+          const { data: allRecords, error } = await supabase
+            .from(table)
+            .select('id, phone, mobile, first_name, last_name, email')
+            .eq('tenant_id', tenant_id);
+          if (error) throw new Error(error.message);
+          (allRecords || []).forEach((record) => {
             const recordPhone = normalizeString(record.phone || record.mobile);
             if (recordPhone === phoneNorm && !potentialDuplicates.find((d) => d.id === record.id)) {
               potentialDuplicates.push({
@@ -195,12 +335,13 @@ export default function createValidationRoutes(pgPool) {
       } else if (entity_type === 'Account') {
         // Check website
         if (data.website) {
-          const websiteMatches = await pgPool.query(
-            `SELECT * FROM ${table} WHERE tenant_id = $1 AND website = $2`,
-            [tenant_id, data.website]
-          );
-
-          websiteMatches.rows.forEach((match) => {
+          const { data: websiteRows, error } = await supabase
+            .from(table)
+            .select('*')
+            .eq('tenant_id', tenant_id)
+            .eq('website', data.website);
+          if (error) throw new Error(error.message);
+          (websiteRows || []).forEach((match) => {
             potentialDuplicates.push({
               ...match,
               reason: 'Same website',
@@ -210,13 +351,14 @@ export default function createValidationRoutes(pgPool) {
 
         // Check similar company name
         if (data.name) {
-          const allAccounts = await pgPool.query(
-            `SELECT * FROM ${table} WHERE tenant_id = $1`,
-            [tenant_id]
-          );
+          const { data: allAccounts, error } = await supabase
+            .from(table)
+            .select('id, name, website, email, phone')
+            .eq('tenant_id', tenant_id);
+          if (error) throw new Error(error.message);
           const nameNorm = normalizeString(data.name);
 
-          allAccounts.rows.forEach((account) => {
+          (allAccounts || []).forEach((account) => {
             const accountNameNorm = normalizeString(account.name);
             if (accountNameNorm === nameNorm && !potentialDuplicates.find((d) => d.id === account.id)) {
               potentialDuplicates.push({
@@ -303,13 +445,18 @@ export default function createValidationRoutes(pgPool) {
 
       // Process account linking for Contacts if applicable
       let accountLookupMap = {};
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
       if (entityType === 'Contact' && accountLinkColumn) {
         console.log(`🔗 Processing account links via column: ${accountLinkColumn}`);
-
-        const accountsResult = await pgPool.query('SELECT * FROM accounts WHERE tenant_id = $1', [tenant_id]);
+        const { data: accountsData, error: accountsErr } = await supabase
+          .from('accounts')
+          .select('*')
+          .eq('tenant_id', tenant_id);
+        if (accountsErr) throw new Error(accountsErr.message);
 
         // Build lookup map: company name (lowercase) -> account
-        accountsResult.rows.forEach((account) => {
+        (accountsData || []).forEach((account) => {
           if (account.name) {
             accountLookupMap[account.name.toLowerCase().trim()] = account;
           }
@@ -403,16 +550,15 @@ export default function createValidationRoutes(pgPool) {
 
           // Build INSERT query dynamically
           const fields = Object.keys(record);
-          const values = Object.values(record);
-          const placeholders = fields.map((_, idx) => `$${idx + 1}`).join(', ');
+          const _values = Object.values(record);
+          const _placeholders = fields.map((_, idx) => `$${idx + 1}`).join(', ');
 
-          const insertSql = `
-            INSERT INTO ${table} (${fields.join(', ')})
-            VALUES (${placeholders})
-            RETURNING *
-          `;
-
-          await pgPool.query(insertSql, values);
+          const { data: _insertData, error: insertErr } = await supabase
+            .from(table)
+            .insert([record])
+            .select('*')
+            .single();
+          if (insertErr) throw new Error(insertErr.message);
           results.successCount++;
         } catch (error) {
           console.error(`Row ${rowNumber} failed:`, error);

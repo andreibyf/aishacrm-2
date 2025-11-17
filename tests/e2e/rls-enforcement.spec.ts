@@ -20,7 +20,7 @@ test.describe('RLS Enforcement - Black-box', () => {
 
   test('cannot access another tenant\'s contact by ID', async ({ request }) => {
     const tenantA = 'unit-test-tenant';
-    const tenantB = 'local-tenant-001';
+    const tenantB = process.env.E2E_TENANT_ID || 'local-tenant-001';
 
     // Create a contact in tenant A
     const create = await request.post(`${BACKEND_URL}/api/contacts`, {

@@ -80,11 +80,11 @@ docker-compose down -v
 
 ### 4. Access the Application
 
-- **Frontend:** http://localhost:3000
-- **Backend API:** http://localhost:3001
-- **Backend Health:** http://localhost:3001/health
-- **API Docs:** http://localhost:3001/api-docs
-- **PostgreSQL:** localhost:5432 (if using local DB)
+- Frontend: http://localhost:4000
+- Backend API: http://localhost:4001
+- Backend Health: http://localhost:4001/health
+- API Docs: http://localhost:4001/api-docs
+- PostgreSQL: localhost:5432 (if using local DB profile)
 
 ## 🏗️ Building Individual Services
 
@@ -95,9 +95,9 @@ docker-compose down -v
 docker build -t aishacrm-frontend .
 
 # Run frontend (requires backend to be running)
-docker run -p 3000:3000 \
+docker run -p 4000:3000 \
   -e PORT=3000 \
-  -e VITE_AISHACRM_BACKEND_URL=http://localhost:3001 \
+  -e VITE_AISHACRM_BACKEND_URL=http://localhost:4001 \
   -e VITE_SUPABASE_URL=https://your-project.supabase.co \
   -e VITE_SUPABASE_ANON_KEY=your-anon-key \
   aishacrm-frontend
@@ -111,7 +111,7 @@ cd backend
 docker build -t aishacrm-backend .
 
 # Run backend
-docker run -p 3001:3001 \
+docker run -p 4001:3001 \
   -e DATABASE_URL=your-connection-string \
   -e SUPABASE_URL=https://your-project.supabase.co \
   -e SUPABASE_SERVICE_ROLE_KEY=your-service-role-key \
@@ -221,14 +221,37 @@ docker build -t test-frontend .
 docker build -t test-backend ./backend
 
 # Run to verify
-docker run -p 3000:3000 test-frontend
-docker run -p 3001:3001 \
+docker run -p 4000:3000 test-frontend
+docker run -p 4001:3001 \
   -e DATABASE_URL=your-db-url \
   test-backend
 
 # Check health
-curl http://localhost:3000/
-curl http://localhost:3001/health
+curl http://localhost:4000/
+curl http://localhost:4001/health
+
+## 🏁 Production Compose (Recommended)
+
+For a minimal, production-ready stack (frontend + backend + redis) with the correct project ports, use the provided `docker-compose.prod.yml`.
+
+```powershell
+# Build and start in the background
+docker compose -f docker-compose.prod.yml up -d --build
+
+# View service health and status
+docker compose -f docker-compose.prod.yml ps
+
+# Tail logs
+docker compose -f docker-compose.prod.yml logs -f backend
+
+# Stop and remove
+docker compose -f docker-compose.prod.yml down
+```
+
+Notes:
+- Frontend: http://localhost:4000
+- Backend: http://localhost:4001
+- Ensure `backend/.env` points to your Supabase or database and includes `ALLOWED_ORIGINS=http://localhost:4000`.
 ```
 
 ## 📊 Monitoring & Debugging
@@ -354,20 +377,133 @@ Current image sizes (approximate):
 - Can test production builds locally
 - Better debugging capabilities
 
+## 📦 Publishing Docker Images to GHCR
+
+### Automated Tag Releases
+
+The repo includes a GitHub Actions workflow (`.github/workflows/docker-release.yml`) that automatically builds and publishes Docker images to GitHub Container Registry (GHCR) when you push version tags.
+
+**How It Works:**
+- Trigger: Push a tag matching `v*` (e.g., `v1.2.3`)
+- Builds: Frontend and backend images from `Dockerfile` and `backend/Dockerfile`
+- Registry: `ghcr.io/<owner>/<repo>-frontend` and `ghcr.io/<owner>/<repo>-backend`
+- Tags Applied:
+  - `v1.2.3` (exact version)
+  - `1.2` (major.minor)
+  - `1` (major)
+  - `sha-<commit>` (commit SHA)
+  - `latest` (on default branch)
+
+**Create and Push a Release Tag:**
+```powershell
+# Tag your commit
+git tag v1.2.3
+
+# Push the tag (triggers workflow)
+git push origin v1.2.3
+```
+
+**Monitor the Build:**
+- GitHub → Actions tab → "Docker Release (GHCR)" workflow
+- Build takes ~5-10 minutes with caching
+- Summary shows all published image tags
+
+### Pulling Published Images
+
+**Public Images (if visibility set to public):**
+```powershell
+docker pull ghcr.io/<owner>/<repo>-frontend:v1.2.3
+docker pull ghcr.io/<owner>/<repo>-backend:v1.2.3
+```
+
+**Private Images (default):**
+```powershell
+# Create a Personal Access Token (PAT) with scope: read:packages
+# GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
+
+# Login to GHCR
+echo YOUR_PAT | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+
+# Pull images
+docker pull ghcr.io/<owner>/<repo>-frontend:v1.2.3
+docker pull ghcr.io/<owner>/<repo>-backend:v1.2.3
+```
+
+**Using in Docker Compose:**
+```yaml
+services:
+  backend:
+    image: ghcr.io/<owner>/<repo>-backend:v1.2.3
+    # ... rest of config
+  
+  frontend:
+    image: ghcr.io/<owner>/<repo>-frontend:v1.2.3
+    # ... rest of config
+```
+
+### Managing Image Visibility
+
+**Default:** Images are private (only you and repo collaborators can access).
+
+**To Make Public:**
+1. GitHub → your repo → Packages (right sidebar)
+2. Click the package (frontend or backend)
+3. Package settings → Change visibility → Public
+4. Confirm
+
+**Access Control:**
+- Private packages require authentication (PAT with `read:packages`)
+- Public packages can be pulled by anyone
+- GitHub Actions in the same repo use `GITHUB_TOKEN` automatically
+
+### Updating Published Images
+
+**New Version (Recommended):**
+```powershell
+# Bump version
+git tag v1.2.4
+git push origin v1.2.4
+```
+
+**Replace Existing Tag:**
+```powershell
+# Delete remote tag
+git push origin :refs/tags/v1.2.3
+
+# Recreate and push
+git tag -f v1.2.3
+git push origin v1.2.3
+```
+
+**Delete Old Versions:**
+- GitHub → Packages → select package → Versions → delete unwanted versions
+
+### Required Secrets (Optional)
+
+The workflow uses default `GITHUB_TOKEN` (provided automatically). Optionally set these repo secrets for build-time frontend config:
+
+- `VITE_AISHACRM_BACKEND_URL` (defaults to `http://localhost:4001`)
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+
+**To set:**
+- GitHub → repo Settings → Secrets and variables → Actions → New repository secret
+
 ## 📚 Additional Resources
 
 - [Docker Best Practices](https://docs.docker.com/develop/dev-best-practices/)
 - [Multi-stage Builds](https://docs.docker.com/build/building/multi-stage/)
 - [Railway Docker Deployment](https://docs.railway.app/deploy/dockerfiles)
 - [Docker Compose Reference](https://docs.docker.com/compose/compose-file/)
+- [GitHub Container Registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
 
 ---
 
 **Next Steps:**
 1. Test locally: `docker-compose up --build`
 2. Verify health checks work
-3. Set environment variables in Railway dashboard
-4. Push to GitHub (Railway auto-deploys)
-5. Monitor Railway logs for successful startup
+3. Tag and push a release: `git tag v1.0.0 && git push origin v1.0.0`
+4. Monitor GitHub Actions for successful image publish
+5. Pull and deploy images from GHCR
 
 For Railway environment variables, see: `RAILWAY_ENV_SETUP.md`

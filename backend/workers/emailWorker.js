@@ -4,38 +4,16 @@
  */
 
 import dotenv from 'dotenv';
-import pkg from 'pg';
 import nodemailer from 'nodemailer';
-
-const { Pool } = pkg;
+import { pool as pgPool } from '../lib/supabase-db.js';
 
 // Load environment (.env.local first, then .env)
 dotenv.config({ path: '.env.local' });
 dotenv.config();
 
-// Database connection (mirrors server.js logic)
-let pgPool = null;
-if (process.env.USE_SUPABASE_PROD === 'true') {
-  pgPool = new Pool({
-    host: process.env.SUPABASE_DB_HOST,
-    port: parseInt(process.env.SUPABASE_DB_PORT || '5432'),
-    database: process.env.SUPABASE_DB_NAME || 'postgres',
-    user: process.env.SUPABASE_DB_USER || 'postgres',
-    password: process.env.SUPABASE_DB_PASSWORD,
-    ssl: { rejectUnauthorized: false },
-    max: 10,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
-  });
-} else if (process.env.DATABASE_URL) {
-  const isSupabaseCloud = process.env.DATABASE_URL.includes('supabase.co');
-  const poolConfig = { connectionString: process.env.DATABASE_URL };
-  if (isSupabaseCloud || process.env.DB_SSL === 'true') {
-    poolConfig.ssl = { rejectUnauthorized: false };
-  }
-  pgPool = new Pool(poolConfig);
-} else {
-  console.error('[EmailWorker] No database configured (set DATABASE_URL or USE_SUPABASE_PROD=true)');
+// Database connection via Supabase pool wrapper (replaces direct pg.Pool)
+if (!pgPool) {
+  console.error('[EmailWorker] No database configured (ensure Supabase client is initialized)');
 }
 
 // SMTP transporter

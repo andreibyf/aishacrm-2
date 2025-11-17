@@ -23,6 +23,7 @@ import { DataManagementSettings } from "@/api/entities";
 import { archiveAgedData } from "@/api/functions";
 import { cleanupOrphanedData } from "@/api/functions";
 import R2ConfigChecker from "./R2ConfigChecker"; // Added import
+import { useUser } from "@/components/shared/useUser.js";
 
 export default function DatabaseSettings() {
   const [isSyncing, setIsSyncing] = useState(false);
@@ -38,14 +39,15 @@ export default function DatabaseSettings() {
     opportunity_retention_days: 365,
   });
   const { toast } = useToast();
+  
+  // Use global user context instead of local User.me()
+  const { user } = useUser();
 
   useEffect(() => {
     const loadSettings = async () => {
+        if (!user) return;
         try {
-            const [existingSettings, currentUser] = await Promise.all([
-                DataManagementSettings.filter({}),
-                User.me()
-            ]);
+            const existingSettings = await DataManagementSettings.filter({});
 
             if (existingSettings.length > 0) {
                 setSettings({
@@ -55,8 +57,8 @@ export default function DatabaseSettings() {
                 });
             }
 
-            if (currentUser && currentUser.database_connection_string) {
-                setConnectionString(currentUser.database_connection_string);
+            if (user && user.database_connection_string) {
+                setConnectionString(user.database_connection_string);
             }
         } catch (error) {
             console.error("Could not load data management settings or user data", error);
@@ -64,7 +66,7 @@ export default function DatabaseSettings() {
         }
     };
     loadSettings();
-  }, [toast]);
+  }, [toast, user]);
 
   const handleSync = async () => {
     setIsSyncing(true);

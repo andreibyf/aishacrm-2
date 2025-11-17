@@ -1,8 +1,50 @@
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 
-export default function createActivityRoutes(pgPool) {
+export default function createActivityRoutes(_pgPool) {
   const router = express.Router();
+  /**
+   * @openapi
+   * /api/activities:
+   *   get:
+   *     summary: List activities
+   *     tags: [activities]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 1000 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Activities list
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   post:
+   *     summary: Create activity
+   *     tags: [activities]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id]
+   *     responses:
+   *       201:
+   *         description: Activity created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
 
   // Apply tenant validation and employee data scope to all routes
   router.use(validateTenantAccess);
@@ -37,7 +79,7 @@ export default function createActivityRoutes(pgPool) {
     };
   }
 
-  // GET /api/activities - List activities with filtering
+  // GET /api/activities - List activities for a tenant
   router.get('/', async (req, res) => {
     try {
       const { tenant_id } = req.query;
@@ -64,114 +106,115 @@ export default function createActivityRoutes(pgPool) {
         return val;
       };
 
-      // Build dynamic WHERE clause safely
-      const where = ['tenant_id = $1'];
-      const params = [tenant_id];
-
-      // Map simple equals filters on top-level columns
-      const simpleEq = [
-        { key: 'status', column: 'status' },
-        { key: 'type', column: 'type' },
-      ];
-      for (const { key, column } of simpleEq) {
-        if (req.query[key]) {
-          params.push(req.query[key]);
-          where.push(`${column} = $${params.length}`);
+      // Use Supabase for base query, client-side filter for complex metadata queries
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      
+      let query = supabase.from('activities').select('*').eq('tenant_id', tenant_id);
+      
+      // Simple column filters via Supabase
+      if (req.query.status) query = query.eq('status', req.query.status);
+      if (req.query.type) query = query.eq('type', req.query.type);
+      if (req.query.related_id) query = query.eq('related_id', req.query.related_id);
+      
+      query = query.order('created_at', { ascending: false });
+      
+      const { data: allData, error } = await query;
+      if (error) throw new Error(error.message);
+      
+      // Client-side filtering for complex metadata queries
+      let filtered = allData || [];
+      
+      if (req.query.related_to) {
+        const v = parseMaybeJson(req.query.related_to);
+        if (typeof v === 'string') {
+          filtered = filtered.filter(row => row.metadata?.related_to === v);
         }
       }
-
-      // assigned_to lives in metadata
+      
       if (req.query.assigned_to) {
         const v = parseMaybeJson(req.query.assigned_to);
         if (typeof v === 'string') {
-          params.push(v);
-          where.push(`metadata->>'assigned_to' = $${params.length}`);
+          filtered = filtered.filter(row => row.metadata?.assigned_to === v);
         }
       }
-
-      // is_test_data filter (support {$ne: true})
+      
       if (req.query.is_test_data) {
         const v = parseMaybeJson(req.query.is_test_data);
         if (v && typeof v === 'object' && v.$ne === true) {
-          // keep rows where is_test_data is not true
-          where.push(`COALESCE((metadata->>'is_test_data')::boolean, false) = false`);
+          filtered = filtered.filter(row => !(row.metadata?.is_test_data === true));
         } else if (v === true || v === 'true') {
-          where.push(`COALESCE((metadata->>'is_test_data')::boolean, false) = true`);
+          filtered = filtered.filter(row => row.metadata?.is_test_data === true);
         }
       }
-
-      // Tags: support { $all: [..] }
+      
       if (req.query.tags) {
         const v = parseMaybeJson(req.query.tags);
         if (v && typeof v === 'object' && Array.isArray(v.$all)) {
-          params.push(JSON.stringify(v.$all));
-          where.push(`(metadata->'tags')::jsonb @> $${params.length}::jsonb`);
+          const requiredTags = v.$all;
+          filtered = filtered.filter(row => {
+            const tags = row.metadata?.tags;
+            if (!Array.isArray(tags)) return false;
+            return requiredTags.every(tag => tags.includes(tag));
+          });
         }
       }
-
-      // Due date range: due_date stored in metadata as YYYY-MM-DD
+      
       if (req.query.due_date) {
         const v = parseMaybeJson(req.query.due_date);
         if (v && typeof v === 'object') {
-          if (v.$gte) {
-            params.push(v.$gte);
-            where.push(`to_date(metadata->>'due_date','YYYY-MM-DD') >= to_date($${params.length},'YYYY-MM-DD')`);
-          }
-          if (v.$lte) {
-            params.push(v.$lte);
-            where.push(`to_date(metadata->>'due_date','YYYY-MM-DD') <= to_date($${params.length},'YYYY-MM-DD')`);
-          }
+          filtered = filtered.filter(row => {
+            const dueDate = row.metadata?.due_date;
+            if (!dueDate) return false;
+            const date = new Date(dueDate);
+            if (v.$gte && date < new Date(v.$gte)) return false;
+            if (v.$lte && date > new Date(v.$lte)) return false;
+            return true;
+          });
         }
       }
-
-      // Global $or: e.g. subject/description/related_name regex, unassigned filter, etc.
+      
       if (req.query['$or']) {
         const v = parseMaybeJson(req.query['$or']);
         if (Array.isArray(v) && v.length > 0) {
-          const orClauses = [];
-          for (const cond of v) {
-            const [field, expr] = Object.entries(cond)[0] || [];
-            if (!field) continue;
-            if (field === 'subject' && expr && typeof expr === 'object' && expr.$regex) {
-              params.push(`%${expr.$regex}%`);
-              orClauses.push(`subject ILIKE $${params.length}`);
-            } else if (field === 'description' && expr && typeof expr === 'object' && expr.$regex) {
-              params.push(`%${expr.$regex}%`);
-              // description maps to body or metadata.description
-              orClauses.push(`(COALESCE(body, metadata->>'description')) ILIKE $${params.length}`);
-            } else if (field === 'related_name' && expr && typeof expr === 'object' && expr.$regex) {
-              params.push(`%${expr.$regex}%`);
-              orClauses.push(`(metadata->>'related_name') ILIKE $${params.length}`);
-            } else if (field === 'assigned_to') {
-              if (expr === null) {
-                orClauses.push(`(metadata->>'assigned_to') IS NULL`);
-              } else if (expr === '') {
-                orClauses.push(`(metadata->>'assigned_to') = ''`);
-              } else if (typeof expr === 'string') {
-                params.push(expr);
-                orClauses.push(`(metadata->>'assigned_to') = $${params.length}`);
+          filtered = filtered.filter(row => {
+            return v.some(cond => {
+              const [field, expr] = Object.entries(cond)[0] || [];
+              if (!field) return false;
+              
+              if (field === 'subject' && expr && typeof expr === 'object' && expr.$regex) {
+                const regex = new RegExp(expr.$regex, 'i');
+                return regex.test(row.subject || '');
               }
-            }
-          }
-          if (orClauses.length > 0) {
-            where.push(`(${orClauses.join(' OR ')})`);
-          }
+              if (field === 'description' && expr && typeof expr === 'object' && expr.$regex) {
+                const regex = new RegExp(expr.$regex, 'i');
+                const desc = row.body || row.metadata?.description || '';
+                return regex.test(desc);
+              }
+              if (field === 'related_name' && expr && typeof expr === 'object' && expr.$regex) {
+                const regex = new RegExp(expr.$regex, 'i');
+                return regex.test(row.metadata?.related_name || '');
+              }
+              if (field === 'assigned_to') {
+                const assigned = row.metadata?.assigned_to;
+                if (expr === null) return assigned == null;
+                if (expr === '') return assigned === '';
+                return assigned === expr;
+              }
+              return false;
+            });
+          });
         }
       }
-
-      // Build final SQL
-      const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-      const sql = `SELECT * FROM activities ${whereSql} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-      const countSql = `SELECT COUNT(*) FROM activities ${whereSql}`;
-
-      const result = await pgPool.query(sql, [...params, limit, offset]);
-      const countResult = await pgPool.query(countSql, params);
+      
+      const total = filtered.length;
+      const paginated = filtered.slice(offset, offset + limit);
 
       res.json({
         status: 'success',
         data: {
-          activities: result.rows.map(normalizeActivity),
-          total: parseInt(countResult.rows[0].count),
+          activities: paginated.map(normalizeActivity),
+          total,
           limit,
           offset,
         }
@@ -186,28 +229,98 @@ export default function createActivityRoutes(pgPool) {
   });
 
   // GET /api/activities/:id - Get single activity (tenant scoped when tenant_id provided)
+  /**
+   * @openapi
+   * /api/activities/{id}:
+   *   get:
+   *     summary: Get activity by ID
+   *     tags: [activities]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Activity details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   put:
+   *     summary: Update activity
+   *     tags: [activities]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *     responses:
+   *       200:
+   *         description: Activity updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   delete:
+   *     summary: Delete activity
+   *     tags: [activities]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Activity deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query || {};
-      let result;
-      if (tenant_id) {
-        result = await pgPool.query('SELECT * FROM activities WHERE id = $1 AND tenant_id = $2', [id, tenant_id]);
-      } else {
-        result = await pgPool.query('SELECT * FROM activities WHERE id = $1', [id]);
-      }
+      let { tenant_id } = req.query || {};
       
-      if (result.rows.length === 0) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'Activity not found'
+      // Require tenant_id for proper RLS enforcement
+        if (!tenant_id) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'tenant_id is required'
+          });
+        }
+
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
+        const { data, error } = await supabase
+          .from('activities')
+          .select('*')
+          .eq('tenant_id', tenant_id)
+          .eq('id', id)
+          .single();
+        if (error?.code === 'PGRST116') {
+          return res.status(404).json({
+            status: 'error',
+            message: 'Activity not found'
+          });
+        }
+        if (error) throw new Error(error.message);
+
+        res.json({
+          status: 'success',
+          data: normalizeActivity(data)
         });
-      }
-      
-      res.json({
-        status: 'success',
-        data: normalizeActivity(result.rows[0])
-      });
     } catch (error) {
       console.error('Error fetching activity:', error);
       res.status(500).json({
@@ -229,42 +342,37 @@ export default function createActivityRoutes(pgPool) {
         });
       }
 
-      // Map to schema + keep remaining fields in metadata for forward compatibility
       const bodyText = activity.description ?? activity.body ?? null;
       const {
         tenant_id,
         type,
         subject,
         related_id,
-        // everything else to metadata
         ...rest
       } = activity || {};
 
+      const normalizedType = activity?.activity_type ?? type;
       const meta = { ...rest, description: bodyText };
 
-      // Insert only columns that exist in initial schema; put extras into metadata
-      const query = `
-        INSERT INTO activities (
-          tenant_id, type, subject, body, related_id, metadata
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6
-        ) RETURNING *
-      `;
-
-      const values = [
-        tenant_id,
-        (type || 'task'),
-        subject || null,
-        bodyText,
-        related_id || null,
-        JSON.stringify(meta)
-      ];
-      
-      const result = await pgPool.query(query, values);
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('activities')
+        .insert([{
+          tenant_id,
+          type: normalizedType || 'task',
+          subject: subject || null,
+          body: bodyText,
+          related_id: related_id || null,
+          metadata: meta,
+        }])
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
       
       res.status(201).json({
         status: 'success',
-        data: normalizeActivity(result.rows[0])
+        data: normalizeActivity(data)
       });
     } catch (error) {
       console.error('Error creating activity:', error);
@@ -281,84 +389,60 @@ export default function createActivityRoutes(pgPool) {
       const { id } = req.params;
   const payload = req.body || {};
 
-      // Separate known columns and extra metadata
       const bodyText = payload.description ?? payload.body ?? null;
       
-      // Merge metadata: load current row's metadata and shallow-merge with incoming extras
-      const current = await pgPool.query('SELECT * FROM activities WHERE id = $1', [id]);
-      if (current.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data: current, error: fetchErr } = await supabase
+        .from('activities')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (fetchErr?.code === 'PGRST116') {
         return res.status(404).json({
           status: 'error',
           message: 'Activity not found'
         });
       }
+      if (fetchErr) throw new Error(fetchErr.message);
       
-      const currentMeta = current.rows[0]?.metadata && typeof current.rows[0].metadata === 'object' ? current.rows[0].metadata : {};
+      const currentMeta = current?.metadata && typeof current.metadata === 'object' ? current.metadata : {};
       const { tenant_id: _t, description: _d, body: _b, id: _id, created_at: _ca, updated_at: _ua, ...extras } = payload;
       const newMeta = { ...currentMeta, ...extras, description: bodyText };
 
-      // Build SET clause dynamically to avoid "UPDATE requires SET clause" error
-      const updates = [];
-      const values = [];
-      let paramCount = 1;
+      const updatePayload = { metadata: newMeta };
+      const updateType = payload.activity_type !== undefined ? payload.activity_type : payload.type;
+      if (updateType !== undefined) updatePayload.type = updateType;
+      if (payload.subject !== undefined) updatePayload.subject = payload.subject;
+      if (bodyText !== undefined) updatePayload.body = bodyText;
+      if (payload.related_id !== undefined) updatePayload.related_id = payload.related_id;
+      if (payload.status !== undefined) updatePayload.status = payload.status;
+      if (payload.due_date !== undefined) updatePayload.due_date = payload.due_date;
 
-      if (payload.type !== undefined) {
-        updates.push(`type = $${paramCount++}`);
-        values.push(payload.type);
-      }
-      if (payload.subject !== undefined) {
-        updates.push(`subject = $${paramCount++}`);
-        values.push(payload.subject);
-      }
-      if (bodyText !== undefined) {
-        updates.push(`body = $${paramCount++}`);
-        values.push(bodyText);
-      }
-      if (payload.related_id !== undefined) {
-        updates.push(`related_id = $${paramCount++}`);
-        values.push(payload.related_id);
-      }
-      if (payload.status !== undefined) {
-        updates.push(`status = $${paramCount++}`);
-        values.push(payload.status);
-      }
-      if (payload.due_date !== undefined) {
-        updates.push(`due_date = $${paramCount++}`);
-        values.push(payload.due_date);
-      }
-      
-      // Always update metadata (it contains merged extras)
-      updates.push(`metadata = $${paramCount++}`);
-      values.push(JSON.stringify(newMeta));
-
-      if (updates.length === 0) {
-        // No updates requested, return current record
+      if (Object.keys(updatePayload).length === 1 && 'metadata' in updatePayload) {
         return res.json({
           status: 'success',
-          data: normalizeActivity(current.rows[0])
+          data: normalizeActivity(current)
         });
       }
 
-      const query = `
-        UPDATE activities SET
-          ${updates.join(', ')}
-        WHERE id = $${paramCount}
-        RETURNING *
-      `;
-      values.push(id);
-      
-      const result = await pgPool.query(query, values);
-      
-      if (result.rows.length === 0) {
+      const { data, error } = await supabase
+        .from('activities')
+        .update(updatePayload)
+        .eq('id', id)
+        .select('*')
+        .single();
+      if (error?.code === 'PGRST116') {
         return res.status(404).json({
           status: 'error',
           message: 'Activity not found'
         });
       }
+      if (error) throw new Error(error.message);
       
       res.json({
         status: 'success',
-        data: normalizeActivity(result.rows[0])
+        data: normalizeActivity(data)
       });
     } catch (error) {
       console.error('Error updating activity:', error);
@@ -373,9 +457,16 @@ export default function createActivityRoutes(pgPool) {
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const result = await pgPool.query('DELETE FROM activities WHERE id = $1 RETURNING *', [id]);
-      
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('activities')
+        .delete()
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) {
         return res.status(404).json({
           status: 'error',
           message: 'Activity not found'

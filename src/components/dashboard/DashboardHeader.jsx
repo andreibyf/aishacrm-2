@@ -12,7 +12,7 @@ export default function DashboardHeader({ user, showTestData, onTestDataToggle, 
   const filters = ['Week', 'Month', 'Quarter', 'Year'];
   const [briefingLoading, setBriefingLoading] = React.useState(false);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  const isSuperadmin = user?.role === 'superadmin';
 
   const speakDailyBriefing = async () => {
     try {
@@ -82,7 +82,7 @@ export default function DashboardHeader({ user, showTestData, onTestDataToggle, 
           <p className="text-blue-100 mt-1">AI-powered customer relationship management and business growth</p>
         </div>
         <div className="flex items-center gap-4 mt-4 md:mt-0 flex-wrap">
-          {isAdmin && (
+          {isSuperadmin && (
             <div className="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-2 backdrop-blur-sm">
               <TestTube className="w-4 h-4" />
               <Label htmlFor="test-data-toggle" className="text-sm cursor-pointer">

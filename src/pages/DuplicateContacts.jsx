@@ -12,33 +12,20 @@ import {
   Users,
 } from "lucide-react";
 import { Contact } from "@/api/entities";
-import { User } from "@/api/entities";
 import { findDuplicates } from "@/api/functions";
 import { useTenant } from "../components/shared/tenantContext";
 import { useToast } from "@/components/ui/use-toast";
 import ContactDetailPanel from "../components/contacts/ContactDetailPanel";
+import { useUser } from "../components/shared/useUser.js";
 
 export default function DuplicateContacts() {
   const [loading, setLoading] = useState(true);
   const [duplicateGroups, setDuplicateGroups] = useState([]);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
   const [selectedContact, setSelectedContact] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const { selectedTenantId } = useTenant();
   const { toast } = useToast();
-
-  useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const user = await User.me();
-      setCurrentUser(user);
-    } catch (error) {
-      console.error("Failed to load user:", error);
-    }
-  };
 
   const loadDuplicates = useCallback(async () => {
     if (!currentUser) return;

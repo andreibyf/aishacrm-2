@@ -17,6 +17,7 @@ class ApiHealthMonitor {
     this.missingEndpoints = new Map(); // Track 404s
     this.serverErrors = new Map(); // Track 500s
     this.authErrors = new Map(); // Track 401/403s
+     this.validationErrors = new Map(); // Track 400s (validation/bad request)
     this.timeoutErrors = new Map(); // Track timeouts
     this.rateLimitErrors = new Map(); // Track 429s
     this.networkErrors = new Map(); // Track network failures
@@ -26,6 +27,19 @@ class ApiHealthMonitor {
   }
 
   /**
+  * Report a validation error (400 bad request)
+  */
+ reportValidationError(endpoint, context = {}) {
+   this._trackError(this.validationErrors, endpoint, context, {
+     type: '400',
+     severity: 'medium',
+     title: 'Validation Error',
+     description: 'The request was malformed or missing required parameters',
+     canAutoFix: false
+   });
+ }
+
+ /**
    * Report a missing endpoint (404 error)
    */
   reportMissingEndpoint(endpoint, context = {}) {
@@ -116,6 +130,13 @@ class ApiHealthMonitor {
    */
   _trackError(errorMap, endpoint, context, errorInfo) {
     const key = endpoint;
+    // Suppression logic for unit test mode / expected validation errors
+    const isBrowser = typeof window !== 'undefined';
+    const suppressedCodes = (isBrowser && Array.isArray(window.__UNIT_TEST_SUPPRESS_CODES)) ? window.__UNIT_TEST_SUPPRESS_CODES : [];
+    const isUnitTestMode = isBrowser && window.__UNIT_TEST_MODE === true;
+    const isSuppressedType = suppressedCodes.includes(errorInfo.type);
+    const explicitlyExpected = context && context.expected === true; // caller can mark expected negative test
+    const suppressOutput = (isUnitTestMode && (isSuppressedType || explicitlyExpected));
     
     if (!errorMap.has(key)) {
       errorMap.set(key, {
@@ -127,15 +148,15 @@ class ApiHealthMonitor {
         lastSeen: new Date()
       });
       
-      console.error(`[API Health Monitor] ${errorInfo.title} detected: ${endpoint}`, context);
-      
-      // Show user-friendly notification
-      if (this.reportingEnabled) {
-        const toastFn = errorInfo.severity === 'critical' ? toast.error : toast.warning;
-        toastFn(`${errorInfo.title}: ${endpoint}`, {
-          description: errorInfo.description,
-          duration: 5000
-        });
+      if (!suppressOutput) {
+        console.error(`[API Health Monitor] ${errorInfo.title} detected: ${endpoint}`, context);
+        if (this.reportingEnabled) {
+          const toastFn = errorInfo.severity === 'critical' ? toast.error : toast.warning;
+          toastFn(`${errorInfo.title}: ${endpoint}`, {
+            description: errorInfo.description,
+            duration: 5000
+          });
+        }
       }
     } else {
       // Update existing entry
@@ -282,17 +303,19 @@ Pluralization Rule:
       missingEndpoints: Array.from(this.missingEndpoints.values()),
       serverErrors: Array.from(this.serverErrors.values()),
       authErrors: Array.from(this.authErrors.values()),
+       validationErrors: Array.from(this.validationErrors.values()),
       rateLimitErrors: Array.from(this.rateLimitErrors.values()),
       timeoutErrors: Array.from(this.timeoutErrors.values()),
       networkErrors: Array.from(this.networkErrors.values()),
       totalMissingEndpoints: this.missingEndpoints.size,
       totalServerErrors: this.serverErrors.size,
       totalAuthErrors: this.authErrors.size,
+       totalValidationErrors: this.validationErrors.size,
       totalRateLimitErrors: this.rateLimitErrors.size,
       totalTimeoutErrors: this.timeoutErrors.size,
       totalNetworkErrors: this.networkErrors.size,
       totalErrors: this.missingEndpoints.size + this.serverErrors.size + this.authErrors.size + 
-                   this.rateLimitErrors.size + this.timeoutErrors.size + this.networkErrors.size,
+                    this.validationErrors.size + this.rateLimitErrors.size + this.timeoutErrors.size + this.networkErrors.size,
       totalFixAttempts: Array.from(this.fixAttempts.values()).reduce((a, b) => a + b, 0)
     };
   }
@@ -304,6 +327,7 @@ Pluralization Rule:
     this.missingEndpoints.clear();
     this.serverErrors.clear();
     this.authErrors.clear();
+     this.validationErrors.clear();
     this.rateLimitErrors.clear();
     this.timeoutErrors.clear();
     this.networkErrors.clear();

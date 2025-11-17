@@ -1,6 +1,7 @@
 import express from 'express';
+import { validateTenantScopedId } from '../lib/validation.js';
 
-export default function createAuditLogRoutes(pgPool) {
+export default function createAuditLogRoutes(_pgPool) {
   const router = express.Router();
 
   // POST /api/audit-logs - Create audit log entry
@@ -8,31 +9,28 @@ export default function createAuditLogRoutes(pgPool) {
     try {
       const log = req.body;
       
-      const query = `
-        INSERT INTO audit_log (
-          tenant_id, user_email, action, entity_type, entity_id,
-          changes, ip_address, user_agent, created_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, NOW()
-        ) RETURNING *
-      `;
-      
-      const values = [
-        log.tenant_id,
-        log.user_email,
-        log.action,
-        log.entity_type,
-        log.entity_id,
-        JSON.stringify(log.changes || {}),
-        log.ip_address,
-        log.user_agent
-      ];
-      
-      const result = await pgPool.query(query, values);
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('audit_log')
+        .insert([{
+          tenant_id: log.tenant_id,
+          user_email: log.user_email,
+          action: log.action,
+          entity_type: log.entity_type,
+          entity_id: log.entity_id,
+          changes: log.changes || {},
+          ip_address: log.ip_address,
+          user_agent: log.user_agent,
+          created_at: new Date().toISOString()
+        }])
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
       
       res.status(201).json({
         status: 'success',
-        data: result.rows[0]
+        data
       });
     } catch (error) {
       console.error('Error creating audit log:', error);
@@ -56,50 +54,26 @@ export default function createAuditLogRoutes(pgPool) {
         offset = 0 
       } = req.query;
 
-      let query = 'SELECT * FROM audit_log WHERE 1=1';
-      const values = [];
-      let valueIndex = 1;
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      let query = supabase.from('audit_log').select('*', { count: 'exact' });
 
-      if (tenant_id) {
-        query += ` AND tenant_id = $${valueIndex}`;
-        values.push(tenant_id);
-        valueIndex++;
-      }
+      if (tenant_id) query = query.eq('tenant_id', tenant_id);
+      if (user_email) query = query.eq('user_email', user_email);
+      if (action) query = query.eq('action', action);
+      if (entity_type) query = query.eq('entity_type', entity_type);
+      if (entity_id) query = query.eq('entity_id', entity_id);
 
-      if (user_email) {
-        query += ` AND user_email = $${valueIndex}`;
-        values.push(user_email);
-        valueIndex++;
-      }
-
-      if (action) {
-        query += ` AND action = $${valueIndex}`;
-        values.push(action);
-        valueIndex++;
-      }
-
-      if (entity_type) {
-        query += ` AND entity_type = $${valueIndex}`;
-        values.push(entity_type);
-        valueIndex++;
-      }
-
-      if (entity_id) {
-        query += ` AND entity_id = $${valueIndex}`;
-        values.push(entity_id);
-        valueIndex++;
-      }
-
-      query += ` ORDER BY created_at DESC LIMIT $${valueIndex} OFFSET $${valueIndex + 1}`;
-      values.push(parseInt(limit), parseInt(offset));
+      query = query.order('created_at', { ascending: false }).range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
       
-      const result = await pgPool.query(query, values);
+      const { data, error, count } = await query;
+      if (error) throw new Error(error.message);
       
       res.json({
         status: 'success',
         data: {
-          'audit-logs': result.rows,
-          total: result.rows.length,
+          'audit-logs': data || [],
+          total: count || 0,
           limit: parseInt(limit),
           offset: parseInt(offset)
         }
@@ -113,32 +87,34 @@ export default function createAuditLogRoutes(pgPool) {
     }
   });
 
-  // GET /api/audit-logs/:id - Get specific audit log
+  // GET /api/audit-logs/:id - Get specific audit log (tenant scoped)
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query;
 
-      let query = 'SELECT * FROM audit_log WHERE id = $1';
-      const values = [id];
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
 
-      if (tenant_id) {
-        query += ' AND tenant_id = $2';
-        values.push(tenant_id);
-      }
-
-      const result = await pgPool.query(query, values);
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('audit_log')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .single();
       
-      if (result.rows.length === 0) {
+      if (error?.code === 'PGRST116') {
         return res.status(404).json({
           status: 'error',
           message: 'Audit log not found'
         });
       }
-      
+      if (error) throw new Error(error.message);
+
       res.json({
         status: 'success',
-        data: result.rows[0]
+        data
       });
     } catch (error) {
       console.error('Error fetching audit log:', error);
@@ -149,24 +125,26 @@ export default function createAuditLogRoutes(pgPool) {
     }
   });
 
-  // DELETE /api/audit-logs/:id - Delete a specific audit log
+  // DELETE /api/audit-logs/:id - Delete a specific audit log (tenant scoped)
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query;
-      
-      let query = 'DELETE FROM audit_log WHERE id = $1';
-      const values = [id];
 
-      if (tenant_id) {
-        query += ' AND tenant_id = $2';
-        values.push(tenant_id);
-      }
-
-      query += ' RETURNING *';
-      const result = await pgPool.query(query, values);
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
       
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('audit_log')
+        .delete()
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
+      
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) {
         return res.status(404).json({
           status: 'error',
           message: 'Audit log not found'
@@ -176,7 +154,7 @@ export default function createAuditLogRoutes(pgPool) {
       res.json({
         status: 'success',
         message: 'Audit log deleted',
-        data: result.rows[0]
+        data
       });
     } catch (error) {
       console.error('Error deleting audit log:', error);
@@ -192,41 +170,28 @@ export default function createAuditLogRoutes(pgPool) {
     try {
       const { tenant_id, user_email, entity_type, older_than_days } = req.query;
 
-      let query = 'DELETE FROM audit_log WHERE 1=1';
-      const values = [];
-      let valueIndex = 1;
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      let query = supabase.from('audit_log').delete();
 
-      if (tenant_id) {
-        query += ` AND tenant_id = $${valueIndex}`;
-        values.push(tenant_id);
-        valueIndex++;
-      }
-
-      if (user_email) {
-        query += ` AND user_email = $${valueIndex}`;
-        values.push(user_email);
-        valueIndex++;
-      }
-
-      if (entity_type) {
-        query += ` AND entity_type = $${valueIndex}`;
-        values.push(entity_type);
-        valueIndex++;
-      }
-
+      if (tenant_id) query = query.eq('tenant_id', tenant_id);
+      if (user_email) query = query.eq('user_email', user_email);
+      if (entity_type) query = query.eq('entity_type', entity_type);
       if (older_than_days) {
-        query += ` AND created_at < NOW() - INTERVAL '${parseInt(older_than_days)} days'`;
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - parseInt(older_than_days));
+        query = query.lt('created_at', cutoffDate.toISOString());
       }
 
-      query += ' RETURNING *';
-      
-      const result = await pgPool.query(query, values);
+      query = query.select('*');
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
       
       res.json({
         status: 'success',
-        message: `Deleted ${result.rows.length} audit log(s)`,
+        message: `Deleted ${(data || []).length} audit log(s)`,
         data: {
-          deleted_count: result.rows.length
+          deleted_count: (data || []).length
         }
       });
     } catch (error) {

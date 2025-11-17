@@ -32,7 +32,7 @@ function hasPageAccess(user, pageName) {
     return pagesAllowedWithoutCRM.has(pageName);
   }
 
-  // Check navigation_permissions first (explicit user settings)
+  // Check navigation_permissions first (explicit user settings). Explicit false DENIES even for admin roles.
   if (
     user.navigation_permissions &&
     typeof user.navigation_permissions === "object"
@@ -42,7 +42,10 @@ function hasPageAccess(user, pageName) {
       pageName,
     );
     if (hasCustomPermission) {
-      return user.navigation_permissions[pageName] === true;
+      const explicit = user.navigation_permissions[pageName];
+      if (explicit === false) return false; // explicit deny
+      if (explicit === true) return true; // explicit allow
+      // fall through if undefined/null
     }
   }
 

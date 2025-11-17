@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { BizDevSource } from "@/api/entities";
 import { Account } from "@/api/entities";
-import { User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,11 +33,11 @@ import CsvImportDialog from "../components/shared/CsvImportDialog";
 import CsvExportButton from "../components/shared/CsvExportButton";
 import Pagination from "../components/shared/Pagination";
 import RefreshButton from "../components/shared/RefreshButton";
-import { promoteBizDevSourceToAccount } from "@/api/functions";
 import BulkArchiveDialog from "../components/bizdev/BulkArchiveDialog";
 import ArchiveIndexViewer from "../components/bizdev/ArchiveIndexViewer";
 import BulkDeleteDialog from "../components/bizdev/BulkDeleteDialog";
 import StatusHelper from "../components/shared/StatusHelper";
+import { useUser } from "../components/shared/useUser.js";
 
 export default function BizDevSourcesPage() {
   const [sources, setSources] = useState([]);
@@ -63,22 +62,13 @@ export default function BizDevSourcesPage() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
   const [bizdevSchema, setBizdevSchema] = useState(null);
 
   const { selectedTenantId } = useTenant();
   const { cachedRequest, clearCache } = useApiManager();
   const { logError } = useErrorLog();
   const loadingRef = useRef(false);
-
-  useEffect(() => {
-    User.me()
-      .then(setUser)
-      .catch((error) => {
-        console.error("Failed to load user:", error);
-        toast.error("Failed to load user data");
-      });
-  }, []);
 
   useEffect(() => {
     const loadSchema = async () => {
@@ -177,26 +167,23 @@ export default function BizDevSourcesPage() {
     setShowForm(true);
   };
 
-  const handleFormSubmit = async (data) => {
+  // Updated to unified form contract: form now persists record directly and passes result
+  const handleFormSubmit = async (result) => {
     try {
-      if (editingSource) {
-        await BizDevSource.update(editingSource.id, data);
-        toast.success("BizDev source updated successfully");
-      } else {
-        await BizDevSource.create({
-          ...data,
-          tenant_id: user.tenant_id || selectedTenantId,
+      // Optimistically update sources list if editing
+      if (result?.id) {
+        setSources(prev => {
+          const exists = prev.some(s => s.id === result.id);
+            return exists ? prev.map(s => s.id === result.id ? result : s) : [result, ...prev];
         });
-        toast.success("BizDev source created successfully");
       }
+      toast.success(`BizDev source ${editingSource ? 'updated' : 'created'} successfully`);
+    } catch (error) {
+      if (logError) logError(handleApiError('BizDev Source Form (post-submit)', error));
+    } finally {
       setShowForm(false);
       setEditingSource(null);
       handleRefresh();
-    } catch (error) {
-      if (logError) {
-        logError(handleApiError('BizDev Source Form', error));
-      }
-      toast.error(`Failed to ${editingSource ? 'update' : 'create'} BizDev source`);
     }
   };
 
@@ -246,21 +233,68 @@ export default function BizDevSourcesPage() {
 
   const handlePromote = async (sourceToPromote) => {
     if (!confirm(`Are you sure you want to promote "${sourceToPromote.company_name}" to an Account?`)) {
-      return;
+      return null;
     }
 
+    // Use the source's tenant_id as primary, fallback to selected tenant
+    const tenantId = sourceToPromote.tenant_id || selectedTenantId || user?.tenant_id;
+    
+    if (!tenantId) {
+      toast.error('Cannot promote: No tenant context available');
+      throw new Error('No tenant_id available');
+    }
+
+    console.log('[BizDevSources] Promoting source:', {
+      id: sourceToPromote.id,
+      company_name: sourceToPromote.company_name,
+      tenant_id: tenantId
+    });
+
     try {
-      const { data } = await promoteBizDevSourceToAccount({ bizdev_source_id: sourceToPromote.id });
+      const result = await BizDevSource.promote(sourceToPromote.id, tenantId);
 
-      toast.success(data.message);
+      // Optimistically update local state so stats reflect immediately
+      setSources(prev => prev.map(s =>
+        s.id === sourceToPromote.id
+          ? {
+              ...s,
+              status: 'Promoted',
+              account_id: result?.account?.id || s.account_id,
+              account_name: result?.account?.name || s.account_name,
+              metadata: {
+                ...(s.metadata || {}),
+                ...(result?.account?.id ? { converted_to_account_id: result.account.id } : {}),
+              },
+            }
+          : s
+      ));
+      if (selectedSource?.id === sourceToPromote.id) {
+        setSelectedSource(prev => prev ? {
+          ...prev,
+          status: 'Promoted',
+          account_id: result?.account?.id || prev.account_id,
+          account_name: result?.account?.name || prev.account_name,
+          metadata: {
+            ...(prev.metadata || {}),
+            ...(result?.account?.id ? { converted_to_account_id: result.account.id } : {}),
+          },
+        } : prev);
+      }
 
+      toast.success('BizDev source promoted to account', {
+        description: `Created account: ${result.account.name}`
+      });
+
+      // Sync with backend to ensure full consistency
       handleRefresh();
       setShowDetailPanel(false);
+      return result;
     } catch (error) {
       if (logError) {
         logError(handleApiError('BizDev Source Promotion', error));
       }
       toast.error(`Failed to promote BizDev source to Account.`);
+      throw error;
     }
   };
 
@@ -357,7 +391,7 @@ export default function BizDevSourcesPage() {
   const stats = {
     total: sources.length,
     active: sources.filter(s => s.status === "Active").length,
-    promoted: sources.filter(s => s.status === "Promoted").length,
+    promoted: sources.filter(s => s.status === "Promoted" || s.status === 'converted').length,
     archived: sources.filter(s => s.status === "Archived").length,
   };
 
@@ -660,7 +694,7 @@ export default function BizDevSourcesPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <BizDevSourceForm
-              source={editingSource}
+              initialData={editingSource}
               onSubmit={handleFormSubmit}
               onCancel={() => {
                 setShowForm(false);

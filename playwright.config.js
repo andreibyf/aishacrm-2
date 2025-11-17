@@ -20,7 +20,11 @@ const authFile = 'playwright/.auth/superadmin.json';
  * @see https://playwright.dev/docs/test-configuration
  */
 export default defineConfig({
-  testDir: './tests/e2e',
+  // Expanded to './tests' so non-E2E validation specs (form-validation.spec.js, api-schema-validation.spec.js)
+  // are discovered. Existing e2e specs remain under tests/e2e. This enables targeted runs:
+  //   npx playwright test tests/form-validation.spec.js
+  // without "No tests found" errors.
+  testDir: './tests',
   
   /* Maximum time one test can run for */
   timeout: 60 * 1000,
@@ -63,7 +67,8 @@ export default defineConfig({
     // Setup project that creates an authenticated SuperAdmin storage state
     {
       name: 'setup',
-      testMatch: 'tests/e2e/auth.setup.js',
+      // With testDir set to './tests', make the pattern relative to that directory
+      testMatch: 'e2e/auth.setup.js',
     },
 
     {

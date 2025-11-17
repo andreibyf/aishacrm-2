@@ -92,6 +92,11 @@ router.delete("/", async (req, res) => {
     values.push(tenant_id);
   }
 
+  // Note: This example shows old pgPool pattern.
+  // Current implementation uses Supabase with client-side date filtering:
+  // const cutoffDate = new Date();
+  // cutoffDate.setHours(cutoffDate.getHours() - hours);
+  // await supabase.from(table).delete().eq('tenant_id', tenant_id).lt('created_at', cutoffDate.toISOString());
   const result = await pgPool.query(query, values);
   // Returns deleted count
 });
@@ -105,19 +110,22 @@ router.delete("/", async (req, res) => {
 router.delete('/performance', async (req, res) => {
   const { tenant_id, hours = 24 } = req.query;
   
-  const conditions = ['created_at > NOW() - $1::INTERVAL'];
-  const params = [`${hours} hours`];
+  // Current Supabase implementation:
+  const cutoffDate = new Date();
+  cutoffDate.setHours(cutoffDate.getHours() - hours);
+  
+  let query = supabase
+    .from('performance_logs')
+    .delete()
+    .lt('created_at', cutoffDate.toISOString())
+    .select();
   
   if (tenant_id) {
-    params.push(tenant_id);
-    conditions.push(`tenant_id = $${params.length}`);
+    query = query.eq('tenant_id', tenant_id);
   }
   
-  const whereClause = `WHERE ${conditions.join(' AND ')}`;
-  const result = await pgPool.query(
-    `DELETE FROM performance_logs ${whereClause} RETURNING *`,
-    params
-  );
+  const { data, error } = await query;
+  if (error) throw error;
   // Returns deleted records
 });
 ```

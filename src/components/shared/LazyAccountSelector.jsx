@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   Select,
   SelectContent,
@@ -6,7 +6,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Account, User } from "@/api/entities";
+import { Account } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import { Loader2, Plus } from "lucide-react";
 import { useApiManager } from "./ApiManager";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,8 @@ import { Button } from "@/components/ui/button";
 
 export default function LazyAccountSelector({
   value,
-  onValueChange,
+  onChange,
+  onValueChange, // Support both prop names for backward compatibility
   onCreateNew,
   placeholder = "Select account...",
   className = "",
@@ -22,6 +24,8 @@ export default function LazyAccountSelector({
   itemClassName = "",
   disabled = false
 }) {
+  // Use onChange if provided, otherwise fall back to onValueChange (memoized to prevent race conditions)
+  const handleChange = useMemo(() => onChange || onValueChange, [onChange, onValueChange]);
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -31,6 +35,8 @@ export default function LazyAccountSelector({
   const { cachedRequest } = useApiManager();
 
   // Only load when dropdown opens
+  const { user: contextUser } = useUser();
+
   const loadAccounts = useCallback(async () => {
     if (loaded) return; // Already loaded
     
@@ -38,9 +44,9 @@ export default function LazyAccountSelector({
     setError(null);
 
     try {
-      const user = await cachedRequest('User', 'me', {}, () => User.me());
-      
-      if (!user?.tenant_id) {
+      const tenantId = contextUser?.tenant_id;
+
+      if (!tenantId) {
         setError("No tenant assigned");
         setAccounts([]);
         setLoaded(true);
@@ -51,8 +57,8 @@ export default function LazyAccountSelector({
       const accData = await cachedRequest(
         'Account',
         'filter',
-        { filter: { tenant_id: user.tenant_id }, sort: 'name', limit: 50 },
-        () => Account.filter({ tenant_id: user.tenant_id }, 'name', 50)
+        { filter: { tenant_id: tenantId }, sort: 'name', limit: 50 },
+        () => Account.filter({ tenant_id: tenantId }, 'name', 50)
       );
 
       setAccounts(accData || []);
@@ -65,7 +71,7 @@ export default function LazyAccountSelector({
     } finally {
       setLoading(false);
     }
-  }, [loaded, cachedRequest]);
+  }, [loaded, cachedRequest, contextUser?.tenant_id]);
 
   const handleOpenChange = (isOpen) => {
     setOpen(isOpen);
@@ -87,7 +93,7 @@ export default function LazyAccountSelector({
   return (
     <Select
       value={value || ''}
-      onValueChange={onValueChange}
+      onValueChange={handleChange}
       disabled={disabled}
       open={open}
       onOpenChange={handleOpenChange}

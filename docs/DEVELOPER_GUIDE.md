@@ -125,7 +125,7 @@ import { User, Settings, Trash2 } from 'lucide-react';
 - Wrap dev-only logs with `import.meta.env.DEV`
 - Use `ConfirmDialog` instead of `window.confirm()`
 - Implement error boundaries for critical sections
-- Use the Base44 SDK for all API calls
+- Use the entity wrappers in `src/api/entities.js` for all data access. They provide automatic Base44 → local backend failover; prefer the local backend when available.
 
 ### ❌ DON'T
 - Commit `.env` files

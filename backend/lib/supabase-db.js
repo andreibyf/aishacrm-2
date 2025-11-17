@@ -5,6 +5,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { addDbTime } from './requestContext.js';
 
 let supabaseClient = null;
 let postgresClient = null;
@@ -16,7 +17,18 @@ export function initSupabaseDB(url, serviceRoleKey) {
   if (!url || !serviceRoleKey) {
     throw new Error('Supabase URL and Service Role Key are required');
   }
-  
+  // Wrap fetch to time all Supabase HTTP calls and accumulate into per-request DB time
+  const baseFetch = globalThis.fetch?.bind(globalThis);
+  const timedFetch = async (input, init) => {
+    const t0 = Number(process.hrtime.bigint()) / 1e6;
+    try {
+      return await (baseFetch ? baseFetch(input, init) : fetch(input, init));
+    } finally {
+      const t1 = Number(process.hrtime.bigint()) / 1e6;
+      addDbTime(Math.max(0, t1 - t0));
+    }
+  };
+
   supabaseClient = createClient(url, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
@@ -24,6 +36,9 @@ export function initSupabaseDB(url, serviceRoleKey) {
     },
     db: {
       schema: 'public'
+    },
+    global: {
+      fetch: timedFetch
     }
   });
   
@@ -76,17 +91,25 @@ export async function query(sql, params = []) {
   }
 
   try {
+    // High-resolution timing for direct Postgres path only (Supabase API calls are timed via fetch wrapper)
     // If we have direct postgres client, use it for raw SQL
     if (postgresClient) {
-      const result = await postgresClient.unsafe(sql, params);
-      return {
-        rows: Array.isArray(result) ? result : [result],
-        rowCount: Array.isArray(result) ? result.length : 1
-      };
+      const t0 = Number(process.hrtime.bigint()) / 1e6;
+      try {
+        const result = await postgresClient.unsafe(sql, params);
+        return {
+          rows: Array.isArray(result) ? result : [result],
+          rowCount: Array.isArray(result) ? result.length : 1
+        };
+      } finally {
+        const t1 = Number(process.hrtime.bigint()) / 1e6;
+        addDbTime(Math.max(0, t1 - t0));
+      }
     }
     
     // Otherwise, use Supabase API with SQL parsing
-    return await executeViaSupabaseAPI(sql, params);
+    const res = await executeViaSupabaseAPI(sql, params);
+    return res;
     
   } catch (error) {
     // Convert errors to pg-like format
@@ -130,17 +153,13 @@ async function executeViaSupabaseAPI(sql, params) {
  * Handle SELECT queries
  */
 async function handleSelectQuery(sql, params) {
-  // Safe clause extractor to avoid heavy regex backtracking on uncontrolled input
-  const extractClause = (source, startKeyword, endKeywords = []) => {
-    const lower = source.toLowerCase();
-    const start = lower.indexOf(startKeyword);
-    if (start === -1) return null;
-    let end = source.length;
-    for (const endKw of endKeywords) {
-      const idx = lower.indexOf(endKw, start + startKeyword.length);
-      if (idx !== -1 && idx < end) end = idx;
-    }
-    return source.slice(start + startKeyword.length, end).trim();
+  // Robust clause extractor tolerant of newlines/extra whitespace
+  // startPattern and endPatterns are regex source strings (without flags)
+  const extractClause = (source, startPattern, endPatterns = []) => {
+    const end = endPatterns.length ? '(?:' + endPatterns.join('|') + ')' : '$';
+    const re = new RegExp(startPattern + '([\\s\\S]*?)' + end, 'i');
+    const m = source.match(re);
+    return m ? m[1].trim() : null;
   };
   // Extract table name
   const fromMatch = sql.match(/from\s+([a-z_]+)/i);
@@ -161,21 +180,60 @@ async function handleSelectQuery(sql, params) {
   
   // Parse WHERE with parameter substitution
   // Build WHERE conditions
-  const wherePart = extractClause(sql, ' where ', [' order by ', ' limit ', ' offset ']);
+  const wherePart = extractClause(sql, '\\bwhere\\b\\s+', ['\\border\\s+by\\b', '\\blimit\\b', '\\boffset\\b']);
   if (wherePart) {
     // Split on AND while preserving inner commas of IN lists
     const conditions = wherePart.split(/\s+and\s+/i).map(c => c.trim());
+    console.log('[Supabase Adapter] WHERE conditions:', conditions);
     for (const cond of conditions) {
-      // Handle OR groups by applying each supported predicate inside the group
-      // subject ILIKE $n
       let g;
+      let m;
+      
+      // 1) EQUALITY (highest priority - check exact match first)
+      m = cond.match(/([a-z_]+)\s*=\s*\$(\d+)/i);
+      if (m) {
+        const col = m[1];
+        const idx = parseInt(m[2], 10) - 1;
+        console.log(`[Supabase Adapter] Exact equality match: column='${col}', value='${params[idx]}', condition='${cond}'`);
+        console.log(`[Supabase Adapter] Applying .eq('${col}', '${params[idx]}')`);
+        query = query.eq(col, params[idx]);
+        continue; // CRITICAL: ensure no fall-through
+      }
+      
+      // 2) CASE-INSENSITIVE EQUALITY (LOWER(column) = LOWER($n))
+      g = cond.match(/lower\(\s*"?([a-z_]+)"?\s*\)\s*=\s*lower\(\s*\$(\d+)\s*\)/i);
+      if (g) {
+        const col = g[1];
+        const idx = parseInt(g[2], 10) - 1;
+        const value = typeof params[idx] === 'string' ? params[idx].toLowerCase() : params[idx];
+        query = query.eq(col, value);
+        continue; // CRITICAL: ensure no fall-through
+      }
+      
+      // 3) PATTERN MATCHING (lower priority)
+      // Generic ILIKE: column ILIKE $n
+      g = cond.match(/([a-z_]+)\s+ilike\s*\$(\d+)/i);
+      if (g) {
+        const col = g[1];
+        const idx = parseInt(g[2], 10) - 1;
+        const val = typeof params[idx] === 'string'
+          ? params[idx].replace(/[%_]/g, '\\$&') // escape % and _ to prevent wildcards
+          : params[idx];
+        query = query.ilike(col, val);
+        continue; // CRITICAL: prevent fall-through
+      }
+      
+      // Subject ILIKE (specific case)
       const ilikeSubjectMatches = [...cond.matchAll(/subject\s+ilike\s*\$(\d+)/ig)];
       if (ilikeSubjectMatches.length > 0) {
         for (const mIlike of ilikeSubjectMatches) {
           const idx = parseInt(mIlike[1], 10) - 1;
-          query = query.ilike('subject', params[idx]);
+          const val = typeof params[idx] === 'string'
+            ? params[idx].replace(/[%_]/g, '\\$&') // escape % and _
+            : params[idx];
+          query = query.ilike('subject', val);
         }
-        // continue parsing for additional predicates within the same condition
+        continue; // CRITICAL: required to prevent stacking with other handlers
       }
 
       // JSON text equality: metadata->>'field' = $n
@@ -226,7 +284,7 @@ async function handleSelectQuery(sql, params) {
         query = query.lte('metadata->>due_date', params[idx]);
       }
       // NOT IN: column NOT IN ($3,$4,...)
-      let m = cond.match(/([a-z_]+)\s+not\s+in\s*\(([^)]+)\)/i);
+      m = cond.match(/([a-z_]+)\s+not\s+in\s*\(([^)]+)\)/i);
       if (m) {
         const col = m[1];
         const placeholders = m[2].split(',').map(s => s.trim());
@@ -265,14 +323,6 @@ async function handleSelectQuery(sql, params) {
         continue;
       }
 
-      // Equals: column = $n
-      m = cond.match(/([a-z_]+)\s*=\s*\$(\d+)/i);
-      if (m) {
-        const col = m[1];
-        const idx = parseInt(m[2], 10) - 1;
-        query = query.eq(col, params[idx]);
-        continue;
-      }
       // Unhandled condition types (JSON operators, functions) are ignored in API fallback
     }
   }
@@ -311,7 +361,7 @@ async function handleSelectQuery(sql, params) {
   }
 
   // Parse ORDER BY
-  const orderSegment = extractClause(sql, ' order by ', [' limit ', ' offset ']);
+  const orderSegment = extractClause(sql, '\\border\\s+by\\b\\s+', ['\\blimit\\b', '\\boffset\\b']);
   if (orderSegment) {
     const parts = orderSegment.trim().split(/\s+/);
     const col = parts[0]?.replace(/[,]/g, '');
@@ -346,6 +396,15 @@ async function handleInsertQuery(sql, params) {
   columns.forEach((col, i) => {
     if (i < params.length) data[col] = params[i];
   });
+  // Sanitize common columns
+  if (Object.prototype.hasOwnProperty.call(data, 'message')) {
+    const v = data.message;
+    if (v === null || v === undefined || (typeof v === 'string' && v.trim() === '')) {
+      data.message = '(no message)';
+    } else if (typeof v !== 'string') {
+      try { data.message = JSON.stringify(v); } catch { data.message = String(v); }
+    }
+  }
     // Best-effort: parse JSON string payloads for JSON/JSONB columns like metadata
     if (typeof data.metadata === 'string') {
       try { data.metadata = JSON.parse(data.metadata); } catch { /* keep as-is */ }
@@ -364,40 +423,112 @@ async function handleInsertQuery(sql, params) {
  * Handle UPDATE queries
  */
 async function handleUpdateQuery(sql, params) {
-  const tableMatch = sql.match(/update\s+([a-z_]+)/i);
-  if (!tableMatch) throw new Error('Could not parse UPDATE');
+  // Robust extraction of table, SET, WHERE allowing newlines
+  let updMatch = sql.match(/update\s+([a-z_][a-z0-9_]*)\s+set\s+([\s\S]*?)\s+where\s+([\s\S]*)/i);
+  let table, setPart, wherePart;
+  let fallbackUsed = null;
   
-  const table = tableMatch[1];
-  // Safe clause extractor
-  const extractClause = (source, startKeyword, endKeywords = []) => {
-    const lower = source.toLowerCase();
-    const start = lower.indexOf(startKeyword);
-    if (start === -1) return null;
-    let end = source.length;
-    for (const endKw of endKeywords) {
-      const idx = lower.indexOf(endKw, start + startKeyword.length);
-      if (idx !== -1 && idx < end) end = idx;
+  if (!updMatch) {
+    // Fallback attempt: collapse whitespace and retry (some environments may introduce \r or unusual spacing)
+    const collapsed = sql.replace(/[\t\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    updMatch = collapsed.match(/update\s+([a-z_][a-z0-9_]*)\s+set\s+(.+?)\s+where\s+(.+)/i);
+    if (updMatch) {
+      fallbackUsed = 'whitespace-collapse';
+      table = updMatch[1];
+      setPart = updMatch[2].trim();
+      wherePart = updMatch[3].trim();
+    } else {
+      // Final fallback: manual index slicing (very defensive)
+      const lower = sql.toLowerCase();
+      const uIdx = lower.indexOf('update ');
+      const setIdx = lower.indexOf(' set ');
+      const whereIdx = lower.indexOf(' where ');
+      if (uIdx !== -1 && setIdx !== -1 && whereIdx !== -1 && setIdx > uIdx && whereIdx > setIdx) {
+        fallbackUsed = 'index-slice';
+        table = sql.slice(uIdx + 7, setIdx).trim().split(/\s+/)[0].replace(/[^a-z0-9_]/gi, '');
+        setPart = sql.slice(setIdx + 5, whereIdx).trim();
+        wherePart = sql.slice(whereIdx + 7).trim();
+      } else {
+        console.error('[Supabase Adapter] UPDATE parse failed', {
+          sqlPreview: sql.slice(0, 200),
+          hasSet: /\bset\b/i.test(sql),
+          hasWhere: /\bwhere\b/i.test(sql),
+        });
+        throw new Error('Malformed UPDATE (missing SET/WHERE)');
+      }
     }
-    return source.slice(start + startKeyword.length, end).trim();
-  };
+  } else {
+    table = updMatch[1];
+    setPart = updMatch[2].trim();
+    wherePart = updMatch[3].trim();
+  }
 
-  // Parse SET clause and WHERE clause using index-based parsing
-  const setPart = extractClause(sql, ' set ', [' where ']);
-  if (!setPart) throw new Error('UPDATE requires SET clause');
-  const wherePart = extractClause(sql, ' where ');
-  if (!wherePart) throw new Error('UPDATE requires WHERE for safety');
-  
-  // Build update data
+  // Split SET part by commas not enclosed in parentheses
+  const rawAssignments = [];
+  let buf = '';
+  let depth = 0;
+  for (let i = 0; i < setPart.length; i++) {
+    const ch = setPart[i];
+    if (ch === '(') depth++;
+    else if (ch === ')') depth = Math.max(0, depth - 1);
+    if (ch === ',' && depth === 0) {
+      if (buf.trim()) rawAssignments.push(buf.trim());
+      buf = '';
+    } else {
+      buf += ch;
+    }
+  }
+  if (buf.trim()) rawAssignments.push(buf.trim());
+
   const updateData = {};
-  const setFields = setPart.split(',').map(f => f.trim());
-  for (const field of setFields) {
-    // Match: column = $N where N is a number
-    const fieldMatch = field.match(/([a-z_]+)\s*=\s*\$(\d+)/i);
-    if (fieldMatch) {
-      const colName = fieldMatch[1];
-      const paramNum = parseInt(fieldMatch[2], 10) - 1; // Convert to 0-indexed
-      if (paramNum >= 0 && paramNum < params.length) {
-        updateData[colName] = params[paramNum];
+  for (const assign of rawAssignments) {
+    const colMatch = assign.match(/^(\w+)\s*=\s*/i);
+    if (!colMatch) continue;
+    const col = colMatch[1];
+    const rhs = assign.slice(colMatch[0].length).trim();
+    if (/now\s*\(\s*\)/i.test(rhs)) continue;
+    const paramMatch = rhs.match(/\$(\d+)/);
+    if (!paramMatch) continue;
+    const paramNum = parseInt(paramMatch[1], 10) - 1;
+    if (paramNum < 0 || paramNum >= params.length) continue;
+    let value = params[paramNum];
+    if (value === undefined) continue;
+    if (col === 'stage' && typeof value === 'string') {
+      value = value.toLowerCase();
+    }
+    updateData[col] = value;
+  }
+
+  // If stage appears in SQL but not captured (e.g., all params null except stage), attempt secondary detection
+  if (!('stage' in updateData) && /stage\s*=\s*case\s+when\s*\$(\d+)/i.test(setPart)) {
+    const mStage = setPart.match(/stage\s*=\s*case\s+when\s*\$(\d+)/i);
+    if (mStage) {
+      const idx = parseInt(mStage[1], 10) - 1;
+      if (idx >= 0 && idx < params.length && params[idx] !== undefined) {
+        const raw = params[idx];
+        updateData.stage = typeof raw === 'string' ? raw.toLowerCase() : raw;
+      }
+    }
+  }
+
+  // Capture COALESCE patterns missed if first param was not stage (defensive for other columns)
+  const coalesceMatches = [...setPart.matchAll(/(\w+)\s*=\s*coalesce\(\$(\d+),\s*\1\)/ig)];
+  for (const m of coalesceMatches) {
+    const c = m[1];
+    const idx = parseInt(m[2], 10) - 1;
+    if (!(c in updateData) && idx >= 0 && idx < params.length && params[idx] !== undefined) {
+      updateData[c] = params[idx];
+    }
+  }
+  // Defensive: capture CASE WHEN param pattern for any column (not just stage) if still missing
+  const caseWhenMatches = [...setPart.matchAll(/(\w+)\s*=\s*case\s+when\s*\$(\d+)\s+is\s+not\s+null\s+then\s*\$(\d+)\s+else\s*\1\s+end/ig)];
+  for (const m of caseWhenMatches) {
+    const col = m[1];
+    const idx = parseInt(m[2], 10) - 1;
+    if (!(col in updateData) && idx >= 0 && idx < params.length && params[idx] !== undefined) {
+      updateData[col] = params[idx];
+      if (col === 'stage' && typeof updateData[col] === 'string') {
+        updateData[col] = updateData[col].toLowerCase();
       }
     }
   }
@@ -405,6 +536,13 @@ async function handleUpdateQuery(sql, params) {
   if (typeof updateData.metadata === 'string') {
     try { updateData.metadata = JSON.parse(updateData.metadata); } catch { /* noop */ }
   }
+  
+  if (import.meta.env?.DEV && !('stage' in updateData) && /\bstage\b/i.test(setPart)) {
+    console.warn('[Supabase Adapter] Stage in SQL but not captured', { table, setPartPreview: setPart.slice(0,150) });
+  }
+  
+  console.log('[Supabase Adapter]', { op: 'UPDATE', table, updateData: Object.keys(updateData), fallback: fallbackUsed || 'none' });
+
   
   // Build WHERE
   let query = supabaseClient.from(table).update(updateData);
@@ -421,7 +559,37 @@ async function handleUpdateQuery(sql, params) {
     }
   }
   
-  const { data, error } = await query.select();
+  const firstRes = await query.select();
+  let { data, error } = firstRes;
+  // Soft-handle stale schema cache for known added columns (e.g., status, due_date)
+  if (error && ( /schema cache/i.test(error.message || '') || /could not find the '.+' column/i.test(error.message || '') )) {
+    console.warn('[Supabase API] Stale schema cache detected – retrying update without newly added columns');
+    const staleCols = ['status','due_date'];
+    let removed = false;
+    for (const c of staleCols) {
+      if (c in updateData) {
+        delete updateData[c];
+        removed = true;
+      }
+    }
+    if (removed) {
+      let retry = supabaseClient.from(table).update(updateData);
+      const whereConditions2 = wherePart.split(/\s+and\s+/i);
+      for (const cond of whereConditions2) {
+        const eqMatch = cond.trim().match(/([a-z_]+)\s*=\s*\$(\d+)/i);
+        if (eqMatch) {
+          const colName = eqMatch[1];
+          const paramNum = parseInt(eqMatch[2], 10) - 1;
+          if (paramNum >= 0 && paramNum < params.length) {
+            retry = retry.eq(colName, params[paramNum]);
+          }
+        }
+      }
+      const retryRes = await retry.select();
+      if (retryRes.error) throw retryRes.error;
+      return { rows: retryRes.data || [], rowCount: retryRes.data?.length || 0 };
+    }
+  }
   if (error) throw error;
   
   return { rows: data || [], rowCount: data?.length || 0 };

@@ -95,6 +95,19 @@ POST /api/database/sync
 }
 ```
 
+### AI Conversations (Chat) — Titles, Topics, Supabase Client
+
+The AI chat endpoints under `/api/ai/*` now use the Supabase JavaScript client for database access (no raw `pgPool.query`), consistent with the rest of the backend. Conversations support user-friendly titles and topic categorization.
+
+- Migration 037 adds `conversations.title` and `conversations.topic` with helpful indexes. Run the SQL in Supabase (see docs below).
+- On the first user message in a conversation, the backend:
+   - Auto-generates a title from the first ~50 chars of the message
+   - Auto-classifies a topic from keywords (leads, accounts, opportunities, contacts, support, general)
+   - Never overwrites a non-general, manually set topic
+- Frontend sidebar shows titles, topic badges, topic filter, and inline rename.
+
+See: `docs/AI_CONVERSATIONS.md` for migration SQL, endpoints, and testing steps.
+
 ## 🔧 Configuration
 
 ### Database Setup

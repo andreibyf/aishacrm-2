@@ -4,13 +4,16 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Alert, AlertDescription } from '../ui/alert';
 import { apiHealthMonitor } from '../../utils/apiHealthMonitor';
-import { AlertCircle, CheckCircle2, Copy, RefreshCw, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Copy, PlayCircle, Loader2, XCircle, RefreshCw, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { BACKEND_URL } from '../../api/entities';
 
 export default function ApiHealthDashboard() {
   const [healthReport, setHealthReport] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isTestingEndpoints, setIsTestingEndpoints] = useState(false);
+  const [testResults, setTestResults] = useState(null);
 
   const refreshReport = () => {
     setIsRefreshing(true);
@@ -123,6 +126,101 @@ export default function ApiHealthDashboard() {
     toast.info(`User notifications ${!currentState ? 'enabled' : 'disabled'}`);
   };
 
+  const testNewEndpoints = async () => {
+    setIsTestingEndpoints(true);
+    const results = {
+      tested: 0,
+      passed: 0,
+      failed: 0,
+      details: []
+    };
+
+    // Define new endpoints to test
+    const endpoints = [
+      { name: 'AI Campaigns - List', method: 'GET', url: `${BACKEND_URL}/api/aicampaigns?tenant_id=test&limit=1` },
+      { name: 'AI Campaigns - Get', method: 'GET', url: `${BACKEND_URL}/api/aicampaigns/test-id?tenant_id=test`, expectError: true },
+      { name: 'Telephony - Inbound Webhook', method: 'POST', url: `${BACKEND_URL}/api/telephony/inbound-webhook`, body: { tenant_id: 'test' }, expectError: true },
+      { name: 'Telephony - Outbound Webhook', method: 'POST', url: `${BACKEND_URL}/api/telephony/outbound-webhook`, body: { tenant_id: 'test' }, expectError: true },
+      { name: 'Telephony - Prepare Call', method: 'POST', url: `${BACKEND_URL}/api/telephony/prepare-call`, body: { tenant_id: 'test' }, expectError: true },
+      { name: 'Telephony - Twilio Webhook', method: 'POST', url: `${BACKEND_URL}/api/telephony/webhook/twilio/inbound?tenant_id=test`, expectError: true },
+      { name: 'Telephony - CallFluent Webhook', method: 'POST', url: `${BACKEND_URL}/api/telephony/webhook/callfluent/inbound?tenant_id=test`, expectError: true },
+    ];
+
+    for (const endpoint of endpoints) {
+      results.tested++;
+      try {
+        const options = {
+          method: endpoint.method,
+          headers: { 'Content-Type': 'application/json' }
+        };
+
+        if (endpoint.body) {
+          options.body = JSON.stringify(endpoint.body);
+        }
+
+        const response = await fetch(endpoint.url, options);
+        
+        // Check if endpoint exists (not 404)
+        if (response.status === 404) {
+          results.failed++;
+          results.details.push({
+            name: endpoint.name,
+            status: 'failed',
+            message: '404 - Endpoint not found',
+            statusCode: 404
+          });
+        } else if (endpoint.expectError && (response.status === 400 || response.status === 500)) {
+          // Expected error (validation, missing data, etc.) means endpoint exists
+          results.passed++;
+          results.details.push({
+            name: endpoint.name,
+            status: 'passed',
+            message: `Endpoint exists (${response.status} expected)`,
+            statusCode: response.status
+          });
+        } else if (response.ok) {
+          results.passed++;
+          results.details.push({
+            name: endpoint.name,
+            status: 'passed',
+            message: 'Endpoint responding correctly',
+            statusCode: response.status
+          });
+        } else {
+          // Other errors - endpoint exists but has issues
+          results.passed++;
+          results.details.push({
+            name: endpoint.name,
+            status: 'warning',
+            message: `Endpoint exists but returned ${response.status}`,
+            statusCode: response.status
+          });
+        }
+      } catch (error) {
+        results.failed++;
+        results.details.push({
+          name: endpoint.name,
+          status: 'failed',
+          message: `Network error: ${error.message}`,
+          statusCode: 0
+        });
+      }
+    }
+
+    setTestResults(results);
+    setIsTestingEndpoints(false);
+    
+    if (results.failed === 0) {
+      toast.success('All endpoint tests passed!', {
+        description: `${results.passed}/${results.tested} endpoints available`
+      });
+    } else {
+      toast.error('Some endpoints failed', {
+        description: `${results.failed}/${results.tested} endpoints not found`
+      });
+    }
+  };
+
   if (!healthReport) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -167,7 +265,7 @@ export default function ApiHealthDashboard() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
         <Card className="bg-red-900/20 border-red-700">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-medium text-red-300">
@@ -206,6 +304,19 @@ export default function ApiHealthDashboard() {
             </div>
           </CardContent>
         </Card>
+
+         <Card className="bg-amber-900/20 border-amber-700">
+           <CardHeader className="pb-2">
+             <CardTitle className="text-xs font-medium text-amber-300">
+               Validation (400)
+             </CardTitle>
+           </CardHeader>
+           <CardContent>
+             <div className="text-2xl font-bold text-slate-100">
+               {healthReport.totalValidationErrors}
+             </div>
+           </CardContent>
+         </Card>
 
         <Card className="bg-blue-900/20 border-blue-700">
           <CardHeader className="pb-2">
@@ -317,6 +428,104 @@ export default function ApiHealthDashboard() {
         </Alert>
       )}
 
+      {/* Endpoint Testing Section */}
+      <Card className="bg-slate-800 border-slate-700">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg font-semibold text-slate-100">
+                New Endpoints Testing
+              </CardTitle>
+              <p className="text-sm text-slate-400 mt-1">
+                Test recently implemented AI Campaigns and Telephony endpoints
+              </p>
+            </div>
+            <Button
+              onClick={testNewEndpoints}
+              disabled={isTestingEndpoints}
+              variant="outline"
+              className="border-blue-600 text-blue-400 hover:bg-blue-600 hover:text-white"
+            >
+              {isTestingEndpoints ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Testing...
+                </>
+              ) : (
+                <>
+                  <PlayCircle className="h-4 w-4 mr-2" />
+                  Test Endpoints
+                </>
+              )}
+            </Button>
+          </div>
+        </CardHeader>
+        
+        {testResults && (
+          <CardContent>
+            <div className="space-y-4">
+              {/* Summary Stats */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                  <div className="text-xs text-slate-400 mb-1">Total Tested</div>
+                  <div className="text-2xl font-bold text-slate-100">{testResults.tested}</div>
+                </div>
+                <div className="bg-green-900/20 p-3 rounded-lg border border-green-700/50">
+                  <div className="text-xs text-green-400 mb-1">Passed</div>
+                  <div className="text-2xl font-bold text-green-300">{testResults.passed}</div>
+                </div>
+                <div className="bg-red-900/20 p-3 rounded-lg border border-red-700/50">
+                  <div className="text-xs text-red-400 mb-1">Failed</div>
+                  <div className="text-2xl font-bold text-red-300">{testResults.failed}</div>
+                </div>
+              </div>
+
+              {/* Test Results List */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-slate-300">Test Results:</h4>
+                {testResults.details.map((result, index) => (
+                  <div
+                    key={index}
+                    className={`p-3 rounded-lg border ${
+                      result.status === 'passed'
+                        ? 'bg-green-900/20 border-green-700/50'
+                        : result.status === 'warning'
+                        ? 'bg-yellow-900/20 border-yellow-700/50'
+                        : 'bg-red-900/20 border-red-700/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {result.status === 'passed' ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-400" />
+                        ) : result.status === 'warning' ? (
+                          <AlertCircle className="h-4 w-4 text-yellow-400" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-red-400" />
+                        )}
+                        <span className="text-sm font-medium text-slate-200">{result.name}</span>
+                      </div>
+                      <span
+                        className={`text-xs px-2 py-1 rounded ${
+                          result.status === 'passed'
+                            ? 'bg-green-700/50 text-green-300'
+                            : result.status === 'warning'
+                            ? 'bg-yellow-700/50 text-yellow-300'
+                            : 'bg-red-700/50 text-red-300'
+                        }`}
+                      >
+                        {result.statusCode}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1 ml-6">{result.message}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
       {/* Error Lists by Type */}
       {renderErrorList(
         healthReport.missingEndpoints,
@@ -341,6 +550,14 @@ export default function ApiHealthDashboard() {
         'border-yellow-200',
         false
       )}
+
+       {renderErrorList(
+         healthReport.validationErrors,
+         'Validation Errors (400)',
+         'Malformed requests or missing required parameters. Common causes: missing tenant_id, invalid filters, or incorrect data types.',
+         'border-amber-200',
+         false
+       )}
 
       {renderErrorList(
         healthReport.rateLimitErrors,

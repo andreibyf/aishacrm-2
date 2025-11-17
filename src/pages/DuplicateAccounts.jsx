@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { Account } from "@/api/entities";
-import { User } from "@/api/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,11 +31,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useUser } from "../components/shared/useUser.js";
 
 export default function DuplicateAccounts() {
   const [loading, setLoading] = useState(true);
   const [duplicateGroups, setDuplicateGroups] = useState([]);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -52,19 +52,6 @@ export default function DuplicateAccounts() {
 
   const [consolidating, setConsolidating] = useState(false);
   const [, setConsolidateTarget] = useState(null);
-
-  useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const user = await User.me();
-      setCurrentUser(user);
-    } catch (error) {
-      console.error("Failed to load user:", error);
-    }
-  };
 
   const loadDuplicates = useCallback(async () => {
     if (!currentUser) return;

@@ -8,6 +8,50 @@ import express from 'express';
 export default function createEmployeeRoutes(_pgPool) {
   const router = express.Router();
 
+  /**
+   * @openapi
+   * /api/employees:
+   *   get:
+   *     summary: List employees
+   *     description: Returns employees by tenant or looks up by email.
+   *     tags: [employees]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         description: Tenant UUID scope (required unless email provided)
+   *       - in: query
+   *         name: email
+   *         schema:
+   *           type: string
+   *           format: email
+   *         description: Direct lookup by email (ignores tenant_id)
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *         description: Page size (default 50)
+   *       - in: query
+   *         name: offset
+   *         schema:
+   *           type: integer
+   *         description: Pagination offset (default 0)
+   *     responses:
+   *       200:
+   *         description: Employees list or single email match
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       400:
+   *         description: Missing tenant_id without email
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   // GET /api/employees - List employees
   router.get('/', async (req, res) => {
     try {
@@ -69,6 +113,45 @@ export default function createEmployeeRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/employees/{id}:
+   *   get:
+   *     summary: Get an employee
+   *     description: Returns a single employee by ID within tenant scope.
+   *     tags: [employees]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     responses:
+   *       200:
+   *         description: Employee details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       400:
+   *         description: Missing tenant_id
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *       404:
+   *         description: Not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   // GET /api/employees/:id - Get single employee
   router.get('/:id', async (req, res) => {
     try {
@@ -84,8 +167,8 @@ export default function createEmployeeRoutes(_pgPool) {
       const { data, error } = await supabase
         .from('employees')
         .select('*')
-        .eq('id', id)
         .eq('tenant_id', tenant_id)
+        .eq('id', id)
         .single();
 
       if (error && error.code !== 'PGRST116') { // PGRST116 is No rows
@@ -106,41 +189,105 @@ export default function createEmployeeRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/employees:
+   *   post:
+   *     summary: Create employee
+   *     description: Creates an employee; test-pattern emails are blocked.
+   *     tags: [employees]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, first_name, last_name]
+   *             properties:
+   *               tenant_id:
+   *                 type: string
+   *                 format: uuid
+   *               first_name:
+   *                 type: string
+   *               last_name:
+   *                 type: string
+   *               email:
+   *                 type: string
+   *                 format: email
+   *               role:
+   *                 type: string
+   *               status:
+   *                 type: string
+   *               metadata:
+   *                 type: object
+   *     responses:
+   *       200:
+   *         description: Employee created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       400:
+   *         description: Validation error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *       403:
+   *         description: Test email blocked
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   // POST /api/employees - Create employee
   router.post('/', async (req, res) => {
     try {
-      const { tenant_id, first_name, last_name, email, role, phone, department, metadata } = req.body;
+      // DEBUG: Log what we received
+      console.log('[Employee POST] Received body:', JSON.stringify(req.body, null, 2));
+      console.log('[Employee POST] Body keys:', Object.keys(req.body));
+      
+      const { tenant_id, first_name, last_name, email, role, status, ...additionalFields } = req.body;
 
-      if (!tenant_id || !email) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id and email are required' });
+      if (!tenant_id) {
+        console.log('[Employee POST] VALIDATION FAILED: tenant_id missing');
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      
+      if (!first_name || !last_name) {
+        console.log('[Employee POST] VALIDATION FAILED: first_name or last_name missing', { first_name, last_name });
+        return res.status(400).json({ status: 'error', message: 'first_name and last_name are required' });
       }
 
       // HARD BLOCK: prevent creation of test-pattern emails to avoid E2E pollution
-      const testEmailPatterns = [
-        /audit\.test\./i,
-        /e2e\.temp\./i,
-        /@playwright\.test$/i,
-        /@example\.com$/i,
-      ];
-      if (testEmailPatterns.some((re) => re.test(String(email)))) {
-        return res.status(403).json({
-          status: 'error',
-          code: 'TEST_EMAIL_BLOCKED',
-          message: 'Employee creation blocked for test email patterns',
-        });
+      if (email) {
+        const testEmailPatterns = [
+          /audit\.test\./i,
+          /e2e\.temp\./i,
+          /@playwright\.test$/i,
+          /@example\.com$/i,
+        ];
+        if (testEmailPatterns.some((re) => re.test(String(email)))) {
+          return res.status(403).json({
+            status: 'error',
+            code: 'TEST_EMAIL_BLOCKED',
+            message: 'Employee creation blocked for test email patterns',
+          });
+        }
       }
+      
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
+      // Store all additional fields (department, phone, job_title, etc.) in metadata JSONB column
       const insertData = {
         tenant_id,
         first_name,
         last_name,
-        email,
-        role,
-        phone,
-        department,
-        metadata: metadata || {},
+        email: email || null,
+        role: role || null,
+        status: status || 'active',
+        metadata: additionalFields || {},
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -164,6 +311,64 @@ export default function createEmployeeRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/employees/{id}:
+   *   put:
+   *     summary: Update employee
+   *     description: Updates employee fields within tenant scope.
+   *     tags: [employees]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               tenant_id:
+   *                 type: string
+   *                 format: uuid
+   *               first_name:
+   *                 type: string
+   *               last_name:
+   *                 type: string
+   *               email:
+   *                 type: string
+   *                 format: email
+   *               role:
+   *                 type: string
+   *               phone:
+   *                 type: string
+   *               department:
+   *                 type: string
+   *               metadata:
+   *                 type: object
+   *     responses:
+   *       200:
+   *         description: Employee updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       400:
+   *         description: Missing tenant_id
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *       404:
+   *         description: Not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   // PUT /api/employees/:id - Update employee
   router.put('/:id', async (req, res) => {
     try {
@@ -214,6 +419,39 @@ export default function createEmployeeRoutes(_pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/employees/{id}:
+   *   delete:
+   *     summary: Delete employee
+   *     description: Deletes an employee within tenant scope.
+   *     tags: [employees]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     responses:
+   *       200:
+   *         description: Employee deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       404:
+   *         description: Not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   // DELETE /api/employees/:id - Delete employee
   router.delete('/:id', async (req, res) => {
     try {

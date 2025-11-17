@@ -1,0 +1,8 @@
+#!/usr/bin/env node
+import fs from "fs";
+import { validate } from "./validate.js";
+const file = process.argv[2] || "-";
+const src = file === "-" ? fs.readFileSync(0,"utf8") : fs.readFileSync(file,"utf8");
+const diags = validate(src, file === "-" ? "stdin" : file);
+for (const d of diags) process.stdout.write(JSON.stringify(d) + "\n");
+process.exit(diags.some(d=>d.severity==="error") ? 1 : 0);

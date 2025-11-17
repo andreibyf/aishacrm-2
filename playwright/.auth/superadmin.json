@@ -11,6 +11,10 @@
         {
           "name": "E2E_TEST_MODE",
           "value": "true"
+        },
+        {
+          "name": "tenant_id",
+          "value": "local-tenant-001"
         }
       ]
     }

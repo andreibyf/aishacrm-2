@@ -11,12 +11,17 @@ import { Card, CardContent } from "@/components/ui/card";
 
 import { useTenant } from "../shared/tenantContext";
 
-import { saveEmployee } from "@/api/functions";
+import { Employee } from "@/api/entities";
 import { toast } from "sonner";
 // Removed: ResendInviteButton is removed from this form's outline
 // import ResendInviteButton from "./ResendInviteButton"; // This import is no longer needed
 
-export default function EmployeeForm({ employee, onSave, onCancel, tenantId }) {
+// Standardized props: { initialData, onSubmit, onCancel, tenantId } while retaining backward compat for existing parent usage.
+export default function EmployeeForm({ employee: legacyEmployee, initialData, onSubmit, onSave, onCancel, tenantId }) {
+  console.log('[EmployeeForm] Rendering with props:', { legacyEmployee, initialData, tenantId });
+  
+  // Prefer initialData if provided; fall back to legacy 'employee' prop.
+  const employee = initialData || legacyEmployee || null;
   const isEdit = !!(employee && employee.id);
   const { _selectedTenantId } = useTenant(); // Kept for potential future use or context check
 
@@ -61,91 +66,96 @@ export default function EmployeeForm({ employee, onSave, onCancel, tenantId }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log('[EmployeeForm] handleSubmit called', { tenantId, isEdit, formData });
+    
     // Removed setMessage(null) as message state is removed
 
-    // Validation
+    // Validation - only required fields
     if (!formData.first_name?.trim()) {
+      console.log('[EmployeeForm] Validation failed: first_name missing');
       toast.error('First name is required');
       return;
     }
     if (!formData.last_name?.trim()) {
+      console.log('[EmployeeForm] Validation failed: last_name missing');
       toast.error('Last name is required');
       return;
     }
-    if (!formData.department) {
-      toast.error('Department is required');
-      return;
-    }
-    if (!formData.job_title?.trim()) {
-      toast.error('Job title is required');
-      return;
-    }
 
-    // Existing validation for CRM access email
-    if (formData.has_crm_access && !formData.email) {
+    // Validation for CRM access - email is required only if enabling CRM access
+    if (formData.has_crm_access && !formData.email?.trim()) {
+      console.log('[EmployeeForm] Validation failed: CRM access requires email');
       toast.error("Email is required for CRM access requests.");
       return;
     }
     if (!tenantId && !isEdit) {
+      console.log('[EmployeeForm] Validation failed: tenant_id missing');
       toast.error("Cannot save employee. Tenant information is missing.");
       return;
     }
 
+    console.log('[EmployeeForm] Validation passed, starting save...');
     setSaving(true);
 
     try {
-      const payload = {
-        employeeId: employee?.id || null, // Pass employee ID if editing, otherwise null for new
-        employeeData: {
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          email: formData.email || null,
-          phone: formData.phone || null,
-          mobile: formData.mobile || null,
-          department: formData.department,
-          job_title: formData.job_title,
-          manager_employee_id: formData.manager_employee_id,
-          hire_date: formData.hire_date || null,
-          employment_status: formData.employment_status,
-          employment_type: formData.employment_type,
-          // Ensure numeric fields are numbers or null
-          hourly_rate: formData.hourly_rate ? Number(formData.hourly_rate) : null,
-          skills: formData.skills,
-          address_1: formData.address_1 || null,
-          address_2: formData.address_2 || null,
-          city: formData.city || null,
-          state: formData.state || null,
-          zip: formData.zip || null,
-          emergency_contact_name: formData.emergency_contact_name || null,
-          emergency_contact_phone: formData.emergency_contact_phone || null,
-          notes: formData.notes || null,
-          tags: formData.tags,
-          is_active: formData.is_active,
-          // CRM fields are included conditionally, matching original logic
-          has_crm_access: formData.has_crm_access,
-          crm_user_employee_role: formData.has_crm_access ? formData.crm_user_employee_role : null,
-        },
-        tenantId: tenantId
+      // Assemble normalized entity payload for standardized onSubmit callback.
+      const entityPayload = {
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        email: formData.email || null,
+        phone: formData.phone || null,
+        mobile: formData.mobile || null,
+        department: formData.department,
+        job_title: formData.job_title,
+        manager_employee_id: formData.manager_employee_id,
+        hire_date: formData.hire_date || null,
+        employment_status: formData.employment_status,
+        employment_type: formData.employment_type,
+        hourly_rate: formData.hourly_rate ? Number(formData.hourly_rate) : null,
+        skills: formData.skills,
+        address_1: formData.address_1 || null,
+        address_2: formData.address_2 || null,
+        city: formData.city || null,
+        state: formData.state || null,
+        zip: formData.zip || null,
+        emergency_contact_name: formData.emergency_contact_name || null,
+        emergency_contact_phone: formData.emergency_contact_phone || null,
+        notes: formData.notes || null,
+        tags: formData.tags,
+        is_active: formData.is_active,
+        has_crm_access: formData.has_crm_access,
+        crm_user_employee_role: formData.has_crm_access ? formData.crm_user_employee_role : null,
+        tenant_id: tenantId || null,
       };
 
-      console.log('[EmployeeForm] Submitting payload:', payload);
+      console.log('[EmployeeForm] Entity payload prepared:', entityPayload);
 
-      const response = await saveEmployee(payload);
-
-      console.log('[EmployeeForm] Save response:', response);
-
-      if (response?.data?.success) {
+      let result;
+      try {
+        if (employee?.id) {
+          console.log('[EmployeeForm] Calling Employee.update...', employee.id);
+          result = await Employee.update(employee.id, entityPayload);
+        } else {
+          console.log('[EmployeeForm] Calling Employee.create...');
+          result = await Employee.create(entityPayload);
+        }
+        console.log('[EmployeeForm] API call successful:', result);
         toast.success(employee?.id ? 'Employee updated successfully' : 'Employee created successfully');
-        setTimeout(() => {
-          if (onSave) {
-            onSave(); // Call onSave without argument as per outline
-          }
-        }, 1500); // Retained setTimeout for UX
-      } else {
-        const errorMsg = response?.data?.error || 'Failed to save employee';
-        console.error('[EmployeeForm] Save failed:', errorMsg);
-        toast.error(errorMsg);
+      } catch (err) {
+        console.error('[EmployeeForm] API call failed:', err);
+        const msg = err?.response?.data?.error || err?.message || 'Failed to save employee';
+        toast.error(msg);
+        throw err;
       }
+
+      // Prefer new standardized onSubmit(data) signature; fallback to legacy onSave() if provided.
+      setTimeout(() => {
+        if (onSubmit) {
+          onSubmit(result);
+        } else if (onSave) {
+          onSave();
+        }
+      }, 500);
     } catch (error) {
       console.error('[EmployeeForm] Save error:', error);
       // More robust error message extraction
@@ -168,8 +178,11 @@ export default function EmployeeForm({ employee, onSave, onCancel, tenantId }) {
       <Card className="bg-slate-800 border-slate-700">
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
           <div>
-            <Label className="text-slate-200">First name</Label>
+            <Label className="text-slate-200">
+              First name <span className="text-red-400">*</span>
+            </Label>
             <Input
+              required
               value={formData.first_name}
               onChange={(e) => onChange("first_name", e.target.value)}
               className="bg-slate-900 border-slate-700 text-slate-100"
@@ -177,8 +190,11 @@ export default function EmployeeForm({ employee, onSave, onCancel, tenantId }) {
             />
           </div>
           <div>
-            <Label className="text-slate-200">Last name</Label>
+            <Label className="text-slate-200">
+              Last name <span className="text-red-400">*</span>
+            </Label>
             <Input
+              required
               value={formData.last_name}
               onChange={(e) => onChange("last_name", e.target.value)}
               className="bg-slate-900 border-slate-700 text-slate-100"
@@ -186,14 +202,22 @@ export default function EmployeeForm({ employee, onSave, onCancel, tenantId }) {
             />
           </div>
           <div>
-            <Label className="text-slate-200">Email</Label>
+            <Label className="text-slate-200">
+              Email {formData.has_crm_access && <span className="text-red-400">*</span>}
+            </Label>
             <Input
               type="email"
+              required={formData.has_crm_access}
               value={formData.email}
               onChange={(e) => onChange("email", e.target.value)}
               className="bg-slate-900 border-slate-700 text-slate-100"
               placeholder="work@example.com"
             />
+            {formData.has_crm_access && (
+              <p className="text-xs text-amber-400 mt-1">
+                Email is required for CRM access
+              </p>
+            )}
           </div>
           <div>
             <Label className="text-slate-200">Phone</Label>
@@ -296,13 +320,18 @@ export default function EmployeeForm({ employee, onSave, onCancel, tenantId }) {
         )}
       </div>
 
-      <div className="flex justify-end gap-3 pt-4">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={saving} className="bg-slate-700 border-slate-600 text-slate-200">
-          Cancel
-        </Button>
-        <Button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700">
-          {saving ? "Saving..." : isEdit ? "Update Employee" : "Create Employee"}
-        </Button>
+      <div className="flex items-center justify-between pt-4 border-t border-slate-700">
+        <p className="text-xs text-slate-400">
+          <span className="text-red-400">*</span> Required fields
+        </p>
+        <div className="flex gap-3">
+          <Button type="button" variant="outline" onClick={onCancel} disabled={saving} className="bg-slate-700 border-slate-600 text-slate-200">
+            Cancel
+          </Button>
+          <Button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700">
+            {saving ? "Saving..." : isEdit ? "Update Employee" : "Create Employee"}
+          </Button>
+        </div>
       </div>
     </form>
   );

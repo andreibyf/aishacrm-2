@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Activity } from '@/api/entities';
-import { Contact, Account, Lead, Opportunity, User } from '@/api/entities';
+import { Contact, Account, Lead, Opportunity } from '@/api/entities';
+import { useUser } from '@/components/shared/useUser.js';
 import { Note } from "@/api/entities"; // NEW: Import Note entity
 import { useTimezone } from '../shared/TimezoneContext';
 import { localToUtc, utcToLocal, getCurrentTimezoneOffset } from '../shared/timezoneUtils';
@@ -39,13 +40,13 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
   const [leads, setLeads] = useState([]);
   const [opportunities, setOpportunities] = useState([]);
   const [relatedRecords, setRelatedRecords] = useState([]);
-  const [, setLoadingUser] = useState(false);
+  // Removed local loading state; rely on global user context
   const [, setSelectedRelatedRecord] = useState(null);
 
-  // NEW: User state and loading for admin check
-  const [user, setUser] = useState(null);
+  // NEW: Use global user context with optional prop override
+  const { user } = useUser();
   const effectiveUser = propsUser || user;
-  const isAdmin = effectiveUser?.role === 'admin' || effectiveUser?.role === 'superadmin';
+  const isSuperadmin = effectiveUser?.role === 'superadmin';
 
   // NEW: State for notes section
   const [notes, setNotes] = useState([]);
@@ -146,23 +147,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
     setFormData(getInitialFormData());
   }, [activity, relatedTo, relatedId, getInitialFormData]);
 
-  // NEW: Load user for admin check (only if not provided via props)
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error('Failed to load current user:', error);
-        toast.error('Failed to load user information.');
-      } finally {
-        setLoadingUser(false);
-      }
-    };
-    if (!propsUser && !user && tenantId) { // Only load if not provided via props and tenantId is available
-      loadUser();
-    }
-  }, [propsUser, user, tenantId]);
+  // Remove local User.me fetch; rely on global context
 
 
   // Load related data
@@ -940,8 +925,8 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
             </div>
           )}
 
-          {/* ONLY show test data toggle to admins */}
-          {isAdmin && (
+          {/* ONLY show test data toggle to Superadmin */}
+          {isSuperadmin && (
             <div className="flex items-center space-x-2 p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
               <Switch
                 id="is_test_data"
@@ -954,7 +939,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
                 Mark as Test Data
               </Label>
               <span className="text-xs text-amber-400 ml-2">
-                (For admin cleanup purposes)
+                (For Superadmin cleanup purposes)
               </span>
             </div>
           )}

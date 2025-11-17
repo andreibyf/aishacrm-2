@@ -64,9 +64,18 @@ export default function LeadSourceChart(props) { // Changed to receive `props`
         const tenantFilter = props?.tenantFilter || {};
         const showTestData = props?.showTestData;
 
+        // Guard: If no tenant_id in filter, don't fetch (superadmin needs to select tenant)
+        if (!tenantFilter.tenant_id) {
+          if (mounted) {
+            setData([]);
+            setLoading(false);
+          }
+          return;
+        }
+
         const effectiveFilter = showTestData
           ? { ...tenantFilter }
-          : Object.assign({}, tenantFilter, { is_test_data: { $ne: true } });
+          : Object.assign({}, tenantFilter, { is_test_data: false });
 
         // If prefetched leads are provided (from dashboard bundle), use them
         // `props.leadsData.length >= 0` is used to ensure it's an array and not null/undefined

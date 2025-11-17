@@ -12,7 +12,8 @@ import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { EmailTemplate, User } from "@/api/entities";
+import { EmailTemplate } from "@/api/entities";
+import { useUser } from '@/components/shared/useUser.js';
 import { getTenantFilter } from './tenantUtils';
 import { useTenant } from './tenantContext';
 import DocumentPicker from './DocumentPicker';
@@ -53,17 +54,18 @@ export default function AIEmailComposer({
   const { selectedTenantId } = useTenant();
   
   const fileInputRef = React.createRef();
+  const { user: currentUser } = useUser();
 
   const loadTemplates = useCallback(async () => {
     try {
-      const user = await User.me();
-      const filter = getTenantFilter(user, selectedTenantId);
+      if (!currentUser) return;
+      const filter = getTenantFilter(currentUser, selectedTenantId);
       const fetchedTemplates = await EmailTemplate.filter(filter);
       setTemplates(fetchedTemplates);
     } catch (error) {
       console.error("Failed to load email templates:", error);
     }
-  }, [selectedTenantId]);
+  }, [selectedTenantId, currentUser]);
 
   useEffect(() => {
     if (isOpen) {
