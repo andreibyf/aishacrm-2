@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || 'http://localhost:4001';
 
 // Mark as slow; skip when RATE_LIMIT_SKIP is set
 const shouldSkip = process.env.RATE_LIMIT_SKIP === '1';

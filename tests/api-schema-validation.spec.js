@@ -32,6 +32,7 @@ async function safeJson(response) {
   try { return await response.json(); } catch { return await response.text(); }
 }
 const TEST_TENANT_ID = 'local-tenant-001';
+const authFile = 'playwright/.auth/superadmin.json';
 
 // Extend test with API context
 const test = base.extend({
@@ -43,6 +44,8 @@ const test = base.extend({
       extraHTTPHeaders: {
         'Content-Type': 'application/json',
       },
+      // Use authenticated session for API requests
+      storageState: authFile,
     });
   await inner(context);
     await context.dispose();
@@ -190,9 +193,9 @@ test.describe('Backend API Schema Validation', () => {
       });
       const data = await expectOk(response);
   expect(data.status).toBe('success');
-  // Contact route returns row under `data`
-  expect(data.data.first_name).toBe('FirstOnly');
-  expect(data.data.last_name).toBe('LastOnly');
+  // Contact route returns row under `data.contact`
+  expect(data.data.contact.first_name).toBe('FirstOnly');
+  expect(data.data.contact.last_name).toBe('LastOnly');
     });
 
     test('should reject contact missing last_name', async ({ apiContext }) => {
@@ -255,9 +258,9 @@ test.describe('Backend API Schema Validation', () => {
       });
       const data = await expectOk(response);
   expect(data.status).toBe('success');
-  // Lead route returns row under `data`
-  expect(data.data.first_name).toBe('LeadFirst');
-  expect(data.data.last_name).toBe('LeadLast');
+  // Lead route returns row under `data.lead`
+  expect(data.data.lead.first_name).toBe('LeadFirst');
+  expect(data.data.lead.last_name).toBe('LeadLast');
     });
 
     test('should reject lead missing last_name', async ({ apiContext }) => {
