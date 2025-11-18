@@ -116,14 +116,14 @@ export const schemaValidationTests = {
           tenant_id: TEST_TENANT_UUID,
           first_name: 'Metadata',
           last_name: 'Test',
-          job_title: 'Sales Manager',
-          hire_date: '2025-01-01'
+          custom_field: 'Custom Value',
+          notes: 'Some notes'
         });
         
         if (!employee.id) throw new Error('Employee not created');
-        // Other fields that aren't direct columns should go to metadata
-        if (employee.metadata && employee.metadata.job_title !== 'Sales Manager') {
-          throw new Error('job_title should be in metadata');
+        // Custom fields that aren't direct columns should go to metadata
+        if (employee.metadata && employee.metadata.custom_field !== 'Custom Value') {
+          throw new Error('custom_field should be in metadata');
         }
         
         return 'Other additional fields stored in metadata';
