@@ -824,6 +824,18 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
     }
   });
 
+  // Lightweight GET heartbeat (read-only) for clients/tests hitting GET instead of POST
+  // Does not mutate or create user records; purely returns a timestamp.
+  router.get('/heartbeat', (req, res) => {
+    return res.json({
+      status: 'success',
+      data: {
+        online: true,
+        ts: new Date().toISOString()
+      }
+    });
+  });
+
   // POST /api/users - Create new user (global admin or tenant employee)
   router.post("/", mutateLimiter, async (req, res) => {
     try {

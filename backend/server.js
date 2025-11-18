@@ -133,10 +133,25 @@ app.use(cookieParser()); // Cookie parsing for auth cookies
 app.use(attachRequestContext);
 
 // Simple, in-memory rate limiter (dependency-free)
-// Configure via ENV: RATE_LIMIT_WINDOW_MS (default 60000), RATE_LIMIT_MAX (default 120)
-// Skips health and docs endpoints by default
+// Configure via ENV:
+//   RATE_LIMIT_WINDOW_MS (default 60000)
+//   RATE_LIMIT_MAX (default 120)
+// Test overrides:
+//   E2E_TEST_MODE=true or NODE_ENV=test will switch to RATE_LIMIT_TEST_MAX (default 120)
+//   RATE_LIMIT_FORCE_DEFAULT=1 forces ignoring a very large RATE_LIMIT_MAX (e.g. 100000) during tests
 const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10);
-const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX || '120', 10);
+const RAW_RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX || '120', 10);
+const IS_TEST_MODE = (process.env.E2E_TEST_MODE === 'true') || (process.env.NODE_ENV === 'test');
+const FORCE_DEFAULT = process.env.RATE_LIMIT_FORCE_DEFAULT === '1';
+const RATE_LIMIT_MAX = (IS_TEST_MODE || FORCE_DEFAULT)
+  ? parseInt(process.env.RATE_LIMIT_TEST_MAX || '120', 10)
+  : RAW_RATE_LIMIT_MAX;
+if (IS_TEST_MODE) {
+  console.log(`[RateLimiter] Test mode active → effective RATE_LIMIT_MAX=${RATE_LIMIT_MAX} (raw=${RAW_RATE_LIMIT_MAX})`);
+}
+if (FORCE_DEFAULT) {
+  console.log(`[RateLimiter] FORCE_DEFAULT enabled → effective RATE_LIMIT_MAX=${RATE_LIMIT_MAX} (raw=${RAW_RATE_LIMIT_MAX})`);
+}
 const rateBucket = new Map(); // key -> { count, ts }
 const rateSkip = new Set(['/health', '/api/status', '/api-docs', '/api-docs.json']);
 
