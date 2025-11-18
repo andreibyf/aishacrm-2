@@ -177,7 +177,8 @@ export default function createAccountRoutes(_pgPool) {
   // POST /api/accounts - Create account (invalidate cache)
   router.post("/", invalidateCache('accounts'), async (req, res) => {
     try {
-      const { tenant_id, name, type, industry, website } = req.body;
+      const { tenant_id, name, type, industry, website, phone, email, description, 
+              annual_revenue, employee_count, street, city, state, zip, country } = req.body;
 
       if (!tenant_id) {
         return res.status(400).json({
@@ -204,6 +205,16 @@ export default function createAccountRoutes(_pgPool) {
           type,
           industry,
           website,
+          phone: phone || null,
+          email: email || null,
+          description: description || null,
+          annual_revenue: annual_revenue || null,
+          employee_count: employee_count || null,
+          street: street || null,
+          city: city || null,
+          state: state || null,
+          zip: zip || null,
+          country: country || null,
           created_at: nowIso,
           updated_at: nowIso,
         }])
@@ -332,8 +343,9 @@ export default function createAccountRoutes(_pgPool) {
   router.put("/:id", invalidateCache('accounts'), async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, type, industry, website, metadata, ...otherFields } =
-        req.body;
+      const { name, type, industry, website, phone, email, description,
+              annual_revenue, employee_count, street, city, state, zip, country,
+              metadata, ...otherFields } = req.body;
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
@@ -362,6 +374,16 @@ export default function createAccountRoutes(_pgPool) {
       if (type !== undefined) payload.type = type;
       if (industry !== undefined) payload.industry = industry;
       if (website !== undefined) payload.website = website;
+      if (phone !== undefined) payload.phone = phone;
+      if (email !== undefined) payload.email = email;
+      if (description !== undefined) payload.description = description;
+      if (annual_revenue !== undefined) payload.annual_revenue = annual_revenue;
+      if (employee_count !== undefined) payload.employee_count = employee_count;
+      if (street !== undefined) payload.street = street;
+      if (city !== undefined) payload.city = city;
+      if (state !== undefined) payload.state = state;
+      if (zip !== undefined) payload.zip = zip;
+      if (country !== undefined) payload.country = country;
 
       const { data, error } = await supabase
         .from('accounts')

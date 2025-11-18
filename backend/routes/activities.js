@@ -484,6 +484,8 @@ export default function createActivityRoutes(_pgPool) {
       if (payload.related_id !== undefined) updatePayload.related_id = payload.related_id;
       if (payload.status !== undefined) updatePayload.status = payload.status;
       if (payload.due_date !== undefined) updatePayload.due_date = payload.due_date;
+      if (payload.assigned_to !== undefined) updatePayload.assigned_to = payload.assigned_to;
+      if (payload.priority !== undefined) updatePayload.priority = payload.priority;
 
       if (Object.keys(updatePayload).length === 1 && 'metadata' in updatePayload) {
         return res.json({

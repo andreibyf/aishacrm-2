@@ -295,6 +295,9 @@ export default function createContactRoutes(_pgPool) {
         last_name,
         email,
         phone,
+        title,
+        department,
+        description,
         account_id,
         status = 'active',
         metadata: incomingMetadata,
@@ -338,6 +341,9 @@ export default function createContactRoutes(_pgPool) {
           last_name,
           email,
           phone,
+          title: title || null,
+          department: department || null,
+          description: description || null,
           account_id: account_id || null,
           status,
           metadata: mergedMetadata,
@@ -457,7 +463,7 @@ export default function createContactRoutes(_pgPool) {
   router.put('/:id', invalidateCache('contacts'), async (req, res) => {
     try {
       const { id } = req.params;
-      const { first_name, last_name, email, phone, account_id, status, metadata, ...otherFields } = req.body;
+      const { first_name, last_name, email, phone, title, department, description, account_id, status, metadata, ...otherFields } = req.body;
 
       // Validate required name fields if provided
       if (first_name !== undefined && (!first_name || !first_name.trim())) {
@@ -500,6 +506,9 @@ export default function createContactRoutes(_pgPool) {
       if (last_name !== undefined) payload.last_name = last_name;
       if (email !== undefined) payload.email = email;
       if (phone !== undefined) payload.phone = phone;
+      if (title !== undefined) payload.title = title;
+      if (department !== undefined) payload.department = department;
+      if (description !== undefined) payload.description = description;
       if (account_id !== undefined) payload.account_id = account_id;
       if (status !== undefined) payload.status = status;
 

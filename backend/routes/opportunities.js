@@ -349,7 +349,7 @@ export default function createOpportunityRoutes(_pgPool) {
   // POST /api/opportunities - Create new opportunity
   router.post('/', async (req, res) => {
     try {
-      const { tenant_id, name, account_id, contact_id, amount, stage, probability, close_date, metadata, ...otherFields } = req.body;
+      const { tenant_id, name, description, expected_revenue, next_step, account_id, contact_id, amount, stage, probability, close_date, metadata, ...otherFields } = req.body;
       
       if (!tenant_id) {
         return res.status(400).json({
@@ -371,6 +371,9 @@ export default function createOpportunityRoutes(_pgPool) {
         .insert([{
           tenant_id,
           name,
+          description: description || null,
+          expected_revenue: expected_revenue || null,
+          next_step: next_step || null,
           account_id: account_id || null,
           contact_id: contact_id || null,
           amount: amount || 0,
@@ -403,7 +406,7 @@ export default function createOpportunityRoutes(_pgPool) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, account_id, contact_id, amount, stage, probability, close_date, metadata, ...otherFields } = req.body;
+      const { name, description, expected_revenue, next_step, account_id, contact_id, amount, stage, probability, close_date, metadata, ...otherFields } = req.body;
       let requestedTenantId = req.body?.tenant_id || req.query?.tenant_id || null;
 
       if (!requestedTenantId) {
@@ -436,6 +439,9 @@ export default function createOpportunityRoutes(_pgPool) {
       
       const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
       if (name !== undefined) payload.name = name;
+      if (description !== undefined) payload.description = description;
+      if (expected_revenue !== undefined) payload.expected_revenue = expected_revenue;
+      if (next_step !== undefined) payload.next_step = next_step;
       if (account_id !== undefined) payload.account_id = account_id;
       if (contact_id !== undefined) payload.contact_id = contact_id;
       if (amount !== undefined) payload.amount = amount;
