@@ -66,8 +66,61 @@ async function findDuplicatesInDbSupabase(supabase, entityTable, tenantId, field
   }
 }
 
-export default function createValidationRoutes(_pgPool) {
+export default function createValidationRoutes(pgPool) {
   const router = express.Router();
+
+  // GET /api/validation/check-duplicate - Check for duplicate records
+  router.get('/check-duplicate', async (req, res) => {
+    try {
+      const { tenant_id, type, name, email, phone } = req.query;
+      
+      if (!tenant_id || !type) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id and type are required'
+        });
+      }
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+
+      const tableMap = {
+        account: 'accounts',
+        lead: 'leads',
+        contact: 'contacts',
+        opportunity: 'opportunities'
+      };
+
+      const table = tableMap[type];
+      if (!table) {
+        return res.status(400).json({
+          status: 'error',
+          message: `Invalid type: ${type}. Valid types: account, lead, contact, opportunity`
+        });
+      }
+
+      let query = supabase.from(table).select('id, name, email, phone').eq('tenant_id', tenant_id);
+
+      if (name) query = query.ilike('name', `%${name}%`);
+      if (email) query = query.eq('email', email);
+      if (phone) query = query.eq('phone', phone);
+
+      const { data, error } = await query.limit(10);
+
+      if (error) throw new Error(error.message);
+
+      res.json({
+        status: 'success',
+        data: {
+          has_duplicates: data && data.length > 0,
+          count: data?.length || 0,
+          duplicates: data || []
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
 
   // POST /api/validation/find-duplicates - Find duplicate records
   router.post('/find-duplicates', async (req, res) => {

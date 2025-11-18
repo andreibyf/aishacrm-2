@@ -36,6 +36,32 @@ function cookieOpts(maxAgeMs) {
 export default function createAuthRoutes(_pgPool) {
   const router = express.Router();
 
+  // POST /api/auth/verify-token - Verify JWT token validity
+  router.post('/verify-token', async (req, res) => {
+    try {
+      const { token } = req.body;
+      if (!token) {
+        return res.status(400).json({ status: 'error', message: 'token required' });
+      }
+
+      const secret = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'change-me-access';
+      try {
+        const decoded = jwt.verify(token, secret);
+        res.json({
+          status: 'success',
+          data: { valid: true, user_id: decoded.user_id, tenant_id: decoded.tenant_id }
+        });
+      } catch (err) {
+        res.json({
+          status: 'success',
+          data: { valid: false, error: err.message }
+        });
+      }
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // POST /api/auth/login - verify with Supabase Auth (if anon key available), then set cookies
   router.post('/login', async (req, res) => {
     try {

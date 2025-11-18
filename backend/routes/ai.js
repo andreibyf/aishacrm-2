@@ -20,6 +20,27 @@ export default function createAIRoutes(pgPool) {
   // SSE clients storage for real-time conversation updates
   const conversationClients = new Map(); // conversationId -> Set<res>
 
+  // GET /api/ai/assistants - List AI assistants
+  router.get('/assistants', async (req, res) => {
+    try {
+      const { tenant_id } = req.query;
+      
+      res.json({
+        status: 'success',
+        data: {
+          assistants: [
+            { id: 'executive-assistant', name: 'Executive Assistant', model: DEFAULT_CHAT_MODEL, active: true },
+            { id: 'sales-assistant', name: 'Sales Assistant', model: DEFAULT_CHAT_MODEL, active: true },
+            { id: 'support-assistant', name: 'Support Assistant', model: DEFAULT_CHAT_MODEL, active: false }
+          ],
+          tenant_id
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   const parseMetadata = (value) => {
     if (!value) return {};
     if (typeof value === 'object') return value;

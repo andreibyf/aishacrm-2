@@ -7,6 +7,7 @@ import { apiHealthMonitor } from '../../utils/apiHealthMonitor';
 import { AlertCircle, CheckCircle2, Copy, PlayCircle, Loader2, XCircle, RefreshCw, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { BACKEND_URL } from '../../api/entities';
+import { createHealthIssue, generateAPIFixSuggestion } from '../../utils/githubIssueCreator';
 
 export default function ApiHealthDashboard() {
   const [healthReport, setHealthReport] = useState(null);
@@ -473,6 +474,11 @@ export default function ApiHealthDashboard() {
                   if (resp.ok && json?.data) {
                     setFullScanResults(json.data);
                     toast.success('Full endpoint scan complete', { description: `${json.data.summary.passed}/${json.data.summary.total} responsive` });
+                    
+                    // Auto-create GitHub issues for failures
+                    if (json.data.summary.failed > 0 || json.data.summary.errors > 0) {
+                      await createGitHubIssuesForFailures(json.data.details);
+                    }
                   } else {
                     toast.error('Full scan failed', { description: json.message || `Status ${resp.status}` });
                   }
@@ -708,4 +714,59 @@ export default function ApiHealthDashboard() {
       </Card>
     </div>
   );
+
+  // Create GitHub issues for API endpoint failures
+  async function createGitHubIssuesForFailures(details) {
+    const failures = details.filter(d => d.status !== 200 && d.status !== 201);
+    
+    if (failures.length === 0) return;
+    
+    toast.info(`🤖 Creating GitHub issues for ${failures.length} failure(s)...`);
+    
+    for (const failure of failures) {
+      try {
+        const errorInfo = {
+          type: failure.status === 404 ? '404' : failure.status >= 500 ? '500' : '4xx',
+          description: failure.message || `HTTP ${failure.status}`
+        };
+        
+        const suggestedFix = generateAPIFixSuggestion({
+          endpoint: failure.endpoint,
+          errorInfo,
+          context: failure
+        });
+        
+        const severity = failure.status === 404 ? 'medium' : failure.status >= 500 ? 'high' : 'medium';
+        
+        const result = await createHealthIssue({
+          type: 'api',
+          title: `${errorInfo.type} Error: ${failure.endpoint}`,
+          description: `The API endpoint \`${failure.endpoint}\` is returning ${failure.status} errors during health monitoring.\n\n**Status Code:** ${failure.status}\n**Error:** ${failure.message || 'No error message'}\n\nThis requires immediate attention to restore full API functionality.`,
+          context: {
+            endpoint: failure.endpoint,
+            statusCode: failure.status,
+            message: failure.message,
+            timestamp: new Date().toISOString(),
+            environment: import.meta.env.MODE || 'development'
+          },
+          suggestedFix,
+          severity,
+          component: 'backend',
+          assignCopilot: true
+        });
+        
+        if (result.success) {
+          toast.success(`Issue #${result.issue.number} created for ${failure.endpoint}`, {
+            action: {
+              label: 'View',
+              onClick: () => window.open(result.issue.url, '_blank')
+            }
+          });
+        }
+      } catch (error) {
+        console.error(`Failed to create issue for ${failure.endpoint}:`, error);
+      }
+    }
+  }
 }
+

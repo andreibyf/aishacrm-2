@@ -8,6 +8,36 @@ import express from 'express';
 export default function createDatabaseRoutes(_pgPool) {
   const router = express.Router();
 
+  // POST /api/database/run-migration - Run SQL migration (admin only)
+  router.post('/run-migration', async (req, res) => {
+    try {
+      const { sql } = req.body;
+
+      if (!sql) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'SQL query is required',
+        });
+      }
+
+      // This is a placeholder - actual implementation would use Supabase admin client
+      // For now, user should run migrations via Supabase dashboard SQL editor
+      res.json({
+        status: 'success',
+        message: 'Migration endpoint - please run migrations via Supabase dashboard',
+        data: {
+          sql_preview: sql.substring(0, 100),
+          instructions: 'Go to Supabase dashboard → SQL Editor → paste migration SQL',
+        },
+      });
+    } catch (error) {
+      res.status(500).json({
+        status: 'error',
+        message: error.message,
+      });
+    }
+  });
+
   // POST /api/database/sync - Sync data from Base44 to PostgreSQL
   router.post('/sync', async (req, res) => {
     try {

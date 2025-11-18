@@ -9,6 +9,22 @@ import crypto from 'crypto';
 export default function createUtilsRoutes(_pgPool) {
   const router = express.Router();
 
+  // GET /api/utils/health - Utility service health check
+  router.get('/health', async (req, res) => {
+    try {
+      res.json({
+        status: 'success',
+        data: {
+          service: 'utils',
+          healthy: true,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // POST /api/utils/hash - Hash a string
   router.post('/hash', async (req, res) => {
     try {

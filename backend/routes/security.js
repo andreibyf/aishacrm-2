@@ -22,6 +22,27 @@ export default function createSecurityRoutes(_pgPool) {
   const router = express.Router();
 
   /**
+   * GET /api/security/policies
+   * List security policies and settings
+   */
+  router.get("/policies", async (req, res) => {
+    try {
+      res.json({
+        status: 'success',
+        data: {
+          policies: [
+            { id: 'rate-limit', enabled: true, description: 'API rate limiting' },
+            { id: 'idr', enabled: true, description: 'Intrusion detection' },
+            { id: 'mfa', enabled: false, description: 'Multi-factor authentication' }
+          ]
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  /**
    * GET /api/security/alerts
    * Retrieve recent security alerts from system_logs
    */

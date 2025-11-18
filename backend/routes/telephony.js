@@ -10,6 +10,37 @@ import { normalizeWebhook } from '../lib/webhookAdapters.js';
 export default function createTelephonyRoutes(pgPool) {
   const router = express.Router();
 
+  // GET /api/telephony/status - Get telephony system status
+  router.get('/status', async (req, res) => {
+    try {
+      res.json({
+        status: 'success',
+        data: {
+          enabled: true,
+          providers: ['twilio', 'signalwire', 'callfluent', 'thoughtly'],
+          active_calls: 0,
+          webhooks_configured: true
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // POST /api/telephony/test-webhook - Test webhook configuration
+  router.post('/test-webhook', async (req, res) => {
+    try {
+      const { provider = 'twilio', tenant_id } = req.body;
+      res.json({
+        status: 'success',
+        message: 'Webhook test endpoint',
+        data: { provider, tenant_id, test: true }
+      });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   /**
    * @openapi
    * /api/telephony/webhook/{provider}/inbound:

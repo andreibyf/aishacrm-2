@@ -247,7 +247,7 @@ export default function createEmployeeRoutes(_pgPool) {
       console.log('[Employee POST] Received body:', JSON.stringify(req.body, null, 2));
       console.log('[Employee POST] Body keys:', Object.keys(req.body));
       
-      const { tenant_id, first_name, last_name, email, role, status, ...additionalFields } = req.body;
+      const { tenant_id, first_name, last_name, email, role, status, phone, department, metadata, ...additionalFields } = req.body;
 
       if (!tenant_id) {
         console.log('[Employee POST] VALIDATION FAILED: tenant_id missing');
@@ -279,7 +279,7 @@ export default function createEmployeeRoutes(_pgPool) {
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
-      // Store all additional fields (department, phone, job_title, etc.) in metadata JSONB column
+      // Use phone and department as direct columns, store any other additional fields in metadata
       const insertData = {
         tenant_id,
         first_name,
@@ -287,7 +287,9 @@ export default function createEmployeeRoutes(_pgPool) {
         email: email || null,
         role: role || null,
         status: status || 'active',
-        metadata: additionalFields || {},
+        phone: phone || null,
+        department: department || null,
+        metadata: metadata || additionalFields || {},
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };

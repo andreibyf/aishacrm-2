@@ -10,6 +10,23 @@ import path from 'path';
 export default function createDocumentationRoutes(_pgPool) {
   const router = express.Router();
 
+  // GET /api/documentation - List available documentation
+  router.get('/', async (req, res) => {
+    try {
+      res.json({
+        status: 'success',
+        data: {
+          documents: [
+            { name: 'User Guide', path: '/api/documentation/user-guide.pdf', format: 'pdf' },
+            { name: 'API Reference', path: '/api-docs', format: 'html' }
+          ]
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // GET /api/documentation/user-guide.pdf - Generate PDF from markdown file
   router.get('/user-guide.pdf', async (req, res) => {
     let browser;

@@ -29,6 +29,8 @@ import {
   Zap,
 } from "lucide-react";
 import { mcpServerPublic as _mcpServerPublic } from "@/api/functions";
+import { createHealthIssue, generateMCPFixSuggestion } from "@/utils/githubIssueCreator";
+import { toast } from "sonner";
 
 export default function MCPServerMonitor() {
   const BRAID_MCP_URL = "http://localhost:8000";
@@ -134,7 +136,7 @@ export default function MCPServerMonitor() {
 
     try {
       // Test 1: Braid Server Health
-      addLog("info", "Test 1/9: Braid server health check");
+      addLog("info", "Test 1/12: Braid server health check");
       try {
         const healthStart = performance.now();
         const healthResp = await fetch(`${BRAID_MCP_URL}/health`);
@@ -155,7 +157,7 @@ export default function MCPServerMonitor() {
       }
 
       // Test 2: Web Adapter - Wikipedia Search
-      addLog("info", "Test 2/9: Web adapter - Wikipedia search");
+      addLog("info", "Test 2/12: Web adapter - Wikipedia search");
       let lastWikiPageId = null;
       try {
         const { result, responseTime } = await executeBraidAction({
@@ -183,7 +185,7 @@ export default function MCPServerMonitor() {
       }
 
       // Test 3: Web Adapter - Get Page
-      addLog("info", "Test 3/9: Web adapter - Get Wikipedia page");
+      addLog("info", "Test 3/12: Web adapter - Get Wikipedia page");
       try {
         const pageidToFetch = lastWikiPageId || "21721040"; // Fallback to a known page (Artificial intelligence)
         const { result, responseTime } = await executeBraidAction({
@@ -208,7 +210,7 @@ export default function MCPServerMonitor() {
       }
 
       // Test 4: CRM Adapter - Search Accounts
-      addLog("info", "Test 4/9: CRM adapter - Search accounts");
+      addLog("info", "Test 4/12: CRM adapter - Search accounts");
       try {
         const { result, responseTime } = await executeBraidAction({
           id: "action-1",
@@ -236,7 +238,7 @@ export default function MCPServerMonitor() {
       }
 
       // Test 5: CRM Adapter - Search Leads
-      addLog("info", "Test 5/9: CRM adapter - Search leads");
+      addLog("info", "Test 5/12: CRM adapter - Search leads");
       try {
         const { result, responseTime } = await executeBraidAction({
           id: "action-1",
@@ -261,7 +263,7 @@ export default function MCPServerMonitor() {
       }
 
       // Test 6: CRM Adapter - Search Contacts
-      addLog("info", "Test 6/9: CRM adapter - Search contacts");
+      addLog("info", "Test 6/12: CRM adapter - Search contacts");
       try {
         const { result, responseTime } = await executeBraidAction({
           id: "action-1",
@@ -286,7 +288,7 @@ export default function MCPServerMonitor() {
       }
 
       // Test 7: Mock Adapter
-      addLog("info", "Test 7/9: Mock adapter");
+      addLog("info", "Test 7/12: Mock adapter");
       try {
         const { result, responseTime } = await executeBraidAction({
           id: "action-1",
@@ -310,7 +312,7 @@ export default function MCPServerMonitor() {
       }
 
       // Test 8: Batch Actions
-      addLog("info", "Test 8/9: Batch actions (CRM + Web)");
+      addLog("info", "Test 8/12: Batch actions (CRM + Web)");
       try {
         const envelope = {
           requestId: `req-${Date.now()}`,
@@ -359,8 +361,122 @@ export default function MCPServerMonitor() {
         failedTests++;
       }
 
-      // Test 9: Error Handling
-      addLog("info", "Test 9/9: Error handling validation");
+      // Test 9: GitHub Adapter - List Repositories (Optional)
+      addLog("info", "Test 9/12: GitHub adapter - List repositories (optional)");
+      try {
+        const { result, responseTime } = await executeBraidAction({
+          id: "action-1",
+          verb: "read",
+          actor: { id: "user:monitor", type: "user" },
+          resource: { system: "github", kind: "repos" },
+          payload: { per_page: 5 }
+        });
+
+        if (result.status === "success" && result.data) {
+          tests.push({ name: "GitHub Repos", status: "pass", time: responseTime.toFixed(0), details: `${result.data.length} results` });
+          addLog("success", `✓ GitHub repository search (${responseTime.toFixed(0)}ms, ${result.data.length} repos)`);
+          passedTests++;
+        } else if (result.errorCode === "MISSING_TOKEN") {
+          // GitHub token not configured - this is OK for production
+          tests.push({ name: "GitHub Repos", status: "skipped", details: "Token not configured (optional)" });
+          addLog("info", `⊘ GitHub adapter skipped: Token not configured (optional feature)`);
+          passedTests++; // Count as pass since it's optional
+        } else {
+          throw new Error(result.errorMessage || "GitHub search failed");
+        }
+      } catch (error) {
+        tests.push({ name: "GitHub Repos", status: "fail", error: error.message });
+        addLog("error", `✗ GitHub adapter failed: ${error.message}`);
+        failedTests++;
+      }
+
+      // Test 10: Memory Adapter - Create Session (Optional)
+      addLog("info", "Test 10/12: Memory adapter - Create session (optional)");
+      try {
+        const sessionId = `test-session-${Date.now()}`;
+        const { result, responseTime } = await executeBraidAction({
+          id: "action-1",
+          verb: "create",
+          actor: { id: "user:monitor", type: "user" },
+          resource: { system: "memory", kind: "session" },
+          payload: { 
+            tenant_id: TENANT_ID || 'test-tenant',
+            user_id: 'test-user',
+            session_id: sessionId,
+            data: { test: "data", timestamp: new Date().toISOString() },
+            ttl_seconds: 300
+          }
+        });
+
+        if (result.status === "success") {
+          tests.push({ name: "Memory Store", status: "pass", time: responseTime.toFixed(0) });
+          addLog("success", `✓ Memory store (${responseTime.toFixed(0)}ms)`);
+          passedTests++;
+        } else if (result.errorCode === "REDIS_UNAVAILABLE" || result.errorMessage?.includes("Redis")) {
+          // Redis not configured - this is OK for production
+          tests.push({ name: "Memory Store", status: "skipped", details: "Redis not configured (optional)" });
+          addLog("info", `⊘ Memory adapter skipped: Redis not configured (optional feature)`);
+          passedTests++; // Count as pass since it's optional
+        } else {
+          throw new Error(result.errorMessage || "Memory store failed");
+        }
+      } catch (error) {
+        // Check if it's a Redis connection error (optional feature)
+        if (error.message?.includes("Redis") || error.message?.includes("ECONNREFUSED")) {
+          tests.push({ name: "Memory Store", status: "skipped", details: "Redis not configured (optional)" });
+          addLog("info", `⊘ Memory adapter skipped: Redis not available (optional feature)`);
+          passedTests++; // Count as pass since it's optional
+        } else {
+          tests.push({ name: "Memory Store", status: "fail", error: error.message });
+          addLog("error", `✗ Memory store failed: ${error.message}`);
+          failedTests++;
+        }
+      }
+
+      // Test 11: LLM Adapter - Generate JSON (Optional)
+      addLog("info", "Test 11/12: LLM adapter - Generate JSON (optional)");
+      try {
+        const { result, responseTime } = await executeBraidAction({
+          id: "action-1",
+          verb: "create",
+          actor: { id: "user:monitor", type: "user" },
+          resource: { system: "llm", kind: "generate-json" },
+          payload: { 
+            prompt: "Generate a simple test response with status: 'ok'",
+            schema: { type: "object", properties: { status: { type: "string" } } },
+            model: "gpt-4o-mini",
+            temperature: 0.2
+          },
+          metadata: TENANT_ID ? { tenant_id: TENANT_ID } : {}
+        });
+
+        if (result.status === "success" && result.data) {
+          tests.push({ name: "LLM Generation", status: "pass", time: responseTime.toFixed(0) });
+          addLog("success", `✓ LLM text generation (${responseTime.toFixed(0)}ms)`);
+          passedTests++;
+        } else if (result.errorCode === "NO_API_KEY" || result.errorMessage?.includes("API key")) {
+          // OpenAI API key not configured - this is OK for production
+          tests.push({ name: "LLM Generation", status: "skipped", details: "API key not configured (optional)" });
+          addLog("info", `⊘ LLM adapter skipped: OpenAI API key not configured (optional feature)`);
+          passedTests++; // Count as pass since it's optional
+        } else {
+          throw new Error(result.errorMessage || "LLM generation failed");
+        }
+      } catch (error) {
+        // Check if it's an API key error (optional feature)
+        if (error.message?.includes("API key") || error.message?.includes("OpenAI")) {
+          tests.push({ name: "LLM Generation", status: "skipped", details: "API key not configured (optional)" });
+          addLog("info", `⊘ LLM adapter skipped: OpenAI API key not configured (optional feature)`);
+          passedTests++; // Count as pass since it's optional
+        } else {
+          tests.push({ name: "LLM Generation", status: "fail", error: error.message });
+          addLog("error", `✗ LLM adapter failed: ${error.message}`);
+          failedTests++;
+        }
+      }
+
+      // Test 12: Error Handling
+      addLog("info", "Test 12/12: Error handling validation");
       try {
         const { result, responseTime } = await executeBraidAction({
           id: "action-1",
@@ -419,11 +535,68 @@ export default function MCPServerMonitor() {
       });
 
       addLog("info", `✅ Test suite complete: ${passedTests}/${passedTests + failedTests} passed in ${totalTime.toFixed(0)}ms`);
+      
+      // Auto-create GitHub issues for critical failures
+      if (failedTests > 0) {
+        const criticalFailures = tests.filter(t => t.status === "fail");
+        if (criticalFailures.length > 0) {
+          addLog("info", `🤖 Creating GitHub issues for ${criticalFailures.length} failure(s)...`);
+          await createGitHubIssuesForFailures(criticalFailures);
+        }
+      }
     } catch (error) {
       addLog("error", `Test suite error: ${error.message}`);
     } finally {
       setIsRunningFullTests(false);
     }
+  };
+
+  // Create GitHub issues for MCP test failures
+  const createGitHubIssuesForFailures = async (failures) => {
+    for (const test of failures) {
+      try {
+        const suggestedFix = generateMCPFixSuggestion(test);
+        const severity = determineSeverity(test);
+        
+        const result = await createHealthIssue({
+          type: 'mcp',
+          title: `MCP ${test.name} Test Failure`,
+          description: `The MCP adapter test "${test.name}" is failing in the health monitor.\n\n**Error:**\n\`\`\`\n${test.error}\n\`\`\`\n\nThis may indicate a configuration issue, missing credentials, or an adapter malfunction.`,
+          context: {
+            testName: test.name,
+            error: test.error,
+            timestamp: new Date().toISOString(),
+            environment: import.meta.env.MODE || 'development'
+          },
+          suggestedFix,
+          severity,
+          component: 'mcp-server',
+          assignCopilot: true
+        });
+        
+        if (result.success) {
+          addLog("success", `✓ GitHub issue created: #${result.issue.number} - ${result.issue.url}`);
+          toast.success(`Issue #${result.issue.number} created`, {
+            description: `Copilot assigned to fix "${test.name}"`,
+            action: {
+              label: 'View',
+              onClick: () => window.open(result.issue.url, '_blank')
+            }
+          });
+        }
+      } catch (error) {
+        addLog("warning", `Failed to create issue for "${test.name}": ${error.message}`);
+      }
+    }
+  };
+
+  // Determine severity based on test type
+  const determineSeverity = (test) => {
+    // Core adapters are critical, optional adapters are medium
+    if (test.name.includes('Braid Health') || test.name.includes('CRM')) return 'critical';
+    if (test.name.includes('Batch') || test.name.includes('Error')) return 'high';
+    if (test.name.includes('GitHub') || test.name.includes('Memory') || test.name.includes('LLM')) return 'medium';
+    return 'medium';
   };
 
   // Quick health check

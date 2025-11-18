@@ -44,6 +44,38 @@ export default function createMemoryRoutes() {
     }
   });
 
+  // GET /api/memory/search - Search memory entries
+  router.get('/search', async (req, res) => {
+    try {
+      const { tenant_id, query, limit = 10 } = req.query;
+      
+      if (!tenant_id || !query) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id and query are required'
+        });
+      }
+
+      // Search recent events that match query
+      const events = await getRecentEvents(tenant_id, parseInt(limit));
+      const filtered = events.filter(e => 
+        JSON.stringify(e).toLowerCase().includes(query.toLowerCase())
+      );
+
+      return res.json({
+        status: 'success',
+        data: {
+          results: filtered,
+          count: filtered.length,
+          query,
+          tenant_id
+        }
+      });
+    } catch (e) {
+      return res.status(500).json({ status: 'error', message: e.message });
+    }
+  });
+
   // Sessions -----------------------------------------------------------
   // POST /api/memory/sessions - create/update session
   router.post('/sessions', async (req, res) => {

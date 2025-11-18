@@ -369,13 +369,19 @@ export default function createTestingRoutes(_pgPool) {
 
       // Define endpoints (method + path); {TENANT_ID} placeholder replaced
       const endpoints = [
+        // Core health/system
         { method: 'GET', path: '/' },
         { method: 'GET', path: '/health' },
         { method: 'GET', path: '/api/status' },
         { method: 'GET', path: '/api/system/status' },
         { method: 'GET', path: '/api/system/runtime' },
         { method: 'GET', path: `/api/system/logs?tenant_id={TENANT_ID}` },
+        
+        // Reports & Analytics
         { method: 'GET', path: `/api/reports/dashboard-stats?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/metrics/performance?tenant_id={TENANT_ID}` },
+        
+        // Core CRM Entities
         { method: 'GET', path: `/api/accounts?tenant_id={TENANT_ID}` },
         { method: 'POST', path: '/api/accounts', body: { tenant_id: tenantId, name: 'Scan Account' } },
         { method: 'GET', path: `/api/contacts?tenant_id={TENANT_ID}` },
@@ -383,33 +389,70 @@ export default function createTestingRoutes(_pgPool) {
         { method: 'GET', path: `/api/opportunities?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/activities?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/notes?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/clients?tenant_id={TENANT_ID}` },
+        
+        // Users & Employees
         { method: 'GET', path: `/api/users?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/employees?tenant_id={TENANT_ID}` },
         { method: 'GET', path: '/api/tenants' },
+        
+        // AI Features
+        { method: 'GET', path: `/api/ai/assistants?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/aicampaigns?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/memory/search?tenant_id={TENANT_ID}&query=test` },
+        
+        // Workflows & Automation
         { method: 'GET', path: `/api/workflows?tenant_id={TENANT_ID}` },
-        { method: 'GET', path: `/api/cashflow?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/workflowexecutions?tenant_id={TENANT_ID}` },
+        
+        // Business Development
         { method: 'GET', path: `/api/bizdev?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/bizdevsources?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/cashflow?tenant_id={TENANT_ID}` },
+        
+        // Settings & Configuration
         { method: 'GET', path: `/api/permissions?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/modulesettings?tenant_id={TENANT_ID}` },
         { method: 'GET', path: '/api/systembrandings' },
+        { method: 'GET', path: '/api/system-settings' },
+        
+        // Integrations
         { method: 'GET', path: `/api/integrations?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/tenantintegrations?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/synchealths?tenant_id={TENANT_ID}` },
+        
+        // Telephony
+        { method: 'GET', path: `/api/telephony/status?tenant_id={TENANT_ID}` },
+        { method: 'POST', path: '/api/telephony/test-webhook', body: { tenant_id: tenantId, test: true } },
+        
+        // Logging & Audit
         { method: 'GET', path: `/api/system-logs?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/audit-logs?tenant_id={TENANT_ID}` },
-        { method: 'GET', path: `/api/metrics/performance?tenant_id={TENANT_ID}` },
-        { method: 'GET', path: `/api/synchealths?tenant_id={TENANT_ID}` },
+        
+        // Storage & Documents
         { method: 'GET', path: '/api/storage/bucket' },
         { method: 'GET', path: `/api/documents?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/documentationfiles?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/documentation?tenant_id={TENANT_ID}` },
+        
+        // Notifications & Announcements
         { method: 'GET', path: `/api/notifications?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/announcements?tenant_id={TENANT_ID}` },
+        
+        // Security & Auth
+        { method: 'GET', path: `/api/apikeys?tenant_id={TENANT_ID}` },
+        { method: 'POST', path: '/api/auth/verify-token', body: { token: 'test' } },
+        { method: 'GET', path: '/api/security/policies' },
+        
+        // Utilities & Tools
         { method: 'GET', path: '/api/testing/ping' },
         { method: 'GET', path: '/api/utils/health' },
         { method: 'GET', path: `/api/webhooks?tenant_id={TENANT_ID}` },
         { method: 'GET', path: '/api/cron/jobs' },
-        { method: 'GET', path: `/api/apikeys?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/validation/check-duplicate?tenant_id={TENANT_ID}&type=account&name=test` },
+        
+        // Billing (if enabled)
+        { method: 'GET', path: `/api/billing/usage?tenant_id={TENANT_ID}` },
       ];
 
       const results = [];

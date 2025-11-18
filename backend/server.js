@@ -416,6 +416,7 @@ import createBillingRoutes from "./routes/billing.js";
 import createStorageRoutes from "./routes/storage.js";
 import createWebhookRoutes from "./routes/webhooks.js";
 import createSystemRoutes from "./routes/system.js";
+import createSystemSettingsRoutes from "./routes/system-settings.js";
 import createUserRoutes from "./routes/users.js";
 import createEmployeeRoutes from "./routes/employees.js";
 import createPermissionRoutes from "./routes/permissions.js";
@@ -451,6 +452,7 @@ import createAICampaignRoutes from "./routes/aicampaigns.js";
 import createSecurityRoutes from "./routes/security.js";
 import createMemoryRoutes from "./routes/memory.js";
 import createAuthRoutes from "./routes/auth.js";
+import createGitHubIssuesRoutes from "./routes/github-issues.js";
 
 // Use the pgPool directly; per-request DB time is measured inside the DB adapter
 const measuredPgPool = pgPool;
@@ -469,6 +471,7 @@ app.use("/api/billing", createBillingRoutes(measuredPgPool));
 app.use("/api/storage", createStorageRoutes(measuredPgPool));
 app.use("/api/webhooks", createWebhookRoutes(measuredPgPool));
 app.use("/api/system", createSystemRoutes(measuredPgPool));
+app.use("/api/system-settings", createSystemSettingsRoutes(measuredPgPool));
 app.use("/api/users", createUserRoutes(measuredPgPool, supabaseAuth));
 app.use("/api/employees", createEmployeeRoutes(measuredPgPool));
 app.use("/api/permissions", createPermissionRoutes(measuredPgPool));
@@ -508,6 +511,8 @@ app.use("/api/security", createSecurityRoutes(measuredPgPool));
 app.use("/api/memory", createMemoryRoutes());
 // Auth routes (cookie-based login/refresh/logout)
 app.use("/api/auth", createAuthRoutes(measuredPgPool));
+// GitHub Issues routes for autonomous health monitoring
+app.use("/api/github-issues", createGitHubIssuesRoutes);
 
 // 404 handler
 app.use((req, res) => {
