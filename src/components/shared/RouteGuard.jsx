@@ -1,5 +1,24 @@
 import { AlertTriangle } from "lucide-react";
 
+// Safely resolve access-related fields from mixed user shapes
+function resolveAccessUser(user) {
+  if (!user) return user;
+  const meta = user.metadata || {};
+  const navigation_permissions = user.navigation_permissions || meta.navigation_permissions || {};
+  const role = user.role || user.employee_role || meta.employee_role || meta.role;
+  const access_level = user.access_level || (user.permissions && user.permissions.access_level) || meta.access_level;
+  const crm_access = typeof user.crm_access === "boolean" ? user.crm_access
+    : (typeof meta.crm_access === "boolean" ? meta.crm_access : true);
+
+  return {
+    ...user,
+    navigation_permissions,
+    role,
+    access_level,
+    crm_access,
+  };
+}
+
 /**
  * Helper: Check if user is a superadmin (god mode)
  */
@@ -12,6 +31,9 @@ function isSuperAdmin(user) {
 
 function hasPageAccess(user, pageName) {
   if (!user) return false;
+
+  // Normalize access-related fields before checks
+  user = resolveAccessUser(user);
 
   // GOD MODE: SuperAdmins bypass ALL restrictions
   if (isSuperAdmin(user)) {
@@ -116,17 +138,18 @@ function hasPageAccess(user, pageName) {
 }
 
 export default function RouteGuard({ user, pageName, children }) {
+  const resolvedUser = resolveAccessUser(user);
   // Debug logging
   console.log("[RouteGuard] Checking access for:", {
     pageName,
-    userEmail: user?.email,
-    userRole: user?.role,
-    isSuperadmin: user?.is_superadmin,
-    accessLevel: user?.access_level,
-    crmAccess: user?.crm_access,
+    userEmail: resolvedUser?.email,
+    userRole: resolvedUser?.role,
+    isSuperadmin: resolvedUser?.is_superadmin,
+    accessLevel: resolvedUser?.access_level,
+    crmAccess: resolvedUser?.crm_access,
   });
 
-  if (!user) {
+  if (!resolvedUser) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
@@ -140,7 +163,7 @@ export default function RouteGuard({ user, pageName, children }) {
     );
   }
 
-  if (!hasPageAccess(user, pageName)) {
+  if (!hasPageAccess(resolvedUser, pageName)) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center max-w-md">

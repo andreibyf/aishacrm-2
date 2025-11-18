@@ -88,18 +88,19 @@ export default function UniversalDetailPanel({
   const loadNotes = useCallback(async () => {
     if (!entity) return;
     try {
-      const relatedTo = entityType.toLowerCase();
-      // Assuming Note.filter supports ordering and related_to/related_id
-      const notesData = await Note.filter({ 
-        related_to: relatedTo, 
-        related_id: entity.id 
-      }, '-created_date'); // Assuming '-created_date' sorts descending
+      const relatedType = entityType.toLowerCase();
+      // Backend expects related_type. Include tenant_id for RLS.
+      const notesData = await Note.filter({
+        tenant_id: user?.tenant_id || entity.tenant_id,
+        related_type: relatedType,
+        related_id: entity.id
+      }, '-created_date');
       setNotes(notesData || []);
     } catch (error) {
       console.error("Failed to load notes:", error);
       toast.error("Failed to load notes");
     }
-  }, [entity, entityType]);
+  }, [entity, entityType, user?.tenant_id]);
 
   const loadActivities = useCallback(async () => {
     if (!entity) return;
@@ -189,14 +190,16 @@ export default function UniversalDetailPanel({
       const entityName = getEntityName(entity); // Pre-calculate for activity
 
       const noteData = {
-        related_to: relatedTo,
+        related_type: relatedTo,
         related_id: entity.id,
         title: newNoteTitle || `${newNoteType.charAt(0).toUpperCase() + newNoteType.slice(1)} Note`,
         content: newNoteContent,
-        type: newNoteType,
         tenant_id: user.tenant_id,
         created_by: user.email // Assuming user.email for created_by
       };
+
+      // Persist note type inside metadata (backend has no 'type' column for notes)
+      noteData.metadata = { type: newNoteType };
 
       // Create or update note
       if (editingNote) {
@@ -905,10 +908,10 @@ export default function UniversalDetailPanel({
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          {getNoteTypeIcon(note.type)}
+                          {getNoteTypeIcon(note.type || note.metadata?.type || 'general')}
                           <span className="font-medium text-slate-200">{note.title}</span>
                           <Badge variant="secondary" className="text-xs bg-slate-700 text-slate-300 border-slate-600">
-                            {note.type.replace(/_/g, ' ')}
+                            {(note.type || note.metadata?.type || 'general').replace(/_/g, ' ')}
                           </Badge>
                         </div>
                         <DropdownMenu>

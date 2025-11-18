@@ -99,8 +99,9 @@ export function normalizeUser(raw) {
     can_manage_settings: (raw.can_manage_settings ?? meta.can_manage_settings ?? basePermissions.can_manage_settings) || false,
   };
 
-  // Navigation permissions: ensure object
-  const navigationPermissions = raw.navigation_permissions || meta.navigation_permissions || {};
+  // Navigation permissions: ensure object. Support new backend shape where navigation_permissions
+  // may only appear at top-level (slim metadata). Fallback order: raw -> meta -> empty.
+  const navigationPermissions = (raw.navigation_permissions || meta.navigation_permissions || {});
 
   // Branding settings
   const brandingSettings = raw.branding_settings || meta.branding_settings || undefined;
@@ -108,8 +109,9 @@ export function normalizeUser(raw) {
   const systemStripeSettings = raw.system_stripe_settings || meta.system_stripe_settings || undefined;
 
   // Live status / last seen
-  const live_status = raw.live_status || meta.live_status || undefined;
-  const last_seen = raw.last_seen || meta.last_seen || undefined;
+  // Live status / last seen fallback order updated for slim metadata: prefer raw then meta.
+  const live_status = (raw.live_status !== undefined ? raw.live_status : meta.live_status) || undefined;
+  const last_seen = (raw.last_seen !== undefined ? raw.last_seen : meta.last_seen) || undefined;
 
   // Employee ID precedence
   const employeeId = raw.employee_id || raw.id_if_employee || undefined;

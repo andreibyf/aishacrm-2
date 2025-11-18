@@ -139,6 +139,7 @@ services:
         VITE_AISHACRM_BACKEND_URL: ${VITE_AISHACRM_BACKEND_URL:-http://localhost:4001}
         VITE_CURRENT_BRANCH: ${VITE_CURRENT_BRANCH:-main}
         VITE_SYSTEM_TENANT_ID: ${VITE_SYSTEM_TENANT_ID}
+        VITE_USER_HEARTBEAT_INTERVAL_MS: ${VITE_USER_HEARTBEAT_INTERVAL_MS:-60000}
       dockerfile: Dockerfile
     container_name: aishacrm-frontend
     restart: unless-stopped

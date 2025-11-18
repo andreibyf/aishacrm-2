@@ -94,16 +94,45 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
   const passwordLimiter = createRouteLimiter({ id: 'password', windowMs: DEFAULT_WINDOW_MS, max: parseInt(process.env.PASSWORD_RATE_LIMIT_MAX || '5', 10) });
   const mutateLimiter = createRouteLimiter({ id: 'user-mutate', windowMs: DEFAULT_WINDOW_MS, max: parseInt(process.env.USER_MUTATE_RATE_LIMIT_MAX || '30', 10) });
 
-  // Helper function to expand metadata fields to top-level properties
+  // Helper: selectively expand metadata to reduce duplication.
+  // Previously we spread ALL metadata keys to top-level which caused large duplication
+  // (e.g. navigation_permissions, permissions repeated). We now only expose a curated
+  // whitelist of frequently accessed convenience fields while retaining the full
+  // original metadata object. Components needing other custom metadata must read
+  // from user.metadata.<key> instead of top-level.
   const expandUserMetadata = (user) => {
     if (!user) return user;
     const { metadata = {}, ...rest } = user;
 
-    // Keep tenant_id as-is (null means "No Client"); don't coerce to string
+    // Whitelist of metadata keys promoted to top-level for convenience.
+    const promoteKeys = [
+      'display_name',
+      'live_status',
+      'last_seen',
+      'is_active',
+      'account_status',
+      'employee_role',
+      'tags',
+      'permissions',
+      'navigation_permissions',
+      'password_change_required',
+      'password_expires_at'
+    ];
+    const promoted = {};
+    for (const k of promoteKeys) {
+      if (k in metadata) promoted[k] = metadata[k];
+    }
+
+    // Remove promoted keys from nested metadata to avoid duplication.
+    const nestedMetadata = { ...metadata };
+    for (const k of promoteKeys) {
+      if (k in nestedMetadata) delete nestedMetadata[k];
+    }
+
     return {
       ...rest,
-      ...metadata, // Spread ALL metadata fields to top level
-      metadata, // Keep original metadata for backwards compatibility
+      ...promoted,
+      metadata: nestedMetadata, // slim metadata without promoted duplicates
     };
   };
 

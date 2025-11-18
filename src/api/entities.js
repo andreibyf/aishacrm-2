@@ -402,7 +402,11 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       key !== "tenant_id" && Array.isArray(result.data[key])
     );
     if (entityKey && Array.isArray(result.data[entityKey])) {
-      return result.data[entityKey];
+      // Only activities responses should return the full object with counts/total
+      if (entityKey === 'activities' && (result.data.counts || typeof result.data.total === 'number')) {
+        return result.data; // Preserve { activities: [...], counts, total, limit, offset }
+      }
+      return result.data[entityKey]; // All other entities: return plain array
     }
     // For single item operations (get, create, update), return the data directly
     if (!Array.isArray(result.data)) {

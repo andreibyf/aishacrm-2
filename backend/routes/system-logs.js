@@ -108,6 +108,69 @@ export default function createSystemLogRoutes(_pgPool) {
     }
   });
 
+  // BULK INSERT endpoint to reduce per-log network overhead (client batches)
+  // Accepts: { entries: [ { tenant_id, level, message, source, user_email, metadata, user_agent, url, stack_trace } ] }
+  // Returns: { inserted: count }
+  router.post('/bulk', async (req, res) => {
+    try {
+      const { entries } = req.body || {};
+      if (!Array.isArray(entries) || entries.length === 0) {
+        return res.status(400).json({ status: 'error', message: 'entries array required' });
+      }
+
+      // Cap batch size defensively to avoid oversized payloads
+      const MAX_BATCH = 200; // can be tuned; small for safety
+      const slice = entries.slice(0, MAX_BATCH);
+
+      const nowIso = new Date().toISOString();
+      const rows = slice.map(e => {
+        const {
+          tenant_id,
+          level,
+          message,
+          source,
+          user_email,
+          metadata,
+          user_agent,
+          url,
+          stack_trace,
+          ...otherFields
+        } = e || {};
+
+        const effectiveTenantId = tenant_id || 'system';
+        const combinedMetadata = { ...(metadata || {}), ...otherFields };
+        if (user_email) combinedMetadata.user_email = user_email;
+        if (user_agent) combinedMetadata.user_agent = user_agent;
+        if (url) combinedMetadata.url = url;
+        const safeMessage = (typeof message === 'string' && message.trim() !== '')
+          ? message
+          : (message == null ? '(no message)' : (() => { try { return JSON.stringify(message); } catch { return String(message); } })());
+        return {
+          tenant_id: effectiveTenantId,
+          level: level || 'INFO',
+          message: safeMessage,
+          source,
+          metadata: combinedMetadata,
+          stack_trace,
+          created_at: nowIso,
+        };
+      });
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.from('system_logs').insert(rows).select('id');
+      if (error) throw new Error(error.message);
+
+      res.status(201).json({
+        status: 'success',
+        data: { inserted_count: data?.length || 0 },
+      });
+    } catch (err) {
+      console.error('[System Logs Bulk] Error inserting logs:', err);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
   /**
    * @openapi
    * /api/system-logs:

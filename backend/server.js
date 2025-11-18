@@ -629,6 +629,8 @@ process.on("uncaughtException", async (err) => {
 // Heartbeat support: record periodic heartbeats so missing intervals indicate downtime
 // ----------------------------------------------------------------------------
 let heartbeatTimer = null;
+const HEARTBEAT_ENABLED = process.env.HEARTBEAT_ENABLED !== 'false';
+const HEARTBEAT_INTERVAL_MS = Math.max(15000, parseInt(process.env.HEARTBEAT_INTERVAL_MS || '60000', 10));
 
 async function writeHeartbeat() {
   if (!pgPool) return;
@@ -653,10 +655,15 @@ async function writeHeartbeat() {
 
 function startHeartbeat() {
   if (!pgPool) return;
+  if (!HEARTBEAT_ENABLED) {
+    console.log("✓ Backend heartbeat disabled via HEARTBEAT_ENABLED=false");
+    return;
+  }
   if (heartbeatTimer) clearInterval(heartbeatTimer);
-  // Immediate heartbeat then every 60 seconds
+  // Immediate heartbeat then at configured interval
   writeHeartbeat();
-  heartbeatTimer = setInterval(writeHeartbeat, 60000);
+  heartbeatTimer = setInterval(writeHeartbeat, HEARTBEAT_INTERVAL_MS);
+  console.log(`✓ Heartbeat interval set to ${HEARTBEAT_INTERVAL_MS} ms`);
 }
 
 async function logRecoveryIfGap() {

@@ -287,8 +287,10 @@ export default function ContactsPage() {
             { last_name: { $icontains: searchTerm } },
             { email: { $icontains: searchTerm } },
             { phone: { $icontains: searchTerm } },
-            { job_title: { $icontains: searchTerm } },
-            { account_name: { $icontains: searchTerm } },
+            // Use actual column names present in contacts table
+            { title: { $icontains: searchTerm } },
+            { department: { $icontains: searchTerm } },
+            { description: { $icontains: searchTerm } },
           ],
         };
         scopedFilter.filter = JSON.stringify(searchFilterObj);

@@ -1,5 +1,7 @@
 import express from 'express';
+import crypto from 'crypto';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
+import { isMemoryAvailable, getMemoryClient } from '../lib/memoryClient.js';
 
 export default function createActivityRoutes(_pgPool) {
   const router = express.Router();
@@ -91,6 +93,22 @@ export default function createActivityRoutes(_pgPool) {
       ...meta,
     };
   }
+
+  // Safely construct case-insensitive regex from user-provided pattern.
+  // Strips leading quantifier characters (?, +, *) which cause `Nothing to repeat` errors
+  // and returns null if the pattern cannot be compiled.
+  const safeRegex = (raw) => {
+    if (!raw || typeof raw !== 'string') return null;
+    // Remove leading quantifiers that would invalidate the pattern
+    let sanitized = raw.replace(/^[?+*]+/, '').trim();
+    // Prevent empty or wholly invalid patterns
+    if (!sanitized) return null;
+    try {
+      return new RegExp(sanitized, 'i');
+    } catch {
+      return null;
+    }
+  };
 
   // GET /api/activities - List activities for a tenant
   router.get('/', async (req, res) => {
@@ -196,17 +214,17 @@ export default function createActivityRoutes(_pgPool) {
               if (!field) return false;
               
               if (field === 'subject' && expr && typeof expr === 'object' && expr.$regex) {
-                const regex = new RegExp(expr.$regex, 'i');
-                return regex.test(row.subject || '');
+                const regex = safeRegex(expr.$regex);
+                return regex ? regex.test(row.subject || '') : false;
               }
               if (field === 'description' && expr && typeof expr === 'object' && expr.$regex) {
-                const regex = new RegExp(expr.$regex, 'i');
+                const regex = safeRegex(expr.$regex);
                 const desc = row.body || row.metadata?.description || '';
-                return regex.test(desc);
+                return regex ? regex.test(desc) : false;
               }
               if (field === 'related_name' && expr && typeof expr === 'object' && expr.$regex) {
-                const regex = new RegExp(expr.$regex, 'i');
-                return regex.test(row.metadata?.related_name || '');
+                const regex = safeRegex(expr.$regex);
+                return regex ? regex.test(row.metadata?.related_name || '') : false;
               }
               if (field === 'assigned_to') {
                 const assigned = row.metadata?.assigned_to;
@@ -223,6 +241,147 @@ export default function createActivityRoutes(_pgPool) {
       const total = filtered.length;
       const paginated = filtered.slice(offset, offset + limit);
 
+      let counts = null;
+      const includeStats = (req.query.include_stats === 'true' || req.query.include_stats === '1');
+      if (includeStats) {
+        // Attempt cache lookup (counts independent of pagination)
+        let cacheHit = false;
+        if (isMemoryAvailable()) {
+          try {
+            const redis = getMemoryClient();
+            const versionKey = `activities:stats:tenant:${tenant_id}:version`;
+            const version = await redis.get(versionKey) || '0';
+            // Build a normalized filter object excluding pagination params
+            const filterDescriptor = {
+              status: req.query.status || null,
+              type: req.query.type || null,
+              related_id: req.query.related_id || null,
+              related_to: req.query.related_to || null,
+              assigned_to: req.query.assigned_to || null,
+              is_test_data: req.query.is_test_data || null,
+              tags: req.query.tags || null,
+              due_date: req.query.due_date || null,
+              or: req.query['$or'] || null,
+            };
+            const hash = crypto.createHash('sha256').update(JSON.stringify(filterDescriptor)).digest('hex');
+            const key = `activities:stats:tenant:${tenant_id}:v${version}:${hash}`;
+            const cachedRaw = await redis.get(key);
+            if (cachedRaw) {
+              const parsed = JSON.parse(cachedRaw);
+              if (parsed && parsed.counts && typeof parsed.total === 'number') {
+                counts = parsed.counts;
+                // Safety: ensure total aligns; if mismatch ignore cache
+                if (parsed.total === total) {
+                  cacheHit = true;
+                  await redis.incr(`activities:stats:tenant:${tenant_id}:hits`);
+                } else {
+                  counts = null; // fallback to recompute
+                  await redis.incr(`activities:stats:tenant:${tenant_id}:skips_mismatch`);
+                }
+              }
+            }
+            if (!cacheHit) {
+              await redis.incr(`activities:stats:tenant:${tenant_id}:misses`);
+            }
+            if (!cacheHit) {
+              // Compute and cache counts
+              const now = new Date();
+              const buildDueDateTime = (a) => {
+                if (!a.due_date) return null;
+                try {
+                  if (a.due_time) {
+                    const [h,m,s] = a.due_time.split(':');
+                    const date = new Date(a.due_date);
+                    date.setHours(parseInt(h,10)||0, parseInt(m,10)||0, parseInt(s||'0',10)||0, 0);
+                    return date;
+                  }
+                  const date = new Date(a.due_date);
+                  date.setHours(23,59,59,999);
+                  return date;
+                } catch { return new Date(a.due_date); }
+              };
+              counts = {
+                total,
+                scheduled: filtered.filter(a => a.status === 'scheduled').length,
+                in_progress: filtered.filter(a => a.status === 'in_progress' || a.status === 'in-progress').length,
+                overdue: filtered.filter(a => {
+                  if (a.status === 'completed' || a.status === 'cancelled') return false;
+                  const due = buildDueDateTime(a);
+                  if (!due) return false;
+                  return due < now;
+                }).length,
+                completed: filtered.filter(a => a.status === 'completed').length,
+                cancelled: filtered.filter(a => a.status === 'cancelled').length,
+              };
+              try {
+                // Cache for 30s (align with frontend TTL)
+                await redis.setEx(key, 30, JSON.stringify({ counts, total }));
+              } catch (e) { void e; }
+            }
+          } catch (e) {
+            // Redis unavailable or error; compute counts without caching
+            const now = new Date();
+            const buildDueDateTime = (a) => {
+              if (!a.due_date) return null;
+              try {
+                if (a.due_time) {
+                  const [h,m,s] = a.due_time.split(':');
+                  const date = new Date(a.due_date);
+                  date.setHours(parseInt(h,10)||0, parseInt(m,10)||0, parseInt(s||'0',10)||0, 0);
+                  return date;
+                }
+                const date = new Date(a.due_date);
+                date.setHours(23,59,59,999);
+                return date;
+              } catch { return new Date(a.due_date); }
+            };
+            counts = {
+              total,
+              scheduled: filtered.filter(a => a.status === 'scheduled').length,
+              in_progress: filtered.filter(a => a.status === 'in_progress' || a.status === 'in-progress').length,
+              overdue: filtered.filter(a => {
+                if (a.status === 'completed' || a.status === 'cancelled') return false;
+                const due = buildDueDateTime(a);
+                if (!due) return false;
+                return due < now;
+              }).length,
+              completed: filtered.filter(a => a.status === 'completed').length,
+              cancelled: filtered.filter(a => a.status === 'cancelled').length,
+            };
+          }
+        } else {
+          // Memory layer not available; compute directly
+          const now = new Date();
+          const buildDueDateTime = (a) => {
+            if (!a.due_date) return null;
+            try {
+              if (a.due_time) {
+                const [h,m,s] = a.due_time.split(':');
+                const date = new Date(a.due_date);
+                date.setHours(parseInt(h,10)||0, parseInt(m,10)||0, parseInt(s||'0',10)||0, 0);
+                return date;
+              }
+              const date = new Date(a.due_date);
+              date.setHours(23,59,59,999);
+              return date;
+            } catch { return new Date(a.due_date); }
+          };
+          counts = {
+            total,
+            scheduled: filtered.filter(a => a.status === 'scheduled').length,
+            in_progress: filtered.filter(a => a.status === 'in_progress' || a.status === 'in-progress').length,
+            overdue: filtered.filter(a => {
+              if (a.status === 'completed' || a.status === 'cancelled') return false;
+              const due = buildDueDateTime(a);
+              if (!due) return false;
+              return due < now;
+            }).length,
+            completed: filtered.filter(a => a.status === 'completed').length,
+            cancelled: filtered.filter(a => a.status === 'cancelled').length,
+          };
+        }
+      }
+
       res.json({
         status: 'success',
         data: {
@@ -230,6 +389,7 @@ export default function createActivityRoutes(_pgPool) {
           total,
           limit,
           offset,
+          counts,
         }
       });
     } catch (error) {
@@ -435,6 +595,13 @@ export default function createActivityRoutes(_pgPool) {
         .select('*')
         .single();
       if (error) throw new Error(error.message);
+      // Invalidate stats cache version for this tenant (increment)
+      try {
+        if (isMemoryAvailable()) {
+          const redis = getMemoryClient();
+          await redis.incr(`activities:stats:tenant:${tenant_id}:version`);
+        }
+      } catch (e) { void e; }
       
       res.status(201).json({
         status: 'success',
@@ -507,6 +674,13 @@ export default function createActivityRoutes(_pgPool) {
         });
       }
       if (error) throw new Error(error.message);
+      // Invalidate stats cache version using tenant from current record
+      try {
+        if (isMemoryAvailable() && current?.tenant_id) {
+          const redis = getMemoryClient();
+          await redis.incr(`activities:stats:tenant:${current.tenant_id}:version`);
+        }
+      } catch (e) { void e; }
       
       res.json({
         status: 'success',
@@ -540,6 +714,13 @@ export default function createActivityRoutes(_pgPool) {
           message: 'Activity not found'
         });
       }
+      // Invalidate stats cache version for tenant
+      try {
+        if (isMemoryAvailable() && data?.tenant_id) {
+          const redis = getMemoryClient();
+          await redis.incr(`activities:stats:tenant:${data.tenant_id}:version`);
+        }
+      } catch (e) { void e; }
       
       res.json({
         status: 'success',
@@ -551,6 +732,55 @@ export default function createActivityRoutes(_pgPool) {
         status: 'error',
         message: error.message
       });
+    }
+  });
+
+  // Monitoring endpoint for activities stats cache (tenant-agnostic summary)
+  // GET /api/activities/stats-monitor
+  // Use a non-param-colliding path so it isn't captured by '/:id'
+  router.get('/monitor/stats', async (req, res) => {
+    try {
+      if (!isMemoryAvailable()) {
+        return res.json({
+          status: 'success',
+          data: { available: false, tenants: [] }
+        });
+      }
+      const redis = getMemoryClient();
+      const hitKeys = await redis.keys('activities:stats:tenant:*:hits');
+      const tenants = [];
+      for (const hk of hitKeys.slice(0, 100)) { // limit scan to first 100 tenants
+        // hk pattern: activities:stats:tenant:<tenantId>:hits
+        const parts = hk.split(':');
+        const tenantId = parts[3];
+        const [hits, misses, skips, version] = await Promise.all([
+          redis.get(`activities:stats:tenant:${tenantId}:hits`),
+          redis.get(`activities:stats:tenant:${tenantId}:misses`),
+          redis.get(`activities:stats:tenant:${tenantId}:skips_mismatch`),
+          redis.get(`activities:stats:tenant:${tenantId}:version`)
+        ]);
+        tenants.push({
+          tenant_id: tenantId,
+          version: parseInt(version || '0', 10),
+          hits: parseInt(hits || '0', 10),
+          misses: parseInt(misses || '0', 10),
+          skips_mismatch: parseInt(skips || '0', 10),
+          hit_ratio: (parseInt(hits || '0', 10) + parseInt(misses || '0', 10)) > 0
+            ? (parseInt(hits || '0', 10) / (parseInt(hits || '0', 10) + parseInt(misses || '0', 10))).toFixed(3)
+            : '0.000'
+        });
+      }
+      return res.json({
+        status: 'success',
+        data: {
+          available: true,
+          tenants_count: tenants.length,
+          tenants
+        }
+      });
+    } catch (e) {
+      console.error('[activities.stats-monitor] Error:', e.message);
+      return res.status(500).json({ status: 'error', message: e.message });
     }
   });
 

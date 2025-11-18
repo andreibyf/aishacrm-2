@@ -105,92 +105,61 @@ export default function ActivitiesPage() {
   
   const initialLoadDone = useRef(false);
 
-  // Removed per-page user fetch; context handles loading and E2E override
-
+  // Build backend filter object from current UI state
   const buildFilter = useCallback(() => {
-    if (!user) return {};
-    
-    let filter = {};
-    
-    if (user.role === 'superadmin' || user.role === 'admin') {
-      if (selectedTenantId) {
-        filter.tenant_id = selectedTenantId;
-      }
-    } else if (user.tenant_id) {
-      filter.tenant_id = user.tenant_id;
-    }
-    
-    if (selectedEmail && selectedEmail !== 'all') {
-      if (selectedEmail === 'unassigned') {
-        filter.$or = [{ assigned_to: null }, { assigned_to: '' }];
-      } else {
-        filter.assigned_to = selectedEmail;
-      }
-    } else if (user.employee_role === 'employee' && user.role !== 'admin' && user.role !== 'superadmin') {
-      filter.assigned_to = user.email;
-    }
-
-    if (statusFilter !== 'all') {
-      if (statusFilter === "overdue") {
-        filter.due_date = { $lt: new Date().toISOString() };
-        filter.status = { $nin: ['completed', 'cancelled'] };
-      } else {
-        filter.status = statusFilter;
+    const filter = {};
+    if (user) {
+      if (user.role === 'superadmin' || user.role === 'admin') {
+        if (selectedTenantId) filter.tenant_id = selectedTenantId;
+      } else if (user.tenant_id) {
+        filter.tenant_id = user.tenant_id;
       }
     }
-
+    if (statusFilter !== 'all' && statusFilter !== 'overdue') {
+      filter.status = statusFilter;
+    }
     if (typeFilter !== 'all') {
       filter.type = typeFilter;
     }
-
-    if (dateRange.start) {
-      filter.due_date = filter.due_date || {};
-      filter.due_date.$gte = dateRange.start;
+    if (selectedEmail) {
+      filter.assigned_to = selectedEmail;
     }
-    if (dateRange.end) {
-      filter.due_date = filter.due_date || {};
-      filter.due_date.$lte = dateRange.end;
-    }
-
     if (!showTestData) {
-      filter.is_test_data = false; // Simple boolean, not complex operator
+      filter.is_test_data = { $ne: true };
     }
-
+    if (dateRange.start || dateRange.end) {
+      const dr = {};
+      if (dateRange.start) dr.$gte = format(new Date(dateRange.start), 'yyyy-MM-dd');
+      if (dateRange.end) dr.$lte = format(new Date(dateRange.end), 'yyyy-MM-dd');
+      filter.due_date = dr;
+    }
     return filter;
-  }, [user, selectedTenantId, selectedEmail, statusFilter, typeFilter, dateRange, showTestData]);
+  }, [user, selectedTenantId, statusFilter, typeFilter, selectedEmail, showTestData, dateRange.start, dateRange.end]);
 
-
+  // Removed per-page user fetch; context handles loading and E2E override
+  // Load supporting data (users, accounts, etc.) once user/tenant resolved
   useEffect(() => {
+    if (!user) return;
+    const supportingDataTenantFilter = {};
+    if (user.role === 'superadmin' || user.role === 'admin') {
+      if (selectedTenantId) supportingDataTenantFilter.tenant_id = selectedTenantId;
+    } else if (user.tenant_id) {
+      supportingDataTenantFilter.tenant_id = user.tenant_id;
+    }
+    if ((user.role === 'superadmin' || user.role === 'admin') && !supportingDataTenantFilter.tenant_id) {
+      if (import.meta.env.DEV) console.log('[Activities] Skipping data load - no tenant selected');
+      return;
+    }
     const loadSupportingData = async () => {
-      if (!user) return;
-
       try {
-        const supportingDataTenantFilter = {};
-        if (user.role === 'superadmin' || user.role === 'admin') {
-          if (selectedTenantId) {
-            supportingDataTenantFilter.tenant_id = selectedTenantId;
-          }
-        } else if (user.tenant_id) {
-          supportingDataTenantFilter.tenant_id = user.tenant_id;
-        }
-        
-        // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
-        if ((user.role === 'superadmin' || user.role === 'admin') && !supportingDataTenantFilter.tenant_id) {
-          if (import.meta.env.DEV) {
-            console.log("[Activities] Skipping data load - no tenant selected");
-          }
-          return;
-        }
-        
         const [usersData, employeesData, accountsData, contactsData, leadsData, opportunitiesData] = await Promise.all([
           cachedRequest('User', 'list', {}, () => User.list()),
           cachedRequest('Employee', 'filter', { filter: supportingDataTenantFilter }, () => Employee.filter(supportingDataTenantFilter)),
           cachedRequest('Account', 'filter', { filter: supportingDataTenantFilter }, () => Account.filter(supportingDataTenantFilter)),
           cachedRequest('Contact', 'filter', { filter: supportingDataTenantFilter }, () => Contact.filter(supportingDataTenantFilter)),
           cachedRequest('Lead', 'filter', { filter: supportingDataTenantFilter }, () => Lead.filter(supportingDataTenantFilter)),
-          cachedRequest('Opportunity', 'filter', { filter: supportingDataTenantFilter }, () => Opportunity.filter(supportingDataTenantFilter))
+          cachedRequest('Opportunity', 'filter', { filter: supportingDataTenantFilter }, () => Opportunity.filter(supportingDataTenantFilter)),
         ]);
-
         setUsers(usersData || []);
         setEmployees(employeesData || []);
         setAccounts(accountsData || []);
@@ -198,66 +167,18 @@ export default function ActivitiesPage() {
         setLeads(leadsData || []);
         setOpportunities(opportunitiesData || []);
       } catch (error) {
-        console.error("Failed to load supporting data:", error);
+        console.error('Failed to load supporting data:', error);
       }
     };
-
     loadSupportingData();
   }, [user, selectedTenantId, cachedRequest]);
-
-  const loadTotalStats = useCallback(async () => {
-    if (!user) return;
-
-    try {
-      const baseFilter = buildFilter();
-      
-      // Guard: Don't load stats if no tenant_id for superadmin
-      if ((user.role === 'superadmin' || user.role === 'admin') && !baseFilter.tenant_id) {
-        setTotalStats({
-          total: 0,
-          scheduled: 0,
-          in_progress: 0,
-          overdue: 0,
-          completed: 0,
-          cancelled: 0
-        });
-        return;
-      }
-      
-      const allActivities = await Activity.filter(baseFilter, 'id', 10000);
-      
-      const now = new Date();
-      const stats = {
-        total: allActivities?.length || 0,
-        scheduled: allActivities?.filter(a => a.status === 'scheduled' && (!a.due_date || new Date(a.due_date) >= now)).length || 0,
-        in_progress: allActivities?.filter(a => a.status === 'in_progress' || a.status === 'in-progress').length || 0,
-        overdue: allActivities?.filter(a => {
-          if (a.status === 'completed' || a.status === 'cancelled') return false;
-          if (!a.due_date) return false;
-          return new Date(a.due_date) < now;
-        }).length || 0,
-        completed: allActivities?.filter(a => a.status === 'completed').length || 0,
-        cancelled: allActivities?.filter(a => a.status === 'cancelled').length || 0
-      };
-
-      setTotalStats(stats);
-    } catch (error) {
-      console.error("Failed to load total stats:", error);
-    }
-  }, [user, buildFilter]);
-
-  useEffect(() => {
-    if (user) {
-      loadTotalStats();
-    }
-  }, [user, buildFilter, loadTotalStats]);
 
   const loadActivities = useCallback(async (page = 1, size = 25) => {
     if (!user) return;
 
     setLoading(true);
     try {
-      let currentFilter = buildFilter();
+      let currentFilter = { ...buildFilter(), include_stats: true };
       
       // Guard: Don't load activities if no tenant_id for superadmin
       if ((user.role === 'superadmin' || user.role === 'admin') && !currentFilter.tenant_id) {
@@ -287,15 +208,31 @@ export default function ActivitiesPage() {
 
       console.log('[Activities] Loading page:', page, 'size:', size, 'skip:', skip, 'filter:', currentFilter);
 
-      const activitiesData = await Activity.filter(currentFilter, '-due_date', size, skip);
-      
-      const countQuery = await Activity.filter(currentFilter, 'id', 10000);
-      const totalCount = countQuery?.length || 0;
+      const activitiesResult = await Activity.filter(currentFilter, '-due_date', size, skip);
+      // activitiesResult may be array (legacy) or object with meta
+      let items = Array.isArray(activitiesResult) ? activitiesResult : activitiesResult.activities;
+      const counts = !Array.isArray(activitiesResult) ? activitiesResult.counts : null;
+      const totalCount = !Array.isArray(activitiesResult) && typeof activitiesResult.total === 'number'
+        ? activitiesResult.total
+        : (items?.length || 0);
 
-      console.log('[Activities] Loaded:', activitiesData?.length, 'Total:', totalCount);
+      console.log('[Activities] Loaded:', items?.length, 'Total:', totalCount);
 
-      setActivities(activitiesData || []);
+      setActivities(items || []);
       setTotalItems(totalCount);
+      if (counts) {
+        setTotalStats({
+          total: counts.total || totalCount,
+            scheduled: counts.scheduled || 0,
+            in_progress: counts.in_progress || 0,
+            overdue: counts.overdue || 0,
+            completed: counts.completed || 0,
+            cancelled: counts.cancelled || 0,
+        });
+      } else {
+        // Fallback minimal stats
+        setTotalStats(ts => ({ ...ts, total: totalCount }));
+      }
       setCurrentPage(page);
       initialLoadDone.current = true;
     } catch (error) {
@@ -371,10 +308,7 @@ export default function ActivitiesPage() {
     setIsFormOpen(false);
     setEditingActivity(null);
     clearCache('');
-    await Promise.all([
-      loadActivities(1, pageSize),
-      loadTotalStats()
-    ]);
+    await loadActivities(1, pageSize);
     toast.success(editingActivity ? "Activity updated successfully" : "Activity created successfully");
   };
 
@@ -399,10 +333,7 @@ export default function ActivitiesPage() {
       await new Promise(resolve => setTimeout(resolve, 100));
       
       clearCache('');
-      await Promise.all([
-        loadActivities(currentPage, pageSize),
-        loadTotalStats()
-      ]);
+      await loadActivities(currentPage, pageSize);
     } catch (error) {
       console.error("Failed to delete activity:", error);
       toast.error("Failed to delete activity");
@@ -442,10 +373,7 @@ export default function ActivitiesPage() {
         setSelectedActivities(new Set());
         setSelectAllMode(false);
         clearCache('');
-        await Promise.all([
-          loadActivities(1, pageSize),
-          loadTotalStats()
-        ]);
+        await loadActivities(1, pageSize);
         toast.success(`${deleteCount} activity/activities deleted`);
       } catch (error) {
         console.error("Failed to delete activities:", error);
@@ -463,10 +391,7 @@ export default function ActivitiesPage() {
         await Promise.all([...selectedActivities].map(id => Activity.delete(id)));
         setSelectedActivities(new Set());
         clearCache('');
-        await Promise.all([
-          loadActivities(currentPage, pageSize),
-          loadTotalStats()
-        ]);
+        await loadActivities(currentPage, pageSize);
         toast.success(`${selectedActivities.size} activity/activities deleted`);
       } catch (error) {
         console.error("Failed to delete activities:", error);
@@ -506,10 +431,7 @@ export default function ActivitiesPage() {
         setSelectedActivities(new Set());
         setSelectAllMode(false);
         clearCache('');
-        await Promise.all([
-          loadActivities(currentPage, pageSize),
-          loadTotalStats()
-        ]);
+        await loadActivities(currentPage, pageSize);
         toast.success(`Updated ${updateCount} activity/activities to ${newStatus}`);
       } catch (error) {
         console.error("Failed to update activities:", error);
@@ -529,10 +451,7 @@ export default function ActivitiesPage() {
         await Promise.all(promises);
         setSelectedActivities(new Set());
         clearCache('');
-        await Promise.all([
-          loadActivities(currentPage, pageSize),
-          loadTotalStats()
-        ]);
+        await loadActivities(currentPage, pageSize);
         toast.success(`Updated ${promises.length} activity/activities to ${newStatus}`);
       } catch (error) {
         console.error("Failed to update activities:", error);
@@ -572,10 +491,7 @@ export default function ActivitiesPage() {
         setSelectedActivities(new Set());
         setSelectAllMode(false);
         clearCache('');
-        await Promise.all([
-          loadActivities(currentPage, pageSize),
-          loadTotalStats()
-        ]);
+        await loadActivities(currentPage, pageSize);
         toast.success(`Assigned ${updateCount} activity/activities`);
       } catch (error) {
         console.error("Failed to assign activities:", error);
@@ -595,10 +511,7 @@ export default function ActivitiesPage() {
         await Promise.all(promises);
         setSelectedActivities(new Set());
         clearCache('');
-        await Promise.all([
-          loadActivities(currentPage, pageSize),
-          loadTotalStats()
-        ]);
+        await loadActivities(currentPage, pageSize);
         toast.success(`Assigned ${promises.length} activity/activities`);
       } catch (error) {
         console.error("Failed to assign activities:", error);
@@ -650,10 +563,7 @@ export default function ActivitiesPage() {
     clearCache('');
     clearCache('');
     clearCache('');
-    await Promise.all([
-      loadActivities(currentPage, pageSize),
-      loadTotalStats()
-    ]);
+    await loadActivities(currentPage, pageSize);
     toast.success("Activities refreshed");
   };
 
@@ -783,10 +693,7 @@ export default function ActivitiesPage() {
           schema={Activity.schema ? Activity.schema() : null}
           onSuccess={async () => {
             clearCache('');
-            await Promise.all([
-              loadActivities(1, pageSize),
-              loadTotalStats()
-            ]);
+            await loadActivities(1, pageSize);
           }}
         />
 

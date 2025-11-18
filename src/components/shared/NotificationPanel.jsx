@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,11 +22,15 @@ export default function NotificationPanel() {
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const { user } = useUser();
+  const pollTimerRef = useRef(null);
+  const pollDelayRef = useRef(15000); // start with 15s
+  const BASE_DELAY = 15000;
+  const MAX_DELAY = 60000;
 
-  const loadNotifications = useCallback(async () => {
+  const loadNotifications = useCallback(async (options = { silent: false }) => {
     if (!user?.email) return;
     try {
-      setLoading(true);
+      if (!options.silent) setLoading(true);
       const fetched = await Notification.filter(
         { user_email: user.email },
         '-created_date',
@@ -34,15 +38,60 @@ export default function NotificationPanel() {
       );
       setNotifications(fetched);
       setUnreadCount(fetched.filter(n => !n.is_read).length);
+      return { ok: true };
     } catch (err) {
       console.error('[NotificationPanel] Failed to load notifications:', err);
+      return { ok: false, error: err };
     } finally {
-      setLoading(false);
+      if (!options.silent) setLoading(false);
     }
   }, [user?.email]);
 
   useEffect(() => {
-    loadNotifications();
+    let cancelled = false;
+
+    const scheduleNext = (delayMs) => {
+      if (cancelled) return;
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = setTimeout(tick, delayMs);
+    };
+
+    const computeNextDelay = (prevDelay, wasSuccess, err) => {
+      if (wasSuccess) return BASE_DELAY;
+      const jitter = Math.floor(Math.random() * 1000);
+      // If 429 or network error, back off aggressively
+      const isRateLimit = err?.status === 429 || err?.response?.status === 429;
+      const next = isRateLimit ? Math.min(MAX_DELAY, Math.max(prevDelay * 2, BASE_DELAY * 2) + jitter)
+        : Math.min(MAX_DELAY, prevDelay * 2 + jitter);
+      return next;
+    };
+
+    const tick = async () => {
+      if (cancelled) return;
+      // Pause when tab not focused to reduce load
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        scheduleNext(BASE_DELAY);
+        return;
+      }
+      const result = await loadNotifications({ silent: true });
+      pollDelayRef.current = computeNextDelay(
+        pollDelayRef.current,
+        !!result?.ok,
+        result?.error,
+      );
+      scheduleNext(pollDelayRef.current);
+    };
+
+    // Initial load immediately
+    loadNotifications({ silent: false }).then((res) => {
+      pollDelayRef.current = computeNextDelay(BASE_DELAY, !!res?.ok, res?.error);
+      scheduleNext(pollDelayRef.current);
+    });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(pollTimerRef.current);
+    };
   }, [loadNotifications]);
 
   const handleNotificationClick = async (notification) => {
