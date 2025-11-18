@@ -383,7 +383,7 @@ export default function createTestingRoutes(_pgPool) {
         
         // Core CRM Entities
         { method: 'GET', path: `/api/accounts?tenant_id={TENANT_ID}` },
-        { method: 'POST', path: '/api/accounts', body: { tenant_id: tenantId, name: 'Scan Account' } },
+        { method: 'POST', path: '/api/accounts', body: { tenant_id: tenantId, name: `Scan Account ${Date.now()}` } },
         { method: 'GET', path: `/api/contacts?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/leads?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/opportunities?tenant_id={TENANT_ID}` },
