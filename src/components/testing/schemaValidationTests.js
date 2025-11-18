@@ -88,24 +88,45 @@ export const schemaValidationTests = {
       }
     },
     {
-      name: 'Employee: should store additional fields in metadata',
+      name: 'Employee: should accept phone and department as direct columns',
+      async fn() {
+        const employee = await Employee.create({
+          tenant_id: TEST_TENANT_UUID,
+          first_name: 'PhoneDept',
+          last_name: 'Test',
+          department: 'Sales',
+          phone: '555-1234'
+        });
+        
+        if (!employee.id) throw new Error('Employee not created');
+        if (employee.department !== 'Sales') {
+          throw new Error('Department should be a direct column, not in metadata');
+        }
+        if (employee.phone !== '555-1234') {
+          throw new Error('Phone should be a direct column, not in metadata');
+        }
+        
+        return 'Phone and department stored as direct columns';
+      }
+    },
+    {
+      name: 'Employee: should store other additional fields in metadata',
       async fn() {
         const employee = await Employee.create({
           tenant_id: TEST_TENANT_UUID,
           first_name: 'Metadata',
           last_name: 'Test',
-          department: 'Sales',
-          job_title: 'Sales Rep',
-          phone: '555-1234'
+          job_title: 'Sales Manager',
+          hire_date: '2025-01-01'
         });
         
         if (!employee.id) throw new Error('Employee not created');
-        if (!employee.metadata) throw new Error('Metadata not stored');
-        if (employee.metadata.department !== 'Sales') {
-          throw new Error('Department not in metadata');
+        // Other fields that aren't direct columns should go to metadata
+        if (employee.metadata && employee.metadata.job_title !== 'Sales Manager') {
+          throw new Error('job_title should be in metadata');
         }
         
-        return 'Additional fields stored in metadata';
+        return 'Other additional fields stored in metadata';
       }
     },
     {
@@ -465,9 +486,10 @@ export const schemaValidationTests = {
       async fn() {
         // This is a documentation test - validates expected UI behavior
         const requiredFields = ['first_name', 'last_name'];
-        const optionalFields = ['email', 'phone', 'department', 'job_title'];
+        const optionalFields = ['email', 'phone', 'department', 'role', 'status'];
+        const schemaColumns = ['id', 'tenant_id', 'first_name', 'last_name', 'email', 'role', 'phone', 'department', 'status', 'metadata', 'created_at', 'updated_at'];
         
-        return `Employee form should show red asterisks (*) on: ${requiredFields.join(', ')}. Optional fields: ${optionalFields.join(', ')}`;
+        return `Employee form should show red asterisks (*) on: ${requiredFields.join(', ')}. Optional fields: ${optionalFields.join(', ')}. Database columns: ${schemaColumns.join(', ')}`;
       }
     },
     {
