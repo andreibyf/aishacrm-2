@@ -77,8 +77,8 @@ export const isLocalDevMode = () => {
   // Check if credentials are placeholders or example values
   const isPlaceholder = !supabaseAnonKey || 
     supabaseAnonKey.includes('your_') || 
-    supabaseAnonKey.includes('placeholder') ||
-    supabaseAnonKey === 'sb_publishable_P-agiWU11Auw3kUOFKrW6Q_Qs-_PkTi'; // Known placeholder
+    supabaseAnonKey.includes('placeholder');
+    // Removed hardcoded key check - use real validation instead
 
   const hasSupabase = !!(supabaseUrl && supabaseAnonKey && !isPlaceholder);
 
