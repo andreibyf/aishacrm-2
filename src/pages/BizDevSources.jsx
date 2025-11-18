@@ -340,6 +340,23 @@ export default function BizDevSourcesPage() {
     }
   };
 
+  const handleDeleteSingle = async (source) => {
+    if (!window.confirm(`Are you sure you want to delete "${source.company_name || source.source || 'this source'}"?`)) {
+      return;
+    }
+
+    try {
+      await BizDevSource.delete(source.id);
+      toast.success('BizDev source deleted successfully');
+      handleRefresh();
+    } catch (error) {
+      if (logError) {
+        logError(handleApiError('Delete BizDev Source', error));
+      }
+      toast.error('Failed to delete BizDev source');
+    }
+  };
+
   const handleArchiveRetrieved = () => {
     clearCache();
     loadSources();
@@ -372,6 +389,20 @@ export default function BizDevSourcesPage() {
   }, [filteredSources, currentPage, pageSize]);
 
   const totalPages = Math.ceil(filteredSources.length / pageSize);
+
+  // Select all functionality - must be after paginatedSources
+  const handleSelectAll = () => {
+    if (selectedSources.length === paginatedSources.length) {
+      // Deselect all on current page
+      setSelectedSources([]);
+    } else {
+      // Select all on current page
+      setSelectedSources(paginatedSources.map(s => s.id));
+    }
+  };
+
+  const isAllSelected = paginatedSources.length > 0 && selectedSources.length === paginatedSources.length;
+  const isSomeSelected = selectedSources.length > 0 && selectedSources.length < paginatedSources.length;
 
   const handlePageChange = (page) => {
     setCurrentPage(page);
@@ -452,9 +483,14 @@ export default function BizDevSourcesPage() {
         </div>
       </div>
 
-      {/* Stats Cards - Matching other pages with semi-transparent backgrounds */}
+      {/* Stats Cards - Clickable for filtering */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-slate-800 border-slate-700 border rounded-lg p-4">
+        <div 
+          className={`bg-slate-800 border-slate-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+            statusFilter === 'all' ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900' : ''
+          }`}
+          onClick={() => setStatusFilter('all')}
+        >
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -467,7 +503,12 @@ export default function BizDevSourcesPage() {
           </div>
         </div>
         
-        <div className="bg-green-900/20 border-green-700 border rounded-lg p-4">
+        <div 
+          className={`bg-green-900/20 border-green-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+            statusFilter === 'Active' ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900' : ''
+          }`}
+          onClick={() => setStatusFilter('Active')}
+        >
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -480,7 +521,12 @@ export default function BizDevSourcesPage() {
           </div>
         </div>
         
-        <div className="bg-blue-900/20 border-blue-700 border rounded-lg p-4">
+        <div 
+          className={`bg-blue-900/20 border-blue-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+            statusFilter === 'Promoted' ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900' : ''
+          }`}
+          onClick={() => setStatusFilter('Promoted')}
+        >
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -493,7 +539,12 @@ export default function BizDevSourcesPage() {
           </div>
         </div>
         
-        <div className="bg-slate-900/20 border-slate-700 border rounded-lg p-4">
+        <div 
+          className={`bg-slate-900/20 border-slate-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+            statusFilter === 'Archived' ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900' : ''
+          }`}
+          onClick={() => setStatusFilter('Archived')}
+        >
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -599,6 +650,24 @@ export default function BizDevSourcesPage() {
         <CardContent className="p-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-2">
+              {/* Select All Checkbox */}
+              <div className="flex items-center gap-2 pr-4 border-r border-slate-700">
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  ref={(el) => {
+                    if (el) {
+                      el.indeterminate = isSomeSelected;
+                    }
+                  }}
+                  onChange={handleSelectAll}
+                  className="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm text-slate-400">
+                  {isAllSelected ? 'Deselect All' : isSomeSelected ? `${selectedSources.length} Selected` : 'Select All'}
+                </span>
+              </div>
+              
               {selectedSources.length > 0 && (
                 <>
                   <Badge variant="outline" className="border-blue-600 text-blue-400">
@@ -671,6 +740,7 @@ export default function BizDevSourcesPage() {
                   isSelected={selectedSources.includes(source.id)}
                   onSelect={handleSelectSource}
                   onEdit={handleEdit}
+                  onDelete={handleDeleteSingle}
                 />
               ))}
             </div>

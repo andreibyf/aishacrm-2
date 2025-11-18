@@ -409,13 +409,50 @@ async function handleInsertQuery(sql, params) {
     if (typeof data.metadata === 'string') {
       try { data.metadata = JSON.parse(data.metadata); } catch { /* keep as-is */ }
     }
+    // Parse JSON for tags when provided as JSON string (jsonb column)
+    if (typeof data.tags === 'string') {
+      try { data.tags = JSON.parse(data.tags); } catch { /* keep as-is */ }
+    }
   
-  const { data: result, error } = await supabaseClient
+  // Perform insert with fallback for stale schema cache/renamed columns
+  let insertData = { ...data };
+  let { data: result, error } = await supabaseClient
     .from(table)
-    .insert(data)
+    .insert(insertData)
     .select();
   
-  if (error) throw error;
+  if (error) {
+    const msg = String(error.message || '');
+    // Fallback: schema cache missing column or column renamed in remote DB
+    const m = msg.match(/Could not find the '([^']+)' column/i);
+    if (m) {
+      const missingCol = m[1];
+      // Handle known rename: source_name -> source
+      if (missingCol === 'source_name' && Object.prototype.hasOwnProperty.call(insertData, 'source_name')) {
+        if (!Object.prototype.hasOwnProperty.call(insertData, 'source')) {
+          insertData.source = insertData.source_name;
+        }
+        delete insertData.source_name;
+        const retry = await supabaseClient
+          .from(table)
+          .insert(insertData)
+          .select();
+        if (retry.error) throw retry.error;
+        return { rows: retry.data || [], rowCount: retry.data?.length || 0 };
+      }
+      // Generic fallback: drop the missing column and retry once
+      if (Object.prototype.hasOwnProperty.call(insertData, missingCol)) {
+        delete insertData[missingCol];
+        const retry2 = await supabaseClient
+          .from(table)
+          .insert(insertData)
+          .select();
+        if (retry2.error) throw retry2.error;
+        return { rows: retry2.data || [], rowCount: retry2.data?.length || 0 };
+      }
+    }
+    throw error;
+  }
   return { rows: result || [], rowCount: result?.length || 0 };
 }
 
@@ -536,6 +573,9 @@ async function handleUpdateQuery(sql, params) {
   if (typeof updateData.metadata === 'string') {
     try { updateData.metadata = JSON.parse(updateData.metadata); } catch { /* noop */ }
   }
+  if (typeof updateData.tags === 'string') {
+    try { updateData.tags = JSON.parse(updateData.tags); } catch { /* noop */ }
+  }
   
   if (import.meta.env?.DEV && !('stage' in updateData) && /\bstage\b/i.test(setPart)) {
     console.warn('[Supabase Adapter] Stage in SQL but not captured', { table, setPartPreview: setPart.slice(0,150) });
@@ -561,9 +601,41 @@ async function handleUpdateQuery(sql, params) {
   
   const firstRes = await query.select();
   let { data, error } = firstRes;
-  // Soft-handle stale schema cache for known added columns (e.g., status, due_date)
+  // Soft-handle stale schema cache for known added columns or renamed columns
   if (error && ( /schema cache/i.test(error.message || '') || /could not find the '.+' column/i.test(error.message || '') )) {
-    console.warn('[Supabase API] Stale schema cache detected – retrying update without newly added columns');
+    console.warn('[Supabase API] Stale schema cache detected on UPDATE – attempting fallback');
+    const msg = String(error.message || '');
+    
+    // Check if it's the source_name column issue
+    const colMatch = msg.match(/Could not find the '([^']+)' column/i);
+    if (colMatch && colMatch[1] === 'source_name') {
+      // Handle known rename: source_name -> source
+      if (Object.prototype.hasOwnProperty.call(updateData, 'source_name')) {
+        if (!Object.prototype.hasOwnProperty.call(updateData, 'source')) {
+          updateData.source = updateData.source_name;
+        }
+        delete updateData.source_name;
+        console.warn('[Supabase API] Mapped source_name → source for UPDATE');
+        
+        let retry = supabaseClient.from(table).update(updateData);
+        const whereConditions2 = wherePart.split(/\s+and\s+/i);
+        for (const cond of whereConditions2) {
+          const eqMatch = cond.trim().match(/([a-z_]+)\s*=\s*\$(\d+)/i);
+          if (eqMatch) {
+            const colName = eqMatch[1];
+            const paramNum = parseInt(eqMatch[2], 10) - 1;
+            if (paramNum >= 0 && paramNum < params.length) {
+              retry = retry.eq(colName, params[paramNum]);
+            }
+          }
+        }
+        const retryRes = await retry.select();
+        if (retryRes.error) throw retryRes.error;
+        return { rows: retryRes.data || [], rowCount: retryRes.data?.length || 0 };
+      }
+    }
+    
+    // Fallback for other stale columns (status, due_date, etc.)
     const staleCols = ['status','due_date'];
     let removed = false;
     for (const c of staleCols) {

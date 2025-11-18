@@ -11,19 +11,17 @@ import {
   X,
   AlertTriangle,
   Loader2,
-  // CheckCircle2, // Reserved for future success indicators
   Database,
-  FileJson,
   FileSpreadsheet
 } from "lucide-react";
 import { toast } from "sonner";
-import { archiveBizDevSourcesToR2 } from "@/api/functions";
+import { callBackendAPI } from "@/api/entities";
 
 export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
   const [archiving, setArchiving] = useState(false);
-  const [format, setFormat] = useState('json');
+  const [format, setFormat] = useState('csv');
   const [compress, setCompress] = useState(true);
-  const [removeAfterArchive, setRemoveAfterArchive] = useState(false);
+  const [minimizeRecords, setMinimizeRecords] = useState(false);
 
   if (!sources || sources.length === 0) return null;
 
@@ -31,29 +29,35 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
     setArchiving(true);
 
     try {
-      const { data, status } = await archiveBizDevSourcesToR2({
-        bizdev_source_ids: sources.map(s => s.id),
-        format: format,
-        compress: compress,
-        remove_after_archive: removeAfterArchive
+      const response = await callBackendAPI('/api/bizdevsources/archive', {
+        method: 'POST',
+        body: JSON.stringify({
+          bizdev_source_ids: sources.map(s => s.id),
+          tenant_id: sources[0]?.tenant_id, // Use tenant_id from first source
+          format: format,
+          compress: compress,
+          remove_after_archive: minimizeRecords
+        })
       });
 
-      if (status === 200 && data.success) {
+      if (response.ok) {
+        const data = await response.json();
         toast.success(
-          `Successfully archived ${data.archived_count} BizDev Source(s) to R2`
+          data.message || `Successfully archived ${sources.length} record(s) to cloud storage`
         );
         
         if (onComplete) {
-          onComplete(data);
+          onComplete(data.data);
         }
         
         onClose();
       } else {
-        toast.error(data.error || 'Failed to archive BizDev Sources');
+        const errorData = await response.json();
+        toast.error(errorData.message || 'Failed to archive records');
       }
     } catch (error) {
       console.error('Archive error:', error);
-      toast.error(error.message || 'Failed to archive BizDev Sources');
+      toast.error(error.message || 'Failed to archive records. Please try again or contact support.');
     } finally {
       setArchiving(false);
     }
@@ -77,9 +81,9 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
             <div className="flex items-center gap-3">
               <Archive className="w-6 h-6 text-blue-400" />
               <div>
-                <CardTitle className="text-slate-100">Archive to Cloudflare R2</CardTitle>
+                <CardTitle className="text-slate-100">Archive Records</CardTitle>
                 <p className="text-sm text-slate-400 mt-1">
-                  Archive {sources.length} BizDev Source{sources.length > 1 ? 's' : ''} to cloud storage
+                  Archiving {sources.length} record{sources.length > 1 ? 's' : ''} to secure cloud storage
                 </p>
               </div>
             </div>
@@ -96,14 +100,14 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
         </CardHeader>
 
         <CardContent className="p-6 space-y-6">
-          {/* Warning Alert */}
-          <Alert className="bg-yellow-900/30 border-yellow-700">
-            <AlertTriangle className="h-4 w-4 text-yellow-400" />
-            <AlertDescription className="text-yellow-300">
-              <p className="font-semibold mb-1">Archive Action</p>
+          {/* Information Alert */}
+          <Alert className="bg-blue-900/30 border-blue-700">
+            <AlertTriangle className="h-4 w-4 text-blue-400" />
+            <AlertDescription className="text-blue-300">
+              <p className="font-semibold mb-1">What happens when you archive?</p>
               <p className="text-sm">
-                Records will be serialized and uploaded to Cloudflare R2 cloud storage.
-                They will be marked as &quot;Archived&quot; in the CRM.
+                Your records will be safely saved to cloud storage and marked as &quot;Archived&quot; in your system. 
+                You can retrieve them later if needed.
               </p>
             </AlertDescription>
           </Alert>
@@ -134,25 +138,15 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
 
           {/* Format Selection */}
           <div>
-            <Label className="text-slate-300 mb-3 block">Archive Format</Label>
+            <Label className="text-slate-300 mb-3 block">Save Format</Label>
             <RadioGroup value={format} onValueChange={setFormat} className="space-y-2">
-              <div className="flex items-center space-x-2 p-3 bg-slate-700 rounded-lg hover:bg-slate-600 cursor-pointer">
-                <RadioGroupItem value="json" id="format-json" />
-                <Label htmlFor="format-json" className="flex items-center gap-2 cursor-pointer flex-1">
-                  <FileJson className="w-4 h-4 text-blue-400" />
-                  <div>
-                    <p className="text-slate-200 font-medium">JSON</p>
-                    <p className="text-xs text-slate-400">Structured data with metadata</p>
-                  </div>
-                </Label>
-              </div>
               <div className="flex items-center space-x-2 p-3 bg-slate-700 rounded-lg hover:bg-slate-600 cursor-pointer">
                 <RadioGroupItem value="csv" id="format-csv" />
                 <Label htmlFor="format-csv" className="flex items-center gap-2 cursor-pointer flex-1">
                   <FileSpreadsheet className="w-4 h-4 text-green-400" />
                   <div>
-                    <p className="text-slate-200 font-medium">CSV</p>
-                    <p className="text-xs text-slate-400">Spreadsheet-compatible format</p>
+                    <p className="text-slate-200 font-medium">Spreadsheet (CSV)</p>
+                    <p className="text-xs text-slate-400">Easy to open in Excel or Google Sheets</p>
                   </div>
                 </Label>
               </div>
@@ -173,10 +167,10 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
                   htmlFor="compress" 
                   className="text-slate-200 cursor-pointer font-medium"
                 >
-                  Compress archive files (.gz)
+                  Compress files to save storage space
                 </Label>
                 <p className="text-xs text-slate-400 mt-1">
-                  Reduces storage space by 60-80%. Files will be saved as .{format}.gz
+                  Recommended: Reduces file size by 60-80%
                 </p>
               </div>
             </div>
@@ -186,21 +180,21 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
           <div className="p-4 bg-slate-700 rounded-lg">
             <div className="flex items-start gap-3">
               <Checkbox
-                id="remove-after"
-                checked={removeAfterArchive}
-                onCheckedChange={setRemoveAfterArchive}
+                id="minimize-records"
+                checked={minimizeRecords}
+                onCheckedChange={setMinimizeRecords}
                 disabled={archiving}
               />
               <div className="flex-1">
                 <Label 
-                  htmlFor="remove-after" 
+                  htmlFor="minimize-records" 
                   className="text-slate-200 cursor-pointer font-medium"
                 >
-                  Minimize archived records
+                  Clean up records after archiving
                 </Label>
                 <p className="text-xs text-slate-400 mt-1">
-                  Clear large text fields after archiving to reduce database size. 
-                  Essential identifiers will be preserved for reference.
+                  Removes detailed notes and large text fields to free up space. 
+                  Key information stays in the system for easy reference.
                 </p>
               </div>
             </div>
@@ -212,8 +206,8 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
               <Database className="w-4 h-4 text-blue-400 mt-0.5" />
               <div className="flex-1">
                 <p className="text-sm font-medium text-blue-300 mb-1">Storage Location</p>
-                <p className="text-xs text-blue-400 font-mono">
-                  tenant-ID/archives/bizdev-sources/batch-ID/timestamp.{format}{compress ? '.gz' : ''}
+                <p className="text-xs text-blue-400">
+                  Your files will be securely stored in the cloud and organized by date
                 </p>
               </div>
             </div>
@@ -242,7 +236,7 @@ export default function BulkArchiveDialog({ sources, onClose, onComplete }) {
               ) : (
                 <>
                   <Archive className="w-4 h-4 mr-2" />
-                  Archive to R2
+                  Archive Now
                 </>
               )}
             </Button>

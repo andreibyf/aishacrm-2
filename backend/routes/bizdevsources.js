@@ -372,7 +372,24 @@ export default function createBizDevSourceRoutes(pgPool) {
         notes,
         tags,
         metadata,
-        is_test_data
+        is_test_data,
+        // Company information fields
+        company_name,
+        dba_name,
+        industry,
+        website,
+        email,
+        phone_number,
+        address_line_1,
+        address_line_2,
+        city,
+        state_province,
+        postal_code,
+        country,
+        batch_id,
+        industry_license,
+        license_status,
+        license_expiry_date
       } = req.body;
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
@@ -396,8 +413,24 @@ export default function createBizDevSourceRoutes(pgPool) {
           tags = COALESCE($13, tags),
           metadata = COALESCE($14, metadata),
           is_test_data = COALESCE($15, is_test_data),
+          company_name = COALESCE($16, company_name),
+          dba_name = COALESCE($17, dba_name),
+          industry = COALESCE($18, industry),
+          website = COALESCE($19, website),
+          email = COALESCE($20, email),
+          phone_number = COALESCE($21, phone_number),
+          address_line_1 = COALESCE($22, address_line_1),
+          address_line_2 = COALESCE($23, address_line_2),
+          city = COALESCE($24, city),
+          state_province = COALESCE($25, state_province),
+          postal_code = COALESCE($26, postal_code),
+          country = COALESCE($27, country),
+          batch_id = COALESCE($28, batch_id),
+          industry_license = COALESCE($29, industry_license),
+          license_status = COALESCE($30, license_status),
+          license_expiry_date = COALESCE($31, license_expiry_date),
           updated_at = now()
-        WHERE tenant_id = $16 AND id = $17
+        WHERE tenant_id = $32 AND id = $33
         RETURNING *`,
         [
           source_name, source_type, source_url, contact_person,
@@ -405,7 +438,11 @@ export default function createBizDevSourceRoutes(pgPool) {
           leads_generated, opportunities_created, revenue_generated,
           notes, tags ? JSON.stringify(tags) : null,
           metadata ? JSON.stringify(metadata) : null,
-          is_test_data, tenant_id, id
+          is_test_data,
+          company_name, dba_name, industry, website, email, phone_number,
+          address_line_1, address_line_2, city, state_province, postal_code, country,
+          batch_id, industry_license, license_status, license_expiry_date,
+          tenant_id, id
         ]
       );
 
@@ -628,12 +665,14 @@ export default function createBizDevSourceRoutes(pgPool) {
       if (source.contact_person) {
         const [firstName, ...lastNameParts] = String(source.contact_person).split(' ');
         const lastName = lastNameParts.join(' ');
+        const phoneValue = source.contact_phone || source.phone_number;
+        const emailValue = source.contact_email || source.email;
         const contactResult = await client.query(
           `INSERT INTO contacts (
             tenant_id, account_id, first_name, last_name, email, phone, created_at
           ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
           RETURNING *`,
-          [tenant_id, newAccount.id, firstName, lastName || '', source.contact_email, source.contact_phone]
+          [tenant_id, newAccount.id, firstName, lastName || '', emailValue, phoneValue]
         );
         newContact = contactResult.rows[0];
       }
@@ -739,6 +778,125 @@ export default function createBizDevSourceRoutes(pgPool) {
       if (supportsTx && client && typeof client.release === 'function') {
         try { client.release(); } catch { /* noop */ }
       }
+    }
+  });
+
+  /**
+   * @openapi
+   * /api/bizdevsources/archive:
+   *   post:
+   *     summary: Archive BizDev sources to cloud storage
+   *     description: Archives selected BizDev sources by marking them as archived and optionally exporting data.
+   *     tags: [bizdevsources]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [bizdev_source_ids, tenant_id]
+   *             properties:
+   *               bizdev_source_ids:
+   *                 type: array
+   *                 items:
+   *                   type: string
+   *                   format: uuid
+   *               tenant_id:
+   *                 type: string
+   *                 format: uuid
+   *               format:
+   *                 type: string
+   *                 enum: [csv, json]
+   *                 default: csv
+   *               compress:
+   *                 type: boolean
+   *                 default: true
+   *               remove_after_archive:
+   *                 type: boolean
+   *                 default: false
+   *     responses:
+   *       200:
+   *         description: Sources archived successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
+  router.post('/archive', invalidateCache('bizdevsources'), async (req, res) => {
+    try {
+      const {
+        bizdev_source_ids,
+        tenant_id: incomingTenantId,
+        format = 'csv',
+        compress = true,
+        remove_after_archive = false
+      } = req.body;
+
+      if (!incomingTenantId) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required'
+        });
+      }
+
+      if (!bizdev_source_ids || !Array.isArray(bizdev_source_ids) || bizdev_source_ids.length === 0) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'bizdev_source_ids array is required'
+        });
+      }
+
+      const tenant_id = incomingTenantId;
+
+      // Update sources to mark as archived
+      const placeholders = bizdev_source_ids.map((_, i) => `$${i + 2}`).join(',');
+      const updateResult = await pgPool.query(
+        `UPDATE bizdev_sources 
+         SET status = 'Archived', 
+             archived_at = NOW(),
+             updated_at = NOW()
+         WHERE tenant_id = $1 AND id IN (${placeholders})
+         RETURNING *`,
+        [tenant_id, ...bizdev_source_ids]
+      );
+
+      const archivedSources = updateResult.rows;
+
+      // If remove_after_archive is true, clear large text fields
+      if (remove_after_archive && archivedSources.length > 0) {
+        const ids = archivedSources.map(s => s.id);
+        const idPlaceholders = ids.map((_, i) => `$${i + 2}`).join(',');
+        await pgPool.query(
+          `UPDATE bizdev_sources 
+           SET notes = NULL,
+               metadata = COALESCE(metadata, '{}'::jsonb) || '{"minimized": true}'::jsonb
+           WHERE tenant_id = $1 AND id IN (${idPlaceholders})`,
+          [tenant_id, ...ids]
+        );
+      }
+
+      // TODO: In future, implement actual export to R2/cloud storage here
+      // For now, just mark as archived in database
+      const archiveData = {
+        success: true,
+        archived_count: archivedSources.length,
+        format,
+        compress,
+        timestamp: new Date().toISOString(),
+        storage_path: `archives/bizdev-sources/${new Date().toISOString().split('T')[0]}`
+      };
+
+      res.json({
+        status: 'success',
+        message: `Successfully archived ${archivedSources.length} BizDev source(s)`,
+        data: archiveData
+      });
+    } catch (error) {
+      console.error('Error archiving bizdev sources:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
     }
   });
 

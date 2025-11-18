@@ -253,6 +253,12 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       const delimiter = url.includes('?') ? '&' : '?';
       url += `${delimiter}tenant_id=${encodeURIComponent(tenantId)}`;
     }
+
+    // DELETE requests require tenant_id as query parameter for validation
+    if (method === 'DELETE' && tenantId !== undefined) {
+      const delimiter = url.includes('?') ? '&' : '?';
+      url += `${delimiter}tenant_id=${encodeURIComponent(tenantId)}`;
+    }
   } else if (data && method !== "GET") {
     // POST and other methods - include data in body, no ID in URL
     const bodyData = data.tenant_id !== undefined

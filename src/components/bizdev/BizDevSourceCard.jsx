@@ -9,9 +9,10 @@ import {
   Globe,
   ExternalLink,
   Pencil,
+  Trash2,
 } from "lucide-react";
 
-export default function BizDevSourceCard({ source, onEdit, onClick, isSelected, onSelect }) {
+export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, isSelected, onSelect }) {
   const isPromoted = source.status === 'Promoted' || source.status === 'converted';
   
   const getStatusColor = (status) => {
@@ -98,7 +99,7 @@ export default function BizDevSourceCard({ source, onEdit, onClick, isSelected, 
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className={`text-lg font-semibold ${isPromoted ? 'text-slate-400 line-through' : 'text-slate-100'}`}>
-                  {source.company_name}
+                  {source.company_name || source.source || source.source_name || 'Unnamed Source'}
                   {isPromoted && source.account_name && (
                     <span className="ml-2 text-sm font-normal text-blue-400">→ {source.account_name}</span>
                   )}
@@ -106,9 +107,26 @@ export default function BizDevSourceCard({ source, onEdit, onClick, isSelected, 
                 {source.dba_name && (
                   <p className="text-sm text-slate-400">DBA: {source.dba_name}</p>
                 )}
+                {source.contact_person && (
+                  <p className="text-sm text-slate-400">{source.contact_person}</p>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap ml-12">
+              {source.priority && source.priority !== 'medium' && (
+                <Badge variant="outline" className={
+                  source.priority === 'high' 
+                    ? 'bg-red-900/30 text-red-400 border-red-700' 
+                    : 'bg-slate-700 text-slate-400 border-slate-600'
+                }>
+                  {source.priority.charAt(0).toUpperCase() + source.priority.slice(1)} Priority
+                </Badge>
+              )}
+              {source.source_type && (
+                <Badge variant="outline" className="bg-slate-700 text-slate-400 border-slate-600">
+                  {source.source_type}
+                </Badge>
+              )}
               {source.license_status && source.license_status !== "Not Required" && (
                 <Badge variant="outline" className={getLicenseStatusColor(source.license_status)}>
                   {source.license_status}
@@ -126,70 +144,125 @@ export default function BizDevSourceCard({ source, onEdit, onClick, isSelected, 
               )}
             </div>
           </div>
-          {onEdit && !isPromoted && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit(source);
-              }}
-              className="text-slate-400 hover:text-blue-400 hover:bg-slate-700"
-            >
-              <Pencil className="w-4 h-4" />
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            {onEdit && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(source);
+                }}
+                className="text-slate-400 hover:text-blue-400 hover:bg-slate-700"
+              >
+                <Pencil className="w-4 h-4" />
+              </Button>
+            )}
+            {onDelete && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(source);
+                }}
+                className="text-slate-400 hover:text-red-400 hover:bg-slate-700"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
 
       <CardContent className="flex-grow space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          {source.email && (
+          {(source.email || source.contact_email) && (
             <div className="flex items-center gap-2 text-slate-300">
               <Mail className="w-4 h-4 text-slate-400 flex-shrink-0" />
               <a 
-                href={`mailto:${source.email}`} 
+                href={`mailto:${source.email || source.contact_email}`} 
                 className="hover:text-blue-400 transition-colors truncate"
                 onClick={(e) => e.stopPropagation()}
               >
-                {source.email}
+                {source.email || source.contact_email}
               </a>
             </div>
           )}
-          {source.phone_number && (
+          {(source.phone_number || source.contact_phone) && (
             <div className="flex items-center gap-2 text-slate-300">
               <Phone className="w-4 h-4 text-slate-400 flex-shrink-0" />
               <a 
-                href={`tel:${source.phone_number}`} 
+                href={`tel:${source.phone_number || source.contact_phone}`} 
                 className="hover:text-blue-400 transition-colors"
                 onClick={(e) => e.stopPropagation()}
               >
-                {source.phone_number}
+                {source.phone_number || source.contact_phone}
               </a>
             </div>
           )}
-          {source.city && source.state_province && (
+          {(source.city && source.state_province) && (
             <div className="flex items-center gap-2 text-slate-300">
               <MapPin className="w-4 h-4 text-slate-400 flex-shrink-0" />
               <span className="truncate">{source.city}, {source.state_province}</span>
             </div>
           )}
-          {source.website && (
+          {(source.website || source.source_url) && (
             <div className="flex items-center gap-2 text-slate-300">
               <Globe className="w-4 h-4 text-slate-400 flex-shrink-0" />
               <a
-                href={source.website}
+                href={source.website || source.source_url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:text-blue-400 transition-colors truncate flex items-center gap-1"
                 onClick={(e) => e.stopPropagation()}
               >
-                {source.website.replace(/^https?:\/\/(www\.)?/, "")}
+                {(source.website || source.source_url).replace(/^https?:\/\/(www\.)?/, "")}
                 <ExternalLink className="w-3 h-3" />
               </a>
             </div>
           )}
         </div>
+
+        {/* Performance Metrics Section */}
+        {(source.leads_generated > 0 || source.opportunities_created > 0 || source.revenue_generated > 0) && (
+          <div className="grid grid-cols-3 gap-3 pt-3 border-t border-slate-700">
+            {source.leads_generated > 0 && (
+              <div className="text-center">
+                <div className="text-lg font-semibold text-slate-200">{source.leads_generated}</div>
+                <div className="text-xs text-slate-400">Leads</div>
+              </div>
+            )}
+            {source.opportunities_created > 0 && (
+              <div className="text-center">
+                <div className="text-lg font-semibold text-slate-200">{source.opportunities_created}</div>
+                <div className="text-xs text-slate-400">Opportunities</div>
+              </div>
+            )}
+            {source.revenue_generated > 0 && (
+              <div className="text-center">
+                <div className="text-lg font-semibold text-green-400">
+                  ${parseFloat(source.revenue_generated).toLocaleString()}
+                </div>
+                <div className="text-xs text-slate-400">Revenue</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tags Section */}
+        {source.tags && Array.isArray(source.tags) && source.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-2 border-t border-slate-700">
+            {source.tags.slice(0, 5).map((tag, idx) => (
+              <span key={idx} className="px-2 py-1 text-xs bg-slate-700 text-slate-300 rounded">
+                {tag}
+              </span>
+            ))}
+            {source.tags.length > 5 && (
+              <span className="px-2 py-1 text-xs text-slate-400">+{source.tags.length - 5} more</span>
+            )}
+          </div>
+        )}
 
         {linkedAccount && (
           <div className="flex items-center gap-2 text-sm">
@@ -201,9 +274,11 @@ export default function BizDevSourceCard({ source, onEdit, onClick, isSelected, 
 
         <div className="flex justify-between items-center pt-2 border-t border-slate-700">
           <Badge variant="outline" className={statusColorClass}>
-            {source.status || 'Active'}
+            {source.status || 'active'}
           </Badge>
-          <span className="text-xs text-slate-500">{source.source}</span>
+          {(source.source || source.source_type) && (
+            <span className="text-xs text-slate-500">{source.source || source.source_type}</span>
+          )}
         </div>
       </CardContent>
     </Card>

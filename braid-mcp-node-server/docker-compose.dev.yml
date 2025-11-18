@@ -3,6 +3,7 @@ version: '3.8'
 services:
   braid-mcp:
     build: .
+    container_name: braid-mcp-1
     env_file: .env
     ports:
       - "8000:8000"
@@ -11,7 +12,8 @@ services:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-      - CRM_BACKEND_URL=${CRM_BACKEND_URL}
+      # Ensure MCP can reach backend over compose network by default
+      - CRM_BACKEND_URL=${CRM_BACKEND_URL:-http://backend:3001}
       - USE_DIRECT_SUPABASE_ACCESS=${USE_DIRECT_SUPABASE_ACCESS}
     volumes:
       - ./:/app
@@ -22,3 +24,12 @@ services:
       timeout: 3s
       retries: 3
       start_period: 15s
+    networks:
+      aishanet:
+        aliases:
+          - braid-mcp
+          - braid-mcp-1
+
+networks:
+  aishanet:
+    external: true

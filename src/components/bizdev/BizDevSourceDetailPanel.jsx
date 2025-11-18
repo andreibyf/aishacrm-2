@@ -556,6 +556,26 @@ export default function BizDevSourceDetailPanel({
             <CardTitle className="text-slate-200">Company Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            {currentSource.company_name && (
+              <div className="flex items-start gap-3">
+                <Building2 className="w-4 h-4 text-slate-400 mt-0.5" />
+                <div>
+                  <p className="text-xs text-slate-400">Company Name</p>
+                  <p className="text-sm text-slate-200">{currentSource.company_name}</p>
+                </div>
+              </div>
+            )}
+            
+            {currentSource.dba_name && (
+              <div className="flex items-start gap-3">
+                <Building2 className="w-4 h-4 text-slate-400 mt-0.5" />
+                <div>
+                  <p className="text-xs text-slate-400">DBA Name</p>
+                  <p className="text-sm text-slate-200">{currentSource.dba_name}</p>
+                </div>
+              </div>
+            )}
+            
             {currentSource.industry && (
               <div className="flex items-start gap-3">
                 <Building2 className="w-4 h-4 text-slate-400 mt-0.5" />
