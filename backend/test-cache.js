@@ -82,7 +82,8 @@ async function testCaching(module, endpoint) {
   return { time1, time2, speedup };
 }
 
-async function testInvalidation(module, endpoint) {
+// Unused function - kept for reference (invalidation testing)
+async function _testInvalidation(module, endpoint) {
   console.log(`\n=== Testing ${module} cache invalidation ===`);
   
   // Get initial data (populate cache)

@@ -221,7 +221,7 @@ export default function createSystemRoutes(_pgPool) {
         statusCode = first.status;
         latencyMs = first.dt;
         reachable = true;
-      } catch (err) {
+      } catch {
         // All failed
         statusCode = 0;
         latencyMs = Math.round((performance.now ? performance.now() : Date.now()) - startAll);
@@ -344,8 +344,9 @@ export default function createSystemRoutes(_pgPool) {
         status: 'success',
         data: stats
       });
-    } catch (error) {
-      return res.status(500).json({ status: 'error', message: error.message });
+    } catch (err) {
+      console.error('[System] Cache stats error:', err);
+      return res.status(500).json({ status: 'error', message: err.message });
     }
   });
 

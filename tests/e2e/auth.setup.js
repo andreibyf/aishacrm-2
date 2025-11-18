@@ -40,6 +40,37 @@ setup('authenticate as superadmin', async ({ page, request }) => {
   setup.setTimeout(180_000);
   page.setDefaultNavigationTimeout(120_000);
   
+  // **LOCAL DEV MODE DETECTION**: Check if we're running with placeholder Supabase credentials
+  const isLocalDevMode = !SUPERADMIN_EMAIL || !SUPERADMIN_PASSWORD || SUPERADMIN_EMAIL === 'dev@localhost';
+  
+  if (isLocalDevMode) {
+    console.log('[Auth Setup] 🔧 LOCAL DEV MODE detected - using mock auth bypass');
+    console.log('[Auth Setup] Set SUPERADMIN_EMAIL and SUPERADMIN_PASSWORD env vars for real Supabase auth');
+    
+    // Ensure auth directory exists
+    if (!fs.existsSync(authDir)) {
+      fs.mkdirSync(authDir, { recursive: true });
+    }
+    
+    // Create a minimal auth state file that indicates mock mode
+    const mockAuthState = {
+      cookies: [],
+      origins: [{
+        origin: BASE_URL,
+        localStorage: [
+          { name: 'tenant_id', value: 'local-tenant-001' },
+          { name: 'selected_tenant_id', value: 'local-tenant-001' },
+          { name: 'mock_auth_mode', value: 'true' },
+          { name: 'mock_superadmin', value: 'dev@localhost' }
+        ]
+      }]
+    };
+    
+    fs.writeFileSync(authFile, JSON.stringify(mockAuthState, null, 2));
+    console.log(`[Auth Setup] ✅ Mock auth state created at ${authFile}`);
+    return; // Skip real auth flow
+  }
+  
   // Capture console messages for debugging
   page.on('console', (msg) => {
     const prefix = `[Browser Console ${msg.type().toUpperCase()}]`;
