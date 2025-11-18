@@ -31,7 +31,8 @@ async function expectStatus(response, expected) {
 async function safeJson(response) {
   try { return await response.json(); } catch { return await response.text(); }
 }
-const TEST_TENANT_ID = 'local-tenant-001';
+// Use UUID-first tenant id (fallbacks to system tenant UUID used elsewhere)
+const TEST_TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 const authFile = 'playwright/.auth/superadmin.json';
 
 // Extend test with API context
@@ -84,25 +85,31 @@ test.describe('Backend API Schema Validation', () => {
       expect(data.status).toBe('success');
     });
 
-    test('should store additional fields in metadata', async ({ apiContext }) => {
+    test('should store custom fields in metadata and flattened fields as columns', async ({ apiContext }) => {
       const response = await apiContext.post('employees', {
         data: {
           tenant_id: TEST_TENANT_ID,
           first_name: 'Metadata',
           last_name: 'Test',
+          // Flattened columns
           department: 'Sales',
-          job_title: 'Sales Rep',
           phone: '555-1234',
+          // Truly custom fields -> should land in metadata
+          custom_field: 'Custom Value',
+          notes: 'Some notes',
         },
       });
       const data = await expectOk(response);
       expect(data.status).toBe('success');
       
-      // Check that additional fields are in metadata
+      // Check flattened columns are direct properties
       const employee = data.data.employee;
-      expect(employee.metadata).toHaveProperty('department', 'Sales');
-      expect(employee.metadata).toHaveProperty('job_title', 'Sales Rep');
-      expect(employee.metadata).toHaveProperty('phone', '555-1234');
+      expect(employee).toHaveProperty('department', 'Sales');
+      expect(employee).toHaveProperty('phone', '555-1234');
+      // Check custom fields are in metadata
+      expect(employee.metadata).toBeTruthy();
+      expect(employee.metadata).toHaveProperty('custom_field', 'Custom Value');
+      expect(employee.metadata).toHaveProperty('notes', 'Some notes');
     });
 
     test('should reject employee without tenant_id', async ({ apiContext }) => {
@@ -194,7 +201,7 @@ test.describe('Backend API Schema Validation', () => {
       const data = await expectOk(response);
   expect(data.status).toBe('success');
   // Contact route returns row under `data.contact`
-  expect(data.data.contact.first_name).toilinBe('FirstOnly');
+  expect(data.data.contact.first_name).toBe('FirstOnly');
   expect(data.data.contact.last_name).toBe('LastOnly');
     });
 
