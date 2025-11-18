@@ -373,50 +373,84 @@ export default function LeadsPage() {
         currentFilter = { ...currentFilter, tags: { $all: selectedTags } };
       }
 
-      // 1. Fetch all leads matching server-side filters (up to a limit)
-      // We fetch a larger number (e.g., 10000) to accurately determine total count after client-side filtering.
-      const allLeadsMatchingServerFilter = await Lead.filter(
+      // Determine pagination strategy:
+      // - If age filter is "all": Use true backend pagination (efficient)
+      // - If age filter is specific: Fetch larger batch for client-side age filtering
+      const useBackendPagination = ageFilter === "all";
+      const fetchLimit = useBackendPagination ? size : Math.min(500, size * 5);
+      const fetchOffset = useBackendPagination ? (page - 1) * size : 0;
+
+      // Add pagination parameters to the filter
+      currentFilter = { 
+        ...currentFilter, 
+        limit: fetchLimit,
+        offset: fetchOffset
+      };
+
+      // Fetch leads with server-side pagination
+      const response = await Lead.filter(
         currentFilter,
         "-created_date",
-        10000,
       );
 
-      // 2. Apply client-side age filter to the full set to determine true total count and to prepare for pagination
-      let ageFilteredAllLeads = allLeadsMatchingServerFilter;
+      // Apply client-side age filter if needed
+      let allFilteredLeads = response || [];
       if (ageFilter !== "all") {
         const selectedBucket = ageBuckets.find((b) => b.value === ageFilter);
         if (selectedBucket) {
-          ageFilteredAllLeads = allLeadsMatchingServerFilter.filter((lead) => {
+          allFilteredLeads = allFilteredLeads.filter((lead) => {
             const age = calculateLeadAge(lead.created_date);
             return age >= selectedBucket.min && age <= selectedBucket.max;
           });
         }
       }
-      const totalCount = ageFilteredAllLeads.length;
 
-      // 3. Apply pagination to the age-filtered set
-      const skip = (page - 1) * size;
-      const paginatedLeads = ageFilteredAllLeads.slice(skip, skip + size);
+      // Apply client-side pagination if age filtering was used
+      let paginatedLeads = allFilteredLeads;
+      let estimatedTotal = allFilteredLeads.length;
+      
+      if (!useBackendPagination) {
+        // Age filter active: paginate client-side after filtering
+        const skip = (page - 1) * size;
+        paginatedLeads = allFilteredLeads.slice(skip, skip + size);
+        // Estimate total based on whether we fetched a full batch
+        estimatedTotal = response.length >= fetchLimit && paginatedLeads.length === size 
+          ? (page * size) + 1 // More pages might exist
+          : skip + paginatedLeads.length; // Final page
+      } else {
+        // Backend pagination: estimate based on current page results
+        estimatedTotal = paginatedLeads.length < size 
+          ? (page - 1) * size + paginatedLeads.length 
+          : page * size + 1;
+      }
 
       console.log(
         "[Leads] Loading page:",
         page,
         "size:",
         size,
-        "skip:",
-        skip,
+        "ageFilter:",
+        ageFilter,
+        "fetchLimit:",
+        fetchLimit,
+        "fetchOffset:",
+        fetchOffset,
         "filter:",
         currentFilter,
       );
       console.log(
-        "[Leads] Loaded (after client filter):",
+        "[Leads] Fetched:",
+        response?.length,
+        "After age filter:",
+        allFilteredLeads?.length,
+        "Paginated:",
         paginatedLeads?.length,
-        "Total (after client filter):",
-        totalCount,
+        "Estimated total:",
+        estimatedTotal,
       );
 
-      setLeads(paginatedLeads || []);
-      setTotalItems(totalCount);
+      setLeads(paginatedLeads);
+      setTotalItems(estimatedTotal);
       setCurrentPage(page);
       initialLoadDone.current = true;
     } catch (error) {

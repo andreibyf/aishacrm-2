@@ -133,7 +133,11 @@ export default function createSystemRoutes(_pgPool) {
   // For non-HTTP services (redis), uses the initialized memory client for a lightweight ping.
   router.get('/containers-status', async (req, res) => {
     const mcpNodeCandidates = [
-      // Prefer direct container name on shared network for reliability
+      // Prefer intended orchestrated container name
+      'http://braid-mcp-1:8000/health',
+      // Backward-compat legacy compose name
+      'http://braid-mcp:8000/health',
+      // Legacy standalone name (no longer used by default)
       'http://braid-mcp-node-server:8000/health',
       // Then any explicit override
       process.env.MCP_NODE_HEALTH_URL,
