@@ -33,7 +33,8 @@ function getTenantId(action: BraidAction): string | undefined {
     (metadata.tenant_id as string | undefined) ||
     (metadata.tenantId as string | undefined) ||
     (payload.tenant_id as string | undefined) ||
-    (payload.tenantId as string | undefined)
+    (payload.tenantId as string | undefined) ||
+    process.env.DEFAULT_TENANT_ID
   );
 }
 

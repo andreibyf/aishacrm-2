@@ -99,7 +99,7 @@ services:
     networks:
       - aishanet
 
-  # (Removed) braid-mcp-server was deprecated in favor of braid-mcp-node-server standalone stack
+  # Braid MCP Node Server is managed externally (braid-mcp-1). Intentionally removed to avoid duplication.
 
   # Frontend (Vite dev server for development, or built static for production-like testing)
   frontend:
@@ -110,6 +110,7 @@ services:
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
         VITE_AISHACRM_BACKEND_URL: ${VITE_AISHACRM_BACKEND_URL:-http://localhost:4001}
         VITE_CURRENT_BRANCH: ${VITE_CURRENT_BRANCH:-main}
+        VITE_SYSTEM_TENANT_ID: ${VITE_SYSTEM_TENANT_ID}
       dockerfile: Dockerfile
     container_name: aishacrm-frontend
     restart: unless-stopped

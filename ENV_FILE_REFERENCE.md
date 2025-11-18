@@ -1,5 +1,14 @@
 # Environment Variables Summary
 
+## MCP Defaults
+
+- `DEFAULT_TENANT_ID`: Server-side default tenant UUID used by the MCP CRM adapter when a request does not provide `tenant_id`. Set this in the root `.env` so Docker Compose passes it to `braid-mcp-node-server`.
+- `VITE_SYSTEM_TENANT_ID`: Frontend fallback tenant UUID for the MCP Monitor UI when no tenant is selected/stored; injected at build via Docker build args. Set in the root `.env`.
+
+Notes:
+- Both variables should be valid tenant UUIDs with data in the target environment.
+- In production, prefer configuring these via platform env/secret managers; `.env` is for local/dev.
+
 ## n8n Integration
 
 - `N8N_BASE_URL`: Base URL for your n8n instance. Example: `http://localhost:5678` (or `http://n8n:5678` when using a compose network).
