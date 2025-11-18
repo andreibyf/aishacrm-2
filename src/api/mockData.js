@@ -68,18 +68,28 @@ export const createMockTenant = () => ({
 });
 
 export const isLocalDevMode = () => {
+  // Safety hatch: Allow disabling mock mode via localStorage
+  try {
+    if (typeof window !== 'undefined' && window.localStorage.getItem('DISABLE_MOCK_USER') === 'true') {
+      return false;
+    }
+  } catch (e) { /* ignore */ }
+
   // Local dev mode means: no real auth/backends are configured
   // Only check for Supabase (Base44 removed)
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  // Check all possible key names
+  const supabaseAnonKey = 
+    import.meta.env.VITE_SUPABASE_ANON_KEY || 
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 
+    import.meta.env.VITE_SUPABASE_PUBLIC_KEY;
 
   // Check if credentials are placeholders or example values
   const isPlaceholder = !supabaseAnonKey || 
     supabaseAnonKey.includes('your_') || 
     supabaseAnonKey.includes('placeholder');
-    // Removed hardcoded key check - use real validation instead
-
+    
   const hasSupabase = !!(supabaseUrl && supabaseAnonKey && !isPlaceholder);
 
   // If Supabase auth is configured with real credentials, we're NOT in local dev mode

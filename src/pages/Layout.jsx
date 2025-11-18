@@ -1745,6 +1745,11 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         localStorage.removeItem("ai_sdk_api_key");
         localStorage.removeItem("force_chat_fallback");
 
+        // FIX: Prevent auto-login as mock user after explicit logout
+        // This ensures that isLocalDevMode() returns false on the next load,
+        // preventing UserContext from automatically signing in the mock user.
+        localStorage.setItem('DISABLE_MOCK_USER', 'true');
+
         // Remove any chat/agent-related keys by prefix
         const toRemove = [];
         for (let i = 0; i < localStorage.length; i++) {

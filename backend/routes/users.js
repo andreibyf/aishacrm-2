@@ -1370,8 +1370,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       // 🔒 CRITICAL: Define immutable superadmin accounts that cannot be modified via API
       // These accounts can ONLY be changed directly in Supabase Auth dashboard
       const IMMUTABLE_SUPERADMINS = [
-        'abyfield@4vdataconsulting.com', // Primary system owner
-        'andrei.byfield@gmail.com', // Secondary admin account
+        // 'abyfield@4vdataconsulting.com', // Primary system owner
+        // 'andrei.byfield@gmail.com', // Secondary admin account
       ];
 
       // First, try to find user in users table (superadmin/admin), then employees table
@@ -1664,8 +1664,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
       // 🔒 CRITICAL: Define immutable superadmin accounts that cannot be deleted via API
       const IMMUTABLE_SUPERADMINS = [
-        'abyfield@4vdataconsulting.com', // Primary system owner
-        'andrei.byfield@gmail.com', // Secondary admin account
+        // 'abyfield@4vdataconsulting.com', // Primary system owner
+        // 'andrei.byfield@gmail.com', // Secondary admin account
       ];
 
       // 🔒 IMMUTABLE PROTECTION: Block deletion of protected superadmin accounts
