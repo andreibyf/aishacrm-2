@@ -324,6 +324,50 @@ Content-Type: application/json
 }
 ```
 
+### Bulk Create Logs (v1.0.3+)
+**Recommended for high-volume logging to reduce API traffic**
+
+```http
+POST /api/system-logs/bulk
+Content-Type: application/json
+
+{
+  "logs": [
+    {
+      "tenant_id": "local-tenant-001",
+      "level": "ERROR",
+      "source": "MyComponent",
+      "message": "Error 1",
+      "user_email": "user@example.com",
+      "metadata": {}
+    },
+    {
+      "tenant_id": "local-tenant-001",
+      "level": "WARN",
+      "source": "MyComponent",
+      "message": "Warning 2",
+      "user_email": "user@example.com",
+      "metadata": {}
+    }
+  ]
+}
+
+Response:
+{
+  "status": "success",
+  "data": {
+    "inserted": 2,
+    "failed": 0
+  }
+}
+```
+
+**Client-Side Batching:** The frontend automatically batches logs using `src/utils/systemLogBatcher.js`:
+- Logs enqueued in memory (max 100 entries)
+- Periodic flush every 5 seconds
+- Automatic flush when queue threshold reached
+- Graceful fallback to single POSTs if bulk fails
+
 ### Get Logs
 ```http
 GET /api/system-logs?tenant_id=local-tenant-001&limit=50&level=ERROR
@@ -341,13 +385,44 @@ DELETE /api/system-logs/:id
 
 ---
 
+## Log Level Filtering (v1.0.3+)
+
+**Client-side log filtering** reduces unnecessary API traffic:
+
+### Environment Variable
+```bash
+VITE_LOG_LEVEL=ERROR  # DEBUG|INFO|WARN|ERROR (default: ERROR)
+```
+
+### Behavior
+- Only logs at or above configured level are sent to server
+- Filtering happens in `src/utils/auditLog.js` before batching
+- Production recommendation: `ERROR` only
+
+### Example
+```javascript
+// In .env file:
+VITE_LOG_LEVEL=ERROR
+
+// These will be sent:
+auditLog('ERROR', 'MyComponent', 'Critical failure', {...});
+
+// These will be filtered out:
+auditLog('INFO', 'MyComponent', 'User logged in', {...});  // Dropped
+auditLog('WARN', 'MyComponent', 'Slow response', {...});   // Dropped
+```
+
+---
+
 ## Key Files Reference
 
 | File | Purpose |
 |------|---------|
 | `src/components/settings/SystemLogsViewer.jsx` | Main UI component |
 | `src/components/shared/ErrorLogger.jsx` | Frontend error logging |
-| `backend/routes/system-logs.js` | API endpoints |
+| `src/utils/systemLogBatcher.js` | Client-side batching utility (v1.0.3+) |
+| `src/utils/auditLog.js` | Log level filtering and batching integration |
+| `backend/routes/system-logs.js` | API endpoints (includes bulk) |
 | `backend/server.js` | Backend lifecycle logging |
 | `backend/migrations/001_init.sql` | Database schema |
 
@@ -360,16 +435,20 @@ DELETE /api/system-logs/:id
 1. **Always use ErrorLogger** - Don't just `console.error()`, use `handleApiError()`
 2. **Provide context** - Include meaningful source names and metadata
 3. **Choose appropriate levels** - Reserve ERROR for actual failures
-4. **Clear test logs** - Don't leave test data in production
-5. **Monitor regularly** - Check System Logs for unexpected patterns
+4. **Use log level filtering** - Set `VITE_LOG_LEVEL=ERROR` in production to minimize traffic
+5. **Leverage batching** - Logs automatically batch; no action needed (handled by `systemLogBatcher.js`)
+6. **Clear test logs** - Don't leave test data in production
+7. **Monitor regularly** - Check System Logs for unexpected patterns
 
 ### For System Administrators
 
 1. **Check logs after deployments** - Verify no ERROR logs appear
 2. **Monitor Backend Server source** - Watch for crashes/restarts
-3. **Set up alerts** (future feature) - Get notified of critical errors
-4. **Archive old logs** (manual for now) - Keep database performant
-5. **Review ERROR logs weekly** - Identify recurring issues
+3. **Configure log levels** - Production should use `VITE_LOG_LEVEL=ERROR` to reduce noise
+4. **Review bulk endpoint usage** - Monitor `POST /api/system-logs/bulk` success rate
+5. **Set up alerts** (future feature) - Get notified of critical errors
+6. **Archive old logs** (manual for now) - Keep database performant
+7. **Review ERROR logs weekly** - Identify recurring issues
 
 ---
 

@@ -383,8 +383,13 @@ graph TB
     
     subgraph "API Layer"
         D --> E[Express Server]
-        E --> F[197 API Endpoints]
+        E --> F[210+ API Endpoints]
         E --> G[Swagger/OpenAPI Docs]
+    end
+    
+    subgraph "Caching Layer"
+        E --> REDIS1[(Redis Memory<br/>:6379<br/>Ephemeral)]
+        E --> REDIS2[(Redis Cache<br/>:6380<br/>Persistent)]
     end
     
     subgraph "Data Layer"
@@ -406,9 +411,38 @@ graph TB
     
     style C fill:#4F46E5,color:#fff
     style D fill:#10B981,color:#fff
-    style H fill:#F59E0B,color:#000
+    style REDIS1 fill:#DC2626,color:#fff
+    style REDIS2 fill:#F59E0B,color:#000
+    style H fill:#06B6D4,color:#000
     style J fill:#EC4899,color:#fff
 ```
+
+### Redis Dual-Layer Architecture (v1.0.3+)
+
+The application uses **two separate Redis instances** for different purposes:
+
+#### 1. Memory Layer (Ephemeral - Port 6379)
+- **Purpose:** Temporary operational data
+- **Container:** `aishacrm-redis`
+- **Use Cases:**
+  - User presence tracking (live_status)
+  - Session data
+  - Real-time event coordination
+- **Persistence:** None (data lost on restart)
+- **Configuration:** `REDIS_MEMORY_URL=redis://aishacrm-redis:6379`
+
+#### 2. Cache Layer (Persistent - Port 6380)
+- **Purpose:** Performance optimization via caching
+- **Container:** `aishacrm-redis-cache`
+- **Use Cases:**
+  - Activities stats caching (versioned invalidation)
+  - API response caching
+  - Computed aggregations
+- **Persistence:** RDB snapshots (survives restarts)
+- **TTL:** Varies by cache type (e.g., 30s for activities stats)
+- **Configuration:** `REDIS_CACHE_URL=redis://aishacrm-redis-cache:6380`
+
+**Monitoring:** Check cache performance at `/api/activities/monitor/stats` and `/api/system/cache-stats`
 
 ### Component Interaction Flow
 
@@ -455,6 +489,8 @@ sequenceDiagram
 | **Express** | 4.x | Web framework |
 | **PostgreSQL** | 15+ | Primary database |
 | **Supabase** | Latest | Database + Auth + Storage |
+| **Redis** (Memory) | 7.x | Ephemeral session/presence data |
+| **Redis** (Cache) | 7.x | Persistent performance caching |
 | **Swagger/OpenAPI** | 3.0 | API documentation |
 | **Helmet.js** | Latest | Security middleware |
 | **Express Rate Limit** | Latest | Rate limiting |
