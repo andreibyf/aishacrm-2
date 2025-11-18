@@ -118,10 +118,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 p-4 lg:p-8">
+      <div className="min-h-screen bg-background p-4 lg:p-8">
         <div className="flex items-center justify-center p-12">
           <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
-          <span className="ml-3 text-slate-300">Loading settings...</span>
+          <span className="ml-3 text-muted-foreground">Loading settings...</span>
         </div>
       </div>
     );
@@ -209,16 +209,16 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
 
   return (
-    <div className="min-h-screen bg-slate-900">
+    <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto">
         <div className="mb-6 p-4 lg:p-8">
-          <h1 className="text-2xl lg:text-3xl font-bold text-slate-100 flex items-center gap-3">
-            <div className="w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center rounded-full bg-slate-800 border border-slate-700">
-              <Cog className="w-5 h-5 lg:w-7 h-7 text-slate-300" />
+          <h1 className="text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-3">
+            <div className="w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center rounded-full bg-card border border-border">
+              <Cog className="w-5 h-5 lg:w-7 h-7 text-muted-foreground" />
             </div>
             Settings & Administration
           </h1>
-          <p className="text-slate-400 mt-1 text-sm lg:text-base">
+          <p className="text-muted-foreground mt-1 text-sm lg:text-base">
             Configure your account, manage users, monitor system health, and optimize performance.
           </p>
         </div>
@@ -226,12 +226,12 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
         <div className="p-4 sm:p-6 lg:p-8 pt-0">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-6">
             {/* TabsList now dynamically generated */}
-            <TabsList className="bg-slate-800 border border-slate-700 p-1 rounded-lg grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-1 h-auto overflow-x-auto">
+            <TabsList className="bg-card border border-border p-1 rounded-lg grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-1 h-auto overflow-x-auto">
               {tabsConfig.map((tab) => (
                 <TabsTrigger
                   key={tab.id}
                   value={tab.id}
-                  className={`rounded-md px-3 py-2 ${getTabColorClass(tab.color)} data-[state=active]:text-white text-slate-300 font-medium transition-colors flex items-center justify-center gap-2`}
+                  className={`rounded-md px-3 py-2 ${getTabColorClass(tab.color)} data-[state=active]:text-white font-medium transition-colors flex items-center justify-center gap-2`}
                 >
                   <tab.icon className="w-4 h-4" />
                   <span className="hidden sm:inline">{tab.label}</span>
@@ -243,10 +243,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
             <div className="space-y-6 m-0">
               {/* User & Profile */}
               {activeTab === 'profile' && (
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100">Personal Information</CardTitle>
-                    <CardDescription className="text-slate-400">Update your profile details and preferences</CardDescription>
+                    <CardTitle>Personal Information</CardTitle>
+                    <CardDescription>Update your profile details and preferences</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <UserInfo user={currentUser} onUpdate={loadUser} />
@@ -255,10 +255,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               )}
 
               {activeTab === 'branding' && (
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100">Branding & Appearance</CardTitle>
-                    <CardDescription className="text-slate-400">Customize your organization&apos;s visual identity</CardDescription>
+                    <CardTitle>Branding & Appearance</CardTitle>
+                    <CardDescription>Customize your organization&apos;s visual identity</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <BrandingSettings user={currentUser} onUpdate={loadUser} />
@@ -267,10 +267,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               )}
 
               {activeTab === 'regional' && ( // New tab content
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100">Regional Settings</CardTitle>
-                    <CardDescription className="text-slate-400">Configure timezone and date formats</CardDescription>
+                    <CardTitle>Regional Settings</CardTitle>
+                    <CardDescription>Configure timezone and date formats</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <TimezoneSettings user={currentUser} onUpdate={loadUser} />
@@ -279,10 +279,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               )}
 
               {activeTab === 'billing' && ( // New tab content
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100">Billing & Subscription</CardTitle>
-                    <CardDescription className="text-slate-400">Manage your subscription plan and payment settings</CardDescription>
+                    <CardTitle>Billing & Subscription</CardTitle>
+                    <CardDescription>Manage your subscription plan and payment settings</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <BillingSettings />
@@ -292,10 +292,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
               {/* Team Management */}
               {activeTab === 'users' && isAdmin && (
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100">User Management</CardTitle>
-                    <CardDescription className="text-slate-400">Invite, manage, and configure team member access</CardDescription>
+                    <CardTitle>User Management</CardTitle>
+                    <CardDescription>Invite, manage, and configure team member access</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <EnhancedUserManagement />
@@ -305,13 +305,13 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
               {/* Access & Security */}
               {activeTab === 'security' && isAdmin && (
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100 flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2">
                       <Shield className="w-5 h-5 text-orange-400" />
                       Security & Authentication
                     </CardTitle>
-                    <CardDescription className="text-slate-400">Review endpoint protection and authentication methods</CardDescription>
+                    <CardDescription>Review endpoint protection and authentication methods</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <SecuritySettings user={currentUser} />
@@ -320,13 +320,13 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               )}
 
               {activeTab === 'apikeys' && isAdmin && ( // Adjusted to isAdmin as per original code
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100 flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2">
                       <Key className="w-5 h-5 text-green-400" />
                       API Security & Keys
                     </CardTitle>
-                    <CardDescription className="text-slate-400">Manage API keys for external integrations and webhook access</CardDescription>
+                    <CardDescription>Manage API keys for external integrations and webhook access</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <ApiKeyManager />
@@ -336,10 +336,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
               {/* Client Management (Admin) */}
               {activeTab === 'tenants' && isAdmin && (
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100">Tenant Administration</CardTitle>
-                    <CardDescription className="text-slate-400">Manage client organizations, branding, and configurations</CardDescription>
+                    <CardTitle>Tenant Administration</CardTitle>
+                    <CardDescription>Manage client organizations, branding, and configurations</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <TenantManagement />
@@ -349,10 +349,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
               {/* Integrations & Webhooks */}
               {activeTab === 'global-integrations' && (isAdmin || isManager) && ( // New tab content
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100">System Integrations</CardTitle>
-                    <CardDescription className="text-slate-400">Connect external services, APIs, and automation platforms</CardDescription>
+                    <CardTitle>System Integrations</CardTitle>
+                    <CardDescription>Connect external services, APIs, and automation platforms</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <IntegrationSettings user={currentUser} />
@@ -361,10 +361,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               )}
 
               {activeTab === 'tenant-integrations' && (isAdmin || isManager) && ( // Tab from outline mapping to TenantIntegrationSettings
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100">Tenant-Specific Integrations</CardTitle>
-                    <CardDescription className="text-slate-400">Configure client-specific integration settings</CardDescription>
+                    <CardTitle>Tenant-Specific Integrations</CardTitle>
+                    <CardDescription>Configure client-specific integration settings</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <TenantIntegrationSettings />
@@ -373,13 +373,13 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               )}
 
               {activeTab === 'n8n' && isSuperadmin && (
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100 flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2">
                       <Workflow className="w-5 h-5 text-purple-400" />
                       n8n Workflow Automation
                     </CardTitle>
-                    <CardDescription className="text-slate-400">
+                    <CardDescription>
                       Create and manage automated workflows with 400+ integrations
                     </CardDescription>
                   </CardHeader>
@@ -414,13 +414,13 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               )}
 
               {activeTab === 'api-docs' && (isAdmin || isManager) && (
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100 flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2">
                       <BookOpen className="w-5 h-5 text-blue-400" />
                       API Documentation
                     </CardTitle>
-                    <CardDescription className="text-slate-400">
+                    <CardDescription>
                       Interactive Swagger documentation for all 197 backend API endpoints
                     </CardDescription>
                   </CardHeader>
@@ -453,10 +453,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
               {/* System Configuration */}
               {activeTab === 'modules' && isAdmin && (
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100">Feature Modules</CardTitle>
-                    <CardDescription className="text-slate-400">Enable or disable CRM modules and features</CardDescription>
+                    <CardTitle>Feature Modules</CardTitle>
+                    <CardDescription>Enable or disable CRM modules and features</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <ModuleManager />
@@ -466,23 +466,23 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
               {activeTab === 'cron' && isAdmin && (
                 <>
-                  <Card className="bg-slate-800 border-slate-700">
+                  <Card>
                     <CardHeader>
-                      <CardTitle className="text-slate-100 flex items-center gap-2">
+                      <CardTitle className="flex items-center gap-2">
                         <Clock className="w-5 h-5 text-yellow-400" />
                         Automated Tasks (Cron Jobs)
                       </CardTitle>
-                      <CardDescription className="text-slate-400">Manage scheduled background tasks and automation</CardDescription>
+                      <CardDescription>Manage scheduled background tasks and automation</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <CronJobManager user={currentUser} />
                     </CardContent>
                   </Card>
 
-                  <Card className="bg-slate-800 border-slate-700">
+                  <Card>
                     <CardHeader>
-                      <CardTitle className="text-slate-100">System Initialization</CardTitle>
-                      <CardDescription className="text-slate-400">Initialize system-level components and scheduled tasks</CardDescription>
+                      <CardTitle>System Initialization</CardTitle>
+                      <CardDescription>Initialize system-level components and scheduled tasks</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <Button
@@ -502,11 +502,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                           }
                         }}
                         variant="outline"
-                        className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
                       >
                         Initialize System Cron Jobs
                       </Button>
-                      <p className="text-xs text-slate-400 mt-2">
+                      <p className="text-xs text-muted-foreground mt-2">
                         This will create the master cron job runner that processes all scheduled tasks.
                       </p>
                     </CardContent>
@@ -515,10 +514,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               )}
 
               {activeTab === 'announcements' && isAdmin && ( // New tab content
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100">System Announcements</CardTitle>
-                    <CardDescription className="text-slate-400">Create and manage system-wide notifications for users</CardDescription>
+                    <CardTitle>System Announcements</CardTitle>
+                    <CardDescription>Create and manage system-wide notifications for users</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <SystemAnnouncements />
@@ -528,10 +527,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
               {/* Data Management */}
               {activeTab === 'data-consistency' && (isAdmin || isManager) && ( // New tab content
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100">Data Consistency Manager</CardTitle>
-                    <CardDescription className="text-slate-400">Identify and resolve referential integrity issues</CardDescription>
+                    <CardTitle>Data Consistency Manager</CardTitle>
+                    <CardDescription>Identify and resolve referential integrity issues</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <DataConsistencyManager />
@@ -540,10 +539,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               )}
 
               {activeTab === 'test-data' && (isAdmin || isManager) && ( // New tab content
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100">Test Data Management</CardTitle>
-                    <CardDescription className="text-slate-400">Clean up test records and development data</CardDescription>
+                    <CardTitle>Test Data Management</CardTitle>
+                    <CardDescription>Clean up test records and development data</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <TestDataManager />
@@ -554,18 +553,18 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               {/* Monitoring & Health */}
               {activeTab === 'performance' && isAdmin && (
                 <div className="space-y-6">
-                  <Card className="bg-slate-800 border-slate-700">
+                  <Card>
                     <CardHeader>
-                      <CardTitle className="text-slate-100">Performance Dashboard</CardTitle>
-                      <CardDescription className="text-slate-400">Monitor API response times, error rates, and system health</CardDescription>
+                      <CardTitle>Performance Dashboard</CardTitle>
+                      <CardDescription>Monitor API response times, error rates, and system health</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <Tabs defaultValue="overview" className="w-full">
-                        <TabsList className="grid w-full grid-cols-2 bg-slate-900">
-                          <TabsTrigger value="overview" className="data-[state=active]:bg-slate-700">
+                        <TabsList className="grid w-full grid-cols-2">
+                          <TabsTrigger value="overview">
                             Overview & Metrics
                           </TabsTrigger>
-                          <TabsTrigger value="realtime" className="data-[state=active]:bg-slate-700">
+                          <TabsTrigger value="realtime">
                             Real-Time Charts
                           </TabsTrigger>
                         </TabsList>
@@ -582,10 +581,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               )}
 
               {activeTab === 'cache-monitor' && isAdmin && (
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100">Tenant Resolve Cache Monitor</CardTitle>
-                    <CardDescription className="text-slate-400">Monitor cache performance and hit ratios for tenant identity resolution</CardDescription>
+                    <CardTitle>Tenant Resolve Cache Monitor</CardTitle>
+                    <CardDescription>Monitor cache performance and hit ratios for tenant identity resolution</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <TenantResolveCacheMonitor />
@@ -594,10 +593,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               )}
 
               {activeTab === 'sync-health' && isAdmin && ( // New tab content
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100">Data Sync Health</CardTitle>
-                    <CardDescription className="text-slate-400">Monitor automated sync jobs and data consistency</CardDescription>
+                    <CardTitle>Data Sync Health</CardTitle>
+                    <CardDescription>Monitor automated sync jobs and data consistency</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <SyncHealthMonitor tenantId={selectedTenantId} />
@@ -606,10 +605,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               )}
 
               {activeTab === 'mcp-monitor' && isAdmin && ( // New tab content
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100">MCP Server Status</CardTitle>
-                    <CardDescription className="text-slate-400">Monitor the Model Context Protocol server health</CardDescription>
+                    <CardTitle>MCP Server Status</CardTitle>
+                    <CardDescription>Monitor the Model Context Protocol server health</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <MCPServerMonitor />
@@ -618,13 +617,13 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
               )}
 
               {activeTab === 'security-monitor' && isAdmin && ( // New Security Monitor tab
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100 flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2">
                       <Shield className="w-5 h-5 text-red-400" />
                       Security & Intrusion Detection
                     </CardTitle>
-                    <CardDescription className="text-slate-400">
+                    <CardDescription>
                       Monitor security alerts, track unauthorized access attempts, and manage blocked IPs
                     </CardDescription>
                   </CardHeader>
@@ -636,10 +635,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
               {/* NEW: System Health Dashboard */}
               {activeTab === 'system-health' && isAdmin && (
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100">System Health Dashboard</CardTitle>
-                    <CardDescription className="text-slate-400">Monitor system status, error logs, and performance metrics.</CardDescription>
+                    <CardTitle>System Health Dashboard</CardTitle>
+                    <CardDescription>Monitor system status, error logs, and performance metrics.</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <SystemHealthDashboard />
@@ -649,13 +648,13 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
               {/* NEW: System Logs tab content */}
               {activeTab === 'system-logs' && isAdmin && (
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100 flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2">
                       <FileText className="w-5 h-5 text-slate-400" />
                       System Logs
                     </CardTitle>
-                    <CardDescription className="text-slate-400">
+                    <CardDescription>
                       View and manage application logs (INFO, WARNING, ERROR, DEBUG)
                     </CardDescription>
                   </CardHeader>
@@ -667,13 +666,13 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
               {/* NEW: Unit Tests tab content */}
               {activeTab === 'unit-tests' && isAdmin && (
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100 flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2">
                       <TestTube2 className="w-5 h-5 text-blue-400" />
                       Automated Unit Tests
                     </CardTitle>
-                    <CardDescription className="text-slate-400">
+                    <CardDescription>
                       Run automated tests to verify core functionality and catch regressions
                     </CardDescription>
                   </CardHeader>
@@ -684,7 +683,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                     >
                       Open Unit Test Dashboard
                     </Button>
-                    <p className="text-xs text-slate-400 mt-2">
+                    <p className="text-xs text-muted-foreground mt-2">
                       Access a dedicated interface for running and viewing automated test results.
                     </p>
                   </CardContent>
@@ -703,26 +702,26 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
               {/* NEW: External Tools tab content */}
               {activeTab === 'external-tools' && (isAdmin || isSuperadmin) && (
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-xl font-semibold text-slate-100 flex items-center gap-2">
+                    <CardTitle className="text-xl font-semibold flex items-center gap-2">
                       <ExternalLink className="w-5 h-5 text-orange-400" />
                       External Tools
                     </CardTitle>
-                    <CardDescription className="text-slate-400">
+                    <CardDescription>
                       Access third-party dashboards and tools directly from within the CRM.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     {/* CallFluent Section */}
-                    <div className="p-4 rounded-lg bg-slate-700/50 border border-slate-600 space-y-3">
+                    <div className="p-4 rounded-lg bg-secondary/50 border border-border space-y-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+                          <h3 className="text-lg font-semibold flex items-center gap-2">
                             CallFluent (Ai-SHA Call Center)
                           </h3>
-                          <p className="text-sm text-slate-400 mt-1">AI-powered call center platform</p>
-                          <p className="text-xs text-slate-500 mt-2">
+                          <p className="text-sm text-muted-foreground mt-1">AI-powered call center platform</p>
+                          <p className="text-xs text-muted-foreground/80 mt-2">
                             Manage AI voice agents, call campaigns, and review call analytics.
                           </p>
                         </div>
@@ -737,14 +736,14 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                     </div>
 
                     {/* Thoughtly Section */}
-                    <div className="p-4 rounded-lg bg-slate-700/50 border border-slate-600 space-y-3">
+                    <div className="p-4 rounded-lg bg-secondary/50 border border-border space-y-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+                          <h3 className="text-lg font-semibold flex items-center gap-2">
                             Thoughtly
                           </h3>
-                          <p className="text-sm text-slate-400 mt-1">AI voice agent platform</p>
-                          <p className="text-xs text-slate-500 mt-2">
+                          <p className="text-sm text-muted-foreground mt-1">AI voice agent platform</p>
+                          <p className="text-xs text-muted-foreground/80 mt-2">
                             Configure AI voice agents, manage conversations, and review transcripts.
                           </p>
                         </div>
@@ -758,7 +757,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                       </Button>
                     </div>
 
-                    <div className="text-xs text-slate-500 bg-slate-700/30 border border-slate-600 rounded p-3">
+                    <div className="text-xs text-muted-foreground/80 bg-secondary/30 border border-border rounded p-3">
                       <strong>Note:</strong> These links will open in a new browser tab. You may need to log in to each service separately.
                     </div>
                   </CardContent>
@@ -767,10 +766,10 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
               {/* NEW: Superadmin-only offboarding section */}
               {activeTab === 'offboarding' && isSuperadmin && (
-                <Card className="bg-slate-800 border-slate-700">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="text-slate-100">Client Offboarding</CardTitle>
-                    <CardDescription className="text-slate-400">
+                    <CardTitle>Client Offboarding</CardTitle>
+                    <CardDescription>
                       Permanently remove client data and configurations from the system. This action is irreversible.
                     </CardDescription>
                   </CardHeader>

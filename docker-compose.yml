@@ -50,6 +50,30 @@ services:
     networks:
       - aishanet
 
+  # Redis Cache - API response caching for accounts/leads/contacts/bizdev
+  redis-cache:
+    image: valkey/valkey:7-alpine
+    container_name: aishacrm-redis-cache
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_cache_data:/data
+    command: valkey-server --save "" --loglevel warning --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - aishanet
+
   # Backend API
   # ⚠️ CRITICAL: Uses Supabase Cloud database ONLY (see DATABASE_CONFIGURATION.md)
   # DATABASE_URL points to Supabase Cloud, NOT local PostgreSQL
@@ -62,6 +86,8 @@ services:
     # REMOVED db dependency - we use Supabase Cloud, not local PostgreSQL
     depends_on:
       redis:
+        condition: service_healthy
+      redis-cache:
         condition: service_healthy
     ports:
       - "4001:3001"  # External port 4001 maps to internal 3001
@@ -78,6 +104,8 @@ services:
       - PGSSLMODE=require
       # Redis connection for ephemeral memory
       - REDIS_URL=redis://redis:6379
+      # Redis connection for API cache
+      - REDIS_CACHE_URL=redis://redis-cache:6379
       - SYSTEM_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
       # Tenant resolution cache configuration
       - TENANT_RESOLVE_CACHE_TTL_MS=${TENANT_RESOLVE_CACHE_TTL_MS:-300000}
@@ -192,6 +220,8 @@ volumes:
   n8n_data:
     driver: local
   redis_data:
+    driver: local
+  redis_cache_data:
     driver: local
 
 networks:

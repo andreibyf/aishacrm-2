@@ -9,6 +9,7 @@ import {
   validateTenantAccess,
 } from "../middleware/validateTenant.js";
 import { tenantScopedId, buildGetByIdSQL as _buildGetByIdSQL } from "../middleware/tenantScopedId.js";
+import { cacheList, invalidateCache } from "../lib/cacheMiddleware.js";
 
 export default function createAccountRoutes(_pgPool) {
   const router = express.Router();
@@ -139,8 +140,8 @@ export default function createAccountRoutes(_pgPool) {
     };
   };
 
-  // GET /api/accounts - List accounts
-  router.get("/", async (req, res) => {
+  // GET /api/accounts - List accounts (with caching)
+  router.get("/", cacheList('accounts', 180), async (req, res) => {
     try {
       let { tenant_id, type } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
@@ -173,8 +174,8 @@ export default function createAccountRoutes(_pgPool) {
     }
   });
 
-  // POST /api/accounts - Create account
-  router.post("/", async (req, res) => {
+  // POST /api/accounts - Create account (invalidate cache)
+  router.post("/", invalidateCache('accounts'), async (req, res) => {
     try {
       const { tenant_id, name, type, industry, website } = req.body;
 
@@ -327,8 +328,8 @@ export default function createAccountRoutes(_pgPool) {
     }
   });
 
-  // PUT /api/accounts/:id - Update account
-  router.put("/:id", async (req, res) => {
+  // PUT /api/accounts/:id - Update account (invalidate cache)
+  router.put("/:id", invalidateCache('accounts'), async (req, res) => {
     try {
       const { id } = req.params;
       const { name, type, industry, website, metadata, ...otherFields } =
@@ -389,8 +390,8 @@ export default function createAccountRoutes(_pgPool) {
     }
   });
 
-  // DELETE /api/accounts/:id - Delete account
-  router.delete("/:id", async (req, res) => {
+  // DELETE /api/accounts/:id - Delete account (invalidate cache)
+  router.delete("/:id", invalidateCache('accounts'), async (req, res) => {
     try {
       const { id } = req.params;
 

@@ -8,6 +8,7 @@ import { validateTenantScopedId } from '../lib/validation.js';
 import { logEntityTransition } from '../lib/transitions.js';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 
 export default function createBizDevSourceRoutes(pgPool) {
   const router = express.Router();
@@ -50,7 +51,7 @@ export default function createBizDevSourceRoutes(pgPool) {
    *               $ref: '#/components/schemas/Success'
    */
   // Get all bizdev sources (with optional filtering)
-  router.get('/', async (req, res) => {
+  router.get('/', cacheList('bizdevsources', 180), async (req, res) => {
     try {
       let { tenant_id, status, source_type, priority } = req.query;
 
@@ -224,7 +225,7 @@ export default function createBizDevSourceRoutes(pgPool) {
    *               $ref: '#/components/schemas/Success'
    */
   // Create new bizdev source
-  router.post('/', async (req, res) => {
+  router.post('/', invalidateCache('bizdevsources'), async (req, res) => {
     try {
       const {
         tenant_id: incomingTenantId,
@@ -352,7 +353,7 @@ export default function createBizDevSourceRoutes(pgPool) {
    *               $ref: '#/components/schemas/Success'
    */
   // Update bizdev source (tenant scoped)
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', invalidateCache('bizdevsources'), async (req, res) => {
     try {
       const { id } = req.params;
       let { tenant_id } = req.query || {};
@@ -456,7 +457,7 @@ export default function createBizDevSourceRoutes(pgPool) {
    *               $ref: '#/components/schemas/Success'
    */
   // Delete bizdev source (tenant scoped)
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', invalidateCache('bizdevsources'), async (req, res) => {
     try {
       const { id } = req.params;
       let { tenant_id } = req.query || {};
@@ -529,7 +530,7 @@ export default function createBizDevSourceRoutes(pgPool) {
    *               $ref: '#/components/schemas/Success'
    */
   // POST /api/bizdevsources/:id/promote - Promote bizdev source to account
-  router.post('/:id/promote', async (req, res) => {
+  router.post('/:id/promote', invalidateCache('bizdevsources'), async (req, res) => {
     const supportsTx = typeof pgPool.connect === 'function';
     let client = null;
     try {

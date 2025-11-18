@@ -1,12 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
+// Re-export the main Supabase client to avoid multiple GoTrueClient instances
+// This prevents the "Multiple GoTrueClient instances detected" warning
+import { supabase } from '@/lib/supabase';
 
-// Supabase client for authentication and database access
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-export const supabase = supabaseUrl && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
+export { supabase };
 
 // Legacy base44 stub for backward compatibility - all calls should migrate to backend routes
 export const base44 = {

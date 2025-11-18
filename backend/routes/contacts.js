@@ -5,6 +5,7 @@
 
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 
 export default function createContactRoutes(_pgPool) {
   const router = express.Router();
@@ -147,7 +148,7 @@ export default function createContactRoutes(_pgPool) {
   };
 
   // GET /api/contacts - List contacts
-  router.get('/', async (req, res) => {
+  router.get('/', cacheList('contacts', 180), async (req, res) => {
     try {
       let { tenant_id, status, account_id, filter } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
@@ -242,7 +243,7 @@ export default function createContactRoutes(_pgPool) {
    *             schema:
    *               $ref: '#/components/schemas/Success'
    */
-  router.get('/search', async (req, res) => {
+  router.get('/search', cacheList('contacts', 180), async (req, res) => {
     try {
       let { tenant_id, q = '' } = req.query;
       const limit = parseInt(req.query.limit || '25', 10);
@@ -286,7 +287,7 @@ export default function createContactRoutes(_pgPool) {
   });
 
   // POST /api/contacts - Create contact
-  router.post('/', async (req, res) => {
+  router.post('/', invalidateCache('contacts'), async (req, res) => {
     try {
       const {
         tenant_id,
@@ -453,7 +454,7 @@ export default function createContactRoutes(_pgPool) {
   });
 
   // PUT /api/contacts/:id - Update contact
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', invalidateCache('contacts'), async (req, res) => {
     try {
       const { id } = req.params;
       const { first_name, last_name, email, phone, account_id, status, metadata, ...otherFields } = req.body;
@@ -527,7 +528,7 @@ export default function createContactRoutes(_pgPool) {
   });
 
   // DELETE /api/contacts/:id - Delete contact
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', invalidateCache('contacts'), async (req, res) => {
     try {
       const { id } = req.params;
 

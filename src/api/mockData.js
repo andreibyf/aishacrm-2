@@ -74,9 +74,15 @@ export const isLocalDevMode = () => {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-  const hasSupabase = !!(supabaseUrl && supabaseAnonKey);
+  // Check if credentials are placeholders or example values
+  const isPlaceholder = !supabaseAnonKey || 
+    supabaseAnonKey.includes('your_') || 
+    supabaseAnonKey.includes('placeholder') ||
+    supabaseAnonKey === 'sb_publishable_P-agiWU11Auw3kUOFKrW6Q_Qs-_PkTi'; // Known placeholder
 
-  // If Supabase auth is configured, we're NOT in local dev mode
+  const hasSupabase = !!(supabaseUrl && supabaseAnonKey && !isPlaceholder);
+
+  // If Supabase auth is configured with real credentials, we're NOT in local dev mode
   if (hasSupabase) return false;
 
   // Otherwise, fall back to mock/local dev mode

@@ -18,6 +18,7 @@ import { initializePerformanceLogBatcher } from './lib/perfLogBatcher.js';
 import { attachRequestContext } from './lib/requestContext.js';
 import { initMemoryClient as initMemory, isMemoryAvailable, getMemoryClient } from './lib/memoryClient.js';
 import { startCampaignWorker } from './lib/campaignWorker.js';
+import cacheManager from './lib/cacheManager.js';
 
 // Load environment variables
 // Try .env.local first (for local development), then fall back to .env
@@ -83,6 +84,15 @@ try {
   }
 } catch (e) {
   console.warn('⚠ Memory client init skipped/failed:', e?.message || e);
+}
+
+// Initialize Redis cache for API responses (non-blocking)
+try {
+  await cacheManager.connect();
+  console.log(`✓ API cache layer connected (${process.env.REDIS_CACHE_URL || 'redis://localhost:6380'})`);
+  app.locals.cacheManager = cacheManager;
+} catch (e) {
+  console.warn('⚠ API cache init skipped/failed:', e?.message || e);
 }
 
 // Use Supabase client wrapper for performance logging (replaces direct pg.Pool)

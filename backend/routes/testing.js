@@ -417,49 +417,81 @@ export default function createTestingRoutes(_pgPool) {
       let networkFailures = 0;
       let totalLatency = 0; let maxLatency = 0;
 
-      for (const ep of endpoints) {
-        const fullPath = ep.path.replace('{TENANT_ID}', tenantId);
-        const url = `${baseUrl}${fullPath}`;
-        let statusCode = 0;
-        const start = performance.now ? performance.now() : Date.now();
-        try {
-          const fetchOpts = { method: ep.method, headers: { 'Content-Type': 'application/json' } };
-          if (ep.body) fetchOpts.body = JSON.stringify(ep.body);
-          const resp = await fetch(url, fetchOpts);
-          statusCode = resp.status;
-        } catch {
-          statusCode = 0;
-        }
-        const end = performance.now ? performance.now() : Date.now();
-        const latencyMs = Math.round(end - start);
-        totalLatency += latencyMs; if (latencyMs > maxLatency) maxLatency = latencyMs;
+      // Throttle requests to prevent connection pool exhaustion
+      // Process endpoints in batches with delay between batches
+      const BATCH_SIZE = 5;
+      const BATCH_DELAY_MS = 100; // 100ms delay between batches
 
-        let classification = 'FAIL';
-        if (statusCode === 0) {
-          classification = 'FAIL';
-          networkFailures++;
-          failed++;
-        } else if (expectedStatuses.includes(statusCode)) {
-          classification = 'PASS';
-          passed++;
-        } else if (statusCode >= 200 && statusCode < 600) {
-          // Responsive but unexpected status (e.g., 404, 400, 500)
-          classification = 'WARN';
-          warn++;
-        } else {
-          classification = 'FAIL';
-          failed++;
-        }
+      for (let i = 0; i < endpoints.length; i += BATCH_SIZE) {
+        const batch = endpoints.slice(i, i + BATCH_SIZE);
+        
+        // Process batch in parallel
+        const batchPromises = batch.map(async (ep) => {
+          const fullPath = ep.path.replace('{TENANT_ID}', tenantId);
+          const url = `${baseUrl}${fullPath}`;
+          let statusCode = 0;
+          const start = performance.now ? performance.now() : Date.now();
+          try {
+            const fetchOpts = { 
+              method: ep.method, 
+              headers: { 'Content-Type': 'application/json' },
+              signal: AbortSignal.timeout(5000) // 5s timeout per request
+            };
+            if (ep.body) fetchOpts.body = JSON.stringify(ep.body);
+            const resp = await fetch(url, fetchOpts);
+            statusCode = resp.status;
+          } catch (err) {
+            // Check if timeout or network error
+            statusCode = 0;
+            if (err.name === 'AbortError' || err.name === 'TimeoutError') {
+              console.warn(`[Full Scan] Timeout on ${ep.method} ${fullPath}`);
+            }
+          }
+          const end = performance.now ? performance.now() : Date.now();
+          const latencyMs = Math.round(end - start);
 
-        results.push({
-          method: ep.method,
-          path: fullPath,
-          status: statusCode,
-          classification,
-          latency_ms: latencyMs,
-          expected: expectedStatuses.includes(statusCode),
-          network_failure: statusCode === 0
+          let classification = 'FAIL';
+          if (statusCode === 0) {
+            classification = 'FAIL';
+            networkFailures++;
+            failed++;
+          } else if (expectedStatuses.includes(statusCode)) {
+            classification = 'PASS';
+            passed++;
+          } else if (statusCode >= 200 && statusCode < 600) {
+            // Responsive but unexpected status (e.g., 404, 400, 500)
+            classification = 'WARN';
+            warn++;
+          } else {
+            classification = 'FAIL';
+            failed++;
+          }
+
+          return {
+            method: ep.method,
+            path: fullPath,
+            status: statusCode,
+            classification,
+            latency_ms: latencyMs,
+            expected: expectedStatuses.includes(statusCode),
+            network_failure: statusCode === 0
+          };
         });
+
+        // Wait for batch to complete
+        const batchResults = await Promise.all(batchPromises);
+        results.push(...batchResults);
+
+        // Update latency stats
+        for (const r of batchResults) {
+          totalLatency += r.latency_ms;
+          if (r.latency_ms > maxLatency) maxLatency = r.latency_ms;
+        }
+
+        // Delay before next batch (except for last batch)
+        if (i + BATCH_SIZE < endpoints.length) {
+          await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+        }
       }
 
       res.json({

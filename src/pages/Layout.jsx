@@ -50,7 +50,7 @@ import { User } from "@/api/entities";
 import { Tenant } from "@/api/entities";
 import { ModuleSettings } from "@/api/entities";
 import { Employee } from "@/api/entities";
-import { supabase } from "@/api/base44Client";
+import { supabase } from "@/lib/supabase";
 import NotificationPanel from "../components/notifications/NotificationPanel";
 import { TenantProvider, useTenant } from "../components/shared/tenantContext";
 import { isValidId } from "../components/shared/tenantUtils";

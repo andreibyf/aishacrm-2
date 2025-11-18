@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import { getCacheStats } from '../lib/cacheMiddleware.js';
 
 export default function createSystemRoutes(_pgPool) {
   const router = express.Router();
@@ -321,6 +322,27 @@ export default function createSystemRoutes(_pgPool) {
           summary,
         },
         message: `Cleanup complete. Deleted ${totalDeleted} orphan record(s).`,
+      });
+    } catch (error) {
+      return res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // GET /api/system/cache-stats - Redis cache statistics
+  router.get('/cache-stats', async (req, res) => {
+    try {
+      const stats = await getCacheStats();
+      
+      if (!stats) {
+        return res.status(503).json({
+          status: 'error',
+          message: 'Cache unavailable'
+        });
+      }
+
+      return res.status(200).json({
+        status: 'success',
+        data: stats
       });
     } catch (error) {
       return res.status(500).json({ status: 'error', message: error.message });
