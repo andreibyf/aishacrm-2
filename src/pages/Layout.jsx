@@ -1720,6 +1720,18 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         }
       }
 
+      // Explicitly sign out from Supabase Auth (clears local auth session & tokens)
+      try {
+        // Prefer centralized User entity method for consistency
+        if (User && typeof User.signOut === 'function') {
+          await User.signOut();
+        } else if (supabase?.auth?.signOut) {
+          await supabase.auth.signOut();
+        }
+      } catch (e) {
+        console.warn("Supabase signOut failed (continuing logout):", e);
+      }
+
       // NEW: Clear chat/session context before logging out
       try {
         // Notify chat UI to clean up (e.g., stop TTS playback)
