@@ -11,7 +11,7 @@ export const BizDevSourceSchema = {
       "type": "string",
       "description": "The ID of the tenant this business development source belongs to"
     },
-    "source": {
+    "source_name": {
       "type": "string",
       "description": "The origin of the business development data (e.g., 'Construction Directory Q4 2025')"
     },
@@ -128,7 +128,7 @@ export const BizDevSourceSchema = {
   "required": [
     "tenant_id",
     "company_name",
-    "source"
+    "source_name"
   ],
   "rls": {
     "read": {

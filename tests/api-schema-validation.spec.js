@@ -194,7 +194,7 @@ test.describe('Backend API Schema Validation', () => {
       const data = await expectOk(response);
   expect(data.status).toBe('success');
   // Contact route returns row under `data.contact`
-  expect(data.data.contact.first_name).toBe('FirstOnly');
+  expect(data.data.contact.first_name).toilinBe('FirstOnly');
   expect(data.data.contact.last_name).toBe('LastOnly');
     });
 

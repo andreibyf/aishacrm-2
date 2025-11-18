@@ -21,7 +21,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
   const source = initialData || legacySource || null;
   const { ensureTenantId, isSubmitting, normalizeError } = useEntityForm();
   const [formData, setFormData] = useState({
-    source: "",
+    source_name: "",
     batch_id: "",
     company_name: "",
     dba_name: "",
@@ -69,7 +69,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
   useEffect(() => {
     if (source) {
       setFormData({
-        source: source.source || "",
+        source_name: source.source_name || source.source || "",
         batch_id: source.batch_id || "",
         company_name: source.company_name || "",
         dba_name: source.dba_name || "",
@@ -100,7 +100,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
       toast.error('Form error: submit handler missing');
       return;
     }
-    if (!formData.source) {
+    if (!formData.source_name) {
       toast.error('Source name is required');
       return;
     }
@@ -170,13 +170,13 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
           <h3 className="text-lg font-semibold text-slate-200">Source Information</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="source" className="text-slate-300">
+              <Label htmlFor="source_name" className="text-slate-300">
                 Source <span className="text-red-400">*</span>
               </Label>
               <Input
-                id="source"
-                value={formData.source}
-                onChange={(e) => handleChange("source", e.target.value)}
+                id="source_name"
+                value={formData.source_name}
+                onChange={(e) => handleChange("source_name", e.target.value)}
                 placeholder="e.g., Construction Directory Q4 2025"
                 required
                 className="bg-slate-700 border-slate-600 text-slate-100"
