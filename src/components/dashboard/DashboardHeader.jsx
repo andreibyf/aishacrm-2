@@ -11,6 +11,8 @@ export default function DashboardHeader({ user, showTestData, onTestDataToggle, 
   const [activeFilter, setActiveFilter] = React.useState('Month');
   const filters = ['Week', 'Month', 'Quarter', 'Year'];
   const [briefingLoading, setBriefingLoading] = React.useState(false);
+  // Feature flag: hide Daily Voice Briefing button
+  const SHOW_DAILY_BRIEFING = false;
 
   const isSuperadmin = user?.role === 'superadmin';
 
@@ -104,15 +106,17 @@ export default function DashboardHeader({ user, showTestData, onTestDataToggle, 
             <LayoutGrid className="w-4 h-4 mr-2" />
             Customize
           </Button>
-          <Button 
-            variant="outline" 
-            className="bg-white/10 border-white/20 hover:bg-white/20 text-white backdrop-blur-sm"
-            onClick={speakDailyBriefing}
-            disabled={briefingLoading}
-          >
-            <FileText className="w-4 h-4 mr-2" />
-            {briefingLoading ? 'Generating...' : 'Daily Voice Briefing'}
-          </Button>
+          {SHOW_DAILY_BRIEFING && (
+            <Button 
+              variant="outline" 
+              className="bg-white/10 border-white/20 hover:bg-white/20 text-white backdrop-blur-sm"
+              onClick={speakDailyBriefing}
+              disabled={briefingLoading}
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              {briefingLoading ? 'Generating...' : 'Daily Voice Briefing'}
+            </Button>
+          )}
         </div>
       </div>
       <div className="mt-6 border-t border-white/20 pt-4">

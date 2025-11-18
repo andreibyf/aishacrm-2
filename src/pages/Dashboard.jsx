@@ -93,10 +93,18 @@ export default function DashboardPage() {
       try {
         const savedPrefs = user.permissions?.dashboard_widgets;
         if (savedPrefs) {
-          setWidgetPreferences(savedPrefs);
+          // Normalize preferences to include all widgets with defaults for missing keys
+          const normalized = ALL_WIDGETS.reduce((acc, widget) => {
+            acc[widget.id] =
+              typeof savedPrefs[widget.id] !== 'undefined'
+                ? savedPrefs[widget.id]
+                : widget.defaultVisibility;
+            return acc;
+          }, {});
+          setWidgetPreferences(normalized);
           logger.info("Loaded user widget preferences", "Dashboard", {
             userId: user.email,
-            preferences: savedPrefs,
+            preferences: normalized,
           });
         } else {
           const defaultPrefs = ALL_WIDGETS.reduce((acc, widget) => {
@@ -402,7 +410,12 @@ export default function DashboardPage() {
     if (Object.keys(widgetPreferences).length === 0 && user) {
       return ALL_WIDGETS.filter((widget) => widget.defaultVisibility);
     }
-    return ALL_WIDGETS.filter((widget) => widgetPreferences[widget.id]);
+    // Fall back to widget.defaultVisibility when pref is missing
+    return ALL_WIDGETS.filter(
+      (widget) => (typeof widgetPreferences[widget.id] !== 'undefined'
+        ? widgetPreferences[widget.id]
+        : widget.defaultVisibility)
+    );
   }, [widgetPreferences, user]);
 
   return (

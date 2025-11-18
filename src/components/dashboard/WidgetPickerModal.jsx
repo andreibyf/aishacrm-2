@@ -31,7 +31,19 @@ export default function WidgetPickerModal(
   };
 
   const handleSave = () => {
-    onSave(internalPreferences);
+    // Ensure we save a complete map for all widgets,
+    // falling back to each widget's defaultVisibility when unset
+    const fullPreferences = availableWidgets.reduce((acc, widget) => {
+      const value =
+        typeof internalPreferences[widget.id] !== 'undefined'
+          ? internalPreferences[widget.id]
+          : (typeof widget.defaultVisibility !== 'undefined'
+              ? widget.defaultVisibility
+              : false);
+      acc[widget.id] = value;
+      return acc;
+    }, {});
+    onSave(fullPreferences);
     onOpenChange(false);
   };
 
@@ -58,9 +70,12 @@ export default function WidgetPickerModal(
               </Label>
               <Switch
                 id={`widget-toggle-${widget.id}`}
-                checked={internalPreferences[widget.id] ?? false}
-                onCheckedChange={(isChecked) =>
-                  handleToggle(widget.id, isChecked)}
+                checked={(typeof internalPreferences[widget.id] !== 'undefined'
+                  ? internalPreferences[widget.id]
+                  : (typeof widget.defaultVisibility !== 'undefined'
+                    ? widget.defaultVisibility
+                    : false))}
+                onCheckedChange={(isChecked) => handleToggle(widget.id, isChecked)}
                 className="data-[state=checked]:bg-blue-500"
               />
             </div>

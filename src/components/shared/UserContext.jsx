@@ -1,5 +1,6 @@
 import { createContext, useEffect, useState, useCallback } from 'react';
 import { User } from '@/api/entities';
+import { createMockUser, isLocalDevMode } from '@/api/mockData';
 import { normalizeUser } from '@/utils/normalizeUser.js';
 
 // Internal context object for user data
@@ -40,12 +41,34 @@ export function UserProvider({ children }) {
           /* swallow debug logging error */
         }
       }
-      setUser(normalized);
-    } catch (err) {
-      if (import.meta.env.DEV) {
-        console.error('[UserContext] Failed to load user:', err);
+      if (!normalized && isLocalDevMode()) {
+        const mock = createMockUser();
+        if (import.meta.env.DEV) {
+          console.log('[UserContext] No authenticated user; using mock user for local dev/test:', mock.email);
+        }
+        setUser(normalizeUser(mock));
+      } else {
+        setUser(normalized);
       }
-      setUser(null);
+    } catch (err) {
+      const message = err?.message || err;
+      if (import.meta.env.DEV) {
+        console.error('[UserContext] Failed to load user:', message);
+      }
+      // In local dev/test mode with no auth configured, fall back to a mock superadmin user
+      try {
+        if (isLocalDevMode()) {
+          const mock = createMockUser();
+          if (import.meta.env.DEV) {
+            console.log('[UserContext] Using mock user for local dev/test:', mock.email);
+          }
+          setUser(normalizeUser(mock));
+        } else {
+          setUser(null);
+        }
+      } catch {
+        setUser(null);
+      }
     } finally {
       setLoading(false);
     }

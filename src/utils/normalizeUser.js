@@ -67,27 +67,36 @@ export function normalizeUser(raw) {
   // Tenant ID precedence: explicit raw.tenant_id -> metadata.tenant_id -> null
   const tenantId = raw.tenant_id != null ? raw.tenant_id : (meta.tenant_id != null ? meta.tenant_id : null);
 
-  // Permissions may appear as array OR object. Unify to object.
-  let permissions = raw.permissions || meta.permissions || {};
-  if (Array.isArray(permissions)) {
-    if (!WARN_ONCE_FLAGS.permissionsTypeMismatch && import.meta?.env?.DEV) {
-      console.warn('[normalizeUser] permissions provided as array; converting to object.');
-      WARN_ONCE_FLAGS.permissionsTypeMismatch = true;
+  // Permissions may appear as array OR object in raw and/or meta. Normalize and deep-merge
+  const toPermObject = (perm) => {
+    if (!perm) return {};
+    if (Array.isArray(perm)) {
+      if (!WARN_ONCE_FLAGS.permissionsTypeMismatch && import.meta?.env?.DEV) {
+        console.warn('[normalizeUser] permissions provided as array; converting to object.');
+        WARN_ONCE_FLAGS.permissionsTypeMismatch = true;
+      }
+      const converted = {};
+      perm.forEach((p) => { converted[p] = true; });
+      return converted;
     }
-    const converted = {};
-    permissions.forEach(p => { converted[p] = true; });
-    permissions = converted;
-  }
+    return { ...perm };
+  };
 
-  // Merge granular permission flags scattered on raw/meta into permissions object if absent.
+  const rawPermissionsObj = toPermObject(raw.permissions);
+  const metaPermissionsObj = toPermObject(meta.permissions);
+  // Merge meta first then raw so DB/raw wins on conflicts, but keep additional keys (e.g., dashboard_widgets) from meta
+  const basePermissions = { ...metaPermissionsObj, ...rawPermissionsObj };
+
+  // Merge granular permission flags scattered on raw/meta into permissions object, preserving existing keys
   const mergedPermissions = {
-    access_level: raw.access_level || meta.access_level || permissions.access_level,
-    crm_access: (raw.crm_access !== undefined ? raw.crm_access : meta.crm_access) ?? permissions.crm_access ?? false,
-    dashboard_scope: raw.dashboard_scope || meta.dashboard_scope || permissions.dashboard_scope,
-    intended_role: raw.intended_role || meta.intended_role || permissions.intended_role,
-    can_use_softphone: (raw.can_use_softphone ?? meta.can_use_softphone ?? permissions.can_use_softphone) || false,
-    can_manage_users: (raw.can_manage_users ?? meta.can_manage_users ?? permissions.can_manage_users) || false,
-    can_manage_settings: (raw.can_manage_settings ?? meta.can_manage_settings ?? permissions.can_manage_settings) || false,
+    ...basePermissions,
+    access_level: raw.access_level || meta.access_level || basePermissions.access_level,
+    crm_access: (raw.crm_access !== undefined ? raw.crm_access : meta.crm_access) ?? basePermissions.crm_access ?? false,
+    dashboard_scope: raw.dashboard_scope || meta.dashboard_scope || basePermissions.dashboard_scope,
+    intended_role: raw.intended_role || meta.intended_role || basePermissions.intended_role,
+    can_use_softphone: (raw.can_use_softphone ?? meta.can_use_softphone ?? basePermissions.can_use_softphone) || false,
+    can_manage_users: (raw.can_manage_users ?? meta.can_manage_users ?? basePermissions.can_manage_users) || false,
+    can_manage_settings: (raw.can_manage_settings ?? meta.can_manage_settings ?? basePermissions.can_manage_settings) || false,
   };
 
   // Navigation permissions: ensure object
