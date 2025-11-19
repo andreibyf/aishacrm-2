@@ -2159,7 +2159,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               />
             </div>
 
-            <div className="mb-6">
+            <div className="mb-4">
               <label
                 className="block text-slate-800 text-sm font-semibold mb-2"
                 htmlFor="password"
@@ -2176,41 +2176,6 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 style={{ "--tw-ring-color": accentColor }}
                 placeholder="Enter your password"
               />
-              <div className="mt-2 text-right">
-                <button
-                  type="button"
-                  onClick={async (e) => {
-                    e.preventDefault();
-                    const emailInput = document.getElementById('email');
-                    const email = emailInput?.value;
-                    
-                    if (!email) {
-                      alert('Please enter your email address first');
-                      emailInput?.focus();
-                      return;
-                    }
-                    
-                    try {
-                      console.log('[ForgotPassword] Sending reset email to:', email);
-                      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                        redirectTo: `${window.location.origin}/reset-password`,
-                      });
-                      
-                      if (error) throw error;
-                      
-                      alert('Password reset email sent! Please check your inbox.');
-                      console.log('[ForgotPassword] Reset email sent successfully');
-                    } catch (error) {
-                      console.error('[ForgotPassword] Failed to send reset email:', error);
-                      alert('Failed to send reset email: ' + (error?.message || 'Unknown error'));
-                    }
-                  }}
-                  className="text-sm font-medium hover:underline"
-                  style={{ color: primaryColor }}
-                >
-                  Forgot Password?
-                </button>
-              </div>
             </div>
 
             <button
@@ -2222,12 +2187,35 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             >
               Sign In
             </button>
-          </form>
 
-          {/* Hint: Users should be created via Supabase Auth. Removed demo credentials. */}
-          <div className="mt-6 text-center text-xs text-slate-500">
-            <p>Create users in Supabase Dashboard → Authentication</p>
-          </div>
+            <div className="mt-3 text-center">
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.preventDefault();
+                  const emailInput = document.getElementById('email');
+                  const email = emailInput?.value?.trim();
+                  if (!email) {
+                    alert('Enter your email above first.');
+                    emailInput?.focus();
+                    return;
+                  }
+                  try {
+                    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                      redirectTo: `${window.location.origin}/reset-password`,
+                    });
+                    if (error) throw error;
+                    alert('Reset email sent. Check your inbox (and spam).');
+                  } catch (err) {
+                    alert('Failed to send reset email: ' + (err?.message || 'Unknown error'));
+                  }
+                }}
+                className="text-xs font-medium text-slate-600 hover:text-slate-800 hover:underline"
+              >
+                Forgot password?
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     );
