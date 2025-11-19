@@ -15,16 +15,31 @@ import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import readline from 'readline';
 
 // Load environment variables
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, '..', '.env') });
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+// Simple CLI arg parser to allow overriding env vars and adding flags
+const argv = process.argv.slice(2);
+function getArg(flag) {
+  const eq = argv.find(a => a === `--${flag}` || a.startsWith(`--${flag}=`));
+  if (!eq) return undefined;
+  if (eq.includes('=')) return eq.split('=')[1];
+  const idx = argv.indexOf(eq);
+  const next = argv[idx + 1];
+  if (next && !next.startsWith('--')) return next;
+  return undefined;
+}
+
+const SUPABASE_URL = getArg('supabase-url') || process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = getArg('service-key') || process.env.SUPABASE_SERVICE_ROLE_KEY;
+const ADMIN_EMAIL = getArg('email') || process.env.ADMIN_EMAIL;
+const ADMIN_PASSWORD = getArg('password') || process.env.ADMIN_PASSWORD;
+const dryRun = argv.includes('--dry-run') || argv.includes('--dryrun');
+const forceYes = argv.includes('--yes') || argv.includes('-y');
 
 // Default superadmin tenant ID (UUID format)
 const SUPERADMIN_TENANT_ID = '00000000-0000-0000-0000-000000000000';
@@ -69,7 +84,36 @@ async function createAdmin() {
   console.log('Configuration:');
   console.log(`  Supabase URL: ${SUPABASE_URL}`);
   console.log(`  Admin Email:  ${ADMIN_EMAIL}`);
-  console.log(`  Password:     ${'*'.repeat(ADMIN_PASSWORD.length)} (${ADMIN_PASSWORD.length} characters)\n`);
+  console.log(`  Password:     ${ADMIN_PASSWORD ? '*'.repeat(ADMIN_PASSWORD.length) : '(none)'}${ADMIN_PASSWORD ? ` (${ADMIN_PASSWORD.length} characters)` : ''}\n`);
+
+  if (dryRun) {
+    console.log('⚠️  Dry-run mode enabled (`--dry-run`). No changes will be made.');
+    console.log('\nPlan:');
+    console.log(`  - Ensure Supabase project at: ${SUPABASE_URL}`);
+    console.log(`  - Would create or update auth user: ${ADMIN_EMAIL}`);
+    console.log(`  - Would set role: superadmin and tenant: ${SUPERADMIN_TENANT_ID}`);
+    console.log('\nTo perform the actual changes, re-run without `--dry-run` and add `--yes` to skip confirmation.');
+    process.exit(0);
+  }
+
+  // Confirmation prompt for safety when not running in unattended mode
+  async function confirmProceed() {
+    if (forceYes) return true;
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const answer = await new Promise(resolve => {
+      rl.question('Type YES to proceed with creating/updating the admin user: ', ans => {
+        rl.close();
+        resolve(ans);
+      });
+    });
+    return answer === 'YES';
+  }
+
+  const confirmed = await confirmProceed();
+  if (!confirmed) {
+    console.log('Aborted by user. No changes were made.');
+    process.exit(0);
+  }
 
   // Create Supabase admin client with service role key
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -100,7 +144,7 @@ async function createAdmin() {
       // Ask if they want to update the password
       console.log('\n🔄 Updating password for existing user...');
       
-      const { data: updateData, error: updateError } = await supabase.auth.admin.updateUserById(
+      const { error: updateError } = await supabase.auth.admin.updateUserById(
         existingUser.id,
         { password: ADMIN_PASSWORD }
       );
