@@ -2176,6 +2176,41 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 style={{ "--tw-ring-color": accentColor }}
                 placeholder="Enter your password"
               />
+              <div className="mt-2 text-right">
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    const emailInput = document.getElementById('email');
+                    const email = emailInput?.value;
+                    
+                    if (!email) {
+                      alert('Please enter your email address first');
+                      emailInput?.focus();
+                      return;
+                    }
+                    
+                    try {
+                      console.log('[ForgotPassword] Sending reset email to:', email);
+                      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                        redirectTo: `${window.location.origin}/reset-password`,
+                      });
+                      
+                      if (error) throw error;
+                      
+                      alert('Password reset email sent! Please check your inbox.');
+                      console.log('[ForgotPassword] Reset email sent successfully');
+                    } catch (error) {
+                      console.error('[ForgotPassword] Failed to send reset email:', error);
+                      alert('Failed to send reset email: ' + (error?.message || 'Unknown error'));
+                    }
+                  }}
+                  className="text-sm font-medium hover:underline"
+                  style={{ color: primaryColor }}
+                >
+                  Forgot Password?
+                </button>
+              </div>
             </div>
 
             <button
