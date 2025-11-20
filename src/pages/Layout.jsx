@@ -2131,7 +2131,22 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 if (error) {
                   throw error;
                 }
-                console.log("[Login] Supabase auth successful, reloading...");
+                console.log("[Login] Supabase auth successful, calling backend login...");
+                
+                // Call backend /api/auth/login to get JWT cookies
+                const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || '';
+                const loginResponse = await fetch(`${backendUrl}/api/auth/login`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include', // Important: include cookies
+                  body: JSON.stringify({ email, password })
+                });
+                
+                if (!loginResponse.ok) {
+                  throw new Error(`Backend login failed: ${loginResponse.status}`);
+                }
+                
+                console.log("[Login] Backend login successful, reloading...");
                 window.location.reload();
               } catch (error) {
                 console.error("[Login] Login failed:", error);
