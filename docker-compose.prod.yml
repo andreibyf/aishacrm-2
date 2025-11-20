@@ -16,7 +16,7 @@ services:
       start_period: 5s
 
   backend:
-    image: ghcr.io/andreibyf/aishacrm-2-backend:v1.0.11
+    image: ghcr.io/andreibyf/aishacrm-2-backend:v1.0.17
     container_name: aishacrm-backend
     restart: unless-stopped
     depends_on:
@@ -35,6 +35,13 @@ services:
       - REDIS_URL=redis://redis:6379
       - SYSTEM_TENANT_ID=${SYSTEM_TENANT_ID:-a11dfb63-4b18-4eb8-872e-747af2e37c46}
       - TENANT_RESOLVE_CACHE_TTL_MS=${TENANT_RESOLVE_CACHE_TTL_MS:-300000}
+      # IDR (Intrusion Detection) Configuration - v1.0.17+
+      # IMPORTANT: Add your admin IP addresses here to prevent lockouts
+      # Example: IDR_WHITELIST_IPS=203.0.113.42,198.51.100.0
+      # Find your IP at: https://api.ipify.org
+      - IDR_WHITELIST_IPS=${IDR_WHITELIST_IPS:-}
+      # Emergency unblock secret - generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+      - IDR_EMERGENCY_SECRET=${IDR_EMERGENCY_SECRET:-}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
       interval: 30s
@@ -43,7 +50,7 @@ services:
       start_period: 10s
 
   frontend:
-    image: ghcr.io/andreibyf/aishacrm-2-frontend:v1.0.11
+    image: ghcr.io/andreibyf/aishacrm-2-frontend:v1.0.17
     container_name: aishacrm-frontend
     restart: unless-stopped
     depends_on:
