@@ -264,8 +264,13 @@ if (typeof window !== "undefined") {
       return String(arg);
     }).join(" ");
 
-    // Don't log if it's our own logging system
-    if (!message.includes("[ERROR]") && !message.includes("Logging failed")) {
+    // Don't log if it's our own logging system or Supabase auth errors
+    const isSupabaseAuthError = message.includes("Auth session missing") || 
+                                 message.includes("AuthSessionMissingError");
+    
+    if (!message.includes("[ERROR]") && 
+        !message.includes("Logging failed") && 
+        !isSupabaseAuthError) {
       SystemLog.create({
         level: "ERROR",
         message,
