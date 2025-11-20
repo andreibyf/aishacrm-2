@@ -16,14 +16,14 @@ services:
       start_period: 5s
 
   backend:
-    image: ghcr.io/andreibyf/aishacrm-2-backend:v1.0.9
+    image: ghcr.io/andreibyf/aishacrm-2-backend:v1.0.11
     container_name: aishacrm-backend
     restart: unless-stopped
     depends_on:
       redis:
         condition: service_healthy
     ports:
-      - "4001:3001"
+      - "127.0.0.1:4001:3001"
     env_file:
       - ./backend/.env
     environment:
@@ -43,7 +43,7 @@ services:
       start_period: 10s
 
   frontend:
-    image: ghcr.io/andreibyf/aishacrm-2-frontend:v1.0.9
+    image: ghcr.io/andreibyf/aishacrm-2-frontend:v1.0.11
     container_name: aishacrm-frontend
     restart: unless-stopped
     depends_on:
