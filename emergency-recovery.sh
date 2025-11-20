@@ -121,8 +121,8 @@ sed -i 's/ghcr.io\/andreibyf\/aishacrm-2-backend:.*/ghcr.io\/andreibyf\/aishacrm
 echo ""
 echo -e "${YELLOW}Step 7: Deploy v1.0.17${NC}"
 echo "This will pull new Docker images from GHCR and restart containers..."
-docker-compose -f docker-compose.prod.yml pull
-docker-compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 
 echo ""
 echo "Waiting 15 seconds for services to start..."
