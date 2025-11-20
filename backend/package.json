@@ -1,6 +1,6 @@
 {
   "name": "ai-sha-crm-backend",
-  "version": "1.0.21",
+  "version": "1.0.22",
   "description": "Independent backend server for ai-sha crm - your own backend infrastructure",
   "main": "server.js",
   "type": "module",
