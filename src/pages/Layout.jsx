@@ -82,6 +82,7 @@ import PortalRootManager from "../components/shared/PortalRootManager";
 import ModalHost from "../components/shared/ModalHost";
 import { ErrorLogProvider } from "../components/shared/ErrorLogger";
 import { LoggerProvider } from "../components/shared/Logger";
+import PasswordResetHandler from "../components/auth/PasswordResetHandler";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ApiOptimizerProvider } from "../components/shared/ApiOptimizer";
@@ -2114,6 +2115,15 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               Welcome to AI-SHA CRM
             </h2>
             <p className="text-slate-600">Sign in to access your account</p>
+            
+            {/* Password reset success message */}
+            {new URLSearchParams(window.location.search).get('reset') === 'success' && (
+              <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
+                <p className="text-sm text-green-700 text-center">
+                  ✓ Password updated successfully! Please sign in with your new password.
+                </p>
+              </div>
+            )}
           </div>
 
           <form
@@ -3432,9 +3442,11 @@ export default function LayoutWrapper({ children, currentPageName }) {
               <TimezoneProvider>
                 <EmployeeScopeProvider>
                   <LoggerProvider>
-                    <Layout currentPageName={currentPageName}>
-                      {children}
-                    </Layout>
+                    <PasswordResetHandler>
+                      <Layout currentPageName={currentPageName}>
+                        {children}
+                      </Layout>
+                    </PasswordResetHandler>
                   </LoggerProvider>
                 </EmployeeScopeProvider>
               </TimezoneProvider>
