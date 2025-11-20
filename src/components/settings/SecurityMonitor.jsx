@@ -213,6 +213,11 @@ export default function SecurityMonitor() {
             <div className="text-xs text-slate-400 mt-1">
               {idrStatus?.blocked_ips?.length || 0} IPs blocked
             </div>
+            {idrStatus?.redis_available === false && (
+              <div className="text-xs text-yellow-400 mt-1">
+                ⚠ Memory-only mode
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -484,33 +489,68 @@ export default function SecurityMonitor() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {idrStatus?.blocked_ips?.length === 0 ? (
+            {!idrStatus || idrStatus.blocked_ips?.length === 0 ? (
               <div className="text-center text-slate-400 py-4">
                 <ShieldCheck className="w-12 h-12 mx-auto mb-2 text-green-500" />
                 No IPs currently blocked
               </div>
             ) : (
               <div className="space-y-2">
-                {idrStatus?.blocked_ips?.map((ip, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between p-3 bg-slate-900 rounded border border-red-700/50"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Lock className="w-4 h-4 text-red-400" />
-                      <span className="font-mono text-sm text-slate-200">{ip}</span>
-                    </div>
-                    <Button
-                      onClick={() => unblockIP(ip)}
-                      size="sm"
-                      variant="outline"
+                {idrStatus.blocked_ips.map((ipData, idx) => {
+                  const isExpiring = ipData.expires_in_seconds > 0 && ipData.expires_in_seconds < 300; // Less than 5 minutes
+                  const expiresText = ipData.expires_in_seconds > 0
+                    ? `Expires in ${Math.floor(ipData.expires_in_seconds / 60)}m ${ipData.expires_in_seconds % 60}s`
+                    : 'Permanent';
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`flex items-center justify-between p-3 bg-slate-900 rounded border ${
+                        isExpiring ? 'border-yellow-700/50' : 'border-red-700/50'
+                      }`}
                     >
-                      <Unlock className="w-3 h-3 mr-1" />
-                      Unblock
-                    </Button>
-                  </div>
-                ))}
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Lock className="w-4 h-4 text-red-400" />
+                          <span className="font-mono text-sm text-slate-200">
+                            {typeof ipData === 'string' ? ipData : ipData.ip}
+                          </span>
+                          {isExpiring && (
+                            <Badge className="bg-yellow-600">
+                              Expiring Soon
+                            </Badge>
+                          )}
+                        </div>
+                        {ipData.blocked_at && ipData.blocked_at !== 'unknown' && (
+                          <div className="text-xs text-slate-400">
+                            Blocked: {new Date(ipData.blocked_at).toLocaleString()}
+                          </div>
+                        )}
+                        <div className="text-xs text-slate-400">
+                          {expiresText}
+                        </div>
+                      </div>
+                      <Button
+                        onClick={() => unblockIP(typeof ipData === 'string' ? ipData : ipData.ip)}
+                        size="sm"
+                        variant="outline"
+                        className="ml-2"
+                      >
+                        <Unlock className="w-3 h-3 mr-1" />
+                        Unblock
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
+            )}
+            {idrStatus && !idrStatus.redis_available && (
+              <Alert className="mt-4 bg-yellow-900/30 border-yellow-700/50">
+                <AlertTriangle className="h-4 w-4 text-yellow-400" />
+                <AlertDescription className="text-yellow-300">
+                  Redis unavailable - Blocked IPs stored in memory only and will reset on backend restart
+                </AlertDescription>
+              </Alert>
             )}
           </CardContent>
         </Card>

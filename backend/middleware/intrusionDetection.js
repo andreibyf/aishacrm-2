@@ -13,12 +13,48 @@
  * - Rate limiting on suspicious IPs
  * - Automatic session termination for severe violations
  * Alert notifications to administrators
+ *
+ * Persistence:
+ * - Blocked IPs stored in Redis with TTL for cross-instance consistency
+ * - In-memory cache synced with Redis on startup and during operations
  */
 
 // In-memory tracking for rate limiting and pattern detection
 const suspiciousActivityTracker = new Map();
 const blockedIPs = new Set();
 const alertedUsers = new Map();
+
+// Redis client for persistent IP blocking (lazy-loaded)
+let redisClient = null;
+
+/**
+ * Initialize Redis client for persistent IP blocking
+ */
+async function initRedisClient() {
+  if (redisClient) return redisClient;
+
+  try {
+    const { getMemoryClient } = await import('../lib/memoryClient.js');
+    redisClient = getMemoryClient();
+    
+    if (redisClient) {
+      // Load existing blocked IPs from Redis on startup
+      const keys = await redisClient.keys('idr:blocked:*');
+      for (const key of keys) {
+        const ip = key.replace('idr:blocked:', '');
+        blockedIPs.add(ip);
+      }
+      console.log(`[IDR] Loaded ${keys.length} blocked IPs from Redis`);
+    }
+  } catch (error) {
+    console.warn('[IDR] Redis client unavailable, using in-memory only:', error.message);
+  }
+
+  return redisClient;
+}
+
+// Initialize Redis on module load (non-blocking, runs in background)
+initRedisClient().catch(e => console.warn('[IDR] Redis init deferred:', e.message));
 
 // Configuration
 const IDR_CONFIG = {
@@ -106,19 +142,58 @@ async function logSecurityEvent(
 }
 
 /**
- * Check if IP is currently blocked
+ * Check if IP is currently blocked (checks Redis first, then in-memory)
  */
-function isIPBlocked(ip) {
-  return blockedIPs.has(ip);
+async function isIPBlocked(ip) {
+  // Check in-memory first (fast path)
+  if (blockedIPs.has(ip)) return true;
+
+  // Check Redis if available (authoritative source)
+  if (redisClient) {
+    try {
+      const blocked = await redisClient.exists(`idr:blocked:${ip}`);
+      if (blocked) {
+        blockedIPs.add(ip); // Sync to in-memory cache
+        return true;
+      }
+    } catch (error) {
+      console.warn('[IDR] Redis check failed, falling back to in-memory:', error.message);
+    }
+  }
+
+  return false;
 }
 
 /**
- * Block an IP address for a specified duration
+ * Block an IP address for a specified duration (persists to Redis)
  */
-function blockIP(ip, durationMs = IDR_CONFIG.BLOCK_DURATION_MS) {
+async function blockIP(ip, durationMs = IDR_CONFIG.BLOCK_DURATION_MS) {
   blockedIPs.add(ip);
-  setTimeout(() => {
+
+  // Persist to Redis with TTL if available
+  if (redisClient) {
+    try {
+      const expiresAt = Date.now() + durationMs;
+      await redisClient.set(
+        `idr:blocked:${ip}`,
+        JSON.stringify({
+          blocked_at: new Date().toISOString(),
+          duration_ms: durationMs,
+          expires_at: new Date(expiresAt).toISOString()
+        }),
+        'PX', // millisecond precision
+        durationMs
+      );
+      console.log(`[IDR] IP blocked in Redis: ${ip} (expires in ${durationMs}ms)`);
+    } catch (error) {
+      console.error('[IDR] Failed to persist IP block to Redis:', error.message);
+    }
+  }
+
+  // In-memory timeout as backup
+  setTimeout(async () => {
     blockedIPs.delete(ip);
+    // Redis will auto-expire via TTL, but clean up in-memory
     console.log(`[IDR] IP unblocked: ${ip}`);
   }, durationMs);
 }
@@ -220,8 +295,8 @@ export async function intrusionDetection(req, res, next) {
   const userId = user?.id || 'anonymous';
   const activityKey = getActivityKey(ip, userId);
 
-  // Check if IP is blocked
-  if (isIPBlocked(ip)) {
+  // Check if IP is blocked (async check with Redis)
+  if (await isIPBlocked(ip)) {
     return res.status(403).json({
       status: 'error',
       message: 'Access denied: IP address temporarily blocked due to suspicious activity',
@@ -319,7 +394,7 @@ export async function intrusionDetection(req, res, next) {
 
       // Block IP after repeated violations
       if (recentViolations.length >= IDR_CONFIG.MAX_TENANT_VIOLATIONS_PER_HOUR) {
-        blockIP(ip);
+        await blockIP(ip);
 
         return res.status(403).json({
           status: 'error',
@@ -420,7 +495,8 @@ export async function intrusionDetection(req, res, next) {
             },
           });
 
-          blockIP(ip, 5 * 60 * 1000); // 5 minute block
+          // Block IP (fire-and-forget, don't await in sync function)
+          blockIP(ip, 5 * 60 * 1000).catch(e => console.error('[IDR] Failed to block IP:', e)); // 5 minute block
         }
 
         trackActivity(activityKey, 'FAILED_REQUEST', {
@@ -442,28 +518,79 @@ export async function intrusionDetection(req, res, next) {
 
 /**
  * Get current security status (for monitoring dashboard)
+ * Syncs with Redis to get authoritative list of blocked IPs
  */
-export function getSecurityStatus() {
+export async function getSecurityStatus() {
+  let allBlockedIPs = Array.from(blockedIPs);
+
+  // Sync with Redis to get complete list with expiration data
+  if (redisClient) {
+    try {
+      const keys = await redisClient.keys('idr:blocked:*');
+      const blockedIPsWithMeta = await Promise.all(
+        keys.map(async (key) => {
+          const ip = key.replace('idr:blocked:', '');
+          const data = await redisClient.get(key);
+          const ttl = await redisClient.ttl(key);
+          
+          try {
+            const metadata = JSON.parse(data);
+            return {
+              ip,
+              blocked_at: metadata.blocked_at,
+              expires_in_seconds: ttl,
+              expires_at: metadata.expires_at
+            };
+          } catch {
+            return { ip, blocked_at: 'unknown', expires_in_seconds: ttl, expires_at: 'unknown' };
+          }
+        })
+      );
+
+      return {
+        blocked_ips: blockedIPsWithMeta,
+        active_trackers: suspiciousActivityTracker.size,
+        timestamp: new Date().toISOString(),
+        redis_available: true
+      };
+    } catch (error) {
+      console.warn('[IDR] Failed to get Redis status:', error.message);
+    }
+  }
+
+  // Fallback to in-memory only
   return {
-    blocked_ips: Array.from(blockedIPs),
+    blocked_ips: allBlockedIPs.map(ip => ({ ip, blocked_at: 'unknown', expires_in_seconds: -1, expires_at: 'unknown' })),
     active_trackers: suspiciousActivityTracker.size,
     timestamp: new Date().toISOString(),
+    redis_available: false
   };
 }
 
 /**
  * Manually block an IP (for administrative actions)
  */
-export function manuallyBlockIP(ip, durationMs = IDR_CONFIG.BLOCK_DURATION_MS) {
-  blockIP(ip, durationMs);
+export async function manuallyBlockIP(ip, durationMs = IDR_CONFIG.BLOCK_DURATION_MS) {
+  await blockIP(ip, durationMs);
   console.log(`[IDR] IP manually blocked: ${ip} for ${durationMs}ms`);
 }
 
 /**
  * Unblock an IP (for administrative actions)
  */
-export function unblockIP(ip) {
+export async function unblockIP(ip) {
   blockedIPs.delete(ip);
+
+  // Remove from Redis
+  if (redisClient) {
+    try {
+      await redisClient.del(`idr:blocked:${ip}`);
+      console.log(`[IDR] IP manually unblocked from Redis: ${ip}`);
+    } catch (error) {
+      console.error('[IDR] Failed to unblock IP in Redis:', error.message);
+    }
+  }
+
   console.log(`[IDR] IP manually unblocked: ${ip}`);
 }
 

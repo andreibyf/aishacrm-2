@@ -29,16 +29,31 @@ const resolveBackendBase = () => {
   try {
     if (typeof window !== 'undefined') {
       const origin = window.location.origin;
-      const isIPv4 = /^(http[s]?:\/\/)?(\d{1,3}\.){3}\d{1,3}(:\d+)?/.test(raw);
-      const isLocalHost = raw.includes('localhost');
-      // Only override to origin for HTTPS pages to prevent mixed-content blocks.
-      // Preserve explicit localhost/IP when page itself is served over HTTP (local docker dev).
-      if (origin.startsWith('https://') && (isLocalHost || isIPv4)) {
-        raw = origin; // Cloudflare tunnel domain with /api routing
+      let hostname = '';
+      let protocol = '';
+      let port = '';
+      try {
+        const u = new URL(raw);
+        hostname = u.hostname;
+        protocol = u.protocol; // includes trailing ':'
+        port = u.port;
+      } catch {
+        // raw may be missing protocol; prepend http:// for parsing attempt
+        try {
+          const u2 = new URL(raw.startsWith('http') ? raw : 'http://' + raw);
+          hostname = u2.hostname;
+          protocol = u2.protocol;
+          port = u2.port;
+        } catch { /* ignore */ }
       }
-      // If protocol mismatch (page https, raw http) upgrade to https
-      if (origin.startsWith('https://') && raw.startsWith('http://')) {
-        raw = 'https://' + raw.substring('http://'.length);
+      const isIPv4Host = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
+      const isLocalHost = hostname === 'localhost';
+      // If page is served via HTTPS tunnel and backend env points to localhost/IP, force domain origin.
+      if (origin.startsWith('https://') && (isIPv4Host || isLocalHost)) {
+        raw = origin; // rely on Cloudflare tunnel /api routing
+      } else if (origin.startsWith('https://') && protocol === 'http:' && !raw.startsWith(origin)) {
+        // Same host but protocol mismatch or arbitrary http host; upgrade scheme
+        raw = 'https://' + (hostname || raw.replace(/^http:\/\//,'').split('/')[0]) + (port ? ':' + port : '');
       }
     }
   } catch { /* ignore */ }
