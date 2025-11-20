@@ -108,25 +108,19 @@ if grep -q "IDR_EMERGENCY_SECRET" docker-compose.prod.yml; then
     sed -i "s/- IDR_EMERGENCY_SECRET=.*/- IDR_EMERGENCY_SECRET=$EMERGENCY_SECRET/" docker-compose.prod.yml
 else
     # Add IDR_EMERGENCY_SECRET after IDR_WHITELIST_IPS
-    sed -i "/- IDR_WHITELIST_IPS=/a\\      - IDR_EMERGENCY_SECRET=$EMERGENCY_SECRET" docker-compose.prod.yml
+    sed -i "/- IDR_EMERGENCY_SECRET=/a\\      - IDR_EMERGENCY_SECRET=$EMERGENCY_SECRET" docker-compose.prod.yml
     echo -e "${GREEN}✓ Added IDR_EMERGENCY_SECRET${NC}"
 fi
 
 echo ""
-echo -e "${YELLOW}Step 6: Pull latest code from GitHub${NC}"
-git fetch origin
-git checkout main
-git pull origin main
-
-echo ""
-echo -e "${YELLOW}Step 7: Update to v1.0.17${NC}"
+echo -e "${YELLOW}Step 6: Update to v1.0.17${NC}"
 echo "Updating image tags in docker-compose.prod.yml..."
 sed -i 's/ghcr.io\/andreibyf\/aishacrm-2-frontend:.*/ghcr.io\/andreibyf\/aishacrm-2-frontend:v1.0.17/' docker-compose.prod.yml
 sed -i 's/ghcr.io\/andreibyf\/aishacrm-2-backend:.*/ghcr.io\/andreibyf\/aishacrm-2-backend:v1.0.17/' docker-compose.prod.yml
 
 echo ""
-echo -e "${YELLOW}Step 8: Deploy v1.0.17${NC}"
-echo "This will pull new images and restart containers..."
+echo -e "${YELLOW}Step 7: Deploy v1.0.17${NC}"
+echo "This will pull new Docker images from GHCR and restart containers..."
 docker-compose -f docker-compose.prod.yml pull
 docker-compose -f docker-compose.prod.yml up -d
 
@@ -136,7 +130,7 @@ sleep 15
 
 # Final health check
 echo ""
-echo -e "${YELLOW}Step 9: Health Check${NC}"
+echo -e "${YELLOW}Step 8: Health Check${NC}"
 if curl -s http://localhost:4001/health > /dev/null; then
     echo -e "${GREEN}✓ Backend is healthy!${NC}"
 else
