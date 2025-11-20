@@ -274,6 +274,7 @@ app.use(productionSafetyGuard({
     '/api/testing/run-playwright', // POST triggers GitHub workflow, no DB writes
     '/api/system-logs',            // System telemetry and monitoring
     '/api/users/heartbeat',        // User session keepalive
+    '/api/users/sync-from-auth',   // Supabase auth sync (critical for login)
     '/api/cron/run',               // Scheduled job execution
     '/api/notifications',          // User notification delivery
   ],
