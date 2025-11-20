@@ -56,12 +56,22 @@ async function initRedisClient() {
 // Initialize Redis on module load (non-blocking, runs in background)
 initRedisClient().catch(e => console.warn('[IDR] Redis init deferred:', e.message));
 
+// IP Whitelist - Trusted IPs that bypass ALL IDR checks
+// Add your admin/trusted IPs here to prevent lockouts
+const WHITELISTED_IPS = new Set([
+  // Add trusted IPs here (examples commented out):
+  // '203.0.113.42',        // Office IP
+  // '198.51.100.0/24',     // Company network (CIDR not supported yet, list individually)
+  // Load from environment variable
+  ...(process.env.IDR_WHITELIST_IPS?.split(',').map(ip => ip.trim()).filter(Boolean) || [])
+]);
+
 // Configuration
 const IDR_CONFIG = {
-  MAX_TENANT_VIOLATIONS_PER_HOUR: 3,
-  MAX_FAILED_REQUESTS_PER_MINUTE: 10,
-  BLOCK_DURATION_MS: 15 * 60 * 1000, // 15 minutes
-  ALERT_COOLDOWN_MS: 5 * 60 * 1000, // 5 minutes between alerts
+  MAX_TENANT_VIOLATIONS_PER_HOUR: 5,        // Increased from 3
+  MAX_FAILED_REQUESTS_PER_MINUTE: 50,       // Increased from 10 (less aggressive)
+  BLOCK_DURATION_MS: 5 * 60 * 1000,         // Reduced from 15 to 5 minutes
+  ALERT_COOLDOWN_MS: 5 * 60 * 1000,         // 5 minutes between alerts
   SQL_INJECTION_PATTERNS: [
     /(\bUNION\b.*\bSELECT\b)|(\bOR\b.*=.*)/i,
     /(\bDROP\b.*\bTABLE\b)|(\bEXEC\b.*\()/i,
@@ -70,10 +80,17 @@ const IDR_CONFIG = {
   ],
   SUSPICIOUS_PATTERNS: {
     RAPID_TENANT_SWITCHING: 5, // Different tenants in 5 requests
-    EXCESSIVE_FAILURES: 10, // Failed requests in 1 minute
+    EXCESSIVE_FAILURES: 50,    // Increased from 10 - less aggressive
     BULK_DATA_EXTRACTION: 1000, // Records in single request
   },
 };
+
+/**
+ * Check if IP is whitelisted (trusted, bypasses all IDR checks)
+ */
+function isWhitelistedIP(ip) {
+  return WHITELISTED_IPS.has(ip);
+}
 
 /**
  * Generate a unique activity tracking key
@@ -291,6 +308,11 @@ export async function intrusionDetection(req, res, next) {
     return next();
   }
 
+  // Check if IP is whitelisted (trusted admin/customer IPs)
+  if (isWhitelistedIP(ip)) {
+    return next();
+  }
+
   const user = req.user;
   const userId = user?.id || 'anonymous';
   const activityKey = getActivityKey(ip, userId);
@@ -301,6 +323,7 @@ export async function intrusionDetection(req, res, next) {
       status: 'error',
       message: 'Access denied: IP address temporarily blocked due to suspicious activity',
       code: 'IP_BLOCKED',
+      hint: 'Contact support to unblock your IP or wait for automatic expiration'
     });
   }
 

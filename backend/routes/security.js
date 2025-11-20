@@ -22,6 +22,67 @@ export default function createSecurityRoutes(_pgPool) {
   const router = express.Router();
 
   /**
+   * POST /api/security/emergency-unblock
+   * Emergency endpoint to unblock IPs without authentication
+   * Requires secret token from environment variable
+   * 
+   * USE CASE: When admin is locked out and can't access UI
+   * 
+   * Example:
+   * curl -X POST http://localhost:4001/api/security/emergency-unblock \
+   *   -H "Content-Type: application/json" \
+   *   -d '{"secret":"YOUR_SECRET","ip":"203.0.113.42"}'
+   */
+  router.post("/emergency-unblock", async (req, res) => {
+    try {
+      const { secret, ip } = req.body;
+
+      // Validate required fields
+      if (!secret || !ip) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Missing required fields: secret, ip'
+        });
+      }
+
+      // Verify emergency secret (must be set in .env)
+      const EMERGENCY_SECRET = process.env.IDR_EMERGENCY_SECRET;
+      if (!EMERGENCY_SECRET) {
+        return res.status(503).json({
+          status: 'error',
+          message: 'Emergency unblock not configured (missing IDR_EMERGENCY_SECRET)',
+          hint: 'Set IDR_EMERGENCY_SECRET in environment variables'
+        });
+      }
+
+      if (secret !== EMERGENCY_SECRET) {
+        console.warn(`[Security] Emergency unblock failed: Invalid secret from ${req.ip}`);
+        return res.status(403).json({
+          status: 'error',
+          message: 'Invalid emergency secret'
+        });
+      }
+
+      // Unblock the IP
+      await unblockIP(ip);
+
+      console.log(`[Security] Emergency unblock: ${ip} by ${req.ip}`);
+      res.json({
+        status: 'success',
+        message: `IP ${ip} has been unblocked`,
+        unblocked_ip: ip,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('[Security] Emergency unblock error:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  });
+
+  /**
    * GET /api/security/policies
    * List security policies and settings
    */
