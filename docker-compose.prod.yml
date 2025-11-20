@@ -16,9 +16,7 @@ services:
       start_period: 5s
 
   backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
+    image: ghcr.io/andreibyf/aishacrm-2-backend:v1.0.9
     container_name: aishacrm-backend
     restart: unless-stopped
     depends_on:
@@ -45,14 +43,7 @@ services:
       start_period: 10s
 
   frontend:
-    build:
-      context: .
-      args:
-        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
-        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
-        VITE_AISHACRM_BACKEND_URL: ${VITE_AISHACRM_BACKEND_URL:-http://localhost:4001}
-        VITE_CURRENT_BRANCH: ${VITE_CURRENT_BRANCH:-main}
-      dockerfile: Dockerfile
+    image: ghcr.io/andreibyf/aishacrm-2-frontend:v1.0.9
     container_name: aishacrm-frontend
     restart: unless-stopped
     depends_on:
