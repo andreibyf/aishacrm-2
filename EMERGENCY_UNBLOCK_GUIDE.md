@@ -19,8 +19,26 @@ ssh andreibyf@147.189.173.237
 # Navigate to app directory
 cd /opt/aishacrm
 
+# Check if emergency-recovery.sh exists, if not download it
+if [ ! -f emergency-recovery.sh ]; then
+    # Download from GitHub raw content
+    wget https://raw.githubusercontent.com/andreibyf/aishacrm-2/main/emergency-recovery.sh
+    chmod +x emergency-recovery.sh
+fi
+
+# Run the recovery script
+bash emergency-recovery.sh
+```
+
+Alternatively, if the file doesn't exist on GitHub yet, create it manually:
+
+```bash
+# SSH to VPS
+ssh andreibyf@147.189.173.237
+cd /opt/aishacrm
+
 # Clear all IP blocks from Redis
-docker exec aishacrm-redis-memory redis-cli --scan --pattern "idr:blocked:*" | xargs docker exec aishacrm-redis-memory redis-cli DEL
+docker exec aishacrm-redis-memory redis-cli --scan --pattern "idr:blocked:*" | xargs docker exec -i aishacrm-redis-memory redis-cli DEL
 
 # Restart backend to clear in-memory blocks
 docker restart aishacrm-backend
