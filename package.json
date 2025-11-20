@@ -1,7 +1,7 @@
 {
   "name": "aishacrm-app",
   "private": true,
-  "version": "1.0.4",
+  "version": "1.0.18",
   "type": "module",
   "scripts": {
     "dev": "node scripts/copy-docs-to-public.js && node dev-frontend.js",

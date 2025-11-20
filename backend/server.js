@@ -277,6 +277,9 @@ app.use(productionSafetyGuard({
     '/api/users/sync-from-auth',   // Supabase auth sync (critical for login)
     '/api/cron/run',               // Scheduled job execution
     '/api/notifications',          // User notification delivery
+    '/api/auth/login',             // Authentication login (critical for access)
+    '/api/auth/refresh',           // JWT token refresh (critical for sessions)
+    '/api/auth/logout',            // Authentication logout
   ],
   pgPool, // Pass database connection for security event logging
 }));
