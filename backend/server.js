@@ -272,6 +272,10 @@ if (perfLogPool || pgPool) {
 app.use(productionSafetyGuard({
   exemptPaths: [
     '/api/testing/run-playwright', // POST triggers GitHub workflow, no DB writes
+    '/api/system-logs',            // System telemetry and monitoring
+    '/api/users/heartbeat',        // User session keepalive
+    '/api/cron/run',               // Scheduled job execution
+    '/api/notifications',          // User notification delivery
   ],
   pgPool, // Pass database connection for security event logging
 }));
