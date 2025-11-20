@@ -55,6 +55,18 @@ jobs:
             org.opencontainers.image.description=Aisha CRM ${{ matrix.service }}
             org.opencontainers.image.licenses=MIT
 
+      - name: Validate frontend build secrets
+        if: ${{ matrix.service == 'frontend' }}
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          echo "Validating frontend build secrets..."
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
+            echo "ERROR: Missing required secrets for frontend build. Set 'VITE_SUPABASE_URL' and 'VITE_SUPABASE_ANON_KEY' in repository secrets." >&2
+            exit 1
+          fi
+
       - name: Build and push ${{ matrix.service }}
         uses: docker/build-push-action@v5
         with:
