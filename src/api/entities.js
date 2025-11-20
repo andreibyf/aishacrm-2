@@ -20,13 +20,30 @@ const normalizeBackendUrl = (url) => {
   return url;
 };
 
-// Exported so other modules (CronHeartbeat, AuditLog, etc.) can consume the same normalized URL
-export const BACKEND_URL = import.meta.env.DEV
-  ? ''
-  : normalizeBackendUrl(
-      import.meta.env.VITE_AISHACRM_BACKEND_URL ||
-      "http://localhost:3001"
-    );
+// Resolve a production-safe backend base URL.
+// Fallback logic: if build-time env missing or points at localhost or a raw IP, prefer window.location.origin
+// because Cloudflare Tunnel terminates TLS and routes /api/*.
+const resolveBackendBase = () => {
+  if (import.meta.env.DEV) return '';
+  let raw = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+  // If raw is localhost or an IPv4 literal, replace with current origin (tunnel domain)
+  try {
+    const isIPv4 = /^(http[s]?:\/\/)?(\d{1,3}\.){3}\d{1,3}(:\d+)?/.test(raw);
+    if (typeof window !== 'undefined') {
+      const origin = window.location.origin;
+      if (!raw || raw.includes('localhost') || isIPv4) {
+        raw = origin;
+      }
+      // Also ensure protocol matches page to avoid mixed-content blocks
+      if (origin.startsWith('https://') && raw.startsWith('http://')) {
+        raw = 'https://' + raw.substring('http://'.length);
+      }
+    }
+  } catch { /* ignore */ }
+  return normalizeBackendUrl(raw);
+};
+
+export const BACKEND_URL = resolveBackendBase();
 
 // Helper to properly pluralize entity names for API endpoints
 const pluralize = (entityName) => {
