@@ -2,6 +2,7 @@ import React, { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom"; // Import useNavigate
 import { createPageUrl } from "@/utils";
 import PasswordChangeModal from "@/components/auth/PasswordChangeModal";
+import EnvironmentBanner from "@/components/shared/EnvironmentBanner";
 import {
   BarChart3,
   BookOpen, // NEW: Added for Documentation
@@ -2116,6 +2117,35 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             </h2>
             <p className="text-slate-600">Sign in to access your account</p>
             
+            {/* Environment indicator on login page */}
+            {(() => {
+              const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || '';
+              const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+              const isDev = backendUrl.includes('localhost') || backendUrl.includes('127.0.0.1');
+              const isDevDb = supabaseUrl.includes('efzqxjpfewkrgpdootte');
+              const isProdDb = supabaseUrl.includes('ehjlenywplgyiahgxkfj');
+              
+              let envLabel = null;
+              let bgColor = '';
+              
+              if (isDev && isDevDb) {
+                envLabel = '🔵 DEVELOPMENT ENVIRONMENT';
+                bgColor = 'bg-blue-100 border-blue-300 text-blue-800';
+              } else if (isDev && isProdDb) {
+                envLabel = '⚠️ LOCAL + PRODUCTION DATABASE';
+                bgColor = 'bg-orange-100 border-orange-300 text-orange-800';
+              } else if (!isDev && isDevDb) {
+                envLabel = '🟡 STAGING ENVIRONMENT';
+                bgColor = 'bg-yellow-100 border-yellow-300 text-yellow-800';
+              }
+              
+              return envLabel ? (
+                <div className={`mt-4 p-3 border rounded-md ${bgColor}`}>
+                  <p className="text-sm font-bold text-center">{envLabel}</p>
+                </div>
+              ) : null;
+            })()}
+            
             {/* Password reset success message */}
             {new URLSearchParams(window.location.search).get('reset') === 'success' && (
               <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
@@ -2226,10 +2256,18 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                     return;
                   }
                   try {
-                    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                      redirectTo: `${window.location.origin}/reset-password`,
+                    // Use backend proxy to avoid CORS issues
+                    const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+                    const response = await fetch(`${backendUrl}/api/users/reset-password`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ 
+                        email,
+                        redirectTo: `${window.location.origin}/reset-password`
+                      }),
                     });
-                    if (error) throw error;
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error || 'Failed to send reset email');
                     alert('Reset email sent. Check your inbox (and spam).');
                   } catch (err) {
                     alert('Failed to send reset email: ' + (err?.message || 'Unknown error'));
@@ -3216,6 +3254,8 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         }
       `}
       </style>
+      {/* Environment Banner - Shows dev/staging indicators */}
+      <EnvironmentBanner />
       {/* Always-visible effective tenant badge in the top-right */}
       <EffectiveClientBadge />
       {/* Light Theme Alert Background Lightening Styles */}
