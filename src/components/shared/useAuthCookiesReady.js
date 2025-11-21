@@ -20,8 +20,11 @@ export function useAuthCookiesReady(options = {}) {
         return; // stop polling
       }
       if (Date.now() - start >= maxWaitMs) {
-        // Give up; mark ready=false but stop polling to avoid infinite loop.
-        setReady(false);
+        // Timeout: assume ready to prevent blocking indefinitely (graceful fallback)
+        if (import.meta.env.DEV) {
+          console.warn('[useAuthCookiesReady] Timeout waiting for auth cookie - proceeding anyway');
+        }
+        setReady(true);
         return;
       }
       setTimeout(check, pollIntervalMs);
