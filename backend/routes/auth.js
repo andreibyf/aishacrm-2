@@ -94,24 +94,29 @@ export default function createAuthRoutes(_pgPool) {
       // Prefer users table (admins/superadmins), then employees
       let user = null;
       let table = 'users';
-      let { data: uRows } = await supabase
+      let { data: uRows, error: uError } = await supabase
         .from('users')
         .select('id, tenant_id, email, first_name, last_name, role, status, metadata')
         .eq('email', normalizedEmail)
         .limit(1);
+      
+      console.log('[Auth.login] Users query:', { email: normalizedEmail, rowCount: uRows?.length, error: uError?.message });
+      
       if (uRows && uRows.length > 0) {
         user = uRows[0];
       } else {
         table = 'employees';
-        const { data: eRows } = await supabase
+        const { data: eRows, error: eError } = await supabase
           .from('employees')
           .select('id, tenant_id, email, first_name, last_name, role, status, metadata')
           .eq('email', normalizedEmail)
           .limit(1);
+        console.log('[Auth.login] Employees query:', { email: normalizedEmail, rowCount: eRows?.length, error: eError?.message });
         if (eRows && eRows.length > 0) user = eRows[0];
       }
 
       if (!user) {
+        console.log('[Auth.login] No user found for email:', normalizedEmail);
         return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
       }
 
