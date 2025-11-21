@@ -10,6 +10,7 @@ import { createPageUrl } from "@/utils";
 import { Lead } from "@/api/entities";
 import { Employee } from "@/api/entities";
 import { useApiManager } from "../shared/ApiManager";
+import { useUser } from "@/components/shared/useUser";
 
 const AGE_BUCKETS = [
   { label: '0-7 days', min: 0, max: 7, color: 'bg-green-100 text-green-800 border-green-200' },
@@ -26,8 +27,14 @@ export default function LeadAgeReport(props) {
   const [ageBuckets, setAgeBuckets] = useState([]);
   const [selectedBucket, setSelectedBucket] = useState(null);
   const { cachedRequest } = useApiManager();
+  const { user, loading: userLoading } = useUser();
 
   useEffect(() => {
+        // Wait for user to be loaded before fetching data
+        if (userLoading) {
+          return;
+        }
+
     let mounted = true;
     const load = async () => {
       setLoading(true);
@@ -119,7 +126,7 @@ export default function LeadAgeReport(props) {
 
     load();
     return () => { mounted = false; };
-  }, [props, cachedRequest]);
+  }, [props, cachedRequest, userLoading]);
 
   // Calculate age distribution
   useEffect(() => {

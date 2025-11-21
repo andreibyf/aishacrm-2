@@ -12,6 +12,7 @@ import { BarChart as RBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTo
 import { Activity } from "@/api/entities";
 import { useApiManager } from "../shared/ApiManager";
 import { useEmployeeScope } from "../shared/EmployeeScopeContext";
+import { useUser } from "@/components/shared/useUser";
 
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -62,9 +63,15 @@ export default function RecentActivities(props) {
 
   const { cachedRequest } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
+    const { user, loading: userLoading } = useUser();
   const flipAttemptedRef = useRef(false);
 
   const fetchActivities = useCallback(async () => {
+        // Wait for user to be loaded before fetching data
+        if (userLoading) {
+          return;
+        }
+
     setLoading(true);
     try {
       if (Array.isArray(props?.prefetchedActivities)) {
@@ -129,7 +136,7 @@ export default function RecentActivities(props) {
     } finally {
       setLoading(false);
     }
-  }, [memoTenantFilter, memoShowTestData, cachedRequest, props.prefetchedActivities]);
+  }, [memoTenantFilter, memoShowTestData, cachedRequest, props.prefetchedActivities, userLoading]);
 
   useEffect(() => {
     fetchActivities();

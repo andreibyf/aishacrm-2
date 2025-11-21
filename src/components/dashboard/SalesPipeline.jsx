@@ -5,6 +5,7 @@ import { Target, AlertTriangle, Loader2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from "recharts";
 import { useApiManager } from "@/components/shared/ApiManager";
 import { Opportunity } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser";
 import { Link } from "react-router-dom"; // Added import
 import { createPageUrl } from "@/utils"; // Added import
 import { Button } from "@/components/ui/button"; // Added import for Button component
@@ -14,8 +15,14 @@ export default function SalesPipeline(props) {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
   const { cachedRequest } = useApiManager();
+  const { user, loading: userLoading } = useUser();
 
   React.useEffect(() => {
+        // Wait for user to be loaded before fetching data
+        if (userLoading) {
+          return;
+        }
+
     let mounted = true; // Flag to prevent state updates on unmounted component
 
     // Helper function to compute pipeline data from a list of opportunities
@@ -123,7 +130,7 @@ export default function SalesPipeline(props) {
     load(); // Execute the async load function
     return () => { mounted = false; }; // Cleanup function for unmounting
      
-  }, [props?.tenantFilter, props?.showTestData, props?.prefetchedOpportunities, cachedRequest]); // Include all relevant props and cachedRequest in dependencies
+  }, [props?.tenantFilter, props?.showTestData, props?.prefetchedOpportunities, cachedRequest, userLoading]); // Include all relevant props and cachedRequest in dependencies
 
   return (
     <Card className="bg-slate-800 border-slate-700 h-full">
