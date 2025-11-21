@@ -87,9 +87,102 @@ const IDR_CONFIG = {
 
 /**
  * Check if IP is whitelisted (trusted, bypasses all IDR checks)
+ * Supports both exact IP matches and CIDR notation (e.g., 2a09:bac5:6c1a:2678::/64)
  */
 function isWhitelistedIP(ip) {
-  return WHITELISTED_IPS.has(ip);
+  // Check exact match first (fast path)
+  if (WHITELISTED_IPS.has(ip)) {
+    return true;
+  }
+  
+  // Check CIDR ranges
+  for (const entry of WHITELISTED_IPS) {
+    if (entry.includes('/')) {
+      // CIDR notation detected
+      if (ipMatchesCIDR(ip, entry)) {
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Check if an IP address matches a CIDR range
+ * Supports both IPv4 and IPv6
+ */
+function ipMatchesCIDR(ip, cidr) {
+  try {
+    const [range, prefixLen] = cidr.split('/');
+    const prefix = parseInt(prefixLen, 10);
+    
+    // Determine if IPv6 or IPv4
+    const isIPv6 = ip.includes(':');
+    const isRangeIPv6 = range.includes(':');
+    
+    if (isIPv6 !== isRangeIPv6) {
+      return false; // Type mismatch
+    }
+    
+    if (isIPv6) {
+      return ipv6MatchesCIDR(ip, range, prefix);
+    } else {
+      return ipv4MatchesCIDR(ip, range, prefix);
+    }
+  } catch (e) {
+    console.warn(`[IDR] Invalid CIDR notation: ${cidr}`, e.message);
+    return false;
+  }
+}
+
+/**
+ * Check if IPv6 address matches CIDR range
+ */
+function ipv6MatchesCIDR(ip, range, prefixLen) {
+  const expandIPv6 = (addr) => {
+    // Expand :: notation
+    const parts = addr.split('::');
+    if (parts.length === 2) {
+      const left = parts[0] ? parts[0].split(':') : [];
+      const right = parts[1] ? parts[1].split(':') : [];
+      const missing = 8 - left.length - right.length;
+      const middle = Array(missing).fill('0');
+      return [...left, ...middle, ...right].map(p => p.padStart(4, '0')).join(':');
+    }
+    return addr.split(':').map(p => p.padStart(4, '0')).join(':');
+  };
+  
+  const ipExpanded = expandIPv6(ip);
+  const rangeExpanded = expandIPv6(range);
+  
+  // Convert to binary string for comparison
+  const ipBinary = ipExpanded.split(':').map(hex => 
+    parseInt(hex, 16).toString(2).padStart(16, '0')
+  ).join('');
+  const rangeBinary = rangeExpanded.split(':').map(hex => 
+    parseInt(hex, 16).toString(2).padStart(16, '0')
+  ).join('');
+  
+  // Compare prefix bits
+  return ipBinary.substring(0, prefixLen) === rangeBinary.substring(0, prefixLen);
+}
+
+/**
+ * Check if IPv4 address matches CIDR range
+ */
+function ipv4MatchesCIDR(ip, range, prefixLen) {
+  const ipParts = ip.split('.').map(Number);
+  const rangeParts = range.split('.').map(Number);
+  
+  // Convert to 32-bit integers
+  const ipInt = (ipParts[0] << 24) | (ipParts[1] << 16) | (ipParts[2] << 8) | ipParts[3];
+  const rangeInt = (rangeParts[0] << 24) | (rangeParts[1] << 16) | (rangeParts[2] << 8) | rangeParts[3];
+  
+  // Create mask
+  const mask = ~((1 << (32 - prefixLen)) - 1);
+  
+  return (ipInt & mask) === (rangeInt & mask);
 }
 
 /**
