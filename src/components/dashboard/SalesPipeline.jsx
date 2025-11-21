@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { useApiManager } from "@/components/shared/ApiManager";
 import { Opportunity } from "@/api/entities";
 import { useUser } from "@/components/shared/useUser";
+import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
 import { Link } from "react-router-dom"; // Added import
 import { createPageUrl } from "@/utils"; // Added import
 import { Button } from "@/components/ui/button"; // Added import for Button component
@@ -16,10 +17,11 @@ export default function SalesPipeline(props) {
   const [errorMessage, setErrorMessage] = useState(null);
   const { cachedRequest } = useApiManager();
   const { user, loading: userLoading } = useUser();
+  const { authCookiesReady } = useAuthCookiesReady();
 
   React.useEffect(() => {
         // Wait for user to be loaded before fetching data
-        if (userLoading) {
+        if (userLoading || !authCookiesReady) {
           return;
         }
 
@@ -130,7 +132,7 @@ export default function SalesPipeline(props) {
     load(); // Execute the async load function
     return () => { mounted = false; }; // Cleanup function for unmounting
      
-  }, [props?.tenantFilter, props?.showTestData, props?.prefetchedOpportunities, cachedRequest, userLoading]); // Include all relevant props and cachedRequest in dependencies
+  }, [props?.tenantFilter, props?.showTestData, props?.prefetchedOpportunities, cachedRequest, userLoading, authCookiesReady]); // Include all relevant props and cachedRequest in dependencies
 
   return (
     <Card className="bg-slate-800 border-slate-700 h-full">

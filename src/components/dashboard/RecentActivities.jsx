@@ -13,6 +13,7 @@ import { Activity } from "@/api/entities";
 import { useApiManager } from "../shared/ApiManager";
 import { useEmployeeScope } from "../shared/EmployeeScopeContext";
 import { useUser } from "@/components/shared/useUser";
+import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
 
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -64,11 +65,12 @@ export default function RecentActivities(props) {
   const { cachedRequest } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
     const { user, loading: userLoading } = useUser();
+    const { authCookiesReady } = useAuthCookiesReady();
   const flipAttemptedRef = useRef(false);
 
   const fetchActivities = useCallback(async () => {
         // Wait for user to be loaded before fetching data
-        if (userLoading) {
+        if (userLoading || !authCookiesReady) {
           return;
         }
 
@@ -136,7 +138,7 @@ export default function RecentActivities(props) {
     } finally {
       setLoading(false);
     }
-  }, [memoTenantFilter, memoShowTestData, cachedRequest, props.prefetchedActivities, userLoading]);
+  }, [memoTenantFilter, memoShowTestData, cachedRequest, props.prefetchedActivities, userLoading, authCookiesReady]);
 
   useEffect(() => {
     fetchActivities();

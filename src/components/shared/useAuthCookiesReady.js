@@ -1,0 +1,35 @@
+import { useEffect, useState } from 'react';
+
+// Simple hook that polls for auth cookies (aisha_access) to appear.
+// Prevents premature API calls immediately after login before browser processes Set-Cookie.
+export function useAuthCookiesReady(options = {}) {
+  const { pollIntervalMs = 100, maxWaitMs = 4000 } = options;
+  const [ready, setReady] = useState(false);
+  const [checkedAtLeastOnce, setCheckedAtLeastOnce] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const start = Date.now();
+
+    const check = () => {
+      if (cancelled) return;
+      const hasCookie = typeof document !== 'undefined' && /aisha_access=/.test(document.cookie);
+      setCheckedAtLeastOnce(true);
+      if (hasCookie) {
+        setReady(true);
+        return; // stop polling
+      }
+      if (Date.now() - start >= maxWaitMs) {
+        // Give up; mark ready=false but stop polling to avoid infinite loop.
+        setReady(false);
+        return;
+      }
+      setTimeout(check, pollIntervalMs);
+    };
+
+    check();
+    return () => { cancelled = true; };
+  }, [pollIntervalMs, maxWaitMs]);
+
+  return { authCookiesReady: ready, checkedAuthCookies: checkedAtLeastOnce };
+}

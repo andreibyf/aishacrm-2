@@ -20,6 +20,7 @@ import { Loader2 } from "lucide-react";
 import WidgetPickerModal from "../components/dashboard/WidgetPickerModal";
 import { toast } from "sonner";
 import { useUser } from "@/components/shared/useUser.js";
+import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
 import { useLogger } from "../components/shared/Logger";
 
 const ALL_WIDGETS = [
@@ -58,6 +59,7 @@ const ALL_WIDGETS = [
 export default function DashboardPage() {
   // Use global user context (centralized User.me())
   const { user, reloadUser } = useUser();
+  const { authCookiesReady } = useAuthCookiesReady();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalContacts: 0,
@@ -175,13 +177,13 @@ export default function DashboardPage() {
 
   // Load dashboard stats (only after user AND tenant are ready)
   useEffect(() => {
-    // Guard: wait for user to load first
-    if (!user) {
+    // Guard: wait for user AND auth cookies
+    if (!user || !authCookiesReady) {
       setLoading(true);
       return;
     }
 
-    const loadStats = async () => {
+    const loadStats = async (attempt = 0) => {
       setLoading(true);
       try {
         // Inline tenant filter logic to avoid dependency issues
@@ -345,6 +347,12 @@ export default function DashboardPage() {
           activitiesCount: activities?.length || 0,
         });
       } catch (error) {
+        // Retry logic for early auth race (cookies not yet processed)
+        const isAuthRace = /Authentication required/i.test(error?.message || "") || /Authentication required/i.test(String(error));
+        if (isAuthRace && attempt < 2) {
+          setTimeout(() => loadStats(attempt + 1), 350);
+          return; // Defer error handling until retries exhausted
+        }
         logger.error("Failed to load dashboard data", "Dashboard", {
           error: error.message,
           stack: error.stack,
@@ -362,6 +370,7 @@ export default function DashboardPage() {
     loadStats();
   }, [
     user,
+    authCookiesReady,
     selectedTenantId,
     showTestData,
     selectedEmail,
