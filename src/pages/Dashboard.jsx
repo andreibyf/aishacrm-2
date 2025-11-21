@@ -257,7 +257,7 @@ export default function DashboardPage() {
           showTestData,
         });
 
-        const [leads, contacts, opportunities, activities] = await Promise.all([
+        const [leadsRaw, contactsRaw, opportunitiesRaw, activitiesRaw] = await Promise.all([
           cachedRequest(
             "Lead",
             "filter",
@@ -283,6 +283,20 @@ export default function DashboardPage() {
             () => Activity.filter(tenantFilter),
           ),
         ]);
+
+        // Defensive normalization: some race conditions or transient errors can return
+        // non-array values (object, promise remnants). Coerce to arrays to avoid
+        // runtime errors like 'P.filter is not a function'. Log once if normalization applied.
+        const toArray = (val, label) => {
+          if (Array.isArray(val)) return val;
+          if (val == null) return [];
+          console.warn(`[Dashboard] Normalizing non-array ${label} value`, val);
+          return [];
+        };
+        const leads = toArray(leadsRaw, 'leads');
+        const contacts = toArray(contactsRaw, 'contacts');
+        const opportunities = toArray(opportunitiesRaw, 'opportunities');
+        const activities = toArray(activitiesRaw, 'activities');
 
         // Calculate pipeline value (active opportunities only - exclude won and lost)
         const activeOpps = opportunities?.filter((o) =>
