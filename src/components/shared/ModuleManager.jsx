@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { ModuleSettings } from "@/api/entities";
 import { useUser } from '@/components/shared/useUser.js';
+import { useAuthCookiesReady } from '@/components/shared/useAuthCookiesReady';
 import {
   Card,
   CardContent,
@@ -278,6 +279,7 @@ export default function ModuleManager() {
   const [moduleSettings, setModuleSettings] = useState([]);
   const [loading, setLoading] = useState(true);
   const { user } = useUser();
+  const { authCookiesReady } = useAuthCookiesReady();
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -324,10 +326,10 @@ export default function ModuleManager() {
   }, [user]);
 
   useEffect(() => {
-    if (user) {
+    if (user && authCookiesReady) {
       loadData();
     }
-  }, [user, loadData]);
+  }, [user, authCookiesReady, loadData]);
 
   const toggleModule = async (moduleId, currentStatus) => {
     if (!user) return;
