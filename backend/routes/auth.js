@@ -96,7 +96,7 @@ export default function createAuthRoutes(_pgPool) {
       let table = 'users';
       let { data: uRows, error: uError } = await supabase
         .from('users')
-        .select('id, tenant_id, email, first_name, last_name, role, status, metadata')
+        .select('id, tenant_id, email, first_name, last_name, role, metadata')
         .eq('email', normalizedEmail)
         .limit(1);
       
