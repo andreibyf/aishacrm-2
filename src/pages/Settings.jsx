@@ -47,6 +47,7 @@ import TimezoneSettings from "../components/settings/TimezoneSettings";
 // Access & Security
 import SecuritySettings from "../components/settings/SecuritySettings";
 import ApiKeyManager from "../components/settings/ApiKeyManager";
+import RateLimitManager from "../components/settings/RateLimitManager";
 
 // Team Management
 import EnhancedUserManagement from "../components/settings/EnhancedUserManagement";
@@ -177,6 +178,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
       { id: 'sync-health', label: 'Sync Health', icon: RefreshCw, color: 'emerald', roles: ['superadmin'] },
       { id: 'mcp-monitor', label: 'MCP Monitor', icon: Server, color: 'emerald', roles: ['superadmin'] },
       { id: 'security-monitor', label: 'Security', icon: Shield, color: 'red', roles: ['superadmin'] },
+      { id: 'rate-limits', label: 'Rate Limits', icon: Lock, color: 'orange', roles: ['superadmin'] },
       { id: 'system-health', label: 'System Health', icon: Activity, color: 'emerald', roles: ['superadmin'] },
       { id: 'system-logs', label: 'System Logs', icon: FileText, color: 'slate', roles: ['superadmin'] },
 
@@ -629,6 +631,23 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                   </CardHeader>
                   <CardContent>
                     <SecurityMonitor />
+                  </CardContent>
+                </Card>
+              )}
+
+              {activeTab === 'rate-limits' && isSuperadmin && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Lock className="w-5 h-5 text-orange-400" />
+                      Rate Limit & IP Block Management
+                    </CardTitle>
+                    <CardDescription>
+                      View and clear rate-limited IPs, unblock users, and monitor security violations
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <RateLimitManager />
                   </CardContent>
                 </Card>
               )}

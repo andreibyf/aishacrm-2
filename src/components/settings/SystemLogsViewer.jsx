@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Loader2, RefreshCw, Trash2, Search, PlusCircle, Download } from "lucide-react";
 import { toast } from "sonner";
-import { BACKEND_URL } from '@/api/entities';
+import { BACKEND_URL, SystemLog } from '@/api/entities';
+import { resilientFetch } from '@/utils/resilientFetch';
 
 export default function SystemLogsViewer() {
   const { selectedTenantId } = useTenant();
@@ -25,99 +26,95 @@ export default function SystemLogsViewer() {
 
   const loadLogs = useCallback(async () => {
     setLoading(true);
+    const correlationId = `syslog-load-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    const tenantId = selectedTenantId || 'local-tenant-001';
     try {
-      // Try backend first (for local dev with Supabase Cloud)
-      // Note: backend mounts this router at /api/system-logs (dash), not /api/system/logs
-      const tenantId = selectedTenantId || 'local-tenant-001';
-      
-      // Fetch logs for BOTH selected tenant AND 'system' tenant (for backend lifecycle events)
-      // Also fetch API performance logs to surface API errors (4xx/5xx)
       const tenantParam = tenantId ? `tenant_id=${encodeURIComponent(tenantId)}&` : '';
-      const [tenantResponse, systemResponse, perfResponse] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/system-logs?${tenantParam}limit=200&hours=${timeRangeHours}`),
-        fetch(`${BACKEND_URL}/api/system-logs?tenant_id=system&limit=200&hours=${timeRangeHours}`),
-        fetch(`${BACKEND_URL}/api/metrics/performance?hours=${timeRangeHours}&limit=500${tenantId ? `&tenant_id=${encodeURIComponent(tenantId)}` : ''}`)
+      const tenantUrl = `${BACKEND_URL}/api/system-logs?${tenantParam}limit=200&hours=${timeRangeHours}`;
+      const systemUrl = `${BACKEND_URL}/api/system-logs?tenant_id=system&limit=200&hours=${timeRangeHours}`;
+      const perfUrl = `${BACKEND_URL}/api/metrics/performance?hours=${timeRangeHours}&limit=500${tenantId ? `&tenant_id=${encodeURIComponent(tenantId)}` : ''}`;
+
+      const [tenantRes, systemRes, perfRes] = await Promise.all([
+        resilientFetch(tenantUrl, { timeoutMs: 7000, maxRetries: 2 }),
+        resilientFetch(systemUrl, { timeoutMs: 7000, maxRetries: 2 }),
+        resilientFetch(perfUrl, { timeoutMs: 7000, maxRetries: 1 })
       ]);
 
-      if (!tenantResponse.ok && !systemResponse.ok) {
-        throw new Error('Backend server is not available. Please check if the backend is running.');
+      if (!tenantRes.ok && !systemRes.ok) {
+        // Instrument failure once
+        try {
+          await SystemLog.create({
+            tenant_id: tenantId,
+            level: 'ERROR',
+            source: 'SystemLogsViewer',
+            message: 'All system log fetch attempts failed',
+            metadata: {
+              correlation_id: correlationId,
+              tenant_error: tenantRes.errorType,
+              system_error: systemRes.errorType,
+              perf_error: perfRes.errorType,
+              tenant_attempts: tenantRes.attempts,
+              system_attempts: systemRes.attempts,
+              perf_attempts: perfRes.attempts
+            }
+          });
+        } catch {/* ignore instrumentation failure */}
+        toast.error(`Failed to load system logs (${tenantRes.errorType || systemRes.errorType || 'unknown'})`);
+        setLogs([]);
+        return;
       }
 
-  let allLogs = [];
-      
-      // Combine logs from both tenant and system
-      if (tenantResponse.ok) {
-        const data = await tenantResponse.json();
-        if (data && data.status === 'success' && data.data) {
-          if (Array.isArray(data.data['system-logs'])) {
-            allLogs = [...allLogs, ...data.data['system-logs']];
-          } else if (Array.isArray(data.data)) {
-            allLogs = [...allLogs, ...data.data];
-          }
-        }
+      let allLogs = [];
+
+      // Tenant logs aggregation
+      if (tenantRes.ok && tenantRes.data) {
+        const d = tenantRes.data;
+        const arr = Array.isArray(d?.data?.['system-logs']) ? d.data['system-logs'] : Array.isArray(d?.data) ? d.data : Array.isArray(d?.['system-logs']) ? d['system-logs'] : [];
+        allLogs = [...allLogs, ...arr];
       }
-      
-      if (systemResponse.ok) {
-        const systemData = await systemResponse.json();
-        if (systemData && systemData.status === 'success' && systemData.data) {
-          if (Array.isArray(systemData.data['system-logs'])) {
-            allLogs = [...allLogs, ...systemData.data['system-logs']];
-          } else if (Array.isArray(systemData.data)) {
-            allLogs = [...allLogs, ...systemData.data];
-          }
-        }
+      // System logs
+      if (systemRes.ok && systemRes.data) {
+        const sd = systemRes.data;
+        const arr = Array.isArray(sd?.data?.['system-logs']) ? sd.data['system-logs'] : Array.isArray(sd?.data) ? sd.data : Array.isArray(sd?.['system-logs']) ? sd['system-logs'] : [];
+        allLogs = [...allLogs, ...arr];
       }
-      
-      // Merge API performance logs as pseudo system logs to display API errors/warnings
-      if (perfResponse.ok) {
-        const perfData = await perfResponse.json();
-        const logs = perfData?.data?.logs || [];
-        const apiLogs = logs
-          .filter(l => (l.status_code || 0) >= 400) // only errors/warnings
-          .map(l => ({
-            id: `api-${l.id}`,
-            tenant_id: l.tenant_id,
-            level: (l.status_code || 0) >= 500 ? 'ERROR' : 'WARNING',
-            message: `${l.method} ${l.endpoint} → ${l.status_code}${l.error_message ? ` - ${l.error_message}` : ''}`,
-            source: 'API Request',
-            user_email: l.user_email,
-            created_at: l.created_at,
-            metadata: {
-              endpoint: l.endpoint,
-              method: l.method,
-              status_code: l.status_code,
-              duration_ms: l.duration_ms,
-              error_message: l.error_message,
-            }
-          }));
+      // Performance logs (API errors)
+      if (perfRes.ok && perfRes.data) {
+        const logs = perfRes.data?.data?.logs || [];
+        const apiLogs = logs.filter(l => (l.status_code || 0) >= 400).map(l => ({
+          id: `api-${l.id}`,
+          tenant_id: l.tenant_id,
+          level: (l.status_code || 0) >= 500 ? 'ERROR' : 'WARNING',
+          message: `${l.method} ${l.endpoint} → ${l.status_code}${l.error_message ? ` - ${l.error_message}` : ''}`,
+          source: 'API Request',
+          user_email: l.user_email,
+          created_at: l.created_at,
+          metadata: {
+            endpoint: l.endpoint,
+            method: l.method,
+            status_code: l.status_code,
+            duration_ms: l.duration_ms,
+            error_message: l.error_message,
+            correlation_id: correlationId
+          }
+        }));
         allLogs = [...allLogs, ...apiLogs];
       }
-      
-      // Sort by created_at descending (newest first)
+
+      // Sort & filter
       allLogs.sort((a, b) => new Date(b.created_at || b.created_date) - new Date(a.created_at || a.created_date));
-      
-      // Extract unique sources
-  const sources = [...new Set(allLogs.map(log => log.source || 'Unknown').filter(Boolean))];
+      const sources = [...new Set(allLogs.map(log => log.source || 'Unknown').filter(Boolean))];
       setUniqueSources(sources);
-
-      // Apply filters
-      if (filterLevel !== 'all') {
-        allLogs = allLogs.filter(log => log.level === filterLevel);
-      }
-      
-      if (filterSource !== 'all') {
-        allLogs = allLogs.filter(log => log.source === filterSource);
-      }
-
+      if (filterLevel !== 'all') allLogs = allLogs.filter(l => l.level === filterLevel);
+      if (filterSource !== 'all') allLogs = allLogs.filter(l => l.source === filterSource);
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
-        allLogs = allLogs.filter(log => 
-          log.message?.toLowerCase().includes(term) ||
-          log.source?.toLowerCase().includes(term) ||
-          log.user_email?.toLowerCase().includes(term)
+        allLogs = allLogs.filter(l =>
+          l.message?.toLowerCase().includes(term) ||
+          l.source?.toLowerCase().includes(term) ||
+          l.user_email?.toLowerCase().includes(term)
         );
       }
-
       setLogs(allLogs);
     } catch (error) {
       console.error('Failed to load logs:', error);
