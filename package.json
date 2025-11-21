@@ -1,7 +1,7 @@
 {
   "name": "aishacrm-app",
   "private": true,
-  "version": "1.0.22",
+  "version": "1.0.32",
   "type": "module",
   "scripts": {
     "dev": "node scripts/copy-docs-to-public.js && node dev-frontend.js",
@@ -117,6 +117,7 @@
     "lint-staged": "^15.2.10",
     "postcss": "^8.5.3",
     "prettier": "^3.3.3",
+    "supabase": "^2.58.5",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.9.3",
     "vite": "^6.1.0",
