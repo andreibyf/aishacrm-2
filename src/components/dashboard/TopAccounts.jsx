@@ -1,4 +1,6 @@
 import React from "react";
+import { useUser } from "@/components/shared/useUser";
+import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, DollarSign } from "lucide-react";
 import { createPageUrl } from "@/utils";
@@ -6,8 +8,15 @@ import { createPageUrl } from "@/utils";
 export default function TopAccounts({ tenantFilter, showTestData }) {
   const [accounts, setAccounts] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const { user, loading: userLoading } = useUser();
+  const { authCookiesReady } = useAuthCookiesReady();
 
   React.useEffect(() => {
+    // Wait for user + auth cookies readiness
+    if (userLoading || !authCookiesReady) {
+      setLoading(true);
+      return;
+    }
     const loadTopAccounts = async () => {
       try {
         // Guard: Don't fetch if no tenant_id is present
@@ -81,7 +90,7 @@ export default function TopAccounts({ tenantFilter, showTestData }) {
     };
 
     loadTopAccounts();
-  }, [tenantFilter, showTestData]);
+  }, [tenantFilter, showTestData, userLoading, authCookiesReady]);
 
   const formatCurrency = (amount) => {
     if (!amount) return "$0";

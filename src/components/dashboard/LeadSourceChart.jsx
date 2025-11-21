@@ -9,6 +9,8 @@ import {
   Tooltip,
 } from "recharts";
 import { Lead } from "@/api/entities"; // ensure correct SDK import
+import { useUser } from "@/components/shared/useUser";
+import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
 import { Loader2, PieChart as PieChartIcon, TrendingUp } from "lucide-react";
 import { useApiManager } from "@/components/shared/ApiManager"; // Updated import path for useApiManager
 
@@ -26,6 +28,8 @@ export default function LeadSourceChart(props) { // Changed to receive `props`
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const { cachedRequest } = useApiManager();
+  const { user, loading: userLoading } = useUser();
+  const { authCookiesReady } = useAuthCookiesReady();
 
   // Helper: compute chart data from a leads array
   const computeFromLeads = (leadsArr) => {
@@ -61,6 +65,11 @@ export default function LeadSourceChart(props) { // Changed to receive `props`
     const run = async () => {
       setLoading(true);
       try {
+        // Guard: wait for user + auth cookies
+        if (userLoading || !authCookiesReady) {
+          if (mounted) setLoading(true);
+          return;
+        }
         const tenantFilter = props?.tenantFilter || {};
         const showTestData = props?.showTestData;
 
@@ -128,7 +137,7 @@ export default function LeadSourceChart(props) { // Changed to receive `props`
       mounted = false;
     };
     // Depend on filter, test toggle, cachedRequest, and leadsData from parent
-  }, [props.tenantFilter, props.showTestData, props.leadsData, cachedRequest]);
+  }, [props.tenantFilter, props.showTestData, props.leadsData, cachedRequest, userLoading, authCookiesReady]);
 
   return (
     <Card className="bg-slate-800 border-slate-700 h-full">
