@@ -2267,7 +2267,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                       }),
                     });
                     const result = await response.json();
-                    if (!response.ok) throw new Error(result.error || 'Failed to send reset email');
+                    if (!response.ok) throw new Error(result.message || 'Failed to send reset email');
                     alert('Reset email sent. Check your inbox (and spam).');
                   } catch (err) {
                     alert('Failed to send reset email: ' + (err?.message || 'Unknown error'));

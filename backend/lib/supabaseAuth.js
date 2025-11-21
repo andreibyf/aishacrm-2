@@ -106,20 +106,23 @@ export async function updateAuthUserPassword(userId, newPassword) {
 /**
  * Send password reset email
  * @param {string} email - User email
+ * @param {string} redirectTo - Optional redirect URL after reset
  * @returns {Promise<{data, error}>}
  */
-export async function sendPasswordResetEmail(email) {
+export async function sendPasswordResetEmail(email, redirectTo) {
   if (!supabaseAdmin) {
     throw new Error("Supabase Auth not initialized");
   }
 
   try {
+    const resetRedirectUrl = redirectTo || `${
+      process.env.FRONTEND_URL || "http://localhost:5173"
+    }/reset-password`;
+
     const { data, error } = await supabaseAdmin.auth.resetPasswordForEmail(
       email,
       {
-        redirectTo: `${
-          process.env.FRONTEND_URL || "http://localhost:5173"
-        }/reset-password`,
+        redirectTo: resetRedirectUrl,
       },
     );
 

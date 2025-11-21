@@ -1810,7 +1810,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
   // POST /api/users/reset-password - Send password reset email
   router.post("/reset-password", passwordLimiter, async (req, res) => {
     try {
-      const { email } = req.body;
+      const { email, redirectTo } = req.body;
 
       if (!email) {
         return res.status(400).json({
@@ -1819,7 +1819,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         });
       }
 
-      const { data, error } = await sendPasswordResetEmail(email);
+      const { data, error } = await sendPasswordResetEmail(email, redirectTo);
 
       if (error) {
         console.error("[Password Reset] Error:", error);
