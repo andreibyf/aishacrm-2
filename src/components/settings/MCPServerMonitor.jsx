@@ -33,8 +33,11 @@ import { createHealthIssue, generateMCPFixSuggestion } from "@/utils/githubIssue
 import { toast } from "sonner";
 
 export default function MCPServerMonitor() {
-  const BRAID_MCP_URL = "http://localhost:8000";
   const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || "http://localhost:4001";
+  // Direct MCP URL (may fail in browser due to network isolation)
+  const BRAID_MCP_URL = "http://localhost:8000";
+  // Backend proxy health endpoint (new) – preferred for determining availability
+  const MCP_PROXY_URL = `${BACKEND_URL}/api/mcp/health-proxy`;
   const resolveTenantId = () => {
     try {
       const sel = localStorage.getItem('selected_tenant_id');
@@ -108,20 +111,35 @@ export default function MCPServerMonitor() {
     };
 
     const startTime = performance.now();
-    const response = await fetch(`${BRAID_MCP_URL}/mcp/run`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(envelope)
-    });
-    const endTime = performance.now();
-    const responseTime = endTime - startTime;
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    // Try direct first; on network error or fetch failure, fallback to backend proxy route
+    try {
+      const directResp = await fetch(`${BRAID_MCP_URL}/mcp/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(envelope)
+      });
+      const endTime = performance.now();
+      const responseTime = endTime - startTime;
+      if (!directResp.ok) throw new Error(`HTTP ${directResp.status}`);
+      const directJson = await directResp.json();
+      return { result: directJson.results[0], responseTime, via: 'direct' };
+    } catch (directErr) {
+      addLog('warning', `Direct MCP call failed (${directErr.message}); using proxy...`);
+      const proxyStart = performance.now();
+      const proxyResp = await fetch(`${BACKEND_URL}/api/mcp/run-proxy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(envelope)
+      });
+      const proxyEnd = performance.now();
+      const responseTime = proxyEnd - proxyStart;
+      if (!proxyResp.ok) {
+        const txt = await proxyResp.text();
+        throw new Error(`Proxy failed ${proxyResp.status}: ${txt.slice(0,180)}`);
+      }
+      const proxyJson = await proxyResp.json();
+      return { result: proxyJson.data.results[0], responseTime, via: 'proxy' };
     }
-
-    const result = await response.json();
-    return { result: result.results[0], responseTime };
   };
 
   // Comprehensive test suite
@@ -135,20 +153,37 @@ export default function MCPServerMonitor() {
     const startTime = performance.now();
 
     try {
-      // Test 1: Braid Server Health
-      addLog("info", "Test 1/12: Braid server health check");
+      // Test 1: Braid Server Health (proxy-first, fallback direct)
+      addLog("info", "Test 1/12: Braid server health (proxy-first)");
       try {
-        const healthStart = performance.now();
-        const healthResp = await fetch(`${BRAID_MCP_URL}/health`);
-        const healthTime = performance.now() - healthStart;
-        const healthData = await healthResp.json();
-
-        if (healthData.status === "ok") {
-          tests.push({ name: "Braid Health", status: "pass", time: healthTime.toFixed(0) });
-          addLog("success", `✓ Health check passed (${healthTime.toFixed(0)}ms)`);
+        let healthData = null; let healthTime = 0; let used = 'proxy';
+        try {
+          const t0 = performance.now();
+          const proxyResp = await fetch(`${BACKEND_URL}/api/mcp/health-proxy`);
+            const proxyJson = await proxyResp.json();
+            healthTime = performance.now() - t0;
+            if (proxyJson?.data?.reachable && proxyJson?.data?.raw?.status === 'ok') {
+              healthData = proxyJson.data.raw;
+            } else {
+              addLog('warning', 'Proxy health did not return reachable=true; trying direct');
+            }
+        } catch (e) {
+          addLog('warning', `Proxy health error: ${e.message}`);
+        }
+        if (!healthData) {
+          used = 'direct';
+          const t1 = performance.now();
+          const directResp = await fetch(`${BRAID_MCP_URL}/health`);
+          const directJson = await directResp.json();
+          healthTime = performance.now() - t1;
+          if (directJson.status === 'ok') healthData = directJson;
+        }
+        if (healthData) {
+          tests.push({ name: "Braid Health", status: "pass", time: healthTime.toFixed(0), details: used });
+          addLog("success", `✓ Health check passed via ${used} (${healthTime.toFixed(0)}ms)`);
           passedTests++;
         } else {
-          throw new Error("Health check failed");
+          throw new Error('No successful health response');
         }
       } catch (error) {
         tests.push({ name: "Braid Health", status: "fail", error: error.message });
@@ -156,8 +191,8 @@ export default function MCPServerMonitor() {
         failedTests++;
       }
 
-      // Test 2: Web Adapter - Wikipedia Search
-      addLog("info", "Test 2/12: Web adapter - Wikipedia search");
+      // Test 2: Web Adapter - Wikipedia Search (proxy-aware)
+      addLog("info", "Test 2/12: Web adapter - Wikipedia search (proxy-aware)");
       let lastWikiPageId = null;
       try {
         const { result, responseTime } = await executeBraidAction({
@@ -167,8 +202,8 @@ export default function MCPServerMonitor() {
           resource: { system: "web", kind: "wikipedia-search" },
           payload: { q: "artificial intelligence" }
         });
-
-        if (result.status === "success" && result.data && result.data.length > 0) {
+        const dataArray = result?.data || [];
+        if (result.status === "success" && Array.isArray(dataArray) && dataArray.length > 0) {
           const first = result.data[0];
           // Wikipedia returns numeric pageid under different shapes depending on API
           lastWikiPageId = String(first?.pageid ?? first?.pageId ?? first?.pageIdStr ?? "");
@@ -311,8 +346,8 @@ export default function MCPServerMonitor() {
         failedTests++;
       }
 
-      // Test 8: Batch Actions
-      addLog("info", "Test 8/12: Batch actions (CRM + Web)");
+      // Test 8: Batch Actions (proxy-aware)
+      addLog("info", "Test 8/12: Batch actions (CRM + Web, proxy-aware)");
       try {
         const envelope = {
           requestId: `req-${Date.now()}`,
@@ -336,21 +371,36 @@ export default function MCPServerMonitor() {
             }
           ]
         };
-
-        const batchStart = performance.now();
-        const response = await fetch(`${BRAID_MCP_URL}/mcp/run`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(envelope)
-        });
-        const batchTime = performance.now() - batchStart;
-        const batchResult = await response.json();
-
-        const allSuccess = batchResult.results.every(r => r.status === "success");
+        // Try direct then proxy similar to executeBraidAction
+        let batchResult = null; let batchTime = 0; let via = 'direct';
+        try {
+          const batchStart = performance.now();
+          const response = await fetch(`${BRAID_MCP_URL}/mcp/run`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(envelope)
+          });
+          batchTime = performance.now() - batchStart;
+          if (!response.ok) throw new Error('direct_bad_status_' + response.status);
+          batchResult = await response.json();
+        } catch (directErr) {
+          addLog('warning', `Direct batch failed (${directErr.message}); retrying via proxy`);
+          via = 'proxy';
+          const proxyStart = performance.now();
+          const proxyResp = await fetch(`${BACKEND_URL}/api/mcp/run-proxy`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(envelope)
+          });
+          batchTime = performance.now() - proxyStart;
+          if (!proxyResp.ok) throw new Error('proxy_bad_status_' + proxyResp.status);
+          const proxyJson = await proxyResp.json();
+          batchResult = { results: proxyJson?.data?.results || [] };
+        }
+        const resultsArr = Array.isArray(batchResult?.results) ? batchResult.results : [];
+        const allSuccess = resultsArr.length && resultsArr.every(r => r.status === "success");
 
         if (allSuccess) {
-          tests.push({ name: "Batch Actions", status: "pass", time: batchTime.toFixed(0), details: "2 actions" });
-          addLog("success", `✓ Batch actions (${batchTime.toFixed(0)}ms)`);
+          tests.push({ name: "Batch Actions", status: "pass", time: batchTime.toFixed(0), details: `2 actions via ${via}` });
+          addLog("success", `✓ Batch actions (${batchTime.toFixed(0)}ms, via ${via})`);
           passedTests++;
         } else {
           throw new Error("Some batch actions failed");
@@ -605,26 +655,51 @@ export default function MCPServerMonitor() {
     addLog("info", "Starting quick health check...");
 
     try {
-      // Test Braid server
-      const healthResp = await fetch(`${BRAID_MCP_URL}/health`);
-      const healthData = await healthResp.json();
+      // 1. Try backend proxy (preferred)
+      let proxySucceeded = false;
+      try {
+        const proxyResp = await fetch(MCP_PROXY_URL);
+        if (proxyResp.ok) {
+          const proxyJson = await proxyResp.json();
+          if (proxyJson?.data?.reachable) {
+            proxySucceeded = true;
+            addLog("success", `MCP proxy reachable (${proxyJson.data.latency_ms}ms)`);
+            setAvailabilityMetrics(prev => ({
+              ...prev,
+              status: "healthy",
+              consecutiveSuccesses: prev.consecutiveSuccesses + 1,
+              lastChecked: new Date().toISOString()
+            }));
+            _setTestResults({ status: "success", message: "Proxy reports server healthy" });
+          } else {
+            addLog("warning", `Proxy unreachable: ${proxyJson?.data?.error || 'unknown'}`);
+          }
+        }
+      } catch (e) {
+        addLog("warning", `Proxy health failed: ${e.message}`);
+      }
 
-      if (healthData.status === "ok") {
-        addLog("success", "Braid MCP server is healthy");
-
-        setAvailabilityMetrics(prev => ({
-          ...prev,
-          status: "healthy",
-          consecutiveSuccesses: prev.consecutiveSuccesses + 1,
-          lastChecked: new Date().toISOString()
-        }));
-
-        _setTestResults({
-          status: "success",
-          message: "Server is operational"
-        });
-      } else {
-        throw new Error("Health check returned non-OK status");
+      // 2. If proxy failed, attempt direct localhost (may be blocked in browser)
+      if (!proxySucceeded) {
+        try {
+          const healthResp = await fetch(`${BRAID_MCP_URL}/health`);
+          const healthData = await healthResp.json();
+          if (healthData.status === "ok") {
+            addLog("success", "Direct MCP health succeeded (fallback)");
+            setAvailabilityMetrics(prev => ({
+              ...prev,
+              status: "healthy",
+              consecutiveSuccesses: prev.consecutiveSuccesses + 1,
+              lastChecked: new Date().toISOString()
+            }));
+            _setTestResults({ status: "success", message: "Direct health endpoint reachable" });
+          } else {
+            throw new Error("Direct health returned non-OK status");
+          }
+        } catch (directErr) {
+          addLog("error", `Direct MCP health failed: ${directErr.message}`);
+          throw directErr; // propagate to outer catch for offline state
+        }
       }
 
       // Fetch backend MCP servers
@@ -654,7 +729,7 @@ export default function MCPServerMonitor() {
     } finally {
       setIsTesting(false);
     }
-  }, [BRAID_MCP_URL, BACKEND_URL, addLog]);
+  }, [BRAID_MCP_URL, BACKEND_URL, MCP_PROXY_URL, addLog]);
 
   const clearLogs = () => {
     setLogs([]);
@@ -852,7 +927,7 @@ export default function MCPServerMonitor() {
               ) : (
                 <>
                   <FileText className="w-4 h-4 mr-2" />
-                  Run Full Test Suite (9 Tests)
+                  Run Full Test Suite (12 Tests)
                 </>
               )}
             </Button>

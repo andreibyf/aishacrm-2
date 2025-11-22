@@ -387,7 +387,23 @@ function scanForSQLInjection(req) {
  * Main IDR middleware
  */
 export async function intrusionDetection(req, res, next) {
-  const ip = req.ip || req.connection.remoteAddress;
+  // Prefer Cloudflare / proxy headers for true client IP, fallback to Express ip
+  const cfIp = req.headers['cf-connecting-ip'];
+  const xff = req.headers['x-forwarded-for'];
+  let ip = cfIp || (xff && xff.split(',')[0].trim()) || req.ip || req.connection.remoteAddress;
+
+  // Debug logging of incoming IP forms (enabled only when IDR_DEBUG=true)
+  const IDR_DEBUG = process.env.IDR_DEBUG === 'true';
+  if (IDR_DEBUG) {
+    const remote = req.connection?.remoteAddress || '';
+    console.log('[IDR][DEBUG] IP resolution', {
+      cfConnectingIp: cfIp || null,
+      xForwardedFor: xff || null,
+      expressIp: req.ip || null,
+      chosenIp: ip,
+      remoteAddress: remote,
+    });
+  }
 
   // Exempt localhost/loopback traffic (development, testing, internal services)
   const isLocalhost =

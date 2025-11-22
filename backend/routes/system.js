@@ -134,18 +134,16 @@ export default function createSystemRoutes(_pgPool) {
   // For non-HTTP services (redis), uses the initialized memory client for a lightweight ping.
   router.get('/containers-status', async (req, res) => {
     const mcpNodeCandidates = [
-      // Prefer intended orchestrated container name
-      'http://braid-mcp-1:8000/health',
-      // Backward-compat legacy compose name
-      'http://braid-mcp:8000/health',
-      // Legacy standalone name (no longer used by default)
+      // Prefer Docker network names first (most reliable)
       'http://braid-mcp-node-server:8000/health',
+      'http://braid-mcp-1:8000/health',
+      'http://braid-mcp:8000/health',
       // Then any explicit override
       process.env.MCP_NODE_HEALTH_URL,
-      // Then host gateway and local fallbacks
-      'http://host.docker.internal:8000/health',
-      'http://localhost:8000/health',
+      // Host gateway only for local dev (backend running outside Docker)
+      process.env.NODE_ENV === 'development' ? 'http://host.docker.internal:8000/health' : null,
     ].filter(Boolean);
+    // Note: localhost:8000 removed to avoid false positives from other services
 
     const services = [
       // Internal Docker DNS names should target internal container ports
@@ -200,7 +198,7 @@ export default function createSystemRoutes(_pgPool) {
       }
       const urls = Array.isArray(svc.url) ? svc.url : [svc.url];
       let usedUrl = urls[0];
-      let statusCode = 0; let reachable = false; let latencyMs = 0;
+      let statusCode = 0; let reachable = false; let latencyMs = 0; let attemptedUrls = [];
       // Probe all candidates in parallel and take the first successful response
       const withTimeout = (p, ms) => Promise.race([
         p,
@@ -209,11 +207,26 @@ export default function createSystemRoutes(_pgPool) {
       const startAll = performance.now ? performance.now() : Date.now();
       try {
         const attempts = urls.map(url => (async () => {
+          attemptedUrls.push(url);
           const t0 = performance.now ? performance.now() : Date.now();
           const resp = await withTimeout(fetch(url, { method: 'GET' }), 1500);
           const ok = resp.ok || (resp.status >= 200 && resp.status < 500);
           const dt = Math.round((performance.now ? performance.now() : Date.now()) - t0);
           if (!ok) throw new Error('bad_status_' + resp.status);
+          // Additional validation: for MCP health endpoint, check response body
+          if (svc.name === 'mcp-node' && url.includes('/health')) {
+            try {
+              const body = await resp.text();
+              const data = JSON.parse(body);
+              // MCP health should return status: "ok" or similar
+              if (!data.status || (data.status !== 'ok' && data.status !== 'healthy')) {
+                throw new Error('invalid_mcp_health_response');
+              }
+            } catch (parseErr) {
+              // If not valid JSON or missing status, treat as unreachable
+              throw new Error('mcp_health_parse_error');
+            }
+          }
           return { url, status: resp.status, dt };
         })());
         const first = await Promise.any(attempts);
@@ -227,7 +240,7 @@ export default function createSystemRoutes(_pgPool) {
         latencyMs = Math.round((performance.now ? performance.now() : Date.now()) - startAll);
         reachable = false;
       }
-      results.push({ name: svc.name, url: usedUrl, reachable, status_code: statusCode, latency_ms: latencyMs });
+      results.push({ name: svc.name, url: usedUrl, reachable, status_code: statusCode, latency_ms: latencyMs, attempted: attemptedUrls.length });
     }
 
     res.json({ status: 'success', data: { services: results, timestamp: new Date().toISOString() } });
