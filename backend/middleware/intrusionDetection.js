@@ -428,7 +428,9 @@ export async function intrusionDetection(req, res, next) {
   }
 
   // Exempt logging endpoints from SQL injection detection (logs may contain SQL)
-  const isLoggingEndpoint = req.path.startsWith('/system-logs') || req.path === '/system-logs';
+  const isLoggingEndpoint = 
+    req.originalUrl?.includes('/api/system-logs') || 
+    req.path?.includes('/system-logs');
   if (isLoggingEndpoint) {
     return next();
   }
