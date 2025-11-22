@@ -2263,7 +2263,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ 
                         email,
-                        redirectTo: `${window.location.origin}/reset-password`
+                        redirectTo: `${window.location.origin}/`
                       }),
                     });
                     const result = await response.json();

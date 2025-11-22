@@ -115,9 +115,10 @@ export async function sendPasswordResetEmail(email, redirectTo) {
   }
 
   try {
+    // Redirect to root path - PasswordResetHandler will intercept PASSWORD_RECOVERY event
     const resetRedirectUrl = redirectTo || `${
       process.env.FRONTEND_URL || "http://localhost:5173"
-    }/reset-password`;
+    }/`;
 
     const { data, error } = await supabaseAdmin.auth.resetPasswordForEmail(
       email,
