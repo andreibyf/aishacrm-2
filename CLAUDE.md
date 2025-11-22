@@ -344,3 +344,27 @@ See `backend/TROUBLESHOOTING_NODE_ESM.md` for ESM-specific debugging if server e
 - `backend/DATABASE_UUID_vs_TENANT_ID.md` - Critical UUID vs tenant_id distinction
 - `backend/TROUBLESHOOTING_NODE_ESM.md` - ESM debugging
 - `.github/copilot-instructions.md` - Detailed conventions and workflows
+
+## Orchestra Control Layer (MANDATORY FOR AI)
+
+This project uses an internal **orchestra** control system to prevent AI from making uncontrolled changes.
+
+Before writing or modifying ANY code, you MUST:
+
+1. Read `orchestra/ARCHITECTURE.md`
+2. Read `orchestra/CONVENTIONS.md`
+3. Read `orchestra/PLAN.md` to see the current active goal and tasks
+4. Read `orchestra/context/interfaces.md` for key contracts and boundaries
+
+Rules:
+
+- You may ONLY work on tasks listed as **Active** in `orchestra/PLAN.md`.
+- Default mode is **BUGFIX-FIRST**:
+  - No new features unless explicitly marked as a `feature` goal.
+  - No broad refactors or rewrites unless required for security, stability, performance, or race-condition fixes.
+- Keep changes as small and localized as possible.
+- Preserve Docker ports, Supabase setup, Base44 failover logic, and tenant isolation as documented elsewhere in this file.
+
+If `PLAN.md` is empty or ambiguous:
+- Ask the user to clarify the active task **before** making any code changes.
+

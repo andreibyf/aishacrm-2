@@ -1,0 +1,91 @@
+########################################
+# ORCHESTRA RUNTIME & EXECUTION ARTIFACTS
+########################################
+
+# Runtime state
+runtime/
+tmp/
+logs/
+.cache/
+.state/
+.context-cache/
+.session
+sessions/
+
+# Generated wave artifacts (non-source)
+wave-output/
+wave-temp/
+wave-diff/
+wave-reports/
+
+# AI / LLM temporary data
+.llm-cache/
+.ai/
+.prompt-cache/
+.copilot/
+orchestra/.context-cache/
+
+########################################
+# COMPILED / TRANSPILED OUTPUT
+########################################
+
+dist/
+build/
+*.js
+*.js.map
+*.d.ts
+tsconfig.tsbuildinfo
+
+########################################
+# NODE TOOLING NOISE (local to orchestra)
+########################################
+
+node_modules/
+pnpm-lock.yaml
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+########################################
+# EDITOR & OS JUNK
+########################################
+
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.bak
+.idea/
+.vscode/
+
+########################################
+# SAFETY: KEEP CONTROL FILES TRACKED
+########################################
+
+!ARCHITECTURE.md
+!CONVENTIONS.md
+!PLAN.md
+!BUGS.md
+!WAVE_LOG.md
+!CHECKLIST.md
+
+!context/
+!context/interfaces.md
+
+!agents/
+!agents/*.prompt.md
+
+########################################
+# ALLOW CORE SOURCE FILES
+########################################
+
+!core/
+!context/AgentContextHub.ts
+!agents/BaseAgent.ts
+!agents/BackendAgent.ts
+!agents/FrontendAgent.ts
+!agents/TestAgent.ts
+!orchestrator/
+!integration/
+!utils/
+!types/
