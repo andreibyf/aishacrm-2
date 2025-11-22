@@ -427,6 +427,12 @@ export async function intrusionDetection(req, res, next) {
     return next();
   }
 
+  // Exempt logging endpoints from SQL injection detection (logs may contain SQL)
+  const isLoggingEndpoint = req.path.startsWith('/system-logs') || req.path === '/system-logs';
+  if (isLoggingEndpoint) {
+    return next();
+  }
+
   const user = req.user;
   const userId = user?.id || 'anonymous';
   const activityKey = getActivityKey(ip, userId);
