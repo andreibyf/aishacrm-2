@@ -88,7 +88,7 @@ services:
 
   # Frontend
   frontend:
-    image: ghcr.io/andreibyf/aishacrm-2-frontend:v1.0.38
+    image: ghcr.io/andreibyf/aishacrm-2-frontend:v1.0.42
     container_name: aishacrm-frontend
     restart: unless-stopped
     depends_on:
@@ -96,6 +96,8 @@ services:
         condition: service_started
     ports:
       - "4000:3000"
+    env_file:
+      - .env
     environment:
       - PORT=${FRONTEND_PORT:-3000}
       - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}

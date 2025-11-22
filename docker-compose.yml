@@ -147,6 +147,8 @@ services:
       - backend
     ports:
       - "4000:3000"  # External port 4000 maps to internal 3000
+    env_file:
+      - .env
     environment:
       - PORT=${FRONTEND_PORT:-3000}
     healthcheck:

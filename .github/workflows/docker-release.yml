@@ -78,10 +78,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            VITE_AISHACRM_BACKEND_URL=${{ secrets.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001' }}
-            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
-            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
-            VITE_CURRENT_BRANCH=${{ github.ref_name }}
+            VITE_AISHACRM_BACKEND_URL=${{ matrix.service == 'frontend' && (secrets.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001') || '' }}
+            VITE_SUPABASE_URL=${{ matrix.service == 'frontend' && secrets.VITE_SUPABASE_URL || '' }}
+            VITE_SUPABASE_ANON_KEY=${{ matrix.service == 'frontend' && secrets.VITE_SUPABASE_ANON_KEY || '' }}
+            VITE_CURRENT_BRANCH=${{ matrix.service == 'frontend' && github.ref_name || '' }}
 
       - name: Image summary
         run: |
