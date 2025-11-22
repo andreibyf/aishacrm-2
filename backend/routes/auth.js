@@ -70,6 +70,11 @@ export default function createAuthRoutes(_pgPool) {
         return res.status(400).json({ status: 'error', message: 'email is required' });
       }
 
+      // Validate password is provided
+      if (!password) {
+        return res.status(400).json({ status: 'error', message: 'password is required' });
+      }
+
       // 1) Verify credentials via Supabase Auth when possible
       const anonClient = getAnonSupabase();
       const isDev = process.env.NODE_ENV !== 'production';
@@ -77,13 +82,19 @@ export default function createAuthRoutes(_pgPool) {
       
       if (anonClient && !isDev && !isE2E) {
         // Production: require Supabase Auth password verification
-        const { error } = await anonClient.auth.signInWithPassword({ email, password });
-        if (error) {
+        console.log('[Auth.login] Production mode: verifying credentials with Supabase Auth');
+        const { data: authData, error: authError } = await anonClient.auth.signInWithPassword({ email, password });
+        if (authError) {
+          console.log('[Auth.login] Supabase Auth failed:', { email, error: authError.message });
           return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
         }
+        console.log('[Auth.login] Supabase Auth successful for:', email);
       } else {
         // Dev/E2E: skip Supabase Auth password check, rely on DB user existence
         // This allows login even when Supabase Auth user doesn't exist or password differs
+        if (!anonClient) {
+          console.log('[Auth.login] Warning: No anon client available (SUPABASE_ANON_KEY not set)');
+        }
         console.log('[Auth.login] Dev/E2E mode: skipping Supabase Auth password verification');
       }
 
@@ -104,6 +115,7 @@ export default function createAuthRoutes(_pgPool) {
       
       if (uRows && uRows.length > 0) {
         user = uRows[0];
+        console.log('[Auth.login] Found user in users table:', { id: user.id, role: user.role, tenant_id: user.tenant_id });
       } else {
         table = 'employees';
         const { data: eRows, error: eError } = await supabase
@@ -112,11 +124,15 @@ export default function createAuthRoutes(_pgPool) {
           .eq('email', normalizedEmail)
           .limit(1);
         console.log('[Auth.login] Employees query:', { email: normalizedEmail, rowCount: eRows?.length, error: eError?.message });
-        if (eRows && eRows.length > 0) user = eRows[0];
+        if (eRows && eRows.length > 0) {
+          user = eRows[0];
+          console.log('[Auth.login] Found user in employees table:', { id: user.id, role: user.role, tenant_id: user.tenant_id });
+        }
       }
 
       if (!user) {
-        console.log('[Auth.login] No user found for email:', normalizedEmail);
+        console.log('[Auth.login] No user found in CRM database for email:', normalizedEmail);
+        console.log('[Auth.login] Note: User may exist in Supabase Auth but not in CRM database (users/employees tables)');
         return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
       }
 
@@ -125,7 +141,16 @@ export default function createAuthRoutes(_pgPool) {
       const accountStatus = String(meta.account_status || user.status || '').toLowerCase();
       const isActiveFlag = meta.is_active !== false;
       if (accountStatus === 'inactive' || isActiveFlag === false || (user.status || '').toLowerCase() === 'inactive') {
+        console.log('[Auth.login] Account disabled:', { email: normalizedEmail, status: accountStatus, is_active: isActiveFlag });
         return res.status(403).json({ status: 'error', message: 'Account is disabled' });
+      }
+
+      // Check for CRM access permission
+      const permissions = meta.permissions || [];
+      const hasCrmAccess = permissions.includes('crm_access') || permissions.length === 0; // Allow if no permissions set (default access)
+      if (!hasCrmAccess) {
+        console.log('[Auth.login] CRM access denied:', { email: normalizedEmail, permissions });
+        return res.status(403).json({ status: 'error', message: 'CRM access not authorized' });
       }
 
       const payload = {
@@ -141,6 +166,7 @@ export default function createAuthRoutes(_pgPool) {
       res.cookie('aisha_access', access, cookieOpts(15 * 60 * 1000));
       res.cookie('aisha_refresh', refresh, cookieOpts(7 * 24 * 60 * 60 * 1000));
 
+      console.log('[Auth.login] Login successful:', { email: normalizedEmail, role: user.role, table });
       return res.json({ status: 'success', message: 'Login successful' });
     } catch (err) {
       console.error('[Auth.login] error', err);
