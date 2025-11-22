@@ -2,6 +2,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import { getAuthUserByEmail } from '../lib/supabaseAuth.js';
 
 function getAnonSupabase() {
   const url = process.env.SUPABASE_URL;
@@ -130,9 +131,109 @@ export default function createAuthRoutes(_pgPool) {
         }
       }
 
+      // AUTO-SYNC: If user not found in CRM but authenticated via Supabase Auth, create CRM record
       if (!user) {
         console.log('[Auth.login] No user found in CRM database for email:', normalizedEmail);
-        console.log('[Auth.login] Note: User may exist in Supabase Auth but not in CRM database (users/employees tables)');
+
+        // Only auto-sync if Supabase Auth verification succeeded (production mode or explicitly verified)
+        if (anonClient && !isDev && !isE2E) {
+          console.log('[Auth.login] Attempting auto-sync from Supabase Auth...');
+          try {
+            // Fetch user metadata from Supabase Auth
+            const { user: authUser, error: authErr } = await getAuthUserByEmail(normalizedEmail);
+            if (authErr || !authUser) {
+              console.log('[Auth.login] Auto-sync failed: user not found in Supabase Auth');
+              return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
+            }
+
+            // Create CRM record based on Supabase Auth metadata
+            const meta = authUser.user_metadata || {};
+            const role = (meta.role || 'employee').toLowerCase();
+            const rawTenant = meta.tenant_id;
+            const normalizedTenantId = (rawTenant === '' || rawTenant === 'no-client' || rawTenant === 'none' || rawTenant === 'null' || rawTenant === undefined) ? null : rawTenant;
+
+            const first_name = meta.first_name || normalizedEmail.split('@')[0] || '';
+            const last_name = meta.last_name || '';
+            const display_name = meta.display_name || `${first_name} ${last_name}`.trim();
+            const nowIso = new Date().toISOString();
+
+            // Decide target table and create record
+            if (role === 'superadmin' && !normalizedTenantId) {
+              const { data, error } = await supabase
+                .from('users')
+                .insert([{
+                  email: normalizedEmail,
+                  first_name,
+                  last_name,
+                  role: 'superadmin',
+                  metadata: { display_name, ...meta },
+                  created_at: nowIso,
+                  updated_at: nowIso,
+                }])
+                .select('id, tenant_id, email, first_name, last_name, role, metadata')
+                .single();
+              if (error) throw error;
+              user = data;
+              table = 'users';
+              console.log('[Auth.login] Auto-synced superadmin to users table:', user.id);
+            } else if (role === 'admin' && normalizedTenantId) {
+              const { data, error } = await supabase
+                .from('users')
+                .insert([{
+                  email: normalizedEmail,
+                  first_name,
+                  last_name,
+                  role: 'admin',
+                  tenant_id: normalizedTenantId,
+                  metadata: { display_name, ...meta },
+                  created_at: nowIso,
+                  updated_at: nowIso,
+                }])
+                .select('id, tenant_id, email, first_name, last_name, role, metadata')
+                .single();
+              if (error) throw error;
+              user = data;
+              table = 'users';
+              console.log('[Auth.login] Auto-synced admin to users table:', user.id);
+            } else {
+              // Default to employee
+              if (!normalizedTenantId) {
+                console.log('[Auth.login] Auto-sync failed: tenant_id required for non-admin users');
+                return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
+              }
+              const { data, error } = await supabase
+                .from('employees')
+                .insert([{
+                  tenant_id: normalizedTenantId,
+                  email: normalizedEmail,
+                  first_name,
+                  last_name,
+                  role,
+                  status: 'active',
+                  metadata: { display_name, ...meta },
+                  created_at: nowIso,
+                  updated_at: nowIso,
+                }])
+                .select('id, tenant_id, email, first_name, last_name, role, status, metadata')
+                .single();
+              if (error) throw error;
+              user = data;
+              table = 'employees';
+              console.log('[Auth.login] Auto-synced employee to employees table:', user.id);
+            }
+          } catch (syncErr) {
+            console.error('[Auth.login] Auto-sync error:', syncErr);
+            return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
+          }
+        } else {
+          // Dev/E2E mode or no Supabase Auth verification - reject login
+          console.log('[Auth.login] User not found in CRM database and auto-sync not available');
+          return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
+        }
+      }
+
+      if (!user) {
+        console.log('[Auth.login] Login failed after auto-sync attempt');
         return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
       }
 
