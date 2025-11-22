@@ -5,17 +5,24 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// Get Supabase credentials from environment (build-time)
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+// Get Supabase credentials from runtime config (injected by entrypoint) or build-time env
+const getRuntimeEnv = (key) => {
+  if (typeof window !== 'undefined' && window._env_) {
+    return window._env_[key];
+  }
+  return import.meta.env[key];
+};
+
+const supabaseUrl = getRuntimeEnv('VITE_SUPABASE_URL');
 
 // Support both legacy "anon" naming and the newer "publishable/public" naming
 // Only use PUBLIC/PUBLISHABLE key on the frontend. NEVER use secret/service keys in the client bundle.
 const supabasePublicKey =
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-  import.meta.env.VITE_SUPABASE_PUBLIC_KEY ||
-  import.meta.env.VITE_SUPABASE_PUBLIC_ANON_KEY ||
-  import.meta.env.VITE_SUPABASE_PK ||
-  import.meta.env.VITE_SUPABASE_ANON_KEY; // legacy name still supported
+  getRuntimeEnv('VITE_SUPABASE_PUBLISHABLE_KEY') ||
+  getRuntimeEnv('VITE_SUPABASE_PUBLIC_KEY') ||
+  getRuntimeEnv('VITE_SUPABASE_PUBLIC_ANON_KEY') ||
+  getRuntimeEnv('VITE_SUPABASE_PK') ||
+  getRuntimeEnv('VITE_SUPABASE_ANON_KEY'); // legacy name still supported
 
 // Provide fallback placeholder values to prevent initialization errors
 // These will be replaced with real credentials when configured

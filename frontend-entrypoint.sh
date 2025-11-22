@@ -1,7 +1,18 @@
 #!/usr/bin/env sh
 set -e
 
-# No runtime env.js generation - environment variables are injected at build time
+# Runtime environment variable injection
+cat > /app/dist/env-config.js << EOF
+window._env_ = {
+  VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}",
+  VITE_SUPABASE_ANON_KEY: "${VITE_SUPABASE_ANON_KEY}",
+  VITE_AISHACRM_BACKEND_URL: "${VITE_AISHACRM_BACKEND_URL}",
+  VITE_CURRENT_BRANCH: "${VITE_CURRENT_BRANCH:-main}",
+  VITE_SYSTEM_TENANT_ID: "${VITE_SYSTEM_TENANT_ID}",
+  VITE_USER_HEARTBEAT_INTERVAL_MS: "${VITE_USER_HEARTBEAT_INTERVAL_MS:-90000}"
+};
+EOF
+
 : "${PORT:=3000}"
 
 # Start static server
