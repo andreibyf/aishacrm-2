@@ -116,9 +116,18 @@ export async function sendPasswordResetEmail(email, redirectTo) {
 
   try {
     // Redirect to root path - PasswordResetHandler will intercept PASSWORD_RECOVERY event
-    const resetRedirectUrl = redirectTo || `${
-      process.env.FRONTEND_URL || "http://localhost:5173"
-    }/`;
+    // FRONTEND_URL is REQUIRED in production - no localhost fallback
+    let resetRedirectUrl;
+    if (redirectTo) {
+      resetRedirectUrl = redirectTo;
+    } else if (process.env.FRONTEND_URL) {
+      resetRedirectUrl = `${process.env.FRONTEND_URL}/`;
+    } else if (process.env.NODE_ENV === 'development') {
+      resetRedirectUrl = 'http://localhost:4000/';
+      console.warn('⚠️  FRONTEND_URL not set, using dev default: http://localhost:4000');
+    } else {
+      throw new Error('FRONTEND_URL environment variable is required for password reset in production');
+    }
 
     const { data, error } = await supabaseAdmin.auth.resetPasswordForEmail(
       email,
@@ -152,6 +161,17 @@ export async function inviteUserByEmail(email, metadata = {}) {
   }
 
   try {
+    // Use same logic as password reset for consistency
+    let inviteRedirectTo;
+    if (process.env.FRONTEND_URL) {
+      inviteRedirectTo = `${process.env.FRONTEND_URL}/accept-invite`;
+    } else if (process.env.NODE_ENV === 'development') {
+      inviteRedirectTo = 'http://localhost:4000/accept-invite';
+      console.warn('⚠️  FRONTEND_URL not set, using dev default: http://localhost:4000');
+    } else {
+      throw new Error('FRONTEND_URL environment variable is required for user invitations in production');
+    }
+
     const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(
       email,
       {
@@ -159,9 +179,7 @@ export async function inviteUserByEmail(email, metadata = {}) {
           ...metadata,
           password_change_required: true,
         },
-        redirectTo: `${
-          process.env.FRONTEND_URL || "http://localhost:5173"
-        }/accept-invite`,
+        redirectTo: inviteRedirectTo,
       },
     );
 

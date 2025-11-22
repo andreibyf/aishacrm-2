@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom"; // Import useNavigate
 import { createPageUrl } from "@/utils";
 import PasswordChangeModal from "@/components/auth/PasswordChangeModal";
 import EnvironmentBanner from "@/components/shared/EnvironmentBanner";
+import { getBackendUrl } from "@/api/backendUrl";
 import {
   BarChart3,
   BookOpen, // NEW: Added for Documentation
@@ -2258,9 +2259,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                   try {
                     // Use backend proxy to avoid CORS issues
                     // Get backend URL from runtime config (window._env_) or build-time env
-                    const backendUrl = (typeof window !== 'undefined' && window._env_?.VITE_AISHACRM_BACKEND_URL) 
-                      || import.meta.env.VITE_AISHACRM_BACKEND_URL 
-                      || 'http://localhost:4001';
+                    const backendUrl = getBackendUrl();
                     const response = await fetch(`${backendUrl}/api/users/reset-password`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },

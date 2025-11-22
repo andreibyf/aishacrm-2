@@ -190,19 +190,27 @@ function rateLimiter(req, res, next) {
 }
 
 // CORS configuration
-// Defaults: allow localhost dev; rely on ALLOWED_ORIGINS for anything else
-const defaultAllowed = [
-  // Vite default
-  "http://localhost:5173",
-  "https://localhost:5173",
-  // Dockerized frontend dev server
-  "http://localhost:4000",
-  "https://localhost:4000",
-];
+// Only use ALLOWED_ORIGINS from environment - no hardcoded defaults for production safety
 const envAllowed = (process.env.ALLOWED_ORIGINS?.split(",") || [])
   .map(s => s.trim())
   .filter(Boolean);
-const allowedOrigins = [...new Set([...defaultAllowed, ...envAllowed])];
+
+// In development, add localhost origins if not already specified
+const devDefaults = process.env.NODE_ENV === 'development' ? [
+  "http://localhost:5173",
+  "https://localhost:5173",
+  "http://localhost:4000",
+  "https://localhost:4000",
+] : [];
+
+const allowedOrigins = [...new Set([...envAllowed, ...devDefaults])];
+
+// Fail loudly if no origins configured in production
+if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
+  console.error('❌ CRITICAL: ALLOWED_ORIGINS not set in production environment');
+  console.error('   Set ALLOWED_ORIGINS in .env with your frontend URL(s)');
+  process.exit(1);
+}
 
 app.use(cors({
   origin: (origin, callback) => {
