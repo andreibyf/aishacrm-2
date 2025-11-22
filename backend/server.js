@@ -275,6 +275,7 @@ app.use(productionSafetyGuard({
     '/api/system-logs',            // System telemetry and monitoring
     '/api/users/heartbeat',        // User session keepalive
     '/api/users/sync-from-auth',   // Supabase auth sync (critical for login)
+    '/api/users/reset-password',   // Password reset email (Supabase Auth, no direct DB writes)
     '/api/cron/run',               // Scheduled job execution
     '/api/notifications',          // User notification delivery
     '/api/auth/login',             // Authentication login (critical for access)
