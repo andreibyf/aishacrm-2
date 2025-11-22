@@ -88,7 +88,7 @@ services:
 
   # Frontend
   frontend:
-    image: ghcr.io/andreibyf/aishacrm-2-frontend:v1.0.42
+    image: ghcr.io/andreibyf/aishacrm-2-frontend:v1.0.43
     container_name: aishacrm-frontend
     restart: unless-stopped
     depends_on:
