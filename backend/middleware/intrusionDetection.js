@@ -19,6 +19,8 @@
  * - In-memory cache synced with Redis on startup and during operations
  */
 
+import { getSupabaseClient } from '../lib/supabase-db.js';
+
 // In-memory tracking for rate limiting and pattern detection
 const suspiciousActivityTracker = new Map();
 const blockedIPs = new Set();
@@ -238,7 +240,10 @@ async function logSecurityEvent(
       },
     };
 
-    await supabase.from('system_logs').insert(logEntry);
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.from('system_logs').insert(logEntry);
+    }
 
     // Also log to console for immediate visibility
     console.error(`[IDR ${severity.toUpperCase()}] ${message}`, {
