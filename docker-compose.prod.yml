@@ -35,7 +35,7 @@ services:
 
   # Backend API
   backend:
-    image: ghcr.io/andreibyf/aishacrm-2-backend:v1.0.23
+    image: ghcr.io/andreibyf/aishacrm-2-backend:v1.0.37
     container_name: aishacrm-backend
     restart: unless-stopped
     depends_on:
@@ -88,7 +88,7 @@ services:
 
   # Frontend
   frontend:
-    image: ghcr.io/andreibyf/aishacrm-2-frontend:v1.0.23
+    image: ghcr.io/andreibyf/aishacrm-2-frontend:v1.0.37
     container_name: aishacrm-frontend
     restart: unless-stopped
     depends_on:
