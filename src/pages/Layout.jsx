@@ -2257,7 +2257,10 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                   }
                   try {
                     // Use backend proxy to avoid CORS issues
-                    const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+                    // Get backend URL from runtime config (window._env_) or build-time env
+                    const backendUrl = (typeof window !== 'undefined' && window._env_?.VITE_AISHACRM_BACKEND_URL) 
+                      || import.meta.env.VITE_AISHACRM_BACKEND_URL 
+                      || 'http://localhost:4001';
                     const response = await fetch(`${backendUrl}/api/users/reset-password`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
