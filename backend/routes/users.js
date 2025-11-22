@@ -1825,7 +1825,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         console.error("[Password Reset] Error:", error);
         return res.status(500).json({
           status: "error",
-          message: `Failed to send reset email: ${error.message}`,
+          message: error.message || "Failed to send reset email",
         });
       }
 
