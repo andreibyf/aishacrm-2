@@ -37,6 +37,38 @@ function cookieOpts(maxAgeMs) {
 export default function createAuthRoutes(_pgPool) {
   const router = express.Router();
 
+  // Email-based throttling for password resets (recommended by Supabase)
+  // Prevents hitting Supabase's 1 email/60s rate limit
+  const attemptsByEmail = new Map(); // email -> { count, resetAt }
+  const MAX_EMAIL_CACHE_SIZE = 10000;
+  function throttleEmail(email, max = 3, windowMs = 15 * 60000) {
+    const key = email.trim().toLowerCase();
+    const now = Date.now();
+
+    // Cleanup old entries if cache grows too large
+    if (attemptsByEmail.size > MAX_EMAIL_CACHE_SIZE) {
+      const cutoff = now - windowMs;
+      for (const [k, v] of attemptsByEmail.entries()) {
+        if (v.resetAt < cutoff) attemptsByEmail.delete(k);
+      }
+    }
+
+    const rec = attemptsByEmail.get(key) ?? { count: 0, resetAt: now + windowMs };
+    if (now > rec.resetAt) {
+      rec.count = 0;
+      rec.resetAt = now + windowMs;
+    }
+    rec.count++;
+    attemptsByEmail.set(key, rec);
+
+    if (rec.count > max) {
+      const retry = Math.ceil((rec.resetAt - now) / 1000);
+      const err = new Error('Too many password reset attempts for this email. Please try again later.');
+      err.retryAfter = retry;
+      throw err;
+    }
+  }
+
   // POST /api/auth/verify-token - Verify JWT token validity
   router.post('/verify-token', async (req, res) => {
     try {
@@ -348,6 +380,19 @@ export default function createAuthRoutes(_pgPool) {
       const { email, redirectTo } = req.body || {};
       if (!email) {
         return res.status(400).json({ status: 'error', message: 'email required' });
+      }
+
+      // Apply email-based throttling (3 attempts per 15 minutes)
+      // This prevents hitting Supabase's built-in 1 email/60s rate limit
+      try {
+        throttleEmail(email);
+      } catch (e) {
+        return res.status(429)
+          .set('Retry-After', String(e.retryAfter ?? 60))
+          .json({
+            status: 'error',
+            message: e.message || 'Too many reset attempts. Try again later.',
+          });
       }
 
       // Ensure Supabase admin client initialized at startup (sendPasswordResetEmail will throw if not)

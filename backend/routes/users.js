@@ -89,6 +89,38 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
     };
   }
 
+  // Email-based throttling for password resets (recommended by Supabase)
+  // Prevents hitting Supabase's 1 email/60s rate limit
+  const attemptsByEmail = new Map(); // email -> { count, resetAt }
+  const MAX_EMAIL_CACHE_SIZE = 10000;
+  function throttleEmail(email, max = 3, windowMs = 15 * 60000) {
+    const key = email.trim().toLowerCase();
+    const now = Date.now();
+
+    // Cleanup old entries if cache grows too large
+    if (attemptsByEmail.size > MAX_EMAIL_CACHE_SIZE) {
+      const cutoff = now - windowMs;
+      for (const [k, v] of attemptsByEmail.entries()) {
+        if (v.resetAt < cutoff) attemptsByEmail.delete(k);
+      }
+    }
+
+    const rec = attemptsByEmail.get(key) ?? { count: 0, resetAt: now + windowMs };
+    if (now > rec.resetAt) {
+      rec.count = 0;
+      rec.resetAt = now + windowMs;
+    }
+    rec.count++;
+    attemptsByEmail.set(key, rec);
+
+    if (rec.count > max) {
+      const retry = Math.ceil((rec.resetAt - now) / 1000);
+      const err = new Error('Too many password reset attempts for this email. Please try again later.');
+      err.retryAfter = retry;
+      throw err;
+    }
+  }
+
   // Tuned limiters for specific endpoints
   const authLimiter = createRouteLimiter({ id: 'auth', windowMs: DEFAULT_WINDOW_MS, max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '5', 10) });
   const passwordLimiter = createRouteLimiter({ id: 'password', windowMs: DEFAULT_WINDOW_MS, max: parseInt(process.env.PASSWORD_RATE_LIMIT_MAX || '5', 10) });
@@ -1817,6 +1849,19 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           status: "error",
           message: "email is required",
         });
+      }
+
+      // Apply email-based throttling (3 attempts per 15 minutes)
+      // This prevents hitting Supabase's built-in 1 email/60s rate limit
+      try {
+        throttleEmail(email);
+      } catch (e) {
+        return res.status(429)
+          .set('Retry-After', String(e.retryAfter ?? 60))
+          .json({
+            status: 'error',
+            message: e.message || 'Too many reset attempts. Try again later.',
+          });
       }
 
       const { data, error } = await sendPasswordResetEmail(email, redirectTo);

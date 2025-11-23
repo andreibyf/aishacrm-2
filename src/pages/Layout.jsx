@@ -2269,7 +2269,19 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                       }),
                     });
                     const result = await response.json();
-                    if (!response.ok) throw new Error(result.message || 'Failed to send reset email');
+                    if (!response.ok) {
+                      // Detect Supabase rate limit error (429 or rate_limit in message)
+                      const isRateLimit = response.status === 429 ||
+                        (result.message && (
+                          result.message.includes('rate limit') ||
+                          result.message.includes('over_email_send_rate_limit')
+                        ));
+
+                      if (isRateLimit) {
+                        throw new Error('Too many password reset attempts. Please wait 60 seconds and try again.');
+                      }
+                      throw new Error(result.message || 'Failed to send reset email');
+                    }
                     alert('Reset email sent. Check your inbox (and spam).');
                   } catch (err) {
                     alert('Failed to send reset email: ' + (err?.message || 'Unknown error'));

@@ -55,48 +55,57 @@ function _getCurrentPage(url) {
 function PagesContent() {
     const location = useLocation();
     const currentPage = _getCurrentPage(location.pathname);
+
+    // Public routes that don't require Layout/authentication
     return (
-        <Layout currentPageName={currentPage}>
-            <Suspense fallback={<div style={{padding:'2rem',textAlign:'center'}}>Loading...</div>}>
-                <Routes>
-                    <Route path="/" element={<PAGES.Dashboard />} />
-                    <Route path="/Dashboard" element={<PAGES.Dashboard />} />
-                    <Route path="/Contacts" element={<PAGES.Contacts />} />
-                    <Route path="/Accounts" element={<PAGES.Accounts />} />
-                    <Route path="/Opportunities" element={<PAGES.Opportunities />} />
-                    <Route path="/Activities" element={<PAGES.Activities />} />
-                    <Route path="/Settings" element={<PAGES.Settings />} />
-                    <Route path="/Reports" element={<PAGES.Reports />} />
-                    <Route path="/Documentation" element={<PAGES.Documentation />} />
-                    <Route path="/TermsConditions" element={<PAGES.TermsConditions />} />
-                    <Route path="/PrivacyPolicy" element={<PAGES.PrivacyPolicy />} />
-                    <Route path="/Tenants" element={<PAGES.Tenants />} />
-                    <Route path="/Employees" element={<PAGES.Employees />} />
-                    <Route path="/TenantDataDebug" element={<PAGES.TenantDataDebug />} />
-                    <Route path="/Integrations" element={<PAGES.Integrations />} />
-                    <Route path="/AuditLog" element={<PAGES.AuditLog />} />
-                    <Route path="/Leads" element={<PAGES.Leads />} />
-                    <Route path="/AICampaigns" element={<PAGES.AICampaigns />} />
-                    <Route path="/DocumentProcessing" element={<PAGES.DocumentProcessing />} />
-                    <Route path="/CashFlow" element={<PAGES.CashFlow />} />
-                    <Route path="/PaymentPortal" element={<PAGES.PaymentPortal />} />
-                    <Route path="/DocumentManagement" element={<PAGES.DocumentManagement />} />
-                    <Route path="/Agent" element={<PAGES.Agent />} />
-                    <Route path="/Calendar" element={<PAGES.Calendar />} />
-                    <Route path="/DuplicateContacts" element={<PAGES.DuplicateContacts />} />
-                    <Route path="/Utilities" element={<PAGES.Utilities />} />
-                    <Route path="/DuplicateAccounts" element={<PAGES.DuplicateAccounts />} />
-                    <Route path="/DataQualityReport" element={<PAGES.DataQualityReport />} />
-                    <Route path="/DataDiagnostics" element={<PAGES.DataDiagnostics />} />
-                    <Route path="/UnitTests" element={<PAGES.UnitTests />} />
-                    <Route path="/BizDevSources" element={<PAGES.BizDevSources />} />
-                    <Route path="/ClientOnboarding" element={<PAGES.ClientOnboarding />} />
-                    <Route path="/ClientRequirements" element={<PAGES.ClientRequirements />} />
-                    <Route path="/SystemLogs" element={<PAGES.SystemLogs />} />
-                    <Route path="/auth/reset" element={<AuthResetPage />} />
-                </Routes>
-            </Suspense>
-        </Layout>
+        <Suspense fallback={<div style={{padding:'2rem',textAlign:'center'}}>Loading...</div>}>
+            <Routes>
+                {/* Public route - password reset (no Layout wrapper) */}
+                <Route path="/auth/reset" element={<AuthResetPage />} />
+
+                {/* All other routes wrapped in Layout (requires authentication) */}
+                <Route path="/*" element={
+                    <Layout currentPageName={currentPage}>
+                        <Routes>
+                            <Route path="/" element={<PAGES.Dashboard />} />
+                            <Route path="/Dashboard" element={<PAGES.Dashboard />} />
+                            <Route path="/Contacts" element={<PAGES.Contacts />} />
+                            <Route path="/Accounts" element={<PAGES.Accounts />} />
+                            <Route path="/Opportunities" element={<PAGES.Opportunities />} />
+                            <Route path="/Activities" element={<PAGES.Activities />} />
+                            <Route path="/Settings" element={<PAGES.Settings />} />
+                            <Route path="/Reports" element={<PAGES.Reports />} />
+                            <Route path="/Documentation" element={<PAGES.Documentation />} />
+                            <Route path="/TermsConditions" element={<PAGES.TermsConditions />} />
+                            <Route path="/PrivacyPolicy" element={<PAGES.PrivacyPolicy />} />
+                            <Route path="/Tenants" element={<PAGES.Tenants />} />
+                            <Route path="/Employees" element={<PAGES.Employees />} />
+                            <Route path="/TenantDataDebug" element={<PAGES.TenantDataDebug />} />
+                            <Route path="/Integrations" element={<PAGES.Integrations />} />
+                            <Route path="/AuditLog" element={<PAGES.AuditLog />} />
+                            <Route path="/Leads" element={<PAGES.Leads />} />
+                            <Route path="/AICampaigns" element={<PAGES.AICampaigns />} />
+                            <Route path="/DocumentProcessing" element={<PAGES.DocumentProcessing />} />
+                            <Route path="/CashFlow" element={<PAGES.CashFlow />} />
+                            <Route path="/PaymentPortal" element={<PAGES.PaymentPortal />} />
+                            <Route path="/DocumentManagement" element={<PAGES.DocumentManagement />} />
+                            <Route path="/Agent" element={<PAGES.Agent />} />
+                            <Route path="/Calendar" element={<PAGES.Calendar />} />
+                            <Route path="/DuplicateContacts" element={<PAGES.DuplicateContacts />} />
+                            <Route path="/Utilities" element={<PAGES.Utilities />} />
+                            <Route path="/DuplicateAccounts" element={<PAGES.DuplicateAccounts />} />
+                            <Route path="/DataQualityReport" element={<PAGES.DataQualityReport />} />
+                            <Route path="/DataDiagnostics" element={<PAGES.DataDiagnostics />} />
+                            <Route path="/UnitTests" element={<PAGES.UnitTests />} />
+                            <Route path="/BizDevSources" element={<PAGES.BizDevSources />} />
+                            <Route path="/ClientOnboarding" element={<PAGES.ClientOnboarding />} />
+                            <Route path="/ClientRequirements" element={<PAGES.ClientRequirements />} />
+                            <Route path="/SystemLogs" element={<PAGES.SystemLogs />} />
+                        </Routes>
+                    </Layout>
+                } />
+            </Routes>
+        </Suspense>
     );
 }
 
