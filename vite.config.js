@@ -1,10 +1,10 @@
-import { defineConfig, splitVendorChunkPlugin } from 'vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), splitVendorChunkPlugin()],
+  plugins: [react()],
   // Inject environment variables at build time
   define: {
     'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(process.env.VITE_SUPABASE_URL || ''),
@@ -56,15 +56,24 @@ export default defineConfig({
     cssCodeSplit: true,
     rollupOptions: {
       output: {
-        chunkFileNames: 'assets/chunk-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
         entryFileNames: 'assets/entry-[hash].js',
         assetFileNames: 'assets/[name]-[hash][extname]',
         manualChunks(id) {
           if (!id.includes('node_modules')) return;
-          if (id.includes('/react/') || id.includes('react-dom') || id.includes('react-router-dom')) return 'vendor-react';
+          // CRITICAL FIX: Ensure ALL React-related packages go in the same chunk
+          // This includes react-router-dom v7 which uses @remix-run/router internally
+          if (
+            id.includes('/react/') ||
+            id.includes('/react-dom/') ||
+            id.includes('react-router') ||
+            id.includes('@remix-run/router') ||
+            id.includes('scheduler')
+          ) return 'vendor-react';
           if (id.includes('@radix-ui')) return 'vendor-radix';
           if (id.includes('@supabase/supabase-js')) return 'vendor-supabase';
-          if (id.includes('recharts')) return 'vendor-charts';
+          // Don't manually chunk recharts - let Vite handle it to avoid circular dependency issues
+          // if (id.includes('recharts')) return 'vendor-charts';
           if (id.includes('framer-motion')) return 'vendor-motion';
           if (id.includes('react-hook-form') || id.includes('@hookform') || id.includes('zod')) return 'vendor-forms';
           if (id.includes('@tanstack/react-query')) return 'vendor-query';
