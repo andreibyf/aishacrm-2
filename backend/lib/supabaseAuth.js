@@ -115,16 +115,17 @@ export async function sendPasswordResetEmail(email, redirectTo) {
   }
 
   try {
-    // Redirect to root path - PasswordResetHandler will intercept PASSWORD_RECOVERY event
-    // FRONTEND_URL is REQUIRED in production - no localhost fallback
+    // Redirect to dedicated reset route so UI immediately presents password form.
+    // FRONTEND_URL is REQUIRED in production - no localhost fallback.
     let resetRedirectUrl;
     if (redirectTo) {
+      // allow caller override (must be whitelisted in Supabase Auth settings)
       resetRedirectUrl = redirectTo;
     } else if (process.env.FRONTEND_URL) {
-      resetRedirectUrl = `${process.env.FRONTEND_URL}/`;
+      resetRedirectUrl = `${process.env.FRONTEND_URL}/auth/reset`;
     } else if (process.env.NODE_ENV === 'development') {
-      resetRedirectUrl = 'http://localhost:4000/';
-      console.warn('⚠️  FRONTEND_URL not set, using dev default: http://localhost:4000');
+      resetRedirectUrl = 'http://localhost:4000/auth/reset';
+      console.warn('⚠️  FRONTEND_URL not set, using dev default: http://localhost:4000/auth/reset');
     } else {
       throw new Error('FRONTEND_URL environment variable is required for password reset in production');
     }
