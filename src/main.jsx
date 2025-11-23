@@ -4,6 +4,7 @@ import '@/index.css'
 import ErrorBoundary from '@/components/shared/ErrorBoundary'
 import { UserProvider } from '@/components/shared/UserContext.jsx'
 import { initRateLimitBackoff } from '@/utils/fetchWithBackoff.js'
+import { scheduleIdlePrefetch } from '@/idlePrefetch.js'
 
 // Install global 429 backoff early to prevent hammering during initial mount
 initRateLimitBackoff();
@@ -21,3 +22,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       </UserProvider>
     </ErrorBoundary>
 ) 
+
+// Kick off idle-time vendor chunk prefetch shortly after first paint
+setTimeout(() => {
+  scheduleIdlePrefetch();
+}, 0);
