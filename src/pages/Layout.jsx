@@ -2260,10 +2260,10 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                     // Use backend proxy to avoid CORS issues
                     // Get backend URL from runtime config (window._env_) or build-time env
                     const backendUrl = getBackendUrl();
-                    const response = await fetch(`${backendUrl}/api/users/reset-password`, {
+                    const response = await fetch(`${backendUrl}/users/reset-password`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ 
+                      body: JSON.stringify({
                         email,
                         redirectTo: `${window.location.origin}/`
                       }),
