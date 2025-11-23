@@ -2265,7 +2265,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
                         email,
-                        redirectTo: `${window.location.origin}/`
+                        redirectTo: `${window.location.origin}/auth/reset`
                       }),
                     });
                     const result = await response.json();
