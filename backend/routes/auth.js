@@ -2,7 +2,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
-import { getAuthUserByEmail } from '../lib/supabaseAuth.js';
+import { getAuthUserByEmail, sendPasswordResetEmail } from '../lib/supabaseAuth.js';
 
 function getAnonSupabase() {
   const url = process.env.SUPABASE_URL;
@@ -339,6 +339,59 @@ export default function createAuthRoutes(_pgPool) {
       return res.json({ status: 'success', data: { user: payload } });
     } catch {
       return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+    }
+  });
+
+  // POST /api/auth/password/reset/request - initiate Supabase password reset email
+  router.post('/password/reset/request', async (req, res) => {
+    try {
+      const { email, redirectTo } = req.body || {};
+      if (!email) {
+        return res.status(400).json({ status: 'error', message: 'email required' });
+      }
+
+      // Ensure Supabase admin client initialized at startup (sendPasswordResetEmail will throw if not)
+      const { data, error } = await sendPasswordResetEmail(String(email).trim().toLowerCase(), redirectTo);
+      if (error) {
+        return res.status(400).json({ status: 'error', message: error.message || 'Failed to send reset email' });
+      }
+      return res.json({ status: 'success', message: 'Reset email sent' });
+    } catch (e) {
+      console.error('[Auth.password.reset.request] error', e);
+      return res.status(500).json({ status: 'error', message: 'Internal error' });
+    }
+  });
+
+  // POST /api/auth/password/reset/confirm - (optional) set new password using recovery access token
+  // NOTE: Frontend can also directly call supabase.auth.updateUser({ password }) after PASSWORD_RECOVERY event.
+  router.post('/password/reset/confirm', async (req, res) => {
+    try {
+      const { access_token, new_password } = req.body || {};
+      if (!access_token || !new_password) {
+        return res.status(400).json({ status: 'error', message: 'access_token and new_password required' });
+      }
+
+      const url = process.env.SUPABASE_URL;
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!url || !key) {
+        return res.status(500).json({ status: 'error', message: 'server auth not configured' });
+      }
+
+      const admin = createSupabaseClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+      const { data: getUserData, error: getUserErr } = await admin.auth.getUser(access_token);
+      const user = getUserData?.user;
+      if (getUserErr || !user) {
+        return res.status(400).json({ status: 'error', message: 'Invalid token' });
+      }
+
+      const { error: updErr } = await admin.auth.admin.updateUserById(user.id, { password: new_password });
+      if (updErr) {
+        return res.status(400).json({ status: 'error', message: updErr.message || 'Failed to update password' });
+      }
+      return res.json({ status: 'success', message: 'Password updated' });
+    } catch (e) {
+      console.error('[Auth.password.reset.confirm] error', e);
+      return res.status(500).json({ status: 'error', message: 'Internal error' });
     }
   });
 
