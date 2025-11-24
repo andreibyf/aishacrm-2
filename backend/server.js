@@ -485,6 +485,7 @@ import createSecurityRoutes from "./routes/security.js";
 import createMemoryRoutes from "./routes/memory.js";
 import createAuthRoutes from "./routes/auth.js";
 import createGitHubIssuesRoutes from "./routes/github-issues.js";
+import createSupabaseProxyRoutes from "./routes/supabaseProxy.js";
 
 // Use the pgPool directly; per-request DB time is measured inside the DB adapter
 const measuredPgPool = pgPool;
@@ -545,6 +546,8 @@ app.use("/api/memory", createMemoryRoutes());
 app.use("/api/auth", createAuthRoutes(measuredPgPool));
 // GitHub Issues routes for autonomous health monitoring
 app.use("/api/github-issues", createGitHubIssuesRoutes);
+// Supabase Auth proxy (CORS-controlled access to /auth/v1/user)
+app.use("/api/supabase-proxy", createSupabaseProxyRoutes());
 
 // 404 handler
 app.use((req, res) => {
