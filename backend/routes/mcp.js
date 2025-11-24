@@ -1001,8 +1001,11 @@ export default function createMCPRoutes(_pgPool) {
       'http://braid-mcp-node-server:8000/health',
       'http://braid-mcp-1:8000/health',
       'http://braid-mcp:8000/health',
-      // Host gateway (works from inside Docker to host-mapped port) in dev only
-      process.env.NODE_ENV === 'development' ? 'http://host.docker.internal:8000/health' : null,
+      // Host gateway (works from inside Docker to host-mapped port)
+      'http://host.docker.internal:8000/health',
+      // Direct localhost fallback (works when MCP server runs on same host)
+      'http://localhost:8000/health',
+      'http://127.0.0.1:8000/health',
     ].filter(Boolean);
 
     const withTimeout = (p, ms) => Promise.race([
@@ -1010,21 +1013,28 @@ export default function createMCPRoutes(_pgPool) {
       new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))
     ]);
 
+    // Track individual errors for better diagnostics
+    const errors = [];
     const attempts = candidates.map(url => (async () => {
       const t0 = performance.now ? performance.now() : Date.now();
-      const resp = await withTimeout(fetch(url, { method: 'GET' }), 1500);
-      const dt = Math.round((performance.now ? performance.now() : Date.now()) - t0);
-      if (!resp.ok) throw new Error('bad_status_' + resp.status);
-      let data;
       try {
-        data = await resp.json();
-      } catch (e) {
-        throw new Error('invalid_json');
+        const resp = await withTimeout(fetch(url, { method: 'GET' }), 1500);
+        const dt = Math.round((performance.now ? performance.now() : Date.now()) - t0);
+        if (!resp.ok) throw new Error('bad_status_' + resp.status);
+        let data;
+        try {
+          data = await resp.json();
+        } catch (e) {
+          throw new Error('invalid_json');
+        }
+        if (!data || (data.status !== 'ok' && data.status !== 'healthy')) {
+          throw new Error('invalid_health_payload');
+        }
+        return { url, latency_ms: dt, data };
+      } catch (err) {
+        errors.push({ url, error: err.message || String(err) });
+        throw err;
       }
-      if (!data || (data.status !== 'ok' && data.status !== 'healthy')) {
-        throw new Error('invalid_health_payload');
-      }
-      return { url, latency_ms: dt, data };
     })());
 
     try {
@@ -1045,7 +1055,12 @@ export default function createMCPRoutes(_pgPool) {
         data: {
           reachable: false,
           error: err.message || 'unreachable',
-          attempted: candidates.length
+          attempted: candidates.length,
+          diagnostics: {
+            candidates: candidates,
+            errors: errors,
+            hint: 'Set MCP_NODE_HEALTH_URL env var or ensure one of the default endpoints is reachable'
+          }
         }
       });
     }
@@ -1054,13 +1069,31 @@ export default function createMCPRoutes(_pgPool) {
   // POST /api/mcp/run-proxy - Forward MCP action envelope to Braid MCP server from backend (browser-safe)
   router.post('/run-proxy', async (req, res) => {
     const envelope = req.body || {};
+    
+    // Validate request envelope
+    if (!envelope || !envelope.requestId || !envelope.actor || !Array.isArray(envelope.actions)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Invalid request envelope: missing requestId, actor, or actions array',
+        details: {
+          hasRequestId: !!envelope?.requestId,
+          hasActor: !!envelope?.actor,
+          hasActions: Array.isArray(envelope?.actions),
+        }
+      });
+    }
+    
     // Reuse candidates from health proxy for base URL discovery
     const healthCandidates = [
       process.env.MCP_NODE_HEALTH_URL,
       'http://braid-mcp-node-server:8000/health',
       'http://braid-mcp-1:8000/health',
       'http://braid-mcp:8000/health',
-      process.env.NODE_ENV === 'development' ? 'http://host.docker.internal:8000/health' : null,
+      // Host gateway (works from inside Docker to host-mapped port)
+      'http://host.docker.internal:8000/health',
+      // Direct localhost fallback (works when MCP server runs on same host)
+      'http://localhost:8000/health',
+      'http://127.0.0.1:8000/health',
     ].filter(Boolean);
     const baseCandidates = healthCandidates.map(u => u.replace(/\/health$/,'')).concat(
       process.env.MCP_NODE_BASE_URL ? [process.env.MCP_NODE_BASE_URL] : []
@@ -1069,26 +1102,47 @@ export default function createMCPRoutes(_pgPool) {
       p,
       new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))
     ]);
+    
+    // Track individual errors for better diagnostics
+    const errors = [];
     const attempts = baseCandidates.map(base => (async () => {
       const url = base.replace(/\/$/, '') + '/mcp/run';
       const t0 = performance.now ? performance.now() : Date.now();
-      const resp = await withTimeout(fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(envelope)
-      }), 5000);
-      const dt = Math.round((performance.now ? performance.now() : Date.now()) - t0);
-      if (!resp.ok) throw new Error('bad_status_' + resp.status);
-      let json;
-      try { json = await resp.json(); } catch (e) { throw new Error('invalid_json'); }
-      if (!json || !Array.isArray(json.results)) throw new Error('invalid_mcp_response');
-      return { base, duration_ms: dt, response: json };
+      try {
+        const resp = await withTimeout(fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(envelope)
+        }), 5000);
+        const dt = Math.round((performance.now ? performance.now() : Date.now()) - t0);
+        if (!resp.ok) {
+          const errText = await resp.text().catch(() => '');
+          throw new Error(`HTTP ${resp.status}: ${errText.slice(0, 100)}`);
+        }
+        let json;
+        try { json = await resp.json(); } catch (e) { throw new Error('invalid_json'); }
+        if (!json || !Array.isArray(json.results)) throw new Error('invalid_mcp_response: missing results array');
+        return { base, duration_ms: dt, response: json };
+      } catch (err) {
+        errors.push({ url, error: err.message || String(err) });
+        throw err;
+      }
     })());
     try {
       const first = await Promise.any(attempts);
       return res.json({ status: 'success', data: { base: first.base, duration_ms: first.duration_ms, results: first.response.results } });
     } catch (err) {
-      return res.status(502).json({ status: 'error', message: 'MCP run-proxy failed', error: err.message, attempted: baseCandidates });
+      // All attempts failed - provide detailed diagnostics
+      return res.status(502).json({ 
+        status: 'error', 
+        message: 'MCP run-proxy failed: all candidate servers unreachable', 
+        error: err.message || 'All MCP server candidates failed',
+        diagnostics: {
+          attempted: baseCandidates,
+          errors: errors,
+          hint: 'Ensure MCP_NODE_HEALTH_URL or MCP_NODE_BASE_URL env vars are set, or that one of the default endpoints is reachable'
+        }
+      });
     }
   });
 
