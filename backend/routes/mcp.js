@@ -1051,6 +1051,93 @@ export default function createMCPRoutes(_pgPool) {
     }
   });
 
+  // Inline fallback handler for web adapter actions when MCP server is unreachable
+  const handleWebActionFallback = async (action) => {
+    const resource = action.resource || {};
+    const kind = (resource.kind || '').toLowerCase();
+    const payload = action.payload || {};
+
+    if (kind === 'wikipedia-search' || kind === 'search_wikipedia') {
+      const q = String(payload.q || payload.query || '').trim();
+      if (!q) {
+        return {
+          actionId: action.id,
+          status: 'error',
+          resource: action.resource,
+          errorCode: 'MISSING_QUERY',
+          errorMessage: "Query parameter 'q' or 'query' is required",
+        };
+      }
+      try {
+        const resp = await fetch(
+          `https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=5&srsearch=${encodeURIComponent(q)}`,
+          {
+            headers: {
+              'User-Agent': 'AishaCRM/1.0 (backend-fallback)',
+              'Accept': 'application/json'
+            }
+          }
+        );
+        const json = await resp.json();
+        return {
+          actionId: action.id,
+          status: 'success',
+          resource: action.resource,
+          data: json?.query?.search || [],
+        };
+      } catch (err) {
+        return {
+          actionId: action.id,
+          status: 'error',
+          resource: action.resource,
+          errorCode: 'WIKIPEDIA_API_ERROR',
+          errorMessage: err?.message || String(err),
+        };
+      }
+    }
+
+    if (kind === 'wikipedia-page' || kind === 'get_wikipedia_page') {
+      const pageid = String(payload.pageid || payload.pageId || '').trim();
+      if (!pageid) {
+        return {
+          actionId: action.id,
+          status: 'error',
+          resource: action.resource,
+          errorCode: 'MISSING_PAGEID',
+          errorMessage: "Parameter 'pageid' is required",
+        };
+      }
+      try {
+        const resp = await fetch(
+          `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&format=json&pageids=${encodeURIComponent(pageid)}`,
+          {
+            headers: {
+              'User-Agent': 'AishaCRM/1.0 (backend-fallback)',
+              'Accept': 'application/json'
+            }
+          }
+        );
+        const json = await resp.json();
+        return {
+          actionId: action.id,
+          status: 'success',
+          resource: action.resource,
+          data: json?.query?.pages?.[pageid] || null,
+        };
+      } catch (err) {
+        return {
+          actionId: action.id,
+          status: 'error',
+          resource: action.resource,
+          errorCode: 'WIKIPEDIA_API_ERROR',
+          errorMessage: err?.message || String(err),
+        };
+      }
+    }
+
+    return null; // Not a web action we can handle
+  };
+
   // POST /api/mcp/run-proxy - Forward MCP action envelope to Braid MCP server from backend (browser-safe)
   router.post('/run-proxy', async (req, res) => {
     const envelope = req.body || {};
@@ -1088,6 +1175,42 @@ export default function createMCPRoutes(_pgPool) {
       const first = await Promise.any(attempts);
       return res.json({ status: 'success', data: { base: first.base, duration_ms: first.duration_ms, results: first.response.results } });
     } catch (err) {
+      // MCP server unreachable - try inline fallback for supported adapters
+      const actions = Array.isArray(envelope.actions) ? envelope.actions : [];
+      const fallbackResults = [];
+      let allHandled = true;
+
+      for (const action of actions) {
+        const system = (action.resource?.system || '').toLowerCase();
+        
+        if (system === 'web') {
+          const result = await handleWebActionFallback(action);
+          if (result) {
+            fallbackResults.push(result);
+          } else {
+            allHandled = false;
+            break;
+          }
+        } else {
+          // Cannot handle this adapter inline
+          allHandled = false;
+          break;
+        }
+      }
+
+      if (allHandled && fallbackResults.length > 0) {
+        return res.json({
+          status: 'success',
+          data: {
+            base: 'inline-fallback',
+            duration_ms: 0,
+            results: fallbackResults,
+            fallback: true
+          }
+        });
+      }
+
+      // No fallback available - return original error
       return res.status(502).json({ status: 'error', message: 'MCP run-proxy failed', error: err.message, attempted: baseCandidates });
     }
   });
