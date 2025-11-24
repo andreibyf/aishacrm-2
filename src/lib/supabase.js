@@ -49,13 +49,51 @@ const normalizedUrl = (() => {
   return url;
 })();
 
+const isBrowser = typeof window !== 'undefined';
+
+const nativeFetch = (typeof fetch === 'function' ? fetch : globalThis.fetch) || (() => Promise.reject(new Error('fetch not available')));
+const baseFetch = nativeFetch.bind(globalThis);
+
+const buildProxyUrl = () => {
+  if (!isBrowser) return null;
+  return new URL('/api/supabase-proxy/auth/user', window.location.origin).toString();
+};
+
+const fetchWithAuthProxy = (input, init = {}) => {
+  const requestUrl = typeof input === 'string' ? input : input?.url;
+  const isAuthUserRequest = requestUrl?.includes('/auth/v1/user');
+
+  if (isBrowser && isAuthUserRequest) {
+    const proxyUrl = buildProxyUrl();
+    if (proxyUrl) {
+      const headers = new Headers(init.headers || (typeof input !== 'string' ? input.headers : undefined));
+      if (!headers.has('Authorization') && input instanceof Request) {
+        const auth = input.headers.get('Authorization');
+        if (auth) headers.set('Authorization', auth);
+      }
+      const proxyInit = {
+        ...init,
+        method: 'GET',
+        credentials: 'include',
+        headers,
+      };
+      return baseFetch(proxyUrl, proxyInit);
+    }
+  }
+
+  return baseFetch(input, init);
+};
+
 // Create Supabase client
 export const supabase = createClient(normalizedUrl, key, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    storage: window.localStorage, // Use localStorage for session persistence
+    storage: isBrowser ? window.localStorage : undefined, // Use localStorage for session persistence
+  },
+  global: {
+    fetch: fetchWithAuthProxy,
   },
 });
 
