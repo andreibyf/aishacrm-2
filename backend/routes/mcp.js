@@ -1051,6 +1051,9 @@ export default function createMCPRoutes(_pgPool) {
     }
   });
 
+  // User-Agent for Wikipedia API requests (required by MediaWiki API)
+  const WIKIPEDIA_USER_AGENT = 'AishaCRM/1.0 (backend-fallback)';
+
   // Inline fallback handler for web adapter actions when MCP server is unreachable
   const handleWebActionFallback = async (action) => {
     const resource = action.resource || {};
@@ -1073,7 +1076,7 @@ export default function createMCPRoutes(_pgPool) {
           `https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=5&srsearch=${encodeURIComponent(q)}`,
           {
             headers: {
-              'User-Agent': 'AishaCRM/1.0 (backend-fallback)',
+              'User-Agent': WIKIPEDIA_USER_AGENT,
               'Accept': 'application/json'
             }
           }
@@ -1112,7 +1115,7 @@ export default function createMCPRoutes(_pgPool) {
           `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&format=json&pageids=${encodeURIComponent(pageid)}`,
           {
             headers: {
-              'User-Agent': 'AishaCRM/1.0 (backend-fallback)',
+              'User-Agent': WIKIPEDIA_USER_AGENT,
               'Accept': 'application/json'
             }
           }

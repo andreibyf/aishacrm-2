@@ -16,6 +16,10 @@ import assert from 'node:assert';
 process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://test.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'test-key';
 
+// Well-known Wikipedia page IDs for testing
+// See: https://en.wikipedia.org/wiki/Wikipedia:Unique_article_identification
+const WIKIPEDIA_AI_PAGE_ID = '21721040'; // Artificial intelligence article
+
 let app;
 const testPort = 3098;
 let server;
@@ -126,7 +130,7 @@ describe('MCP Routes', async () => {
           verb: 'read',
           actor: { id: 'user:test', type: 'user' },
           resource: { system: 'web', kind: 'wikipedia-page' },
-          payload: { pageid: '21721040' } // Artificial intelligence page
+          payload: { pageid: WIKIPEDIA_AI_PAGE_ID } // Artificial intelligence page
         }]
       };
 
@@ -264,7 +268,7 @@ describe('MCP Routes', async () => {
       const resp = await makeRequest('POST', '/api/mcp/execute-tool', {
         server_id: 'web',
         tool_name: 'web.get_wikipedia_page',
-        parameters: { pageid: '21721040' }
+        parameters: { pageid: WIKIPEDIA_AI_PAGE_ID }
       });
       const json = await resp.json();
 
