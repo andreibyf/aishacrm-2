@@ -1001,8 +1001,11 @@ export default function createMCPRoutes(_pgPool) {
       'http://braid-mcp-node-server:8000/health',
       'http://braid-mcp-1:8000/health',
       'http://braid-mcp:8000/health',
-      // Host gateway (works from inside Docker to host-mapped port) in dev only
-      process.env.NODE_ENV === 'development' ? 'http://host.docker.internal:8000/health' : null,
+      // Host gateway (works from inside Docker to host-mapped port)
+      'http://host.docker.internal:8000/health',
+      // Localhost (works when backend runs on host, not in Docker)
+      'http://localhost:8000/health',
+      'http://127.0.0.1:8000/health',
     ].filter(Boolean);
 
     const withTimeout = (p, ms) => Promise.race([
@@ -1012,13 +1015,13 @@ export default function createMCPRoutes(_pgPool) {
 
     const attempts = candidates.map(url => (async () => {
       const t0 = performance.now ? performance.now() : Date.now();
-      const resp = await withTimeout(fetch(url, { method: 'GET' }), 1500);
+      const resp = await withTimeout(fetch(url, { method: 'GET' }), 2000);
       const dt = Math.round((performance.now ? performance.now() : Date.now()) - t0);
       if (!resp.ok) throw new Error('bad_status_' + resp.status);
       let data;
       try {
         data = await resp.json();
-      } catch (e) {
+      } catch (_e) {
         throw new Error('invalid_json');
       }
       if (!data || (data.status !== 'ok' && data.status !== 'healthy')) {
@@ -1040,12 +1043,16 @@ export default function createMCPRoutes(_pgPool) {
         }
       });
     } catch (err) {
+      // Collect all errors for debugging
+      const errorsDetails = err.errors ? err.errors.map(e => e.message).join(', ') : (err.message || 'unreachable');
       return res.json({
         status: 'success',
         data: {
           reachable: false,
-          error: err.message || 'unreachable',
-          attempted: candidates.length
+          error: 'MCP server not running or not reachable',
+          details: errorsDetails,
+          attempted: candidates.length,
+          candidates: candidates
         }
       });
     }
@@ -1060,7 +1067,9 @@ export default function createMCPRoutes(_pgPool) {
       'http://braid-mcp-node-server:8000/health',
       'http://braid-mcp-1:8000/health',
       'http://braid-mcp:8000/health',
-      process.env.NODE_ENV === 'development' ? 'http://host.docker.internal:8000/health' : null,
+      'http://host.docker.internal:8000/health',
+      'http://localhost:8000/health',
+      'http://127.0.0.1:8000/health',
     ].filter(Boolean);
     const baseCandidates = healthCandidates.map(u => u.replace(/\/health$/,'')).concat(
       process.env.MCP_NODE_BASE_URL ? [process.env.MCP_NODE_BASE_URL] : []
@@ -1080,7 +1089,7 @@ export default function createMCPRoutes(_pgPool) {
       const dt = Math.round((performance.now ? performance.now() : Date.now()) - t0);
       if (!resp.ok) throw new Error('bad_status_' + resp.status);
       let json;
-      try { json = await resp.json(); } catch (e) { throw new Error('invalid_json'); }
+      try { json = await resp.json(); } catch (_e) { throw new Error('invalid_json'); }
       if (!json || !Array.isArray(json.results)) throw new Error('invalid_mcp_response');
       return { base, duration_ms: dt, response: json };
     })());
@@ -1088,7 +1097,14 @@ export default function createMCPRoutes(_pgPool) {
       const first = await Promise.any(attempts);
       return res.json({ status: 'success', data: { base: first.base, duration_ms: first.duration_ms, results: first.response.results } });
     } catch (err) {
-      return res.status(502).json({ status: 'error', message: 'MCP run-proxy failed', error: err.message, attempted: baseCandidates });
+      // Collect all errors for debugging
+      const errorsDetails = err.errors ? err.errors.map(e => e.message).join(', ') : (err.message || 'unreachable');
+      return res.status(502).json({ 
+        status: 'error', 
+        message: 'MCP server not running or not reachable. Start the Braid MCP server or check network configuration.', 
+        error: errorsDetails, 
+        attempted: baseCandidates 
+      });
     }
   });
 

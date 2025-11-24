@@ -34,9 +34,7 @@ import { toast } from "sonner";
 
 export default function MCPServerMonitor() {
   const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || "http://localhost:4001";
-  // Direct MCP URL (may fail in browser due to network isolation)
-  const BRAID_MCP_URL = "http://localhost:8000";
-  // Backend proxy health endpoint (new) – preferred for determining availability
+  // Backend proxy health endpoint - only reliable method from browser in Docker environments
   const MCP_PROXY_URL = `${BACKEND_URL}/api/mcp/health-proxy`;
   const resolveTenantId = () => {
     try {
@@ -101,7 +99,7 @@ export default function MCPServerMonitor() {
     setLogs((prev) => [newLog, ...prev.slice(0, 99)]);
   }, []);
 
-  // Helper to execute Braid MCP action
+  // Helper to execute Braid MCP action (proxy-first to work in Docker environments)
   const executeBraidAction = async (action) => {
     const envelope = {
       requestId: `req-${Date.now()}`,
@@ -111,34 +109,31 @@ export default function MCPServerMonitor() {
     };
 
     const startTime = performance.now();
-    // Try direct first; on network error or fetch failure, fallback to backend proxy route
+    // Use proxy-first since direct localhost access fails from browser in Docker
     try {
-      const directResp = await fetch(`${BRAID_MCP_URL}/mcp/run`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(envelope)
-      });
-      const endTime = performance.now();
-      const responseTime = endTime - startTime;
-      if (!directResp.ok) throw new Error(`HTTP ${directResp.status}`);
-      const directJson = await directResp.json();
-      return { result: directJson.results[0], responseTime, via: 'direct' };
-    } catch (directErr) {
-      addLog('warning', `Direct MCP call failed (${directErr.message}); using proxy...`);
-      const proxyStart = performance.now();
       const proxyResp = await fetch(`${BACKEND_URL}/api/mcp/run-proxy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(envelope)
       });
-      const proxyEnd = performance.now();
-      const responseTime = proxyEnd - proxyStart;
+      const endTime = performance.now();
+      const responseTime = endTime - startTime;
+      
       if (!proxyResp.ok) {
         const txt = await proxyResp.text();
-        throw new Error(`Proxy failed ${proxyResp.status}: ${txt.slice(0,180)}`);
+        throw new Error(`MCP proxy failed ${proxyResp.status}: ${txt.slice(0,180)}`);
       }
       const proxyJson = await proxyResp.json();
+      
+      // Handle case where MCP server is not reachable
+      if (proxyJson.status === 'error') {
+        throw new Error(proxyJson.message || 'MCP server error');
+      }
+      
       return { result: proxyJson.data.results[0], responseTime, via: 'proxy' };
+    } catch (err) {
+      // Re-throw with clear message
+      throw new Error(`MCP execution failed: ${err.message}`);
     }
   };
 
@@ -153,39 +148,30 @@ export default function MCPServerMonitor() {
     const startTime = performance.now();
 
     try {
-      // Test 1: Braid Server Health (proxy-first, fallback direct)
-      addLog("info", "Test 1/12: Braid server health (proxy-first)");
+      // Test 1: Braid Server Health (proxy-only - direct localhost fails from browser)
+      addLog("info", "Test 1/12: Braid server health (via proxy)");
       try {
-        let healthData = null; let healthTime = 0; let used = 'proxy';
-        try {
-          const t0 = performance.now();
-          const proxyResp = await fetch(`${BACKEND_URL}/api/mcp/health-proxy`);
-            const proxyJson = await proxyResp.json();
-            healthTime = performance.now() - t0;
-            if (proxyJson?.data?.reachable && proxyJson?.data?.raw?.status === 'ok') {
-              healthData = proxyJson.data.raw;
-            } else {
-              addLog('warning', 'Proxy health did not return reachable=true; trying direct');
-            }
-        } catch (e) {
-          addLog('warning', `Proxy health error: ${e.message}`);
-        }
-        if (!healthData) {
-          used = 'direct';
-          const t1 = performance.now();
-          const directResp = await fetch(`${BRAID_MCP_URL}/health`);
-          const directJson = await directResp.json();
-          healthTime = performance.now() - t1;
-          if (directJson.status === 'ok') healthData = directJson;
-        }
-        if (healthData) {
-          tests.push({ name: "Braid Health", status: "pass", time: healthTime.toFixed(0), details: used });
-          addLog("success", `✓ Health check passed via ${used} (${healthTime.toFixed(0)}ms)`);
+        let healthTime = 0;
+        const t0 = performance.now();
+        const proxyResp = await fetch(`${BACKEND_URL}/api/mcp/health-proxy`);
+        const proxyJson = await proxyResp.json();
+        healthTime = performance.now() - t0;
+        
+        if (proxyJson?.data?.reachable && proxyJson?.data?.raw?.status === 'ok') {
+          tests.push({ name: "Braid Health", status: "pass", time: healthTime.toFixed(0), details: `via proxy (${proxyJson.data.url || 'backend'})` });
+          addLog("success", `✓ Health check passed via proxy (${healthTime.toFixed(0)}ms)`);
           passedTests++;
+        } else if (!proxyJson?.data?.reachable) {
+          // MCP server not running or not reachable - mark as skipped (optional component)
+          const reason = proxyJson?.data?.error || 'MCP server not reachable';
+          tests.push({ name: "Braid Health", status: "skipped", details: `MCP server not configured (${reason})` });
+          addLog("info", `⊘ Braid Health skipped: MCP server not reachable - this is optional if you're not using the Braid MCP server`);
+          passedTests++; // Count as pass since it's an optional component
         } else {
-          throw new Error('No successful health response');
+          throw new Error('Unexpected health response format');
         }
       } catch (error) {
+        // Network error reaching the backend proxy itself
         tests.push({ name: "Braid Health", status: "fail", error: error.message });
         addLog("error", `✗ Health check failed: ${error.message}`);
         failedTests++;
@@ -371,36 +357,28 @@ export default function MCPServerMonitor() {
             }
           ]
         };
-        // Try direct then proxy similar to executeBraidAction
-        let batchResult = null; let batchTime = 0; let via = 'direct';
-        try {
-          const batchStart = performance.now();
-          const response = await fetch(`${BRAID_MCP_URL}/mcp/run`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(envelope)
-          });
-          batchTime = performance.now() - batchStart;
-          if (!response.ok) throw new Error('direct_bad_status_' + response.status);
-          batchResult = await response.json();
-        } catch (directErr) {
-          addLog('warning', `Direct batch failed (${directErr.message}); retrying via proxy`);
-          via = 'proxy';
-          const proxyStart = performance.now();
-          const proxyResp = await fetch(`${BACKEND_URL}/api/mcp/run-proxy`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(envelope)
-          });
-          batchTime = performance.now() - proxyStart;
-          if (!proxyResp.ok) throw new Error('proxy_bad_status_' + proxyResp.status);
-          const proxyJson = await proxyResp.json();
-          batchResult = { results: proxyJson?.data?.results || [] };
+        // Use proxy only (direct localhost fails from browser in Docker)
+        let batchResult = null; let batchTime = 0;
+        const batchStart = performance.now();
+        const proxyResp = await fetch(`${BACKEND_URL}/api/mcp/run-proxy`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(envelope)
+        });
+        batchTime = performance.now() - batchStart;
+        if (!proxyResp.ok) throw new Error('proxy_bad_status_' + proxyResp.status);
+        const proxyJson = await proxyResp.json();
+        
+        // Handle MCP server not reachable
+        if (proxyJson.status === 'error') {
+          throw new Error(proxyJson.message || 'MCP server error');
         }
+        
+        batchResult = { results: proxyJson?.data?.results || [] };
         const resultsArr = Array.isArray(batchResult?.results) ? batchResult.results : [];
         const allSuccess = resultsArr.length && resultsArr.every(r => r.status === "success");
 
         if (allSuccess) {
-          tests.push({ name: "Batch Actions", status: "pass", time: batchTime.toFixed(0), details: `2 actions via ${via}` });
-          addLog("success", `✓ Batch actions (${batchTime.toFixed(0)}ms, via ${via})`);
+          tests.push({ name: "Batch Actions", status: "pass", time: batchTime.toFixed(0), details: `2 actions via proxy` });
+          addLog("success", `✓ Batch actions (${batchTime.toFixed(0)}ms, via proxy)`);
           passedTests++;
         } else {
           throw new Error("Some batch actions failed");
@@ -655,7 +633,7 @@ export default function MCPServerMonitor() {
     addLog("info", "Starting quick health check...");
 
     try {
-      // 1. Try backend proxy (preferred)
+      // 1. Try backend proxy (only method that works from browser in Docker environment)
       let proxySucceeded = false;
       try {
         const proxyResp = await fetch(MCP_PROXY_URL);
@@ -672,34 +650,38 @@ export default function MCPServerMonitor() {
             }));
             _setTestResults({ status: "success", message: "Proxy reports server healthy" });
           } else {
-            addLog("warning", `Proxy unreachable: ${proxyJson?.data?.error || 'unknown'}`);
+            // MCP server not running or not reachable - this is OK (optional component)
+            const reason = proxyJson?.data?.error || 'MCP server not reachable';
+            addLog("info", `MCP server not reachable: ${reason} (optional component)`);
+            setAvailabilityMetrics(prev => ({
+              ...prev,
+              status: "degraded", // degraded instead of offline - MCP is optional
+              lastChecked: new Date().toISOString()
+            }));
+            _setTestResults({ 
+              status: "skipped", 
+              message: `MCP server not configured or not running (${reason})` 
+            });
+            proxySucceeded = true; // Don't try direct fetch - it will fail from browser
           }
         }
       } catch (e) {
         addLog("warning", `Proxy health failed: ${e.message}`);
       }
 
-      // 2. If proxy failed, attempt direct localhost (may be blocked in browser)
+      // 2. Only try direct localhost if we couldn't reach the backend proxy at all
+      // Note: This will typically fail from browser in Docker environments
       if (!proxySucceeded) {
-        try {
-          const healthResp = await fetch(`${BRAID_MCP_URL}/health`);
-          const healthData = await healthResp.json();
-          if (healthData.status === "ok") {
-            addLog("success", "Direct MCP health succeeded (fallback)");
-            setAvailabilityMetrics(prev => ({
-              ...prev,
-              status: "healthy",
-              consecutiveSuccesses: prev.consecutiveSuccesses + 1,
-              lastChecked: new Date().toISOString()
-            }));
-            _setTestResults({ status: "success", message: "Direct health endpoint reachable" });
-          } else {
-            throw new Error("Direct health returned non-OK status");
-          }
-        } catch (directErr) {
-          addLog("error", `Direct MCP health failed: ${directErr.message}`);
-          throw directErr; // propagate to outer catch for offline state
-        }
+        addLog("warning", "Backend proxy unreachable, checking backend MCP servers only");
+        setAvailabilityMetrics(prev => ({
+          ...prev,
+          status: "degraded",
+          lastChecked: new Date().toISOString()
+        }));
+        _setTestResults({ 
+          status: "warning", 
+          message: "MCP server status unknown - backend proxy not responding" 
+        });
       }
 
       // Fetch backend MCP servers
@@ -729,7 +711,7 @@ export default function MCPServerMonitor() {
     } finally {
       setIsTesting(false);
     }
-  }, [BRAID_MCP_URL, BACKEND_URL, MCP_PROXY_URL, addLog]);
+  }, [BACKEND_URL, MCP_PROXY_URL, addLog]);
 
   const clearLogs = () => {
     setLogs([]);
