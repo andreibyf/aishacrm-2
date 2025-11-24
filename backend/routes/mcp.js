@@ -1049,7 +1049,7 @@ export default function createMCPRoutes(_pgPool) {
         status: 'success',
         data: {
           reachable: false,
-          error: 'MCP server not running or not reachable',
+          error: 'MCP server not running or not reachable. Start the Braid MCP server (cd braid-mcp-node-server && docker-compose up -d) or configure MCP_NODE_HEALTH_URL environment variable.',
           details: errorsDetails,
           attempted: candidates.length,
           candidates: candidates

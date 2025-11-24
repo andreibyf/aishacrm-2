@@ -28,13 +28,17 @@ describe('MCP Routes - Health Endpoints', () => {
     const { initSupabaseDB } = await import('../../lib/supabase-db.js');
     
     // Set mock environment variables - these need valid format but don't need to be real
-    process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://mock.supabase.co';
-    process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1vY2siLCJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNjE1NjMxNjQ4LCJleHAiOjE5MzEyMDc2NDh9.mock';
+    // Using clearly identifiable mock values that won't be confused with real tokens
+    process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://test-mock-project.supabase.co';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'test-mock-service-role-key-for-unit-tests-only';
     
     try {
       initSupabaseDB(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    } catch (_e) {
-      // May fail if already initialized, that's fine for tests
+    } catch (err) {
+      // Only ignore "already initialized" errors, re-throw unexpected errors
+      if (!err.message?.includes('already') && !err.message?.includes('initialized')) {
+        throw err;
+      }
     }
     
     const express = (await import('express')).default;
