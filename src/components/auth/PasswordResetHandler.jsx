@@ -28,16 +28,23 @@ export default function PasswordResetHandler({ children }) {
       }
     });
 
-    // Check if we're currently in recovery mode (page refresh during recovery)
+    // Check if we're currently in recovery mode by detecting the hash parameter
+    // This triggers Supabase to exchange the token and fire PASSWORD_RECOVERY event
     const checkRecoveryState = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      // Detect recovery from URL hash or session metadata
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
       const type = hashParams.get('type');
-      
-      if (type === 'recovery' && session) {
-        console.log('[PasswordResetHandler] Recovery mode detected from URL');
-        setIsRecoveryMode(true);
+
+      // If recovery hash is present, call getSession() to trigger token exchange
+      // This will cause PASSWORD_RECOVERY event to fire if successful
+      if (type === 'recovery') {
+        console.log('[PasswordResetHandler] Recovery hash detected, triggering session check');
+        try {
+          await supabase.auth.getSession();
+          // The PASSWORD_RECOVERY event handler above will set isRecoveryMode
+        } catch (error) {
+          console.error('[PasswordResetHandler] Error during recovery session check:', error);
+          setError('Invalid or expired reset link. Please request a new one.');
+        }
       }
     };
 
