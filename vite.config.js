@@ -44,13 +44,9 @@ export default defineConfig({
     },
     extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx', '.json']
   },
-  optimizeDeps: {
-    esbuildOptions: {
-      loader: {
-        '.js': 'jsx',
-      },
-    },
-  },
+  // Removed custom optimizeDeps esbuild loader forcing all .js to jsx to avoid
+  // potential transform issues with certain deps (e.g., React internals).
+  optimizeDeps: {},
   build: {
     sourcemap: false,
     cssCodeSplit: true,
@@ -59,26 +55,7 @@ export default defineConfig({
         chunkFileNames: 'assets/[name]-[hash].js',
         entryFileNames: 'assets/entry-[hash].js',
         assetFileNames: 'assets/[name]-[hash][extname]',
-        manualChunks(id) {
-          if (!id.includes('node_modules')) return;
-          // CRITICAL FIX: Ensure ALL React-related packages go in the same chunk
-          // This includes react-router-dom v7 which uses @remix-run/router internally
-          if (
-            id.includes('/react/') ||
-            id.includes('/react-dom/') ||
-            id.includes('react-router') ||
-            id.includes('@remix-run/router') ||
-            id.includes('scheduler')
-          ) return 'vendor-react';
-          if (id.includes('@radix-ui')) return 'vendor-radix';
-          if (id.includes('@supabase/supabase-js')) return 'vendor-supabase';
-          // Don't manually chunk recharts - let Vite handle it to avoid circular dependency issues
-          // if (id.includes('recharts')) return 'vendor-charts';
-          if (id.includes('framer-motion')) return 'vendor-motion';
-          if (id.includes('react-hook-form') || id.includes('@hookform') || id.includes('zod')) return 'vendor-forms';
-          if (id.includes('@tanstack/react-query')) return 'vendor-query';
-          if (/date-fns|clsx|tailwind-merge|tailwindcss-animate/.test(id)) return 'vendor-utils';
-        }
+        // Removed manualChunks to allow Vite's default strategy and avoid premature execution ordering issues.
       }
     }
   }
