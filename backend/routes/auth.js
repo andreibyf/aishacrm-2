@@ -279,10 +279,67 @@ export default function createAuthRoutes(_pgPool) {
       }
 
       // Check for CRM access permission
-      const permissions = meta.permissions || [];
-      const hasCrmAccess = permissions.includes('crm_access') || permissions.length === 0; // Allow if no permissions set (default access)
+      const rawPermissions = meta.permissions;
+      const permissionSet = new Set();
+
+      const collectPermissions = (value, keyHint) => {
+        if (value === null || value === undefined) return;
+
+        if (typeof value === 'boolean') {
+          if (value && keyHint) permissionSet.add(String(keyHint));
+          return;
+        }
+
+        if (typeof value === 'string') {
+          const normalized = value.trim();
+          if (normalized.length === 0) return;
+          if (normalized.toLowerCase() === 'true' && keyHint) {
+            permissionSet.add(String(keyHint));
+            return;
+          }
+          permissionSet.add(normalized);
+          return;
+        }
+
+        if (typeof value === 'number') {
+          if (value === 1 && keyHint) {
+            permissionSet.add(String(keyHint));
+            return;
+          }
+          permissionSet.add(String(value));
+          return;
+        }
+
+        if (Array.isArray(value)) {
+          for (const nested of value) collectPermissions(nested, keyHint);
+          return;
+        }
+
+        if (typeof value === 'object') {
+          for (const [nestedKey, nestedVal] of Object.entries(value)) {
+            if (!nestedVal) continue;
+            collectPermissions(nestedVal, nestedKey);
+          }
+          return;
+        }
+
+        permissionSet.add(String(value));
+      };
+
+      collectPermissions(rawPermissions, null);
+
+      const roleLower = String(user.role || '').toLowerCase();
+      const hasCrmAccess =
+        roleLower === 'superadmin' ||
+        permissionSet.size === 0 ||
+        permissionSet.has('crm_access');
+
       if (!hasCrmAccess) {
-        console.log('[Auth.login] CRM access denied:', { email: normalizedEmail, permissions });
+        console.log('[Auth.login] CRM access denied:', {
+          email: normalizedEmail,
+          role: roleLower,
+          permissions: Array.from(permissionSet).sort(),
+        });
         return res.status(403).json({ status: 'error', message: 'CRM access not authorized' });
       }
 
