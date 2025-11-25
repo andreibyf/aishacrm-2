@@ -7,7 +7,8 @@ WORKDIR /app
 
 # Copy backend package files and install production deps
 COPY backend/package*.json ./backend/
-RUN cd backend && npm ci --omit=dev
+# Ensure production-only dependencies and faster, reproducible installs
+RUN cd backend && npm ci --omit=dev --prefer-offline --no-audit --fund=false
 
 # Copy backend source code
 COPY backend ./backend
@@ -21,20 +22,21 @@ RUN cd backend && npm install --omit=dev ../braid-llm-kit
 # Production stage
 FROM node:22-alpine AS runner
 
+# Build-time flags to control Chromium/Puppeteer footprint
+ARG USE_SYSTEM_CHROMIUM=false
+ARG PUPPETEER_SKIP_DOWNLOAD=1
+
 # App lives in /app/backend for clarity
 WORKDIR /app/backend
 
-# Install system dependencies for headless Chromium used by Puppeteer
-RUN apk add --no-cache \
-  chromium \
-  nss \
-  freetype \
-  harfbuzz \
-  ca-certificates \
-  ttf-freefont
+# Install system Chromium only when explicitly requested
+RUN if [ "$USE_SYSTEM_CHROMIUM" = "true" ]; then \
+    apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont; \
+  fi
 
-# Hint Puppeteer to use system Chromium
+# Hint Puppeteer to use system Chromium when present; otherwise skip bundled download
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PUPPETEER_SKIP_DOWNLOAD=${PUPPETEER_SKIP_DOWNLOAD}
 
 # Copy backend node_modules from builder
 COPY --from=builder /app/backend/node_modules ./node_modules

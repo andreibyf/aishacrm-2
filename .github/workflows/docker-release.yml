@@ -67,6 +67,9 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             VITE_CURRENT_BRANCH=${{ matrix.service == 'frontend' && github.ref_name || '' }}
+            # Backend slimming: skip Puppeteer download by default; opt-in via image rebuild
+            PUPPETEER_SKIP_DOWNLOAD=1
+            USE_SYSTEM_CHROMIUM=false
 
       - name: Image summary
         run: |
