@@ -28,7 +28,7 @@ export default function LeadAgeReport(props) {
   const [ageBuckets, setAgeBuckets] = useState([]);
   const [selectedBucket, setSelectedBucket] = useState(null);
   const { cachedRequest } = useApiManager();
-  const { user, loading: userLoading } = useUser();
+  const { loading: userLoading } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
 
   useEffect(() => {

@@ -316,9 +316,11 @@ export default function createActivityRoutes(_pgPool) {
               try {
                 // Cache for 30s (align with frontend TTL)
                 await redis.setEx(key, 30, JSON.stringify({ counts, total }));
-              } catch (e) { void e; }
+              } catch {
+                // ignore transient cache errors
+              }
             }
-          } catch (e) {
+          } catch {
             // Redis unavailable or error; compute counts without caching
             const now = new Date();
             const buildDueDateTime = (a) => {

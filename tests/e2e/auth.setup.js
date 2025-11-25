@@ -153,11 +153,9 @@ setup('authenticate as superadmin', async ({ page, request }) => {
         const submitBtn = page.locator('button[type="submit"]').first();
         const submitBtnText = page.getByRole('button', { name: /sign in/i }).first();
         
-        let clicked = false;
         if (await submitBtn.isVisible().catch(() => false)) {
           console.log('Clicking submit button via [type="submit"]');
           await submitBtn.click();
-          clicked = true;
         } else if (await submitBtnText.isVisible().catch(() => false)) {
           console.log('Clicking submit button via role=button');
           await submitBtnText.click();

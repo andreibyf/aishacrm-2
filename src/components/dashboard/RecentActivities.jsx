@@ -64,8 +64,8 @@ export default function RecentActivities(props) {
 
   const { cachedRequest } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
-    const { user, loading: userLoading } = useUser();
-    const { authCookiesReady } = useAuthCookiesReady();
+  const { loading: userLoading } = useUser();
+  const { authCookiesReady } = useAuthCookiesReady();
   const flipAttemptedRef = useRef(false);
 
   const fetchActivities = useCallback(async () => {

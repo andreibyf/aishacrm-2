@@ -16,7 +16,7 @@ export default function SalesPipeline(props) {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
   const { cachedRequest } = useApiManager();
-  const { user, loading: userLoading } = useUser();
+  const { loading: userLoading } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
 
   React.useEffect(() => {

@@ -28,7 +28,7 @@ export default function LeadSourceChart(props) { // Changed to receive `props`
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const { cachedRequest } = useApiManager();
-  const { user, loading: userLoading } = useUser();
+  const { loading: userLoading } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
 
   // Helper: compute chart data from a leads array

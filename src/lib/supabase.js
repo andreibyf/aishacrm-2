@@ -81,7 +81,7 @@ export const supabase = createClient(normalizedUrl, key, {
           credentials: 'omit',
           headers: mergedHeaders,
         });
-      } catch (e) {
+      } catch {
         // Fallback to native fetch if anything unexpected occurs
         return fetch(input, init);
       }

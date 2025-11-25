@@ -116,7 +116,7 @@ export default function createAuthRoutes(_pgPool) {
       if (anonClient && !isDev && !isE2E) {
         // Production: require Supabase Auth password verification
         console.log('[Auth.login] Production mode: verifying credentials with Supabase Auth');
-        const { data: authData, error: authError } = await anonClient.auth.signInWithPassword({ email, password });
+        const { data: _authData, error: authError } = await anonClient.auth.signInWithPassword({ email, password });
         if (authError) {
           console.log('[Auth.login] Supabase Auth failed:', { email, error: authError.message });
           return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
@@ -453,7 +453,7 @@ export default function createAuthRoutes(_pgPool) {
       }
 
       // Ensure Supabase admin client initialized at startup (sendPasswordResetEmail will throw if not)
-      const { data, error } = await sendPasswordResetEmail(String(email).trim().toLowerCase(), redirectTo);
+      const { error } = await sendPasswordResetEmail(String(email).trim().toLowerCase(), redirectTo);
       if (error) {
         return res.status(400).json({ status: 'error', message: error.message || 'Failed to send reset email' });
       }
