@@ -43,6 +43,9 @@ RUN npm install -g serve@14.2.5
 # Copy built assets from builder stage
 COPY --from=builder /app/dist ./dist
 
+# Remove placeholder env-config.js so entrypoint can generate fresh one
+RUN rm -f /app/dist/env-config.js
+
 # Copy frontend entrypoint
 COPY frontend-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
