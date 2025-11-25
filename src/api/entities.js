@@ -3,6 +3,10 @@ import { createMockUser, isLocalDevMode } from "./mockData";
 import { apiHealthMonitor } from "../utils/apiHealthMonitor";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
+// Build version marker for deployment verification (v1.0.61)
+export const ENTITIES_BUILD_VERSION = "v1.0.61-auth-fix";
+console.log("[Entities] Build version:", ENTITIES_BUILD_VERSION);
+
 // Backend base URL: in dev, use relative path and Vite proxy to avoid CORS
 // In production, normalize to HTTPS when the app is served over HTTPS to avoid mixed-content blocks
 const normalizeBackendUrl = (url) => {
