@@ -237,6 +237,30 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     },
   };
 
+  // Attach auth token (Supabase) if available to avoid 401 on protected routes (e.g. modulesettings)
+  try {
+    // Prefer explicit Supabase session token
+    if (isSupabaseConfigured()) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+      if (accessToken) {
+        options.headers.Authorization = `Bearer ${accessToken}`;
+      }
+    }
+    // Fallback: token persisted in localStorage (RateLimitManager pattern)
+    if (!options.headers.Authorization && typeof window !== 'undefined') {
+      const stored = localStorage.getItem('sb-access-token');
+      if (stored) {
+        options.headers.Authorization = `Bearer ${stored}`;
+      }
+    }
+  } catch {
+    // Silent: absence of token will lead to graceful 401 handling upstream
+  }
+
+  // Include credentials (cookies) for same-origin or allowed CORS scenarios
+  options.credentials = 'include';
+
   if (method === "GET") {
     if (id) {
       // GET by ID - append ID to URL

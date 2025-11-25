@@ -1,16 +1,16 @@
-# AiSHA CRM – Orchestra Plan
+# AiSHA CRM – Orchestra Plan (Dashboard Bugfixes)
 
 ## Current Goal
 
 Type: bugfix  
-Title: Stabilize critical entry flows (blank page + auth flows)
+Title: Stabilize Dashboard loading and performance
 
 Description:  
-Focus on fixing high-impact, reproducible issues that prevent users from seeing or accessing the app:
-- Blank white page instead of UI
-- Broken password reset redirect
+The Dashboard must reliably load for authenticated users with a valid tenant and display stats in a timely manner. Current issues include:
+- Dashboard failing to load due to backend “Authentication required” errors.
+- Slow loading of dashboard cards and stats.
 
-No new features in this phase. Only targeted bugfixes and minimal structural corrections where absolutely required for stability.
+This phase is strictly bugfix work. No new Dashboard features, layout redesign, or metric expansions.
 
 ---
 
@@ -19,212 +19,174 @@ No new features in this phase. Only targeted bugfixes and minimal structural cor
 Mode: BUGFIX ONLY
 
 Do NOT:
-- Redesign layout, routing, or global state management.
-- Introduce new auth features (MFA, magic links, etc.).
-- Perform broad or “opportunistic” refactors.
-- Change ports, core environment assumptions, or tenant isolation.
+- Redesign auth or tenant architecture.
+- Change routing structure globally.
+- Add new dashboard features or widgets.
+- Introduce new dependencies for state management.
 
-Larger changes are allowed **only if strictly required** to:
-- Prevent or fix a fatal runtime error (crash of the root React tree).
-- Correct a misconfiguration that prevents initial render or auth flow.
-- Resolve a clear security/stability issue (e.g., auth bypass, broken reset token handling).
+Allowed only when strictly necessary:
+- Minimal changes to backend auth checks for dashboard-related endpoints.
+- Minimal changes to frontend guards to handle auth failures more gracefully.
+- Performance optimizations focused on dashboard APIs and their immediate consumers.
 
-Every fix must:
-- Be as small and localized as possible.
-- Include a clear explanation of root cause.
-- Add or update tests where feasible.
-
-If there is any doubt: **stop and ask** instead of guessing.
+Every change must:
+- Be small and justified.
+- Include clear explanation of root cause.
+- Include tests or at least a reproducible manual verification path.
 
 ---
 
-## Active Tasks (Priority Order)
+## Active Tasks
 
-### 1) BUG-UI-001 – Diagnose Blank Page Root Cause
+### BUG-DASH-001A – Diagnose Dashboard auth failure (root cause)
 
 Type: bugfix  
 Status: Active (P1)  
-Area: Frontend shell (root React tree, routing, app initialization)
-
-Problem Indicators:
-- Browser shows a completely blank white screen.
-- URL loads, but no visible UI.
-- May or may not show errors in DevTools console.
-
-Steps:
-1. Reproduce in the failing environment(s):
-   - Record URL, user state (logged in/logged out), environment (Docker vs direct dev).
-2. Use DevTools:
-   - Console: capture any runtime errors (React, TypeError, import failures).
-   - Network: check for failed JS/CSS/API requests (404/500).
-3. Inspect root files:
-   - `src/main.tsx` or `src/main.jsx` (bootstrap)
-   - `src/App.tsx` or `src/App.jsx` (top-level app shell)
-   - Routing entry: e.g. `src/router.tsx` or equivalent.
-
-Scope:
-- Diagnostics ONLY.
-- Temporary logging allowed.
-- No behavioral or structural changes yet.
-
-Acceptance:
-- Clear, documented root cause hypothesis:
-  - e.g., uncaught error, routing mismatch, guard returning `null` indefinitely, asset load failure, etc.
-- Evidence captured (console logs, stack traces, code locations) to feed into BUG-UI-002.
-
----
-
-### 2) BUG-UI-002 – Fix Root Cause of Blank Page
-
-Type: bugfix  
-Status: Pending (starts after BUG-UI-001 has a root cause)  
-Area: Same as BUG-UI-001, plus any directly implicated component/guard
-
-Dependencies:
-- BUG-UI-001 diagnosis completed.
-
-Typical Causes to Check:
-- Uncaught runtime errors in an ancestor component with no error boundary.
-- React Router configuration that leaves the initial route unmatched → nothing rendered.
-- Auth/tenant guard returning `null` or empty fragment and never transitioning.
-- Critical assets (main bundle, CSS) failing to load due to misconfigured paths.
-
-Steps:
-1. Implement the smallest possible change that restores visible UI:
-   - Add or adjust error boundaries only if required.
-   - Fix route configuration so initial URL renders a real page.
-   - Fix guard logic so it does not leave the app in a permanent “blank” state.
-2. Ensure any auth/tenant gates:
-   - Show a loader or error UI instead of a permanent blank.
-3. Remove any temporary logging added in BUG-UI-001 if no longer needed.
-
-Scope:
-- Only touch:
-  - `src/main.*`
-  - `src/App.*`
-  - Directly implicated route/guard components.
-- No global state or architecture redesign.
-
-Acceptance:
-- The failing scenario no longer shows a blank page.
-- A valid or anonymous user sees a real screen (login, dashboard, or explicit error).
-- No regressions in other known-good paths.
-
----
-
-### 3) BUG-UI-003 – Add Regression Coverage for Blank Page Scenario
-
-Type: bugfix  
-Status: Pending (after BUG-UI-002)  
-Area: Frontend tests (unit/integration/E2E)
-
-Dependencies:
-- BUG-UI-002 fix applied.
-
-Steps:
-1. Add or update tests to cover the previously failing scenario:
-   - Same route, same user state, same environment conditions as original bug.
-2. Assertions must validate:
-   - Non-empty render (e.g., app shell, header, login form, or dashboard element).
-   - Not just “no throw”, but actual UI visible.
-
-Scope:
-- Test files and helpers only.
-
-Acceptance:
-- Test fails against pre-fix code (if run back in time).
-- Test passes with current fix.
-- Future regressions that reintroduce a blank page are caught.
-
----
-
-## Next Up (Not Active Yet – Do Not Work On)
-
-### BUG-AUTH-005 – Reset link redirects to login instead of new password page
-
-Type: bugfix  
-Status: Completed  
-Area: Auth – password reset flow
+Area: Dashboard / Backend API / Auth
 
 Goal:  
-Fix the password reset flow so that valid reset links (from email) open the “Set New Password” screen instead of redirecting to the login page.
+Determine why the Dashboard fails to load for an authenticated user and why calls to `/api/modulesettings?tenant_id=<tenant>` return `{"status":"error","message":"Authentication required"}` despite valid Supabase user and tenant context.
 
-Problem Indicators:
-- User clicks reset link from email.
-- App opens login page instead of new password page.
-- No clear message about token state (valid/invalid/expired).
+Steps:
+1. Reproduce:
+   - Log in with an affected user.
+   - Allow tenant auto-selection to occur.
+   - Navigate to the Dashboard and observe console and network logs.
+2. Inspect frontend:
+   - Where module settings and dashboard data are fetched (e.g. `src/api/entities.js`, dashboard data hooks/components).
+   - Route guards and `hasPageAccess` logic for the dashboard route.
+3. Inspect backend:
+   - Endpoint that serves module settings and dashboard-related data (e.g. `backend/routes/modulesettings.js` or equivalent).
+   - Auth middleware / token extraction used for these endpoints.
+4. Identify mismatch:
+   - Is the auth header or cookie missing?
+   - Is the backend expecting a different token than what the frontend sends?
+   - Is tenant scoping causing an auth failure?
 
-Scope (when activated):
-- Frontend reset-password route and auth guard logic.
-- Supabase redirect URL/token handling, only as needed.
-- No auth model redesign, no new flows.
+Scope:
+- Diagnostic only.
+- You may add temporary logging.
+- Do not implement fixes yet.
 
-Acceptance (when implemented):
-- Valid reset link → new password screen.
-- Invalid/expired link → clear error + option to request new link.
-- Login page is not the default for valid reset links.
+Acceptance:
+- Clear, documented root cause for the “Authentication required” response for dashboard module settings.
+- List of exact files to be modified in the fix phase (BUG-DASH-001B).
 
 ---
 
-## Testing & Validation Requirements (for all active tasks)
+### BUG-DASH-001B – Fix Dashboard auth failure and restore load
+
+Type: bugfix  
+Status: Pending (P1, after BUG-DASH-001A)  
+Area: Dashboard / Backend API / Auth
+
+Dependencies:
+- BUG-DASH-001A (root cause identified).
+
+Goal:  
+Implement the smallest viable change that allows a properly authenticated user, with a valid tenant, to successfully load Dashboard module settings and render the Dashboard.
+
+Steps:
+1. Fix the auth mismatch:
+   - Ensure the frontend sends the correct auth token/cookie on dashboard/module settings requests.
+   - Ensure the backend validates the same token/cookie used for other authenticated endpoints.
+2. Update guards (if needed):
+   - If the dashboard route guard treats “Authentication required” as a fatal state, adjust it to:
+     - Retry, OR
+     - Redirect appropriately, OR
+     - Show a clear error screen rather than silently failing.
+3. Remove any temporary logging added during diagnosis.
+
+Scope:
+- Only the backend auth handling for dashboard/module settings.
+- Only the frontend request and guard logic that interacts with those endpoints.
+- No broader auth system redesign.
+
+Acceptance:
+- Authenticated user with valid tenant can load Dashboard successfully.
+- Module settings calls no longer return “Authentication required” for valid sessions.
+- No regression in other authenticated routes.
+
+---
+
+### BUG-DASH-002 – Improve Dashboard stats loading performance
+
+Type: bugfix  
+Status: Pending (P2, after BUG-DASH-001A/B)  
+Area: Dashboard / Backend API / Performance
+
+Goal:  
+Reduce the time it takes for dashboard cards and stats to appear after page load, without changing the meaning of any metrics.
+
+Steps:
+1. Measure current behavior:
+   - Identify which API endpoints are called for dashboard stats.
+   - Determine whether calls are sequential or redundant.
+2. Backend optimizations:
+   - Consolidate multiple small calls into fewer, aggregated calls where safe.
+   - Optimize database queries (indexes, joins, filters) for dashboard endpoints.
+   - Consider adding short-lived caching (e.g. Redis) for frequently-read stats, ensuring tenant isolation.
+3. Frontend optimizations:
+   - Avoid duplicate requests on rerender.
+   - Ensure components subscribe to shared data where appropriate instead of re-fetching.
+
+Scope:
+- Backend: only dashboard-related endpoints and queries.
+- Frontend: only dashboard data-fetching components/hooks.
+- No changes to metric definitions or visibility rules.
+
+Acceptance:
+- Noticeable reduction in time-to-display for dashboard cards/statistics.
+- No incorrect or cross-tenant data shown.
+- No increased error rates or auth issues from optimization changes.
+
+---
+
+## Testing & Validation Requirements
 
 Manual:
-- Reproduce the original blank-page scenario(s).
-- Confirm:
-  - UI now renders where it previously showed blank.
-  - No unexpected redirects or infinite loading states.
-- Later (when BUG-AUTH-005 becomes active):
-  - Reset email → link → correct reset screen behavior.
+- For BUG-DASH-001:
+  - Log in as an affected user, select tenant, open Dashboard.
+  - Confirm the Dashboard actually loads and does not get stuck due to “Authentication required”.
+- For BUG-DASH-002:
+  - Observe dashboard load time before and after changes in the same environment.
+  - Confirm metrics match expected values.
 
 Automated:
-- Run existing frontend test suites.
-- New tests for BUG-UI-003 must pass.
-- When BUG-AUTH-005 is implemented:
-  - Add tests for reset token handling and routing.
+- Add/extend tests for:
+  - Auth checks on dashboard/module settings endpoints.
+  - Basic dashboard data retrieval flows.
+- Performance tests where feasible (e.g. request counts, execution time metrics).
 
 Environment:
-- Validate in:
-  - Local dev server (e.g. `npm run dev`).
-  - Dockerized / deployed environment where the bug actually manifests.
+- Validate both:
+  - Local dev
+  - The deployed environment where the problem was observed (Docker / cloud).
 
 ---
 
 ## Status
 
-- BUG-UI-001: Active (diagnostic phase)
-- BUG-UI-002: Not started (Pending, P1)
-- BUG-UI-003: Not started (Pending, P1)
-- BUG-AUTH-005: Completed
-- MAINT-LINT-001: Completed (ESLint cleanup)
+- BUG-DASH-001A: **Completed** (P1, diagnostic) – Root cause identified: `callBackendAPI` lacked auth token attachment; `requireAdminRole` middleware rejected requests.
+- BUG-DASH-001B: **Ready for verification** (P1, fix) – Added Supabase bearer token + credentials to `callBackendAPI` in `src/api/entities.js`. Awaiting production test.
+- BUG-DASH-002: Pending (P2, performance) – will begin after BUG-DASH-001B is verified.
 
 ---
 
-## Backlog (Do Not Touch)
+## Usage Instruction for AI Tools
 
-- BUG-AUTH-002 – Invalid login credentials for valid Supabase users
-- FEAT-UI-001 – Improve global error boundary UX
-- FEAT-UI-002 – Add standardized loading skeleton for root-level guards
-- PERF-UI-001 – Optimize initial bundle size for first paint
+When using Claude, Copilot, or any AI assistant:
 
----
+1. Read `.github/copilot-instructions.md` and comply fully.  
+2. Read `orchestra/ARCHITECTURE.md` and `orchestra/CONVENTIONS.md`.  
+3. Read this PLAN and identify the highest priority task:
 
-## Usage Instruction for AI Tools (Claude, Copilot, Orchestrator)
+   - Start with **BUG-DASH-001A (diagnostic)**.
+   - Do not work on BUG-DASH-001B until diagnosis is clear.
+   - Do not work on BUG-DASH-002 until BUG-DASH-001A/B are completed or explicitly paused.
 
-When using any AI to modify code in this repo:
-
-1. Read `.github/copilot-instructions.md` and follow it exactly.  
-2. Read `orchestra/ARCHITECTURE.md`.  
-3. Read `orchestra/CONVENTIONS.md` (especially Copilot/AI behavior rules).  
-4. Read this PLAN and select **BUG-UI-001** first.  
-
-Rules:
-- For BUG-UI-001: Diagnostics only (no fixes).
-- For BUG-UI-002: Minimal fix only, after BUG-UI-001 diagnosis is done.
-- For BUG-UI-003: Tests only.
-- BUG-AUTH-005 must not be touched until explicitly promoted to Status: Active.
-
-AI must:
-- Declare which task ID it is working on.
-- List files it intends to modify.
-- Wait for human approval before making changes.
-- Keep diffs minimal and within the approved scope.
+4. For the selected task:
+   - State the task ID and title.
+   - List the files you plan to touch.
+   - Wait for human approval before changing code.
+   - Keep diffs minimal and within scope.

@@ -4,6 +4,73 @@ This file tracks known issues. PLAN.md selects which bugs are currently in scope
 
 ---
 
+## Dashboard
+
+### BUG-DASH-001 – Dashboard fails to load for authenticated user
+
+Status: Open  
+Priority: High  
+Area: Dashboard / Backend API / Auth
+
+Symptoms:
+- After login and tenant auto-selection, the Dashboard does not render the expected content.
+- Console shows repeated logs from:
+  - `TenantContext` (tenant selection and synchronization)
+  - `RouteGuard` and `hasPageAccess` (access checks running repeatedly)
+  - `TenantSwitcher` (tenants successfully loaded)
+- Backend calls to `GET /api/modulesettings?tenant_id=<tenant-id>` return:
+  - `{"status":"error","message":"Authentication required"}`
+- Logs indicate:
+  - Supabase user is selected successfully (`[Supabase Auth] User record selected`)
+  - `User.me` returns data
+  - Tenant context and filtering appear to be applied
+  - But the backend still responds as unauthenticated for dashboard module settings.
+
+Suspected Causes:
+- The dashboard/module settings API is not receiving or validating the auth token/session correctly, even though the frontend believes the user is authenticated.
+- Possible mismatch between:
+  - Supabase auth/session and the backend’s expected auth mechanism (e.g., missing Authorization header, cookie, or token mapping).
+- Route guards may be relying on module settings and failing hard on “Authentication required”, leaving the Dashboard in a non-rendered state.
+
+Notes:
+- Fix must not redesign the auth system.
+- The goal is to ensure that a properly authenticated user with a valid tenant can load dashboard module settings and see the Dashboard.
+- Changes should be minimal and localized to:
+  - API auth handling for module settings
+  - Any guard logic that treats “Authentication required” as a fatal state for a valid session.
+
+Interim Resolution Plan:
+- Identified missing auth propagation in generic entity fetch helper (`callBackendAPI`) leading to 401 on `GET /api/modulesettings`.
+- Added bearer token attachment (Supabase access token or stored `sb-access-token`) and `credentials: 'include'` to `callBackendAPI` in `src/api/entities.js`.
+- This permits `requireAdminRole` to succeed for authenticated admin/superadmin without altering core auth architecture.
+- Pending verification: dashboard load with module settings present; confirm non-admin receives expected 403 while UI degrades gracefully.
+- After verification, update Status to Resolved and summarize outcome.
+
+---
+
+### BUG-DASH-002 – Dashboard stats slow to load
+
+Status: Open  
+Priority: Medium  
+Area: Dashboard / Backend API / Performance
+
+**Symptoms:**
+- Dashboard cards and statistics take noticeably long to appear after page load.
+- The UI feels responsive in other areas, but Dashboard metrics lag behind.
+- No explicit frontend errors, but multiple sequential or redundant API calls are suspected.
+
+**Suspected Causes:**
+- Dashboard is issuing multiple requests to stats or module endpoints instead of batching where possible.
+- Lack of caching for frequently-read dashboard metrics (e.g., no short-term in-memory or Redis cache).
+- Inefficient database queries or joins on the backend for dashboard endpoints.
+
+**Notes:**
+- Fix must not alter overall authentication or tenant isolation logic.
+- Focus on the performance of retrieving and displaying dashboard stats:
+- Reduce redundant calls.
+- Optimize queries or introduce safe caching.
+- Any caching must respect tenant boundaries and avoid cross-tenant data exposure.
+
 ## Authentication
 
 ### BUG-AUTH-001 – Supabase credential misconfiguration
