@@ -16,23 +16,24 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       // Route frontend /api calls to the backend during dev to avoid CORS
+      // Use VITE_DEV_BACKEND_HOST for Docker or default to localhost:3001
       '/api': {
-        target: 'http://localhost:3001',
+        target: `http://${process.env.VITE_DEV_BACKEND_HOST || 'localhost:3001'}`,
         changeOrigin: true,
         secure: false,
       },
       '/health': {
-        target: 'http://localhost:3001',
+        target: `http://${process.env.VITE_DEV_BACKEND_HOST || 'localhost:3001'}`,
         changeOrigin: true,
         secure: false,
       },
       '/api-docs': {
-        target: 'http://localhost:3001',
+        target: `http://${process.env.VITE_DEV_BACKEND_HOST || 'localhost:3001'}`,
         changeOrigin: true,
         secure: false,
       },
       '/api-docs.json': {
-        target: 'http://localhost:3001',
+        target: `http://${process.env.VITE_DEV_BACKEND_HOST || 'localhost:3001'}`,
         changeOrigin: true,
         secure: false,
       },
