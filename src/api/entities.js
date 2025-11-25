@@ -3,8 +3,8 @@ import { createMockUser, isLocalDevMode } from "./mockData";
 import { apiHealthMonitor } from "../utils/apiHealthMonitor";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
-// Build version marker for deployment verification (v1.0.61)
-export const ENTITIES_BUILD_VERSION = "v1.0.61-auth-fix";
+// Build version marker for deployment verification (v1.0.62)
+export const ENTITIES_BUILD_VERSION = "v1.0.62-auth-debug";
 console.log("[Entities] Build version:", ENTITIES_BUILD_VERSION);
 
 // Backend base URL: in dev, use relative path and Vite proxy to avoid CORS
@@ -244,9 +244,21 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   // Attach auth token (Supabase) if available to avoid 401 on protected routes (e.g. modulesettings)
   try {
     // Prefer explicit Supabase session token
-    if (isSupabaseConfigured()) {
+    const supabaseConfigured = isSupabaseConfigured();
+    console.log("[callBackendAPI] Auth check", { 
+      entityName, 
+      supabaseConfigured,
+      url: url.substring(0, 80)
+    });
+    
+    if (supabaseConfigured) {
       const { data: { session } } = await supabase.auth.getSession();
       const accessToken = session?.access_token;
+      console.log("[callBackendAPI] Supabase session", { 
+        hasSession: !!session, 
+        hasToken: !!accessToken,
+        tokenPreview: accessToken ? accessToken.substring(0, 20) + '...' : null
+      });
       if (accessToken) {
         options.headers.Authorization = `Bearer ${accessToken}`;
       }
@@ -254,12 +266,19 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     // Fallback: token persisted in localStorage (RateLimitManager pattern)
     if (!options.headers.Authorization && typeof window !== 'undefined') {
       const stored = localStorage.getItem('sb-access-token');
+      console.log("[callBackendAPI] Fallback localStorage token", { hasStored: !!stored });
       if (stored) {
         options.headers.Authorization = `Bearer ${stored}`;
       }
     }
-  } catch {
+    
+    console.log("[callBackendAPI] Final auth header", { 
+      hasAuth: !!options.headers.Authorization,
+      entityName 
+    });
+  } catch (authErr) {
     // Silent: absence of token will lead to graceful 401 handling upstream
+    console.warn("[callBackendAPI] Auth attachment error:", authErr?.message);
   }
 
   // Include credentials (cookies) for same-origin or allowed CORS scenarios
