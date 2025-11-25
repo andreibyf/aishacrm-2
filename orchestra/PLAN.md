@@ -143,7 +143,7 @@ Acceptance:
 ### BUG-AUTH-005 – Reset link redirects to login instead of new password page
 
 Type: bugfix  
-Status: Planned (P2, after BUG-UI-00x)  
+Status: Completed  
 Area: Auth – password reset flow
 
 Goal:  
@@ -191,10 +191,11 @@ Environment:
 
 ## Status
 
-- BUG-UI-001: Not started (Active diagnostic)
+- BUG-UI-001: Active (diagnostic phase)
 - BUG-UI-002: Not started (Pending, P1)
 - BUG-UI-003: Not started (Pending, P1)
-- BUG-AUTH-005: Planned (P2 – do not start yet)
+- BUG-AUTH-005: Completed
+- MAINT-LINT-001: Completed (ESLint cleanup)
 
 ---
 

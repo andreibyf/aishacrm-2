@@ -8,9 +8,10 @@ This file tracks known issues. PLAN.md selects which bugs are currently in scope
 
 ### BUG-AUTH-001 – Supabase credential misconfiguration
 
-**Status:** Open  
+**Status:** Resolved  
 **Priority:** High  
 **Area:** Frontend auth / env config
+**Resolution:** Supabase credentials properly configured and validated; auth initialization flow fixed.
 
 **Symptoms:**
 - Console warnings about missing Supabase credentials.
@@ -27,11 +28,12 @@ This file tracks known issues. PLAN.md selects which bugs are currently in scope
 
 ---
 
-### BUG-AUTH-002 – Valid users getting “Invalid login credentials”
+### BUG-AUTH-002 – Valid users getting "Invalid login credentials"
 
-**Status:** Open  
+**Status:** Resolved  
 **Priority:** High  
 **Area:** Auth endpoints / User.signIn
+**Resolution:** Auth error handling improved; credential validation now correctly maps Supabase auth responses.
 
 **Symptoms:**
 - User exists in Supabase Auth and database.
@@ -48,11 +50,12 @@ This file tracks known issues. PLAN.md selects which bugs are currently in scope
 
 ---
 
-### BUG-AUTH-003 – “User logged in but UI not recognizing session”
+### BUG-AUTH-003 – "User logged in but UI not recognizing session"
 
-**Status:** Open  
+**Status:** Resolved  
 **Priority:** High  
 **Area:** Session handling / User.me()
+**Resolution:** Session persistence fixed; user context now properly maintained across page refreshes.
 
 **Symptoms:**
 - Supabase shows active session.
@@ -73,9 +76,10 @@ This file tracks known issues. PLAN.md selects which bugs are currently in scope
 
 ### BUG-AUTH-004 – CRM access not enforced after login
 
-**Status:** Open  
+**Status:** Resolved  
 **Priority:** Medium  
 **Area:** Post-login validation / permissions
+**Resolution:** CRM access checks now properly enforced; inactive/suspended users blocked at guard level.
 
 **Symptoms:**
 - User without `crm_access` can still reach parts of the app.
