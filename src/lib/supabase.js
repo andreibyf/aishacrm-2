@@ -13,16 +13,18 @@ const getRuntimeEnv = (key) => {
   return import.meta.env[key];
 };
 
+// Use explicit Supabase project URL (no proxy). Must be like https://xxxxx.supabase.co
 const supabaseUrl = getRuntimeEnv('VITE_SUPABASE_URL');
 
 // Support both legacy "anon" naming and the newer "publishable/public" naming
 // Only use PUBLIC/PUBLISHABLE key on the frontend. NEVER use secret/service keys in the client bundle.
 const supabasePublicKey =
+  // Prefer explicit anon key variable, fall back to any legacy/public variants
+  getRuntimeEnv('VITE_SUPABASE_ANON_KEY') ||
   getRuntimeEnv('VITE_SUPABASE_PUBLISHABLE_KEY') ||
   getRuntimeEnv('VITE_SUPABASE_PUBLIC_KEY') ||
   getRuntimeEnv('VITE_SUPABASE_PUBLIC_ANON_KEY') ||
-  getRuntimeEnv('VITE_SUPABASE_PK') ||
-  getRuntimeEnv('VITE_SUPABASE_ANON_KEY'); // legacy name still supported
+  getRuntimeEnv('VITE_SUPABASE_PK');
 
 // Provide fallback placeholder values to prevent initialization errors
 // These will be replaced with real credentials when configured
@@ -51,49 +53,39 @@ const normalizedUrl = (() => {
 
 const isBrowser = typeof window !== 'undefined';
 
-const nativeFetch = (typeof fetch === 'function' ? fetch : globalThis.fetch) || (() => Promise.reject(new Error('fetch not available')));
-const baseFetch = nativeFetch.bind(globalThis);
-
-const buildProxyUrl = () => {
-  if (!isBrowser) return null;
-  return new URL('/api/supabase-proxy/auth/user', window.location.origin).toString();
-};
-
-const fetchWithAuthProxy = (input, init = {}) => {
-  const requestUrl = typeof input === 'string' ? input : input?.url;
-  const isAuthUserRequest = requestUrl?.includes('/auth/v1/user');
-
-  if (isBrowser && isAuthUserRequest) {
-    const proxyUrl = buildProxyUrl();
-    if (proxyUrl) {
-      const headers = new Headers(init.headers || (typeof input !== 'string' ? input.headers : undefined));
-      if (!headers.has('Authorization') && input instanceof Request) {
-        const auth = input.headers.get('Authorization');
-        if (auth) headers.set('Authorization', auth);
-      }
-      const proxyInit = {
-        ...init,
-        method: 'GET',
-        credentials: 'include',
-        headers,
-      };
-      return baseFetch(proxyUrl, proxyInit);
-    }
-  }
-
-  return baseFetch(input, init);
-};
+// Use native fetch directly; avoid any local proxying for auth endpoints.
 
 // Create Supabase client
 export const supabase = createClient(normalizedUrl, key, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true,
-    storage: isBrowser ? window.localStorage : undefined, // Use localStorage for session persistence
+    // We manually parse recovery hash/query tokens, so disable built-in detection
+    detectSessionInUrl: false,
+    storage: isBrowser ? window.localStorage : undefined,
   },
   global: {
-    fetch: fetchWithAuthProxy,
+    fetch: (input, init) => {
+      try {
+        const baseInit = init || {};
+        // Merge headers from init and Request (if provided)
+        const mergedHeaders = new Headers(
+          (baseInit.headers || (input instanceof Request ? input.headers : undefined)) || {}
+        );
+        mergedHeaders.delete('cookie');
+        mergedHeaders.delete('Cookie');
+
+        return fetch(input, {
+          ...baseInit,
+            // Explicitly omit credentials so no cookies sent to Supabase domain
+          credentials: 'omit',
+          headers: mergedHeaders,
+        });
+      } catch (e) {
+        // Fallback to native fetch if anything unexpected occurs
+        return fetch(input, init);
+      }
+    },
   },
 });
 

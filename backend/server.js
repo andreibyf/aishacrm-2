@@ -42,13 +42,17 @@ let dbConnectionType = "none";
 app.locals.ipv4FirstApplied = ipv4FirstApplied;
 app.locals.dbConnectionType = dbConnectionType;
 app.locals.resolvedDbIPv4 = null;
-app.locals.dbConfigPath = (process.env.USE_SUPABASE_PROD === 'true')
-  ? 'supabase_api'
-  : 'none';
+const useSupabaseApi = (
+  process.env.USE_SUPABASE_PROD === 'true' ||
+  process.env.USE_SUPABASE_API === 'true' ||
+  process.env.USE_SUPABASE_DEV === 'true'
+);
+
+app.locals.dbConfigPath = useSupabaseApi ? 'supabase_api' : 'none';
 
 // Initialize database using Supabase JS API (HTTP/REST, not direct PostgreSQL)
 await (async () => {
-  if (process.env.USE_SUPABASE_PROD === "true") {
+  if (useSupabaseApi) {
     // Use Supabase PostgREST API - works over HTTP, avoids IPv6 PostgreSQL issues
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
@@ -65,7 +69,7 @@ await (async () => {
     return;
   }
 
-  console.warn("⚠ No database configured - set USE_SUPABASE_PROD=true with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
+  console.warn("⚠ No database configured - set USE_SUPABASE_API=true (or USE_SUPABASE_PROD=true for legacy) with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
 })();
 
 // Initialize Redis/Valkey memory client (non-blocking for app startup)
