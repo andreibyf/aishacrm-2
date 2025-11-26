@@ -9,6 +9,7 @@
     "dev": "node dev-server.js",
     "dev:unlimited": "node --watch server.js",
     "test": "node --test \"test/**/*.test.js\"",
+    "test:coverage": "c8 --reporter=text-summary --reporter=lcov node --test \"test/**/*.test.js\"",
     "seed": "node scripts/run_seed.js",
     "worker:email": "node workers/emailWorker.js",
     "verify:rls": "node verify-rls.js",
@@ -42,5 +43,8 @@
     "puppeteer": "^24.30.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "c8": "^9.0.0"
   }
 }
