@@ -107,7 +107,9 @@ jobs:
             # Tag as latest locally
             docker tag ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-frontend:latest
             docker tag ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-backend:latest
-            # Restart services
+            # Export version for docker compose environment substitution
+            export APP_BUILD_VERSION=$VERSION_TAG
+            # Restart services with version info
             docker compose -f docker-compose.prod.yml up -d frontend backend
             echo "Deployment completed: $VERSION_TAG"
             # Verify deployment
