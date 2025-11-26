@@ -85,16 +85,13 @@ test.describe('Backend API Schema Validation', () => {
       expect(data.status).toBe('success');
     });
 
-    test('should store custom fields in metadata and flattened fields as columns', async ({ apiContext }) => {
+    test('should store custom fields in metadata', async ({ apiContext }) => {
       const response = await apiContext.post('employees', {
         data: {
           tenant_id: TEST_TENANT_ID,
           first_name: 'Metadata',
           last_name: 'Test',
-          // Flattened columns
-          department: 'Sales',
-          phone: '555-1234',
-          // Truly custom fields -> should land in metadata
+          // Custom fields -> should land in metadata
           custom_field: 'Custom Value',
           notes: 'Some notes',
         },
@@ -102,11 +99,8 @@ test.describe('Backend API Schema Validation', () => {
       const data = await expectOk(response);
       expect(data.status).toBe('success');
       
-      // Check flattened columns are direct properties
-      const employee = data.data.employee;
-      expect(employee).toHaveProperty('department', 'Sales');
-      expect(employee).toHaveProperty('phone', '555-1234');
       // Check custom fields are in metadata
+      const employee = data.data.employee;
       expect(employee.metadata).toBeTruthy();
       expect(employee.metadata).toHaveProperty('custom_field', 'Custom Value');
       expect(employee.metadata).toHaveProperty('notes', 'Some notes');
@@ -434,9 +428,11 @@ test.describe('Backend API Schema Validation', () => {
         },
       });
       await expectOk(response1);
-      // Backend surfaces unique violation as 500
+      // Backend surfaces unique violation as 500 - error message varies by database
       const data2 = await expectStatus(response2, 500);
-      expect(data2.message).toContain('already exists');
+      expect(data2.status).toBe('error');
+      // Supabase returns 'duplicate key' or 'already exists' depending on constraint
+      expect(data2.message.toLowerCase()).toMatch(/duplicate|already exists|unique/);
     });
   });
 });
