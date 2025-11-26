@@ -34,11 +34,13 @@ async function safeCount(_pgPool, table, tenantId, filterBuilder, options = {}) 
     }
     if (!includeTestData) {
       try {
-        query = query.eq('is_test_data', false);
+        // When toggle OFF: exclude test data (show only real data)
+        query = query.or('is_test_data.is.false,is_test_data.is.null');
       } catch (e) {
         /* ignore: table may not have is_test_data */ void 0;
       }
     }
+    // When includeTestData is true, no filter applied (show all data)
     // Apply additional filters (e.g., status not in ...)
     if (typeof filterBuilder === 'function') {
       try {
@@ -58,7 +60,9 @@ async function safeCount(_pgPool, table, tenantId, filterBuilder, options = {}) 
           try { exact = exact.eq('tenant_id', tenantId); } catch (e) { /* ignore */ void 0; }
         }
         if (!includeTestData) {
-          try { exact = exact.eq('is_test_data', false); } catch (e) { /* ignore */ void 0; }
+          try {
+            exact = exact.or('is_test_data.is.false,is_test_data.is.null');
+          } catch (e) { /* ignore */ void 0; }
         }
         if (typeof filterBuilder === 'function') {
           try { exact = filterBuilder(exact) || exact; } catch (e) { /* ignore */ void 0; }
@@ -122,10 +126,21 @@ export default function createReportRoutes(_pgPool) {
       console.log('[Reports] clear-cache called:', { tenant_id, cacheSize: bundleCache.size, keys: Array.from(bundleCache.keys()) });
       
       if (tenant_id) {
-        // Clear specific tenant cache
-        const deletedTenant = bundleCache.delete(tenant_id);
-        const deletedGlobal = bundleCache.delete('GLOBAL');
-        console.log('[Reports] Deleted cache entries:', { tenant_id, deletedTenant, deletedGlobal });
+        // Clear specific tenant cache: delete any keys that match the tenant or its variants
+        const keys = Array.from(bundleCache.keys());
+        let deletedCount = 0;
+        for (const key of keys) {
+          if (key === tenant_id || key.startsWith(`${tenant_id}::`)) {
+            if (bundleCache.delete(key)) deletedCount++;
+          }
+        }
+        // Also clear any GLOBAL variants
+        for (const key of keys) {
+          if (key === 'GLOBAL' || key.startsWith('GLOBAL::')) {
+            if (bundleCache.delete(key)) deletedCount++;
+          }
+        }
+        console.log('[Reports] Deleted cache entries:', { tenant_id, deletedCount });
       } else {
         // Clear all cache
         bundleCache.clear();
@@ -135,7 +150,7 @@ export default function createReportRoutes(_pgPool) {
       res.json({
         status: 'success',
         message: `Cache cleared${tenant_id ? ' for tenant ' + tenant_id : ' (all tenants)'}`,
-        data: { cleared: true, remaining: bundleCache.size, clearedKeys: tenant_id ? [tenant_id, 'GLOBAL'] : 'all' }
+        data: { cleared: true, remaining: bundleCache.size }
       });
     } catch (error) {
       console.error('[Reports] clear-cache error:', error);
@@ -242,7 +257,7 @@ export default function createReportRoutes(_pgPool) {
     try {
       const { tenant_id } = req.query;
       const includeTestData = (req.query.include_test_data ?? 'true') !== 'false';
-      const cacheKey = tenant_id || 'GLOBAL';
+      const cacheKey = `${tenant_id || 'GLOBAL'}::include=${includeTestData ? 'true' : 'false'}`;
       const now = Date.now();
       const cached = bundleCache.get(cacheKey);
       if (cached && cached.expiresAt > now) {
@@ -272,7 +287,7 @@ export default function createReportRoutes(_pgPool) {
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
           q = q.gte('created_date', sinceISO);
           if (!includeTestData) {
-            try { q = q.eq('is_test_data', false); } catch (e) { /* ignore */ void 0; }
+            try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch (e) { /* ignore */ void 0; }
           }
           const { count } = await q;
           const planned = count ?? 0;
@@ -281,7 +296,9 @@ export default function createReportRoutes(_pgPool) {
               let exact = supabase.from('leads').select('*', { count: 'exact', head: true });
               if (tenant_id) exact = exact.eq('tenant_id', tenant_id);
               exact = exact.gte('created_date', sinceISO);
-              if (!includeTestData) { try { exact = exact.eq('is_test_data', false); } catch (e) { /* ignore */ void 0; } }
+              if (!includeTestData) {
+                try { exact = exact.or('is_test_data.is.false,is_test_data.is.null'); } catch (e) { /* ignore */ void 0; }
+              }
               const { count: exactCount } = await exact;
               return exactCount ?? planned;
             } catch (e) { return planned; }
@@ -297,7 +314,7 @@ export default function createReportRoutes(_pgPool) {
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
           q = q.gte('created_date', sinceISO);
           if (!includeTestData) {
-            try { q = q.eq('is_test_data', false); } catch (e) { /* ignore */ void 0; }
+            try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
           }
           const { count } = await q;
           const planned = count ?? 0;
@@ -306,7 +323,7 @@ export default function createReportRoutes(_pgPool) {
               let exact = supabase.from('activities').select('*', { count: 'exact', head: true });
               if (tenant_id) exact = exact.eq('tenant_id', tenant_id);
               exact = exact.gte('created_date', sinceISO);
-              if (!includeTestData) { try { exact = exact.eq('is_test_data', false); } catch (e) { /* ignore */ void 0; } }
+              if (!includeTestData) { try { exact = exact.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ } }
               const { count: exactCount } = await exact;
               return exactCount ?? planned;
             } catch (e) { return planned; }
@@ -321,7 +338,7 @@ export default function createReportRoutes(_pgPool) {
           let q = supabase.from('activities').select('id,type,subject,created_at').order('created_at', { ascending: false }).limit(10);
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
           if (!includeTestData) {
-            try { q = q.eq('is_test_data', false); } catch (e) { /* ignore */ void 0; }
+            try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
           }
           const { data } = await q;
           return Array.isArray(data) ? data : [];
@@ -332,7 +349,7 @@ export default function createReportRoutes(_pgPool) {
           let q = supabase.from('leads').select('id,first_name,last_name,company,created_date,status').order('created_date', { ascending: false }).limit(5);
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
           if (!includeTestData) {
-            try { q = q.eq('is_test_data', false); } catch (e) { /* ignore */ void 0; }
+            try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
           }
           const { data } = await q;
           return Array.isArray(data) ? data : [];
@@ -343,7 +360,7 @@ export default function createReportRoutes(_pgPool) {
           let q = supabase.from('opportunities').select('id,name,amount,stage,updated_at').order('updated_at', { ascending: false }).limit(5);
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
           if (!includeTestData) {
-            try { q = q.eq('is_test_data', false); } catch (e) { /* ignore */ void 0; }
+            try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
           }
           const { data } = await q;
           return Array.isArray(data) ? data : [];

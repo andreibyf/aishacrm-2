@@ -152,6 +152,7 @@ export default function createLeadRoutes(_pgPool) {
   router.get('/', cacheList('leads', 180), async (req, res) => {
     try {
       let { tenant_id, status, account_id, filter } = req.query;
+      const isTestData = req.query.is_test_data;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
@@ -162,6 +163,18 @@ export default function createLeadRoutes(_pgPool) {
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       let q = supabase.from('leads').select('*', { count: 'exact' }).eq('tenant_id', tenant_id);
+
+      // Honor is_test_data filter when provided
+      // When false: exclude test data (show only real data: false or NULL)
+      // When true: show only test data (is_test_data = true)
+      if (typeof isTestData !== 'undefined') {
+        const flag = String(isTestData).toLowerCase();
+        if (flag === 'false') {
+          try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore if column absent */ }
+        } else if (flag === 'true') {
+          try { q = q.eq('is_test_data', true); } catch { /* ignore if column absent */ }
+        }
+      }
 
       // Handle $or filter for dynamic search (frontend passes filter as JSON string)
       if (filter) {
@@ -232,7 +245,7 @@ export default function createLeadRoutes(_pgPool) {
   // POST /api/leads - Create lead
   router.post('/', invalidateCache('leads'), async (req, res) => {
     try {
-      const { tenant_id, first_name, last_name, email, phone, company, job_title, title, description, status = 'new', source, metadata, ...otherFields } = req.body;
+      const { tenant_id, first_name, last_name, email, phone, company, job_title, title, description, status = 'new', source, metadata, is_test_data, ...otherFields } = req.body;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -278,6 +291,7 @@ export default function createLeadRoutes(_pgPool) {
           job_title,
           status,
           source,
+          ...(typeof is_test_data === 'boolean' ? { is_test_data } : {}),
           metadata: combinedMetadata,
           created_at: nowIso,
           created_date: nowIso,
@@ -399,7 +413,7 @@ export default function createLeadRoutes(_pgPool) {
   router.put('/:id', invalidateCache('leads'), async (req, res) => {
     try {
       const { id } = req.params;
-      const { first_name, last_name, email, phone, title, description, company, job_title, status, source, metadata, ...otherFields } = req.body;
+      const { first_name, last_name, email, phone, title, description, company, job_title, status, source, metadata, is_test_data, ...otherFields } = req.body;
 
       // Validate required name fields if provided
       if (first_name !== undefined && (!first_name || !first_name.trim())) {
@@ -448,6 +462,7 @@ export default function createLeadRoutes(_pgPool) {
       if (company !== undefined) payload.company = company;
       if (job_title !== undefined) payload.job_title = job_title;
       if (status !== undefined) payload.status = status;
+      if (typeof is_test_data === 'boolean') payload.is_test_data = is_test_data;
       if (source !== undefined) payload.source = source;
 
       const { data, error } = await supabase
