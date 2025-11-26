@@ -2261,7 +2261,7 @@ If you're integrating with external tools:
                 <Shield className="h-4 w-4 text-amber-400" />
                 <AlertDescription className="text-amber-300">
                   <strong>Tenant Administrators:</strong>{" "}
-                  See the <strong>"Tenant Administration"</strong> section above for managing users, 
+                  See the <strong>&ldquo;Tenant Administration&rdquo;</strong> section above for managing users, 
                   permissions, and tenant settings. For complete admin documentation, download the Administrator Guide PDF.
                 </AlertDescription>
               </Alert>

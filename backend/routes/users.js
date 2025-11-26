@@ -13,6 +13,7 @@ import {
   sendPasswordResetEmail,
   updateAuthUserMetadata,
   updateAuthUserPassword,
+  generateRecoveryLink,
 } from "../lib/supabaseAuth.js";
 import { createAuditLog, getUserEmailFromRequest, getClientIP } from "../lib/auditLogger.js";
 
@@ -1842,7 +1843,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
   // POST /api/users/reset-password - Send password reset email
   router.post("/reset-password", passwordLimiter, async (req, res) => {
     try {
-      const { email, redirectTo } = req.body;
+      const { email } = req.body;
 
       if (!email) {
         return res.status(400).json({
@@ -1864,7 +1865,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           });
       }
 
-      const { data, error } = await sendPasswordResetEmail(email, redirectTo);
+      const { data, error } = await sendPasswordResetEmail(email);
 
       if (error) {
         console.error("[Password Reset] Error:", error);
@@ -1882,6 +1883,37 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
     } catch (error) {
       console.error("Error sending password reset:", error);
       res.status(500).json({ status: "error", message: error.message });
+    }
+  });
+
+  // POST /api/users/generate-recovery-link - Dev diagnostic: generate recovery link without email delivery
+  router.post("/generate-recovery-link", passwordLimiter, async (req, res) => {
+    try {
+      if (process.env.NODE_ENV === "production") {
+        return res
+          .status(403)
+          .json({ status: "error", message: "Not available in production" });
+      }
+      const { email, redirectTo } = req.body || {};
+      if (!email) {
+        return res
+          .status(400)
+          .json({ status: "error", message: "email is required" });
+      }
+      const { link, error } = await generateRecoveryLink(email, redirectTo);
+      if (error) {
+        return res.status(500).json({
+          status: "error",
+          message: error.message || "Failed to generate recovery link",
+        });
+      }
+      return res.json({ status: "success", link });
+    } catch (e) {
+      console.error("[RecoveryLink] Error generating recovery link:", e);
+      return res.status(500).json({
+        status: "error",
+        message: e.message || "Internal error",
+      });
     }
   });
 

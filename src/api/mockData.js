@@ -73,7 +73,7 @@ export const isLocalDevMode = () => {
     if (typeof window !== 'undefined' && window.localStorage.getItem('DISABLE_MOCK_USER') === 'true') {
       return false;
     }
-  } catch (e) { /* ignore */ }
+  } catch { /* ignore */ }
 
   // Local dev mode means: no real auth/backends are configured
   // Only check for Supabase (Base44 removed)

@@ -47,7 +47,7 @@ const priorityColors = {
   urgent: "bg-red-100 text-red-800 border-red-200"
 };
 
-export default function RecentActivities(props) {
+function RecentActivities(props) {
   const { tenantFilter: tenantFilterProp, showTestData: showTestDataProp } = props || {};
   const memoTenantFilter = useMemo(() => (tenantFilterProp ? tenantFilterProp : {}), [tenantFilterProp]);
   const memoShowTestData = useMemo(
@@ -64,11 +64,13 @@ export default function RecentActivities(props) {
 
   const { cachedRequest } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
-    const { user, loading: userLoading } = useUser();
-    const { authCookiesReady } = useAuthCookiesReady();
+  const { loading: userLoading } = useUser();
+  const { authCookiesReady } = useAuthCookiesReady();
   const flipAttemptedRef = useRef(false);
 
-  const fetchActivities = useCallback(async () => {
+  const backgroundScheduledRef = useRef(false);
+
+  const fetchActivities = useCallback(async (forceFull = false) => {
         // Wait for user to be loaded before fetching data
         if (userLoading || !authCookiesReady) {
           return;
@@ -76,11 +78,18 @@ export default function RecentActivities(props) {
 
     setLoading(true);
     try {
-      if (Array.isArray(props?.prefetchedActivities)) {
+      if (!forceFull && Array.isArray(props?.prefetchedActivities)) {
         const pref = props.prefetchedActivities || [];
         setActivities(pref.map(a => ({ ...a })));
         setLastUpdated(Date.now());
         setLoading(false);
+        if (!backgroundScheduledRef.current) {
+          backgroundScheduledRef.current = true;
+          setTimeout(() => {
+            // Single background refresh to hydrate with full data
+            fetchActivities(true);
+          }, 300);
+        }
         return;
       }
 
@@ -146,7 +155,7 @@ export default function RecentActivities(props) {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      fetchActivities();
+      fetchActivities(true);
     }, 180000);
     return () => clearInterval(interval);
   }, [fetchActivities]);
@@ -318,7 +327,7 @@ export default function RecentActivities(props) {
                       contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px', color: '#f1f5f9' }}
                       formatter={(value) => [`${value}`, 'Count']}
                     />
-                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false}>
                       {summaryData.map((d, i) => (
                         <Cell key={`cell-${d.key}-${i}`} fill={barColors[d.key] || '#6366f1'} />
                       ))}
@@ -400,3 +409,5 @@ export default function RecentActivities(props) {
     </Card>
   );
 }
+
+export default React.memo(RecentActivities);

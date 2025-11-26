@@ -3,7 +3,6 @@
 // Safeguards: Will refuse to run against production Supabase project.
 
 import 'dotenv/config';
-import { createClient } from '@supabase/supabase-js';
 
 const DEV_PROJECT_ID = 'efzqxjpfewkrgpdootte';
 const PROD_PROJECT_ID = 'ehjlenywplgyiahgxkfj';

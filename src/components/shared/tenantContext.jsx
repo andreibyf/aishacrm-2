@@ -9,18 +9,7 @@ import {
 import { isValidId } from "./tenantUtils";
 import { useUser } from "./useUser.js";
 
-window.__fixPrototype = (obj) => {
-  if (!obj || typeof obj !== "object") return obj;
-  if (typeof obj.hasOwnProperty !== "function") {
-    return JSON.parse(JSON.stringify(obj));
-  }
-  return obj;
-};
-
-if (typeof Object.prototype.hasOwnProperty !== "function") {
-  const goodProto = {}.__proto__;
-  Object.setPrototypeOf(Object.prototype, goodProto);
-}
+// Removed unsafe prototype mutation and global fixPrototype helper.
 
 const sanitizeObject = (obj) => {
   if (!obj) return obj;
@@ -65,7 +54,7 @@ function logTenantEvent(level, message, metadata) {
     });
   }
 
-  // Also keep console logging - FIX: ensure we always have a valid method
+  // Also keep console logging - ensure we always have a valid method
   const consoleMethodMap = {
     "INFO": "info",
     "WARNING": "warn",

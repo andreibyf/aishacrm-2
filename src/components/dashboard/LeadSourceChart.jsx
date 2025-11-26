@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Cell,
@@ -24,11 +24,11 @@ const COLORS = [
   "#ff4d4d",
 ];
 
-export default function LeadSourceChart(props) { // Changed to receive `props`
+function LeadSourceChart(props) { // Changed to receive `props`
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const { cachedRequest } = useApiManager();
-  const { user, loading: userLoading } = useUser();
+  const { loading: userLoading } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
 
   // Helper: compute chart data from a leads array
@@ -107,6 +107,18 @@ export default function LeadSourceChart(props) { // Changed to receive `props`
           });
           computeFromLeads(filtered);
           setLoading(false); // Crucial to set loading to false when using prefetched data
+          // Background refresh to hydrate with full dataset
+          (async () => {
+            try {
+              const fullLeads = await cachedRequest(
+                "Lead",
+                "filter",
+                { filter: effectiveFilter },
+                () => Lead.filter(effectiveFilter),
+              );
+              if (mounted) computeFromLeads(fullLeads);
+            } catch { /* ignore background errors */ }
+          })();
           return; // Exit early as we've processed prefetched data
         }
 
@@ -191,6 +203,7 @@ export default function LeadSourceChart(props) { // Changed to receive `props`
                         outerRadius={80}
                         fill="#8884d8"
                         dataKey="value"
+                        isAnimationActive={false}
                       >
                         {data.filter((item) => item.value > 0).map((
                           entry,
@@ -271,3 +284,5 @@ export default function LeadSourceChart(props) { // Changed to receive `props`
     </Card>
   );
 }
+
+export default memo(LeadSourceChart);

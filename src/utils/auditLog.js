@@ -4,8 +4,6 @@
  * Provides functions to log user management actions for compliance and security tracking.
  * Logs are stored in the system_logs table via the backend API.
  */
-
-import { callBackendAPI } from '@/api/entities.js';
 import { enqueueSystemLog } from '@/utils/systemLogBatcher.js';
 
 // Central log level gate: default to ERROR-only unless explicitly widened via env.

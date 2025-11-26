@@ -8,7 +8,7 @@ import { createPageUrl } from "@/utils";
 export default function TopAccounts({ tenantFilter, showTestData }) {
   const [accounts, setAccounts] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-  const { user, loading: userLoading } = useUser();
+  const { loading: userLoading } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
 
   React.useEffect(() => {

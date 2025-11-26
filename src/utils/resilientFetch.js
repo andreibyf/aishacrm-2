@@ -41,7 +41,7 @@ export async function resilientFetch(url, options = {}) {
         try {
           const text = await response.text();
           data = text ? JSON.parse(text) : null;
-        } catch (e) {
+        } catch {
           errorType = 'parse';
         }
       }

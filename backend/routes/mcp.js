@@ -1021,7 +1021,7 @@ export default function createMCPRoutes(_pgPool) {
       let data;
       try {
         data = await resp.json();
-      } catch (_e) {
+      } catch {
         throw new Error('invalid_json');
       }
       if (!data || (data.status !== 'ok' && data.status !== 'healthy')) {
@@ -1089,7 +1089,7 @@ export default function createMCPRoutes(_pgPool) {
       const dt = Math.round((performance.now ? performance.now() : Date.now()) - t0);
       if (!resp.ok) throw new Error('bad_status_' + resp.status);
       let json;
-      try { json = await resp.json(); } catch (_e) { throw new Error('invalid_json'); }
+      try { json = await resp.json(); } catch { throw new Error('invalid_json'); }
       if (!json || !Array.isArray(json.results)) throw new Error('invalid_mcp_response');
       return { base, duration_ms: dt, response: json };
     })());

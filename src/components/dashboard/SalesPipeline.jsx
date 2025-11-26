@@ -11,12 +11,12 @@ import { Link } from "react-router-dom"; // Added import
 import { createPageUrl } from "@/utils"; // Added import
 import { Button } from "@/components/ui/button"; // Added import for Button component
 
-export default function SalesPipeline(props) {
+function SalesPipeline(props) {
   const [pipelineData, setPipelineData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
   const { cachedRequest } = useApiManager();
-  const { user, loading: userLoading } = useUser();
+  const { loading: userLoading } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
 
   React.useEffect(() => {
@@ -81,6 +81,23 @@ export default function SalesPipeline(props) {
             setPipelineData(computeFromOpps(props.prefetchedOpportunities));
             setLoading(false);
           }
+          // Background refresh to hydrate with full data silently
+          (async () => {
+            try {
+              const tenantFilter = props?.tenantFilter || {};
+              if (!tenantFilter.tenant_id) return;
+              const showTestData = props?.showTestData;
+              const effectiveFilter = showTestData ? { ...tenantFilter } : { ...tenantFilter, is_test_data: false };
+              const hasFilter = Object.keys(effectiveFilter).length > 0;
+              const methodName = hasFilter ? "filter" : "list";
+              const methodParams = hasFilter ? { filter: effectiveFilter } : {};
+              const dataFetcher = () => hasFilter ? Opportunity.filter(effectiveFilter) : Opportunity.list();
+              const oppsFull = await cachedRequest("Opportunity", methodName, methodParams, dataFetcher);
+              if (mounted) {
+                setPipelineData(computeFromOpps(oppsFull));
+              }
+            } catch { /* ignore background errors */ }
+          })();
           return; // Exit if preloaded data is used
         }
 
@@ -190,7 +207,7 @@ export default function SalesPipeline(props) {
                     }}
                     labelFormatter={(label) => `Stage: ${label}`}
                   />
-                  <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                  <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} isAnimationActive={false}>
                     <LabelList
                       dataKey="value"
                       position="top"
@@ -218,3 +235,5 @@ export default function SalesPipeline(props) {
     </Card>
   );
 }
+
+export default React.memo(SalesPipeline);
