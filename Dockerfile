@@ -9,6 +9,7 @@ ARG VITE_AISHACRM_BACKEND_URL
 ARG VITE_CURRENT_BRANCH=main
 ARG VITE_SYSTEM_TENANT_ID
 ARG VITE_USER_HEARTBEAT_INTERVAL_MS
+ARG APP_BUILD_VERSION=dev-local
 
 # Make them available to the build process
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
@@ -17,6 +18,7 @@ ENV VITE_AISHACRM_BACKEND_URL=$VITE_AISHACRM_BACKEND_URL
 ENV VITE_CURRENT_BRANCH=$VITE_CURRENT_BRANCH
 ENV VITE_SYSTEM_TENANT_ID=$VITE_SYSTEM_TENANT_ID
 ENV VITE_USER_HEARTBEAT_INTERVAL_MS=$VITE_USER_HEARTBEAT_INTERVAL_MS
+ENV APP_BUILD_VERSION=$APP_BUILD_VERSION
 
 
 # Copy package files
@@ -42,6 +44,9 @@ RUN npm install -g serve@14.2.5
 
 # Copy built assets from builder stage
 COPY --from=builder /app/dist ./dist
+
+# Remove placeholder env-config.js so entrypoint can generate fresh one
+RUN rm -f /app/dist/env-config.js
 
 # Copy frontend entrypoint
 COPY frontend-entrypoint.sh /entrypoint.sh

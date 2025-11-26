@@ -8,7 +8,7 @@ export function requireAuthCookie(req, res, next) {
     const payload = jwt.verify(token, secret);
     req.user = payload;
     return next();
-  } catch (_e) {
+  } catch {
     return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   }
 }

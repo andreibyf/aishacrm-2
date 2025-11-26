@@ -317,6 +317,52 @@ export async function confirmUserEmail(userId) {
   }
 }
 
+/**
+ * Generate a recovery link without sending email (diagnostic / manual testing)
+ * @param {string} email - User email
+ * @param {string} redirectTo - Optional redirect override (must be whitelisted)
+ * @returns {Promise<{link: string|null, error: any}>}
+ */
+export async function generateRecoveryLink(email, redirectTo) {
+  if (!supabaseAdmin) {
+    throw new Error("Supabase Auth not initialized");
+  }
+  if (!email) {
+    return { link: null, error: { message: "email is required" } };
+  }
+  try {
+    let resetRedirectUrl;
+    if (redirectTo) {
+      resetRedirectUrl = redirectTo;
+    } else if (process.env.FRONTEND_URL) {
+      resetRedirectUrl = `${process.env.FRONTEND_URL}/auth/reset`;
+    } else if (process.env.NODE_ENV === 'development') {
+      resetRedirectUrl = 'http://localhost:4000/auth/reset';
+      console.warn('⚠️  FRONTEND_URL not set; using dev default recovery redirect http://localhost:4000/auth/reset');
+    } else {
+      throw new Error("FRONTEND_URL environment variable is required for recovery link generation in production");
+    }
+
+    const { data, error } = await supabaseAdmin.auth.admin.generateLink({
+      type: "recovery",
+      email,
+      options: { redirectTo: resetRedirectUrl }
+    });
+    if (error) {
+      console.error("[Supabase Auth] generateLink error:", error);
+      return { link: null, error };
+    }
+    const link = data?.properties?.action_link || null;
+    if (!link) {
+      return { link: null, error: { message: "Recovery link not returned by Supabase" } };
+    }
+    return { link, error: null };
+  } catch (e) {
+    console.error("[Supabase Auth] Exception generating recovery link:", e);
+    return { link: null, error: { message: e.message } };
+  }
+}
+
 export default {
   initSupabaseAuth,
   createAuthUser,
@@ -327,4 +373,5 @@ export default {
   getAuthUserByEmail,
   updateAuthUserMetadata,
   confirmUserEmail,
+  generateRecoveryLink,
 };

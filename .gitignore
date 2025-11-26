@@ -75,6 +75,7 @@ test-dev-setup.js
 setup-dev-db.sh
 test-dashboard-endpoints.ps1
 dashboard-endpoint-test-results.json
+tmp-check-user.mjs
 
 # Production database dumps (NEVER COMMIT)
 prod_data.sql

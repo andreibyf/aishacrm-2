@@ -116,7 +116,7 @@ export default function createAuthRoutes(_pgPool) {
       if (anonClient && !isDev && !isE2E) {
         // Production: require Supabase Auth password verification
         console.log('[Auth.login] Production mode: verifying credentials with Supabase Auth');
-        const { data: authData, error: authError } = await anonClient.auth.signInWithPassword({ email, password });
+        const { data: _authData, error: authError } = await anonClient.auth.signInWithPassword({ email, password });
         if (authError) {
           console.log('[Auth.login] Supabase Auth failed:', { email, error: authError.message });
           return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
@@ -279,10 +279,67 @@ export default function createAuthRoutes(_pgPool) {
       }
 
       // Check for CRM access permission
-      const permissions = meta.permissions || [];
-      const hasCrmAccess = permissions.includes('crm_access') || permissions.length === 0; // Allow if no permissions set (default access)
+      const rawPermissions = meta.permissions;
+      const permissionSet = new Set();
+
+      const collectPermissions = (value, keyHint) => {
+        if (value === null || value === undefined) return;
+
+        if (typeof value === 'boolean') {
+          if (value && keyHint) permissionSet.add(String(keyHint));
+          return;
+        }
+
+        if (typeof value === 'string') {
+          const normalized = value.trim();
+          if (normalized.length === 0) return;
+          if (normalized.toLowerCase() === 'true' && keyHint) {
+            permissionSet.add(String(keyHint));
+            return;
+          }
+          permissionSet.add(normalized);
+          return;
+        }
+
+        if (typeof value === 'number') {
+          if (value === 1 && keyHint) {
+            permissionSet.add(String(keyHint));
+            return;
+          }
+          permissionSet.add(String(value));
+          return;
+        }
+
+        if (Array.isArray(value)) {
+          for (const nested of value) collectPermissions(nested, keyHint);
+          return;
+        }
+
+        if (typeof value === 'object') {
+          for (const [nestedKey, nestedVal] of Object.entries(value)) {
+            if (!nestedVal) continue;
+            collectPermissions(nestedVal, nestedKey);
+          }
+          return;
+        }
+
+        permissionSet.add(String(value));
+      };
+
+      collectPermissions(rawPermissions, null);
+
+      const roleLower = String(user.role || '').toLowerCase();
+      const hasCrmAccess =
+        roleLower === 'superadmin' ||
+        permissionSet.size === 0 ||
+        permissionSet.has('crm_access');
+
       if (!hasCrmAccess) {
-        console.log('[Auth.login] CRM access denied:', { email: normalizedEmail, permissions });
+        console.log('[Auth.login] CRM access denied:', {
+          email: normalizedEmail,
+          role: roleLower,
+          permissions: Array.from(permissionSet).sort(),
+        });
         return res.status(403).json({ status: 'error', message: 'CRM access not authorized' });
       }
 
@@ -307,10 +364,80 @@ export default function createAuthRoutes(_pgPool) {
     }
   });
 
-  // POST /api/auth/refresh - rotate short-lived access cookie using refresh cookie
+  // POST /api/auth/refresh - rotate short-lived access cookie using refresh cookie OR accept Supabase Bearer
   router.post('/refresh', async (req, res) => {
     try {
+      // DEBUG logging
+      const hasRefreshCookie = !!req.cookies?.aisha_refresh;
+      const authHeader = req.headers?.authorization || '';
+      const hasBearer = authHeader.startsWith('Bearer ');
+      if (process.env.NODE_ENV !== 'production' || process.env.AUTH_DEBUG === 'true') {
+        console.log('[Auth.refresh] Request context:', { hasRefreshCookie, hasBearer });
+      }
+
+      // Accept either refresh cookie (for cookie-based sessions) OR Supabase Bearer token
       const token = req.cookies?.aisha_refresh;
+      const bearer = hasBearer ? authHeader.substring(7).trim() : null;
+
+      // If Supabase Bearer token provided, validate it with service role OR anon client fallback
+      if (!token && bearer) {
+        if (process.env.NODE_ENV !== 'production' || process.env.AUTH_DEBUG === 'true') {
+          console.log('[Auth.refresh] Using Supabase Bearer token for refresh');
+        }
+        try {
+          const url = process.env.SUPABASE_URL;
+          const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+          const anonKey = process.env.SUPABASE_ANON_KEY;
+          if (!url || (!serviceKey && !anonKey)) {
+            return res.status(500).json({ status: 'error', message: 'Supabase not configured' });
+          }
+          const client = createSupabaseClient(url, serviceKey || anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+          const { data: getUserData, error: getUserErr } = await client.auth.getUser(bearer);
+          const authUser = getUserData?.user;
+          if (getUserErr || !authUser) {
+            console.log('[Auth.refresh] Invalid Supabase token:', getUserErr?.message);
+            return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+          }
+
+          const email = (authUser.email || '').toLowerCase().trim();
+          const supabase = getSupabaseClient();
+
+          // Lookup CRM user record
+          let user = null;
+          let table = 'users';
+          const { data: uRows } = await supabase.from('users').select('id, email, role, tenant_id, status, metadata').eq('email', email).limit(1);
+          if (uRows && uRows.length > 0) {
+            user = uRows[0];
+          } else {
+            table = 'employees';
+            const { data: eRows } = await supabase.from('employees').select('id, email, role, tenant_id, status, metadata').eq('email', email).limit(1);
+            if (eRows && eRows.length > 0) user = eRows[0];
+          }
+
+          if (!user) {
+            console.log('[Auth.refresh] No CRM user found for Supabase token');
+            return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+          }
+
+          // Check account status
+          const meta = user.metadata || {};
+          const accountStatus = String(meta.account_status || user.status || '').toLowerCase();
+          const isActiveFlag = meta.is_active !== false;
+          if (accountStatus === 'inactive' || isActiveFlag === false || (user.status || '').toLowerCase() === 'inactive') {
+            return res.status(403).json({ status: 'error', message: 'Account is disabled' });
+          }
+
+          const payload = { sub: user.id, email: user.email, role: user.role, tenant_id: user.tenant_id || null, table };
+          const access = signAccess(payload);
+          res.cookie('aisha_access', access, cookieOpts(15 * 60 * 1000));
+          console.log('[Auth.refresh] Issued access cookie from Supabase Bearer token:', { email, mode: serviceKey ? 'service_role' : 'anon_fallback' });
+          return res.json({ status: 'success', message: 'Refreshed' });
+        } catch (bearerErr) {
+          console.error('[Auth.refresh] Bearer token processing error:', bearerErr);
+          return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+        }
+      }
+
       if (!token) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
       const secret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'change-me-refresh';
       let decoded;
@@ -396,7 +523,7 @@ export default function createAuthRoutes(_pgPool) {
       }
 
       // Ensure Supabase admin client initialized at startup (sendPasswordResetEmail will throw if not)
-      const { data, error } = await sendPasswordResetEmail(String(email).trim().toLowerCase(), redirectTo);
+      const { error } = await sendPasswordResetEmail(String(email).trim().toLowerCase(), redirectTo);
       if (error) {
         return res.status(400).json({ status: 'error', message: error.message || 'Failed to send reset email' });
       }

@@ -1,0 +1,61 @@
+# Development override compose file for hot reload (frontend + backend)
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# Stops:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+# This overrides frontend/backend to run in dev/watch mode with mounted source.
+
+services:
+  backend:
+    image: node:22-alpine
+    container_name: aishacrm-backend-dev
+    working_dir: /app/backend
+    volumes:
+      - ./:/app
+    env_file:
+      - backend/.env
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - ALLOWED_ORIGINS=http://localhost:4000
+      - REDIS_URL=redis://redis:6379
+      - REDIS_CACHE_URL=redis://redis-cache:6379
+      - PGSSLMODE=require
+      # Speed up dev startup: skip large Chromium download and reuse host node_modules
+      - PUPPETEER_SKIP_DOWNLOAD=1
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "4001:3001"
+    depends_on:
+      redis:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+
+  frontend:
+    image: node:22-alpine
+    container_name: aishacrm-frontend-dev
+    working_dir: /app
+    volumes:
+      - ./:/app
+    env_file:
+      - .env
+    environment:
+      - VITE_DEV_BACKEND_HOST=backend:3001
+    # Generate env-config.js then start Vite
+    command: >
+      sh -c "
+      echo 'window._env_ = {' > /app/public/env-config.js &&
+      echo '  VITE_SUPABASE_URL: \"'$$VITE_SUPABASE_URL'\",' >> /app/public/env-config.js &&
+      echo '  VITE_SUPABASE_ANON_KEY: \"'$$VITE_SUPABASE_ANON_KEY'\",' >> /app/public/env-config.js &&
+      echo '  VITE_AISHACRM_BACKEND_URL: \"'$${VITE_AISHACRM_BACKEND_URL:-http://localhost:4001}'\",' >> /app/public/env-config.js &&
+      echo '  VITE_CURRENT_BRANCH: \"'$${VITE_CURRENT_BRANCH:-main}'\"' >> /app/public/env-config.js &&
+      echo '};' >> /app/public/env-config.js &&
+      npm install && npx vite --port 3000 --host
+      "
+    ports:
+      - "4000:3000"
+    depends_on:
+      - backend
+
+# Reuse existing redis services from base compose (defined in docker-compose.yml)

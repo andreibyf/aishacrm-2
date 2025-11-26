@@ -36,6 +36,9 @@ async function runMigration() {
         console.log('RPC failed, trying direct query...');
         const { error: queryError } = await supabase.from('_migrations').insert({});
         console.error('Migration execution error:', error);
+        if (queryError) {
+          console.error('Direct query attempt also failed:', queryError);
+        }
       } else {
         console.log('✓ Statement executed successfully');
       }

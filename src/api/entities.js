@@ -3,6 +3,15 @@ import { createMockUser, isLocalDevMode } from "./mockData";
 import { apiHealthMonitor } from "../utils/apiHealthMonitor";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
+// Build version marker for deployment verification.
+// Prefer build-time injected env var, then runtime window._env_, then fallback literal.
+export const ENTITIES_BUILD_VERSION = (
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_APP_BUILD_VERSION) ||
+  (typeof window !== 'undefined' && window._env_ && window._env_.APP_BUILD_VERSION) ||
+  'v1.0.64'
+);
+console.log('[Entities] Build version:', ENTITIES_BUILD_VERSION);
+
 // Backend base URL: in dev, use relative path and Vite proxy to avoid CORS
 // In production, normalize to HTTPS when the app is served over HTTPS to avoid mixed-content blocks
 const normalizeBackendUrl = (url) => {
@@ -20,12 +29,20 @@ const normalizeBackendUrl = (url) => {
   return url;
 };
 
+// Get runtime environment variable (injected by frontend-entrypoint.sh) or build-time env
+const getRuntimeEnv = (key) => {
+  if (typeof window !== 'undefined' && window._env_) {
+    return window._env_[key];
+  }
+  return import.meta.env[key];
+};
+
 // Resolve a production-safe backend base URL.
 // Fallback logic: if build-time env missing or points at localhost or a raw IP, prefer window.location.origin
 // because Cloudflare Tunnel terminates TLS and routes /api/*.
 const resolveBackendBase = () => {
   if (import.meta.env.DEV) return '';
-  let raw = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+  let raw = getRuntimeEnv('VITE_AISHACRM_BACKEND_URL') || 'http://localhost:3001';
   try {
     if (typeof window !== 'undefined') {
       const origin = window.location.origin;
@@ -236,6 +253,49 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       "Content-Type": "application/json",
     },
   };
+
+  // Attach auth token (Supabase) if available to avoid 401 on protected routes (e.g. modulesettings)
+  try {
+    // Prefer explicit Supabase session token
+    const supabaseConfigured = isSupabaseConfigured();
+    console.log("[callBackendAPI] Auth check", { 
+      entityName, 
+      supabaseConfigured,
+      url: url.substring(0, 80)
+    });
+    
+    if (supabaseConfigured) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+      console.log("[callBackendAPI] Supabase session", { 
+        hasSession: !!session, 
+        hasToken: !!accessToken,
+        tokenPreview: accessToken ? accessToken.substring(0, 20) + '...' : null
+      });
+      if (accessToken) {
+        options.headers.Authorization = `Bearer ${accessToken}`;
+      }
+    }
+    // Fallback: token persisted in localStorage (RateLimitManager pattern)
+    if (!options.headers.Authorization && typeof window !== 'undefined') {
+      const stored = localStorage.getItem('sb-access-token');
+      console.log("[callBackendAPI] Fallback localStorage token", { hasStored: !!stored });
+      if (stored) {
+        options.headers.Authorization = `Bearer ${stored}`;
+      }
+    }
+    
+    console.log("[callBackendAPI] Final auth header", { 
+      hasAuth: !!options.headers.Authorization,
+      entityName 
+    });
+  } catch (authErr) {
+    // Silent: absence of token will lead to graceful 401 handling upstream
+    console.warn("[callBackendAPI] Auth attachment error:", authErr?.message);
+  }
+
+  // Include credentials (cookies) for same-origin or allowed CORS scenarios
+  options.credentials = 'include';
 
   if (method === "GET") {
     if (id) {

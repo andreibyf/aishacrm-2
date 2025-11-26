@@ -5,9 +5,16 @@
 import express from 'express';
 
 // Helper: attempt to count rows from a table safely (optionally by tenant)
-async function safeCount(_pgPool, table, tenantId) {
+// options:
+// - includeTestData: boolean (default true)
+// - countMode: 'planned' | 'exact' (default 'planned')
+// - confirmSmallCounts: boolean (default true) -> if planned count <= 5, double-check with exact
+async function safeCount(_pgPool, table, tenantId, filterBuilder, options = {}) {
   const { getSupabaseClient } = await import('../lib/supabase-db.js');
   const supabase = getSupabaseClient();
+  const includeTestData = options.includeTestData !== false;
+  const countMode = options.countMode || 'planned';
+  const confirmSmall = options.confirmSmallCounts !== false; // default true
 
   // Whitelist of allowed table names
   const allowedTables = ['contacts', 'accounts', 'leads', 'opportunities', 'activities'];
@@ -16,22 +23,54 @@ async function safeCount(_pgPool, table, tenantId) {
   }
 
   try {
-    // Try tenant-scoped count first if a tenantId is provided
+    // Build base query
+    let query = supabase.from(table).select('*', { count: countMode, head: true });
     if (tenantId) {
       try {
-        const { count } = await supabase
-          .from(table)
-          .select('*', { count: 'exact', head: true })
-          .eq('tenant_id', tenantId);
-        return count ?? 0;
-      } catch {
-        // Fall through to global count if tenant_id column doesn't exist
+        query = query.eq('tenant_id', tenantId);
+      } catch (e) {
+        /* ignore: table may not have tenant_id */ void 0;
       }
     }
-    const { count } = await supabase
-      .from(table)
-      .select('*', { count: 'exact', head: true });
-    return count ?? 0;
+    if (!includeTestData) {
+      try {
+        query = query.eq('is_test_data', false);
+      } catch (e) {
+        /* ignore: table may not have is_test_data */ void 0;
+      }
+    }
+    // Apply additional filters (e.g., status not in ...)
+    if (typeof filterBuilder === 'function') {
+      try {
+        query = filterBuilder(query) || query;
+      } catch {
+        // ignore filter builder errors; keep base query
+      }
+    }
+    const { count } = await query;
+    const plannedCount = count ?? 0;
+
+    // If using planned estimates, and the estimate is tiny, confirm with exact to avoid false positives on empty sets
+    if (countMode === 'planned' && confirmSmall && plannedCount <= 5) {
+      try {
+        let exact = supabase.from(table).select('*', { count: 'exact', head: true });
+        if (tenantId) {
+          try { exact = exact.eq('tenant_id', tenantId); } catch (e) { /* ignore */ void 0; }
+        }
+        if (!includeTestData) {
+          try { exact = exact.eq('is_test_data', false); } catch (e) { /* ignore */ void 0; }
+        }
+        if (typeof filterBuilder === 'function') {
+          try { exact = filterBuilder(exact) || exact; } catch (e) { /* ignore */ void 0; }
+        }
+        const { count: exactCount } = await exact;
+        return exactCount ?? plannedCount;
+      } catch (e) {
+        // fall back to planned on error
+        return plannedCount;
+      }
+    }
+    return plannedCount;
   } catch {
     return 0; // table might not exist yet; return 0 as a safe default
   }
@@ -70,6 +109,10 @@ async function safeRecentActivities(_pgPool, tenantId, limit = 10) {
 
 export default function createReportRoutes(_pgPool) {
   const router = express.Router();
+  // In-memory per-tenant cache for dashboard bundle
+  // Shape: Map<key, { data, expiresAt }>
+  const bundleCache = new Map();
+  const BUNDLE_TTL_MS = 60 * 1000; // 60 seconds
 
   /**
    * @openapi
@@ -166,19 +209,169 @@ export default function createReportRoutes(_pgPool) {
   router.get('/dashboard-bundle', async (req, res) => {
     try {
       const { tenant_id } = req.query;
+      const includeTestData = (req.query.include_test_data ?? 'true') !== 'false';
+      const cacheKey = tenant_id || 'GLOBAL';
+      const now = Date.now();
+      const cached = bundleCache.get(cacheKey);
+      if (cached && cached.expiresAt > now) {
+        return res.json({ status: 'success', data: cached.data, cached: true });
+      }
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+
+      // Counts (use planned head counts for speed)
+      const commonOpts = { includeTestData };
+      const totalContactsP = safeCount(null, 'contacts', tenant_id, undefined, commonOpts);
+      const totalAccountsP = safeCount(null, 'accounts', tenant_id, undefined, commonOpts);
+      const totalLeadsP = safeCount(null, 'leads', tenant_id, undefined, commonOpts);
+      const totalOpportunitiesP = safeCount(null, 'opportunities', tenant_id, undefined, commonOpts);
+      const openLeadsP = safeCount(null, 'leads', tenant_id, (q) => q.not('status', 'in', '("converted","lost")'), commonOpts);
+      const wonOpportunitiesP = safeCount(null, 'opportunities', tenant_id, (q) => q.in('stage', ['won', 'closed_won']), commonOpts);
+      const openOpportunitiesP = safeCount(null, 'opportunities', tenant_id, (q) => q.not('stage', 'in', '("won","closed_won","lost","closed_lost")'), commonOpts);
+
+      // New leads last 30 days
+      const since = new Date();
+      since.setDate(since.getDate() - 30);
+      const sinceISO = since.toISOString();
+      const newLeadsP = (async () => {
+        try {
+          let q = supabase.from('leads').select('*', { count: 'planned', head: true });
+          if (tenant_id) q = q.eq('tenant_id', tenant_id);
+          q = q.gte('created_date', sinceISO);
+          if (!includeTestData) {
+            try { q = q.eq('is_test_data', false); } catch (e) { /* ignore */ void 0; }
+          }
+          const { count } = await q;
+          const planned = count ?? 0;
+          if (planned <= 5) {
+            try {
+              let exact = supabase.from('leads').select('*', { count: 'exact', head: true });
+              if (tenant_id) exact = exact.eq('tenant_id', tenant_id);
+              exact = exact.gte('created_date', sinceISO);
+              if (!includeTestData) { try { exact = exact.eq('is_test_data', false); } catch (e) { /* ignore */ void 0; } }
+              const { count: exactCount } = await exact;
+              return exactCount ?? planned;
+            } catch (e) { return planned; }
+          }
+          return planned;
+        } catch { return 0; }
+      })();
+
+      // Activities last 30 days
+      const recentActivitiesCountP = (async () => {
+        try {
+          let q = supabase.from('activities').select('*', { count: 'planned', head: true });
+          if (tenant_id) q = q.eq('tenant_id', tenant_id);
+          q = q.gte('created_date', sinceISO);
+          if (!includeTestData) {
+            try { q = q.eq('is_test_data', false); } catch (e) { /* ignore */ void 0; }
+          }
+          const { count } = await q;
+          const planned = count ?? 0;
+          if (planned <= 5) {
+            try {
+              let exact = supabase.from('activities').select('*', { count: 'exact', head: true });
+              if (tenant_id) exact = exact.eq('tenant_id', tenant_id);
+              exact = exact.gte('created_date', sinceISO);
+              if (!includeTestData) { try { exact = exact.eq('is_test_data', false); } catch (e) { /* ignore */ void 0; } }
+              const { count: exactCount } = await exact;
+              return exactCount ?? planned;
+            } catch (e) { return planned; }
+          }
+          return planned;
+        } catch { return 0; }
+      })();
+
+      // Recent small lists (narrow columns, limited)
+      const recentActivitiesP = (async () => {
+        try {
+          let q = supabase.from('activities').select('id,type,subject,created_at').order('created_at', { ascending: false }).limit(10);
+          if (tenant_id) q = q.eq('tenant_id', tenant_id);
+          if (!includeTestData) {
+            try { q = q.eq('is_test_data', false); } catch (e) { /* ignore */ void 0; }
+          }
+          const { data } = await q;
+          return Array.isArray(data) ? data : [];
+        } catch { return []; }
+      })();
+      const recentLeadsP = (async () => {
+        try {
+          let q = supabase.from('leads').select('id,first_name,last_name,company,created_date,status').order('created_date', { ascending: false }).limit(5);
+          if (tenant_id) q = q.eq('tenant_id', tenant_id);
+          if (!includeTestData) {
+            try { q = q.eq('is_test_data', false); } catch (e) { /* ignore */ void 0; }
+          }
+          const { data } = await q;
+          return Array.isArray(data) ? data : [];
+        } catch { return []; }
+      })();
+      const recentOppsP = (async () => {
+        try {
+          let q = supabase.from('opportunities').select('id,name,amount,stage,updated_at').order('updated_at', { ascending: false }).limit(5);
+          if (tenant_id) q = q.eq('tenant_id', tenant_id);
+          if (!includeTestData) {
+            try { q = q.eq('is_test_data', false); } catch (e) { /* ignore */ void 0; }
+          }
+          const { data } = await q;
+          return Array.isArray(data) ? data : [];
+        } catch { return []; }
+      })();
+
+      const [
+        totalContacts,
+        totalAccounts,
+        totalLeads,
+        totalOpportunities,
+        openLeads,
+        wonOpportunities,
+        openOpportunities,
+        newLeads,
+        activitiesLast30,
+        recentActivities,
+        recentLeads,
+        recentOpportunities,
+      ] = await Promise.all([
+        totalContactsP,
+        totalAccountsP,
+        totalLeadsP,
+        totalOpportunitiesP,
+        openLeadsP,
+        wonOpportunitiesP,
+        openOpportunitiesP,
+        newLeadsP,
+        recentActivitiesCountP,
+        recentActivitiesP,
+        recentLeadsP,
+        recentOppsP,
+      ]);
 
       const bundle = {
         stats: {
-          totalContacts: 0,
-          totalAccounts: 0,
-          totalLeads: 0,
+          totalContacts,
+          totalAccounts,
+          totalLeads,
+          totalOpportunities,
+          openLeads,
+          wonOpportunities,
+          openOpportunities,
+          newLeadsLast30Days: newLeads,
+          activitiesLast30Days: activitiesLast30,
         },
-        recentActivities: [],
-        recentLeads: [],
-        opportunities: [],
+        lists: {
+          recentActivities,
+          recentLeads,
+          recentOpportunities,
+        },
+        meta: {
+          tenant_id: tenant_id || null,
+          generated_at: new Date().toISOString(),
+          ttl_seconds: Math.round(BUNDLE_TTL_MS / 1000),
+        },
       };
 
-      res.json({ status: 'success', data: bundle, tenant_id });
+      bundleCache.set(cacheKey, { data: bundle, expiresAt: now + BUNDLE_TTL_MS });
+      res.json({ status: 'success', data: bundle, cached: false });
     } catch (error) {
       res.status(500).json({
         status: 'error',

@@ -222,7 +222,7 @@ export default function createSystemRoutes(_pgPool) {
               if (!data.status || (data.status !== 'ok' && data.status !== 'healthy')) {
                 throw new Error('invalid_mcp_health_response');
               }
-            } catch (parseErr) {
+            } catch {
               // If not valid JSON or missing status, treat as unreachable
               throw new Error('mcp_health_parse_error');
             }

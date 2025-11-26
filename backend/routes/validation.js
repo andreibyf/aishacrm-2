@@ -66,7 +66,7 @@ async function findDuplicatesInDbSupabase(supabase, entityTable, tenantId, field
   }
 }
 
-export default function createValidationRoutes(pgPool) {
+export default function createValidationRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/validation/check-duplicate - Check for duplicate records

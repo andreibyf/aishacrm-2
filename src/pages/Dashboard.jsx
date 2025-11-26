@@ -17,6 +17,7 @@ import TopAccounts from "../components/dashboard/TopAccounts";
 import RecentActivities from "../components/dashboard/RecentActivities";
 import LeadAgeReport from "../components/dashboard/LeadAgeReport";
 import { Loader2 } from "lucide-react";
+import { getDashboardBundle as getDashBundle } from "@/api/functions";
 import WidgetPickerModal from "../components/dashboard/WidgetPickerModal";
 import { toast } from "sonner";
 import { useUser } from "@/components/shared/useUser.js";
@@ -61,6 +62,7 @@ export default function DashboardPage() {
   const { user, reloadUser } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
   const [loading, setLoading] = useState(true);
+  const [bundleLists, setBundleLists] = useState(null);
   const [stats, setStats] = useState({
     totalContacts: 0,
     newLeads: 0,
@@ -257,32 +259,65 @@ export default function DashboardPage() {
           showTestData,
         });
 
-        const [leadsRaw, contactsRaw, opportunitiesRaw, activitiesRaw] = await Promise.all([
-          cachedRequest(
-            "Lead",
-            "filter",
-            { filter: tenantFilter },
-            () => Lead.filter(tenantFilter),
-          ),
-          cachedRequest(
-            "Contact",
-            "filter",
-            { filter: tenantFilter },
-            () => Contact.filter(tenantFilter),
-          ),
-          cachedRequest(
-            "Opportunity",
-            "filter",
-            { filter: tenantFilter },
-            () => Opportunity.filter(tenantFilter),
-          ),
-          cachedRequest(
-            "Activity",
-            "filter",
-            { filter: tenantFilter },
-            () => Activity.filter(tenantFilter),
-          ),
-        ]);
+        // Fast path: fetch compact dashboard bundle first (cached ~60s on server)
+        let bundle = null;
+        try {
+          const bundleResp = await cachedRequest(
+            "Dashboard",
+            "bundle",
+            { tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData },
+            () => getDashBundle({ tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData })
+          );
+          // Unwrap common shapes: either { data: {...} } or raw {...}
+          bundle = bundleResp?.data || bundleResp;
+          if (bundle?.lists) {
+            setBundleLists(bundle.lists);
+          }
+          if (bundle?.stats) {
+            setStats((prev) => ({
+              ...prev,
+              totalContacts: Number(bundle.stats.totalContacts || 0),
+              newLeads: Number(bundle.stats.newLeadsLast30Days || 0),
+              activeOpportunities: Number(bundle.stats.openOpportunities || 0), // keep UI snappy; refined below if needed
+              pipelineValue: Number(prev.pipelineValue || 0),
+              activitiesLogged: Number(bundle.stats.activitiesLast30Days || 0),
+            }));
+          }
+        } catch (e) {
+          if (import.meta.env.DEV) {
+            console.warn("[Dashboard] bundle fetch skipped:", e?.message);
+          }
+        }
+
+        // If bundle missing advanced stats (e.g., pipeline sums), fall back to detailed lists AFTER first paint
+        const [leadsRaw, contactsRaw, opportunitiesRaw, activitiesRaw] = bundle?.stats
+          ? [[], [], [], []] // skip heavy fetch for initial stats
+          : await Promise.all([
+              cachedRequest(
+                "Lead",
+                "filter",
+                { filter: tenantFilter },
+                () => Lead.filter(tenantFilter),
+              ),
+              cachedRequest(
+                "Contact",
+                "filter",
+                { filter: tenantFilter },
+                () => Contact.filter(tenantFilter),
+              ),
+              cachedRequest(
+                "Opportunity",
+                "filter",
+                { filter: tenantFilter },
+                () => Opportunity.filter(tenantFilter),
+              ),
+              cachedRequest(
+                "Activity",
+                "filter",
+                { filter: tenantFilter },
+                () => Activity.filter(tenantFilter),
+              ),
+            ]);
 
         // Defensive normalization: some race conditions or transient errors can return
         // non-array values (object, promise remnants). Coerce to arrays to avoid
@@ -334,13 +369,13 @@ export default function DashboardPage() {
         }) || [];
 
         const calculatedStats = {
-          totalContacts: contacts?.length || 0,
-          newLeads: newLeads.length,
-          activeOpportunities: activeOpps.length,
-          wonOpportunities: wonOpps.length,
+          totalContacts: bundle?.stats ? Number(bundle.stats.totalContacts || 0) : (contacts?.length || 0),
+          newLeads: bundle?.stats ? Number(bundle.stats.newLeadsLast30Days || 0) : newLeads.length,
+          activeOpportunities: bundle?.stats ? Number(bundle.stats.openOpportunities || 0) : activeOpps.length,
+          wonOpportunities: bundle?.stats ? Number(bundle.stats.wonOpportunities || 0) : wonOpps.length,
           pipelineValue: pipelineValue,
           wonValue: wonValue,
-          activitiesLogged: recentActivities.length,
+          activitiesLogged: bundle?.stats ? Number(bundle.stats.activitiesLast30Days || 0) : recentActivities.length,
           trends: {
             contacts: null,
             newLeads: null,
@@ -441,6 +476,8 @@ export default function DashboardPage() {
     );
   }, [widgetPreferences, user]);
 
+  const stableTenantFilter = useMemo(() => getTenantFilter(), [getTenantFilter]);
+
   return (
     <div className="min-h-screen bg-slate-900 p-4 sm:p-6">
       {loading
@@ -474,14 +511,37 @@ export default function DashboardPage() {
               {visibleWidgets.length > 0
                 ? (
                   visibleWidgets.map((widget, index) => {
+                    // Prefetch lists from dashboard bundle where applicable to avoid redundant queries
+                    const prefetchProps = {};
+                    if (widget.id === "recentActivities" && Array.isArray(bundleLists?.recentActivities)) {
+                      prefetchProps.prefetchedActivities = (showTestData
+                        ? bundleLists.recentActivities
+                        : bundleLists.recentActivities.filter(a => a?.is_test_data !== true));
+                    }
+                    if (widget.id === "salesPipeline" && Array.isArray(bundleLists?.recentOpportunities)) {
+                      prefetchProps.prefetchedOpportunities = (showTestData
+                        ? bundleLists.recentOpportunities
+                        : bundleLists.recentOpportunities.filter(o => o?.is_test_data !== true));
+                    }
+                    if (widget.id === "leadSourceChart" && Array.isArray(bundleLists?.recentLeads)) {
+                      prefetchProps.leadsData = (showTestData
+                        ? bundleLists.recentLeads
+                        : bundleLists.recentLeads.filter(l => l?.is_test_data !== true));
+                    }
+                    if (widget.id === "leadAgeReport" && Array.isArray(bundleLists?.recentLeads)) {
+                      prefetchProps.leadsData = (showTestData
+                        ? bundleLists.recentLeads
+                        : bundleLists.recentLeads.filter(l => l?.is_test_data !== true));
+                    }
                     return (
                       <LazyWidgetLoader
                         key={widget.id}
                         component={widget.component}
                         delay={(index + 1) * 500}
                         user={user}
-                        tenantFilter={getTenantFilter()}
+                        tenantFilter={stableTenantFilter}
                         showTestData={showTestData}
+                        {...prefetchProps}
                       />
                     );
                   })

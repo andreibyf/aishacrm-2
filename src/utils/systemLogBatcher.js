@@ -25,7 +25,7 @@ function stopTimer() {
   }
 }
 
-async function flush(entries, reason) {
+async function flush(entries) {
   if (!entries.length) return;
   try {
     await callBackendAPI('system-logs/bulk', 'POST', null, { entries });

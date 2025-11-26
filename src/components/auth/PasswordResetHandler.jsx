@@ -6,8 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 
 /**
- * PasswordResetHandler - Detects PASSWORD_RECOVERY event and forces user to set new password
- * before allowing access to the app. Prevents auto-login after reset link click.
+ * PasswordResetHandler - Handles Supabase password recovery links.
+ * Supports PKCE hash or query code flows and forces a password update before normal app access.
  */
 export default function PasswordResetHandler({ children }) {
   const [isRecoveryMode, setIsRecoveryMode] = useState(false);
@@ -18,41 +18,65 @@ export default function PasswordResetHandler({ children }) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Listen for PASSWORD_RECOVERY event
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const sub = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
-        console.log('[PasswordResetHandler] PASSWORD_RECOVERY detected - requiring password change');
         setIsRecoveryMode(true);
         setError('');
         setSuccess(false);
       }
-    });
+    }).data.subscription;
 
-    // Check if we're currently in recovery mode by detecting the hash parameter
-    // This triggers Supabase to exchange the token and fire PASSWORD_RECOVERY event
-    const checkRecoveryState = async () => {
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const type = hashParams.get('type');
+    const bootstrap = async () => {
+      try {
+        const url = new URL(window.location.href);
+        const hash = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
+        const params = new URLSearchParams(hash);
 
-      // If recovery hash is present, call getSession() to trigger token exchange
-      // This will cause PASSWORD_RECOVERY event to fire if successful
-      if (type === 'recovery') {
-        console.log('[PasswordResetHandler] Recovery hash detected, triggering session check');
-        try {
-          await supabase.auth.getSession();
-          // The PASSWORD_RECOVERY event handler above will set isRecoveryMode
-        } catch (error) {
-          console.error('[PasswordResetHandler] Error during recovery session check:', error);
-          setError('Invalid or expired reset link. Please request a new one.');
+        const type = params.get('type');
+        const access_token = params.get('access_token');
+        const refresh_token = params.get('refresh_token');
+
+        // Handle bearer-style recovery links with direct tokens
+        if (type === 'recovery' && access_token && refresh_token) {
+          console.log('[PasswordResetHandler] Using setSession with bearer tokens...');
+          const { error } = await supabase.auth.setSession({
+            access_token,
+            refresh_token,
+          });
+          if (error) {
+            console.error('[PasswordResetHandler] setSession error:', error);
+            setError('Invalid or expired reset link. Please request a new one.');
+            return;
+          }
+          setIsRecoveryMode(true);
+          // Clean hash to avoid re-processing
+          window.history.replaceState({}, document.title, url.pathname + url.search);
+          return;
         }
+
+        // Fallback: query-style code exchange
+        const hasQueryCode = url.searchParams.get('code');
+        if (hasQueryCode) {
+          console.log('[PasswordResetHandler] Query code detected. Exchanging...');
+          const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+          if (error) {
+            console.error('[PasswordResetHandler] exchange (query) error:', error);
+            setError('Invalid or expired reset link. Please request a new one.');
+            return;
+          }
+          setIsRecoveryMode(true);
+          url.searchParams.delete('code');
+          if (url.searchParams.has('type')) url.searchParams.delete('type');
+          window.history.replaceState({}, document.title, url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : ''));
+        }
+      } catch (e) {
+        console.error('[PasswordResetHandler] bootstrap error:', e);
+        setError('Unexpected error handling reset link.');
       }
     };
 
-    checkRecoveryState();
-
-    return () => {
-      subscription?.unsubscribe();
-    };
+    bootstrap();
+    return () => sub?.unsubscribe();
   }, []);
 
   const handlePasswordUpdate = async (e) => {
@@ -60,13 +84,11 @@ export default function PasswordResetHandler({ children }) {
     setError('');
     setLoading(true);
 
-    // Validation
     if (newPassword.length < 8) {
       setError('Password must be at least 8 characters long');
       setLoading(false);
       return;
     }
-
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match');
       setLoading(false);
@@ -74,44 +96,31 @@ export default function PasswordResetHandler({ children }) {
     }
 
     try {
-      // Update password using the temporary recovery session
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword
-      });
-
-      if (updateError) {
-        throw updateError;
-      }
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) throw updateError;
 
       console.log('[PasswordResetHandler] Password updated successfully');
       setSuccess(true);
 
-      // Sign out to require explicit login with new password
       await supabase.auth.signOut();
-      
-      // Redirect to login after 2 seconds
       setTimeout(() => {
         window.location.href = '/login?reset=success';
       }, 2000);
-
     } catch (err) {
       console.error('[PasswordResetHandler] Password update failed:', err);
-      setError(err.message || 'Failed to update password');
+      setError(err?.message || 'Failed to update password');
     } finally {
       setLoading(false);
     }
   };
 
-  // If in recovery mode, show password reset form
   if (isRecoveryMode) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 px-4">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="text-2xl">Reset Your Password</CardTitle>
-            <CardDescription>
-              Please enter a new password to continue
-            </CardDescription>
+            <CardDescription>Please enter a new password to continue</CardDescription>
           </CardHeader>
           <CardContent>
             {success ? (
@@ -164,16 +173,12 @@ export default function PasswordResetHandler({ children }) {
                   />
                 </div>
 
-                <Button 
-                  type="submit" 
-                  className="w-full" 
-                  disabled={loading}
-                >
+                <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? 'Updating...' : 'Update Password'}
                 </Button>
 
                 <p className="text-xs text-center text-slate-500 dark:text-slate-400 mt-4">
-                  You'll need to log in again after changing your password
+                  You&apos;ll need to log in again after changing your password
                 </p>
               </form>
             )}
@@ -183,6 +188,5 @@ export default function PasswordResetHandler({ children }) {
     );
   }
 
-  // Not in recovery mode - render children normally
   return <>{children}</>;
 }

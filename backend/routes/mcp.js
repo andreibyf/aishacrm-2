@@ -1018,22 +1018,12 @@ export default function createMCPRoutes(_pgPool) {
     const attempts = candidates.map(url => (async () => {
       const t0 = performance.now ? performance.now() : Date.now();
       try {
-        const resp = await withTimeout(fetch(url, { method: 'GET' }), 1500);
-        const dt = Math.round((performance.now ? performance.now() : Date.now()) - t0);
-        if (!resp.ok) throw new Error('bad_status_' + resp.status);
-        let data;
-        try {
-          data = await resp.json();
-        } catch (e) {
-          throw new Error('invalid_json');
-        }
-        if (!data || (data.status !== 'ok' && data.status !== 'healthy')) {
-          throw new Error('invalid_health_payload');
-        }
-        return { url, latency_ms: dt, data };
-      } catch (err) {
-        errors.push({ url, error: err.message || String(err) });
-        throw err;
+        data = await resp.json();
+      } catch {
+        throw new Error('invalid_json');
+      }
+      if (!data || (data.status !== 'ok' && data.status !== 'healthy')) {
+        throw new Error('invalid_health_payload');
       }
     })());
 
@@ -1065,6 +1055,96 @@ export default function createMCPRoutes(_pgPool) {
       });
     }
   });
+
+  // User-Agent for Wikipedia API requests (required by MediaWiki API)
+  const WIKIPEDIA_USER_AGENT = 'AishaCRM/1.0 (backend-fallback)';
+
+  // Inline fallback handler for web adapter actions when MCP server is unreachable
+  const handleWebActionFallback = async (action) => {
+    const resource = action.resource || {};
+    const kind = (resource.kind || '').toLowerCase();
+    const payload = action.payload || {};
+
+    if (kind === 'wikipedia-search' || kind === 'search_wikipedia') {
+      const q = String(payload.q || payload.query || '').trim();
+      if (!q) {
+        return {
+          actionId: action.id,
+          status: 'error',
+          resource: action.resource,
+          errorCode: 'MISSING_QUERY',
+          errorMessage: "Query parameter 'q' or 'query' is required",
+        };
+      }
+      try {
+        const resp = await fetch(
+          `https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=5&srsearch=${encodeURIComponent(q)}`,
+          {
+            headers: {
+              'User-Agent': WIKIPEDIA_USER_AGENT,
+              'Accept': 'application/json'
+            }
+          }
+        );
+        const json = await resp.json();
+        return {
+          actionId: action.id,
+          status: 'success',
+          resource: action.resource,
+          data: json?.query?.search || [],
+        };
+      } catch (err) {
+        return {
+          actionId: action.id,
+          status: 'error',
+          resource: action.resource,
+          errorCode: 'WIKIPEDIA_API_ERROR',
+          errorMessage: err?.message || String(err),
+        };
+      }
+    }
+
+    if (kind === 'wikipedia-page' || kind === 'get_wikipedia_page') {
+      const pageid = String(payload.pageid || payload.pageId || '').trim();
+      if (!pageid) {
+        return {
+          actionId: action.id,
+          status: 'error',
+          resource: action.resource,
+          errorCode: 'MISSING_PAGEID',
+          errorMessage: "Parameter 'pageid' is required",
+        };
+      }
+      try {
+        const resp = await fetch(
+          `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&format=json&pageids=${encodeURIComponent(pageid)}`,
+          {
+            headers: {
+              'User-Agent': WIKIPEDIA_USER_AGENT,
+              'Accept': 'application/json'
+            }
+          }
+        );
+        const json = await resp.json();
+        return {
+          actionId: action.id,
+          status: 'success',
+          resource: action.resource,
+          data: json?.query?.pages?.[pageid] || null,
+        };
+      } catch (err) {
+        return {
+          actionId: action.id,
+          status: 'error',
+          resource: action.resource,
+          errorCode: 'WIKIPEDIA_API_ERROR',
+          errorMessage: err?.message || String(err),
+        };
+      }
+    }
+
+    return null; // Not a web action we can handle
+  };
 
   // POST /api/mcp/run-proxy - Forward MCP action envelope to Braid MCP server from backend (browser-safe)
   router.post('/run-proxy', async (req, res) => {
@@ -1108,41 +1188,59 @@ export default function createMCPRoutes(_pgPool) {
     const attempts = baseCandidates.map(base => (async () => {
       const url = base.replace(/\/$/, '') + '/mcp/run';
       const t0 = performance.now ? performance.now() : Date.now();
-      try {
-        const resp = await withTimeout(fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(envelope)
-        }), 5000);
-        const dt = Math.round((performance.now ? performance.now() : Date.now()) - t0);
-        if (!resp.ok) {
-          const errText = await resp.text().catch(() => '');
-          throw new Error(`HTTP ${resp.status}: ${errText.slice(0, 100)}`);
-        }
-        let json;
-        try { json = await resp.json(); } catch (e) { throw new Error('invalid_json'); }
-        if (!json || !Array.isArray(json.results)) throw new Error('invalid_mcp_response: missing results array');
-        return { base, duration_ms: dt, response: json };
-      } catch (err) {
-        errors.push({ url, error: err.message || String(err) });
-        throw err;
-      }
+      const resp = await withTimeout(fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(envelope)
+      }), 5000);
+      const dt = Math.round((performance.now ? performance.now() : Date.now()) - t0);
+      if (!resp.ok) throw new Error('bad_status_' + resp.status);
+      let json;
+      try { json = await resp.json(); } catch { throw new Error('invalid_json'); }
+      if (!json || !Array.isArray(json.results)) throw new Error('invalid_mcp_response');
+      return { base, duration_ms: dt, response: json };
     })());
     try {
       const first = await Promise.any(attempts);
       return res.json({ status: 'success', data: { base: first.base, duration_ms: first.duration_ms, results: first.response.results } });
     } catch (err) {
-      // All attempts failed - provide detailed diagnostics
-      return res.status(502).json({ 
-        status: 'error', 
-        message: 'MCP run-proxy failed: all candidate servers unreachable', 
-        error: err.message || 'All MCP server candidates failed',
-        diagnostics: {
-          attempted: baseCandidates,
-          errors: errors,
-          hint: 'Ensure MCP_NODE_HEALTH_URL or MCP_NODE_BASE_URL env vars are set, or that one of the default endpoints is reachable'
+      // MCP server unreachable - try inline fallback for supported adapters
+      const actions = Array.isArray(envelope.actions) ? envelope.actions : [];
+      const fallbackResults = [];
+      let allHandled = true;
+
+      for (const action of actions) {
+        const system = (action.resource?.system || '').toLowerCase();
+        
+        if (system === 'web') {
+          const result = await handleWebActionFallback(action);
+          if (result) {
+            fallbackResults.push(result);
+          } else {
+            allHandled = false;
+            break;
+          }
+        } else {
+          // Cannot handle this adapter inline
+          allHandled = false;
+          break;
         }
-      });
+      }
+
+      if (allHandled && fallbackResults.length > 0) {
+        return res.json({
+          status: 'success',
+          data: {
+            base: 'inline-fallback',
+            duration_ms: 0,
+            results: fallbackResults,
+            fallback: true
+          }
+        });
+      }
+
+      // No fallback available - return original error
+      return res.status(502).json({ status: 'error', message: 'MCP run-proxy failed', error: err.message, attempted: baseCandidates });
     }
   });
 

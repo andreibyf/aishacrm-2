@@ -1,36 +1,109 @@
 # Copilot Instructions for AI Agents
 
-## Project Overview
-- **Aisha CRM:** Independent CRM system with AI Executive Assistant capabilities powered by Braid SDK
-- **Architecture:** 
-  - Frontend: Vite + React (domain-organized components)
-  - Backend: Node.js Express (210+ API endpoints, 28 categories)
-  - Database: PostgreSQL via Supabase Cloud (50+ tables, RLS enabled)
-  - AI: Braid SDK with 27+ production tools, MCP server for transcript analysis
-- **Key Differentiator:** Automatic Base44 → local backend failover ensures zero downtime
-- **Multi-Tenant:** UUID-first tenant isolation with row-level security
+## 🎯 Project Identity & Control System
 
-## 🐳 CRITICAL: Docker Development Environment
-**THIS PROJECT RUNS IN DOCKER CONTAINERS - ALWAYS REMEMBER THIS:**
+**Aisha CRM (AI-SHA: AI Super Hi-performing Assistant)** - Independent CRM with AI Executive Assistant capabilities powered by Braid SDK.
 
-- **Frontend Container:** Runs on `http://localhost:4000` (NOT 5173 or 3000)
-- **Backend Container:** Runs on `http://localhost:4001` (NOT 3001)
-- **Port Configuration:** NEVER suggest changing ports - they are fixed in Docker setup
-- **Environment Files:**
-  - Root `.env`: `VITE_AISHACRM_BACKEND_URL=http://localhost:4001`
-  - Backend `.env`: `ALLOWED_ORIGINS` includes `http://localhost:4000`, `FRONTEND_URL=http://localhost:4000`
-- **Starting Services:** Use `docker-compose up -d` to start both containers (runs in background)
-- **Code Changes:** 
-  - Frontend changes require rebuild: `docker-compose up -d --build frontend`
-  - Backend changes require rebuild: `docker-compose up -d --build backend`
-  - Rebuild both: `docker-compose up -d --build`
-- **Debugging:** Check `docker ps` for container status; use `docker logs aishacrm-frontend` or `docker logs aishacrm-backend` for output
-- **Common Mistakes to Avoid:**
-  - ❌ DON'T assume standard Vite port (5173) or Express port (3001)
-  - ❌ DON'T suggest `npm run dev` without Docker context
-  - ❌ DON'T modify port configuration without explicit user request
-  - ✅ DO verify Docker containers are running before troubleshooting
-  - ✅ DO use container ports (4000/4001) in all URLs and CORS config
+### Core Architecture
+- **Frontend:** React 18 + Vite (domain-organized components in `src/components/`)
+- **Backend:** Node.js 22 Express server (210+ API endpoints across 28 categories)
+- **Database:** PostgreSQL 15+ via Supabase Cloud (50+ tables, UUID primary keys, RLS enabled)
+- **Cache/Memory:** Dual Redis/Valkey instances (ephemeral memory + API response cache)
+- **AI:** Braid SDK with 27+ production tools, MCP server for transcript analysis
+- **Deployment:** Docker Compose with fixed external ports (frontend: 4000, backend: 4001)
+
+### Key Differentiators
+- ✅ **Automatic Failover:** Base44 → local backend (zero downtime via `src/api/fallbackFunctions.js`)
+- ✅ **UUID-First Multi-Tenancy:** Tenant isolation with RLS at database level
+- ✅ **AI-Powered Telephony:** Call flow automation with transcript analysis
+- ✅ **Campaign Worker:** Background email/call execution with advisory locking
+- ✅ **Orchestra Control:** Internal governance system prevents uncontrolled AI changes
+
+### 🚨 MANDATORY: Orchestra Control System
+**BEFORE modifying ANY code, you MUST:**
+1. Read `orchestra/PLAN.md` for current active goals and tasks
+2. Read `orchestra/ARCHITECTURE.md` for system control layers
+3. Read `orchestra/CONVENTIONS.md` for bugfix-first policy
+4. **ONLY work on tasks marked as "Active" in PLAN.md**
+5. **Default mode is BUGFIX-FIRST** - no new features unless explicitly authorized
+6. Keep changes minimal, localized, and surgical
+7. Ask user to clarify active task if PLAN.md is unclear
+
+**Violation of Orchestra rules will result in rejected changes.**
+
+
+## 🐳 Docker Development Environment (CRITICAL)
+
+**THIS PROJECT RUNS IN DOCKER CONTAINERS - NEVER FORGET THIS:**
+
+### Port Configuration (FIXED - DO NOT CHANGE)
+| Service | Container Port | Host Port | Access URL |
+|---------|----------------|-----------|------------|
+| Frontend | 3000 | 4000 | http://localhost:4000 |
+| Backend | 3001 | 4001 | http://localhost:4001 |
+| Redis (Memory) | 6379 | 6379 | redis://localhost:6379 |
+| Redis (Cache) | 6379 | 6380 | redis://localhost:6380 |
+| n8n | 5678 | 5679 | http://localhost:5679 |
+| Braid MCP | 8000 | 8000 | http://localhost:8000 |
+
+### Environment Configuration
+```bash
+# Root .env (Frontend build args)
+VITE_AISHACRM_BACKEND_URL=http://localhost:4001
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_anon_key
+
+# backend/.env (Backend runtime)
+ALLOWED_ORIGINS=http://localhost:4000,http://localhost:5173
+FRONTEND_URL=http://localhost:4000
+DATABASE_URL=postgresql://...  # Supabase connection
+REDIS_URL=redis://redis:6379   # Internal Docker network
+REDIS_CACHE_URL=redis://redis-cache:6379
+SYSTEM_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
+```
+
+### Docker Workflows
+```bash
+# Start all services (detached mode)
+docker compose up -d
+
+# Rebuild after code changes
+docker compose up -d --build                  # Both services
+docker compose up -d --build frontend         # Frontend only
+docker compose up -d --build backend          # Backend only
+
+# View logs
+docker logs aishacrm-frontend --tail=100 -f   # Follow frontend logs
+docker logs aishacrm-backend --tail=100 -f    # Follow backend logs
+
+# Check status
+docker ps                                      # List running containers
+docker compose ps                              # List project containers
+
+# Stop services
+docker compose down                            # Stop and remove
+docker compose stop                            # Stop only
+```
+
+### Common Docker Mistakes to AVOID
+- ❌ DON'T assume standard Vite port (5173) - use 4000
+- ❌ DON'T assume standard Express port (3001) - external is 4001
+- ❌ DON'T suggest `npm run dev` without Docker context
+- ❌ DON'T modify port configuration without explicit user request
+- ❌ DON'T use `host.docker.internal` for inter-container communication
+- ✅ DO verify containers are running (`docker ps`) before troubleshooting
+- ✅ DO use container ports (4000/4001) in all URLs and CORS config
+- ✅ DO use service names in Docker network (e.g., `redis`, `backend`)
+
+### Shared Docker Network
+- Network name: `aishanet` (bridge driver)
+- All services communicate via service names (not localhost)
+- Braid MCP server runs in separate compose file but joins `aishanet`
+- Backend → MCP: `http://braid-mcp-node-server:8000`
+- Backend → Redis Memory: `redis://redis:6379`
+- Backend → Redis Cache: `redis://redis-cache:6379`
+
+
 
 ## Architecture & Data Flow
 
@@ -59,11 +132,28 @@
 4. **Caching:** ApiManager caches GET requests for 30s, invalidate with `clearCache(pattern)`
 5. **AI Tools:** OpenAI Chat → `backend/routes/ai.js` → Braid executor → Backend API
 
+### Dual Redis Architecture
+```javascript
+// Ephemeral Memory (agent sessions, presence, real-time)
+REDIS_URL=redis://redis:6379
+- Used by: AI conversations, user presence, campaign locks
+- TTL: Short-lived (minutes to hours)
+- Policy: allkeys-lru with 256MB limit
+
+// Persistent Cache (API responses, aggregations)
+REDIS_CACHE_URL=redis://redis-cache:6379
+- Used by: Dashboard stats, account/lead lists, tenant resolution
+- TTL: Configurable (30s to 5min typical)
+- Policy: allkeys-lru with 512MB limit
+- Invalidation: Manual via clearCache() or TTL expiry
+```
+
 ### Why Independent Backend
 - ✅ Zero downtime when Base44 is unavailable
 - ✅ Full control over data, security, and scaling
 - ✅ Can run on-premise or own cloud infrastructure
 - ✅ No vendor lock-in or usage limits
+
 
 ## Developer Workflows
 
@@ -185,11 +275,13 @@
 The backend exposes 210+ API endpoints across 28 categories:
 - **accounts** - Account management operations
 - **activities** - Activity logging and tracking
-- **ai** - AI-powered features and assistants
-- **aicampaigns** - AI campaign automation (8 endpoints)
+- **ai** - AI-powered features and assistants (conversation management, titles, topics)
+- **aicampaigns** - AI campaign automation (8 endpoints for email/call campaigns)
 - **announcements** - System announcements and notifications
 - **apikeys** - API key management
+- **assistant** - AI assistant interactions (context, tools)
 - **audit-logs** - System audit logging
+- **auth** - Authentication and session management
 - **billing** - Billing and payment operations
 - **bizdev** - Business development tools
 - **bizdevsources** - Business development data sources
@@ -198,29 +290,39 @@ The backend exposes 210+ API endpoints across 28 categories:
 - **contacts** - Contact information handling
 - **cron** - Scheduled job management
 - **database** - Database operations (sync, archive, cleanup)
+- **documentation** - Documentation management
+- **documentationfiles** - Documentation file storage
 - **documents** - Document storage and retrieval
 - **employees** - Employee management
+- **github-issues** - GitHub integration for health reporting
 - **integrations** - Third-party integrations
 - **leads** - Lead generation and management
-- **mcp** - Model Context Protocol server
+- **mcp** - Model Context Protocol server integration
+- **memory** - Redis-backed agent memory (sessions, events, archival)
 - **metrics** - Performance metrics and analytics
 - **modulesettings** - Module configuration
 - **notes** - Note-taking and comments
 - **notifications** - User notifications
 - **opportunities** - Sales opportunity tracking
 - **permissions** - Access control and permissions
-- **reports** - Dashboard stats and data exports
+- **reports** - Dashboard stats and data exports (bundled endpoint for performance)
+- **security** - Security operations
 - **storage** - File storage operations
+- **supabaseProxy** - Supabase proxy layer
+- **synchealths** - Synchronization health monitoring
 - **system-logs** - System logging and auditing
+- **system-settings** - System configuration
 - **system** - Health checks, diagnostics, status
-- **telephony** - Phone and communication features (8 webhook endpoints)
+- **systembrandings** - System branding customization
+- **telephony** - Phone and communication features (8 webhook endpoints for Twilio, SignalWire, CallFluent, Thoughtly)
 - **tenant-integrations** - Multi-tenant integrations
+- **tenant-resolve** - Canonical tenant resolution with caching (UUID/slug normalization)
 - **tenants** - Multi-tenant management
 - **testing** - Testing utilities and endpoints
 - **users** - User account management
 - **utils** - Utility functions
 - **validation** - Data validation and duplicate detection
-- **webhooks** - Webhook handling
+- **webhooks** - Webhook handling (provider-agnostic)
 - **workflows** - Workflow automation
 - **workflowexecutions** - Workflow execution tracking
 

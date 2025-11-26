@@ -42,13 +42,17 @@ let dbConnectionType = "none";
 app.locals.ipv4FirstApplied = ipv4FirstApplied;
 app.locals.dbConnectionType = dbConnectionType;
 app.locals.resolvedDbIPv4 = null;
-app.locals.dbConfigPath = (process.env.USE_SUPABASE_PROD === 'true')
-  ? 'supabase_api'
-  : 'none';
+const useSupabaseApi = (
+  process.env.USE_SUPABASE_PROD === 'true' ||
+  process.env.USE_SUPABASE_API === 'true' ||
+  process.env.USE_SUPABASE_DEV === 'true'
+);
+
+app.locals.dbConfigPath = useSupabaseApi ? 'supabase_api' : 'none';
 
 // Initialize database using Supabase JS API (HTTP/REST, not direct PostgreSQL)
 await (async () => {
-  if (process.env.USE_SUPABASE_PROD === "true") {
+  if (useSupabaseApi) {
     // Use Supabase PostgREST API - works over HTTP, avoids IPv6 PostgreSQL issues
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
@@ -65,7 +69,7 @@ await (async () => {
     return;
   }
 
-  console.warn("⚠ No database configured - set USE_SUPABASE_PROD=true with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
+  console.warn("⚠ No database configured - set USE_SUPABASE_API=true (or USE_SUPABASE_PROD=true for legacy) with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
 })();
 
 // Initialize Redis/Valkey memory client (non-blocking for app startup)
@@ -243,6 +247,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 import { performanceLogger } from "./middleware/performanceLogger.js";
 import { productionSafetyGuard } from "./middleware/productionSafetyGuard.js";
 import { intrusionDetection } from "./middleware/intrusionDetection.js";
+import { authenticateRequest } from "./middleware/authenticate.js";
 // Build a resilient perf DB wrapper that falls back to Supabase API pool if the direct pool was ended
 const resilientPerfDb = {
   query: async (...args) => {
@@ -307,6 +312,9 @@ if (process.env.ENABLE_IDR !== 'false') {
 } else {
   console.warn("⚠ IDR middleware disabled via ENABLE_IDR=false");
 }
+
+// Attach authentication context (cookie or Supabase bearer) for downstream route auth checks
+app.use('/api', authenticateRequest);
 
 // ----------------------------------------------------------------------------
 // Canary logging middleware for BizDevSource promote diagnostics

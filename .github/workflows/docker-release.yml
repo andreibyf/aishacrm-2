@@ -66,7 +66,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            VITE_CURRENT_BRANCH=${{ matrix.service == 'frontend' && github.ref_name || '' }}
+            APP_BUILD_VERSION=${{ github.ref_name }}
+            VITE_CURRENT_BRANCH=${{ github.ref_name }}
+            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
+            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
+            VITE_AISHACRM_BACKEND_URL=${{ secrets.VITE_AISHACRM_BACKEND_URL }}
+            PUPPETEER_SKIP_DOWNLOAD=1
+            USE_SYSTEM_CHROMIUM=false
 
       - name: Image summary
         run: |
