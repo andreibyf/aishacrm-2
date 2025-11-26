@@ -2195,6 +2195,24 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                   throw new Error(`Backend login failed: ${loginResponse.status}`);
                 }
                 
+                const loginData = await loginResponse.json();
+                const tenant_id = loginData.data?.user?.tenant_id;
+                
+                // Clear backend dashboard cache to ensure fresh data after login
+                if (tenant_id) {
+                  try {
+                    await fetch(`${backendUrl}/api/reports/clear-cache`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      credentials: 'include',
+                      body: JSON.stringify({ tenant_id })
+                    });
+                    console.log("[Login] Dashboard cache cleared for tenant:", tenant_id);
+                  } catch (cacheErr) {
+                    console.warn("[Login] Failed to clear cache (non-critical):", cacheErr);
+                  }
+                }
+                
                 console.log("[Login] Backend login successful, reloading...");
                 window.location.reload();
               } catch (error) {
