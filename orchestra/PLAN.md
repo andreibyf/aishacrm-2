@@ -505,3 +505,35 @@ When using Claude, Copilot, or any AI assistant:
    - List the files you plan to touch.
    - Wait for human approval before changing code.
    - Keep diffs minimal and within scope.
+
+---
+
+## Backlog
+
+### FEAT-NOTIFICATIONS-001 – Enable notifications feature in production
+
+Type: feature  
+Status: Backlog  
+Area: Notifications / Database  
+Priority: Low
+
+Goal:  
+Enable the in-app notifications feature (Bell icon panel) in production by creating the required database table and RLS policies.
+
+Context:
+- Notifications table exists in migrations but not yet created in production Supabase database
+- Feature currently gracefully fails with suppressed console warnings (v1.0.79)
+- Non-critical feature - app works fine without it
+
+Steps:
+1. Run migration `001_init.sql` (lines 76-85) to create notifications table in production Supabase
+2. Add `created_date` column and sync trigger (from migration 002)
+3. Enable RLS policies via migration `061_consolidate_rls_notifications.sql`
+4. Verify table exists in Supabase Table Editor
+5. Test Bell icon functionality in production app
+
+Scope:
+- Database only (no code changes required)
+- Migrations already exist in `backend/migrations/`
+- Feature code already deployed and working in v1.0.79+
+

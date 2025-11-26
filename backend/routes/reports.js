@@ -114,6 +114,33 @@ export default function createReportRoutes(_pgPool) {
   const bundleCache = new Map();
   const BUNDLE_TTL_MS = 60 * 1000; // 60 seconds
 
+  // POST /api/reports/clear-cache - Clear dashboard bundle cache (admin only)
+  router.post('/clear-cache', async (req, res) => {
+    try {
+      const { tenant_id } = req.body;
+      
+      if (tenant_id) {
+        // Clear specific tenant cache
+        bundleCache.delete(tenant_id);
+        bundleCache.delete('GLOBAL');
+      } else {
+        // Clear all cache
+        bundleCache.clear();
+      }
+      
+      res.json({
+        status: 'success',
+        message: `Cache cleared${tenant_id ? ' for tenant ' + tenant_id : ' (all tenants)'}`,
+        data: { cleared: true, remaining: bundleCache.size }
+      });
+    } catch (error) {
+      res.status(500).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+  });
+
   /**
    * @openapi
    * /api/reports/dashboard-stats:
