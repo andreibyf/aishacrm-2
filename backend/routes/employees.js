@@ -8,6 +8,17 @@ import express from 'express';
 export default function createEmployeeRoutes(_pgPool) {
   const router = express.Router();
 
+  // Helper function to expand metadata fields to top-level properties
+  const expandMetadata = (record) => {
+    if (!record) return record;
+    const { metadata = {}, ...rest } = record;
+    return {
+      ...rest,
+      ...metadata,
+      metadata,
+    };
+  };
+
   /**
    * @openapi
    * /api/employees:
@@ -71,9 +82,11 @@ export default function createEmployeeRoutes(_pgPool) {
 
         if (error) throw new Error(error.message);
 
+        const employees = (data || []).map(expandMetadata);
+
         return res.json({
           status: 'success',
-          data: data || [],
+          data: employees,
         });
       }
 
@@ -98,10 +111,12 @@ export default function createEmployeeRoutes(_pgPool) {
 
       if (error) throw new Error(error.message);
 
+      const employees = (data || []).map(expandMetadata);
+
       res.json({
         status: 'success',
         data: {
-          employees: data || [],
+          employees,
           total: typeof count === 'number' ? count : (data ? data.length : 0),
           limit: lim,
           offset: off,
@@ -179,9 +194,11 @@ export default function createEmployeeRoutes(_pgPool) {
         return res.status(404).json({ status: 'error', message: 'Employee not found' });
       }
 
+      const employee = expandMetadata(data);
+
       res.json({
         status: 'success',
-        data: { employee: data },
+        data: { employee },
       });
     } catch (error) {
       console.error('Error getting employee:', error);
@@ -307,10 +324,12 @@ export default function createEmployeeRoutes(_pgPool) {
 
       if (error) throw new Error(error.message);
 
+      const employee = expandMetadata(data);
+
       res.json({
         status: 'success',
         message: 'Employee created',
-        data: { employee: data },
+        data: { employee },
       });
     } catch (error) {
       console.error('Error creating employee:', error);
@@ -439,10 +458,12 @@ export default function createEmployeeRoutes(_pgPool) {
         return res.status(404).json({ status: 'error', message: 'Employee not found' });
       }
 
+      const employee = expandMetadata(data);
+
       res.json({
         status: 'success',
         message: 'Employee updated',
-        data: { employee: data },
+        data: { employee },
       });
     } catch (error) {
       console.error('Error updating employee:', error);
@@ -511,10 +532,12 @@ export default function createEmployeeRoutes(_pgPool) {
         return res.status(404).json({ status: 'error', message: 'Employee not found' });
       }
 
+      const employee = expandMetadata(data);
+
       res.json({
         status: 'success',
         message: 'Employee deleted',
-        data: { employee: data },
+        data: { employee },
       });
     } catch (error) {
       console.error('Error deleting employee:', error);
