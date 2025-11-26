@@ -119,21 +119,26 @@ export default function createReportRoutes(_pgPool) {
     try {
       const { tenant_id } = req.body;
       
+      console.log('[Reports] clear-cache called:', { tenant_id, cacheSize: bundleCache.size, keys: Array.from(bundleCache.keys()) });
+      
       if (tenant_id) {
         // Clear specific tenant cache
-        bundleCache.delete(tenant_id);
-        bundleCache.delete('GLOBAL');
+        const deletedTenant = bundleCache.delete(tenant_id);
+        const deletedGlobal = bundleCache.delete('GLOBAL');
+        console.log('[Reports] Deleted cache entries:', { tenant_id, deletedTenant, deletedGlobal });
       } else {
         // Clear all cache
         bundleCache.clear();
+        console.log('[Reports] Cleared all cache');
       }
       
       res.json({
         status: 'success',
         message: `Cache cleared${tenant_id ? ' for tenant ' + tenant_id : ' (all tenants)'}`,
-        data: { cleared: true, remaining: bundleCache.size }
+        data: { cleared: true, remaining: bundleCache.size, clearedKeys: tenant_id ? [tenant_id, 'GLOBAL'] : 'all' }
       });
     } catch (error) {
+      console.error('[Reports] clear-cache error:', error);
       res.status(500).json({
         status: 'error',
         message: error.message

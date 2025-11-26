@@ -2198,19 +2198,28 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 const loginData = await loginResponse.json();
                 const tenant_id = loginData.data?.user?.tenant_id;
                 
+                console.log("[Login] Login response data:", { 
+                  tenant_id, 
+                  hasUser: !!loginData.data?.user,
+                  userKeys: Object.keys(loginData.data?.user || {})
+                });
+                
                 // Clear backend dashboard cache to ensure fresh data after login
                 if (tenant_id) {
                   try {
-                    await fetch(`${backendUrl}/api/reports/clear-cache`, {
+                    const cacheResponse = await fetch(`${backendUrl}/api/reports/clear-cache`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       credentials: 'include',
                       body: JSON.stringify({ tenant_id })
                     });
-                    console.log("[Login] Dashboard cache cleared for tenant:", tenant_id);
+                    const cacheResult = await cacheResponse.json();
+                    console.log("[Login] Dashboard cache cleared:", cacheResult);
                   } catch (cacheErr) {
                     console.warn("[Login] Failed to clear cache (non-critical):", cacheErr);
                   }
+                } else {
+                  console.warn("[Login] No tenant_id found in login response, skipping cache clear");
                 }
                 
                 console.log("[Login] Backend login successful, reloading...");
