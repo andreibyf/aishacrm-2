@@ -12,12 +12,38 @@
 - **AI:** Braid SDK with 27+ production tools, MCP server for transcript analysis
 - **Deployment:** Docker Compose with fixed external ports (frontend: 4000, backend: 4001)
 
+### 🚀 CRITICAL: Production Deployment Model
+**NEVER suggest pulling Git repository to production server - this is WRONG:**
+- ❌ **DON'T** suggest `git pull` on production server
+- ❌ **DON'T** suggest cloning repo to production
+- ❌ **DON'T** assume code changes need manual deployment
+
+**Production deployment is FULLY AUTOMATED via GitHub Actions:**
+1. Developer pushes version tag (e.g., `git push origin v1.0.76`)
+2. GitHub Actions workflow (`.github/workflows/docker-release.yml`) triggers automatically
+3. Images are built with version baked in and pushed to GHCR
+4. Workflow SSHs to production VPS and deploys new images
+5. Version is automatically written to production `.env` file
+6. Containers restart with new code - **ZERO manual intervention**
+
+**Version Management (Automatic):**
+- `APP_BUILD_VERSION` is baked into Docker image at build time (`/app/VERSION` file)
+- GitHub Actions writes version to production `.env` during deployment
+- Frontend entrypoint reads version from `.env` or falls back to `/app/VERSION`
+- **NEVER manually set version** - it's fully automated in CI/CD pipeline
+
+**Production server (`beige-koala-18294`) only contains:**
+- `/opt/aishacrm/docker-compose.prod.yml` - Production compose file
+- `/opt/aishacrm/.env` - Runtime environment variables (auto-updated by CI)
+- **NO source code, NO Git repository, NO build artifacts**
+
 ### Key Differentiators
 - ✅ **Automatic Failover:** Base44 → local backend (zero downtime via `src/api/fallbackFunctions.js`)
 - ✅ **UUID-First Multi-Tenancy:** Tenant isolation with RLS at database level
 - ✅ **AI-Powered Telephony:** Call flow automation with transcript analysis
 - ✅ **Campaign Worker:** Background email/call execution with advisory locking
 - ✅ **Orchestra Control:** Internal governance system prevents uncontrolled AI changes
+- ✅ **Automated CI/CD:** Tag-triggered builds, GHCR registry, automated VPS deployment
 
 ### 🚨 MANDATORY: Orchestra Control System
 **BEFORE modifying ANY code, you MUST:**
