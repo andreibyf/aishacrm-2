@@ -90,22 +90,26 @@ jobs:
     steps:
       - name: Deploy to Production VPS
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          VERSION_TAG: ${{ github.ref_name }}
         with:
           host: ${{ secrets.PROD_VPS_HOST }}
           username: ${{ secrets.PROD_VPS_USER }}
           key: ${{ secrets.PROD_VPS_SSH_KEY }}
           port: ${{ secrets.PROD_VPS_PORT || 22 }}
+          envs: VERSION_TAG
           script: |
             cd /opt/aishacrm
+            echo "Deploying version: $VERSION_TAG"
             # Pull specific version tags
-            docker pull ghcr.io/andreibyf/aishacrm-2-frontend:${{ github.ref_name }}
-            docker pull ghcr.io/andreibyf/aishacrm-2-backend:${{ github.ref_name }}
+            docker pull ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG
+            docker pull ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG
             # Tag as latest locally
-            docker tag ghcr.io/andreibyf/aishacrm-2-frontend:${{ github.ref_name }} ghcr.io/andreibyf/aishacrm-2-frontend:latest
-            docker tag ghcr.io/andreibyf/aishacrm-2-backend:${{ github.ref_name }} ghcr.io/andreibyf/aishacrm-2-backend:latest
+            docker tag ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-frontend:latest
+            docker tag ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-backend:latest
             # Restart services
             docker compose -f docker-compose.prod.yml up -d frontend backend
-            echo "Deployment completed: ${{ github.ref_name }}"
+            echo "Deployment completed: $VERSION_TAG"
             # Verify deployment
             sleep 3
             docker exec aishacrm-frontend cat /app/dist/env-config.js | grep APP_BUILD_VERSION || true
