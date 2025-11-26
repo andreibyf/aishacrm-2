@@ -1,14 +1,14 @@
 #!/usr/bin/env sh
 set -e
 
-# Auto-detect version from Docker image label if APP_BUILD_VERSION not set
-if [ -z "$APP_BUILD_VERSION" ] || [ "$APP_BUILD_VERSION" = "dev-local" ]; then
+# Auto-detect version from Docker image label if VITE_APP_BUILD_VERSION not set
+if [ -z "$VITE_APP_BUILD_VERSION" ] || [ "$VITE_APP_BUILD_VERSION" = "dev-local" ]; then
   # Try to extract version from image metadata (set during GitHub Actions build)
   IMAGE_VERSION=$(cat /app/VERSION 2>/dev/null || echo "")
   if [ -n "$IMAGE_VERSION" ]; then
-    APP_BUILD_VERSION="$IMAGE_VERSION"
+    VITE_APP_BUILD_VERSION="$IMAGE_VERSION"
   else
-    APP_BUILD_VERSION="dev-local"
+    VITE_APP_BUILD_VERSION="dev-local"
   fi
 fi
 
@@ -22,7 +22,7 @@ window._env_ = {
   VITE_CURRENT_BRANCH: "${VITE_CURRENT_BRANCH:-main}",
   VITE_SYSTEM_TENANT_ID: "${VITE_SYSTEM_TENANT_ID}",
   VITE_USER_HEARTBEAT_INTERVAL_MS: "${VITE_USER_HEARTBEAT_INTERVAL_MS:-90000}",
-  APP_BUILD_VERSION: "${APP_BUILD_VERSION}"
+  VITE_APP_BUILD_VERSION: "${VITE_APP_BUILD_VERSION}"
 };
 EOF
 

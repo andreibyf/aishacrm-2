@@ -106,7 +106,7 @@ services:
       - VITE_CURRENT_BRANCH=${VITE_CURRENT_BRANCH:-main}
       - VITE_SYSTEM_TENANT_ID=${VITE_SYSTEM_TENANT_ID}
       - VITE_USER_HEARTBEAT_INTERVAL_MS=${VITE_USER_HEARTBEAT_INTERVAL_MS:-90000}
-      - APP_BUILD_VERSION=${APP_BUILD_VERSION:-dev-local}
+      - VITE_APP_BUILD_VERSION=${VITE_APP_BUILD_VERSION:-dev-local}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
       interval: 30s

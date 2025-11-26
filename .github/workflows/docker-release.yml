@@ -66,7 +66,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            APP_BUILD_VERSION=${{ github.ref_name }}
+            VITE_APP_BUILD_VERSION=${{ github.ref_name }}
             VITE_CURRENT_BRANCH=${{ github.ref_name }}
             VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
             VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
@@ -108,17 +108,17 @@ jobs:
             docker tag ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-frontend:latest
             docker tag ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-backend:latest
             # Write version to .env for runtime injection
-            if grep -q "^APP_BUILD_VERSION=" .env 2>/dev/null; then
-              sed -i "s/^APP_BUILD_VERSION=.*/APP_BUILD_VERSION=$VERSION_TAG/" .env
+            if grep -q "^VITE_APP_BUILD_VERSION=" .env 2>/dev/null; then
+              sed -i "s/^VITE_APP_BUILD_VERSION=.*/VITE_APP_BUILD_VERSION=$VERSION_TAG/" .env
             else
-              echo "APP_BUILD_VERSION=$VERSION_TAG" >> .env
+              echo "VITE_APP_BUILD_VERSION=$VERSION_TAG" >> .env
             fi
             # Restart services with version info
             docker compose -f docker-compose.prod.yml up -d frontend backend
             echo "Deployment completed: $VERSION_TAG"
             # Verify deployment
             sleep 3
-            docker exec aishacrm-frontend cat /app/dist/env-config.js | grep APP_BUILD_VERSION || true
+            docker exec aishacrm-frontend cat /app/dist/env-config.js | grep VITE_APP_BUILD_VERSION || true
       
       - name: Deployment summary
         run: |

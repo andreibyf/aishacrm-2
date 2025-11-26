@@ -49,8 +49,8 @@ COPY --from=builder /app/dist ./dist
 RUN rm -f /app/dist/env-config.js
 
 # Bake build version into image (will be picked up by entrypoint if env var not set)
-ARG APP_BUILD_VERSION=dev-local
-RUN echo "${APP_BUILD_VERSION}" > /app/VERSION
+ARG VITE_APP_BUILD_VERSION=dev-local
+RUN echo "${VITE_APP_BUILD_VERSION}" > /app/VERSION
 
 # Copy frontend entrypoint
 COPY frontend-entrypoint.sh /entrypoint.sh
