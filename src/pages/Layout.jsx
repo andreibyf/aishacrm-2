@@ -1722,6 +1722,15 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         }
       }
 
+      // Clear ApiManager cache to prevent stale data on next login
+      try {
+        if (clearCache) {
+          clearCache(); // Clear all cached API requests
+        }
+      } catch (e) {
+        console.warn("API cache clear failed on logout:", e);
+      }
+
       // Explicitly sign out from Supabase Auth (clears local auth session & tokens)
       try {
         // Prefer centralized User entity method for consistency

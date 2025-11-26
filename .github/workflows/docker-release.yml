@@ -113,8 +113,8 @@ jobs:
             else
               echo "VITE_APP_BUILD_VERSION=$VERSION_TAG" >> .env
             fi
-            # Restart services with version info
-            docker compose -f docker-compose.prod.yml up -d frontend backend
+            # Restart services with version info (force recreate to detect :latest image changes)
+            docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend
             echo "Deployment completed: $VERSION_TAG"
             # Verify deployment
             sleep 3
