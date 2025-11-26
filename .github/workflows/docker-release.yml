@@ -49,7 +49,7 @@ jobs:
             type=semver,pattern={{major}}
             type=ref,event=tag
             type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.description=Aisha CRM ${{ matrix.service }}
