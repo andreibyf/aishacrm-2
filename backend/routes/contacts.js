@@ -325,9 +325,13 @@ export default function createContactRoutes(_pgPool) {
         });
       }
 
+      // Store title, department, description, and other fields in metadata since they may not be direct columns
       const mergedMetadata = {
         ...(incomingMetadata || {}),
         ...otherFields,
+        ...(title !== undefined && title !== null ? { title } : {}),
+        ...(department !== undefined && department !== null ? { department } : {}),
+        ...(description !== undefined && description !== null ? { description } : {}),
       };
 
       const nowIso = new Date().toISOString();
@@ -341,9 +345,6 @@ export default function createContactRoutes(_pgPool) {
           last_name,
           email,
           phone,
-          title: title || null,
-          department: department || null,
-          description: description || null,
           account_id: account_id || null,
           status,
           metadata: mergedMetadata,
@@ -494,11 +495,15 @@ export default function createContactRoutes(_pgPool) {
       }
       if (fetchErr) throw new Error(fetchErr.message);
 
+      // Store title, department, description in metadata since they may not be direct columns
       const currentMetadata = current?.metadata || {};
       const updatedMetadata = {
         ...currentMetadata,
         ...(metadata || {}),
         ...otherFields,
+        ...(title !== undefined ? { title } : {}),
+        ...(department !== undefined ? { department } : {}),
+        ...(description !== undefined ? { description } : {}),
       };
 
       const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
@@ -506,9 +511,6 @@ export default function createContactRoutes(_pgPool) {
       if (last_name !== undefined) payload.last_name = last_name;
       if (email !== undefined) payload.email = email;
       if (phone !== undefined) payload.phone = phone;
-      if (title !== undefined) payload.title = title;
-      if (department !== undefined) payload.department = department;
-      if (description !== undefined) payload.description = description;
       if (account_id !== undefined) payload.account_id = account_id;
       if (status !== undefined) payload.status = status;
 

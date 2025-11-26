@@ -255,9 +255,12 @@ export default function createLeadRoutes(_pgPool) {
         });
       }
 
+      // Store title and description in metadata since they may not be direct columns
       const combinedMetadata = {
         ...(metadata || {}),
-        ...otherFields
+        ...otherFields,
+        ...(title !== undefined && title !== null ? { title } : {}),
+        ...(description !== undefined && description !== null ? { description } : {}),
       };
 
       const nowIso = new Date().toISOString();
@@ -271,8 +274,6 @@ export default function createLeadRoutes(_pgPool) {
           last_name,
           email,
           phone,
-          title: title || null,
-          description: description || null,
           company,
           job_title,
           status,
@@ -428,11 +429,14 @@ export default function createLeadRoutes(_pgPool) {
       }
       if (fetchErr) throw new Error(fetchErr.message);
 
+      // Store title and description in metadata since they may not be direct columns
       const currentMetadata = current?.metadata || {};
       const updatedMetadata = {
         ...currentMetadata,
         ...(metadata || {}),
         ...otherFields,
+        ...(title !== undefined ? { title } : {}),
+        ...(description !== undefined ? { description } : {}),
       };
 
       const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
@@ -440,8 +444,6 @@ export default function createLeadRoutes(_pgPool) {
       if (last_name !== undefined) payload.last_name = last_name;
       if (email !== undefined) payload.email = email;
       if (phone !== undefined) payload.phone = phone;
-      if (title !== undefined) payload.title = title;
-      if (description !== undefined) payload.description = description;
       if (company !== undefined) payload.company = company;
       if (job_title !== undefined) payload.job_title = job_title;
       if (status !== undefined) payload.status = status;

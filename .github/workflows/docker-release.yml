@@ -49,7 +49,7 @@ jobs:
             type=semver,pattern={{major}}
             type=ref,event=tag
             type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.description=Aisha CRM ${{ matrix.service }}
@@ -66,11 +66,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            VITE_CURRENT_BRANCH=${{ matrix.service == 'frontend' && github.ref_name || '' }}
-            # Backend slimming: skip Puppeteer download by default; opt-in via image rebuild
+            APP_BUILD_VERSION=${{ github.ref_name }}
+            VITE_CURRENT_BRANCH=${{ github.ref_name }}
+            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
+            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
+            VITE_AISHACRM_BACKEND_URL=${{ secrets.VITE_AISHACRM_BACKEND_URL }}
             PUPPETEER_SKIP_DOWNLOAD=1
             USE_SYSTEM_CHROMIUM=false
-            APP_BUILD_VERSION=${{ github.ref_name }}
 
       - name: Image summary
         run: |
@@ -79,3 +81,31 @@ jobs:
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  deploy-production:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - name: Deploy to Production VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PROD_VPS_HOST }}
+          username: ${{ secrets.PROD_VPS_USER }}
+          key: ${{ secrets.PROD_VPS_SSH_KEY }}
+          port: ${{ secrets.PROD_VPS_PORT || 22 }}
+          script: |
+            cd /opt/aishacrm
+            docker compose -f docker-compose.prod.yml pull frontend backend
+            docker compose -f docker-compose.prod.yml up -d frontend backend
+            echo "Deployment completed: ${{ github.ref_name }}"
+            docker exec aishacrm-frontend cat /app/dist/env-config.js | grep APP_BUILD_VERSION || true
+      
+      - name: Deployment summary
+        run: |
+          echo "### 🚀 Deployed to Production VPS" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Host**: ${{ secrets.PROD_VPS_HOST }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Time**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY

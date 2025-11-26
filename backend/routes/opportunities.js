@@ -358,9 +358,13 @@ export default function createOpportunityRoutes(_pgPool) {
         });
       }
 
+      // Store description, expected_revenue, next_step in metadata since they may not be direct columns
       const combinedMetadata = {
         ...(metadata || {}),
-        ...otherFields
+        ...otherFields,
+        ...(description !== undefined && description !== null ? { description } : {}),
+        ...(expected_revenue !== undefined && expected_revenue !== null ? { expected_revenue } : {}),
+        ...(next_step !== undefined && next_step !== null ? { next_step } : {}),
       };
 
       const nowIso = new Date().toISOString();
@@ -371,9 +375,6 @@ export default function createOpportunityRoutes(_pgPool) {
         .insert([{
           tenant_id,
           name,
-          description: description || null,
-          expected_revenue: expected_revenue || null,
-          next_step: next_step || null,
           account_id: account_id || null,
           contact_id: contact_id || null,
           amount: amount || 0,
@@ -429,19 +430,20 @@ export default function createOpportunityRoutes(_pgPool) {
       }
       if (fetchErr) throw new Error(fetchErr.message);
 
+      // Store description, expected_revenue, next_step in metadata since they may not be direct columns
       const currentMetadata = before?.metadata || {};
       const updatedMetadata = {
         ...currentMetadata,
         ...(metadata || {}),
         ...otherFields,
+        ...(description !== undefined ? { description } : {}),
+        ...(expected_revenue !== undefined ? { expected_revenue } : {}),
+        ...(next_step !== undefined ? { next_step } : {}),
       };
       const normalizedStage = typeof stage === 'string' ? stage.toLowerCase() : null;
       
       const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
       if (name !== undefined) payload.name = name;
-      if (description !== undefined) payload.description = description;
-      if (expected_revenue !== undefined) payload.expected_revenue = expected_revenue;
-      if (next_step !== undefined) payload.next_step = next_step;
       if (account_id !== undefined) payload.account_id = account_id;
       if (contact_id !== undefined) payload.contact_id = contact_id;
       if (amount !== undefined) payload.amount = amount;

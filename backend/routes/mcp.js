@@ -1003,7 +1003,7 @@ export default function createMCPRoutes(_pgPool) {
       'http://braid-mcp:8000/health',
       // Host gateway (works from inside Docker to host-mapped port)
       'http://host.docker.internal:8000/health',
-      // Localhost (works when backend runs on host, not in Docker)
+      // Direct localhost fallback (works when MCP server runs on same host)
       'http://localhost:8000/health',
       'http://127.0.0.1:8000/health',
     ].filter(Boolean);
@@ -1013,12 +1013,10 @@ export default function createMCPRoutes(_pgPool) {
       new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))
     ]);
 
+    // Track individual errors for better diagnostics
+    const errors = [];
     const attempts = candidates.map(url => (async () => {
       const t0 = performance.now ? performance.now() : Date.now();
-      const resp = await withTimeout(fetch(url, { method: 'GET' }), 2000);
-      const dt = Math.round((performance.now ? performance.now() : Date.now()) - t0);
-      if (!resp.ok) throw new Error('bad_status_' + resp.status);
-      let data;
       try {
         data = await resp.json();
       } catch {
@@ -1027,7 +1025,6 @@ export default function createMCPRoutes(_pgPool) {
       if (!data || (data.status !== 'ok' && data.status !== 'healthy')) {
         throw new Error('invalid_health_payload');
       }
-      return { url, latency_ms: dt, data };
     })());
 
     try {
@@ -1049,25 +1046,134 @@ export default function createMCPRoutes(_pgPool) {
         status: 'success',
         data: {
           reachable: false,
-          error: 'MCP server not running or not reachable. Start the Braid MCP server (cd braid-mcp-node-server && docker-compose up -d) or configure MCP_NODE_HEALTH_URL environment variable.',
-          details: errorsDetails,
+          error: err.message || 'unreachable',
           attempted: candidates.length,
-          candidates: candidates
+          diagnostics: {
+            candidates: candidates,
+            errors: errors,
+            hint: 'Set MCP_NODE_HEALTH_URL env var or ensure one of the default endpoints is reachable'
+          }
         }
       });
     }
   });
 
+  // User-Agent for Wikipedia API requests (required by MediaWiki API)
+  const WIKIPEDIA_USER_AGENT = 'AishaCRM/1.0 (backend-fallback)';
+
+  // Inline fallback handler for web adapter actions when MCP server is unreachable
+  const handleWebActionFallback = async (action) => {
+    const resource = action.resource || {};
+    const kind = (resource.kind || '').toLowerCase();
+    const payload = action.payload || {};
+
+    if (kind === 'wikipedia-search' || kind === 'search_wikipedia') {
+      const q = String(payload.q || payload.query || '').trim();
+      if (!q) {
+        return {
+          actionId: action.id,
+          status: 'error',
+          resource: action.resource,
+          errorCode: 'MISSING_QUERY',
+          errorMessage: "Query parameter 'q' or 'query' is required",
+        };
+      }
+      try {
+        const resp = await fetch(
+          `https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=5&srsearch=${encodeURIComponent(q)}`,
+          {
+            headers: {
+              'User-Agent': WIKIPEDIA_USER_AGENT,
+              'Accept': 'application/json'
+            }
+          }
+        );
+        const json = await resp.json();
+        return {
+          actionId: action.id,
+          status: 'success',
+          resource: action.resource,
+          data: json?.query?.search || [],
+        };
+      } catch (err) {
+        return {
+          actionId: action.id,
+          status: 'error',
+          resource: action.resource,
+          errorCode: 'WIKIPEDIA_API_ERROR',
+          errorMessage: err?.message || String(err),
+        };
+      }
+    }
+
+    if (kind === 'wikipedia-page' || kind === 'get_wikipedia_page') {
+      const pageid = String(payload.pageid || payload.pageId || '').trim();
+      if (!pageid) {
+        return {
+          actionId: action.id,
+          status: 'error',
+          resource: action.resource,
+          errorCode: 'MISSING_PAGEID',
+          errorMessage: "Parameter 'pageid' is required",
+        };
+      }
+      try {
+        const resp = await fetch(
+          `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&format=json&pageids=${encodeURIComponent(pageid)}`,
+          {
+            headers: {
+              'User-Agent': WIKIPEDIA_USER_AGENT,
+              'Accept': 'application/json'
+            }
+          }
+        );
+        const json = await resp.json();
+        return {
+          actionId: action.id,
+          status: 'success',
+          resource: action.resource,
+          data: json?.query?.pages?.[pageid] || null,
+        };
+      } catch (err) {
+        return {
+          actionId: action.id,
+          status: 'error',
+          resource: action.resource,
+          errorCode: 'WIKIPEDIA_API_ERROR',
+          errorMessage: err?.message || String(err),
+        };
+      }
+    }
+
+    return null; // Not a web action we can handle
+  };
+
   // POST /api/mcp/run-proxy - Forward MCP action envelope to Braid MCP server from backend (browser-safe)
   router.post('/run-proxy', async (req, res) => {
     const envelope = req.body || {};
+    
+    // Validate request envelope
+    if (!envelope || !envelope.requestId || !envelope.actor || !Array.isArray(envelope.actions)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Invalid request envelope: missing requestId, actor, or actions array',
+        details: {
+          hasRequestId: !!envelope?.requestId,
+          hasActor: !!envelope?.actor,
+          hasActions: Array.isArray(envelope?.actions),
+        }
+      });
+    }
+    
     // Reuse candidates from health proxy for base URL discovery
     const healthCandidates = [
       process.env.MCP_NODE_HEALTH_URL,
       'http://braid-mcp-node-server:8000/health',
       'http://braid-mcp-1:8000/health',
       'http://braid-mcp:8000/health',
+      // Host gateway (works from inside Docker to host-mapped port)
       'http://host.docker.internal:8000/health',
+      // Direct localhost fallback (works when MCP server runs on same host)
       'http://localhost:8000/health',
       'http://127.0.0.1:8000/health',
     ].filter(Boolean);
@@ -1078,6 +1184,9 @@ export default function createMCPRoutes(_pgPool) {
       p,
       new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))
     ]);
+    
+    // Track individual errors for better diagnostics
+    const errors = [];
     const attempts = baseCandidates.map(base => (async () => {
       const url = base.replace(/\/$/, '') + '/mcp/run';
       const t0 = performance.now ? performance.now() : Date.now();
@@ -1097,14 +1206,43 @@ export default function createMCPRoutes(_pgPool) {
       const first = await Promise.any(attempts);
       return res.json({ status: 'success', data: { base: first.base, duration_ms: first.duration_ms, results: first.response.results } });
     } catch (err) {
-      // Collect all errors for debugging
-      const errorsDetails = err.errors ? err.errors.map(e => e.message).join(', ') : (err.message || 'unreachable');
-      return res.status(502).json({ 
-        status: 'error', 
-        message: 'MCP server not running or not reachable. Start the Braid MCP server or check network configuration.', 
-        error: errorsDetails, 
-        attempted: baseCandidates 
-      });
+      // MCP server unreachable - try inline fallback for supported adapters
+      const actions = Array.isArray(envelope.actions) ? envelope.actions : [];
+      const fallbackResults = [];
+      let allHandled = true;
+
+      for (const action of actions) {
+        const system = (action.resource?.system || '').toLowerCase();
+        
+        if (system === 'web') {
+          const result = await handleWebActionFallback(action);
+          if (result) {
+            fallbackResults.push(result);
+          } else {
+            allHandled = false;
+            break;
+          }
+        } else {
+          // Cannot handle this adapter inline
+          allHandled = false;
+          break;
+        }
+      }
+
+      if (allHandled && fallbackResults.length > 0) {
+        return res.json({
+          status: 'success',
+          data: {
+            base: 'inline-fallback',
+            duration_ms: 0,
+            results: fallbackResults,
+            fallback: true
+          }
+        });
+      }
+
+      // No fallback available - return original error
+      return res.status(502).json({ status: 'error', message: 'MCP run-proxy failed', error: err.message, attempted: baseCandidates });
     }
   });
 

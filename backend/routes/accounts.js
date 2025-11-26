@@ -178,7 +178,7 @@ export default function createAccountRoutes(_pgPool) {
   router.post("/", invalidateCache('accounts'), async (req, res) => {
     try {
       const { tenant_id, name, type, industry, website, phone, email, description, 
-              annual_revenue, employee_count, street, city, state, zip, country } = req.body;
+              annual_revenue, employee_count, street, city, state, zip, country, metadata, ...otherFields } = req.body;
 
       if (!tenant_id) {
         return res.status(400).json({
@@ -194,6 +194,21 @@ export default function createAccountRoutes(_pgPool) {
         });
       }
 
+      // Store phone, email, description, employee_count, address fields in metadata since they may not be direct columns
+      const combinedMetadata = {
+        ...(metadata || {}),
+        ...otherFields,
+        ...(phone !== undefined && phone !== null ? { phone } : {}),
+        ...(email !== undefined && email !== null ? { email } : {}),
+        ...(description !== undefined && description !== null ? { description } : {}),
+        ...(employee_count !== undefined && employee_count !== null ? { employee_count } : {}),
+        ...(street !== undefined && street !== null ? { street } : {}),
+        ...(city !== undefined && city !== null ? { city } : {}),
+        ...(state !== undefined && state !== null ? { state } : {}),
+        ...(zip !== undefined && zip !== null ? { zip } : {}),
+        ...(country !== undefined && country !== null ? { country } : {}),
+      };
+
       const nowIso = new Date().toISOString();
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
@@ -205,16 +220,8 @@ export default function createAccountRoutes(_pgPool) {
           type,
           industry,
           website,
-          phone: phone || null,
-          email: email || null,
-          description: description || null,
           annual_revenue: annual_revenue || null,
-          employee_count: employee_count || null,
-          street: street || null,
-          city: city || null,
-          state: state || null,
-          zip: zip || null,
-          country: country || null,
+          metadata: combinedMetadata,
           created_at: nowIso,
           updated_at: nowIso,
         }])
@@ -362,11 +369,21 @@ export default function createAccountRoutes(_pgPool) {
       }
       if (fetchErr) throw new Error(fetchErr.message);
 
+      // Store phone, email, description, employee_count, address fields in metadata since they may not be direct columns
       const currentMetadata = current?.metadata || {};
       const updatedMetadata = {
         ...currentMetadata,
         ...(metadata || {}),
         ...otherFields,
+        ...(phone !== undefined ? { phone } : {}),
+        ...(email !== undefined ? { email } : {}),
+        ...(description !== undefined ? { description } : {}),
+        ...(employee_count !== undefined ? { employee_count } : {}),
+        ...(street !== undefined ? { street } : {}),
+        ...(city !== undefined ? { city } : {}),
+        ...(state !== undefined ? { state } : {}),
+        ...(zip !== undefined ? { zip } : {}),
+        ...(country !== undefined ? { country } : {}),
       };
 
       const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
@@ -374,16 +391,7 @@ export default function createAccountRoutes(_pgPool) {
       if (type !== undefined) payload.type = type;
       if (industry !== undefined) payload.industry = industry;
       if (website !== undefined) payload.website = website;
-      if (phone !== undefined) payload.phone = phone;
-      if (email !== undefined) payload.email = email;
-      if (description !== undefined) payload.description = description;
       if (annual_revenue !== undefined) payload.annual_revenue = annual_revenue;
-      if (employee_count !== undefined) payload.employee_count = employee_count;
-      if (street !== undefined) payload.street = street;
-      if (city !== undefined) payload.city = city;
-      if (state !== undefined) payload.state = state;
-      if (zip !== undefined) payload.zip = zip;
-      if (country !== undefined) payload.country = country;
 
       const { data, error } = await supabase
         .from('accounts')
