@@ -107,8 +107,12 @@ jobs:
             # Tag as latest locally
             docker tag ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-frontend:latest
             docker tag ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-backend:latest
-            # Export version for docker compose environment substitution
-            export APP_BUILD_VERSION=$VERSION_TAG
+            # Write version to .env for runtime injection
+            if grep -q "^APP_BUILD_VERSION=" .env 2>/dev/null; then
+              sed -i "s/^APP_BUILD_VERSION=.*/APP_BUILD_VERSION=$VERSION_TAG/" .env
+            else
+              echo "APP_BUILD_VERSION=$VERSION_TAG" >> .env
+            fi
             # Restart services with version info
             docker compose -f docker-compose.prod.yml up -d frontend backend
             echo "Deployment completed: $VERSION_TAG"
