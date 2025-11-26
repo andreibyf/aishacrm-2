@@ -379,19 +379,20 @@ export default function createAuthRoutes(_pgPool) {
       const token = req.cookies?.aisha_refresh;
       const bearer = hasBearer ? authHeader.substring(7).trim() : null;
 
-      // If Supabase Bearer token provided, validate it and issue access cookie
+      // If Supabase Bearer token provided, validate it with service role OR anon client fallback
       if (!token && bearer) {
         if (process.env.NODE_ENV !== 'production' || process.env.AUTH_DEBUG === 'true') {
           console.log('[Auth.refresh] Using Supabase Bearer token for refresh');
         }
         try {
           const url = process.env.SUPABASE_URL;
-          const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-          if (!url || !key) {
-            return res.status(500).json({ status: 'error', message: 'Server auth not configured' });
+          const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+          const anonKey = process.env.SUPABASE_ANON_KEY;
+          if (!url || (!serviceKey && !anonKey)) {
+            return res.status(500).json({ status: 'error', message: 'Supabase not configured' });
           }
-          const admin = createSupabaseClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-          const { data: getUserData, error: getUserErr } = await admin.auth.getUser(bearer);
+          const client = createSupabaseClient(url, serviceKey || anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+          const { data: getUserData, error: getUserErr } = await client.auth.getUser(bearer);
           const authUser = getUserData?.user;
           if (getUserErr || !authUser) {
             console.log('[Auth.refresh] Invalid Supabase token:', getUserErr?.message);
@@ -400,7 +401,7 @@ export default function createAuthRoutes(_pgPool) {
 
           const email = (authUser.email || '').toLowerCase().trim();
           const supabase = getSupabaseClient();
-          
+
           // Lookup CRM user record
           let user = null;
           let table = 'users';
@@ -429,7 +430,7 @@ export default function createAuthRoutes(_pgPool) {
           const payload = { sub: user.id, email: user.email, role: user.role, tenant_id: user.tenant_id || null, table };
           const access = signAccess(payload);
           res.cookie('aisha_access', access, cookieOpts(15 * 60 * 1000));
-          console.log('[Auth.refresh] Issued access cookie from Supabase Bearer token:', { email });
+          console.log('[Auth.refresh] Issued access cookie from Supabase Bearer token:', { email, mode: serviceKey ? 'service_role' : 'anon_fallback' });
           return res.json({ status: 'success', message: 'Refreshed' });
         } catch (bearerErr) {
           console.error('[Auth.refresh] Bearer token processing error:', bearerErr);

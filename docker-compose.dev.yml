@@ -21,6 +21,8 @@ services:
       - REDIS_URL=redis://redis:6379
       - REDIS_CACHE_URL=redis://redis-cache:6379
       - PGSSLMODE=require
+      # Speed up dev startup: skip large Chromium download and reuse host node_modules
+      - PUPPETEER_SKIP_DOWNLOAD=1
     command: sh -c "npm install && npm run dev"
     ports:
       - "4001:3001"

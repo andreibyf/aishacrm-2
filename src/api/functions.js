@@ -86,6 +86,47 @@ const createFunctionProxy = (functionName) => {
     }
 
     if (isLocalDevMode()) {
+            // ========================================
+            // Dashboard Stats & Bundle (Local Dev -> call backend directly)
+            // ========================================
+            if (functionName === 'getDashboardStats') {
+              try {
+                const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+                const opts = args[0] || {};
+                const params = new URLSearchParams();
+                if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
+                const resp = await fetch(`${BACKEND_URL}/api/reports/dashboard-stats?${params}`, {
+                  method: 'GET',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                });
+                const json = await resp.json().catch(() => ({}));
+                return { data: json.data || json };
+              } catch (err) {
+                console.warn('[Local Dev Mode] getDashboardStats failed:', err?.message || err);
+                return { data: { status: 'error', message: err?.message || String(err) } };
+              }
+            }
+
+            if (functionName === 'getDashboardBundle') {
+              try {
+                const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+                const opts = args[0] || {};
+                const params = new URLSearchParams();
+                if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
+                if (typeof opts.include_test_data !== 'undefined') params.append('include_test_data', String(!!opts.include_test_data));
+                const resp = await fetch(`${BACKEND_URL}/api/reports/dashboard-bundle?${params}`, {
+                  method: 'GET',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                });
+                const json = await resp.json().catch(() => ({}));
+                return { data: json.data || json };
+              } catch (err) {
+                console.warn('[Local Dev Mode] getDashboardBundle failed:', err?.message || err);
+                return { data: { status: 'error', message: err?.message || String(err) } };
+              }
+            }
       // ========================================
       // Workflows (Local Backend)
       // ========================================
@@ -686,6 +727,49 @@ const createFunctionProxy = (functionName) => {
       } catch (err) {
         console.error('[testSystemOpenAI] Backend call failed:', err);
         throw err;
+      }
+    }
+
+    if (functionName === 'getDashboardStats') {
+      try {
+        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+        const opts = args[0] || {};
+        const params = new URLSearchParams();
+        if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
+        const resp = await fetch(`${BACKEND_URL}/api/reports/dashboard-stats?${params}`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        });
+        const json = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          return Promise.reject(new Error(json?.message || `Failed: ${resp.status}`));
+        }
+        return { data: json.data || json };
+      } catch (err) {
+        return Promise.reject(err);
+      }
+    }
+
+    if (functionName === 'getDashboardBundle') {
+      try {
+        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+        const opts = args[0] || {};
+        const params = new URLSearchParams();
+        if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
+        if (typeof opts.include_test_data !== 'undefined') params.append('include_test_data', String(!!opts.include_test_data));
+        const resp = await fetch(`${BACKEND_URL}/api/reports/dashboard-bundle?${params}`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        });
+        const json = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          return Promise.reject(new Error(json?.message || `Failed: ${resp.status}`));
+        }
+        return { data: json.data || json };
+      } catch (err) {
+        return Promise.reject(err);
       }
     }
 

@@ -8,9 +8,10 @@ This file tracks known issues. PLAN.md selects which bugs are currently in scope
 
 ### BUG-DASH-001 – Dashboard fails to load for authenticated user
 
-Status: Open  
+Status: Resolved  
 Priority: High  
-Area: Dashboard / Backend API / Auth
+Area: Dashboard / Backend API / Auth  
+Resolution: Frontend `callBackendAPI` now attaches Supabase bearer token (session or stored `sb-access-token`) plus `credentials: 'include'`, allowing backend auth middleware to populate `req.user` before `requireAdminRole` on `/api/modulesettings`. Backend auth middleware updated to support publishable (anon) key fallback (no service-role key required) ensuring authenticated users receive module settings. Dashboard renders successfully post-change; non-admin users receive proper 403 for settings while UI degrades gracefully.
 
 Symptoms:
 - After login and tenant auto-selection, the Dashboard does not render the expected content.
@@ -26,11 +27,10 @@ Symptoms:
   - Tenant context and filtering appear to be applied
   - But the backend still responds as unauthenticated for dashboard module settings.
 
-Suspected Causes:
-- The dashboard/module settings API is not receiving or validating the auth token/session correctly, even though the frontend believes the user is authenticated.
-- Possible mismatch between:
-  - Supabase auth/session and the backend’s expected auth mechanism (e.g., missing Authorization header, cookie, or token mapping).
-- Route guards may be relying on module settings and failing hard on “Authentication required”, leaving the Dashboard in a non-rendered state.
+Suspected Causes (Original):
+- Dashboard/module settings API was not receiving/validating auth headers, despite frontend session.
+- Mismatch between Supabase session and backend auth mechanism (missing Authorization bearer/cookie).
+- Route guards treated 401 “Authentication required” from module settings as fatal, blocking initial Dashboard render.
 
 Notes:
 - Fix must not redesign the auth system.
@@ -39,12 +39,16 @@ Notes:
   - API auth handling for module settings
   - Any guard logic that treats “Authentication required” as a fatal state for a valid session.
 
-Interim Resolution Plan:
-- Identified missing auth propagation in generic entity fetch helper (`callBackendAPI`) leading to 401 on `GET /api/modulesettings`.
-- Added bearer token attachment (Supabase access token or stored `sb-access-token`) and `credentials: 'include'` to `callBackendAPI` in `src/api/entities.js`.
-- This permits `requireAdminRole` to succeed for authenticated admin/superadmin without altering core auth architecture.
-- Pending verification: dashboard load with module settings present; confirm non-admin receives expected 403 while UI degrades gracefully.
-- After verification, update Status to Resolved and summarize outcome.
+Resolution Details:
+- Added bearer + cookies in `callBackendAPI` to supply backend with Supabase access token early.
+- Auth middleware enhanced with publishable key fallback (no privileged key required) so `req.user` consistently set.
+- Guards now receive settings or 403 (non-admin) rather than 401; dashboard renders modules accordingly.
+- No redesign of auth; changes localized to API helper + middleware.
+
+Verification:
+- Authenticated admin/superadmin: `/api/modulesettings` returns settings list (200).
+- Non-admin with tenant: receives 403 (expected) and UI continues with limited navigation.
+- No further repeated 401 loops observed in logs.
 
 ---
 

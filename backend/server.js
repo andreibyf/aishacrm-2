@@ -247,6 +247,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 import { performanceLogger } from "./middleware/performanceLogger.js";
 import { productionSafetyGuard } from "./middleware/productionSafetyGuard.js";
 import { intrusionDetection } from "./middleware/intrusionDetection.js";
+import { authenticateRequest } from "./middleware/authenticate.js";
 // Build a resilient perf DB wrapper that falls back to Supabase API pool if the direct pool was ended
 const resilientPerfDb = {
   query: async (...args) => {
@@ -311,6 +312,9 @@ if (process.env.ENABLE_IDR !== 'false') {
 } else {
   console.warn("⚠ IDR middleware disabled via ENABLE_IDR=false");
 }
+
+// Attach authentication context (cookie or Supabase bearer) for downstream route auth checks
+app.use('/api', authenticateRequest);
 
 // ----------------------------------------------------------------------------
 // Canary logging middleware for BizDevSource promote diagnostics

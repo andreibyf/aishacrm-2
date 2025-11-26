@@ -4,7 +4,7 @@
   "version": "1.0.53",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/copy-docs-to-public.js && node dev-frontend.js",
+    "dev": "node scripts/copy-docs-to-public.js && node scripts/database/dev-frontend.js",
     "dev:vite": "vite",
     "build": "node scripts/copy-docs-to-public.js && vite build",
     "lint": "eslint .",

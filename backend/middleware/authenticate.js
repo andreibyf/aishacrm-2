@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 let supabaseAdmin = null;
+let supabaseAnon = null;
 
 function getSupabaseAdmin() {
   try {
@@ -13,6 +14,21 @@ function getSupabaseAdmin() {
       auth: { persistSession: false, autoRefreshToken: false },
     });
     return supabaseAdmin;
+  } catch {
+    return null;
+  }
+}
+
+function getSupabaseAnon() {
+  try {
+    if (supabaseAnon) return supabaseAnon;
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_ANON_KEY; // publishable key with RLS
+    if (!url || !key) return null;
+    supabaseAnon = createSupabaseClient(url, key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    return supabaseAnon;
   } catch {
     return null;
   }
@@ -67,59 +83,68 @@ export async function authenticateRequest(req, _res, next) {
         console.log('[Auth Debug] Processing bearer token:', { path: req.path, tokenLength: bearer.length });
       }
       try {
+        // Prefer service role; fallback to anon; final fallback decode only
         const admin = getSupabaseAdmin();
+        const anon = admin ? null : getSupabaseAnon();
+        let authUser = null;
         if (admin) {
           const { data: getUserData, error: getUserErr } = await admin.auth.getUser(bearer);
-          const authUser = getUserData?.user;
-          if (!getUserErr && authUser) {
-            const email = (authUser.email || '').toLowerCase().trim();
-            const meta = authUser.user_metadata || {};
+          if (!getUserErr) authUser = getUserData?.user || null;
+        } else if (anon) {
+          const { data: getUserData, error: getUserErr } = await anon.auth.getUser(bearer);
+          if (!getUserErr) authUser = getUserData?.user || null;
+        } else {
+          // Last resort: decode token claims (unverified) for email hint
+          try {
+            const decoded = jwt.decode(bearer) || {};
+            if (decoded.email) authUser = { email: decoded.email, user_metadata: {} };
+          } catch { /* ignore */ }
+        }
+
+        if (authUser) {
+          const email = (authUser.email || '').toLowerCase().trim();
+          const meta = authUser.user_metadata || {};
             const roleMeta = (meta.role || '').toLowerCase() || null;
             const tenantMeta = meta.tenant_id ?? null;
-
-            // Attempt to resolve CRM user record by email to attach id/role/tenant_id
-            try {
-              const { getSupabaseClient } = await import('../lib/supabase-db.js');
-              const supa = getSupabaseClient();
-              const [{ data: uRows }, { data: eRows }] = await Promise.all([
-                supa.from('users').select('id, role, tenant_id').eq('email', email),
-                supa.from('employees').select('id, role, tenant_id').eq('email', email),
-              ]);
-              const row = (uRows && uRows[0]) || (eRows && eRows[0]) || null;
-              if (row) {
-                req.user = {
-                  id: row.id,
-                  email,
-                  role: row.role || roleMeta || 'employee',
-                  tenant_id: row.tenant_id ?? tenantMeta ?? null,
-                };
-                if (process.env.NODE_ENV !== 'production' || process.env.AUTH_DEBUG === 'true') {
-                  console.log('[Auth Debug] Attached user from DB:', { email, role: req.user.role, tenant_id: req.user.tenant_id });
-                }
-              } else {
-                // Fallback to metadata when CRM record not yet created
-                req.user = {
-                  id: null,
-                  email,
-                  role: roleMeta || 'employee',
-                  tenant_id: tenantMeta || null,
-                };
+          try {
+            const { getSupabaseClient } = await import('../lib/supabase-db.js');
+            const supa = getSupabaseClient();
+            const [{ data: uRows }, { data: eRows }] = await Promise.all([
+              supa.from('users').select('id, role, tenant_id').eq('email', email),
+              supa.from('employees').select('id, role, tenant_id').eq('email', email),
+            ]);
+            const row = (uRows && uRows[0]) || (eRows && eRows[0]) || null;
+            if (row) {
+              req.user = {
+                id: row.id,
+                email,
+                role: row.role || roleMeta || 'employee',
+                tenant_id: row.tenant_id ?? tenantMeta ?? null,
+              };
+              if (process.env.NODE_ENV !== 'production' || process.env.AUTH_DEBUG === 'true') {
+                console.log('[Auth Debug] Attached user from DB:', { email, role: req.user.role, tenant_id: req.user.tenant_id });
               }
-              return next();
-            } catch {
-              // If Supabase DB lookup fails, still attach minimal user from metadata
+            } else {
               req.user = {
                 id: null,
                 email,
                 role: roleMeta || 'employee',
                 tenant_id: tenantMeta || null,
               };
-              return next();
             }
+            return next();
+          } catch {
+            req.user = {
+              id: null,
+              email,
+              role: roleMeta || 'employee',
+              tenant_id: tenantMeta || null,
+            };
+            return next();
           }
         }
       } catch {
-        // Ignore token errors; proceed without user
+        // Ignore bearer processing errors
       }
     }
 

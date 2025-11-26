@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ const AGE_BUCKETS = [
   { label: '30+ days', min: 31, max: 999, color: 'bg-purple-100 text-purple-800 border-purple-200' },
 ];
 
-export default function LeadAgeReport(props) {
+function LeadAgeReport(props) {
   const [leads, setLeads] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -82,6 +82,34 @@ export default function LeadAgeReport(props) {
             setEmployees(employeesData);
           }
           setLoading(false);
+          // Background refresh to hydrate from full dataset quietly
+          (async () => {
+            try {
+              let effectiveFilter = { 
+                ...tenantFilter, 
+                status: { $nin: ['converted', 'lost'] } 
+              };
+              const [activeLeadsFull, employeesFull] = await Promise.all([
+                cachedRequest('Lead', 'filter', { filter: effectiveFilter }, function () { return Lead.filter(effectiveFilter); }),
+                Array.isArray(props?.employeesData)
+                  ? Promise.resolve(props.employeesData)
+                  : cachedRequest('Employee', 'list', { tenant_id: tenantFilter?.tenant_id }, function () { 
+                      return Employee.list({ tenant_id: tenantFilter?.tenant_id }); 
+                    })
+              ]);
+
+              const hydrated = (activeLeadsFull || []).map(lead => {
+                const createdDate = new Date(lead.created_date);
+                const today = new Date();
+                const ageInDays = Math.floor((today - createdDate) / (1000 * 60 * 60 * 24));
+                return { ...lead, ageInDays };
+              });
+              if (mounted) {
+                setLeads(hydrated);
+                setEmployees(employeesFull || []);
+              }
+            } catch { /* ignore background errors */ }
+          })();
           return;
         }
 
@@ -288,3 +316,5 @@ export default function LeadAgeReport(props) {
     </Card>
   );
 }
+
+export default memo(LeadAgeReport);
