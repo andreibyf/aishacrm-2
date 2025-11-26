@@ -38,10 +38,279 @@ Every change must:
 
 ## Active Tasks
 
+# AiSHA CRM – Orchestra Plan (Platform Health & MCP/Braid Integrations)
+
+## Current Goal
+
+Type: bugfix  
+Title: Stabilize core API reliability and MCP/Braid integrations
+
+Description:  
+Focus on fixing critical platform health issues detected in Settings/health tests:
+- Core tenant/employee/leads APIs failing (fetch errors, auth errors).
+- Braid MCP server and n8n integrations unreachable.
+- Elevated API error rate (~10%).
+- Health issue reporter behaving unreliably.
+- Tenant resolve cache currently ineffective.
+
+No new features in this phase. Only targeted reliability, auth, connectivity, and performance fixes.
+
+---
+
+## Execution Rules (Critical)
+
+Mode: BUGFIX ONLY
+
+Do NOT:
+- Redesign entire auth or tenant architecture.
+- Introduce new external services or queues without necessity.
+- Add new product features or expand API surface.
+
+Allowed only if strictly required:
+- Minimal changes to auth middleware or token handling.
+- Minimal wiring fixes between services (hostnames, ports, TLS).
+- Adding logging, metrics, or small caching where needed to stabilize behavior.
+
+Every change must:
+- Be as small and localized as possible.
+- Be tied to a specific BUG ID.
+- Include a verifiable test or monitored metric that confirms improvement.
+
+---
+
+## Active Tasks (Priority Order)
+
+### 1) BUG-API-001A – Diagnose tenant/employee fetch failures
+
+Type: bugfix  
+Status: Complete ✅  
+Area: Core API – tenants and employees
+
+Goal:  
+Find out why `GET /api/tenants/<tenant-id>` and `GET /api/employees?tenant_id=<tenant-id>` are failing with `TypeError: fetch failed` for user `abyfield@4vdataconsulting.com`.
+
+Steps:
+1. Reproduce the failure path:
+   - Same tenant ID: `a11dfb63-4b18-4eb8-872e-747af2e37c46`.
+   - Same or similar user context.
+2. Inspect:
+   - Frontend/API caller for these endpoints.
+   - Backend route handlers and any upstream services they depend on.
+   - Network/proxy/TLS configuration between caller and backend.
+3. Determine exact nature of “fetch failed”:
+   - DNS/host resolution?
+   - TLS error?
+   - Connection reset/refused?
+   - Misconfigured base URL?
+
+Scope:
+- Diagnostics only (logging, tracing).
+- No behavior changes yet.
+
+Acceptance:
+- Clear root cause explanation for the fetch failures.
+- List of exact files/services to be changed in the fix phase BUG-API-001B.
+
+---
+
+### 2) BUG-API-001B – Fix tenant/employee fetch failures
+
+Type: bugfix  
+Status: Complete ✅  
+Area: Core API – tenants and employees
+
+Goal:  
+Implement minimal changes so that tenant and employee endpoints no longer produce `TypeError: fetch failed`, and instead behave like normal authenticated/unauthenticated HTTP endpoints.
+
+Steps:
+1. Apply connectivity/config fixes identified in BUG-API-001A:
+   - Correct base URL, host, or protocol if required.
+   - Fix any reverse proxy or container networking issues.
+2. Ensure:
+   - Valid requests succeed.
+   - Invalid/unauthorized requests return explicit HTTP errors (401/403/404), not fetch-level failures.
+3. Remove any temporary debug-only logging not needed for normal operation.
+
+Scope:
+- Only relevant backend/API config and caller logic for tenants/employees.
+- No broad auth system redesign.
+
+Acceptance:
+- No `TypeError: fetch failed` for the monitored endpoints under normal operation.
+- Health checks for tenant/employee endpoints pass consistently.
+
+---
+
+### 3) BUG-API-002 – Fix false “Authentication required” on leads endpoint
+
+Type: bugfix  
+Status: Pending (P1 – parallel to 001B if needed)  
+Area: Leads API / Auth
+
+Goal:  
+Ensure that `GET /api/leads?tenant_id=<tenant-id>` behaves consistently with other authenticated endpoints and does not return `Authentication required` for valid sessions.
+
+Steps:
+1. Compare auth middleware for:
+   - `/api/leads`
+   - `/api/tenants`
+   - `/api/employees`
+2. Check:
+   - How tokens/cookies are passed from frontend to leads endpoint.
+   - Whether tenant-based permission checks are aligned for leads.
+3. Apply minimal fix:
+   - Align auth handling with the working endpoints.
+   - Do NOT weaken security; only correct false negative auth decisions.
+
+Scope:
+- Leads endpoint handler(s).
+- Any specific auth middleware/guards applied to leads.
+
+Acceptance:
+- Leads endpoint returns data for authenticated, properly-permitted users.
+- Unauthorized access still returns `Authentication required` or appropriate code.
+- Monitoring no longer shows auth warnings for valid sessions.
+
+---
+
+### 4) BUG-MCP-001 – Restore MCP/Braid and n8n reachability
+
+Type: bugfix  
+Status: Pending (P2, after P1 APIs are stable or in parallel if isolated)  
+Area: Integrations – Braid MCP / n8n
+
+Goal:  
+Make `mcp-node`, `n8n-proxy`, and `n8n` reachable again and restore MCP test suite to a passing or mostly-passing state.
+
+Steps:
+1. Check container/service status:
+   - Are MCP and n8n containers running?
+   - Are the ports and hostnames matching the URLs used in health checks?
+2. Validate connectivity:
+   - From the monitoring environment to MCP/n8n.
+   - Check TLS/SSL if HTTPS is involved.
+3. Fix configuration:
+   - Correct environment variables, base URLs, ports.
+   - Ensure any required auth between services is configured.
+
+Scope:
+- Only service wiring/config for MCP/n8n and their health endpoints.
+
+Acceptance:
+- `mcp-node`, `n8n-proxy`, and `n8n` no longer report “Not reachable”.
+- MCP health suite starts passing core tests (Braid Health, CRM endpoints, etc.).
+
+---
+
+### 5) BUG-INT-001 – Stabilize GitHub health issue reporter
+
+Type: bugfix  
+Status: Pending (P2)  
+Area: Integrations – GitHub health reporting
+
+Goal:  
+Stop flapping/repeated attempts for `POST /api/github-issues/create-health-issue` and make health issue creation idempotent and reliable.
+
+Steps:
+1. Inspect the logic that triggers `create-health-issue`:
+   - When is it called?
+   - What conditions trigger multiple calls at the same timestamp?
+2. Implement:
+   - Deduplication or idempotency for a given incident.
+   - Backoff/retry logic where appropriate.
+3. Log:
+   - Success vs failure of health issue creation.
+   - Reason when suppressed (duplicate).
+
+Scope:
+- Only the metric/health issue reporter and its call to GitHub.
+
+Acceptance:
+- No repeated bursts of `create-health-issue` calls for the same event.
+- Failures are logged clearly and do not cause uncontrolled retry storms.
+
+---
+
+### 6) BUG-CACHE-001 – Make tenant resolve cache actually useful
+
+Type: bugfix  
+Status: Pending (P3 – lower priority)  
+Area: Performance – Tenant resolution cache
+
+Goal:  
+Improve tenant resolution cache effectiveness so that repeated tenant lookups benefit from caching without breaking correctness.
+
+Steps:
+1. Review current cache key design and where it is used.
+2. Confirm:
+   - That tenant resolution is called with repeatable keys.
+   - Cache TTL (300000 ms) is appropriate.
+3. Adjust:
+   - Keying logic if needed.
+   - Where cache is checked vs bypassed.
+
+Scope:
+- Only tenant resolution + cache logic.
+
+Acceptance:
+- `tenant_resolve_cache_hit_ratio` moves above 0 under normal usage.
+- No incorrect tenant resolution due to cache.
+
+---
+
+## Testing & Validation Requirements
+
+Manual:
+- Re-run Settings / health tests for:
+  - Tenants, employees, and leads endpoints.
+  - MCP/Braid and n8n integrations.
+  - GitHub health reporter.
+- Confirm no `fetch failed` or bogus `Authentication required` where they shouldn’t appear.
+
+Automated / Monitoring:
+- API error rate drops significantly from ~10%.
+- MCP test suite moves from 0/12 to majority passing (target: all green).
+- GitHub health reporter calls are well-behaved and deduplicated.
+- Tenant cache metrics show non-zero hit ratio under realistic load.
+
+---
+
+## Status
+
+- BUG-API-001A: Complete ✅
+- BUG-API-001B: Complete ✅
+- BUG-API-002: Pending (P1)
+- BUG-MCP-001: Pending (P2)
+- BUG-INT-001: Pending (P2)
+- BUG-CACHE-001: Pending (P3)
+
+---
+
+## Usage Instruction for AI Tools
+
+When using Claude, Copilot, or orchestrator:
+
+1. Read `.github/copilot-instructions.md`.  
+2. Read `orchestra/ARCHITECTURE.md` and `orchestra/CONVENTIONS.md`.  
+3. Read this PLAN and select the highest-priority Active task:
+
+   - Start with **BUG-API-001A (diagnostic)**.
+
+4. For the selected task:
+   - State the task ID and title.
+   - List the files and services you will inspect.
+   - Wait for human approval before making code/config changes.
+   - Keep changes minimal and tied to the task’s Acceptance criteria.
+
+---
+
+
+## Completed Tasks
+
 ### BUG-DASH-001A – Diagnose Dashboard auth failure (root cause)
 
 Type: bugfix  
-Status: Active (P1)  
+Status: Completed (P1)  
 Area: Dashboard / Backend API / Auth
 
 Goal:  

@@ -29,12 +29,20 @@ const normalizeBackendUrl = (url) => {
   return url;
 };
 
+// Get runtime environment variable (injected by frontend-entrypoint.sh) or build-time env
+const getRuntimeEnv = (key) => {
+  if (typeof window !== 'undefined' && window._env_) {
+    return window._env_[key];
+  }
+  return import.meta.env[key];
+};
+
 // Resolve a production-safe backend base URL.
 // Fallback logic: if build-time env missing or points at localhost or a raw IP, prefer window.location.origin
 // because Cloudflare Tunnel terminates TLS and routes /api/*.
 const resolveBackendBase = () => {
   if (import.meta.env.DEV) return '';
-  let raw = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+  let raw = getRuntimeEnv('VITE_AISHACRM_BACKEND_URL') || 'http://localhost:3001';
   try {
     if (typeof window !== 'undefined') {
       const origin = window.location.origin;
