@@ -182,34 +182,30 @@ Acceptance:
 ### 4) BUG-API-003 – Add backend endpoint for generateUniqueId
 
 Type: bugfix  
-Status: Active 🔄
+Status: Complete ✅
+Resolution: v1.0.75 (backend endpoint + frontend integration)
 Area: Leads/Contacts/Accounts - Unique ID generation
-Priority: P1 (console warnings in production)
 
 Goal:
 Stop console warnings in production: "Function 'generateUniqueId' not available. Use backend routes."
 
-Issue:
-- LeadForm.jsx (line 344) and ContactForm.jsx call generateUniqueId()
-- In production mode, functions.js proxy rejects all local function calls
-- Code has try-catch so it doesn't break, but creates console noise
-- unique_id field is optional but should work when called
+Resolution:
+- Created POST /api/utils/generate-unique-id endpoint
+- Generates format: L-YYYYMMDD-RANDOM (e.g., L-20251126-6BD0C6)
+- Updated src/api/functions.js to call backend in production
+- Supports Lead, Contact, Account, Opportunity entity types
+- No console warnings when creating entities
 
-Steps:
-1. Create backend route: POST /api/utils/generate-unique-id
-2. Accept: { entity_type: 'Lead'|'Contact'|'Account', tenant_id: uuid }
-3. Return: { unique_id: 'L-XXXXX' | 'C-XXXXX' | 'ACC-XXXXX' }
-4. Update src/api/functions.js to call backend route in production mode
+Files Changed:
+- backend/routes/utils.js: Added generate-unique-id endpoint
+- src/api/functions.js: Added production mode handler for generateUniqueId
+- orchestra/PLAN.md: Documented issue and resolution
 
-Scope:
-- New backend/routes/utils.js endpoint (or add to existing utils route)
-- Update functions.js proxy to handle generateUniqueId
-- No changes to LeadForm/ContactForm (already have try-catch)
-
-Acceptance:
-- No console warnings when creating leads/contacts in production
-- unique_id field populated when entity is created
-- Falls back gracefully if endpoint fails
+Testing:
+- Backend endpoint verified with curl
+- Frontend build successful
+- Local Docker containers tested
+- Deployed to production in v1.0.75
 
 ---
 
@@ -317,10 +313,10 @@ Automated / Monitoring:
 
 ## Status
 
-- BUG-API-001A: Complete ✅ (v1.0.66-74)
-- BUG-API-001B: Complete ✅ (v1.0.74)
-- BUG-API-002: Resolved ✅ (auth issue gone, new issue in BUG-API-003)
-- BUG-API-003: Active 🔄 (generateUniqueId console warnings)
+- BUG-API-001A: Complete ✅ (v1.0.66-74 - diagnosed runtime env issues)
+- BUG-API-001B: Complete ✅ (v1.0.74 - APP_BUILD_VERSION runtime injection)
+- BUG-API-002: Resolved ✅ (auth issue resolved with 001B fixes)
+- BUG-API-003: Complete ✅ (v1.0.75 - generateUniqueId backend endpoint)
 - BUG-MCP-001: Pending (P2)
 - BUG-INT-001: Pending (P2)
 - BUG-CACHE-001: Pending (P3)
