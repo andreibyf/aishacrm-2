@@ -118,6 +118,7 @@ Acceptance:
 Type: bugfix  
 Status: Complete ✅  
 Area: Core API – tenants and employees
+Resolution: v1.0.74 (APP_BUILD_VERSION runtime injection via env-config.js)
 
 Goal:  
 Implement minimal changes so that tenant and employee endpoints no longer produce `TypeError: fetch failed`, and instead behave like normal authenticated/unauthenticated HTTP endpoints.
@@ -141,14 +142,19 @@ Acceptance:
 
 ---
 
-### 3) BUG-API-002 – Fix false “Authentication required” on leads endpoint
+### 3) BUG-API-002 – Fix false "Authentication required" on leads endpoint
 
 Type: bugfix  
-Status: Pending (P1 – parallel to 001B if needed)  
+Status: Resolved ✅ (No longer occurring)
 Area: Leads API / Auth
 
 Goal:  
 Ensure that `GET /api/leads?tenant_id=<tenant-id>` behaves consistently with other authenticated endpoints and does not return `Authentication required` for valid sessions.
+
+Resolution:
+- Authentication issue resolved as part of BUG-API-001B fixes
+- New issue discovered: generateUniqueId console warnings in production
+- See BUG-API-003 for follow-up
 
 Steps:
 1. Compare auth middleware for:
@@ -173,7 +179,41 @@ Acceptance:
 
 ---
 
-### 4) BUG-MCP-001 – Restore MCP/Braid and n8n reachability
+### 4) BUG-API-003 – Add backend endpoint for generateUniqueId
+
+Type: bugfix  
+Status: Active 🔄
+Area: Leads/Contacts/Accounts - Unique ID generation
+Priority: P1 (console warnings in production)
+
+Goal:
+Stop console warnings in production: "Function 'generateUniqueId' not available. Use backend routes."
+
+Issue:
+- LeadForm.jsx (line 344) and ContactForm.jsx call generateUniqueId()
+- In production mode, functions.js proxy rejects all local function calls
+- Code has try-catch so it doesn't break, but creates console noise
+- unique_id field is optional but should work when called
+
+Steps:
+1. Create backend route: POST /api/utils/generate-unique-id
+2. Accept: { entity_type: 'Lead'|'Contact'|'Account', tenant_id: uuid }
+3. Return: { unique_id: 'L-XXXXX' | 'C-XXXXX' | 'ACC-XXXXX' }
+4. Update src/api/functions.js to call backend route in production mode
+
+Scope:
+- New backend/routes/utils.js endpoint (or add to existing utils route)
+- Update functions.js proxy to handle generateUniqueId
+- No changes to LeadForm/ContactForm (already have try-catch)
+
+Acceptance:
+- No console warnings when creating leads/contacts in production
+- unique_id field populated when entity is created
+- Falls back gracefully if endpoint fails
+
+---
+
+### 5) BUG-MCP-001 – Restore MCP/Braid and n8n reachability
 
 Type: bugfix  
 Status: Pending (P2, after P1 APIs are stable or in parallel if isolated)  
@@ -202,7 +242,7 @@ Acceptance:
 
 ---
 
-### 5) BUG-INT-001 – Stabilize GitHub health issue reporter
+### 6) BUG-INT-001 – Stabilize GitHub health issue reporter
 
 Type: bugfix  
 Status: Pending (P2)  
@@ -231,7 +271,7 @@ Acceptance:
 
 ---
 
-### 6) BUG-CACHE-001 – Make tenant resolve cache actually useful
+### 7) BUG-CACHE-001 – Make tenant resolve cache actually useful
 
 Type: bugfix  
 Status: Pending (P3 – lower priority)  
@@ -277,9 +317,10 @@ Automated / Monitoring:
 
 ## Status
 
-- BUG-API-001A: Complete ✅
-- BUG-API-001B: Complete ✅
-- BUG-API-002: Pending (P1)
+- BUG-API-001A: Complete ✅ (v1.0.66-74)
+- BUG-API-001B: Complete ✅ (v1.0.74)
+- BUG-API-002: Resolved ✅ (auth issue gone, new issue in BUG-API-003)
+- BUG-API-003: Active 🔄 (generateUniqueId console warnings)
 - BUG-MCP-001: Pending (P2)
 - BUG-INT-001: Pending (P2)
 - BUG-CACHE-001: Pending (P3)

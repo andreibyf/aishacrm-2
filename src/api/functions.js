@@ -815,6 +815,28 @@ const createFunctionProxy = (functionName) => {
       }
     }
 
+    // generateUniqueId: always call backend route
+    if (functionName === 'generateUniqueId') {
+      try {
+        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+        const payload = args[0] || {};
+        const response = await fetch(`${BACKEND_URL}/api/utils/generate-unique-id`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+        const json = await response.json();
+        if (!response.ok) {
+          return { data: { status: 'error', error: json?.message || response.statusText } };
+        }
+        return { data: json.data || json };
+      } catch (err) {
+        console.error('[generateUniqueId] Error:', err);
+        return { data: { status: 'error', error: err?.message || String(err) } };
+      }
+    }
+
     // Fallback: warn if function not found
     console.warn(`[Production Mode] Function '${functionName}' not available. Use backend routes.`);
     return Promise.reject(new Error(`Function '${functionName}' not available. Use backend routes.`));

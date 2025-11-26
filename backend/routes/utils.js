@@ -54,5 +54,44 @@ export default function createUtilsRoutes(_pgPool) {
     }
   });
 
+  // POST /api/utils/generate-unique-id - Generate human-readable unique ID
+  router.post('/generate-unique-id', async (req, res) => {
+    try {
+      const { entity_type, tenant_id } = req.body;
+
+      if (!entity_type) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'entity_type is required (e.g., "Lead", "Contact", "Account")' 
+        });
+      }
+
+      // Generate a unique ID in format: PREFIX-YYYYMMDD-RANDOM
+      const now = new Date();
+      const dateStr = now.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+      const randomStr = crypto.randomBytes(3).toString('hex').toUpperCase(); // 6 hex chars
+
+      let prefix = 'UNKN';
+      if (entity_type === 'Lead' || entity_type === 'lead') {
+        prefix = 'L';
+      } else if (entity_type === 'Contact' || entity_type === 'contact') {
+        prefix = 'C';
+      } else if (entity_type === 'Account' || entity_type === 'account') {
+        prefix = 'ACC';
+      } else if (entity_type === 'Opportunity' || entity_type === 'opportunity') {
+        prefix = 'OPP';
+      }
+
+      const unique_id = `${prefix}-${dateStr}-${randomStr}`;
+
+      res.json({
+        status: 'success',
+        data: { unique_id },
+      });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   return router;
 }
