@@ -364,10 +364,79 @@ export default function createAuthRoutes(_pgPool) {
     }
   });
 
-  // POST /api/auth/refresh - rotate short-lived access cookie using refresh cookie
+  // POST /api/auth/refresh - rotate short-lived access cookie using refresh cookie OR accept Supabase Bearer
   router.post('/refresh', async (req, res) => {
     try {
+      // DEBUG logging
+      const hasRefreshCookie = !!req.cookies?.aisha_refresh;
+      const authHeader = req.headers?.authorization || '';
+      const hasBearer = authHeader.startsWith('Bearer ');
+      if (process.env.NODE_ENV !== 'production' || process.env.AUTH_DEBUG === 'true') {
+        console.log('[Auth.refresh] Request context:', { hasRefreshCookie, hasBearer });
+      }
+
+      // Accept either refresh cookie (for cookie-based sessions) OR Supabase Bearer token
       const token = req.cookies?.aisha_refresh;
+      const bearer = hasBearer ? authHeader.substring(7).trim() : null;
+
+      // If Supabase Bearer token provided, validate it and issue access cookie
+      if (!token && bearer) {
+        if (process.env.NODE_ENV !== 'production' || process.env.AUTH_DEBUG === 'true') {
+          console.log('[Auth.refresh] Using Supabase Bearer token for refresh');
+        }
+        try {
+          const url = process.env.SUPABASE_URL;
+          const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+          if (!url || !key) {
+            return res.status(500).json({ status: 'error', message: 'Server auth not configured' });
+          }
+          const admin = createSupabaseClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+          const { data: getUserData, error: getUserErr } = await admin.auth.getUser(bearer);
+          const authUser = getUserData?.user;
+          if (getUserErr || !authUser) {
+            console.log('[Auth.refresh] Invalid Supabase token:', getUserErr?.message);
+            return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+          }
+
+          const email = (authUser.email || '').toLowerCase().trim();
+          const supabase = getSupabaseClient();
+          
+          // Lookup CRM user record
+          let user = null;
+          let table = 'users';
+          const { data: uRows } = await supabase.from('users').select('id, email, role, tenant_id, status, metadata').eq('email', email).limit(1);
+          if (uRows && uRows.length > 0) {
+            user = uRows[0];
+          } else {
+            table = 'employees';
+            const { data: eRows } = await supabase.from('employees').select('id, email, role, tenant_id, status, metadata').eq('email', email).limit(1);
+            if (eRows && eRows.length > 0) user = eRows[0];
+          }
+
+          if (!user) {
+            console.log('[Auth.refresh] No CRM user found for Supabase token');
+            return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+          }
+
+          // Check account status
+          const meta = user.metadata || {};
+          const accountStatus = String(meta.account_status || user.status || '').toLowerCase();
+          const isActiveFlag = meta.is_active !== false;
+          if (accountStatus === 'inactive' || isActiveFlag === false || (user.status || '').toLowerCase() === 'inactive') {
+            return res.status(403).json({ status: 'error', message: 'Account is disabled' });
+          }
+
+          const payload = { sub: user.id, email: user.email, role: user.role, tenant_id: user.tenant_id || null, table };
+          const access = signAccess(payload);
+          res.cookie('aisha_access', access, cookieOpts(15 * 60 * 1000));
+          console.log('[Auth.refresh] Issued access cookie from Supabase Bearer token:', { email });
+          return res.json({ status: 'success', message: 'Refreshed' });
+        } catch (bearerErr) {
+          console.error('[Auth.refresh] Bearer token processing error:', bearerErr);
+          return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+        }
+      }
+
       if (!token) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
       const secret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'change-me-refresh';
       let decoded;

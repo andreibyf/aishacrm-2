@@ -27,6 +27,20 @@ function getSupabaseAdmin() {
  */
 export async function authenticateRequest(req, _res, next) {
   try {
+    // DEBUG: Log auth context for 401 diagnostics
+    const authHeader = req.headers?.authorization || '';
+    const hasCookie = !!req.cookies?.aisha_access;
+    const hasBearer = authHeader.startsWith('Bearer ');
+    if (process.env.NODE_ENV !== 'production' || process.env.AUTH_DEBUG === 'true') {
+      console.log('[Auth Debug]', {
+        path: req.path,
+        method: req.method,
+        hasCookie,
+        hasBearer,
+        bearerPreview: hasBearer ? authHeader.substring(7, 27) + '...' : null,
+      });
+    }
+
     // 1) Try backend JWT access cookie first
     const cookieToken = req.cookies?.aisha_access;
     if (cookieToken) {
@@ -46,10 +60,12 @@ export async function authenticateRequest(req, _res, next) {
     }
 
     // 2) Try Supabase access token from Authorization header
-    const authHeader = req.headers?.authorization || '';
     const bearer = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
 
     if (bearer) {
+      if (process.env.NODE_ENV !== 'production' || process.env.AUTH_DEBUG === 'true') {
+        console.log('[Auth Debug] Processing bearer token:', { path: req.path, tokenLength: bearer.length });
+      }
       try {
         const admin = getSupabaseAdmin();
         if (admin) {
@@ -77,6 +93,9 @@ export async function authenticateRequest(req, _res, next) {
                   role: row.role || roleMeta || 'employee',
                   tenant_id: row.tenant_id ?? tenantMeta ?? null,
                 };
+                if (process.env.NODE_ENV !== 'production' || process.env.AUTH_DEBUG === 'true') {
+                  console.log('[Auth Debug] Attached user from DB:', { email, role: req.user.role, tenant_id: req.user.tenant_id });
+                }
               } else {
                 // Fallback to metadata when CRM record not yet created
                 req.user = {
