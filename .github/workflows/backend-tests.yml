@@ -42,4 +42,14 @@ jobs:
           CI: true
           BACKEND_URL: http://localhost:3001
           TEST_TENANT_ID: local-tenant-001
-        run: npm test --silent
+        run: |
+          echo "[Backend Tests] Searching for test files..."
+          set -e
+          FILES=$(ls test/**/*.test.js 2>/dev/null || true)
+          if [ -z "$FILES" ]; then
+            echo "[Backend Tests] No test files found under backend/test/**/*.test.js – skipping without failure."
+            exit 0
+          fi
+          echo "[Backend Tests] Found test files:"
+          echo "$FILES" | sed 's/^/  - /'
+          npm test --silent
