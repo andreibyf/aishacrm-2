@@ -77,7 +77,7 @@ Acceptance:
 ### BUG-DASH-001B – Fix Dashboard auth failure and restore load
 
 Type: bugfix  
-Status: Pending (P1, after BUG-DASH-001A)  
+Status: Completed (P1)  
 Area: Dashboard / Backend API / Auth
 
 Dependencies:
@@ -103,16 +103,20 @@ Scope:
 - No broader auth system redesign.
 
 Acceptance:
-- Authenticated user with valid tenant can load Dashboard successfully.
+- Authenticated user with valid tenant loads Dashboard successfully.
 - Module settings calls no longer return “Authentication required” for valid sessions.
 - No regression in other authenticated routes.
+
+Verification:
+- Frontend `callBackendAPI` attaches Supabase bearer + credentials; backend auth middleware supports publishable key fallback.
+- Local, dev Docker, and staging verified; production tag `v1.0.66` published.
 
 ---
 
 ### BUG-DASH-002 – Improve Dashboard stats loading performance
 
 Type: bugfix  
-Status: Pending (P2, after BUG-DASH-001A/B)  
+Status: Completed (P2)  
 Area: Dashboard / Backend API / Performance
 
 Goal:  
@@ -139,6 +143,11 @@ Acceptance:
 - Noticeable reduction in time-to-display for dashboard cards/statistics.
 - No incorrect or cross-tenant data shown.
 - No increased error rates or auth issues from optimization changes.
+
+Verification:
+- Backend: `/api/reports/dashboard-bundle` aggregated response with cache (≈60s TTL), exact small-count fallback.
+- Frontend: bundle-first render; background hydration; animations disabled; widgets memoized.
+- DB: indexes applied via `077_dashboard_indexes.sql`; usage confirmed with EXPLAIN ANALYZE.
 
 ---
 
@@ -168,8 +177,8 @@ Environment:
 ## Status
 
 - BUG-DASH-001A: **Completed** (P1, diagnostic) – Root cause identified: `callBackendAPI` lacked auth token attachment; `requireAdminRole` middleware rejected requests.
-- BUG-DASH-001B: **Ready for verification** (P1, fix) – Added Supabase bearer token + credentials to `callBackendAPI` in `src/api/entities.js`. Awaiting production test.
-- BUG-DASH-002: Pending (P2, performance) – will begin after BUG-DASH-001B is verified.
+- BUG-DASH-001B: **Completed** (P1, fix) – Frontend attaches bearer + credentials; backend auth supports publishable key. Verified locally and staged; released under `v1.0.66`.
+- BUG-DASH-002: **Completed** (P2, performance) – Bundle endpoint + cache, frontend background hydration, INP improvements, and DB indexes applied.
 
 ---
 

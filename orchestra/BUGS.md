@@ -54,26 +54,26 @@ Verification:
 
 ### BUG-DASH-002 – Dashboard stats slow to load
 
-Status: Open  
+Status: Resolved  
 Priority: Medium  
 Area: Dashboard / Backend API / Performance
 
-**Symptoms:**
-- Dashboard cards and statistics take noticeably long to appear after page load.
-- The UI feels responsive in other areas, but Dashboard metrics lag behind.
-- No explicit frontend errors, but multiple sequential or redundant API calls are suspected.
+Resolution: Implemented `/api/reports/dashboard-bundle` to aggregate fast counts and recent lists with a per-tenant in-memory cache (≈60s TTL). Added planned-counts with exact fallback for small values to improve accuracy and speed. Wired frontend to fetch the bundle first, render quickly, and hydrate widgets with full data in the background. Disabled chart animations and memoized widgets to reduce presentation delay (INP). Applied database indexes to leads, opportunities, activities, contacts, and accounts to accelerate common filters and ordering.
 
-**Suspected Causes:**
-- Dashboard is issuing multiple requests to stats or module endpoints instead of batching where possible.
-- Lack of caching for frequently-read dashboard metrics (e.g., no short-term in-memory or Redis cache).
-- Inefficient database queries or joins on the backend for dashboard endpoints.
+Symptoms (original):
+- Dashboard cards and statistics took noticeably long to appear after page load.
+- Metrics lagged versus rest of the UI.
 
-**Notes:**
-- Fix must not alter overall authentication or tenant isolation logic.
-- Focus on the performance of retrieving and displaying dashboard stats:
-- Reduce redundant calls.
-- Optimize queries or introduce safe caching.
-- Any caching must respect tenant boundaries and avoid cross-tenant data exposure.
+Changes:
+- Backend: new `dashboard-bundle` endpoint with tenant-scoped cache; exact fallback for small counts; `include_test_data` alignment.
+- Frontend: bundle-first render; background hydration for `RecentActivities`, `SalesPipeline`, `LeadSourceChart`, `LeadAgeReport`.
+- Performance: chart animations off; React.memo on widgets; stable props.
+- Database: indexes created via `backend/migrations/077_dashboard_indexes.sql`.
+
+Verification:
+- Local and staging show faster time-to-first-paint for dashboard.
+- Counts now align with dataset size and test data toggle.
+- PROD release tagged `v1.0.66` for GHCR build and deploy.
 
 ## Authentication
 
