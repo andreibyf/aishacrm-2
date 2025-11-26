@@ -279,7 +279,14 @@ export default function createEmployeeRoutes(_pgPool) {
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
-      // Use phone and department as direct columns, store any other additional fields in metadata
+      // Store phone, department, and any additional fields in metadata since they may not be direct columns
+      const combinedMetadata = {
+        ...(metadata || {}),
+        ...(additionalFields || {}),
+        ...(phone !== undefined && phone !== null ? { phone } : {}),
+        ...(department !== undefined && department !== null ? { department } : {}),
+      };
+
       const insertData = {
         tenant_id,
         first_name,
@@ -287,9 +294,7 @@ export default function createEmployeeRoutes(_pgPool) {
         email: email || null,
         role: role || null,
         status: status || 'active',
-        phone: phone || null,
-        department: department || null,
-        metadata: metadata || additionalFields || {},
+        metadata: combinedMetadata,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -375,7 +380,7 @@ export default function createEmployeeRoutes(_pgPool) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id, first_name, last_name, email, role, phone, department, metadata } = req.body;
+      const { tenant_id, first_name, last_name, email, role, phone, department, metadata, ...otherFields } = req.body;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -383,14 +388,38 @@ export default function createEmployeeRoutes(_pgPool) {
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
+      // Fetch current metadata first to merge
+      const { data: current, error: fetchErr } = await supabase
+        .from('employees')
+        .select('metadata')
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .single();
+
+      if (fetchErr && fetchErr.code !== 'PGRST116') {
+        throw new Error(fetchErr.message);
+      }
+
+      if (!current) {
+        return res.status(404).json({ status: 'error', message: 'Employee not found' });
+      }
+
+      // Merge phone, department, and other fields into metadata
+      const currentMetadata = current?.metadata || {};
+      const updatedMetadata = {
+        ...currentMetadata,
+        ...(metadata || {}),
+        ...(otherFields || {}),
+        ...(phone !== undefined ? { phone } : {}),
+        ...(department !== undefined ? { department } : {}),
+      };
+
       const updateData = {
         ...(first_name !== undefined && { first_name }),
         ...(last_name !== undefined && { last_name }),
         ...(email !== undefined && { email }),
         ...(role !== undefined && { role }),
-        ...(phone !== undefined && { phone }),
-        ...(department !== undefined && { department }),
-        ...(metadata !== undefined && { metadata }),
+        metadata: updatedMetadata,
         updated_at: new Date().toISOString(),
       };
 
