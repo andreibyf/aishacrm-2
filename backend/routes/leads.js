@@ -280,6 +280,7 @@ export default function createLeadRoutes(_pgPool) {
           source,
           metadata: combinedMetadata,
           created_at: nowIso,
+          created_date: nowIso,
           updated_at: nowIso,
         }])
         .select('*')
