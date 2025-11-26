@@ -40,7 +40,10 @@ export default function NotificationPanel() {
       setUnreadCount(fetched.filter(n => !n.is_read).length);
       return { ok: true };
     } catch (err) {
-      console.error('[NotificationPanel] Failed to load notifications:', err);
+      // Suppress error if notifications table doesn't exist (non-critical feature)
+      if (import.meta.env.DEV || !err?.message?.includes('relation "notifications" does not exist')) {
+        console.warn('[NotificationPanel] Failed to load notifications:', err.message || err);
+      }
       return { ok: false, error: err };
     } finally {
       if (!options.silent) setLoading(false);
