@@ -3,9 +3,14 @@ import { createMockUser, isLocalDevMode } from "./mockData";
 import { apiHealthMonitor } from "../utils/apiHealthMonitor";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
-// Build version marker for deployment verification (v1.0.62)
-export const ENTITIES_BUILD_VERSION = "v1.0.62-auth-debug";
-console.log("[Entities] Build version:", ENTITIES_BUILD_VERSION);
+// Build version marker for deployment verification.
+// Prefer build-time injected env var, then runtime window._env_, then fallback literal.
+export const ENTITIES_BUILD_VERSION = (
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_APP_BUILD_VERSION) ||
+  (typeof window !== 'undefined' && window._env_ && window._env_.APP_BUILD_VERSION) ||
+  'v1.0.64'
+);
+console.log('[Entities] Build version:', ENTITIES_BUILD_VERSION);
 
 // Backend base URL: in dev, use relative path and Vite proxy to avoid CORS
 // In production, normalize to HTTPS when the app is served over HTTPS to avoid mixed-content blocks

@@ -70,6 +70,7 @@ jobs:
             # Backend slimming: skip Puppeteer download by default; opt-in via image rebuild
             PUPPETEER_SKIP_DOWNLOAD=1
             USE_SYSTEM_CHROMIUM=false
+            APP_BUILD_VERSION=${{ github.ref_name }}
 
       - name: Image summary
         run: |

@@ -11,6 +11,14 @@ export default defineConfig({
     'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(process.env.VITE_SUPABASE_ANON_KEY || ''),
     'import.meta.env.VITE_AISHACRM_BACKEND_URL': JSON.stringify(process.env.VITE_AISHACRM_BACKEND_URL || ''),
     'import.meta.env.VITE_CURRENT_BRANCH': JSON.stringify(process.env.VITE_CURRENT_BRANCH || 'main'),
+    // Build/version marker injected at build time; falls back through common CI vars then local override
+    'import.meta.env.VITE_APP_BUILD_VERSION': JSON.stringify(
+      process.env.APP_BUILD_VERSION ||
+      process.env.GIT_TAG ||
+      process.env.GITHUB_REF_NAME ||
+      process.env.VITE_APP_BUILD_VERSION ||
+      'dev-local'
+    ),
   },
   server: {
     allowedHosts: true,
