@@ -97,9 +97,17 @@ jobs:
           port: ${{ secrets.PROD_VPS_PORT || 22 }}
           script: |
             cd /opt/aishacrm
-            docker compose -f docker-compose.prod.yml pull frontend backend
+            # Pull specific version tags
+            docker pull ghcr.io/andreibyf/aishacrm-2-frontend:${{ github.ref_name }}
+            docker pull ghcr.io/andreibyf/aishacrm-2-backend:${{ github.ref_name }}
+            # Tag as latest locally
+            docker tag ghcr.io/andreibyf/aishacrm-2-frontend:${{ github.ref_name }} ghcr.io/andreibyf/aishacrm-2-frontend:latest
+            docker tag ghcr.io/andreibyf/aishacrm-2-backend:${{ github.ref_name }} ghcr.io/andreibyf/aishacrm-2-backend:latest
+            # Restart services
             docker compose -f docker-compose.prod.yml up -d frontend backend
             echo "Deployment completed: ${{ github.ref_name }}"
+            # Verify deployment
+            sleep 3
             docker exec aishacrm-frontend cat /app/dist/env-config.js | grep APP_BUILD_VERSION || true
       
       - name: Deployment summary
