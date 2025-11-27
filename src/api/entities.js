@@ -3,6 +3,9 @@ import { createMockUser, isLocalDevMode } from "./mockData";
 import { apiHealthMonitor } from "../utils/apiHealthMonitor";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
+// Re-export for use by other components
+export { supabase, isSupabaseConfigured };
+
 // Build version marker for deployment verification.
 // Always read from runtime window._env_ to avoid browser cache issues
 export const getBuildVersion = () => {
