@@ -306,11 +306,11 @@ app.use((req, _res, next) => {
 });
 
 // Enable Intrusion Detection and Response (IDR) system
-if (process.env.ENABLE_IDR !== 'false') {
+if (process.env.IDR_ENABLED !== 'false') {
   app.use(intrusionDetection);
   console.log("✓ Intrusion Detection & Response (IDR) middleware enabled");
 } else {
-  console.warn("⚠ IDR middleware disabled via ENABLE_IDR=false");
+  console.warn("⚠ IDR middleware disabled via IDR_ENABLED=false");
 }
 
 // Attach authentication context (cookie or Supabase bearer) for downstream route auth checks
