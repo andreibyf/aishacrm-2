@@ -2,9 +2,9 @@
  * Unit tests for system routes
  */
 
-import { describe, it, before, after, mock } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import { initSupabaseForTests, hasSupabaseCredentials } from '../setup.js';
+import { initSupabaseForTests } from '../setup.js';
 
 let app;
 const testPort = 3101;

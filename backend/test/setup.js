@@ -11,10 +11,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Load environment variables from root .env (backend doesn't have its own)
-// Try multiple paths for flexibility
 const envPaths = [
-  join(__dirname, '../../.env'),       // /backend/test -> /backend -> root
-  join(__dirname, '../../../.env'),    // alternate path
+  join(__dirname, '../../.env'),       // /backend/test -> /backend -> root .env
 ];
 
 for (const envPath of envPaths) {

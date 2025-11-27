@@ -20,7 +20,7 @@ async function req(method, path, body) {
   return res;
 }
 
-describe('Validation Routes - basic error cases', () => {
+describe('Validation Routes', () => {
   before(async () => {
     // Initialize Supabase if credentials are available
     supabaseInitialized = await initSupabaseForTests();
@@ -38,6 +38,7 @@ describe('Validation Routes - basic error cases', () => {
     if (server) await new Promise((r) => server.close(r));
   });
 
+  // Basic error cases
   it('POST /find-duplicates requires entity_type and tenant_id', async () => {
     const res = await req('POST', '/api/validation/find-duplicates', { fields: ['email'] });
     assert.strictEqual(res.status, 400);
@@ -59,40 +60,15 @@ describe('Validation Routes - basic error cases', () => {
     const res = await req('POST', '/api/validation/validate-and-import', { records: [{}], entityType: 'Foo', tenant_id: 't' });
     assert.strictEqual(res.status, 400);
   });
-});
 
-describe('Validation Routes - find duplicates and duplicate check', () => {
-  let server2;
-  const port2 = 3105;
-  let supabaseInit = false;
-
-  before(async () => {
-    // Initialize Supabase if credentials are available
-    supabaseInit = await initSupabaseForTests();
-    
-    const express = (await import('express')).default;
-    const createValidationRoutes = (await import('../../routes/validation.js')).default;
-
-    app = express();
-    app.use(express.json());
-    app.use('/api/validation', createValidationRoutes(null));
-    server2 = app.listen(port2);
-    await new Promise((r) => server2.on('listening', r));
-  });
-
-  after(async () => {
-    if (server2) await new Promise((r) => server2.close(r));
-  });
-
+  // Find duplicates and duplicate check
   it('POST /find-duplicates returns groups for allowed fields', async () => {
-    if (!supabaseInit) {
+    if (!supabaseInitialized) {
       // Skip this test if Supabase not initialized
       return;
     }
     const body = { tenant_id: 't1', entity_type: 'Lead', fields: ['first_name', 'last_name'] };
-    const res = await fetch(`http://localhost:${port2}/api/validation/find-duplicates`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-    });
+    const res = await req('POST', '/api/validation/find-duplicates', body);
     // Accept 200 (success) or 500 (network error in CI)
     assert.ok([200, 500].includes(res.status), `Expected 200 or 500, got ${res.status}`);
     if (res.status === 200) {
@@ -103,14 +79,12 @@ describe('Validation Routes - find duplicates and duplicate check', () => {
   });
 
   it('POST /check-duplicate-before-create detects email and phone duplicates for Contact', async () => {
-    if (!supabaseInit) {
+    if (!supabaseInitialized) {
       // Skip this test if Supabase not initialized
       return;
     }
     const body = { tenant_id: 't1', entity_type: 'Contact', data: { email: 'a@b.com', phone: '123' } };
-    const res = await fetch(`http://localhost:${port2}/api/validation/check-duplicate-before-create`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-    });
+    const res = await req('POST', '/api/validation/check-duplicate-before-create', body);
     // Accept 200 (success) or 500 (network error in CI)
     assert.ok([200, 500].includes(res.status), `Expected 200 or 500, got ${res.status}`);
     if (res.status === 200) {
@@ -118,33 +92,10 @@ describe('Validation Routes - find duplicates and duplicate check', () => {
       assert.strictEqual(json.status, 'success');
     }
   });
-});
 
-describe('Validation Routes - validate-and-import success for Contact', () => {
-  let server3;
-  const port3 = 3106;
-  let supabaseInit = false;
-
-  before(async () => {
-    // Initialize Supabase if credentials are available
-    supabaseInit = await initSupabaseForTests();
-    
-    const express = (await import('express')).default;
-    const createValidationRoutes = (await import('../../routes/validation.js')).default;
-
-    app = (await import('express')).default();
-    app.use(express.json());
-    app.use('/api/validation', createValidationRoutes(null));
-    server3 = app.listen(port3);
-    await new Promise((r) => server3.on('listening', r));
-  });
-
-  after(async () => {
-    if (server3) await new Promise((r) => server3.close(r));
-  });
-
+  // Validate and import success for Contact
   it('imports one Contact and defaults missing last_name to UNK', async () => {
-    if (!supabaseInit) {
+    if (!supabaseInitialized) {
       // Skip this test if Supabase not initialized
       return;
     }
@@ -153,9 +104,7 @@ describe('Validation Routes - validate-and-import success for Contact', () => {
       entityType: 'Contact',
       records: [{ first_name: 'Alice' }]
     };
-    const res = await fetch(`http://localhost:${port3}/api/validation/validate-and-import`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-    });
+    const res = await req('POST', '/api/validation/validate-and-import', body);
     // Accept 200 (success) or 500 (network error in CI)
     assert.ok([200, 500].includes(res.status), `Expected 200 or 500, got ${res.status}`);
     if (res.status === 200) {

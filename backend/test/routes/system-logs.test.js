@@ -2,9 +2,9 @@
  * Unit tests for system-logs routes
  */
 
-import { describe, it, before, after, mock } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import { initSupabaseForTests, hasSupabaseCredentials } from '../setup.js';
+import { initSupabaseForTests } from '../setup.js';
 
 let app;
 let server;
@@ -68,8 +68,9 @@ describe('System Logs Routes', () => {
       // Skip this test if Supabase not initialized
       return;
     }
-    // Use a non-existent ID - the API should still return success (no rows affected)
-    const res = await fetch(`http://localhost:${port}/api/system-logs/00000000-0000-0000-0000-000000000000`, { method: 'DELETE' });
+    // Use a randomly generated non-existent UUID - the API should still return success (no rows affected)
+    const testUuid = crypto.randomUUID();
+    const res = await fetch(`http://localhost:${port}/api/system-logs/${testUuid}`, { method: 'DELETE' });
     // Accept 200 (success) or 500 (network error in CI)
     assert.ok([200, 500].includes(res.status), `Expected 200 or 500, got ${res.status}`);
     if (res.status === 200) {
