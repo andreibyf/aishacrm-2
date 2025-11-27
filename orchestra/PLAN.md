@@ -281,6 +281,44 @@ Acceptance:
 
 ---
 
+### 8) BUG-DASH-003 – Fix dashboard phantom counts and cache issues
+
+Type: bugfix  
+Status: Complete ✅ (v1.0.93-95)  
+Area: Dashboard – Data accuracy and caching
+
+Goal:  
+Eliminate incorrect dashboard counts showing phantom data when tables are empty, and fix cache-related data leakage issues.
+
+Resolution:
+
+**v1.0.93 - Cache Key Isolation:**
+- **Root Cause:** Dashboard bundle cache used `'GLOBAL'` fallback when `tenant_id` was missing, causing cross-tenant cache leakage. One tenant's cached data returned to another tenant.
+- **Fix:** Removed `'GLOBAL'` fallback; required explicit `tenant_id` parameter for cache keys. Each tenant now has isolated cache entry.
+- **Side Effect:** Broke superadmin "All Clients Global" view (sent `null` tenant_id, rejected by backend).
+
+**v1.0.94 - Superadmin Regression Fix:**
+- **Root Cause:** v1.0.93 was too restrictive - rejected `null` tenant_id, breaking legitimate superadmin global aggregation view.
+- **Fix:** Allow `null` tenant_id but use distinct `'SUPERADMIN_GLOBAL'` cache key. Maintains tenant isolation while enabling global view.
+- **Impact:** Both single-tenant and global views work correctly with proper cache separation.
+
+**v1.0.95 - Phantom Count Fix:**
+- **Root Cause:** PostgreSQL `count: 'planned'` uses statistical estimates that don't update immediately after DELETE operations, showing phantom counts (e.g., "67 activities" when table empty).
+- **Fix:** Changed all dashboard count queries to use `count: 'exact'` instead of `'planned'` estimates. Added `bust_cache=true` query parameter for testing.
+- **Impact:** Dashboard now shows accurate counts reflecting actual database rows. No more phantom data from stale statistics.
+
+Files Changed:
+- `backend/routes/reports.js`: Cache key logic (effectiveTenantKey), count mode changed from 'planned' to 'exact', added cache bust parameter, simplified new leads and activities queries.
+
+Acceptance:
+- ✅ Dashboard shows 0 counts when tables are empty (no phantom data).
+- ✅ Each tenant has isolated cache (no cross-tenant data leakage).
+- ✅ Superadmin global view works without errors.
+- ✅ Test data toggle functions correctly.
+- ✅ Cache bypass available for testing (`?bust_cache=true`).
+
+---
+
 ## Testing & Validation Requirements
 
 Manual:
@@ -307,8 +345,9 @@ Automated / Monitoring:
 - BUG-MCP-001: Complete ✅ (v1.0.87-90 - MCP connectivity, health-proxy, token injection)
 - BUG-INT-001: Complete ✅ (v1.0.91 - idempotency, retry, suppression logging)
 - BUG-CACHE-001: Complete ✅ (v1.0.92 - consolidated tenant resolution to canonical cache)
+- BUG-DASH-003: Complete ✅ (v1.0.93-95 - phantom counts, cache isolation, exact count queries)
 
-**All planned bugfixes complete! 🎉**
+**All planned bugfixes complete! Platform stable and ready for feature work. 🎉**
 
 ---
 
