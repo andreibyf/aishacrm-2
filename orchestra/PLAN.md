@@ -212,29 +212,22 @@ Testing:
 ### 5) BUG-MCP-001 – Restore MCP/Braid and n8n reachability
 
 Type: bugfix  
-Status: Pending (P2, after P1 APIs are stable or in parallel if isolated)  
+Status: Complete ✅ (v1.0.87–v1.0.90)  
 Area: Integrations – Braid MCP / n8n
 
 Goal:  
 Make `mcp-node`, `n8n-proxy`, and `n8n` reachable again and restore MCP test suite to a passing or mostly-passing state.
 
-Steps:
-1. Check container/service status:
-   - Are MCP and n8n containers running?
-   - Are the ports and hostnames matching the URLs used in health checks?
-2. Validate connectivity:
-   - From the monitoring environment to MCP/n8n.
-   - Check TLS/SSL if HTTPS is involved.
-3. Fix configuration:
-   - Correct environment variables, base URLs, ports.
-   - Ensure any required auth between services is configured.
-
-Scope:
-- Only service wiring/config for MCP/n8n and their health endpoints.
+Resolution:
+- Production compose uses internal service URL `http://mcp:8000` for backend (`BRAID_MCP_URL`, `MCP_NODE_HEALTH_URL`).
+- Backend `/api/mcp/health-proxy` fixed with timeout, payload validation, and multi-candidate attempts. Enhanced diagnostics added.
+- GitHub Actions deployment injects `GITHUB_TOKEN` to prod `.env`; MCP container recreated when token is present.
+- MCP monitor shows all green in production; validation issues created and confirmed: `#60` (dev), `#61` (prod), `#62` (post v1.0.90 deploy).
+- Direct prod curl to `/api/mcp/health-proxy` returns `reachable: true`, `url: http://mcp:8000/health`, low latency.
 
 Acceptance:
-- `mcp-node`, `n8n-proxy`, and `n8n` no longer report “Not reachable”.
-- MCP health suite starts passing core tests (Braid Health, CRM endpoints, etc.).
+- MCP and n8n containers healthy under `docker compose ps`.
+- MCP health suite and monitor green; health-proxy reachable with diagnostics.
 
 ---
 
@@ -247,19 +240,15 @@ Area: Integrations – GitHub health reporting
 Goal:  
 Stop flapping/repeated attempts for `POST /api/github-issues/create-health-issue` and make health issue creation idempotent and reliable.
 
-Steps:
-1. Inspect the logic that triggers `create-health-issue`:
-   - When is it called?
-   - What conditions trigger multiple calls at the same timestamp?
-2. Implement:
-   - Deduplication or idempotency for a given incident.
-   - Backoff/retry logic where appropriate.
-3. Log:
-   - Success vs failure of health issue creation.
-   - Reason when suppressed (duplicate).
+Progress:
+- Backend route enhanced: token fallback (`GITHUB_TOKEN || GH_TOKEN || GITHUB_PAT || GITHUB_PERSONAL_ACCESS_TOKEN`), environment-aware labels/title, and metadata footer with build version, requestId, timestamp.
+- Workflow updated to inject `GITHUB_TOKEN` into prod and recreate MCP when token present.
+- Validation issues created successfully (dev/prod), labels and metadata correct after `v1.0.90`.
 
-Scope:
-- Only the metric/health issue reporter and its call to GitHub.
+Remaining Steps:
+1. Implement request-level idempotency key (e.g., hash of incident context) to dedupe within TTL.
+2. Add backoff/retry with jitter for transient GitHub failures; suppress storms with circuit breaker.
+3. Structured logging: log suppression reason when duplicate; summary metrics for creation vs suppression.
 
 Acceptance:
 - No repeated bursts of `create-health-issue` calls for the same event.
