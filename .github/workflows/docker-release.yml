@@ -141,7 +141,7 @@ jobs:
               fi
             fi
             # Restart services with version info (force recreate to detect :latest image changes)
-            docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend
+            docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend n8n n8n-proxy
             # If token changed, recreate MCP to pick up new env
             if [ -n "$MCP_GITHUB_TOKEN" ]; then
               docker compose -f docker-compose.prod.yml up -d --force-recreate mcp
