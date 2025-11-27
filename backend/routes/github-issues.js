@@ -6,6 +6,7 @@
 import express from 'express';
 import fetch from 'node-fetch';
 import crypto from 'crypto';
+import fs from 'fs';
 
 const router = express.Router();
 
@@ -18,12 +19,23 @@ const GITHUB_API_BASE = 'https://api.github.com';
 
 // Environment / build metadata
 const ENVIRONMENT = process.env.NODE_ENV === 'production' ? 'prod' : 'dev';
-// Build/version fallback order: explicit backend vars, then frontend tag injected by CI
-const BUILD_VERSION =
-  process.env.APP_BUILD_VERSION ||
-  process.env.BUILD_VERSION ||
-  process.env.VITE_APP_BUILD_VERSION ||
-  'dev-local';
+// Build/version resolution: env vars first, then baked image file (/app/VERSION), else dev-local
+function resolveBuildVersion() {
+  const fromEnv =
+    process.env.APP_BUILD_VERSION ||
+    process.env.BUILD_VERSION ||
+    process.env.VITE_APP_BUILD_VERSION;
+  if (fromEnv && fromEnv.trim()) return fromEnv.trim();
+  let fileVersion = null;
+  try {
+    fileVersion = fs.readFileSync('/app/VERSION', 'utf8');
+  } catch (e) {
+    fileVersion = null;
+  }
+  if (fileVersion && fileVersion.trim()) return fileVersion.trim();
+  return 'dev-local';
+}
+const BUILD_VERSION = resolveBuildVersion();
 
 /**
  * POST /api/github-issues/create-health-issue
