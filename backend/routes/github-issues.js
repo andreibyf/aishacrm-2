@@ -18,7 +18,12 @@ const GITHUB_API_BASE = 'https://api.github.com';
 
 // Environment / build metadata
 const ENVIRONMENT = process.env.NODE_ENV === 'production' ? 'prod' : 'dev';
-const BUILD_VERSION = process.env.APP_BUILD_VERSION || process.env.BUILD_VERSION || 'dev-local';
+// Build/version fallback order: explicit backend vars, then frontend tag injected by CI
+const BUILD_VERSION =
+  process.env.APP_BUILD_VERSION ||
+  process.env.BUILD_VERSION ||
+  process.env.VITE_APP_BUILD_VERSION ||
+  'dev-local';
 
 /**
  * POST /api/github-issues/create-health-issue

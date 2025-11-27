@@ -92,12 +92,13 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           VERSION_TAG: ${{ github.ref_name }}
+          MCP_GITHUB_TOKEN: ${{ secrets.PROD_MCP_GITHUB_TOKEN }}
         with:
           host: ${{ secrets.PROD_VPS_HOST }}
           username: ${{ secrets.PROD_VPS_USER }}
           key: ${{ secrets.PROD_VPS_SSH_KEY }}
           port: ${{ secrets.PROD_VPS_PORT || 22 }}
-          envs: VERSION_TAG
+          envs: VERSION_TAG,MCP_GITHUB_TOKEN
           script: |
             cd /opt/aishacrm
             echo "Deploying version: $VERSION_TAG"
@@ -113,8 +114,20 @@ jobs:
             else
               echo "VITE_APP_BUILD_VERSION=$VERSION_TAG" >> .env
             fi
+            # Optionally inject GitHub token for MCP GitHub adapter
+            if [ -n "$MCP_GITHUB_TOKEN" ]; then
+              if grep -q "^GITHUB_TOKEN=" .env 2>/dev/null; then
+                sed -i "s/^GITHUB_TOKEN=.*/GITHUB_TOKEN=$MCP_GITHUB_TOKEN/" .env
+              else
+                echo "GITHUB_TOKEN=$MCP_GITHUB_TOKEN" >> .env
+              fi
+            fi
             # Restart services with version info (force recreate to detect :latest image changes)
             docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend
+            # If token changed, recreate MCP to pick up new env
+            if [ -n "$MCP_GITHUB_TOKEN" ]; then
+              docker compose -f docker-compose.prod.yml up -d --force-recreate mcp
+            fi
             echo "Deployment completed: $VERSION_TAG"
             # Verify deployment
             sleep 3
