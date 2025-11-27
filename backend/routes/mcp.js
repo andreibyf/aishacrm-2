@@ -1016,6 +1016,7 @@ export default function createMCPRoutes(_pgPool) {
     // Track individual errors for better diagnostics
     const errors = [];
     const attempts = candidates.map(url => (async () => {
+      try {
       const t0 = performance.now ? performance.now() : Date.now();
       const resp = await withTimeout(fetch(url, {
         method: 'GET',
@@ -1033,6 +1034,10 @@ export default function createMCPRoutes(_pgPool) {
         throw new Error('invalid_health_payload');
       }
       return { url, latency_ms: Math.round(dt), data };
+      } catch (error) {
+        errors.push({ url, error: error.message });
+        throw error;
+      }
     })());
 
     try {
@@ -1049,7 +1054,8 @@ export default function createMCPRoutes(_pgPool) {
       });
     } catch (err) {
       // Collect all errors for debugging
-      const errorsDetails = err.errors ? err.errors.map(e => e.message).join(', ') : (err.message || 'unreachable');
+      const aggregateErrors = err.errors ? err.errors.map(e => ({ message: e.message, stack: e.stack?.split('\n')[0] })) : [];
+      console.log('[MCP Health Proxy] All attempts failed:', JSON.stringify(aggregateErrors, null, 2));
       return res.json({
         status: 'success',
         data: {
@@ -1058,7 +1064,7 @@ export default function createMCPRoutes(_pgPool) {
           attempted: candidates.length,
           diagnostics: {
             candidates: candidates,
-            errors: errors,
+            errors: aggregateErrors,
             hint: 'Set MCP_NODE_HEALTH_URL env var or ensure one of the default endpoints is reachable'
           }
         }
