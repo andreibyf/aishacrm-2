@@ -1017,6 +1017,13 @@ export default function createMCPRoutes(_pgPool) {
     const errors = [];
     const attempts = candidates.map(url => (async () => {
       const t0 = performance.now ? performance.now() : Date.now();
+      const resp = await withTimeout(fetch(url, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      }), 3000);
+      const dt = (performance.now ? performance.now() : Date.now()) - t0;
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      let data;
       try {
         data = await resp.json();
       } catch {
@@ -1025,6 +1032,7 @@ export default function createMCPRoutes(_pgPool) {
       if (!data || (data.status !== 'ok' && data.status !== 'healthy')) {
         throw new Error('invalid_health_payload');
       }
+      return { url, latency_ms: Math.round(dt), data };
     })());
 
     try {
