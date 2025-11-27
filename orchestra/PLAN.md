@@ -130,10 +130,38 @@ Every change must:
 
 ## Active Tasks (Priority Order)
 
+### BUG-DB-001 – Missing synchealth table in database schema
 
+**Status**: Open  
+**Priority**: Critical  
+**Area**: Database Schema / Sync Health Monitoring
 
+**Goal**:  
+Resolve the missing `synchealth` table error that is blocking the sync health monitoring endpoint.
 
+**Symptoms**:
+- Endpoint: `GET /api/synchealths?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46`
+- Error: `Could not find the table 'public.synchealth' in the schema cache`
+- Complete failure of sync health monitoring functionality
 
+**Tasks**:
+1. **Investigation Phase**:
+   - Search for synchealth table migration files in `backend/migrations/`
+   - Check if table exists in local/dev Supabase database
+   - Review `backend/routes/synchealths.js` for expected schema
+   - Determine if this is a missing migration or schema mismatch
+
+2. **Resolution Phase**:
+   - Create or apply migration to add `synchealth` table to production
+   - Include proper columns, indexes, and constraints
+   - Apply RLS policies for tenant isolation
+   - Test endpoint after table creation
+
+**Acceptance Criteria**:
+- `GET /api/synchealths` returns data or empty array (not schema error)
+- Table visible in Supabase Table Editor
+- RLS policies enforce tenant isolation
+- No impact on existing sync functionality
 
 ---
 

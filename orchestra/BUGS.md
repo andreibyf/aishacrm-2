@@ -5,6 +5,37 @@ This file tracks known issues. PLAN.md selects which bugs are currently in scope
 ---
 ## Platform Health & Integrations
 
+### BUG-DB-001 – Missing synchealth table in database schema
+
+Status: Open  
+Priority: Critical  
+Area: Database Schema / Sync Health Monitoring
+
+Symptoms:
+- `GET /api/synchealths?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46`
+- Error: `Could not find the table 'public.synchealth' in the schema cache`
+- Sync health monitoring endpoint completely non-functional
+
+Interpretation:
+- The `synchealth` table does not exist in the production Supabase database
+- Schema cache cannot locate the table, causing all sync health queries to fail
+- Likely missing migration or table was never created in production
+
+Suspected Causes:
+- Migration file exists but was never applied to production database
+- Table creation SQL may be in migration files but not executed
+- Possible table rename or schema mismatch between dev and production
+
+Notes:
+- This is a critical issue blocking sync health monitoring entirely
+- Need to:
+  - Verify if migration exists for synchealth table creation
+  - Check if table exists in dev/local database
+  - Apply missing migration to production or create table manually
+  - Verify RLS policies are in place after table creation
+
+---
+
 ## CRUD Health Tests
 
 ### BUG-CRUD-001 – Auth failures for CRUD health tests (Contacts, Leads, Accounts, Lists)
