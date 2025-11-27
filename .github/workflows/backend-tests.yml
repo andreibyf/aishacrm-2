@@ -2,73 +2,40 @@ name: Backend Tests
 
 on:
   push:
-    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-tests.yml'
   pull_request:
-    branches: [ main ]
-
-# Least-privilege token permissions for this workflow
-permissions:
-  contents: read
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-tests.yml'
 
 jobs:
-  test-backend:
+  backend-tests:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    defaults:
-      run:
-        working-directory: backend
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: |
-            backend/package-lock.json
+          cache-dependency-path: backend/package-lock.json
 
-      - name: Install deps
-        run: npm ci
+      - name: Install backend dependencies
+        run: npm --prefix backend ci
 
-      - name: Lint (optional)
-        run: |
-          echo "No linter configured for backend; skipping"
+      - name: Run backend tests
+        run: npm --prefix backend test
 
-      - name: Run unit tests (skip API route tests by default)
-        env:
-          CI: true
-          BACKEND_URL: http://localhost:3001
-          TEST_TENANT_ID: local-tenant-001
-        run: |
-          echo "[Backend Tests] Searching for test files..."
-          set -e
-          FILES=$(ls test/**/*.test.js 2>/dev/null || true)
-          if [ -z "$FILES" ]; then
-            echo "[Backend Tests] No test files found under backend/test/**/*.test.js – skipping without failure."
-            exit 0
-          fi
-          echo "[Backend Tests] Found test files:" && echo "$FILES" | sed 's/^/  - /'
-          npm test --silent
-
-      - name: Coverage report
-        if: success()
-        env:
-          CI: true
-        run: |
-          FILES=$(ls test/**/*.test.js 2>/dev/null || true)
-          if [ -z "$FILES" ]; then
-            echo "[Coverage] Skipping coverage – no tests present." && exit 0
-          fi
-          echo "[Coverage] Running coverage via npm run test:coverage";
-          npm run test:coverage || { echo "[Coverage] Failed"; exit 1; }
-          echo "[Coverage] lcov snippet:"; head -n 20 coverage/lcov.info || true
-
-      - name: Upload coverage artifact
-        if: success()
+      - name: Upload test artifacts (optional)
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-coverage
-          path: backend/coverage
+          name: backend-test-logs
+          path: |
+            backend/test-results
+            backend/*.log
+            backend/test/**/*.log
