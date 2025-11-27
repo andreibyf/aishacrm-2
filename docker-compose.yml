@@ -193,6 +193,8 @@ services:
       # Disable frame-ancestors CSP to allow iframe embedding
       - N8N_HIRING_BANNER_ENABLED=false
       - VUE_APP_URL_BASE_API=http://localhost:5679
+      # Enable Public API for proper REST endpoint authentication
+      - N8N_PUBLIC_API_DISABLED=false
       # Load custom MCP node
       - N8N_CUSTOM_EXTENSIONS=/home/node/.n8n/custom
       # Optional: enable Basic Auth to allow backend to use legacy /rest endpoints
