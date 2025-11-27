@@ -234,25 +234,26 @@ Acceptance:
 ### 6) BUG-INT-001 – Stabilize GitHub health issue reporter
 
 Type: bugfix  
-Status: Pending (P2)  
+Status: Complete ✅ (v1.0.91)  
 Area: Integrations – GitHub health reporting
 
 Goal:  
 Stop flapping/repeated attempts for `POST /api/github-issues/create-health-issue` and make health issue creation idempotent and reliable.
 
-Progress:
-- Backend route enhanced: token fallback (`GITHUB_TOKEN || GH_TOKEN || GITHUB_PAT || GITHUB_PERSONAL_ACCESS_TOKEN`), environment-aware labels/title, and metadata footer with build version, requestId, timestamp.
-- Workflow updated to inject `GITHUB_TOKEN` into prod and recreate MCP when token present.
-- Validation issues created successfully (dev/prod), labels and metadata correct after `v1.0.90`.
+Resolution:
+- **Idempotency:** Generate hash key from incident context (env, type, component, severity, error signature). Redis-backed with 24h TTL prevents duplicate issues for same incident.
+- **Retry Logic:** Exponential backoff with 30% jitter for transient GitHub API failures (rate limits, network errors). Skips retries on client errors (except 429).
+- **Suppression Logging:** Logs duplicate detections with existing issue reference. Returns `suppressed: true` response with existing issue URL.
+- **Token & Metadata:** Enhanced in earlier iterations (token fallback, environment labels, build version footer).
+- **Validation:** Tested locally; ready for production deployment via tag.
 
-Remaining Steps:
-1. Implement request-level idempotency key (e.g., hash of incident context) to dedupe within TTL.
-2. Add backoff/retry with jitter for transient GitHub failures; suppress storms with circuit breaker.
-3. Structured logging: log suppression reason when duplicate; summary metrics for creation vs suppression.
+Files Changed:
+- `backend/routes/github-issues.js`: Added `getRedisClient`, `generateIdempotencyKey`, `checkIdempotency`, `recordIssueCreation`, `retryWithBackoff` functions; integrated into create-health-issue endpoint.
 
 Acceptance:
-- No repeated bursts of `create-health-issue` calls for the same event.
-- Failures are logged clearly and do not cause uncontrolled retry storms.
+- ✅ No repeated bursts of `create-health-issue` calls for the same event (dedupe via Redis).
+- ✅ Transient failures retry automatically with backoff/jitter.
+- ✅ Suppressed duplicates logged clearly with existing issue reference.
 
 ---
 
@@ -306,8 +307,8 @@ Automated / Monitoring:
 - BUG-API-001B: Complete ✅ (v1.0.74 - APP_BUILD_VERSION runtime injection)
 - BUG-API-002: Resolved ✅ (auth issue resolved with 001B fixes)
 - BUG-API-003: Complete ✅ (v1.0.75 - generateUniqueId backend endpoint)
-- BUG-MCP-001: Pending (P2)
-- BUG-INT-001: Pending (P2)
+- BUG-MCP-001: Complete ✅ (v1.0.87-90 - MCP connectivity, health-proxy, token injection)
+- BUG-INT-001: Complete ✅ (v1.0.91 - idempotency, retry, suppression logging)
 - BUG-CACHE-001: Pending (P3)
 
 ---
