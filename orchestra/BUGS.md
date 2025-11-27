@@ -36,6 +36,41 @@ Notes:
 
 ---
 
+### BUG-PROD-001 – Settings page returns HTML instead of JSON (Production only)
+
+Status: Open  
+Priority: Critical  
+Area: Settings API / Production Environment
+
+Symptoms:
+- URL: `https://app.aishacrm.com/settings`
+- Error: `SyntaxError: Unexpected token '<', "<!doctype "... is not valid JSON`
+- Occurs in production only, not in dev environment
+- Browser: Chrome 144.0.0.0 on Windows 10
+
+Interpretation:
+- API endpoint is returning HTML (likely an error page or index.html) instead of JSON response
+- JavaScript is attempting to parse response as JSON, causing syntax error
+- Environment-specific issue - dev works correctly, production fails
+
+Suspected Causes:
+- Production nginx/reverse proxy misconfiguration routing `/settings` to frontend instead of backend API
+- Missing or incorrect CORS/proxy configuration for Settings endpoints in production
+- Backend route not registered or not accessible in production environment
+- Frontend making request to wrong URL (missing `/api/` prefix)
+- Production build issue where Settings API calls are not properly configured
+
+Notes:
+- This is a critical production-only issue blocking Settings page functionality
+- Need to:
+  - Check if issue is with `/settings` route or `/api/settings` endpoint
+  - Verify production nginx configuration for API routing
+  - Compare dev vs prod environment configurations
+  - Check if Settings frontend code uses correct API base URL
+  - Review production docker-compose and environment variables
+
+---
+
 ## CRUD Health Tests
 
 ### BUG-CRUD-001 – Auth failures for CRUD health tests (Contacts, Leads, Accounts, Lists)

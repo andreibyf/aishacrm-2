@@ -130,6 +130,50 @@ Every change must:
 
 ## Active Tasks (Priority Order)
 
+### BUG-PROD-001 – Settings page returns HTML instead of JSON (Production only)
+
+**Status**: Open  
+**Priority**: Critical  
+**Area**: Settings API / Production Environment
+
+**Goal**:  
+Fix the Settings page in production that is returning HTML instead of JSON, causing a parse error.
+
+**Symptoms**:
+- URL: `https://app.aishacrm.com/settings`
+- Error: `SyntaxError: Unexpected token '<', "<!doctype "... is not valid JSON`
+- Production only - dev environment works correctly
+- User Agent: Chrome 144.0.0.0 on Windows 10
+
+**Tasks**:
+1. **Investigation Phase**:
+   - Identify which API endpoint Settings page is calling
+   - Check frontend code: does it use `/settings` or `/api/settings`?
+   - Verify production nginx configuration (routing rules, proxy pass)
+   - Compare production vs dev environment configurations
+   - Check production docker-compose.yml and .env settings
+   - Test API endpoint directly with curl from production server
+
+2. **Root Cause Analysis**:
+   - Determine if nginx is routing API calls to frontend container
+   - Check if VITE_AISHACRM_BACKEND_URL is correct in production build
+   - Verify backend route registration for Settings endpoints
+   - Check if issue is specific to `/settings` or affects other routes
+
+3. **Resolution Phase**:
+   - Fix nginx configuration if routing issue
+   - Update frontend API calls if using wrong base URL
+   - Ensure backend routes are accessible from production nginx
+   - Test fix in staging before production deploy
+
+**Acceptance Criteria**:
+- Settings page loads in production without JSON parse error
+- API calls return proper JSON responses, not HTML
+- Dev and production behavior is consistent
+- No regression on other API endpoints
+
+---
+
 ### BUG-DB-001 – Missing synchealth table in database schema
 
 **Status**: Open  
