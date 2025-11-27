@@ -1040,6 +1040,8 @@ export default function createMCPRoutes(_pgPool) {
         }
       });
     } catch (err) {
+      // Collect all errors for debugging
+      const errorsDetails = err.errors ? err.errors.map(e => e.message).join(', ') : (err.message || 'unreachable');
       return res.json({
         status: 'success',
         data: {
