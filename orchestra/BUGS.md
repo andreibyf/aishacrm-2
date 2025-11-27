@@ -5,6 +5,51 @@ This file tracks known issues. PLAN.md selects which bugs are currently in scope
 ---
 ## Platform Health & Integrations
 
+## CRUD Health Tests
+
+### BUG-CRUD-001 – Auth failures for CRUD health tests (Contacts, Leads, Accounts, Lists)
+
+Status: Open  
+Priority: High  
+Area: Core API – Contacts / Leads / Accounts / Listing
+
+Symptoms (from automated tests):
+- CRUD Operations – Contact:
+  - Create: `Error: Create should succeed (status: 401)`
+  - Read: `Error: Contact ID from create test should exist`
+  - Update: `Error: Contact ID from create test should exist`
+  - Delete: `Error: Contact ID from create test should exist`
+- CRUD Operations – Lead:
+  - Create: `Error: Create should succeed (status: 401)`
+  - Read/Update/Delete: `Error: Lead ID from create test should exist`
+- CRUD Operations – Account:
+  - Create: `Error: Create should succeed (status: 401)`
+  - Read/Update/Delete: `Error: Account ID from create test should exist`
+- CRUD Operations – List with Filters:
+  - `Error: List should succeed (status: 401)`
+
+Interpretation:
+- All create operations for Contacts, Leads, and Accounts are returning HTTP 401 (Unauthorized) in the health test context.
+- All read/update/delete failures are cascading from the missing ID (because create never succeeded).
+- List-with-filters endpoint also returns 401, indicating the same auth problem.
+
+Suspected Causes:
+- The health test runner (or MCP/Braid test suite) is not authenticated correctly:
+  - Missing or invalid auth token/cookie for API calls.
+  - Using a user or service account that lacks the required CRM permissions.
+- CRUD endpoints may be using stricter or different auth middleware compared to other endpoints that are passing.
+- Possible mismatch between “normal app” auth flow and “health test” auth flow.
+
+Notes:
+- Fix must NOT weaken security or make CRUD endpoints publicly accessible.
+- The goal is to:
+  - Ensure health tests use a proper authenticated context (service account or test user).
+  - Ensure CRUD endpoints honor that authenticated context consistently.
+
+
+
+
+
 ### BUG-API-001 – Tenant and employee API calls intermittently fail (fetch failed)
 
 Status: Closed  
