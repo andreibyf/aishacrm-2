@@ -22,7 +22,7 @@ import { useErrorLog } from "../shared/ErrorLogger";
 import { useConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "sonner";
 import { useTenant } from "../shared/tenantContext";
-import { BACKEND_URL } from '@/api/entities';
+import { BACKEND_URL, callBackendAPI } from '@/api/entities';
 
 export default function SystemHealthDashboard({ onViewMore }) {
   const { errors, clearErrors } = useErrorLog();
@@ -64,12 +64,9 @@ export default function SystemHealthDashboard({ onViewMore }) {
 
   const loadContainerStatus = async () => {
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/system/containers-status`);
-      if (resp.ok) {
-        const result = await resp.json();
-        if (result.status === 'success' && result.data) {
-          setContainerStatus({ services: result.data.services || [], timestamp: result.data.timestamp });
-        }
+      const resp = await callBackendAPI('/api/system/containers-status', { method: 'GET' });
+      if (resp && resp.status === 'success' && resp.data) {
+        setContainerStatus({ services: resp.data.services || [], timestamp: resp.data.timestamp });
       }
     } catch (e) {
       console.warn("Failed to load container status:", e.message);
@@ -79,9 +76,8 @@ export default function SystemHealthDashboard({ onViewMore }) {
   const loadMetrics = useCallback(async () => {
     try {
       const tenantParam = selectedTenantId ? `&tenant_id=${encodeURIComponent(selectedTenantId)}` : "";
-      const resp = await fetch(`${BACKEND_URL}/api/metrics/performance?hours=${rangeHours}&limit=200${tenantParam}`);
-      if (resp.ok) {
-        const result = await resp.json();
+      const result = await callBackendAPI(`/api/metrics/performance?hours=${rangeHours}&limit=200${tenantParam}`, { method: 'GET' });
+      if (result && result.status === 'success') {
         const data = result.data || {};
         setMetrics({
           errorRate: data.metrics?.errorRate || 0,
