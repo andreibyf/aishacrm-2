@@ -148,7 +148,8 @@ services:
       - VUE_APP_URL_BASE_API=http://147.189.173.237:5679
       # Enable Public API for proper REST endpoint authentication
       - N8N_PUBLIC_API_DISABLED=false
-      - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE:-false}
+      # Enable Basic Auth for iframe embedding (simpler than user management)
+      - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
       - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
     volumes:

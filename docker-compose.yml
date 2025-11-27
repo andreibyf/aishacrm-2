@@ -197,8 +197,8 @@ services:
       - N8N_PUBLIC_API_DISABLED=false
       # Load custom MCP node
       - N8N_CUSTOM_EXTENSIONS=/home/node/.n8n/custom
-      # Optional: enable Basic Auth to allow backend to use legacy /rest endpoints
-      - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE:-false}
+      # Enable Basic Auth for iframe embedding (simpler than user management)
+      - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
       - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
     volumes:
