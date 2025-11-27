@@ -5,14 +5,20 @@
 
 import express from 'express';
 import fetch from 'node-fetch';
+import crypto from 'crypto';
 
 const router = express.Router();
 
-// GitHub Configuration
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+// GitHub Configuration (token fallback + normalization)
+const RAW_GITHUB_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_PAT || process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
+const GITHUB_TOKEN = (RAW_GITHUB_TOKEN || '').trim();
 const GITHUB_REPO_OWNER = process.env.GITHUB_REPO_OWNER || 'andreibyf';
 const GITHUB_REPO_NAME = process.env.GITHUB_REPO_NAME || 'aishacrm-2';
 const GITHUB_API_BASE = 'https://api.github.com';
+
+// Environment / build metadata
+const ENVIRONMENT = process.env.NODE_ENV === 'production' ? 'prod' : 'dev';
+const BUILD_VERSION = process.env.APP_BUILD_VERSION || process.env.BUILD_VERSION || 'dev-local';
 
 /**
  * POST /api/github-issues/create-health-issue
@@ -49,22 +55,33 @@ router.post('/create-health-issue', async (req, res) => {
       });
     }
 
-    // Build issue body with structured information
+    // Generate request ID for traceability
+    const requestId = crypto.randomUUID();
+
+    // Build issue body with structured information + metadata footer
     const issueBody = buildIssueBody({
       type,
       description,
       context,
       suggestedFix,
       severity,
-      component
+      component,
+      environment: ENVIRONMENT,
+      buildVersion: BUILD_VERSION,
+      requestId
     });
 
-    // Determine labels based on type and severity
-    const labels = buildLabels(type, severity, component);
+    // Determine labels based on type, severity, component, and environment
+    const labels = buildLabels(type, severity, component, ENVIRONMENT);
 
     // Create GitHub issue
+    let finalTitle = `[${type.toUpperCase()}] ${title}`;
+    if (ENVIRONMENT === 'dev') {
+      // Prefix dev issues for immediate visual distinction
+      finalTitle = `[DEV-${type.toUpperCase()}] ${title}`;
+    }
     const issuePayload = {
-      title: `[${type.toUpperCase()}] ${title}`,
+      title: finalTitle,
       body: issueBody,
       labels,
       ...(assignee && { assignees: [assignee] })
@@ -209,7 +226,7 @@ ${additionalContext ? `\n**Additional Context:**\n${additionalContext}` : ''}
 });
 
 // Helper: Build structured issue body
-function buildIssueBody({ type, description, context, suggestedFix, severity, component }) {
+function buildIssueBody({ type, description, context, suggestedFix, severity, component, environment, buildVersion, requestId }) {
   const timestamp = new Date().toISOString();
   const severityEmoji = {
     critical: '🔴',
@@ -263,7 +280,19 @@ ${suggestedFix}
 
 ---
 
+## Monitoring Metadata
+
+| Field | Value |
+|-------|-------|
+| Environment | ${environment} |
+| Build Version | ${buildVersion} |
+| Request ID | ${requestId} |
+| Generated | ${timestamp} |
+
+---
+
 *🤖 This issue was automatically created by the AishaCRM Health Monitoring System.*  
+*Source labels include environment + component for triage.*  
 *For immediate assistance, review the suggested fix or contact the on-call engineer.*
 
 `;
@@ -271,9 +300,10 @@ ${suggestedFix}
   return body;
 }
 
-// Helper: Build labels array
-function buildLabels(type, severity, component) {
-  const labels = ['bug', 'health-monitor'];
+// Helper: Build labels array (adds env/source/component)
+function buildLabels(type, severity, component, environment) {
+  const labels = ['bug', 'health-monitor', `env:${environment}`];
+  labels.push('source:health-monitor');
 
   // Add type label
   if (type === 'api') labels.push('backend', 'api-endpoint');
