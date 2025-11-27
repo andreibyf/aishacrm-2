@@ -75,10 +75,18 @@ services:
     image: ghcr.io/andreibyf/aishacrm-mcp:latest
     container_name: aishacrm-mcp
     restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+      redis-memory:
+        condition: service_healthy
     ports:
       - "127.0.0.1:4002:8000"
     env_file:
       - .env
+    environment:
+      - CRM_BACKEND_URL=http://backend:3001
+      - REDIS_URL=redis://redis-memory:6379
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8000/health || exit 1"]
       interval: 30s

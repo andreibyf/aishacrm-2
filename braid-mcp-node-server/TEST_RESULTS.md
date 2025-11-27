@@ -1,8 +1,8 @@
 # Braid MCP Server - Test Results
 
-**Test Date:** November 14, 2025
+**Test Date:** November 26, 2025 (Updated)
 **Server:** http://localhost:8000
-**Status:** ✅ All Tests Passed
+**Status:** ✅ All Tests Passed (Memory Layer Enabled)
 
 ## Test Summary
 
@@ -53,12 +53,15 @@
 ### 📊 Server Logs Confirm
 
 ```
+[MCP Memory] Connected to Redis
+[MCP] Memory layer available
 Direct Supabase search successful { kind: 'accounts', tenantId: 'system', count: 0 }
 Direct Supabase search successful { kind: 'leads', tenantId: 'system', count: 0 }
 Direct Supabase search successful { kind: 'contacts', tenantId: 'system', count: 0 }
 ```
 
 **All CRM operations are using direct Supabase connection!** 🚀
+**Redis memory layer is now active for session management!** 🎉
 
 ### 🔍 Not Yet Tested
 

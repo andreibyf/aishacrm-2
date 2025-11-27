@@ -3,6 +3,164 @@
 This file tracks known issues. PLAN.md selects which bugs are currently in scope.
 
 ---
+## Platform Health & Integrations
+
+### BUG-API-001 – Tenant and employee API calls intermittently fail (fetch failed)
+
+Status: Closed  
+Priority: Critical  
+Area: Core API – tenants and employees
+
+Symptoms:
+- Monitoring shows repeated critical errors:
+  - `GET /api/tenants/a11dfb63-4b18-4eb8-872e-747af2e37c46`
+  - `GET /api/employees?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46`
+- Both fail with `TypeError: fetch failed`.
+- Affects user: `abyfield@4vdataconsulting.com` at `10:03:41 PM`.
+- Not reported as a clean HTTP 4xx/5xx; instead it’s a lower-level fetch failure (network / TLS / DNS / connection).
+
+Suspected Causes:
+- Backend service or reverse proxy temporarily unreachable from the frontend/API layer.
+- DNS / host resolution issues in the environment where tests run.
+- TLS/SSL or network configuration mismatch between frontend and backend.
+- Possible container or service restart/health issues during calls.
+
+Resolution:
+- Runtime connectivity and environment alignment fixes applied as part of v1.0.74+ releases (APP_BUILD_VERSION injection and proxy/config corrections). Frontend now consistently reaches backend with explicit HTTP responses (401/403 as applicable) instead of lower-level `fetch failed`. Monitoring no longer reports tenant/employee fetch failures; endpoints return stable results across sessions.
+Notes:
+- This impacts core tenant and employee resolution, which cascades into access control and UI loading.
+- Fix stabilizes connectivity and removes fetch-level failures; application-level errors (e.g. 401/403) are explicit HTTP responses, not “fetch failed”.
+
+### BUG-API-002 – Leads API returns “Authentication required” in healthy session
+
+Status: Closed  
+Priority: High  
+Area: Leads API / Auth
+
+Symptoms:
+- Monitoring shows repeated warnings:
+  - `GET /api/leads?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46`
+- Response: `Authentication required`.
+- Occurs even while other tenant-scoped endpoints for the same tenant/user may be working.
+
+Suspected Causes:
+- Leads endpoint using a different auth check/middleware than tenants/employees.
+- Missing or incorrect auth token/cookie propagation for this specific route.
+- Tenant or permission checks misconfigured for leads, causing false “Authentication required”.
+
+Resolution:
+- Aligned leads route auth with global middleware; frontend `callBackendAPI` attaches Supabase bearer token and cookies, enabling backend to populate `req.user` consistently. Issue resolved alongside BUG-API-001 connectivity fixes; monitoring shows no false “Authentication required” on `/api/leads` for authenticated sessions.
+Notes:
+- Fix aligns leads endpoint auth behavior with the rest of the authenticated API without weakening auth.
+
+### BUG-MCP-001 – Braid MCP server and n8n integrations unreachable
+
+Status: In Progress (Reachability Restored)  
+Priority: High  
+Area: Integrations – Braid MCP / n8n
+
+Symptoms (original):
+- Health checks showed MCP/n8n unreachable with code 0 and ~1500ms latency.
+- MCP test suite reported 0/12 passing.
+- All MCP-related tests failing: Braid Health, Wikipedia Search, CRM Accounts/Leads/Contacts, Mock Adapter, Batch Actions, GitHub Repos, Memory Store, LLM Generation, Error Handling.
+
+Current status (verified):
+- MCP server `aishacrm-mcp` is running and healthy.
+- Host health: `curl http://localhost:4002/health` → `200 application/json`.
+- Backend DNS: `wget http://aishacrm-mcp:8000/health` from `aishacrm-backend` → `200`.
+- Pending: enable memory layer (`REDIS_URL`) and re-run MCP test suite.
+
+Suspected Causes (original):
+- MCP/Braid and n8n containers or services down or misconfigured (ports, hostnames, TLS).
+- Health checker targeting wrong host port (`8000` instead of published `4002`) or not using service DNS.
+
+Notes:
+- Reachability restored; next focus is enabling Redis-backed memory and validating adapters.
+- Fix must pass core health tests before feature work.
+
+Action Items:
+- Set `REDIS_URL=redis://redis:6379` for MCP to enable memory.
+- Ensure `CRM_BACKEND_URL=http://backend:3001` inside network.
+- Align health monitors: host → `http://localhost:4002/health`, containers → `http://aishacrm-mcp:8000/health`.
+- Re-run MCP test suite and record results in `braid-mcp-node-server/TEST_RESULTS.md`.
+
+### BUG-API-003 – Elevated API error rate (~10%)
+
+Status: Open  
+Priority: Medium  
+Area: API reliability / Observability
+
+Symptoms:
+- Average API response time: ~447ms over 451 successful calls.
+- API error rate at ~10%:
+  - 49 errors from 500 calls.
+- Errors include:
+  - Fetch failures for core endpoints (tenants/employees).
+  - Authentication errors on specific endpoints (e.g. leads).
+  - Repeated errors in the health issue reporter.
+
+Suspected Causes:
+- Combination of:
+  - Unreachable services (MCP/n8n).
+  - Auth failures on certain routes.
+  - Intermittent backend/API availability issues.
+- Observability is catching the errors, but underlying causes are not yet stabilized.
+
+Notes:
+- This bug is a meta-issue representing overall reliability; it should trend down as BUG-API-001, BUG-API-002, and BUG-MCP-001 are resolved.
+- Fix is partially dependent on those underlying issues.
+---
+
+### BUG-INT-001 – Health issue reporter endpoint is flapping or misbehaving
+
+Status: Open  
+Priority: Medium  
+Area: Integrations – GitHub health issue reporting
+
+Symptoms:
+- Monitoring shows repeated critical events at the same timestamp:
+  - `POST /api/github-issues/create-health-issue - 11/25/2025, 10:23:38 PM` (multiple times)
+- Suggests:
+  - Either repeated automatic retries due to failure, or
+  - Misconfigured integration that fires multiple times for the same event.
+
+Suspected Causes:
+- Health reporter logic attempting to auto-create GitHub issues and failing, then retrying.
+- No deduplication or backoff, causing multiple attempts for the same health incident.
+- Possible GitHub API errors or misconfiguration (token, repo, permissions).
+
+Notes:
+- This bug is about making the health reporter reliable and non-spammy.
+- Fix must ensure idempotency/deduplication and clear logging, not silent or repeated failures.
+---
+
+### BUG-CACHE-001 – Tenant resolve cache ineffective (0% hit ratio)
+
+Status: Open  
+Priority: Low  
+Area: Performance – Tenant resolution cache
+
+Symptoms:
+- Metrics show:
+  - `tenant_resolve_cache_size 1`
+  - `tenant_resolve_cache_hits_total 0`
+  - `tenant_resolve_cache_misses_total 2`
+  - `tenant_resolve_cache_hit_ratio 0.0000`
+  - `tenant_resolve_cache_ttl_ms 300000` (5 minutes)
+- Cache exists but is effectively never hit.
+
+Suspected Causes:
+- Cache key or lookup logic not aligning with how tenant resolution is invoked.
+- Cache TTL/eviction OK, but data is never marked as reusable for incoming requests.
+- Possibly too many unique keys or per-request variations.
+
+Notes:
+- Lower priority than hard failures, but relevant for performance and load reduction.
+- Fix should make tenant resolution cache actually useful without compromising correctness or tenant isolation.
+
+
+---
+
 
 ## Dashboard
 
