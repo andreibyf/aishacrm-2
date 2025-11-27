@@ -10,6 +10,25 @@ import fs from 'fs';
 
 const router = express.Router();
 
+// Redis client for idempotency tracking (lazy-loaded)
+let redisClient = null;
+
+/**
+ * Initialize Redis client for idempotency
+ */
+async function getRedisClient() {
+  if (redisClient) return redisClient;
+  
+  try {
+    const { getCacheClient } = await import('../lib/cacheClient.js');
+    redisClient = getCacheClient();
+    return redisClient;
+  } catch (error) {
+    console.warn('[GitHub Issues] Redis unavailable, idempotency disabled:', error.message);
+    return null;
+  }
+}
+
 // GitHub Configuration (token fallback + normalization)
 const RAW_GITHUB_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_PAT || process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
 const GITHUB_TOKEN = (RAW_GITHUB_TOKEN || '').trim();
@@ -36,6 +55,104 @@ function resolveBuildVersion() {
   return 'dev-local';
 }
 const BUILD_VERSION = resolveBuildVersion();
+
+// Idempotency configuration
+const IDEMPOTENCY_TTL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 1000; // 1 second
+
+/**
+ * Generate idempotency key from incident context
+ * Same key = same issue (deduplication within TTL)
+ */
+function generateIdempotencyKey({ type, component, severity, description, environment }) {
+  // Extract error signature from description (first 200 chars normalized)
+  const errorSignature = description
+    .substring(0, 200)
+    .toLowerCase()
+    .replace(/\d+/g, 'N') // Normalize numbers
+    .replace(/[^a-z0-9\s]/g, '') // Remove special chars
+    .trim();
+  
+  const key = `${environment}:${type}:${component}:${severity}:${errorSignature}`;
+  const hash = crypto.createHash('sha256').update(key).digest('hex').substring(0, 16);
+  return `github:issue:${hash}`;
+}
+
+/**
+ * Check if issue creation should be suppressed (duplicate within TTL)
+ */
+async function checkIdempotency(idempotencyKey) {
+  const redis = await getRedisClient();
+  if (!redis) return null; // Redis unavailable, allow creation
+  
+  try {
+    const existing = await redis.get(idempotencyKey);
+    if (existing) {
+      const data = JSON.parse(existing);
+      return {
+        suppressed: true,
+        existingIssue: data.issueNumber,
+        createdAt: data.createdAt,
+        url: data.url
+      };
+    }
+    return { suppressed: false };
+  } catch (error) {
+    console.warn('[GitHub Issues] Idempotency check failed:', error.message);
+    return { suppressed: false }; // Fail open
+  }
+}
+
+/**
+ * Record issue creation for idempotency
+ */
+async function recordIssueCreation(idempotencyKey, issueData) {
+  const redis = await getRedisClient();
+  if (!redis) return;
+  
+  try {
+    const data = JSON.stringify({
+      issueNumber: issueData.number,
+      url: issueData.html_url,
+      createdAt: new Date().toISOString()
+    });
+    await redis.set(idempotencyKey, data, 'PX', IDEMPOTENCY_TTL);
+  } catch (error) {
+    console.error('[GitHub Issues] Failed to record issue creation:', error.message);
+  }
+}
+
+/**
+ * Retry GitHub API call with exponential backoff and jitter
+ */
+async function retryWithBackoff(fn, maxRetries = MAX_RETRIES) {
+  let lastError;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      
+      // Don't retry on client errors (400-499) except rate limits
+      if (error.status && error.status >= 400 && error.status < 500 && error.status !== 429) {
+        throw error;
+      }
+      
+      if (attempt < maxRetries) {
+        const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
+        const jitter = Math.random() * delay * 0.3; // 30% jitter
+        const totalDelay = delay + jitter;
+        
+        console.log(`[GitHub Issues] Retry ${attempt + 1}/${maxRetries} after ${Math.round(totalDelay)}ms (error: ${error.message})`);
+        await new Promise(resolve => setTimeout(resolve, totalDelay));
+      }
+    }
+  }
+  
+  throw lastError;
+}
 
 /**
  * POST /api/github-issues/create-health-issue
@@ -75,6 +192,36 @@ router.post('/create-health-issue', async (req, res) => {
     // Generate request ID for traceability
     const requestId = crypto.randomUUID();
 
+    // Generate idempotency key from incident context
+    const idempotencyKey = generateIdempotencyKey({
+      type,
+      component: component || 'unknown',
+      severity: severity || 'unknown',
+      description,
+      environment: ENVIRONMENT
+    });
+
+    // Check if this issue was already created recently
+    const idempotencyCheck = await checkIdempotency(idempotencyKey);
+    if (idempotencyCheck.suppressed) {
+      console.log('[GitHub Issues] Suppressed duplicate issue:', {
+        idempotencyKey,
+        existingIssue: idempotencyCheck.existingIssue,
+        createdAt: idempotencyCheck.createdAt
+      });
+      
+      return res.json({
+        success: true,
+        suppressed: true,
+        message: 'Issue already exists for this incident',
+        issue: {
+          number: idempotencyCheck.existingIssue,
+          url: idempotencyCheck.url,
+          createdAt: idempotencyCheck.createdAt
+        }
+      });
+    }
+
     // Build issue body with structured information + metadata footer
     const issueBody = buildIssueBody({
       type,
@@ -107,35 +254,41 @@ router.post('/create-health-issue', async (req, res) => {
     console.log('[GitHub Issues] Creating issue:', {
       title: issuePayload.title,
       labels,
-      assignee
+      assignee,
+      idempotencyKey
     });
 
-    const response = await fetch(
-      `${GITHUB_API_BASE}/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/issues`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${GITHUB_TOKEN}`,
-          'Accept': 'application/vnd.github+json',
-          'Content-Type': 'application/json',
-          'User-Agent': 'aishacrm-health-monitor'
-        },
-        body: JSON.stringify(issuePayload)
+    // Create GitHub issue with retry logic
+    const issue = await retryWithBackoff(async () => {
+      const response = await fetch(
+        `${GITHUB_API_BASE}/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/issues`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github+json',
+            'Content-Type': 'application/json',
+            'User-Agent': 'aishacrm-health-monitor'
+          },
+          body: JSON.stringify(issuePayload)
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        const error = new Error(`GitHub API error: ${response.status}`);
+        error.status = response.status;
+        error.details = errorText;
+        throw error;
       }
-    );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[GitHub Issues] API error:', response.status, errorText);
-      return res.status(response.status).json({
-        success: false,
-        error: 'GitHub API error',
-        details: errorText
-      });
-    }
+      return await response.json();
+    });
 
-    const issue = await response.json();
     console.log('[GitHub Issues] Issue created:', issue.html_url);
+
+    // Record issue creation for idempotency
+    await recordIssueCreation(idempotencyKey, issue);
 
     // Trigger GitHub Copilot review workflow (optional)
     if (process.env.TRIGGER_COPILOT_REVIEW === 'true') {
@@ -150,15 +303,23 @@ router.post('/create-health-issue', async (req, res) => {
         title: issue.title,
         state: issue.state,
         labels: issue.labels.map(l => l.name)
-      }
+      },
+      idempotencyKey // Include for debugging/monitoring
     });
 
   } catch (error) {
-    console.error('[GitHub Issues] Error creating issue:', error);
-    res.status(500).json({
+    console.error('[GitHub Issues] Error creating issue:', {
+      message: error.message,
+      status: error.status,
+      details: error.details
+    });
+    
+    const statusCode = error.status || 500;
+    res.status(statusCode).json({
       success: false,
       error: 'Failed to create GitHub issue',
-      message: error.message
+      message: error.message,
+      ...(error.details && { details: error.details })
     });
   }
 });
