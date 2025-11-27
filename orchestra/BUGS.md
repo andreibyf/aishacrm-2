@@ -9,9 +9,10 @@ This file tracks known issues. PLAN.md selects which bugs are currently in scope
 
 ### BUG-CRUD-001 – Auth failures for CRUD health tests (Contacts, Leads, Accounts, Lists)
 
-Status: Open  
+Status: Closed ✅  
 Priority: High  
 Area: Core API – Contacts / Leads / Accounts / Listing
+Resolution: v1.0.96 (November 27, 2025) - Browser tests now properly authenticate with Supabase session tokens
 
 Symptoms (from automated tests):
 - CRUD Operations – Contact:
