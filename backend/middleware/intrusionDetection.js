@@ -394,6 +394,12 @@ function scanForSQLInjection(req) {
  * Main IDR middleware
  */
 export async function intrusionDetection(req, res, next) {
+  // Check if IDR is enabled (default: true unless explicitly disabled)
+  const IDR_ENABLED = process.env.IDR_ENABLED !== 'false';
+  if (!IDR_ENABLED) {
+    return next();
+  }
+
   // Prefer Cloudflare / proxy headers for true client IP, fallback to Express ip
   const cfIp = req.headers['cf-connecting-ip'];
   const xff = req.headers['x-forwarded-for'];
