@@ -261,18 +261,19 @@ export default function createReportRoutes(_pgPool) {
       // Use explicit cache key to differentiate: null tenant = "SUPERADMIN_GLOBAL"
       const includeTestData = (req.query.include_test_data ?? 'true') !== 'false';
       const effectiveTenantKey = tenant_id || 'SUPERADMIN_GLOBAL';
+      const bustCache = req.query.bust_cache === 'true'; // Allow cache bypass for testing
       const cacheKey = `${effectiveTenantKey}::include=${includeTestData ? 'true' : 'false'}`;
       const now = Date.now();
       const cached = bundleCache.get(cacheKey);
-      if (cached && cached.expiresAt > now) {
+      if (!bustCache && cached && cached.expiresAt > now) {
         return res.json({ status: 'success', data: cached.data, cached: true });
       }
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
-      // Counts (use planned head counts for speed)
-      const commonOpts = { includeTestData };
+      // Counts (use exact counts for accuracy; cache mitigates performance impact)
+      const commonOpts = { includeTestData, countMode: 'exact', confirmSmallCounts: false };
       const totalContactsP = safeCount(null, 'contacts', tenant_id, undefined, commonOpts);
       const totalAccountsP = safeCount(null, 'accounts', tenant_id, undefined, commonOpts);
       const totalLeadsP = safeCount(null, 'leads', tenant_id, undefined, commonOpts);
@@ -281,58 +282,34 @@ export default function createReportRoutes(_pgPool) {
       const wonOpportunitiesP = safeCount(null, 'opportunities', tenant_id, (q) => q.in('stage', ['won', 'closed_won']), commonOpts);
       const openOpportunitiesP = safeCount(null, 'opportunities', tenant_id, (q) => q.not('stage', 'in', '("won","closed_won","lost","closed_lost")'), commonOpts);
 
-      // New leads last 30 days
+      // New leads last 30 days (exact count for accuracy)
       const since = new Date();
       since.setDate(since.getDate() - 30);
       const sinceISO = since.toISOString();
       const newLeadsP = (async () => {
         try {
-          let q = supabase.from('leads').select('*', { count: 'planned', head: true });
+          let q = supabase.from('leads').select('*', { count: 'exact', head: true });
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
           q = q.gte('created_date', sinceISO);
           if (!includeTestData) {
             try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch (e) { /* ignore */ void 0; }
           }
           const { count } = await q;
-          const planned = count ?? 0;
-          if (planned <= 5) {
-            try {
-              let exact = supabase.from('leads').select('*', { count: 'exact', head: true });
-              if (tenant_id) exact = exact.eq('tenant_id', tenant_id);
-              exact = exact.gte('created_date', sinceISO);
-              if (!includeTestData) {
-                try { exact = exact.or('is_test_data.is.false,is_test_data.is.null'); } catch (e) { /* ignore */ void 0; }
-              }
-              const { count: exactCount } = await exact;
-              return exactCount ?? planned;
-            } catch (e) { return planned; }
-          }
-          return planned;
+          return count ?? 0;
         } catch { return 0; }
       })();
 
-      // Activities last 30 days
+      // Activities last 30 days (exact count for accuracy)
       const recentActivitiesCountP = (async () => {
         try {
-          let q = supabase.from('activities').select('*', { count: 'planned', head: true });
+          let q = supabase.from('activities').select('*', { count: 'exact', head: true });
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
           q = q.gte('created_date', sinceISO);
           if (!includeTestData) {
             try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
           }
           const { count } = await q;
-          const planned = count ?? 0;
-          if (planned <= 5) {
-            try {
-              let exact = supabase.from('activities').select('*', { count: 'exact', head: true });
-              if (tenant_id) exact = exact.eq('tenant_id', tenant_id);
-              exact = exact.gte('created_date', sinceISO);
-              if (!includeTestData) { try { exact = exact.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ } }
-              const { count: exactCount } = await exact;
-              return exactCount ?? planned;
-            } catch (e) { return planned; }
-          }
-          return planned;
+          return count ?? 0;
         } catch { return 0; }
       })();
 
