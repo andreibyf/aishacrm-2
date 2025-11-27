@@ -257,16 +257,11 @@ export default function createReportRoutes(_pgPool) {
     try {
       const { tenant_id } = req.query;
       
-      // Require tenant_id to prevent returning global/cross-tenant data
-      if (!tenant_id) {
-        return res.status(400).json({ 
-          status: 'error', 
-          message: 'tenant_id is required for dashboard-bundle' 
-        });
-      }
-      
+      // Note: tenant_id can be null/undefined for superadmin global view (aggregates all tenants)
+      // Use explicit cache key to differentiate: null tenant = "SUPERADMIN_GLOBAL"
       const includeTestData = (req.query.include_test_data ?? 'true') !== 'false';
-      const cacheKey = `${tenant_id}::include=${includeTestData ? 'true' : 'false'}`;
+      const effectiveTenantKey = tenant_id || 'SUPERADMIN_GLOBAL';
+      const cacheKey = `${effectiveTenantKey}::include=${includeTestData ? 'true' : 'false'}`;
       const now = Date.now();
       const cached = bundleCache.get(cacheKey);
       if (cached && cached.expiresAt > now) {
