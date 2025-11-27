@@ -85,6 +85,8 @@ const IDR_CONFIG = {
     EXCESSIVE_FAILURES: 50,    // Increased from 10 - less aggressive
     BULK_DATA_EXTRACTION: 1000, // Records in single request
   },
+  // Block escalated bulk extraction attempts
+  BULK_BLOCK_THRESHOLD: 5000, // If single-request limit exceeds this, block IP
 };
 
 /**
@@ -601,6 +603,12 @@ export async function intrusionDetection(req, res, next) {
           threshold: IDR_CONFIG.SUSPICIOUS_PATTERNS.BULK_DATA_EXTRACTION,
         },
       });
+
+      // Escalate to temporary IP block for extreme values
+      if (limit >= IDR_CONFIG.BULK_BLOCK_THRESHOLD) {
+        // Block for 1 hour for severe extraction attempts
+        blockIP(ip, 60 * 60 * 1000).catch(e => console.error('[IDR] Failed to block IP:', e));
+      }
 
       return res.status(400).json({
         status: 'error',
