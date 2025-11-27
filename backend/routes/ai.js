@@ -7,6 +7,7 @@ import express from 'express';
 import { createChatCompletion, buildSystemPrompt, getOpenAIClient } from '../lib/aiProvider.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { summarizeToolResult, BRAID_SYSTEM_PROMPT, generateToolSchemas, executeBraidTool } from '../lib/braidIntegration-v2.js';
+import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 
 const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
@@ -516,18 +517,7 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
     );
   };
 
-  const tenantLookupCache = new Map();
-
-  const cacheTenantRecord = (record) => {
-    if (!record) return;
-    if (record.id) {
-      tenantLookupCache.set(record.id, record);
-    }
-    if (record.tenant_id) {
-      tenantLookupCache.set(record.tenant_id, record);
-    }
-  };
-
+  // Use canonical tenant resolver for consistent caching
   const resolveTenantRecord = async (identifier) => {
     if (!identifier || typeof identifier !== 'string') {
       return null;
@@ -538,58 +528,23 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       return null;
     }
 
-    if (tenantLookupCache.has(key)) {
-      return tenantLookupCache.get(key);
-    }
-
     try {
-      let record = null;
-      if (UUID_PATTERN.test(key)) {
-        const { data: byId } = await supa
-          .from('tenant')
-          .select('id, tenant_id, name')
-          .eq('id', key)
-          .limit(1)
-          .single();
-        record = byId || null;
-        if (!record) {
-          const { data: bySlug } = await supa
-            .from('tenant')
-            .select('id, tenant_id, name')
-            .eq('tenant_id', key)
-            .limit(1)
-            .single();
-          record = bySlug || null;
-        }
-      } else {
-        const { data: bySlug } = await supa
-          .from('tenant')
-          .select('id, tenant_id, name')
-          .eq('tenant_id', key)
-          .limit(1)
-          .single();
-        record = bySlug || null;
-        if (!record) {
-          const { data: byId } = await supa
-            .from('tenant')
-            .select('id, tenant_id, name')
-            .eq('id', key)
-            .limit(1)
-            .single();
-          record = byId || null;
-        }
+      const result = await resolveCanonicalTenant(key);
+      
+      // Convert canonical result to expected format
+      if (result && result.found && result.tenant) {
+        return {
+          id: result.tenant.id,
+          tenant_id: result.tenant.tenant_id,
+          name: result.tenant.name
+        };
       }
-      if (record) {
-        cacheTenantRecord(record);
-        tenantLookupCache.set(key, record);
-        return record;
-      }
+      
+      return null;
     } catch (error) {
       console.warn('[AI Routes] Tenant lookup failed for identifier:', key, error.message || error);
+      return null;
     }
-
-    tenantLookupCache.set(key, null);
-    return null;
   };
 
   const truncateString = (value, maxLength = 1000) => {
