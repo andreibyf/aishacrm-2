@@ -2367,10 +2367,15 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               onError={(e) => {
                 // Hard fallback to global app logo so branding is always visible
                 try {
-                  const fallbackSrc = "/assets/Ai-SHA-logo-2.png?v=" + Date.now();
-                  if (e?.target && e.target.src !== fallbackSrc) {
-                    e.target.src = fallbackSrc;
-                    e.target.style.display = ""; // ensure it's visible
+                  const img = e?.currentTarget || e?.target;
+                  if (!img) return;
+
+                  // Prevent infinite retry loop by only attempting fallback once
+                  if (!img.dataset.fallbackApplied) {
+                    img.dataset.fallbackApplied = "1";
+                    const fallbackSrc = "/assets/Ai-SHA-logo-2.png"; // stable URL; no cache-busting here
+                    img.src = fallbackSrc;
+                    img.style.display = ""; // ensure it's visible
                     if (import.meta.env.DEV) {
                       console.debug("Logo failed to load, swapped to default:", {
                         raw: logoUrl,
@@ -2382,14 +2387,20 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                   }
                 } catch (err) {
                   if (import.meta.env.DEV) {
-                    console.debug("Logo fallback swap error (safe to ignore):", err?.message || err);
+                    console.debug(
+                      "Logo fallback swap error (safe to ignore):",
+                      err?.message || err,
+                    );
                   }
                 }
 
                 // If even the fallback fails, show the text-based placeholder
-                e.target.style.display = "none";
-                if (e.target.nextElementSibling) {
-                  e.target.nextElementSibling.style.display = "flex";
+                const img = e?.currentTarget || e?.target;
+                if (img) {
+                  img.style.display = "none";
+                  if (img.nextElementSibling) {
+                    img.nextElementSibling.style.display = "flex";
+                  }
                 }
               }}
               onLoad={(e) => {
