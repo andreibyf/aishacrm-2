@@ -1,10 +1,14 @@
+# Backup of previous development docker-compose.yml prior to unification
+# Timestamp: 2025-11-27
+# Do not edit; kept for reference in case rollback is needed.
 services:
-  # Optional local PostgreSQL for migration testing (disabled by default to mirror production Supabase usage)
+  # PostgreSQL Database (DISABLED - Using Supabase Cloud)
   db:
     image: postgres:15-alpine
     container_name: aishacrm-db
     restart: "no"
-    profiles: [migration-testing]
+    profiles:
+      - migration-testing
     ports:
       - "5432:5432"
     environment:
@@ -19,19 +23,17 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # Redis Memory (rename to match production: redis-memory)
-  redis-memory:
-    image: redis:7-alpine
-    container_name: aishacrm-redis-memory
+  redis:
+    image: valkey/valkey:7-alpine
+    container_name: aishacrm-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
-      - redis_memory_data:/data
-    command: redis-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru
+      - redis_data:/data
+    command: valkey-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      test: ["CMD-SHELL", "valkey-cli ping | grep PONG"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -43,19 +45,17 @@ services:
         max-file: "2"
     networks:
       - aishanet
-
-  # Redis Cache - API response caching
   redis-cache:
-    image: redis:7-alpine
+    image: valkey/valkey:7-alpine
     container_name: aishacrm-redis-cache
     restart: unless-stopped
     ports:
       - "6380:6379"
     volumes:
       - redis_cache_data:/data
-    command: redis-server --save "" --loglevel warning --maxmemory 512mb --maxmemory-policy allkeys-lru
+    command: valkey-server --save "" --loglevel warning --maxmemory 512mb --maxmemory-policy allkeys-lru
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      test: ["CMD-SHELL", "valkey-cli ping | grep PONG"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -67,8 +67,6 @@ services:
         max-file: "2"
     networks:
       - aishanet
-
-  # Backend API (mirrors production layout, local build)
   backend:
     build:
       context: .
@@ -76,7 +74,7 @@ services:
     container_name: aishacrm-backend
     restart: unless-stopped
     depends_on:
-      redis-memory:
+      redis:
         condition: service_healthy
       redis-cache:
         condition: service_healthy
@@ -90,12 +88,10 @@ services:
       - PORT=${PORT:-3001}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4000}
       - PGSSLMODE=require
-      - REDIS_URL=redis://redis-memory:6379
+      - REDIS_URL=redis://redis:6379
       - REDIS_CACHE_URL=redis://redis-cache:6379
       - SYSTEM_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
       - TENANT_RESOLVE_CACHE_TTL_MS=${TENANT_RESOLVE_CACHE_TTL_MS:-300000}
-      - BRAID_MCP_URL=http://mcp:8000
-      - MCP_NODE_HEALTH_URL=http://mcp:8000/health
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -112,37 +108,6 @@ services:
         max-file: "3"
     networks:
       - aishanet
-
-  # MCP Server (local build mirroring production image usage)
-  mcp:
-    build:
-      context: ./braid-mcp-node-server
-      dockerfile: Dockerfile
-    container_name: aishacrm-mcp
-    restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_started
-      redis-memory:
-        condition: service_healthy
-    ports:
-      - "4002:8000"
-    env_file:
-      - ./.env
-    environment:
-      - NODE_ENV=development
-      - CRM_BACKEND_URL=http://backend:3001
-      - REDIS_URL=redis://redis-memory:6379
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8000/health || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-    networks:
-      - aishanet
-
-  # Frontend (Vite dev server for development, or built static for production-like testing)
   frontend:
     build:
       context: .
@@ -160,7 +125,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "4000:3000"  # External port 4000 maps to internal 3000
+      - "4000:3000"
     env_file:
       - .env
     environment:
@@ -173,8 +138,6 @@ services:
       start_period: 15s
     networks:
       - aishanet
-
-  # n8n (optional) - local automation
   n8n:
     image: n8nio/n8n:latest
     container_name: aishacrm-n8n
@@ -186,16 +149,12 @@ services:
       - N8N_HOST=0.0.0.0
       - GENERIC_TIMEZONE=UTC
       - N8N_DIAGNOSTICS_ENABLED=false
-      # Allow iframe embedding in CRM
       - N8N_EDITOR_BASE_URL=http://localhost:5679
       - N8N_SECURE_COOKIE=false
       - N8N_SKIP_WEBHOOK_DEREGISTRATION_SHUTDOWN=true
-      # Disable frame-ancestors CSP to allow iframe embedding
       - N8N_HIRING_BANNER_ENABLED=false
       - VUE_APP_URL_BASE_API=http://localhost:5679
-      # Load custom MCP node
       - N8N_CUSTOM_EXTENSIONS=/home/node/.n8n/custom
-      # Optional: enable Basic Auth to allow backend to use legacy /rest endpoints
       - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE:-false}
       - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
       - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
@@ -210,8 +169,6 @@ services:
       start_period: 15s
     networks:
       - aishanet
-
-  # nginx proxy for n8n to strip X-Frame-Options header for iframe embedding
   n8n-proxy:
     image: nginx:alpine
     container_name: aishacrm-n8n-proxy
@@ -230,17 +187,15 @@ services:
       start_period: 10s
     networks:
       - aishanet
-
 volumes:
   postgres_data:
     driver: local
   n8n_data:
     driver: local
-  redis_memory_data:
+  redis_data:
     driver: local
   redis_cache_data:
     driver: local
-
 networks:
   aishanet:
     name: aishanet

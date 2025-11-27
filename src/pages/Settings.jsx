@@ -392,7 +392,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                           <strong>n8n Workflow Editor</strong> - Visual automation platform embedded below
                         </p>
                         <a
-                          href="http://localhost:5679"
+                          href={import.meta.env.VITE_N8N_URL || "http://localhost:5679"}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition-colors"
@@ -404,7 +404,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                       
                       <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
                         <iframe
-                          src="http://localhost:5679"
+                          src={import.meta.env.VITE_N8N_URL || "http://localhost:5679"}
                           className="w-full border-0"
                           style={{ height: 'calc(100vh - 300px)', minHeight: '600px' }}
                           title="n8n Workflow Editor"
