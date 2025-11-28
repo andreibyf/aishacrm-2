@@ -130,6 +130,106 @@ Every change must:
 
 ## Active Tasks (Priority Order)
 
+### BUG-UI-001 – Fix Blocked IPs page crash
+
+**Status**: Complete ✅
+**Priority**: High  
+**Area**: Frontend / Settings / Security Monitor
+
+**Goal**:
+Fix crash when navigating to Blocked IPs tab in Security Monitor settings page.
+
+**Symptoms**:
+- Page crashes with `TypeError: Cannot read properties of undefined (reading 'map')`
+- Error at SecurityMonitor.jsx line 499: `idrStatus.blocked_ips.map(...)`
+- Blocks access to Blocked IP management functionality
+
+**Root Cause**:
+- Guard condition at line 492 doesn't handle case where `idrStatus` exists but `blocked_ips` is undefined
+- Current: `!idrStatus || idrStatus.blocked_ips?.length === 0`
+- Fails when: `idrStatus = {}` (object without `blocked_ips` property)
+
+**Resolution**:
+- Updated guard condition in SecurityMonitor.jsx line 492
+- Changed from: `!idrStatus || idrStatus.blocked_ips?.length === 0`
+- Changed to: `!idrStatus || !idrStatus.blocked_ips || idrStatus.blocked_ips.length === 0`
+- Now properly handles all cases: null idrStatus, undefined blocked_ips, empty array, populated array
+
+**Files Changed**:
+- `src/components/settings/SecurityMonitor.jsx`: Fixed guard condition at line 492
+
+**Acceptance Criteria**:
+- ✅ Blocked IPs tab loads without JavaScript error
+- ✅ Handles all response states gracefully (null, undefined, empty, populated)
+- ✅ UI shows appropriate message for each state
+- ✅ Minimal, surgical change to guard condition only
+
+---
+
+### BUG-PROD-002 – Diagnose and fix production backend fetch failures
+
+**Status**: Open  
+**Priority**: Critical  
+**Area**: Production Backend / Database Connectivity
+
+**Goal**:
+Restore production backend connectivity to Supabase database and resolve HTTP 500 errors affecting multiple API endpoints.
+
+**Symptoms**:
+- Multiple endpoints returning 500 with "TypeError: fetch failed"
+- Affected: `/api/notifications`, `/api/modulesettings`, `/api/system-logs`
+- Backend health checks passing (server is running)
+- Local development working fine
+- Production only (app.aishacrm.com)
+
+**Tasks**:
+
+1. **Investigation Phase (Diagnostic)**:
+   - [ ] SSH to production VPS: `ssh beige-koala-18294`
+   - [ ] Check production backend logs: `docker logs aishacrm-backend --tail=200 | grep -i error`
+   - [ ] Verify Supabase connectivity from VPS: `curl -v https://PROJECT.supabase.co`
+   - [ ] Check DNS resolution: `nslookup PROJECT.supabase.co`
+   - [ ] Verify production `.env` has correct Supabase credentials
+   - [ ] Check Supabase project status in dashboard
+   - [ ] Review Supabase logs for rate limiting or errors
+   - [ ] Check container resource usage: `docker stats --no-stream`
+   - [ ] Verify network connectivity: `docker exec aishacrm-backend ping -c 3 8.8.8.8`
+
+2. **Root Cause Analysis**:
+   - [ ] Determine exact failure point (DNS, TLS, connection, timeout)
+   - [ ] Check if issue is intermittent or persistent
+   - [ ] Verify if started after specific deployment or time
+   - [ ] Review recent changes to production environment
+
+3. **Resolution Phase** (based on findings):
+   - **If Supabase credentials invalid:** Update production `.env` with correct values
+   - **If network/firewall issue:** Configure VPS firewall to allow Supabase traffic
+   - **If DNS issue:** Add static DNS entry or fix resolver
+   - **If rate limiting:** Contact Supabase support or upgrade plan
+   - **If SSL/TLS issue:** Verify `PGSSLMODE=require` or adjust as needed
+   - **If connection pool issue:** Tune Supabase client pool settings
+
+4. **Verification**:
+   - [ ] Test affected endpoints return 200 OK
+   - [ ] Verify Settings page loads without errors
+   - [ ] Confirm notifications load correctly
+   - [ ] Check error rate drops in monitoring
+   - [ ] Ensure no cascading failures
+
+**Acceptance Criteria**:
+- `/api/notifications` returns data or empty array (not 500 error)
+- `/api/modulesettings` returns module settings successfully
+- `/api/system-logs` accepts log entries
+- Settings page loads without console errors
+- Production error rate returns to normal (<1%)
+
+**Scope Limitations**:
+- Do NOT modify application code unless required for connectivity
+- Do NOT redesign database schema or queries
+- Focus on infrastructure and connectivity fixes only
+
+---
+
 ### REF-SERVER-001 – Modularize Backend Server Initialization
 
 **Status**: Complete ✅
@@ -510,6 +610,45 @@ Acceptance:
 - ✅ Superadmin global view works without errors.
 - ✅ Test data toggle functions correctly.
 - ✅ Cache bypass available for testing (`?bust_cache=true`).
+
+---
+
+### 9) FEAT-WORKFLOW-001 – Add Workflows module to Module Settings
+
+Type: feature  
+Status: Complete ✅ (v1.1.8)  
+Area: Module Settings / Navigation Permissions
+
+Goal:  
+Add Workflows module to Module Settings and ensure it's properly integrated with the Navigation Permissions system so administrators can enable/disable the Workflows menu option for users.
+
+Resolution:
+
+**Implementation:**
+- Added "Workflows" module definition to `ModuleManager.jsx` defaultModules array with:
+  - Module ID: `workflows`
+  - Icon: Workflow (lucide-react)
+  - Features: Visual Workflow Builder, Event-Based Triggers, Multi-Step Automation, Conditional Logic, External Integrations
+- Added module mapping in `Layout.jsx` hasPageAccess function: `Workflows: 'workflows'`
+- Verified "Workflows" already exists in NavigationPermissions.jsx ORDER array
+- Verified Workflows navigation item already exists in Layout.jsx navItems
+
+**How It Works:**
+1. Superadmin enables/disables Workflows module in Settings → Module Settings
+2. Module setting controls visibility of Workflows menu item via hasPageAccess() → moduleMapping check
+3. User-level Navigation Permissions (User Management) can further restrict access per user
+4. Both controls work together: Module must be enabled AND user must have navigation permission
+
+Files Changed:
+- `src/components/shared/ModuleManager.jsx`: Added Workflow icon import and workflows module definition
+- `src/pages/Layout.jsx`: Added `Workflows: 'workflows'` to moduleMapping object
+
+Acceptance:
+- ✅ Workflows module appears in Settings → Module Settings
+- ✅ Module can be enabled/disabled per tenant
+- ✅ Module setting controls navigation menu visibility via hasPageAccess
+- ✅ Navigation Permissions toggle already exists for user-level control
+- ✅ No errors in modified files
 
 ---
 

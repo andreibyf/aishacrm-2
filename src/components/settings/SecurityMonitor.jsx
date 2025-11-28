@@ -489,7 +489,7 @@ export default function SecurityMonitor() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {!idrStatus || idrStatus.blocked_ips?.length === 0 ? (
+            {!idrStatus || !idrStatus.blocked_ips || idrStatus.blocked_ips.length === 0 ? (
               <div className="text-center text-slate-400 py-4">
                 <ShieldCheck className="w-12 h-12 mx-auto mb-2 text-green-500" />
                 No IPs currently blocked

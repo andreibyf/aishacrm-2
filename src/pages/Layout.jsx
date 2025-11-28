@@ -191,6 +191,7 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     Agent: 'ai_agent',
     Utilities: 'utilities',
     ClientOnboarding: 'client_onboarding',
+    Workflows: 'workflows',
     DuplicateContacts: null,
     DuplicateAccounts: null,
     DuplicateLeads: null,

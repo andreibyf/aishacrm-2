@@ -28,6 +28,7 @@ import {
   Target,
   TrendingUp,
   Users,
+  Workflow,
   Wrench,
   Zap,
 } from "lucide-react";
@@ -271,6 +272,19 @@ const defaultModules = [
       "Task Automation",
       "Smart Recommendations",
       "Context-Aware Assistance",
+    ],
+  },
+  {
+    id: "workflows",
+    name: "Workflows",
+    description: "Automate CRM tasks with custom workflows and triggers",
+    icon: Workflow,
+    features: [
+      "Visual Workflow Builder",
+      "Event-Based Triggers",
+      "Multi-Step Automation",
+      "Conditional Logic",
+      "External Integrations",
     ],
   },
 ];
