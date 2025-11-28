@@ -303,6 +303,11 @@ export default function ModuleManager() {
       let currentModuleSettings = [];
       try {
         currentModuleSettings = await ModuleSettings.list();
+        // Normalize response shape to array
+        if (!Array.isArray(currentModuleSettings)) {
+          const rows = currentModuleSettings?.data?.modulesettings || currentModuleSettings?.data || [];
+          currentModuleSettings = Array.isArray(rows) ? rows : [];
+        }
         setModuleSettings(currentModuleSettings);
       } catch (error) {
         console.warn("Could not load module settings:", error);
