@@ -20,6 +20,7 @@
  */
 
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import { initMemoryClient, getMemoryClient } from '../lib/memoryClient.js';
 
 // In-memory tracking for rate limiting and pattern detection
 const suspiciousActivityTracker = new Map();
@@ -36,7 +37,8 @@ async function initRedisClient() {
   if (redisClient) return redisClient;
 
   try {
-    const { getMemoryClient } = await import('../lib/memoryClient.js');
+    // Ensure Redis/Valkey client is initialized before retrieving instance
+    await initMemoryClient(process.env.REDIS_URL);
     redisClient = getMemoryClient();
     
     if (redisClient) {

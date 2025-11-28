@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { ModuleSettings } from "@/api/entities";
 import { useUser } from '@/components/shared/useUser.js';
 import { useAuthCookiesReady } from '@/components/shared/useAuthCookiesReady';
+import { useTenant } from '@/components/shared/tenantContext';
 import {
   Card,
   CardContent,
@@ -33,7 +34,6 @@ import {
   Zap,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { createAuditLog } from "@/api/functions";
 import { toast } from "sonner";
 
 const defaultModules = [
@@ -294,6 +294,7 @@ export default function ModuleManager() {
   const [loading, setLoading] = useState(true);
   const { user } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
+  const { selectedTenantId } = useTenant();
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -370,22 +371,6 @@ export default function ModuleManager() {
           )
         );
 
-        // Create audit log
-        try {
-          await createAuditLog({
-            action_type: "module_toggle",
-            entity_type: "ModuleSettings",
-            entity_id: setting.id,
-            description: `${newStatus ? "Enabled" : "Disabled"} module: ${
-              module?.name || moduleId
-            }`,
-            old_values: { is_enabled: currentStatus },
-            new_values: { is_enabled: newStatus },
-          });
-        } catch (auditError) {
-          console.warn("Failed to create audit log:", auditError);
-        }
-
         // Dispatch event to notify Layout and other components
         window.dispatchEvent(
           new CustomEvent("module-settings-changed", {
@@ -412,6 +397,32 @@ export default function ModuleManager() {
     const module = defaultModules.find((m) => m.id === moduleId);
     const setting = moduleSettings.find((s) => s.module_name === module?.name);
     return setting?.is_enabled ?? true;
+  };
+
+  // Admin-only: List currently disabled modules for the selected tenant
+  const DisabledModulesPanel = () => {
+    const isAdminLike = user?.role === 'admin' || user?.role === 'superadmin' || user?.is_superadmin === true;
+    const tenantId = selectedTenantId || user?.tenant_id || null;
+    if (!isAdminLike || !tenantId) return null;
+
+    const disabled = moduleSettings
+      .filter((s) => s.tenant_id === tenantId && s.is_enabled === false)
+      .map((s) => s.module_name);
+
+    return (
+      <div className="mt-6 p-3 rounded border border-yellow-700/40 bg-yellow-900/20">
+        <div className="text-sm font-medium text-yellow-300">Disabled for tenant</div>
+        {disabled.length === 0 ? (
+          <div className="text-xs text-yellow-200/80 mt-1">No modules are disabled for this tenant.</div>
+        ) : (
+          <ul className="mt-2 text-sm text-yellow-100 list-disc list-inside">
+            {disabled.map((name) => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
   };
 
   if (loading) {
@@ -578,6 +589,9 @@ export default function ModuleManager() {
               <div className="text-sm text-slate-400">Total Available</div>
             </div>
           </div>
+
+          {/* Disabled Modules Panel */}
+          <DisabledModulesPanel />
         </CardContent>
       </Card>
     </div>

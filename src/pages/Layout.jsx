@@ -161,7 +161,10 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     navigationPermissions: user.navigation_permissions,
   });
 
-  if (isSuperAdmin(user)) return true;
+  // Superadmins bypass disables only in global view (no tenant selected)
+  if (isSuperAdmin(user) && (selectedTenantId === null || selectedTenantId === undefined)) {
+    return true;
+  }
 
   const superadminOnlyPages = new Set(["Tenants"]);
   if (superadminOnlyPages.has(pageName) && user.role !== 'superadmin') return false;
