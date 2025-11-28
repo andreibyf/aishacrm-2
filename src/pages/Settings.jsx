@@ -88,6 +88,15 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("profile");
   const [selectedTenantId, setSelectedTenantId] = useState(null);
+  
+  // Minimal bugfix: ensure n8n iframe uses production origin /n8n/ when env var points to localhost.
+  const resolveN8nUrl = () => {
+    const envUrl = import.meta.env.VITE_N8N_URL;
+    // If env URL is set and not pointing to localhost, prefer it; else derive from current origin.
+    let base = envUrl && !/localhost|127\.|::1/.test(envUrl) ? envUrl : `${window.location.origin}/n8n/`;
+    if (!base.endsWith('/')) base += '/';
+    return base;
+  };
 
   const loadUser = useCallback(async () => {
     try {
@@ -393,10 +402,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                         </p>
                         {(() => { /* n8n embed link */ })()}
                         <a
-                          href={(() => {
-                            const raw = import.meta.env.VITE_N8N_URL || "http://localhost:5679";
-                            return raw.endsWith('/') ? raw : raw + '/';
-                          })()}
+                          href={resolveN8nUrl()}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition-colors"
@@ -408,10 +414,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                       
                       <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
                         <iframe
-                          src={(() => {
-                            const raw = import.meta.env.VITE_N8N_URL || "http://localhost:5679";
-                            return raw.endsWith('/') ? raw : raw + '/';
-                          })()}
+                          src={resolveN8nUrl()}
                           className="w-full border-0"
                           style={{ height: 'calc(100vh - 300px)', minHeight: '600px' }}
                           title="n8n Workflow Editor"
