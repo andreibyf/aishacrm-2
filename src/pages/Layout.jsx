@@ -172,26 +172,26 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
   if (user.crm_access === false) return pagesAllowedWithoutCRM.has(pageName);
 
   const moduleMapping = {
-    Dashboard: 'dashboard',
-    Contacts: 'contacts',
-    Accounts: 'accounts',
-    Leads: 'leads',
-    Opportunities: 'opportunities',
-    Activities: 'activities',
-    Calendar: 'calendar',
-    BizDevSources: 'bizdev_sources',
-    CashFlow: 'cash_flow',
-    DocumentProcessing: 'document_processing',
-    DocumentManagement: 'document_processing',
-    Employees: 'employees',
-    Reports: 'reports',
-    Integrations: 'integrations',
-    PaymentPortal: 'payment_portal',
-    AICampaigns: 'ai_campaigns',
-    Agent: 'ai_agent',
-    Utilities: 'utilities',
-    ClientOnboarding: 'client_onboarding',
-    Workflows: 'workflows',
+    Dashboard: 'Dashboard',
+    Contacts: 'Contact Management',
+    Accounts: 'Account Management',
+    Leads: 'Lead Management',
+    Opportunities: 'Opportunities',
+    Activities: 'Activity Tracking',
+    Calendar: 'Calendar',
+    BizDevSources: 'Business Development',
+    CashFlow: 'Cash Flow',
+    DocumentProcessing: 'Document Processing',
+    DocumentManagement: 'Document Processing',
+    Employees: 'Employees',
+    Reports: 'Reports',
+    Integrations: 'Integrations',
+    PaymentPortal: 'Payment Portal',
+    AICampaigns: 'AI Campaigns',
+    Agent: 'AI Agent',
+    Utilities: 'Utilities',
+    ClientOnboarding: 'Client Onboarding',
+    Workflows: 'Workflows',
     DuplicateContacts: null,
     DuplicateAccounts: null,
     DuplicateLeads: null,
@@ -205,8 +205,8 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
 
   const requiredModuleId = moduleMapping[pageName];
   if (requiredModuleId && moduleSettings.length > 0) {
-    const moduleSetting = moduleSettings.find(m => m.module_id === requiredModuleId);
-    if (moduleSetting && moduleSetting.is_active === false) return false;
+    const moduleSetting = moduleSettings.find(m => m.module_name === requiredModuleId);
+    if (moduleSetting && moduleSetting.is_enabled === false) return false;
   }
 
   if (user.navigation_permissions && typeof user.navigation_permissions === 'object') {

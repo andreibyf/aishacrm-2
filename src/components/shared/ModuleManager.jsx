@@ -316,18 +316,17 @@ export default function ModuleManager() {
       }
 
       // Initialize default settings for modules that don't exist
-      const existingModuleIds = currentModuleSettings.map((s) => s.module_id);
+      const existingModuleNames = currentModuleSettings.map((s) => s.module_name);
       const missingModules = defaultModules.filter((m) =>
-        !existingModuleIds.includes(m.id)
+        !existingModuleNames.includes(m.name)
       );
 
       if (missingModules.length > 0 && currentUser) {
         try {
           const newModuleRecords = missingModules.map((module) => ({
-            module_id: module.id,
+            tenant_id: currentUser.tenant_id,
             module_name: module.name,
-            is_active: true,
-            user_email: currentUser.email,
+            is_enabled: true,
           }));
           await ModuleSettings.bulkCreate(newModuleRecords);
 
@@ -354,20 +353,20 @@ export default function ModuleManager() {
     if (!user) return;
 
     try {
-      const setting = moduleSettings.find((s) => s.module_id === moduleId);
       const module = defaultModules.find((m) => m.id === moduleId);
+      const setting = moduleSettings.find((s) => s.module_name === module?.name);
       const newStatus = !currentStatus;
 
       if (setting) {
         await ModuleSettings.update(setting.id, {
-          is_active: newStatus,
-          user_email: user.email,
+          tenant_id: user.tenant_id,
+          is_enabled: newStatus,
         });
 
         // Update local state
         setModuleSettings((prev) =>
           prev.map((s) =>
-            s.module_id === moduleId ? { ...s, is_active: newStatus } : s
+            s.module_name === module?.name ? { ...s, is_enabled: newStatus } : s
           )
         );
 
@@ -380,8 +379,8 @@ export default function ModuleManager() {
             description: `${newStatus ? "Enabled" : "Disabled"} module: ${
               module?.name || moduleId
             }`,
-            old_values: { is_active: currentStatus },
-            new_values: { is_active: newStatus },
+            old_values: { is_enabled: currentStatus },
+            new_values: { is_enabled: newStatus },
           });
         } catch (auditError) {
           console.warn("Failed to create audit log:", auditError);
@@ -410,8 +409,9 @@ export default function ModuleManager() {
   };
 
   const getModuleStatus = (moduleId) => {
-    const setting = moduleSettings.find((s) => s.module_id === moduleId);
-    return setting?.is_active ?? true;
+    const module = defaultModules.find((m) => m.id === moduleId);
+    const setting = moduleSettings.find((s) => s.module_name === module?.name);
+    return setting?.is_enabled ?? true;
   };
 
   if (loading) {
