@@ -373,14 +373,95 @@ export default function createWorkflowRoutes(pgPool) {
               log.output = { updatedContact: r.rows[0], applied_updates: Object.fromEntries(sets.map((s, i) => [s.split('=')[0].trim(), vals[i]])) };
               break;
             }
+            case 'find_account': {
+              const field = cfg.search_field || 'company';
+              let value = replaceVariables(cfg.search_value || '{{company}}');
+              if (typeof value === 'string') value = value.replace(/^["']|["']$/g, '').trim();
+              const q = `SELECT * FROM accounts WHERE tenant_id = $1 AND ${field} = $2 LIMIT 1`;
+              const r = await pgPool.query(q, [workflow.tenant_id, value]);
+              if (r.rows.length) {
+                log.output = { account: r.rows[0] };
+                context.variables.found_account = r.rows[0];
+              } else {
+                log.status = 'error';
+                log.error = `No account found with ${field} = ${value}`;
+              }
+              break;
+            }
+            case 'update_account': {
+              const account = context.variables.found_account;
+              if (!account) { log.status = 'error'; log.error = 'No account found in context'; break; }
+              const mappings = cfg.field_mappings || [];
+              const sets = [];
+              const vals = [];
+              let idx = 1;
+              for (const m of mappings) {
+                if (m.account_field && m.webhook_field) {
+                  const v = replaceVariables(`{{${m.webhook_field}}}`);
+                  if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) { sets.push(`${m.account_field} = $${idx++}`); vals.push(v); }
+                }
+              }
+              if (!sets.length) { log.status = 'error'; log.error = 'No field mappings configured or no values to update'; break; }
+              vals.push(account.id);
+              const q = `UPDATE accounts SET ${sets.join(', ')}, updated_date = NOW() WHERE id = $${idx} RETURNING *`;
+              const r = await pgPool.query(q, vals);
+              log.output = { updatedAccount: r.rows[0], applied_updates: Object.fromEntries(sets.map((s, i) => [s.split('=')[0].trim(), vals[i]])) };
+              break;
+            }
+            case 'create_opportunity': {
+              const mappings = cfg.field_mappings || [];
+              if (!mappings.length) { log.status = 'error'; log.error = 'No field mappings configured'; break; }
+              const cols = ['tenant_id'];
+              const vals = [workflow.tenant_id];
+              const ph = ['$1'];
+              let idx = 2;
+              for (const m of mappings) {
+                if (m.opportunity_field && m.webhook_field) {
+                  const v = replaceVariables(`{{${m.webhook_field}}}`);
+                  if (v !== null && v !== undefined && v !== '') { cols.push(m.opportunity_field); vals.push(v); ph.push(`$${idx++}`); }
+                }
+              }
+              // Try to associate to an account or lead if present
+              const account = context.variables.found_account;
+              const lead = context.variables.found_lead;
+              if (account) { cols.push('account_id'); vals.push(account.id); ph.push(`$${idx++}`); }
+              if (lead) { cols.push('lead_id'); vals.push(lead.id); ph.push(`$${idx++}`); }
+              const q = `INSERT INTO opportunities (${cols.join(',')}) VALUES (${ph.join(',')}) RETURNING *`;
+              const r = await pgPool.query(q, vals);
+              log.output = { opportunity: r.rows[0] };
+              context.variables.found_opportunity = r.rows[0];
+              break;
+            }
+            case 'update_opportunity': {
+              const opportunity = context.variables.found_opportunity;
+              if (!opportunity) { log.status = 'error'; log.error = 'No opportunity found in context'; break; }
+              const mappings = cfg.field_mappings || [];
+              const sets = [];
+              const vals = [];
+              let idx = 1;
+              for (const m of mappings) {
+                if (m.opportunity_field && m.webhook_field) {
+                  const v = replaceVariables(`{{${m.webhook_field}}}`);
+                  if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) { sets.push(`${m.opportunity_field} = $${idx++}`); vals.push(v); }
+                }
+              }
+              if (!sets.length) { log.status = 'error'; log.error = 'No field mappings configured'; break; }
+              vals.push(opportunity.id);
+              const q = `UPDATE opportunities SET ${sets.join(', ')}, updated_date = NOW() WHERE id = $${idx} RETURNING *`;
+              const r = await pgPool.query(q, vals);
+              log.output = { updatedOpportunity: r.rows[0], applied_updates: Object.fromEntries(sets.map((s, i) => [s.split('=')[0].trim(), vals[i]])) };
+              break;
+            }
             case 'create_activity': {
               const activityType = cfg.type || 'task';
-              const subject = replaceVariables(cfg.subject || 'Workflow activity');
-              const description = replaceVariables(cfg.description || '');
+              const subject = replaceVariables(cfg.title || cfg.subject || 'Workflow activity');
+              const description = replaceVariables(cfg.details || cfg.description || '');
               const lead = context.variables.found_lead;
               const contact = context.variables.found_contact;
-              const related_to = lead ? 'lead' : (contact ? 'contact' : null);
-              const related_id = lead ? lead.id : (contact ? contact.id : null);
+              const account = context.variables.found_account;
+              const opportunity = context.variables.found_opportunity;
+              const related_to = lead ? 'lead' : (contact ? 'contact' : (account ? 'account' : (opportunity ? 'opportunity' : null)));
+              const related_id = lead ? lead.id : (contact ? contact.id : (account ? account.id : (opportunity ? opportunity.id : null)));
               const metadata = { created_by_workflow: workflow.id };
               const q = `
                 INSERT INTO activities (
