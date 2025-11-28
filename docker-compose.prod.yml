@@ -141,11 +141,12 @@ services:
       - N8N_HOST=0.0.0.0
       - GENERIC_TIMEZONE=UTC
       - N8N_DIAGNOSTICS_ENABLED=false
-      - N8N_EDITOR_BASE_URL=http://147.189.173.237:5679
+      # Serve editor under main domain path /n8n to avoid separate subdomain
+      - N8N_EDITOR_BASE_URL=https://app.aishacrm.com/n8n
       - N8N_SECURE_COOKIE=false
       - N8N_SKIP_WEBHOOK_DEREGISTRATION_SHUTDOWN=true
       - N8N_HIRING_BANNER_ENABLED=false
-      - VUE_APP_URL_BASE_API=http://147.189.173.237:5679
+      - VUE_APP_URL_BASE_API=https://app.aishacrm.com/n8n
       # Enable Public API for proper REST endpoint authentication
       - N8N_PUBLIC_API_DISABLED=false
       # Enable Basic Auth for iframe embedding (simpler than user management)

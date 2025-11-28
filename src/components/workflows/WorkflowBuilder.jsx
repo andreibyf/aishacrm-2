@@ -12,6 +12,7 @@ import WorkflowCanvas from './WorkflowCanvas';
 import NodeLibrary from './NodeLibrary';
 import { toast } from 'sonner';
 import { WorkflowExecution } from '@/api/entities';
+import { Switch } from '@/components/ui/switch';
 
 export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   const [name, setName] = useState(workflow?.name || '');
@@ -33,6 +34,8 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   const [loadingExecutions, setLoadingExecutions] = useState(false);
   const [executionLimit, setExecutionLimit] = useState(10);
   const [executionOffset, setExecutionOffset] = useState(0);
+  
+  const [autoConnect, setAutoConnect] = useState(true);
 
 
   useEffect(() => {
@@ -87,6 +90,32 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
   const handleSelectNode = (nodeId) => {
     setSelectedNodeId(nodeId);
+  };
+
+  const handleDragEnd = (result) => {
+    if (!result.destination) return;
+
+    const items = Array.from(nodes);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+
+    setNodes(items);
+
+    if (autoConnect) {
+       const hasCondition = items.some(n => n.type === 'condition');
+       if (hasCondition) {
+         toast.warning("Auto-connect skipped: Workflow contains condition nodes.");
+         return;
+       }
+       
+       // Rebuild connections linearly
+       const newConnections = [];
+       for (let i = 0; i < items.length - 1; i++) {
+         newConnections.push({ from: items[i].id, to: items[i+1].id });
+       }
+       setConnections(newConnections);
+       toast.success("Nodes reordered and connections updated.");
+    }
   };
 
   const handleCopyWebhookUrl = () => {
@@ -1194,6 +1223,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
             onConnect={handleConnect}
             onSelectNode={handleSelectNode}
             selectedNodeId={selectedNodeId}
+            onDragEnd={handleDragEnd}
           />
         </div>
 
@@ -1213,7 +1243,17 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         <Button variant="outline" onClick={onCancel} className="border-slate-600 text-slate-300">
           Cancel
         </Button>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <div className="flex items-center gap-2 mr-4">
+            <Switch 
+              id="auto-connect" 
+              checked={autoConnect} 
+              onCheckedChange={setAutoConnect} 
+            />
+            <Label htmlFor="auto-connect" className="text-slate-300 cursor-pointer text-sm">
+              Auto-connect
+            </Label>
+          </div>
           <Button
             onClick={handleSave}
             disabled={saving}

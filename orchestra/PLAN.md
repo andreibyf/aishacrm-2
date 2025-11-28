@@ -130,6 +130,32 @@ Every change must:
 
 ## Active Tasks (Priority Order)
 
+### REF-SERVER-001 – Modularize Backend Server Initialization
+
+**Status**: Complete ✅
+**Priority**: High
+**Area**: Backend Architecture / Stability
+
+**Goal**:
+Refactor `backend/server.js` to reduce complexity and improve maintainability by extracting initialization logic into dedicated modules in `backend/startup/`.
+
+**Tasks**:
+1.  ✅ Create `backend/startup/` directory.
+2.  ✅ Extract Database initialization to `backend/startup/initDatabase.js`.
+3.  ✅ Extract Service initialization (Redis, Cache) to `backend/startup/initServices.js`.
+4.  ✅ Extract Middleware configuration to `backend/startup/initMiddleware.js`.
+5.  ✅ Update `backend/server.js` to use these new modules.
+
+**Acceptance Criteria**:
+-   ✅ `backend/server.js` is significantly smaller and cleaner.
+-   ✅ Server starts up correctly with all services (DB, Redis, Middleware) initialized.
+-   ✅ No regression in functionality (API endpoints work, logging works).
+-   ✅ Tests pass (when server is not already running).
+
+**Resolution**: Completed in v1.0.96. Server successfully refactored into modular startup files.
+
+---
+
 ### BUG-PROD-001 – Settings page authentication failure (Production only)
 
 **Status**: Resolved ✅  

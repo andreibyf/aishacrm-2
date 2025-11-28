@@ -31,6 +31,7 @@ import {
   UserPlus, // NEW: Added for Client Onboarding
   Users, // Changed Employees icon to Users
   Wrench,
+  Zap, // NEW: Added for Workflows
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -108,6 +109,7 @@ const navItems = [
   { href: "Employees", icon: Users, label: "Employees" }, // Changed icon to Users
   { href: "Reports", icon: BarChart3, label: "Reports" },
   { href: "Integrations", icon: Plug, label: "Integrations" }, // Changed icon to Plug
+  { href: "Workflows", icon: Zap, label: "Workflows" }, // NEW: Added Workflows
   { href: "PaymentPortal", icon: CreditCard, label: "Payment Portal" },
   { href: "Utilities", icon: Wrench, label: "Utilities" },
   { href: "ClientOnboarding", icon: UserPlus, label: "Client Onboarding" }, // Changed icon to UserPlus

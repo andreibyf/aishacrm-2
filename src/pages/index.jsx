@@ -38,6 +38,7 @@ const PAGES = {
     ClientOnboarding: lazy(() => import('./ClientOnboarding')),
     ClientRequirements: lazy(() => import('./ClientRequirements')),
     SystemLogs: lazy(() => import('./SystemLogs')),
+    Workflows: lazy(() => import('./Workflows')),
 };
 
 function _getCurrentPage(url) {
@@ -101,6 +102,7 @@ function PagesContent() {
                             <Route path="/ClientOnboarding" element={<PAGES.ClientOnboarding />} />
                             <Route path="/ClientRequirements" element={<PAGES.ClientRequirements />} />
                             <Route path="/SystemLogs" element={<PAGES.SystemLogs />} />
+                            <Route path="/Workflows" element={<PAGES.Workflows />} />
                         </Routes>
                     </Layout>
                 } />

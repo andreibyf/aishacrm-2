@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import WorkflowNode from './WorkflowNode';
 import { ArrowDown, ArrowDownRight, ArrowDownLeft } from 'lucide-react';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
-export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDeleteNode, onConnect, onSelectNode, selectedNodeId }) {
+export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDeleteNode, onConnect, onSelectNode, selectedNodeId, onDragEnd }) {
   const [connectingFrom, setConnectingFrom] = useState(null);
 
   const handleNodeClick = (nodeId) => {
@@ -96,29 +97,51 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
         </div>
       )}
 
-      {/* Render nodes with connectors */}
-      <div className="space-y-1">
-        {nodes.map((node, _index) => {
-          const nodeConnections = getNodeConnections(node.id);
-          
-          return (
-            <React.Fragment key={node.id}>
-              <WorkflowNode
-                node={node}
-                isSelected={selectedNodeId === node.id}
-                isConnecting={connectingFrom === node.id}
-                onClick={() => handleNodeClick(node.id)}
-                onUpdate={(updates) => onUpdateNode(node.id, updates)}
-                onDelete={() => onDeleteNode(node.id)}
-                onStartConnect={() => handleStartConnect(node.id)}
-              />
-              
-              {/* Render connector arrows */}
-              {renderConnector(node, nodeConnections)}
-            </React.Fragment>
-          );
-        })}
-      </div>
+      <DragDropContext onDragEnd={onDragEnd}>
+        <Droppable droppableId="workflow-nodes">
+          {(provided) => (
+            <div 
+              className="space-y-1"
+              {...provided.droppableProps}
+              ref={provided.innerRef}
+            >
+              {nodes.map((node, index) => {
+                const nodeConnections = getNodeConnections(node.id);
+                
+                return (
+                  <Draggable key={node.id} draggableId={node.id} index={index}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        style={{
+                          ...provided.draggableProps.style,
+                          opacity: snapshot.isDragging ? 0.8 : 1,
+                        }}
+                      >
+                        <WorkflowNode
+                          node={node}
+                          isSelected={selectedNodeId === node.id}
+                          isConnecting={connectingFrom === node.id}
+                          onClick={() => handleNodeClick(node.id)}
+                          onUpdate={(updates) => onUpdateNode(node.id, updates)}
+                          onDelete={() => onDeleteNode(node.id)}
+                          onStartConnect={() => handleStartConnect(node.id)}
+                          dragHandleProps={provided.dragHandleProps}
+                        />
+                        
+                        {/* Render connector arrows - hide when dragging to avoid visual clutter */}
+                        {!snapshot.isDragging && renderConnector(node, nodeConnections)}
+                      </div>
+                    )}
+                  </Draggable>
+                );
+              })}
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
 
       {/* Empty state hint */}
       {nodes.length === 1 && (
