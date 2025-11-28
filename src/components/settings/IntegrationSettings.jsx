@@ -57,31 +57,6 @@ const webhookServices = [
 }`,
   },
   {
-    name: "n8n - Create Lead",
-    description: "Creates a new lead in the CRM from an n8n workflow.",
-    webhook: `${WEBHOOK_BASE_URL}/functions/n8nCreateLead`,
-    icon: Workflow,
-    method: "POST",
-    payloadExample: `{
-  "first_name": "John",
-  "last_name": "Doe",
-  "email": "john.doe@example.com",
-  "company": "Example Inc."
-}`,
-  },
-  {
-    name: "n8n - Create Contact",
-    description: "Creates a new contact in the CRM from an n8n workflow.",
-    webhook: `${WEBHOOK_BASE_URL}/functions/n8nCreateContact`,
-    icon: Workflow,
-    method: "POST",
-    payloadExample: `{
-  "first_name": "Jane",
-  "last_name": "Smith",
-  "email": "jane.smith@example.com"
-}`,
-  },
-  {
     name: "Zapier - Trigger Action",
     description: "Trigger CRM actions from Zapier.",
     webhook: `${WEBHOOK_BASE_URL}/functions/tenantZapierWebhook`,
