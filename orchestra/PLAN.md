@@ -877,3 +877,32 @@ Scope:
 - Migrations already exist in `backend/migrations/`
 - Feature code already deployed and working in v1.0.79+
 
+---
+
+### FEAT-WORKFLOW-AI-001 – MCP-backed AI workflow nodes
+
+Type: feature  
+Status: Backlog  
+Area: Workflows / AI Integrations  
+Priority: Medium
+
+Goal:  
+Add AI-driven workflow steps with MCP-first executors and provider stubs for OpenAI, Anthropic, and Gemini. Nodes: `ai_classify_opportunity_stage`, `ai_generate_email`, `ai_enrich_account`, `ai_route_activity`.
+
+Context:
+- Frontend Node Library entries added; configuration UI placeholders added (provider/model/prompt/context fields).
+- Backend workflow executor requires MCP-backed handlers plus provider stubs and output variable population.
+- Must remain tenant-safe and auditable; outputs stored in `context.variables` and execution logs.
+
+Acceptance Criteria:
+- Backend executors implement MCP-first logic with graceful fallbacks; provider stubs return deterministic outputs for tests.
+- Outputs available via variables: `ai_stage`, `ai_email`, `ai_enrichment`, `ai_route`.
+- Timeouts and error handling added; no SSRF or external network calls outside MCP/provider SDKs.
+- Minimal, localized changes; no impact on existing CRUD nodes.
+
+Steps:
+1. Add executor cases for AI nodes in `backend/routes/workflows.js` (MCP-first, stub providers).  
+2. Expose configuration fields in `WorkflowBuilder.jsx` for provider/model/prompt/context where relevant.  
+3. Add unit tests for deterministic stubs and variable propagation.  
+4. Document usage in `docs/workflows/ai-nodes.md` (short guide).
+

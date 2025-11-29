@@ -1,4 +1,4 @@
-import { Search, Edit, Mail, Plus, GitBranch, UserPlus, Globe, Building2, Briefcase, Activity } from 'lucide-react'
+import { Search, Edit, Mail, Plus, GitBranch, UserPlus, Globe, Building2, Briefcase, Activity, Brain, Sparkles } from 'lucide-react'
 
 const nodeTypes = [
   {
@@ -95,6 +95,36 @@ const nodeTypes = [
     icon: Activity,
     description: 'Log an activity (email, call, task)',
     color: 'violet'
+  }
+  ,
+  // AI-driven nodes
+  {
+    type: 'ai_classify_opportunity_stage',
+    label: 'AI: Classify Stage',
+    icon: Brain,
+    description: 'Classify opportunity stage from text/context',
+    color: 'purple'
+  },
+  {
+    type: 'ai_generate_email',
+    label: 'AI: Generate Email',
+    icon: Sparkles,
+    description: 'Draft personalized email from context',
+    color: 'pink'
+  },
+  {
+    type: 'ai_enrich_account',
+    label: 'AI: Enrich Account',
+    icon: Brain,
+    description: 'Enrich company data via MCP/API',
+    color: 'indigo'
+  },
+  {
+    type: 'ai_route_activity',
+    label: 'AI: Route Activity',
+    icon: Sparkles,
+    description: 'Suggest next best action and priority',
+    color: 'cyan'
   }
 ];
 

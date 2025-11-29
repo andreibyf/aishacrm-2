@@ -4,11 +4,32 @@
  */
 
 import express from 'express';
+import workflowQueue from '../services/workflowQueue.js';
 
 // Helper: lift workflow fields from metadata and align shape with frontend expectations
 function normalizeWorkflow(row) {
   if (!row) return row;
-  const meta = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+
+  let meta = row.metadata;
+
+  // Handle stringified JSON (common with some DB drivers or text columns)
+  if (typeof meta === 'string') {
+    try {
+      meta = JSON.parse(meta);
+    } catch (e) {
+      console.warn('[normalizeWorkflow] Failed to parse metadata string:', e);
+      meta = {};
+    }
+  }
+
+  // Ensure meta is an object
+  meta = meta && typeof meta === 'object' ? meta : {};
+
+  // Log if nodes are missing but expected (debugging)
+  if ((!meta.nodes || meta.nodes.length === 0) && row.name) {
+    console.log(`[normalizeWorkflow] Workflow "${row.name}" (id: ${row.id}) has no nodes in metadata. Raw metadata type: ${typeof row.metadata}`);
+  }
+
   return {
     ...row,
     // Frontend expects trigger object
@@ -70,8 +91,8 @@ export default function createWorkflowRoutes(pgPool) {
    *             schema:
    *               $ref: '#/components/schemas/Success'
    */
-  
-  // Internal executor used by both /execute and /:id/test to avoid SSRF via internal HTTP
+
+  // Exported executor used by queue processor and test endpoint
   async function executeWorkflowById(workflow_id, triggerPayload) {
     const startTime = Date.now();
     const executionLog = [];
@@ -508,6 +529,95 @@ export default function createWorkflowRoutes(pgPool) {
               log.output = { condition_result: result, field_template: fieldTemplate, actual_value: actualValue, compare_value: compareValue, operator };
               break;
             }
+            // AI nodes via MCP-first, provider stubs
+            case 'ai_classify_opportunity_stage': {
+              const provider = (cfg.provider || 'mcp').toLowerCase();
+              const model = cfg.model || 'default';
+              const text = String(replaceVariables(cfg.text || ''));
+              let output = { stage: 'unknown', confidence: 0.0, provider };
+              try {
+                if (provider === 'mcp') {
+                  // Placeholder: call MCP classification tool via internal adapter
+                  // For now, use simple heuristics
+                  const t = text.toLowerCase();
+                  if (t.includes('closed won') || t.includes('signed')) output = { stage: 'Closed Won', confidence: 0.9, provider };
+                  else if (t.includes('negotiation') || t.includes('proposal')) output = { stage: 'Negotiation', confidence: 0.7, provider };
+                  else if (t.includes('qualified') || t.includes('meeting')) output = { stage: 'Qualified', confidence: 0.6, provider };
+                  else if (t.includes('discovery') || t.includes('intro')) output = { stage: 'Discovery', confidence: 0.5, provider };
+                } else {
+                  // stubs for openai/anthropic/google
+                  output = { stage: 'Qualified', confidence: 0.5, provider };
+                }
+                log.output = { ai_stage: output };
+                context.variables.ai_stage = output;
+              } catch (e) {
+                log.status = 'error';
+                log.error = `AI classify failed: ${e.message}`;
+              }
+              break;
+            }
+            case 'ai_generate_email': {
+              const provider = (cfg.provider || 'mcp').toLowerCase();
+              const prompt = String(replaceVariables(cfg.prompt || ''));
+              let email = { subject: 'Hello', body: '...', provider };
+              try {
+                if (provider === 'mcp') {
+                  // Placeholder generation
+                  email = {
+                    subject: 'Follow-up on our conversation',
+                    body: `Hi there,\n\n${prompt}\n\nBest regards,\nAisha CRM`,
+                    provider
+                  };
+                } else {
+                  email = { subject: 'Follow-up', body: prompt || 'Draft body', provider };
+                }
+                log.output = { ai_email: email };
+                context.variables.ai_email = email;
+              } catch (e) {
+                log.status = 'error';
+                log.error = `AI email generation failed: ${e.message}`;
+              }
+              break;
+            }
+            case 'ai_enrich_account': {
+              const provider = (cfg.provider || 'mcp').toLowerCase();
+              const input = String(replaceVariables(cfg.input || ''));
+              let enrichment = { company: input || null, website: null, industry: null, size: null, provider };
+              try {
+                if (provider === 'mcp') {
+                  enrichment.website = input && input.includes('.') ? `https://${input}` : null;
+                  enrichment.industry = 'Software';
+                  enrichment.size = '51-200';
+                } else {
+                  enrichment.industry = 'Unknown';
+                }
+                log.output = { ai_enrichment: enrichment };
+                context.variables.ai_enrichment = enrichment;
+              } catch (e) {
+                log.status = 'error';
+                log.error = `AI enrichment failed: ${e.message}`;
+              }
+              break;
+            }
+            case 'ai_route_activity': {
+              const provider = (cfg.provider || 'mcp').toLowerCase();
+              const contextText = String(replaceVariables(cfg.context || ''));
+              let route = { type: 'task', title: 'Next best action', details: contextText, priority: 'medium', provider };
+              try {
+                if (provider === 'mcp') {
+                  const t = contextText.toLowerCase();
+                  if (t.includes('call')) route = { ...route, type: 'call', title: 'Call the contact', priority: 'high' };
+                  else if (t.includes('email')) route = { ...route, type: 'email', title: 'Send an email', priority: 'medium' };
+                  else if (t.includes('meeting')) route = { ...route, type: 'task', title: 'Schedule a meeting', priority: 'high' };
+                }
+                log.output = { ai_route: route };
+                context.variables.ai_route = route;
+              } catch (e) {
+                log.status = 'error';
+                log.error = `AI routing failed: ${e.message}`;
+              }
+              break;
+            }
             default:
               log.status = 'error';
               log.error = `Unknown node type: ${node.type}`;
@@ -635,6 +745,9 @@ export default function createWorkflowRoutes(pgPool) {
     try {
       const { tenant_id, name, description, trigger, nodes, connections, is_active } = req.body;
 
+      console.log('[Workflows POST] Received nodes:', nodes);
+      console.log('[Workflows POST] Received connections:', connections);
+
       if (!tenant_id || !name) {
         return res.status(400).json({ 
           status: 'error', 
@@ -650,6 +763,8 @@ export default function createWorkflowRoutes(pgPool) {
         execution_count: 0,
         last_executed: null
       };
+
+      console.log('[Workflows POST] Metadata to store:', metadata);
 
       // Extract trigger type and config
       const trigger_type = trigger?.type || 'webhook';
@@ -744,6 +859,9 @@ export default function createWorkflowRoutes(pgPool) {
       const { id } = req.params;
       const { tenant_id, name, description, trigger, nodes, connections, is_active } = req.body;
 
+      console.log('[Workflows PUT] Received nodes:', nodes);
+      console.log('[Workflows PUT] Received connections:', connections);
+
       if (!tenant_id) {
         return res.status(400).json({ 
           status: 'error', 
@@ -765,7 +883,23 @@ export default function createWorkflowRoutes(pgPool) {
       }
 
       const existingWorkflow = checkResult.rows[0];
-      const existingMetadata = existingWorkflow.metadata || {};
+      let existingMetadata = existingWorkflow.metadata || {};
+
+      console.log('[Workflows PUT] Existing metadata type:', typeof existingMetadata);
+      console.log('[Workflows PUT] Existing metadata value:', JSON.stringify(existingMetadata));
+
+      // Handle stringified JSON in database
+      if (typeof existingMetadata === 'string') {
+        try {
+          existingMetadata = JSON.parse(existingMetadata);
+        } catch (e) {
+          console.warn('[Workflows PUT] Failed to parse existing metadata:', e);
+          existingMetadata = {};
+        }
+      }
+
+      console.log('[Workflows PUT] Parsed existing metadata:', existingMetadata);
+      console.log('[Workflows PUT] Incoming nodes:', nodes ? `Array(${nodes.length})` : 'undefined');
 
       // Build updated metadata
       const metadata = {
@@ -773,6 +907,10 @@ export default function createWorkflowRoutes(pgPool) {
         nodes: nodes !== undefined ? nodes : existingMetadata.nodes || [],
         connections: connections !== undefined ? connections : existingMetadata.connections || []
       };
+
+      console.log('[Workflows PUT] Final merged metadata:', JSON.stringify(metadata));
+
+      console.log('[Workflows PUT] Metadata to store:', metadata);
 
       // Extract trigger type and config if provided
       const trigger_type = trigger?.type || existingWorkflow.trigger_type;
@@ -878,12 +1016,29 @@ export default function createWorkflowRoutes(pgPool) {
     try {
       const { workflow_id, payload, input_data } = req.body || {};
       const triggerPayload = payload ?? input_data ?? {};
+
       if (!workflow_id) {
         return res.status(400).json({ status: 'error', message: 'workflow_id is required' });
       }
-      const result = await executeWorkflowById(workflow_id, triggerPayload);
-      return res.status(result.httpStatus).json({ status: result.status, data: result.data });
+
+      // Queue the workflow for async execution
+      const job = await workflowQueue.add({
+        workflow_id,
+        trigger_data: triggerPayload
+      });
+
+      // Return immediately with 202 Accepted
+      return res.status(202).json({
+        status: 'queued',
+        data: {
+          job_id: job.id,
+          workflow_id,
+          message: 'Workflow queued for execution',
+          check_status_at: `/api/workflows/executions?workflow_id=${workflow_id}`
+        }
+      });
     } catch (error) {
+      console.error('[Workflow Execute] Error queuing workflow:', error);
       return res.status(500).json({ status: 'error', message: error.message });
     }
   });

@@ -14,6 +14,7 @@ import { initSupabaseAuth } from "./lib/supabaseAuth.js";
 import { initDatabase } from "./startup/initDatabase.js";
 import { initServices } from "./startup/initServices.js";
 import { initMiddleware } from "./startup/initMiddleware.js";
+import workflowQueue from "./services/workflowQueue.js";
 
 // Load environment variables
 // Try .env.local first (for local development), then fall back to .env
@@ -348,6 +349,12 @@ process.on("SIGTERM", async () => {
   );
   if (heartbeatTimer) clearInterval(heartbeatTimer);
 
+  // Close workflow queue
+  if (workflowQueue) {
+    await workflowQueue.close();
+    console.log("Workflow queue closed");
+  }
+
   if (pgPool) {
     pgPool.end(() => {
       console.log("PostgreSQL pool closed");
@@ -540,6 +547,8 @@ server.listen(PORT, async () => {
   ensureStorageBucketExists().catch((err) =>
     console.error("Bucket ensure failed:", err?.message)
   );
+
+  console.log("!!! BACKEND VERSION CHECK: FIX APPLIED (v2) !!!");
 
   // Log startup event (non-blocking - don't block server startup)
   logBackendEvent("INFO", "Backend server started successfully", {

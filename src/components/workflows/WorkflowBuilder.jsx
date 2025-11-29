@@ -37,6 +37,31 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   
   const [autoConnect, setAutoConnect] = useState(true);
 
+  // Update state when workflow prop changes (for editing)
+  useEffect(() => {
+    console.log("!!! FRONTEND VERSION CHECK: FIX APPLIED (v2) !!!");
+    if (workflow) {
+      console.log('[WorkflowBuilder] Workflow prop changed:', {
+        id: workflow.id,
+        name: workflow.name,
+        hasNodes: !!workflow.nodes,
+        nodesLength: workflow.nodes?.length,
+        nodesData: workflow.nodes,
+        hasConnections: !!workflow.connections,
+        connectionsLength: workflow.connections?.length,
+        connectionsData: workflow.connections
+      });
+
+      setName(workflow.name || '');
+      setDescription(workflow.description || '');
+      setNodes(workflow.nodes || []);
+      setConnections(workflow.connections || []);
+
+      if (workflow.nodes && workflow.nodes.length > 0) {
+        setSelectedNodeId(workflow.nodes[0].id);
+      }
+    }
+  }, [workflow?.id]); // Depend on workflow.id to avoid infinite loops
 
   useEffect(() => {
     if (!workflow && nodes.length === 0) {
@@ -44,7 +69,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         id: 'trigger-1',
         type: 'webhook_trigger',
         config: {},
-        position: { x: 50, y: 50 }
+        position: { x: 400, y: 200 } // Center of canvas for better expansion
       };
       setNodes([initialNode]);
       // Make the initial webhook trigger node selectable
@@ -57,7 +82,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
       id: `node-${Date.now()}`,
       type: nodeType,
       config: {},
-      position: { x: 300, y: nodes.length * 100 + 50 }
+      position: { x: 400, y: 200 + (nodes.length * 150) } // Centered horizontally, spaced vertically
     };
     setNodes([...nodes, newNode]);
     setSelectedNodeId(newNode.id);
@@ -90,32 +115,6 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
   const handleSelectNode = (nodeId) => {
     setSelectedNodeId(nodeId);
-  };
-
-  const handleDragEnd = (result) => {
-    if (!result.destination) return;
-
-    const items = Array.from(nodes);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
-
-    setNodes(items);
-
-    if (autoConnect) {
-       const hasCondition = items.some(n => n.type === 'condition');
-       if (hasCondition) {
-         toast.warning("Auto-connect skipped: Workflow contains condition nodes.");
-         return;
-       }
-       
-       // Rebuild connections linearly
-       const newConnections = [];
-       for (let i = 0; i < items.length - 1; i++) {
-         newConnections.push({ from: items[i].id, to: items[i+1].id });
-       }
-       setConnections(newConnections);
-       toast.success("Nodes reordered and connections updated.");
-    }
   };
 
   const handleCopyWebhookUrl = () => {
@@ -1430,6 +1429,153 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           </div>
         );
 
+      // AI: Classify Opportunity Stage
+      case 'ai_classify_opportunity_stage':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Provider</Label>
+              <Select
+                value={node.config?.provider || 'mcp'}
+                onValueChange={(value) => {
+                  updateNodeConfig(node.id, { ...node.config, provider: value });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="mcp">Braid MCP</SelectItem>
+                  <SelectItem value="openai">OpenAI (stub)</SelectItem>
+                  <SelectItem value="anthropic">Anthropic (stub)</SelectItem>
+                  <SelectItem value="google">Gemini (stub)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-slate-200">Model</Label>
+              <Input
+                value={node.config?.model || 'default'}
+                onChange={(e) => updateNodeConfig(node.id, { ...node.config, model: e.target.value })}
+                placeholder="e.g., gpt-4.1, claude-3.5, gemini-1.5-pro or 'default'"
+                className="bg-slate-800 border-slate-700 text-slate-200"
+              />
+            </div>
+            <div>
+              <Label className="text-slate-200">Text/Context</Label>
+              <textarea
+                value={node.config?.text || ''}
+                onChange={(e) => updateNodeConfig(node.id, { ...node.config, text: e.target.value })}
+                placeholder="Provide notes or use {{field}} variables from payload/context"
+                className="w-full min-h-[120px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
+              />
+              <p className="text-xs text-slate-500 mt-1">Output stored in {'{{ai_stage}}'} with {'{{ai_stage.stage}}'} and {'{{ai_stage.confidence}}'}</p>
+            </div>
+          </div>
+        );
+
+      // AI: Generate Email
+      case 'ai_generate_email':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Provider</Label>
+              <Select
+                value={node.config?.provider || 'mcp'}
+                onValueChange={(value) => updateNodeConfig(node.id, { ...node.config, provider: value })}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="mcp">Braid MCP</SelectItem>
+                  <SelectItem value="openai">OpenAI (stub)</SelectItem>
+                  <SelectItem value="anthropic">Anthropic (stub)</SelectItem>
+                  <SelectItem value="google">Gemini (stub)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-slate-200">Prompt</Label>
+              <textarea
+                value={node.config?.prompt || ''}
+                onChange={(e) => updateNodeConfig(node.id, { ...node.config, prompt: e.target.value })}
+                placeholder="Describe the email to generate. Use {{field}} variables."
+                className="w-full min-h-[120px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
+              />
+              <p className="text-xs text-slate-500 mt-1">Output stored in {'{{ai_email}}'} with {'{{ai_email.subject}}'} and {'{{ai_email.body}}'}</p>
+            </div>
+          </div>
+        );
+
+      // AI: Enrich Account
+      case 'ai_enrich_account':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Provider</Label>
+              <Select
+                value={node.config?.provider || 'mcp'}
+                onValueChange={(value) => updateNodeConfig(node.id, { ...node.config, provider: value })}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="mcp">Braid MCP</SelectItem>
+                  <SelectItem value="openai">OpenAI (stub)</SelectItem>
+                  <SelectItem value="anthropic">Anthropic (stub)</SelectItem>
+                  <SelectItem value="google">Gemini (stub)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-slate-200">Input (e.g., domain)</Label>
+              <Input
+                value={node.config?.input || '{{company}}'}
+                onChange={(e) => updateNodeConfig(node.id, { ...node.config, input: e.target.value })}
+                placeholder="e.g., {{domain}} or {{company}}"
+                className="bg-slate-800 border-slate-700 text-slate-200"
+              />
+              <p className="text-xs text-slate-500 mt-1">Output stored in {'{{ai_enrichment}}'} (e.g., website, industry, size)</p>
+            </div>
+          </div>
+        );
+
+      // AI: Route Activity
+      case 'ai_route_activity':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Provider</Label>
+              <Select
+                value={node.config?.provider || 'mcp'}
+                onValueChange={(value) => updateNodeConfig(node.id, { ...node.config, provider: value })}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="mcp">Braid MCP</SelectItem>
+                  <SelectItem value="openai">OpenAI (stub)</SelectItem>
+                  <SelectItem value="anthropic">Anthropic (stub)</SelectItem>
+                  <SelectItem value="google">Gemini (stub)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-slate-200">Context</Label>
+              <textarea
+                value={node.config?.context || ''}
+                onChange={(e) => updateNodeConfig(node.id, { ...node.config, context: e.target.value })}
+                placeholder="Provide context for next best action (use {{field}} variables)"
+                className="w-full min-h-[120px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
+              />
+              <p className="text-xs text-slate-500 mt-1">Output stored in {'{{ai_route}}'}: {'{{type}}'}, {'{{title}}'}, {'{{details}}'}, {'{{priority}}'}</p>
+            </div>
+          </div>
+        );
+
       case 'condition':
         return (
           <div className="space-y-4">
@@ -1578,13 +1724,28 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         webhook_url: workflow?.webhook_url || `${BACKEND_URL}/api/workflows/execute?workflow_id=PENDING`
       };
 
+      console.log('[WorkflowBuilder] Saving workflow with nodes:', nodes);
+      console.log('[WorkflowBuilder] Workflow data being sent:', workflowData);
+
       let savedWorkflow;
       if (workflow) {
         savedWorkflow = await Workflow.update(workflow.id, workflowData);
       } else {
         savedWorkflow = await Workflow.create(workflowData);
+        console.log('[WorkflowBuilder] Created workflow:', savedWorkflow);
+
+        if (!savedWorkflow || !savedWorkflow.id) {
+          console.error('[WorkflowBuilder] Created workflow missing ID!', savedWorkflow);
+          throw new Error('Failed to create workflow: No ID returned');
+        }
+
+        // Explicitly pass nodes and connections again to ensure they aren't lost
+        // if the backend merge logic fails or if existing metadata is empty
         await Workflow.update(savedWorkflow.id, {
-          webhook_url: `${BACKEND_URL}/api/workflows/execute?workflow_id=${savedWorkflow.id}`
+          webhook_url: `${BACKEND_URL}/api/workflows/execute?workflow_id=${savedWorkflow.id}`,
+          nodes,
+          connections,
+          tenant_id: tenantId // Ensure tenant_id is passed
         });
       }
 
@@ -1628,11 +1789,28 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
       </div>
 
       <div className="flex flex-1 overflow-hidden min-h-0">
-        <div className="w-64 border-r border-slate-700 overflow-y-auto p-4 flex-shrink-0">
-          <NodeLibrary onAddNode={handleAddNode} />
+        <div className="w-64 border-r border-slate-700 flex-shrink-0 flex flex-col">
+          <style>{`
+            .workflow-node-scroll::-webkit-scrollbar {
+              width: 8px;
+            }
+            .workflow-node-scroll::-webkit-scrollbar-track {
+              background: #1e293b;
+            }
+            .workflow-node-scroll::-webkit-scrollbar-thumb {
+              background: #475569;
+              border-radius: 4px;
+            }
+            .workflow-node-scroll::-webkit-scrollbar-thumb:hover {
+              background: #64748b;
+            }
+          `}</style>
+          <div className="workflow-node-scroll overflow-y-auto flex-1 p-4">
+            <NodeLibrary onAddNode={handleAddNode} />
+          </div>
         </div>
 
-        <div className="flex-1 bg-slate-950 overflow-y-auto min-h-0">
+        <div className="flex-1 bg-slate-950 overflow-auto min-h-0">
           <WorkflowCanvas
             nodes={nodes}
             connections={connections}
@@ -1641,7 +1819,6 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
             onConnect={handleConnect}
             onSelectNode={handleSelectNode}
             selectedNodeId={selectedNodeId}
-            onDragEnd={handleDragEnd}
           />
         </div>
 
