@@ -131,6 +131,9 @@ export async function authenticateRequest(req, _res, next) {
                 role: roleMeta || 'employee',
                 tenant_id: tenantMeta || null,
               };
+              if (process.env.AUTH_DEBUG === 'true') {
+                console.warn('[Auth Debug] Email not found in users/employees; using metadata fallback', { email, roleMeta, tenantMeta });
+              }
             }
             return next();
           } catch {
@@ -140,6 +143,9 @@ export async function authenticateRequest(req, _res, next) {
               role: roleMeta || 'employee',
               tenant_id: tenantMeta || null,
             };
+            if (process.env.AUTH_DEBUG === 'true') {
+              console.warn('[Auth Debug] DB lookup failed; continuing with metadata fallback', { email, roleMeta, tenantMeta });
+            }
             return next();
           }
         }
@@ -152,6 +158,20 @@ export async function authenticateRequest(req, _res, next) {
     return next();
   } catch {
     return next();
+  }
+}
+
+// Optional, minimal preview helpers for diagnostics (non-sensitive)
+function previewHeaders(headers = {}) {
+  try {
+    const auth = headers.authorization || '';
+    return {
+      hasAuthorization: !!auth,
+      authPreview: auth ? (auth.startsWith('Bearer ') ? (auth.substring(7, 19) + '...') : auth.slice(0, 12) + '...') : null,
+      userAgent: headers['user-agent'] || null,
+    };
+  } catch {
+    return { error: 'header_preview_failed' };
   }
 }
 

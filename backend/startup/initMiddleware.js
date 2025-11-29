@@ -1,0 +1,224 @@
+import express from "express";
+import cors from "cors";
+import helmet from "helmet";
+import morgan from "morgan";
+import cookieParser from "cookie-parser";
+import compression from "compression";
+import { attachRequestContext } from '../lib/requestContext.js';
+import { performanceLogger } from "../middleware/performanceLogger.js";
+import { productionSafetyGuard } from "../middleware/productionSafetyGuard.js";
+import { intrusionDetection } from "../middleware/intrusionDetection.js";
+import { authenticateRequest } from "../middleware/authenticate.js";
+import { pool as perfLogPool } from '../lib/supabase-db.js';
+
+export function initMiddleware(app, pgPool) {
+  // Middleware
+  // Apply Helmet with secure defaults globally
+  app.use(helmet()); // Security headers (no insecure overrides globally)
+  app.use(compression()); // Compress responses
+  app.use(morgan("combined")); // Logging
+  app.use(cookieParser()); // Cookie parsing for auth cookies
+  // Attach request-scoped context for accumulating DB timing
+  app.use(attachRequestContext);
+
+  // Simple, in-memory rate limiter (dependency-free)
+  // Configure via ENV:
+  //   RATE_LIMIT_WINDOW_MS (default 60000)
+  //   RATE_LIMIT_MAX (default 120)
+  // Test overrides:
+  //   E2E_TEST_MODE=true or NODE_ENV=test will switch to RATE_LIMIT_TEST_MAX (default 120)
+  //   RATE_LIMIT_FORCE_DEFAULT=1 forces ignoring a very large RATE_LIMIT_MAX (e.g. 100000) during tests
+  const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10);
+  const RAW_RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX || '120', 10);
+  const IS_TEST_MODE = (process.env.E2E_TEST_MODE === 'true') || (process.env.NODE_ENV === 'test');
+  const FORCE_DEFAULT = process.env.RATE_LIMIT_FORCE_DEFAULT === '1';
+  const RATE_LIMIT_MAX = (IS_TEST_MODE || FORCE_DEFAULT)
+    ? parseInt(process.env.RATE_LIMIT_TEST_MAX || '120', 10)
+    : RAW_RATE_LIMIT_MAX;
+  if (IS_TEST_MODE) {
+    console.log(`[RateLimiter] Test mode active → effective RATE_LIMIT_MAX=${RATE_LIMIT_MAX} (raw=${RAW_RATE_LIMIT_MAX})`);
+  }
+  if (FORCE_DEFAULT) {
+    console.log(`[RateLimiter] FORCE_DEFAULT enabled → effective RATE_LIMIT_MAX=${RATE_LIMIT_MAX} (raw=${RAW_RATE_LIMIT_MAX})`);
+  }
+  const rateBucket = new Map(); // key -> { count, ts }
+  const rateSkip = new Set(['/health', '/api/status', '/api-docs', '/api-docs.json']);
+
+  function rateLimiter(req, res, next) {
+    try {
+      if (rateSkip.has(req.path)) return next();
+      // Allow OPTIONS preflight freely
+      if (req.method === 'OPTIONS') return next();
+      const now = Date.now();
+      const key = `${req.ip}`; // after trust proxy, this reflects client IP
+      const entry = rateBucket.get(key);
+      if (!entry || now - entry.ts >= RATE_LIMIT_WINDOW_MS) {
+        rateBucket.set(key, { count: 1, ts: now });
+        return next();
+      }
+      if (entry.count < RATE_LIMIT_MAX) {
+        entry.count++;
+        return next();
+      }
+      // Prepare CORS headers early if not already set (ensures browser can read 429)
+      if (!res.getHeader('Access-Control-Allow-Origin')) {
+        const origin = req.headers.origin || '*';
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
+      res.setHeader('Retry-After', Math.ceil((entry.ts + RATE_LIMIT_WINDOW_MS - now) / 1000));
+      return res.status(429).json({
+        error: 'Too Many Requests',
+        message: `Rate limit exceeded. Try again soon.`,
+      });
+    } catch {
+      // Fail open on limiter errors
+      return next();
+    }
+  }
+
+  // CORS configuration
+  // Only use ALLOWED_ORIGINS from environment - no hardcoded defaults for production safety
+  const envAllowed = (process.env.ALLOWED_ORIGINS?.split(",") || [])
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  // In development, add localhost origins if not already specified
+  const devDefaults = process.env.NODE_ENV === 'development' ? [
+    "http://localhost:5173",
+    "https://localhost:5173",
+    "http://localhost:4000",
+    "https://localhost:4000",
+  ] : [];
+
+  const allowedOrigins = [...new Set([...envAllowed, ...devDefaults])];
+
+  // Fail loudly if no origins configured in production
+  if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
+    console.error('❌ CRITICAL: ALLOWED_ORIGINS not set in production environment');
+    console.error('   Set ALLOWED_ORIGINS in .env with your frontend URL(s)');
+    process.exit(1);
+  }
+
+  app.use(cors({
+    origin: (origin, callback) => {
+      try {
+        // Allow server-to-server or same-origin calls
+        if (!origin) return callback(null, true);
+
+        // Explicit allowlist or wildcard
+        if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+
+        // No platform-specific defaults; configure via ALLOWED_ORIGINS
+
+        return callback(new Error("Not allowed by CORS"));
+      } catch {
+        return callback(new Error("CORS configuration error"));
+      }
+    },
+    credentials: true,
+  }));
+
+  // Apply limiter to API routes AFTER CORS so 429 responses include CORS headers
+  app.use('/api', rateLimiter);
+
+  app.use(express.json({ limit: "10mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+  // Performance logging middleware (must be after body parsers, before routes)
+  // Build a resilient perf DB wrapper that falls back to Supabase API pool if the direct pool was ended
+  const resilientPerfDb = {
+    query: async (...args) => {
+      const directAlive = perfLogPool && !perfLogPool.ended;
+      const db = directAlive ? perfLogPool : pgPool;
+      try {
+        return await db.query(...args);
+      } catch (e) {
+        // Fallback broadly to Supabase API pool when direct connection fails for any reason
+        if (directAlive && pgPool && db === perfLogPool) {
+          try {
+            return await pgPool.query(...args);
+          } catch (e2) {
+            // Log fallback error and re-throw original
+            console.error('[ResilientPerfDb] Fallback query failed:', e2?.message || e2);
+            throw e;
+          }
+        }
+        throw e;
+      }
+    }
+  };
+
+  if (perfLogPool || pgPool) {
+    app.use(performanceLogger(resilientPerfDb));
+    console.log(
+      `✓ Performance logging middleware enabled (${perfLogPool ? "PostgreSQL direct" : "Supabase API"})`
+    );
+  } else {
+    console.warn("⚠ Performance logging disabled - no database connection available");
+  }
+
+  // Block mutating requests in production Supabase unless explicitly allowed
+  // Exempt non-DB-mutating CI endpoints (GitHub Actions dispatch) from the guard
+  app.use(productionSafetyGuard({
+    exemptPaths: [
+      '/api/testing/run-playwright', // POST triggers GitHub workflow, no DB writes
+      '/api/system-logs',            // System telemetry and monitoring
+      '/api/users/heartbeat',        // User session keepalive
+      '/api/users/sync-from-auth',   // Supabase auth sync (critical for login)
+      '/api/users/reset-password',   // Password reset email (Supabase Auth, no direct DB writes)
+      '/api/cron/run',               // Scheduled job execution
+      '/api/notifications',          // User notification delivery
+      '/api/auth/login',             // Authentication login (critical for access)
+      '/api/auth/refresh',           // JWT token refresh (critical for sessions)
+      '/api/auth/logout',            // Authentication logout
+    ],
+    pgPool, // Pass database connection for security event logging
+  }));
+  console.log("✓ Production safety guard enabled");
+
+  // Attach Supabase client to request for IDR middleware
+  app.use((req, _res, next) => {
+    req.supabase = pgPool;
+    next();
+  });
+
+  // Enable Intrusion Detection and Response (IDR) system
+  if (process.env.IDR_ENABLED !== 'false') {
+    app.use(intrusionDetection);
+    console.log("✓ Intrusion Detection & Response (IDR) middleware enabled");
+  } else {
+    console.warn("⚠ IDR middleware disabled via IDR_ENABLED=false");
+  }
+
+  // Attach authentication context (cookie or Supabase bearer) for downstream route auth checks
+  app.use('/api', authenticateRequest);
+
+  // ----------------------------------------------------------------------------
+  // Canary logging middleware for BizDevSource promote diagnostics
+  // Logs every POST to /api/bizdevsources/* BEFORE route handlers.
+  // Helps distinguish client/network stall vs server handling issues.
+  // ----------------------------------------------------------------------------
+  app.use((req, _res, next) => {
+    try {
+      if (req.method === 'POST' && req.path.startsWith('/api/bizdevsources/')) {
+        console.log('[CANARY Promote POST] Incoming request', {
+          path: req.path,
+          method: req.method,
+          origin: req.headers.origin,
+          contentType: req.headers['content-type'],
+          hasBody: !!req.headers['content-length'],
+          productionGuardEnabled: true,
+        });
+      }
+    } catch (e) {
+      console.warn('[CANARY Promote POST] Logging error', e?.message);
+    }
+    return next();
+  });
+
+  return { resilientPerfDb };
+}

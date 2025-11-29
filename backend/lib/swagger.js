@@ -10,20 +10,30 @@ const options = {
     openapi: '3.0.0',
     info: {
       title: 'Aisha CRM API',
-      version: '2.0.0',
+      version: '2.1.0',
       description: `# Independent CRM Backend
 
-**197 endpoints** organized across **26 API categories** for comprehensive customer relationship management.
+**210+ endpoints** organized across **28 API categories** for comprehensive customer relationship management.
 
 ## Key Features
 
 - **Multi-tenant Architecture**: UUID-based tenant isolation and management
 - **Database**: PostgreSQL (Supabase) with automatic Base44 failover
-- **Workflow Automation**: n8n integration for visual workflow creation
-- **AI Agent Operations**: MCP (Model Context Protocol) server support
-- **Performance**: Real-time monitoring with intelligent caching
-- **Security**: Rate limiting, CORS protection, JWT authentication
-- **Deployment**: Docker containers (Frontend: port 4000, Backend: port 4001)
+- **Workflow Automation**: Visual workflow builder with AI-powered nodes and CRM entity operations
+- **AI Agent Operations**: MCP (Model Context Protocol) server support with provider abstraction (OpenAI/Anthropic/Gemini)
+- **Background Processing**: Bull queue for async workflow execution with retry logic
+- **Performance**: Real-time monitoring with intelligent Redis caching (dual instance: memory + cache)
+- **Security**: Rate limiting, CORS protection, JWT authentication, tenant-scoped RLS
+- **Deployment**: Docker containers (Frontend: port 4000, Backend: port 4001, MCP: port 8000)
+
+## Workflow System
+
+Build automated workflows with:
+- **Webhook Triggers**: HTTP endpoints for external integrations
+- **CRM Entity Nodes**: Find/Update Accounts, Create/Update Opportunities, Create Activities
+- **AI Nodes**: Classify stages, generate emails, enrich data, route activities (MCP-first with provider stubs)
+- **Conditional Logic**: Branch workflows based on field values and expressions
+- **Visual Builder**: Drag-and-drop canvas with SVG connection lines and absolute positioning
 
 ## Documentation
 
@@ -120,7 +130,7 @@ For detailed guides and examples, visit the API documentation at \`/api-docs\``,
       { name: 'telephony', description: 'Phone system integration and call management' },
       { name: 'tenants', description: 'Multi-tenant management and provisioning' },
       { name: 'users', description: 'User authentication, profiles, and sessions' },
-      { name: 'workflows', description: 'n8n workflow automation and triggers' }
+      { name: 'workflows', description: 'Visual workflow automation with AI-powered nodes - Build automated CRM workflows with webhook triggers, CRM entity operations (find/update Accounts, create/update Opportunities, create Activities), AI-driven steps (classify stages, generate emails, enrich accounts, route activities), conditional branching, and background execution via Bull queue. Supports drag-and-drop canvas builder with SVG connections and absolute positioning.' }
     ]
   },
   // Paths to files containing OpenAPI definitions

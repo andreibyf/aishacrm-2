@@ -92,7 +92,11 @@ export default function WorkflowsPage() {
 
   const handleSave = async () => {
     setShowBuilder(false);
-    loadData();
+    setEditingWorkflow(null);
+    // Refresh the list after a brief delay to ensure backend has processed
+    setTimeout(() => {
+      loadData();
+    }, 300);
   };
 
   if (loading || userLoading) {
@@ -251,17 +255,19 @@ export default function WorkflowsPage() {
 
         {/* Workflow Builder Dialog */}
         <Dialog open={showBuilder} onOpenChange={setShowBuilder}>
-          <DialogContent className="max-w-6xl h-[90vh] bg-slate-900 border-slate-700">
-            <DialogHeader>
+          <DialogContent className="max-w-[95vw] w-full max-h-[90vh] h-[90vh] bg-slate-900 border-slate-700 p-0">
+            <DialogHeader className="px-6 pt-6 pb-0">
               <DialogTitle className="text-slate-100">
                 {editingWorkflow ? "Edit Workflow" : "Create New Workflow"}
               </DialogTitle>
             </DialogHeader>
-            <WorkflowBuilder
-              workflow={editingWorkflow}
-              onSave={handleSave}
-              onCancel={() => setShowBuilder(false)}
-            />
+            <div className="h-[calc(90vh-4rem)] overflow-hidden">
+              <WorkflowBuilder
+                workflow={editingWorkflow}
+                onSave={handleSave}
+                onCancel={() => setShowBuilder(false)}
+              />
+            </div>
           </DialogContent>
         </Dialog>
       </div>

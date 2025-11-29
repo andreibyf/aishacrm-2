@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { getBackendUrl } from "@/api/backendUrl";
 import { useUser } from '@/components/shared/useUser.js';
+import { useTenant } from '@/components/shared/tenantContext.jsx';
 
 const BACKEND_URL = getBackendUrl();
 
@@ -38,6 +39,7 @@ export default function TestRunner({ testSuites }) {
   const [running, setRunning] = useState(false);
   const resultsRef = useRef([]);
   const { user } = useUser();
+  const { tenant } = useTenant();
   const isSuperadmin = (user?.role || '').toLowerCase() === 'superadmin';
   const [config, setConfig] = useState(() => {
     try {
@@ -498,7 +500,12 @@ export default function TestRunner({ testSuites }) {
 
     // Proactively clean up test data created with test tenant
     // This helps when a run aborts before Delete tests execute
-    const TEST_TENANT_ID = 'local-tenant-001';
+    const tenantId = tenant?.id;
+    if (!tenantId) {
+      console.warn('[Cleanup] No tenant ID available, skipping cleanup');
+      setCleaning(false);
+      return;
+    }
     const BACKEND_URL = getBackendUrl();
     const cleanupSpecs = [
       {
@@ -523,7 +530,7 @@ export default function TestRunner({ testSuites }) {
     const summary = [];
     for (const spec of cleanupSpecs) {
       try {
-        const listResp = await fetch(`${BACKEND_URL}/api/${spec.endpoint}?tenant_id=${encodeURIComponent(TEST_TENANT_ID)}&limit=200`);
+        const listResp = await fetch(`${BACKEND_URL}/api/${spec.endpoint}?tenant_id=${encodeURIComponent(tenantId)}&limit=200`);
         if (!listResp.ok) {
           console.warn(`[Cleanup] Skip ${spec.endpoint}: status ${listResp.status}`);
           continue;
@@ -535,7 +542,7 @@ export default function TestRunner({ testSuites }) {
         for (const item of targets) {
           if (!item.id) continue;
           try {
-            const del = await fetch(`${BACKEND_URL}/api/${spec.endpoint}/${item.id}?tenant_id=${encodeURIComponent(TEST_TENANT_ID)}`, { method: 'DELETE' });
+            const del = await fetch(`${BACKEND_URL}/api/${spec.endpoint}/${item.id}?tenant_id=${encodeURIComponent(tenantId)}`, { method: 'DELETE' });
             if (del.ok) deleted++;
           } catch (e) {
             console.warn(`[Cleanup] Failed delete ${spec.endpoint} ${item.id}:`, e.message);

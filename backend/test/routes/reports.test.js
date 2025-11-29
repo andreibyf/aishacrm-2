@@ -4,6 +4,7 @@
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
+import { initSupabaseForTests, hasSupabaseCredentials } from '../setup.js';
 
 let app;
 let server;
@@ -16,6 +17,9 @@ async function request(method, path) {
 
 describe('Reports Routes', () => {
   before(async () => {
+    // Initialize Supabase if credentials are available
+    await initSupabaseForTests();
+    
     const express = (await import('express')).default;
     const createReportRoutes = (await import('../../routes/reports.js')).default;
 
@@ -32,6 +36,10 @@ describe('Reports Routes', () => {
   });
 
   it('GET /dashboard-bundle returns success bundle', async () => {
+    if (!hasSupabaseCredentials()) {
+      // Skip this test if no Supabase credentials
+      return;
+    }
     const res = await request('GET', '/api/reports/dashboard-bundle?tenant_id=t1');
     assert.strictEqual(res.status, 200);
     const json = await res.json();

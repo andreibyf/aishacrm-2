@@ -87,5 +87,10 @@ export async function resolveOpenAIKey(params: {
     void e;
   }
 
+  // Final fallback to environment variable
+  if (process.env.OPENAI_API_KEY) {
+    return process.env.OPENAI_API_KEY;
+  }
+
   return null;
 }

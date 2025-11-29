@@ -17,12 +17,6 @@ export { cronOrphanCleanup } from './database/cronOrphanCleanup';
 export { trackEntityChange } from './database/trackEntityChange';
 export { getEntityAtDate } from './database/getEntityAtDate';
 
-// n8n Integration
-export { n8nCreateLead } from './integrations/n8nCreateLead';
-export { n8nCreateContact } from './integrations/n8nCreateContact';
-export { n8nGetData } from './integrations/n8nGetData';
-export { n8nUpdateContact } from './integrations/n8nUpdateContact';
-
 // Telephony & Call Management
 export { makeCall } from './telephony/makeCall';
 export { callStatus } from './telephony/callStatus';

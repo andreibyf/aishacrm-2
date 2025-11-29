@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Webhook, Search, Edit, Trash2, Link as LinkIcon, UserPlus, GitBranch, Globe, Mail } from 'lucide-react';
+import { Webhook, Search, Edit, Trash2, Link as LinkIcon, UserPlus, GitBranch, Globe, Mail, GripVertical } from 'lucide-react';
 
 const nodeIcons = {
   webhook_trigger: Webhook,
@@ -26,7 +26,7 @@ const nodeColors = {
   send_email: 'bg-indigo-600',
 };
 
-export default function WorkflowNode({ node, isSelected, isConnecting, onClick, _onUpdate, onDelete, onStartConnect }) {
+export default function WorkflowNode({ node, isSelected, isConnecting, onClick, _onUpdate, onDelete, onStartConnect, dragHandleProps }) {
   const Icon = nodeIcons[node.type] || Edit;
   const colorClass = nodeColors[node.type] || 'bg-gray-600';
 
@@ -82,6 +82,15 @@ export default function WorkflowNode({ node, isSelected, isConnecting, onClick, 
         </div>
         {/* Overlay controls */}
         <div className="absolute -top-2 right-1 flex gap-1">
+          {/* Drag Handle for Condition Node */}
+          <div 
+            {...dragHandleProps}
+            className="h-6 w-6 flex items-center justify-center text-white bg-slate-700/50 hover:bg-slate-700 rounded cursor-grab active:cursor-grabbing"
+            onClick={(e) => e.stopPropagation()}
+            title="Drag to reorder"
+          >
+            <GripVertical className="w-3 h-3" />
+          </div>
           <Button
             variant="ghost"
             size="icon"
@@ -124,6 +133,14 @@ export default function WorkflowNode({ node, isSelected, isConnecting, onClick, 
       <CardHeader className={`${colorClass} text-white`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
+            {/* Drag Handle */}
+            <div 
+              {...dragHandleProps}
+              className="cursor-grab active:cursor-grabbing p-1 hover:bg-white/10 rounded"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <GripVertical className="w-4 h-4 text-white/70" />
+            </div>
             <Icon className="w-5 h-5" />
             <CardTitle className="text-base">{getNodeTitle()}</CardTitle>
           </div>

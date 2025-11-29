@@ -1464,7 +1464,7 @@ Connect Ai-SHA CRM with other tools and automate your workflows.
 
 ### Automation
 - **Zapier** - Connect 3,000+ apps
-- **n8n** - Open-source automation
+- **n8n** - Open-source automation (external access at http://localhost:5679 in dev)
 - **Webhooks** - Custom integrations
 
 ### AI Providers
@@ -1513,8 +1513,8 @@ Includes:
 ## Email Integration
 
 ### Webhook-Based Email
-Send automated emails via n8n or Make:
-1. Set up webhook in automation tool
+Send automated emails via external automation tools (n8n, Make/Integromat, Zapier):
+1. Set up webhook in automation tool (n8n accessible at http://localhost:5679 in dev)
 2. Configure email template
 3. Map CRM data fields
 4. Trigger on CRM events

@@ -22,7 +22,29 @@ import { useErrorLog } from "../shared/ErrorLogger";
 import { useConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "sonner";
 import { useTenant } from "../shared/tenantContext";
-import { BACKEND_URL } from '@/api/entities';
+import { BACKEND_URL, supabase, isSupabaseConfigured } from '@/api/entities';
+
+// Helper to make authenticated requests to system endpoints (non-entity CRUD)
+async function fetchWithAuth(url, options = {}) {
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {})
+  };
+
+  // Attach Supabase Bearer token if available
+  try {
+    if (isSupabaseConfigured()) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers.Authorization = `Bearer ${session.access_token}`;
+      }
+    }
+  } catch (err) {
+    console.warn('[fetchWithAuth] Failed to get auth token:', err);
+  }
+
+  return fetch(url, { ...options, headers });
+}
 
 export default function SystemHealthDashboard({ onViewMore }) {
   const { errors, clearErrors } = useErrorLog();
@@ -64,7 +86,7 @@ export default function SystemHealthDashboard({ onViewMore }) {
 
   const loadContainerStatus = async () => {
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/system/containers-status`);
+      const resp = await fetchWithAuth(`${BACKEND_URL}/api/system/containers-status`);
       if (resp.ok) {
         const result = await resp.json();
         if (result.status === 'success' && result.data) {
@@ -79,7 +101,7 @@ export default function SystemHealthDashboard({ onViewMore }) {
   const loadMetrics = useCallback(async () => {
     try {
       const tenantParam = selectedTenantId ? `&tenant_id=${encodeURIComponent(selectedTenantId)}` : "";
-      const resp = await fetch(`${BACKEND_URL}/api/metrics/performance?hours=${rangeHours}&limit=200${tenantParam}`);
+      const resp = await fetchWithAuth(`${BACKEND_URL}/api/metrics/performance?hours=${rangeHours}&limit=200${tenantParam}`);
       if (resp.ok) {
         const result = await resp.json();
         const data = result.data || {};
