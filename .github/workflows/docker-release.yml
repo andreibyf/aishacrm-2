@@ -88,6 +88,20 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy Compose File to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PROD_VPS_HOST }}
+          username: ${{ secrets.PROD_VPS_USER }}
+          key: ${{ secrets.PROD_VPS_SSH_KEY }}
+          port: ${{ secrets.PROD_VPS_PORT || 22 }}
+          source: "docker-compose.prod.yml,nginx-n8n.conf"
+          target: "/opt/aishacrm/"
+          strip_components: 0
+
       - name: Deploy to Production VPS
         uses: appleboy/ssh-action@v1.0.3
         env:
@@ -114,6 +128,10 @@ jobs:
             else
               echo "VITE_APP_BUILD_VERSION=$VERSION_TAG" >> .env
             fi
+            # Ensure n8n URL is set for iframe embedding
+            if ! grep -q "^VITE_N8N_URL=" .env 2>/dev/null; then
+              echo "VITE_N8N_URL=http://147.189.173.237:5679" >> .env
+            fi
             # Optionally inject GitHub token for MCP GitHub adapter
             if [ -n "$MCP_GITHUB_TOKEN" ]; then
               if grep -q "^GITHUB_TOKEN=" .env 2>/dev/null; then
@@ -123,7 +141,7 @@ jobs:
               fi
             fi
             # Restart services with version info (force recreate to detect :latest image changes)
-            docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend
+            docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend n8n n8n-proxy
             # If token changed, recreate MCP to pick up new env
             if [ -n "$MCP_GITHUB_TOKEN" ]; then
               docker compose -f docker-compose.prod.yml up -d --force-recreate mcp

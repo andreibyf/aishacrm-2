@@ -358,7 +358,7 @@ export default function createSystemLogRoutes(_pgPool) {
       if (level) del = del.eq('level', level);
       if (hours) {
         const since = new Date(Date.now() - parseInt(hours) * 60 * 60 * 1000).toISOString();
-        del = del.gt('created_at', since);
+        del = del.lt('created_at', new Date().toISOString()).gte('created_at', since); // Delete logs within time range
       }
       if (older_than_days) {
         const before = new Date(Date.now() - parseInt(older_than_days) * 24 * 60 * 60 * 1000).toISOString();

@@ -4,317 +4,39 @@
  */
 
 import express from "express";
-import cors from "cors";
-import helmet from "helmet";
-import morgan from "morgan";
-import cookieParser from "cookie-parser";
-import compression from "compression";
 import dotenv from "dotenv";
 import { createServer } from "http";
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './lib/swagger.js';
-import { initSupabaseDB, pool as supabasePool } from './lib/supabase-db.js';
-import { initializePerformanceLogBatcher } from './lib/perfLogBatcher.js';
-import { attachRequestContext } from './lib/requestContext.js';
-import { initMemoryClient as initMemory, isMemoryAvailable, getMemoryClient } from './lib/memoryClient.js';
-import { startCampaignWorker } from './lib/campaignWorker.js';
-import cacheManager from './lib/cacheManager.js';
+import { initSupabaseAuth } from "./lib/supabaseAuth.js";
+
+// Import startup modules
+import { initDatabase } from "./startup/initDatabase.js";
+import { initServices } from "./startup/initServices.js";
+import { initMiddleware } from "./startup/initMiddleware.js";
+import workflowQueue from "./services/workflowQueue.js";
 
 // Load environment variables
 // Try .env.local first (for local development), then fall back to .env
 dotenv.config({ path: ".env.local" });
 dotenv.config(); // Fallback to .env if .env.local doesn't exist
 
-// NOTE: Using Supabase PostgREST API instead of direct PostgreSQL connection
-// Direct connection requires IPv6 which Docker doesn't support well
-let ipv4FirstApplied = false;
-
 const app = express();
 // Behind proxies, trust X-Forwarded-* to get real client IPs
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
-// Database connection using Supabase PostgREST API (avoids IPv6 issues)
-let pgPool = null;
-let dbConnectionType = "none";
+// Initialize Database
+const { pgPool, dbConnectionType, ipv4FirstApplied } = await initDatabase(app);
 
-// Initialize diagnostics locals with defaults (updated after DB init)
-app.locals.ipv4FirstApplied = ipv4FirstApplied;
-app.locals.dbConnectionType = dbConnectionType;
-app.locals.resolvedDbIPv4 = null;
-const useSupabaseApi = (
-  process.env.USE_SUPABASE_PROD === 'true' ||
-  process.env.USE_SUPABASE_API === 'true' ||
-  process.env.USE_SUPABASE_DEV === 'true'
-);
+// Initialize Services (Redis, Cache, Perf Log Batcher)
+await initServices(app, pgPool);
 
-app.locals.dbConfigPath = useSupabaseApi ? 'supabase_api' : 'none';
-
-// Initialize database using Supabase JS API (HTTP/REST, not direct PostgreSQL)
-await (async () => {
-  if (useSupabaseApi) {
-    // Use Supabase PostgREST API - works over HTTP, avoids IPv6 PostgreSQL issues
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
-    }
-
-    initSupabaseDB(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    pgPool = supabasePool;
-    dbConnectionType = "Supabase API";
-    console.log("✓ Supabase PostgREST API initialized (HTTP-based, bypassing PostgreSQL IPv6)");
-
-    // update diagnostics
-    app.locals.dbConnectionType = dbConnectionType;
-    app.locals.dbConfigPath = 'supabase_api';
-    return;
-  }
-
-  console.warn("⚠ No database configured - set USE_SUPABASE_API=true (or USE_SUPABASE_PROD=true for legacy) with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
-})();
-
-// Initialize Redis/Valkey memory client (non-blocking for app startup)
-try {
-  await initMemory(process.env.REDIS_URL);
-  console.log(`✓ Memory layer ${isMemoryAvailable() ? 'available' : 'unavailable'} (${process.env.REDIS_URL ? 'configured' : 'no REDIS_URL'})`);
-  // Expose memory client for diagnostics/probes (e.g., containers-status)
-  try {
-    const client = getMemoryClient();
-    if (client) {
-      // Attach to app.locals for lightweight reachability checks
-      app.locals.memoryClient = client;
-    }
-  } catch {
-    // getMemoryClient throws when unavailable; leave unset
-  }
-} catch (e) {
-  console.warn('⚠ Memory client init skipped/failed:', e?.message || e);
-}
-
-// Initialize Redis cache for API responses (non-blocking)
-try {
-  await cacheManager.connect();
-  console.log(`✓ API cache layer connected (${process.env.REDIS_CACHE_URL || 'redis://localhost:6380'})`);
-  app.locals.cacheManager = cacheManager;
-} catch (e) {
-  console.warn('⚠ API cache init skipped/failed:', e?.message || e);
-}
-
-// Use Supabase client wrapper for performance logging (replaces direct pg.Pool)
-// This ensures consistency with ESLint policy while maintaining performance logging capability
-import { pool as perfLogPool } from './lib/supabase-db.js';
-if (pgPool) {
-  console.log("✓ Performance logging enabled via Supabase pool wrapper");
-  // Initialize batching layer (uses Supabase client via supabase-db)
-  try {
-    initializePerformanceLogBatcher(pgPool);
-  } catch (e) {
-    console.error('[Server] Failed to init performance log batcher:', e.message);
-  }
-  // Test connection
-  const testPerfPool = async () => {
-    try {
-      await perfLogPool.query('SELECT 1');
-      console.log("✓ Performance logging pool connection verified");
-    } catch (err) {
-      console.error("✗ Performance logging pool connection failed:", err.message);
-    }
-  };
-  testPerfPool();
-}
-
+// Initialize Middleware
+const { resilientPerfDb } = initMiddleware(app, pgPool);
 
 // Initialize Supabase Auth
-import { initSupabaseAuth } from "./lib/supabaseAuth.js";
 const supabaseAuth = initSupabaseAuth();
-
-// Middleware
-// Apply Helmet with secure defaults globally
-app.use(helmet()); // Security headers (no insecure overrides globally)
-app.use(compression()); // Compress responses
-app.use(morgan("combined")); // Logging
-app.use(cookieParser()); // Cookie parsing for auth cookies
-// Attach request-scoped context for accumulating DB timing
-app.use(attachRequestContext);
-
-// Simple, in-memory rate limiter (dependency-free)
-// Configure via ENV:
-//   RATE_LIMIT_WINDOW_MS (default 60000)
-//   RATE_LIMIT_MAX (default 120)
-// Test overrides:
-//   E2E_TEST_MODE=true or NODE_ENV=test will switch to RATE_LIMIT_TEST_MAX (default 120)
-//   RATE_LIMIT_FORCE_DEFAULT=1 forces ignoring a very large RATE_LIMIT_MAX (e.g. 100000) during tests
-const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10);
-const RAW_RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX || '120', 10);
-const IS_TEST_MODE = (process.env.E2E_TEST_MODE === 'true') || (process.env.NODE_ENV === 'test');
-const FORCE_DEFAULT = process.env.RATE_LIMIT_FORCE_DEFAULT === '1';
-const RATE_LIMIT_MAX = (IS_TEST_MODE || FORCE_DEFAULT)
-  ? parseInt(process.env.RATE_LIMIT_TEST_MAX || '120', 10)
-  : RAW_RATE_LIMIT_MAX;
-if (IS_TEST_MODE) {
-  console.log(`[RateLimiter] Test mode active → effective RATE_LIMIT_MAX=${RATE_LIMIT_MAX} (raw=${RAW_RATE_LIMIT_MAX})`);
-}
-if (FORCE_DEFAULT) {
-  console.log(`[RateLimiter] FORCE_DEFAULT enabled → effective RATE_LIMIT_MAX=${RATE_LIMIT_MAX} (raw=${RAW_RATE_LIMIT_MAX})`);
-}
-const rateBucket = new Map(); // key -> { count, ts }
-const rateSkip = new Set(['/health', '/api/status', '/api-docs', '/api-docs.json']);
-
-function rateLimiter(req, res, next) {
-  try {
-    if (rateSkip.has(req.path)) return next();
-    // Allow OPTIONS preflight freely
-    if (req.method === 'OPTIONS') return next();
-    const now = Date.now();
-    const key = `${req.ip}`; // after trust proxy, this reflects client IP
-    const entry = rateBucket.get(key);
-    if (!entry || now - entry.ts >= RATE_LIMIT_WINDOW_MS) {
-      rateBucket.set(key, { count: 1, ts: now });
-      return next();
-    }
-    if (entry.count < RATE_LIMIT_MAX) {
-      entry.count++;
-      return next();
-    }
-    // Prepare CORS headers early if not already set (ensures browser can read 429)
-    if (!res.getHeader('Access-Control-Allow-Origin')) {
-      const origin = req.headers.origin || '*';
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Vary', 'Origin');
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-    }
-    res.setHeader('Retry-After', Math.ceil((entry.ts + RATE_LIMIT_WINDOW_MS - now) / 1000));
-    return res.status(429).json({
-      error: 'Too Many Requests',
-      message: `Rate limit exceeded. Try again soon.`,
-    });
-  } catch {
-    // Fail open on limiter errors
-    return next();
-  }
-}
-
-// CORS configuration
-// Only use ALLOWED_ORIGINS from environment - no hardcoded defaults for production safety
-const envAllowed = (process.env.ALLOWED_ORIGINS?.split(",") || [])
-  .map(s => s.trim())
-  .filter(Boolean);
-
-// In development, add localhost origins if not already specified
-const devDefaults = process.env.NODE_ENV === 'development' ? [
-  "http://localhost:5173",
-  "https://localhost:5173",
-  "http://localhost:4000",
-  "https://localhost:4000",
-] : [];
-
-const allowedOrigins = [...new Set([...envAllowed, ...devDefaults])];
-
-// Fail loudly if no origins configured in production
-if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
-  console.error('❌ CRITICAL: ALLOWED_ORIGINS not set in production environment');
-  console.error('   Set ALLOWED_ORIGINS in .env with your frontend URL(s)');
-  process.exit(1);
-}
-
-app.use(cors({
-  origin: (origin, callback) => {
-    try {
-      // Allow server-to-server or same-origin calls
-      if (!origin) return callback(null, true);
-
-      // Explicit allowlist or wildcard
-      if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      // No platform-specific defaults; configure via ALLOWED_ORIGINS
-
-      return callback(new Error("Not allowed by CORS"));
-    } catch {
-      return callback(new Error("CORS configuration error"));
-    }
-  },
-  credentials: true,
-}));
-
-// Apply limiter to API routes AFTER CORS so 429 responses include CORS headers
-app.use('/api', rateLimiter);
-
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
-
-// Performance logging middleware (must be after body parsers, before routes)
-import { performanceLogger } from "./middleware/performanceLogger.js";
-import { productionSafetyGuard } from "./middleware/productionSafetyGuard.js";
-import { intrusionDetection } from "./middleware/intrusionDetection.js";
-import { authenticateRequest } from "./middleware/authenticate.js";
-// Build a resilient perf DB wrapper that falls back to Supabase API pool if the direct pool was ended
-const resilientPerfDb = {
-  query: async (...args) => {
-    const directAlive = perfLogPool && !perfLogPool.ended;
-    const db = directAlive ? perfLogPool : pgPool;
-    try {
-      return await db.query(...args);
-    } catch (e) {
-      // Fallback broadly to Supabase API pool when direct connection fails for any reason
-      if (directAlive && pgPool && db === perfLogPool) {
-        try {
-          return await pgPool.query(...args);
-        } catch (e2) {
-          // Log fallback error and re-throw original
-          console.error('[ResilientPerfDb] Fallback query failed:', e2?.message || e2);
-          throw e;
-        }
-      }
-      throw e;
-    }
-  }
-};
-
-if (perfLogPool || pgPool) {
-  app.use(performanceLogger(resilientPerfDb));
-  console.log(
-    `✓ Performance logging middleware enabled (${perfLogPool ? "PostgreSQL direct" : "Supabase API"})`
-  );
-} else {
-  console.warn("⚠ Performance logging disabled - no database connection available");
-}
-
-// Block mutating requests in production Supabase unless explicitly allowed
-// Exempt non-DB-mutating CI endpoints (GitHub Actions dispatch) from the guard
-app.use(productionSafetyGuard({
-  exemptPaths: [
-    '/api/testing/run-playwright', // POST triggers GitHub workflow, no DB writes
-    '/api/system-logs',            // System telemetry and monitoring
-    '/api/users/heartbeat',        // User session keepalive
-    '/api/users/sync-from-auth',   // Supabase auth sync (critical for login)
-    '/api/users/reset-password',   // Password reset email (Supabase Auth, no direct DB writes)
-    '/api/cron/run',               // Scheduled job execution
-    '/api/notifications',          // User notification delivery
-    '/api/auth/login',             // Authentication login (critical for access)
-    '/api/auth/refresh',           // JWT token refresh (critical for sessions)
-    '/api/auth/logout',            // Authentication logout
-  ],
-  pgPool, // Pass database connection for security event logging
-}));
-console.log("✓ Production safety guard enabled");
-
-// Attach Supabase client to request for IDR middleware
-app.use((req, _res, next) => {
-  req.supabase = pgPool;
-  next();
-});
-
-// Enable Intrusion Detection and Response (IDR) system
-if (process.env.IDR_ENABLED !== 'false') {
-  app.use(intrusionDetection);
-  console.log("✓ Intrusion Detection & Response (IDR) middleware enabled");
-} else {
-  console.warn("⚠ IDR middleware disabled via IDR_ENABLED=false");
-}
-
-// Attach authentication context (cookie or Supabase bearer) for downstream route auth checks
-app.use('/api', authenticateRequest);
 
 // ----------------------------------------------------------------------------
 // Canary logging middleware for BizDevSource promote diagnostics
@@ -370,6 +92,7 @@ app.get("/health", (req, res) => {
 // Swagger API Documentation
 // Restrict framing for docs to known dev origins using CSP frame-ancestors on this route only
 // IMPORTANT: Remove global CSP header first, then set a route-specific CSP to avoid header merging
+import helmet from "helmet"; // Need helmet here for the route-specific config
 app.use(
   '/api-docs',
   (req, res, next) => { res.removeHeader('Content-Security-Policy'); next(); },
@@ -626,6 +349,12 @@ process.on("SIGTERM", async () => {
   );
   if (heartbeatTimer) clearInterval(heartbeatTimer);
 
+  // Close workflow queue
+  if (workflowQueue) {
+    await workflowQueue.close();
+    console.log("Workflow queue closed");
+  }
+
   if (pgPool) {
     pgPool.end(() => {
       console.log("PostgreSQL pool closed");
@@ -799,19 +528,9 @@ async function ensureStorageBucketExists() {
   }
 }
 
-server.listen(PORT, '0.0.0.0', () => {
+// Start listening
+server.listen(PORT, async () => {
   console.log(`
-╔═══════════════════════════════════════════════════════════╗
-║                                                           ║
-║   🚀 Aisha CRM Independent Backend Server                 ║
-║                                                           ║
-║   Status: Running                                         ║
-║   Port: ${PORT}                                              ║
-║   Environment: ${
-    process.env.NODE_ENV || "development"
-  }                              ║
-║   Database: ${
-    pgPool ? "Connected (" + dbConnectionType + ")" : "Not configured"
   }   ║
 ║                                                           ║
 ║   Health Check: http://localhost:${PORT}/health             ║
@@ -828,6 +547,8 @@ server.listen(PORT, '0.0.0.0', () => {
   ensureStorageBucketExists().catch((err) =>
     console.error("Bucket ensure failed:", err?.message)
   );
+
+  console.log("!!! BACKEND VERSION CHECK: FIX APPLIED (v2) !!!");
 
   // Log startup event (non-blocking - don't block server startup)
   logBackendEvent("INFO", "Backend server started successfully", {

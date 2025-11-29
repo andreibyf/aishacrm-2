@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { ModuleSettings } from "@/api/entities";
 import { useUser } from '@/components/shared/useUser.js';
 import { useAuthCookiesReady } from '@/components/shared/useAuthCookiesReady';
+import { useTenant } from '@/components/shared/tenantContext';
 import {
   Card,
   CardContent,
@@ -28,11 +29,11 @@ import {
   Target,
   TrendingUp,
   Users,
+  Workflow,
   Wrench,
   Zap,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { createAuditLog } from "@/api/functions";
 import { toast } from "sonner";
 
 const defaultModules = [
@@ -273,6 +274,19 @@ const defaultModules = [
       "Context-Aware Assistance",
     ],
   },
+  {
+    id: "workflows",
+    name: "Workflows",
+    description: "Automate CRM tasks with custom workflows and triggers",
+    icon: Workflow,
+    features: [
+      "Visual Workflow Builder",
+      "Event-Based Triggers",
+      "Multi-Step Automation",
+      "Conditional Logic",
+      "External Integrations",
+    ],
+  },
 ];
 
 export default function ModuleManager() {
@@ -280,6 +294,7 @@ export default function ModuleManager() {
   const [loading, setLoading] = useState(true);
   const { user } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
+  const { selectedTenantId } = useTenant();
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -289,6 +304,11 @@ export default function ModuleManager() {
       let currentModuleSettings = [];
       try {
         currentModuleSettings = await ModuleSettings.list();
+        // Normalize response shape to array
+        if (!Array.isArray(currentModuleSettings)) {
+          const rows = currentModuleSettings?.data?.modulesettings || currentModuleSettings?.data || [];
+          currentModuleSettings = Array.isArray(rows) ? rows : [];
+        }
         setModuleSettings(currentModuleSettings);
       } catch (error) {
         console.warn("Could not load module settings:", error);
@@ -297,18 +317,17 @@ export default function ModuleManager() {
       }
 
       // Initialize default settings for modules that don't exist
-      const existingModuleIds = currentModuleSettings.map((s) => s.module_id);
+      const existingModuleNames = currentModuleSettings.map((s) => s.module_name);
       const missingModules = defaultModules.filter((m) =>
-        !existingModuleIds.includes(m.id)
+        !existingModuleNames.includes(m.name)
       );
 
       if (missingModules.length > 0 && currentUser) {
         try {
           const newModuleRecords = missingModules.map((module) => ({
-            module_id: module.id,
+            tenant_id: currentUser.tenant_id,
             module_name: module.name,
-            is_active: true,
-            user_email: currentUser.email,
+            is_enabled: true,
           }));
           await ModuleSettings.bulkCreate(newModuleRecords);
 
@@ -335,38 +354,22 @@ export default function ModuleManager() {
     if (!user) return;
 
     try {
-      const setting = moduleSettings.find((s) => s.module_id === moduleId);
       const module = defaultModules.find((m) => m.id === moduleId);
+      const setting = moduleSettings.find((s) => s.module_name === module?.name);
       const newStatus = !currentStatus;
 
       if (setting) {
         await ModuleSettings.update(setting.id, {
-          is_active: newStatus,
-          user_email: user.email,
+          tenant_id: user.tenant_id,
+          is_enabled: newStatus,
         });
 
         // Update local state
         setModuleSettings((prev) =>
           prev.map((s) =>
-            s.module_id === moduleId ? { ...s, is_active: newStatus } : s
+            s.module_name === module?.name ? { ...s, is_enabled: newStatus } : s
           )
         );
-
-        // Create audit log
-        try {
-          await createAuditLog({
-            action_type: "module_toggle",
-            entity_type: "ModuleSettings",
-            entity_id: setting.id,
-            description: `${newStatus ? "Enabled" : "Disabled"} module: ${
-              module?.name || moduleId
-            }`,
-            old_values: { is_active: currentStatus },
-            new_values: { is_active: newStatus },
-          });
-        } catch (auditError) {
-          console.warn("Failed to create audit log:", auditError);
-        }
 
         // Dispatch event to notify Layout and other components
         window.dispatchEvent(
@@ -391,8 +394,35 @@ export default function ModuleManager() {
   };
 
   const getModuleStatus = (moduleId) => {
-    const setting = moduleSettings.find((s) => s.module_id === moduleId);
-    return setting?.is_active ?? true;
+    const module = defaultModules.find((m) => m.id === moduleId);
+    const setting = moduleSettings.find((s) => s.module_name === module?.name);
+    return setting?.is_enabled ?? true;
+  };
+
+  // Admin-only: List currently disabled modules for the selected tenant
+  const DisabledModulesPanel = () => {
+    const isAdminLike = user?.role === 'admin' || user?.role === 'superadmin' || user?.is_superadmin === true;
+    const tenantId = selectedTenantId || user?.tenant_id || null;
+    if (!isAdminLike || !tenantId) return null;
+
+    const disabled = moduleSettings
+      .filter((s) => s.tenant_id === tenantId && s.is_enabled === false)
+      .map((s) => s.module_name);
+
+    return (
+      <div className="mt-6 p-3 rounded border border-yellow-700/40 bg-yellow-900/20">
+        <div className="text-sm font-medium text-yellow-300">Disabled for tenant</div>
+        {disabled.length === 0 ? (
+          <div className="text-xs text-yellow-200/80 mt-1">No modules are disabled for this tenant.</div>
+        ) : (
+          <ul className="mt-2 text-sm text-yellow-100 list-disc list-inside">
+            {disabled.map((name) => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
   };
 
   if (loading) {
@@ -559,6 +589,9 @@ export default function ModuleManager() {
               <div className="text-sm text-slate-400">Total Available</div>
             </div>
           </div>
+
+          {/* Disabled Modules Panel */}
+          <DisabledModulesPanel />
         </CardContent>
       </Card>
     </div>

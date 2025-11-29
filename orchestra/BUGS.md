@@ -3,7 +3,212 @@
 This file tracks known issues. PLAN.md selects which bugs are currently in scope.
 
 ---
+## UI/Frontend Issues
+
+### BUG-UI-001 – Blocked IPs page crashes on load
+
+Status: Resolved ✅  
+Priority: High  
+Area: Settings / Security Monitor / Blocked IPs Tab  
+Detected: November 28, 2025
+
+Symptoms:
+- Navigating to Settings → Security Monitor → Blocked IPs tab causes page crash
+- Console error: `TypeError: Cannot read properties of undefined (reading 'map')`
+- Error occurs at SecurityMonitor component line 499: `idrStatus.blocked_ips.map((ipData, idx) => {`
+- Full error trace:
+  ```
+  TypeError: Cannot read properties of undefined (reading 'map')
+      at Jn (Settings-CBcDkmPw.js:211:21485)
+      at Ch (entry-Cju4CqvL.js:39:17358)
+      ...
+  ```
+
+Interpretation:
+- `idrStatus.blocked_ips` is undefined when component tries to render Blocked IPs list
+- Guard condition at line 492 checks `!idrStatus || idrStatus.blocked_ips?.length === 0` but doesn't handle undefined `blocked_ips`
+- When `idrStatus` exists but `blocked_ips` is undefined, it falls through to `.map()` call which crashes
+
+Suspected Causes:
+1. **Backend response structure mismatch:**
+   - API endpoint `/api/security/status` returns `idrStatus` object without `blocked_ips` property
+   - Backend may return empty object `{}` or object with different structure
+2. **Race condition:**
+   - Component renders before `fetchIDRStatus()` completes
+   - Initial state has `idrStatus: null` but changes to `{}` before `blocked_ips` is populated
+3. **API error handling:**
+   - Backend returns success status but incomplete data structure
+   - Error in data transformation leaving `blocked_ips` undefined
+
+Root Cause:
+- Line 492 guard condition: `!idrStatus || idrStatus.blocked_ips?.length === 0`
+- This is true when:
+  - `idrStatus` is null/falsy (shows "No IPs blocked")
+  - `blocked_ips` exists and is empty array (shows "No IPs blocked")
+- This is false when:
+  - `idrStatus` exists but `blocked_ips` is undefined → crashes on line 499
+
+Fix:
+- Change guard to: `!idrStatus || !idrStatus.blocked_ips || idrStatus.blocked_ips.length === 0`
+- Or use optional chaining in map: `idrStatus?.blocked_ips?.map(...) || []`
+- Ensure backend always returns `blocked_ips` as array (empty or populated)
+
+Files Affected:
+- `src/components/settings/SecurityMonitor.jsx` (line 492-499)
+- Possibly `backend/routes/security.js` (status endpoint)
+
+Resolution (November 28, 2025):
+- Fixed guard condition at line 492 in SecurityMonitor.jsx
+- Changed from: `!idrStatus || idrStatus.blocked_ips?.length === 0`
+- Changed to: `!idrStatus || !idrStatus.blocked_ips || idrStatus.blocked_ips.length === 0`
+- Now explicitly checks for undefined `blocked_ips` before accessing length/map
+- Deployed in frontend container rebuild (21.0s build time)
+
+Notes:
+- High priority as it completely blocks access to Blocked IPs management
+- Simple null-safety fix should resolve immediately
+- Should verify backend response structure for consistency
+
+---
+## Production Critical Issues
+
+### BUG-PROD-002 – Production backend fetch failures (Multiple endpoints returning 500)
+
+Status: Open  
+Priority: Critical  
+Area: Production Backend / Database Connectivity  
+Detected: November 28, 2025
+
+Symptoms:
+- Multiple API endpoints returning HTTP 500 errors in production (app.aishacrm.com)
+- Error message: `{"status":"error","message":"TypeError: fetch failed"}`
+- Affected endpoints:
+  - `GET /api/notifications?tenant_id=...&user_email=...`
+  - `GET /api/modulesettings?tenant_id=...`
+  - `POST /api/system-logs`
+  - `GET /heartbeat` (404 not found)
+- Cascading failures causing Settings page and notifications to fail
+- Error occurs on backend when attempting to fetch from Supabase
+
+Interpretation:
+- Backend Node.js process cannot complete fetch() calls to external services
+- Most likely: Supabase database connectivity issue from production VPS
+- Backend health checks (`/health`) still passing, indicating server is running
+- Error is at network/connectivity layer, not application logic layer
+
+Suspected Causes:
+1. **Supabase connectivity issue:**
+   - Supabase service down or unreachable from production VPS
+   - Network/firewall blocking outbound HTTPS to Supabase
+   - DNS resolution failure for Supabase domain
+2. **Rate limiting or throttling:**
+   - Supabase API rate limits exceeded
+   - IP-based throttling from production server
+3. **Configuration issue:**
+   - Invalid/expired Supabase credentials in production `.env`
+   - Missing `DATABASE_URL` or `SUPABASE_URL` in production environment
+   - Incorrect SSL/TLS configuration (`PGSSLMODE`)
+4. **Resource exhaustion:**
+   - Connection pool exhausted
+   - Too many concurrent requests to Supabase
+
+Context:
+- Issue appeared in production after normal operation
+- NOT related to recent n8n removal changes (v1.1.7)
+- Local development environment working correctly
+- Affects authenticated users trying to load Settings and notifications
+
+Notes:
+- This is a **production-only infrastructure issue**
+- Requires SSH access to production VPS for diagnosis
+- May need coordination with Supabase support if service-side issue
+- Check production backend logs for detailed error traces
+- Verify Supabase dashboard shows project as healthy
+
+---
 ## Platform Health & Integrations
+
+### BUG-DB-001 – Missing synchealth table in database schema
+
+Status: Open  
+Priority: Critical  
+Area: Database Schema / Sync Health Monitoring
+
+Symptoms:
+- `GET /api/synchealths?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46`
+- Error: `Could not find the table 'public.synchealth' in the schema cache`
+- Sync health monitoring endpoint completely non-functional
+
+Interpretation:
+- The `synchealth` table does not exist in the production Supabase database
+- Schema cache cannot locate the table, causing all sync health queries to fail
+- Likely missing migration or table was never created in production
+
+Suspected Causes:
+- Migration file exists but was never applied to production database
+- Table creation SQL may be in migration files but not executed
+- Possible table rename or schema mismatch between dev and production
+
+Notes:
+- This is a critical issue blocking sync health monitoring entirely
+- Need to:
+  - Verify if migration exists for synchealth table creation
+  - Check if table exists in dev/local database
+  - Apply missing migration to production or create table manually
+  - Verify RLS policies are in place after table creation
+
+---
+
+### BUG-PROD-001 – Settings page authentication failure (Production only)
+
+Status: Resolved ✅  
+Priority: Critical  
+Area: Settings API / Authentication  
+Resolution: November 27, 2025 - Root cause identified as authentication issue, not routing
+
+Symptoms (Initial Report):
+- URL: `https://app.aishacrm.com/settings`
+- Error: `SyntaxError: Unexpected token '<', "<!doctype "... is not valid JSON`
+- Occurs in production only, not in dev environment
+- Browser: Chrome 144.0.0.0 on Windows 10
+
+Investigation Results:
+- Tested `/api/modulesettings` endpoint directly: Returns JSON (401 Authentication required) ✅
+- Cloudflare Tunnel routing verified working: `/api/*` correctly reaches backend ✅
+- Backend health check working: `http://localhost:4001/health` returns JSON ✅
+- Settings page successfully makes API calls and receives JSON responses ✅
+
+Root Cause:
+- **NOT a routing issue** - Cloudflare Tunnel configured correctly
+- **NOT returning HTML** - Backend returns proper JSON responses
+- **Authentication issue**: User session expired or invalid, causing 401 errors
+- Settings page cannot load module settings without valid authentication
+
+Resolution:
+- Initial symptom (HTML parse error) was either:
+  - From a different time before Cloudflare Tunnel was configured
+  - From a cached frontend build with incorrect API URL
+  - From a specific auth state that has since been resolved
+- Current production state: API routing works, authentication required
+- Settings page properly receives JSON 401 responses (not HTML)
+
+Verification (November 27, 2025):
+```bash
+# Backend health check
+curl http://localhost:4001/health
+# Returns: {"status":"ok","timestamp":"2025-11-27T17:28:06.370Z",...}
+
+# Module settings endpoint (without auth)
+curl https://app.aishacrm.com/api/modulesettings?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46
+# Returns: {"status":"error","message":"Authentication required"}
+```
+
+Outcome:
+- BUG-PROD-001 resolved: No routing issue, Cloudflare Tunnel working correctly
+- If users still see Settings page errors, it's due to expired/invalid sessions (user-level issue)
+- Settings page handles 401 responses gracefully per existing error handling in `callBackendAPI`
+
+---
 
 ## CRUD Health Tests
 

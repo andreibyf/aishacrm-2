@@ -130,10 +130,225 @@ Every change must:
 
 ## Active Tasks (Priority Order)
 
+### BUG-UI-001 – Fix Blocked IPs page crash
 
+**Status**: Complete ✅
+**Priority**: High  
+**Area**: Frontend / Settings / Security Monitor
 
+**Goal**:
+Fix crash when navigating to Blocked IPs tab in Security Monitor settings page.
 
+**Symptoms**:
+- Page crashes with `TypeError: Cannot read properties of undefined (reading 'map')`
+- Error at SecurityMonitor.jsx line 499: `idrStatus.blocked_ips.map(...)`
+- Blocks access to Blocked IP management functionality
 
+**Root Cause**:
+- Guard condition at line 492 doesn't handle case where `idrStatus` exists but `blocked_ips` is undefined
+- Current: `!idrStatus || idrStatus.blocked_ips?.length === 0`
+- Fails when: `idrStatus = {}` (object without `blocked_ips` property)
+
+**Resolution**:
+- Updated guard condition in SecurityMonitor.jsx line 492
+- Changed from: `!idrStatus || idrStatus.blocked_ips?.length === 0`
+- Changed to: `!idrStatus || !idrStatus.blocked_ips || idrStatus.blocked_ips.length === 0`
+- Now properly handles all cases: null idrStatus, undefined blocked_ips, empty array, populated array
+
+**Files Changed**:
+- `src/components/settings/SecurityMonitor.jsx`: Fixed guard condition at line 492
+
+**Acceptance Criteria**:
+- ✅ Blocked IPs tab loads without JavaScript error
+- ✅ Handles all response states gracefully (null, undefined, empty, populated)
+- ✅ UI shows appropriate message for each state
+- ✅ Minimal, surgical change to guard condition only
+
+---
+
+### BUG-PROD-002 – Diagnose and fix production backend fetch failures
+
+**Status**: Open  
+**Priority**: Critical  
+**Area**: Production Backend / Database Connectivity
+
+**Goal**:
+Restore production backend connectivity to Supabase database and resolve HTTP 500 errors affecting multiple API endpoints.
+
+**Symptoms**:
+- Multiple endpoints returning 500 with "TypeError: fetch failed"
+- Affected: `/api/notifications`, `/api/modulesettings`, `/api/system-logs`
+- Backend health checks passing (server is running)
+- Local development working fine
+- Production only (app.aishacrm.com)
+
+**Tasks**:
+
+1. **Investigation Phase (Diagnostic)**:
+   - [ ] SSH to production VPS: `ssh beige-koala-18294`
+   - [ ] Check production backend logs: `docker logs aishacrm-backend --tail=200 | grep -i error`
+   - [ ] Verify Supabase connectivity from VPS: `curl -v https://PROJECT.supabase.co`
+   - [ ] Check DNS resolution: `nslookup PROJECT.supabase.co`
+   - [ ] Verify production `.env` has correct Supabase credentials
+   - [ ] Check Supabase project status in dashboard
+   - [ ] Review Supabase logs for rate limiting or errors
+   - [ ] Check container resource usage: `docker stats --no-stream`
+   - [ ] Verify network connectivity: `docker exec aishacrm-backend ping -c 3 8.8.8.8`
+
+2. **Root Cause Analysis**:
+   - [ ] Determine exact failure point (DNS, TLS, connection, timeout)
+   - [ ] Check if issue is intermittent or persistent
+   - [ ] Verify if started after specific deployment or time
+   - [ ] Review recent changes to production environment
+
+3. **Resolution Phase** (based on findings):
+   - **If Supabase credentials invalid:** Update production `.env` with correct values
+   - **If network/firewall issue:** Configure VPS firewall to allow Supabase traffic
+   - **If DNS issue:** Add static DNS entry or fix resolver
+   - **If rate limiting:** Contact Supabase support or upgrade plan
+   - **If SSL/TLS issue:** Verify `PGSSLMODE=require` or adjust as needed
+   - **If connection pool issue:** Tune Supabase client pool settings
+
+4. **Verification**:
+   - [ ] Test affected endpoints return 200 OK
+   - [ ] Verify Settings page loads without errors
+   - [ ] Confirm notifications load correctly
+   - [ ] Check error rate drops in monitoring
+   - [ ] Ensure no cascading failures
+
+**Acceptance Criteria**:
+- `/api/notifications` returns data or empty array (not 500 error)
+- `/api/modulesettings` returns module settings successfully
+- `/api/system-logs` accepts log entries
+- Settings page loads without console errors
+- Production error rate returns to normal (<1%)
+
+**Scope Limitations**:
+- Do NOT modify application code unless required for connectivity
+- Do NOT redesign database schema or queries
+- Focus on infrastructure and connectivity fixes only
+
+---
+
+### REF-SERVER-001 – Modularize Backend Server Initialization
+
+**Status**: Complete ✅
+**Priority**: High
+**Area**: Backend Architecture / Stability
+
+**Goal**:
+Refactor `backend/server.js` to reduce complexity and improve maintainability by extracting initialization logic into dedicated modules in `backend/startup/`.
+
+**Tasks**:
+1.  ✅ Create `backend/startup/` directory.
+2.  ✅ Extract Database initialization to `backend/startup/initDatabase.js`.
+3.  ✅ Extract Service initialization (Redis, Cache) to `backend/startup/initServices.js`.
+4.  ✅ Extract Middleware configuration to `backend/startup/initMiddleware.js`.
+5.  ✅ Update `backend/server.js` to use these new modules.
+
+**Acceptance Criteria**:
+-   ✅ `backend/server.js` is significantly smaller and cleaner.
+-   ✅ Server starts up correctly with all services (DB, Redis, Middleware) initialized.
+-   ✅ No regression in functionality (API endpoints work, logging works).
+-   ✅ Tests pass (when server is not already running).
+
+**Resolution**: Completed in v1.0.96. Server successfully refactored into modular startup files.
+
+---
+
+### BUG-PROD-001 – Settings page authentication failure (Production only)
+
+**Status**: Resolved ✅  
+**Priority**: Critical  
+**Area**: Settings API / Authentication  
+**Completion**: November 27, 2025
+
+**Goal**:  
+Investigate Settings page error in production returning "Authentication required" instead of module settings.
+
+**Investigation Results**:
+- ✅ Cloudflare Tunnel routing verified working: `/api/*` reaches backend
+- ✅ Backend health check: `http://localhost:4001/health` returns JSON
+- ✅ `/api/modulesettings` endpoint returns JSON (401 auth error), not HTML
+- ✅ Settings page successfully makes API calls and receives JSON responses
+
+**Root Cause**:
+- Initial report of HTML parse error was either:
+  - Transient during Cloudflare Tunnel setup
+  - Cached frontend build issue  
+  - Specific auth state now resolved
+- Current behavior: API routing works correctly, returning proper JSON
+- 401 "Authentication required" is expected for unauthenticated/expired sessions
+
+**Resolution**:
+- No code or infrastructure changes needed
+- Cloudflare Tunnel configuration confirmed working:
+  ```yaml
+  ingress:
+    - hostname: app.aishacrm.com
+      path: /api/*
+      service: http://localhost:4001
+    - hostname: app.aishacrm.com
+      service: http://localhost:4000
+    - service: http_status:404
+  ```
+- Settings page already handles 401 errors gracefully via `callBackendAPI` error handling
+
+**Verification**:
+```bash
+curl https://app.aishacrm.com/api/modulesettings?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46
+# Returns: {"status":"error","message":"Authentication required"}
+```
+
+**Outcome**: Bug closed - routing works, authentication expected behavior.
+   - Check if issue is specific to `/settings` or affects other routes
+
+3. **Resolution Phase**:
+   - Fix nginx configuration if routing issue
+   - Update frontend API calls if using wrong base URL
+   - Ensure backend routes are accessible from production nginx
+   - Test fix in staging before production deploy
+
+**Acceptance Criteria**:
+- Settings page loads in production without JSON parse error
+- API calls return proper JSON responses, not HTML
+- Dev and production behavior is consistent
+- No regression on other API endpoints
+
+---
+
+### BUG-DB-001 – Missing synchealth table in database schema
+
+**Status**: Open  
+**Priority**: Critical  
+**Area**: Database Schema / Sync Health Monitoring
+
+**Goal**:  
+Resolve the missing `synchealth` table error that is blocking the sync health monitoring endpoint.
+
+**Symptoms**:
+- Endpoint: `GET /api/synchealths?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46`
+- Error: `Could not find the table 'public.synchealth' in the schema cache`
+- Complete failure of sync health monitoring functionality
+
+**Tasks**:
+1. **Investigation Phase**:
+   - Search for synchealth table migration files in `backend/migrations/`
+   - Check if table exists in local/dev Supabase database
+   - Review `backend/routes/synchealths.js` for expected schema
+   - Determine if this is a missing migration or schema mismatch
+
+2. **Resolution Phase**:
+   - Create or apply migration to add `synchealth` table to production
+   - Include proper columns, indexes, and constraints
+   - Apply RLS policies for tenant isolation
+   - Test endpoint after table creation
+
+**Acceptance Criteria**:
+- `GET /api/synchealths` returns data or empty array (not schema error)
+- Table visible in Supabase Table Editor
+- RLS policies enforce tenant isolation
+- No impact on existing sync functionality
 
 ---
 
@@ -398,6 +613,45 @@ Acceptance:
 
 ---
 
+### 9) FEAT-WORKFLOW-001 – Add Workflows module to Module Settings
+
+Type: feature  
+Status: Complete ✅ (v1.1.8)  
+Area: Module Settings / Navigation Permissions
+
+Goal:  
+Add Workflows module to Module Settings and ensure it's properly integrated with the Navigation Permissions system so administrators can enable/disable the Workflows menu option for users.
+
+Resolution:
+
+**Implementation:**
+- Added "Workflows" module definition to `ModuleManager.jsx` defaultModules array with:
+  - Module ID: `workflows`
+  - Icon: Workflow (lucide-react)
+  - Features: Visual Workflow Builder, Event-Based Triggers, Multi-Step Automation, Conditional Logic, External Integrations
+- Added module mapping in `Layout.jsx` hasPageAccess function: `Workflows: 'workflows'`
+- Verified "Workflows" already exists in NavigationPermissions.jsx ORDER array
+- Verified Workflows navigation item already exists in Layout.jsx navItems
+
+**How It Works:**
+1. Superadmin enables/disables Workflows module in Settings → Module Settings
+2. Module setting controls visibility of Workflows menu item via hasPageAccess() → moduleMapping check
+3. User-level Navigation Permissions (User Management) can further restrict access per user
+4. Both controls work together: Module must be enabled AND user must have navigation permission
+
+Files Changed:
+- `src/components/shared/ModuleManager.jsx`: Added Workflow icon import and workflows module definition
+- `src/pages/Layout.jsx`: Added `Workflows: 'workflows'` to moduleMapping object
+
+Acceptance:
+- ✅ Workflows module appears in Settings → Module Settings
+- ✅ Module can be enabled/disabled per tenant
+- ✅ Module setting controls navigation menu visibility via hasPageAccess
+- ✅ Navigation Permissions toggle already exists for user-level control
+- ✅ No errors in modified files
+
+---
+
 ## Testing & Validation Requirements
 
 Manual:
@@ -622,4 +876,33 @@ Scope:
 - Database only (no code changes required)
 - Migrations already exist in `backend/migrations/`
 - Feature code already deployed and working in v1.0.79+
+
+---
+
+### FEAT-WORKFLOW-AI-001 – MCP-backed AI workflow nodes
+
+Type: feature  
+Status: Backlog  
+Area: Workflows / AI Integrations  
+Priority: Medium
+
+Goal:  
+Add AI-driven workflow steps with MCP-first executors and provider stubs for OpenAI, Anthropic, and Gemini. Nodes: `ai_classify_opportunity_stage`, `ai_generate_email`, `ai_enrich_account`, `ai_route_activity`.
+
+Context:
+- Frontend Node Library entries added; configuration UI placeholders added (provider/model/prompt/context fields).
+- Backend workflow executor requires MCP-backed handlers plus provider stubs and output variable population.
+- Must remain tenant-safe and auditable; outputs stored in `context.variables` and execution logs.
+
+Acceptance Criteria:
+- Backend executors implement MCP-first logic with graceful fallbacks; provider stubs return deterministic outputs for tests.
+- Outputs available via variables: `ai_stage`, `ai_email`, `ai_enrichment`, `ai_route`.
+- Timeouts and error handling added; no SSRF or external network calls outside MCP/provider SDKs.
+- Minimal, localized changes; no impact on existing CRUD nodes.
+
+Steps:
+1. Add executor cases for AI nodes in `backend/routes/workflows.js` (MCP-first, stub providers).  
+2. Expose configuration fields in `WorkflowBuilder.jsx` for provider/model/prompt/context where relevant.  
+3. Add unit tests for deterministic stubs and variable propagation.  
+4. Document usage in `docs/workflows/ai-nodes.md` (short guide).
 

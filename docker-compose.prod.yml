@@ -121,6 +121,7 @@ services:
       - VITE_SYSTEM_TENANT_ID=${VITE_SYSTEM_TENANT_ID}
       - VITE_USER_HEARTBEAT_INTERVAL_MS=${VITE_USER_HEARTBEAT_INTERVAL_MS:-90000}
       - VITE_APP_BUILD_VERSION=${VITE_APP_BUILD_VERSION:-dev-local}
+      - VITE_N8N_URL=${VITE_N8N_URL:-http://147.189.173.237:5679}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
       interval: 30s
@@ -128,7 +129,9 @@ services:
       retries: 3
       start_period: 15s
 
-  # n8n - Workflow automation
+  # n8n - Workflow automation platform (external access only - not embedded in CRM UI)
+  # Access at http://localhost:5679 (via n8n-proxy on production VPS)
+  # Used for building custom workflows that can call CRM APIs via webhooks
   n8n:
     image: n8nio/n8n:latest
     container_name: aishacrm-n8n
@@ -140,10 +143,16 @@ services:
       - N8N_HOST=0.0.0.0
       - GENERIC_TIMEZONE=UTC
       - N8N_DIAGNOSTICS_ENABLED=false
+      # Serve editor under main domain path /n8n to avoid separate subdomain
+      - N8N_EDITOR_BASE_URL=https://app.aishacrm.com/n8n
       - N8N_SECURE_COOKIE=false
       - N8N_SKIP_WEBHOOK_DEREGISTRATION_SHUTDOWN=true
       - N8N_HIRING_BANNER_ENABLED=false
-      - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE:-false}
+      - VUE_APP_URL_BASE_API=https://app.aishacrm.com/n8n
+      # Enable Public API for proper REST endpoint authentication
+      - N8N_PUBLIC_API_DISABLED=false
+      # Enable Basic Auth for iframe embedding (simpler than user management)
+      - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
       - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
     volumes:
@@ -154,6 +163,25 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+
+  # nginx proxy for n8n - strips X-Frame-Options header (external use)
+  # Note: n8n is no longer embedded in CRM UI; this proxy remains for potential external iframe embedding
+  n8n-proxy:
+    image: nginx:alpine
+    container_name: aishacrm-n8n-proxy
+    restart: unless-stopped
+    depends_on:
+      - n8n
+    ports:
+      - "5679:5679"
+    volumes:
+      - ./nginx-n8n.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5679/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   redis_memory_data:

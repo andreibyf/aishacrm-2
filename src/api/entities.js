@@ -3,6 +3,9 @@ import { createMockUser, isLocalDevMode } from "./mockData";
 import { apiHealthMonitor } from "../utils/apiHealthMonitor";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
+// Re-export for use by other components
+export { supabase, isSupabaseConfigured };
+
 // Build version marker for deployment verification.
 // Always read from runtime window._env_ to avoid browser cache issues
 export const getBuildVersion = () => {
@@ -477,6 +480,22 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     throw e;
   }
 
+  // CRITICAL DEBUG: Log all POST responses to understand data structure
+  if (method === 'POST') {
+    console.log('[callBackendAPI POST Response]', {
+      entityName,
+      url,
+      status: result?.status,
+      hasData: !!result?.data,
+      dataType: Array.isArray(result?.data) ? 'array' : typeof result?.data,
+      dataKeys: result?.data && typeof result?.data === 'object' && !Array.isArray(result?.data) 
+        ? Object.keys(result.data) 
+        : null,
+      hasId: result?.data && Object.prototype.hasOwnProperty.call(result.data, 'id'),
+      fullData: result?.data
+    });
+  }
+
   if (isDebugEntity) {
     // Log stage-related fields if present
     const stageVal = result?.data?.stage || result?.stage;
@@ -491,6 +510,13 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   // Backend returns { status: "success", data: { entityName: [...] } }
   // Extract the actual data array/object
   if (result.status === "success" && result.data) {
+    // CRITICAL: Check for single entity response FIRST (by presence of 'id' field)
+    // This must come before checking for array keys to avoid false positives
+    // (e.g., workflow responses have 'nodes', 'connections' arrays but are single entities)
+    if (!Array.isArray(result.data) && Object.prototype.hasOwnProperty.call(result.data, 'id')) {
+      return result.data;
+    }
+
     // For list/filter operations, data contains { entityName: [...] }
     const entityKey = Object.keys(result.data).find((key) =>
       key !== "tenant_id" && Array.isArray(result.data[key])
@@ -502,17 +528,19 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       }
       return result.data[entityKey]; // All other entities: return plain array
     }
-    // For single item operations (get, create, update), return the data directly
+    // For single item operations without id (edge case handling)
     if (!Array.isArray(result.data)) {
-      // If it's already an entity-like object (has an id), return as-is
-      if (Object.prototype.hasOwnProperty.call(result.data, 'id')) {
-        return result.data;
-      }
 
       // Known wrapper keys for single-entity responses
       const wrapperKeys = new Set([
-        'employee','account','contact','lead','opportunity','user','tenant','activity','opportunities','employees','accounts','contacts','users','tenants','activities'
+        'employee', 'account', 'contact', 'lead', 'opportunity', 'user', 'tenant', 'activity', 'workflow', 'opportunities', 'employees', 'accounts', 'contacts', 'users', 'tenants', 'activities', 'workflows'
       ]);
+
+      console.log('[API Debug] Checking response format:', {
+        isArray: Array.isArray(result.data),
+        hasId: result.data && Object.prototype.hasOwnProperty.call(result.data, 'id'),
+        keys: result.data ? Object.keys(result.data) : null
+      });
 
       // Prefer unwrapping a known wrapper key
       const knownWrapperKey = Object.keys(result.data).find((key) =>

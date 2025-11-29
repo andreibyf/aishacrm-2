@@ -31,6 +31,7 @@ import {
   UserPlus, // NEW: Added for Client Onboarding
   Users, // Changed Employees icon to Users
   Wrench,
+  Zap, // NEW: Added for Workflows
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -108,6 +109,7 @@ const navItems = [
   { href: "Employees", icon: Users, label: "Employees" }, // Changed icon to Users
   { href: "Reports", icon: BarChart3, label: "Reports" },
   { href: "Integrations", icon: Plug, label: "Integrations" }, // Changed icon to Plug
+  { href: "Workflows", icon: Zap, label: "Workflows" }, // NEW: Added Workflows
   { href: "PaymentPortal", icon: CreditCard, label: "Payment Portal" },
   { href: "Utilities", icon: Wrench, label: "Utilities" },
   { href: "ClientOnboarding", icon: UserPlus, label: "Client Onboarding" }, // Changed icon to UserPlus
@@ -159,7 +161,10 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     navigationPermissions: user.navigation_permissions,
   });
 
-  if (isSuperAdmin(user)) return true;
+  // Superadmins bypass disables only in global view (no tenant selected)
+  if (isSuperAdmin(user) && (selectedTenantId === null || selectedTenantId === undefined)) {
+    return true;
+  }
 
   const superadminOnlyPages = new Set(["Tenants"]);
   if (superadminOnlyPages.has(pageName) && user.role !== 'superadmin') return false;
@@ -170,25 +175,26 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
   if (user.crm_access === false) return pagesAllowedWithoutCRM.has(pageName);
 
   const moduleMapping = {
-    Dashboard: 'dashboard',
-    Contacts: 'contacts',
-    Accounts: 'accounts',
-    Leads: 'leads',
-    Opportunities: 'opportunities',
-    Activities: 'activities',
-    Calendar: 'calendar',
-    BizDevSources: 'bizdev_sources',
-    CashFlow: 'cash_flow',
-    DocumentProcessing: 'document_processing',
-    DocumentManagement: 'document_processing',
-    Employees: 'employees',
-    Reports: 'reports',
-    Integrations: 'integrations',
-    PaymentPortal: 'payment_portal',
-    AICampaigns: 'ai_campaigns',
-    Agent: 'ai_agent',
-    Utilities: 'utilities',
-    ClientOnboarding: 'client_onboarding',
+    Dashboard: 'Dashboard',
+    Contacts: 'Contact Management',
+    Accounts: 'Account Management',
+    Leads: 'Lead Management',
+    Opportunities: 'Opportunities',
+    Activities: 'Activity Tracking',
+    Calendar: 'Calendar',
+    BizDevSources: 'Business Development',
+    CashFlow: 'Cash Flow',
+    DocumentProcessing: 'Document Processing',
+    DocumentManagement: 'Document Processing',
+    Employees: 'Employees',
+    Reports: 'Reports',
+    Integrations: 'Integrations',
+    PaymentPortal: 'Payment Portal',
+    AICampaigns: 'AI Campaigns',
+    Agent: 'AI Agent',
+    Utilities: 'Utilities',
+    ClientOnboarding: 'Client Onboarding',
+    Workflows: 'Workflows',
     DuplicateContacts: null,
     DuplicateAccounts: null,
     DuplicateLeads: null,
@@ -202,8 +208,8 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
 
   const requiredModuleId = moduleMapping[pageName];
   if (requiredModuleId && moduleSettings.length > 0) {
-    const moduleSetting = moduleSettings.find(m => m.module_id === requiredModuleId);
-    if (moduleSetting && moduleSetting.is_active === false) return false;
+    const moduleSetting = moduleSettings.find(m => m.module_name === requiredModuleId);
+    if (moduleSetting && moduleSetting.is_enabled === false) return false;
   }
 
   if (user.navigation_permissions && typeof user.navigation_permissions === 'object') {
