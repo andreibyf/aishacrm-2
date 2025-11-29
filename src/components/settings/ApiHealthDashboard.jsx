@@ -269,7 +269,7 @@ export default function ApiHealthDashboard() {
       </div>
 
       {/* Summary Cards */}
-       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
         <Card className="bg-red-900/20 border-red-700">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-medium text-red-300">
@@ -308,6 +308,22 @@ export default function ApiHealthDashboard() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Protected endpoints badge (from Full Scan, informational) */}
+        {fullScanResults?.summary?.protected !== undefined && (
+          <Card className="bg-blue-900/20 border-blue-700">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-medium text-blue-300">
+                Protected (401/403)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-300">
+                {fullScanResults.summary.protected || 0}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
          <Card className="bg-amber-900/20 border-amber-700">
            <CardHeader className="pb-2">
