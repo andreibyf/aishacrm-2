@@ -574,9 +574,13 @@ const createEntity = (entityName) => {
     filter: async (filterObj, _sortField, _limit) => {
       return callBackendAPI(entityName, "GET", filterObj);
     },
-    // List method
-    list: async (filterObj, _sortField, _limit) => {
-      return callBackendAPI(entityName, "GET", filterObj);
+    // List method - handle both string orderBy and object filters
+    list: async (filterObjOrOrderBy, _sortField, _limit) => {
+      // If first param is a string starting with - or contains only alphanumeric/underscore, treat as orderBy
+      if (typeof filterObjOrOrderBy === 'string') {
+        return callBackendAPI(entityName, "GET", { orderBy: filterObjOrOrderBy });
+      }
+      return callBackendAPI(entityName, "GET", filterObjOrOrderBy);
     },
     // Get by ID
     get: async (id) => {
