@@ -163,7 +163,7 @@ export default function AIMarketInsights({ tenant }) {
 
       // Unified backend orchestration: call single endpoint
       const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || "http://localhost:4001";
-      const tenantId = tenant?.id || tenant?.tenant_id || "local-tenant-001";
+      const tenantId = tenant?.id || tenant?.tenant_id || import.meta.env.VITE_SYSTEM_TENANT_ID || "a11dfb63-4b18-4eb8-872e-747af2e37c46";
       const res = await fetch(`${BACKEND_URL}/api/mcp/market-insights`, {
         method: "POST",
         headers: {

@@ -73,7 +73,7 @@ export default function AuditLogPage() {
 
   const handleClearLogs = async () => {
     try {
-      const tenantId = currentUser?.tenant_id || 'local-tenant-001';
+      const tenantId = currentUser?.tenant_id || import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
       
       if (import.meta.env.DEV) {
         console.log('Clearing audit logs for tenant:', tenantId);

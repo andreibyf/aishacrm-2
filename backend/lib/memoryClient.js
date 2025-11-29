@@ -50,11 +50,14 @@ export async function initMemoryClient(redisUrl = process.env.REDIS_URL) {
     });
 
     await redisClient.connect();
+    // Set isConnected immediately after successful connect (event may fire later)
+    isConnected = true;
     console.log('✓ Memory client initialized');
     return redisClient;
   } catch (error) {
     console.error('[MemoryClient] Failed to initialize:', error.message);
     redisClient = null;
+    isConnected = false;
     return null;
   }
 }

@@ -15,7 +15,7 @@ const callMCPServerDirect = async (payload) => {
   } else {
     try {
       // Try to infer tenant_id from payload.params or payload.context
-      const tenantId = payload?.params?.tenant_id || payload?.params?.tenantId || payload?.context?.tenant_id || 'local-tenant-001';
+      const tenantId = payload?.params?.tenant_id || payload?.params?.tenantId || payload?.context?.tenant_id || import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
       const storageKey = `local_user_api_key_${tenantId}`;
       const stored = localStorage.getItem(storageKey);
       if (stored) headers['x-api-key'] = stored;
@@ -161,7 +161,7 @@ const createFunctionProxy = (functionName) => {
         try {
           const payload = args[0] || {};
           const { employeeId, employeeData, tenantId } = payload;
-          const key = `local_employees_${tenantId || 'local-tenant-001'}`;
+          const key = `local_employees_${tenantId || import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46'}`;
           const raw = localStorage.getItem(key);
           const list = raw ? JSON.parse(raw) : [];
 
@@ -181,7 +181,7 @@ const createFunctionProxy = (functionName) => {
           const newEmployee = {
             id: `local-emp-${Date.now()}`,
             ...employeeData,
-            tenant_id: tenantId || 'local-tenant-001',
+            tenant_id: tenantId || import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           };
@@ -550,7 +550,7 @@ const createFunctionProxy = (functionName) => {
 
       if (functionName === 'getOrCreateUserApiKey') {
         try {
-          const mockTenant = args[0]?.tenantId || 'local-tenant-001';
+          const mockTenant = args[0]?.tenantId || import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
           const storageKey = `local_user_api_key_${mockTenant}`;
           const persistAllowed = (import.meta.env.VITE_ALLOW_PERSIST_API_KEYS === 'true');
 

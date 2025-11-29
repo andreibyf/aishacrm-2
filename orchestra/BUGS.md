@@ -577,6 +577,177 @@ Verification:
 
 ---
 
+## API Health & Testing
+
+### BUG-TEST-001 – API Health scan reports false 401 errors for auth-protected endpoints
+
+Status: Open  
+Priority: Medium  
+Area: Testing / API Health Monitor / Authentication  
+Detected: November 28, 2025
+
+Symptoms:
+- API Health full scan reports 401 (Unauthorized) errors for multiple endpoints:
+  - `GET /api/accounts?tenant_id=test-tenant-001` → 401
+  - `POST /api/accounts` → 401
+  - `GET /api/contacts?tenant_id=test-tenant-001` → 401
+  - `GET /api/leads?tenant_id=test-tenant-001` → 401
+  - `GET /api/opportunities?tenant_id=test-tenant-001` → 401
+  - `GET /api/activities?tenant_id=test-tenant-001` → 401
+  - `GET /api/aicampaigns?tenant_id=test-tenant-001` → 401
+  - `GET /api/bizdevsources?tenant_id=test-tenant-001` → 401
+  - `GET /api/cashflow?tenant_id=test-tenant-001` → 401
+  - `GET /api/modulesettings?tenant_id=test-tenant-001` → 401
+  - `GET /api/synchealths?tenant_id=test-tenant-001` → 401
+  - `GET /api/documentationfiles?tenant_id=test-tenant-001` → 401
+- All failing endpoints have 401 status code and similar latencies (7-15ms)
+- These are classified as "Auth (401/403)" errors in API Health Dashboard
+
+Interpretation:
+- **These are NOT bugs** - the endpoints are correctly protected and require authentication
+- The API Health scanner (`backend/routes/testing.js` `/full-scan` endpoint) sends unauthenticated requests
+- Scanner treats 401 responses as failures, but they should be classified as "Auth Required" (expected)
+- Actual bugs would be 404 (missing endpoint), 500 (server error), or timeouts
+
+Root Cause:
+1. **Full-scan endpoint lacks authentication:**
+   - `backend/routes/testing.js` lines 338-532 defines `/api/testing/full-scan`
+   - Fetch calls at line 481+ do not include `Authorization` header or session cookies
+   - Expected to test endpoint availability, not authenticated functionality
+2. **Classification logic incorrect:**
+   - Lines 493-509 classify non-2xx as WARN or FAIL without distinguishing "protected endpoint"
+   - 401/403 should be separate category: "AUTH_REQUIRED" (not failure if endpoint exists)
+3. **Frontend dashboard misleading:**
+   - `src/components/settings/ApiHealthDashboard.jsx` displays 401s as errors
+   - No distinction between "endpoint missing" vs "endpoint protected"
+
+Expected Behavior:
+- Protected endpoints returning 401 should be classified as:
+  - **Status**: "PROTECTED" or "AUTH_REQUIRED"
+  - **Classification**: Not counted as failure or warning
+  - **Visual**: Separate category in dashboard (e.g., blue badge "Protected" instead of yellow "Auth Error")
+- True auth errors are when authenticated request returns 401 (session expired, invalid token)
+
+Proposed Fix Options:
+
+**Option A: Authenticate the scanner (Recommended)**
+- Create test user with Supabase auth: `test-scanner@system.local` with service role key
+- Modify `/full-scan` to:
+  1. Sign in with test credentials before scanning
+  2. Include `Authorization: Bearer <token>` in all fetch requests
+  3. Classify 401 as FAIL (since requests are authenticated, 401 means broken auth)
+- Benefits: Tests actual functionality, catches real auth bugs
+- Drawbacks: Requires test user setup, more complex
+
+**Option B: Classify 401 as "Protected" (Quick Fix)**
+- Modify scanner classification logic (lines 493-509):
+  - If `statusCode === 401 || statusCode === 403`, set `classification = 'PROTECTED'`
+  - Update summary stats to track `protected` count separately from `warn`/`failed`
+  - Add "Protected" category to dashboard alongside errors
+- Frontend `ApiHealthDashboard.jsx`:
+  - Add new summary card for "Protected" endpoints
+  - Display 401/403 in informational color (blue/gray) instead of warning yellow
+- Benefits: Simple, no auth setup needed, accurately represents endpoint state
+- Drawbacks: Doesn't test actual authenticated functionality
+
+**Option C: Skip auth-required endpoints in health scan**
+- Maintain allowlist of public endpoints (health checks, ping, status)
+- Skip protected CRM endpoints from full scan
+- Benefits: No false positives, fast scan
+- Drawbacks: Doesn't validate core CRM endpoints exist
+
+Recommendation:
+- **Short-term**: Implement Option B (classify 401 as PROTECTED) to stop false alarms
+- **Long-term**: Implement Option A (authenticate scanner) for comprehensive health checks
+
+Files Affected:
+- `backend/routes/testing.js` (lines 338-532) - scanner logic
+- `src/components/settings/ApiHealthDashboard.jsx` (lines 19-24, 200-300) - dashboard display
+- `src/utils/apiHealthMonitor.js` (lines 72-78) - error categorization
+
+**Related Context:**
+- SYSTEM_TENANT_ID: `a11dfb63-4b18-4eb8-872e-747af2e37c46`
+- JWT_SECRET: `b614eab0-cb2f-4e4a-8e28-da3c0504ebc4`
+- Supabase URL: `https://efzqxjpfewkrgpdootte.supabase.co`
+- Test tenant commonly used: `test-tenant-001` (text slug, not UUID - may cause errors)
+- **WARNING**: Using text slug `test-tenant-001` instead of UUID causes validation errors on UUID-required endpoints
+
+Notes:
+- This affects perceived system health metrics - dashboard shows false "Auth Errors"
+- No actual functionality broken - all endpoints working as designed
+- Fix improves observability and reduces noise in health monitoring
+- Consider creating authenticated E2E tests separately from availability scan
+
+---
+
+### BUG-TEST-002 – API Health scan includes non-existent or problematic endpoints
+
+Status: Open  
+Priority: Medium  
+Area: Testing / API Health Monitor / Endpoint Coverage  
+Detected: November 28, 2025
+
+Symptoms:
+- Full-scan reports 404 (Not Found) and 500 (Server Error) for newly added endpoints:
+  - **404 errors:**
+    - `GET /api/mcp/tools` → 404 (endpoint doesn't exist, should be `/api/mcp/servers` or `/api/mcp/resources`)
+    - `GET /api/database/health` → 404 (endpoint doesn't exist, only `/api/database/check-volume` exists)
+  - **500 errors (database views missing):**
+    - `GET /api/reports/pipeline?tenant_id=test-tenant-001` → 500 (queries non-existent `v_opportunity_pipeline_by_stage` view)
+    - `GET /api/reports/lead-status?tenant_id=test-tenant-001` → 500 (database view issue)
+    - `GET /api/reports/calendar?tenant_id=test-tenant-001` → 500 (database view issue)
+    - `GET /api/reports/data-quality?tenant_id=test-tenant-001` → 500 (database view issue)
+    - `GET /api/aicampaigns?tenant_id=test-tenant-001` → 500 (likely UUID validation issue with text slug)
+    - `GET /api/validation/check-duplicate?tenant_id=test-tenant-001&type=account&name=test` → 500 (error handling issue)
+  - **400 errors (validation):**
+    - `GET /api/tenantresolve?identifier=test-tenant-001` → 400 (text slug validation or missing tenant)
+    - `GET /api/memory/sessions?tenant_id=test-tenant-001` → 400 (parameter validation or Redis connection issue)
+
+Root Cause:
+1. **Non-existent endpoints added to scan:**
+   - `/api/mcp/tools` doesn't exist (actual: `/api/mcp/servers`, `/api/mcp/resources`, `/api/mcp/health-proxy`)
+   - `/api/database/health` doesn't exist (actual: `/api/database/check-volume`)
+2. **Database views missing for reports:**
+   - Report endpoints query aggregation views that aren't created in database schema
+   - Views like `v_opportunity_pipeline_by_stage` need migration to create
+3. **Text slug vs UUID validation:**
+   - Using `test-tenant-001` (text) instead of UUID causes validation failures
+   - Many endpoints expect UUID format for `tenant_id` parameter
+4. **Missing error handling:**
+   - Some endpoints throw 500 instead of graceful 400 for invalid input
+
+Fix Required:
+1. **Remove non-existent endpoints from scan:**
+   - Remove `/api/mcp/tools` (replace with `/api/mcp/servers`)
+   - Remove `/api/database/health` (replace with `/api/database/check-volume`)
+2. **Fix report endpoints OR remove from scan:**
+   - Option A: Create database migration for missing aggregation views
+   - Option B: Remove problematic report endpoints from scan until views exist
+3. **Use valid UUID for test tenant:**
+   - Change `test-tenant-001` to `a11dfb63-4b18-4eb8-872e-747af2e37c46` (SYSTEM_TENANT_ID)
+   - Or create dedicated test tenant with UUID in database
+4. **Add better error handling:**
+   - Report endpoints should return 404 or 400 with helpful messages when views missing
+   - Validation endpoints should catch errors and return 400 instead of 500
+
+Files Affected:
+- `backend/routes/testing.js` (lines 370-460) - endpoint list
+- `backend/routes/reports.js` - missing database views causing 500 errors
+- `backend/routes/mcp.js` - correct endpoint is `/servers` not `/tools`
+- `backend/routes/database.js` - correct endpoint is `/check-volume` not `/health`
+
+Related Issues:
+- See BUG-TEST-001 for auth-required endpoint classification
+- Report endpoints may need dedicated database migration task in PLAN.md
+
+Notes:
+- Scan expanded from 47 to 65+ endpoints but introduced 10+ problematic ones
+- 500 errors indicate actual bugs (missing views) vs 404s (wrong endpoint names)
+- Should validate endpoint existence before adding to scan
+- Consider automated endpoint discovery from Express route registration
+
+---
+
 ## Other Known Issues (Parking Lot)
 
 Add non-auth bugs here; do not work on them unless they are pulled into PLAN.md.

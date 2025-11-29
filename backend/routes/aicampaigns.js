@@ -2,7 +2,7 @@ import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { emitTenantWebhooks } from '../lib/webhookEmitter.js';
 
-// Real routes for AI Campaigns backed by ai_campaigns table
+// Real routes for AI Campaigns backed by ai_campaign table (singular)
 export default function createAICampaignRoutes(pgPool) {
   const router = express.Router();
   router.use(validateTenantAccess);
@@ -31,14 +31,14 @@ export default function createAICampaignRoutes(pgPool) {
 
       params.push(parseInt(limit), parseInt(offset));
       const query = `
-        SELECT * FROM ai_campaigns
+        SELECT * FROM ai_campaign
         ${where}
         ORDER BY created_at DESC
         LIMIT $${params.length - 1} OFFSET $${params.length}
       `;
       const result = await pgPool.query(query, params);
 
-      const countQuery = `SELECT COUNT(*) FROM ai_campaigns ${where}`;
+      const countQuery = `SELECT COUNT(*) FROM ai_campaign ${where}`;
       const countResult = await pgPool.query(countQuery, params.slice(0, params.length - 2));
 
       res.json({
@@ -57,7 +57,7 @@ export default function createAICampaignRoutes(pgPool) {
       const { id } = req.params;
       const { tenant_id } = req.query || {};
       if (!tenant_id) return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
-      const result = await pgPool.query('SELECT * FROM ai_campaigns WHERE tenant_id = $1 AND id = $2', [tenant_id, id]);
+      const result = await pgPool.query('SELECT * FROM ai_campaign WHERE tenant_id = $1 AND id = $2', [tenant_id, id]);
       if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'AI Campaign not found' });
       res.json({ status: 'success', data: result.rows[0] });
     } catch (err) {
@@ -72,8 +72,8 @@ export default function createAICampaignRoutes(pgPool) {
       const { tenant_id, name, status = 'draft', description = null, target_contacts = [], performance_metrics = {}, metadata = {} } = req.body;
       if (!tenant_id) return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
 
-      const insert = `
-        INSERT INTO ai_campaigns (tenant_id, name, status, description, target_contacts, performance_metrics, metadata, created_at)
+      const query = `
+        INSERT INTO ai_campaign (tenant_id, name, status, description, target_contacts, performance_metrics, metadata, created_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
         RETURNING *
       `;
@@ -97,7 +97,7 @@ export default function createAICampaignRoutes(pgPool) {
       if (!tenant_id) return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
 
       const update = `
-        UPDATE ai_campaigns
+        UPDATE ai_campaign
         SET name = COALESCE($3, name),
             status = COALESCE($4, status),
             description = COALESCE($5, description),
@@ -124,7 +124,7 @@ export default function createAICampaignRoutes(pgPool) {
       const { id } = req.params;
       const { tenant_id } = req.query || {};
       if (!tenant_id) return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
-      const result = await pgPool.query('DELETE FROM ai_campaigns WHERE tenant_id = $1 AND id = $2 RETURNING id', [tenant_id, id]);
+      const result = await pgPool.query('DELETE FROM ai_campaign WHERE tenant_id = $1 AND id = $2 RETURNING id', [tenant_id, id]);
       if (result.rowCount === 0) return res.status(404).json({ status: 'error', message: 'AI Campaign not found' });
       res.json({ status: 'success', data: { id } });
     } catch (err) {
@@ -141,7 +141,7 @@ export default function createAICampaignRoutes(pgPool) {
       if (!tenant_id) return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
 
       // Load campaign (tenant-scoped)
-      const getQ = 'SELECT * FROM ai_campaigns WHERE tenant_id = $1 AND id = $2 LIMIT 1';
+      const getQ = 'SELECT * FROM ai_campaign WHERE tenant_id = $1 AND id = $2 LIMIT 1';
       const getR = await pgPool.query(getQ, [tenant_id, id]);
       if (getR.rows.length === 0) return res.status(404).json({ status: 'error', message: 'AI Campaign not found' });
       const campaign = getR.rows[0];
@@ -183,7 +183,7 @@ export default function createAICampaignRoutes(pgPool) {
 
       const newMeta = { ...metadata, lifecycle };
       const updQ = `
-        UPDATE ai_campaigns
+        UPDATE ai_campaign
         SET status = 'scheduled',
             metadata = $3,
             updated_at = NOW()
@@ -215,7 +215,7 @@ export default function createAICampaignRoutes(pgPool) {
       const { tenant_id } = req.body || {};
       if (!tenant_id) return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
 
-      const getR = await pgPool.query('SELECT * FROM ai_campaigns WHERE tenant_id = $1 AND id = $2 LIMIT 1', [tenant_id, id]);
+      const getR = await pgPool.query('SELECT * FROM ai_campaign WHERE tenant_id = $1 AND id = $2 LIMIT 1', [tenant_id, id]);
       if (getR.rows.length === 0) return res.status(404).json({ status: 'error', message: 'AI Campaign not found' });
       const campaign = getR.rows[0];
       const metadata = campaign.metadata || {};
@@ -223,7 +223,7 @@ export default function createAICampaignRoutes(pgPool) {
       const newMeta = { ...metadata, lifecycle };
 
       const upd = await pgPool.query(
-        `UPDATE ai_campaigns SET status = 'paused', metadata = $3, updated_at = NOW() WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+        `UPDATE ai_campaign SET status = 'paused', metadata = $3, updated_at = NOW() WHERE tenant_id = $1 AND id = $2 RETURNING *`,
         [tenant_id, id, newMeta]
       );
       const updated = upd.rows[0];
@@ -242,7 +242,7 @@ export default function createAICampaignRoutes(pgPool) {
       const { tenant_id } = req.body || {};
       if (!tenant_id) return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
 
-      const getR = await pgPool.query('SELECT * FROM ai_campaigns WHERE tenant_id = $1 AND id = $2 LIMIT 1', [tenant_id, id]);
+      const getR = await pgPool.query('SELECT * FROM ai_campaign WHERE tenant_id = $1 AND id = $2 LIMIT 1', [tenant_id, id]);
       if (getR.rows.length === 0) return res.status(404).json({ status: 'error', message: 'AI Campaign not found' });
       const campaign = getR.rows[0];
       const metadata = campaign.metadata || {};
@@ -250,7 +250,7 @@ export default function createAICampaignRoutes(pgPool) {
       const newMeta = { ...metadata, lifecycle };
 
       const upd = await pgPool.query(
-        `UPDATE ai_campaigns SET status = 'scheduled', metadata = $3, updated_at = NOW() WHERE tenant_id = $1 AND id = $2 RETURNING *`,
+        `UPDATE ai_campaign SET status = 'scheduled', metadata = $3, updated_at = NOW() WHERE tenant_id = $1 AND id = $2 RETURNING *`,
         [tenant_id, id, newMeta]
       );
       const updated = upd.rows[0];

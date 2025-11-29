@@ -6,17 +6,13 @@ import { pool as perfLogPool } from '../lib/supabase-db.js';
 export async function initServices(app, pgPool) {
   // Initialize Redis/Valkey memory client (non-blocking for app startup)
   try {
-    await initMemory(process.env.REDIS_URL);
-    console.log(`✓ Memory layer ${isMemoryAvailable() ? 'available' : 'unavailable'} (${process.env.REDIS_URL ? 'configured' : 'no REDIS_URL'})`);
-    // Expose memory client for diagnostics/probes (e.g., containers-status)
-    try {
-      const client = getMemoryClient();
-      if (client) {
-        // Attach to app.locals for lightweight reachability checks
-        app.locals.memoryClient = client;
-      }
-    } catch {
-      // getMemoryClient throws when unavailable; leave unset
+    const memClient = await initMemory(process.env.REDIS_URL);
+    // Attach to app.locals immediately after initialization
+    if (memClient) {
+      app.locals.memoryClient = memClient;
+      console.log(`✓ Memory layer available (${process.env.REDIS_URL})`);
+    } else {
+      console.log(`✓ Memory layer unavailable (${process.env.REDIS_URL ? 'configured but failed to connect' : 'no REDIS_URL'})`);
     }
   } catch (e) {
     console.warn('⚠ Memory client init skipped/failed:', e?.message || e);

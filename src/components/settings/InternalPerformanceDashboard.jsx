@@ -36,7 +36,7 @@ export default function InternalPerformanceDashboard({ user }) {
     try {
       // Build metrics URL: superadmin sees global metrics (no tenant filter)
       const isSuperAdmin = user?.role === 'superadmin';
-      const tenantId = user?.tenant_id || 'local-tenant-001';
+      const tenantId = user?.tenant_id || import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
       const metricsUrl = isSuperAdmin
         ? `${BACKEND_URL}/api/metrics/performance?limit=500`
         : `${BACKEND_URL}/api/metrics/performance?tenant_id=${tenantId}&limit=500`;

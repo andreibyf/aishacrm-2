@@ -2,7 +2,7 @@ import { assert } from './testUtils';
 import { getBackendUrl } from '@/api/backendUrl';
 
 const BACKEND_URL = getBackendUrl();
-const TEST_TENANT_ID = 'local-tenant-001';
+const TEST_TENANT_ID = import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 
 // Generate a unique message for this run to find it reliably in listings
 const uniqueSuffix = () => new Date().toISOString().replace(/[:.]/g, '-');

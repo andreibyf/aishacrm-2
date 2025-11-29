@@ -901,11 +901,14 @@ export default function createWorkflowRoutes(pgPool) {
       console.log('[Workflows PUT] Parsed existing metadata:', existingMetadata);
       console.log('[Workflows PUT] Incoming nodes:', nodes ? `Array(${nodes.length})` : 'undefined');
 
-      // Build updated metadata
+      // Build updated metadata - use explicit property assignment to avoid TDZ issues
+      const updatedNodes = nodes !== undefined ? nodes : (existingMetadata.nodes || []);
+      const updatedConnections = connections !== undefined ? connections : (existingMetadata.connections || []);
+
       const metadata = {
         ...existingMetadata,
-        nodes: nodes !== undefined ? nodes : existingMetadata.nodes || [],
-        connections: connections !== undefined ? connections : existingMetadata.connections || []
+        nodes: updatedNodes,
+        connections: updatedConnections
       };
 
       console.log('[Workflows PUT] Final merged metadata:', JSON.stringify(metadata));

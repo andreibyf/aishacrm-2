@@ -468,7 +468,8 @@ export default function ApiHealthDashboard() {
                 setFullScanResults(null);
                 try {
                   // Force internal base_url usage for accurate container-network scanning
-                  const scanUrl = `${BACKEND_URL}/api/testing/full-scan?tenant_id=test-tenant-001&base_url=internal`;
+                  // Use system tenant UUID instead of text slug for proper validation
+                  const scanUrl = `${BACKEND_URL}/api/testing/full-scan?base_url=internal`;
                   const resp = await fetch(scanUrl);
                   const json = await resp.json().catch(() => ({}));
                   if (resp.ok && json?.data) {
@@ -583,6 +584,10 @@ export default function ApiHealthDashboard() {
                   <div className="text-xs text-green-400 mb-1">Passed</div>
                   <div className="text-2xl font-bold text-green-300">{fullScanResults.summary.passed}</div>
                 </div>
+                <div className="bg-blue-900/20 p-3 rounded-lg border border-blue-700/50">
+                  <div className="text-xs text-blue-400 mb-1">Protected</div>
+                  <div className="text-2xl font-bold text-blue-300">{fullScanResults.summary.protected || 0}</div>
+                </div>
                 <div className="bg-yellow-900/20 p-3 rounded-lg border border-yellow-700/50">
                   <div className="text-xs text-yellow-400 mb-1">Warnings</div>
                   <div className="text-2xl font-bold text-yellow-300">{fullScanResults.summary.warn}</div>
@@ -591,14 +596,10 @@ export default function ApiHealthDashboard() {
                   <div className="text-xs text-red-400 mb-1">Failed</div>
                   <div className="text-2xl font-bold text-red-300">{fullScanResults.summary.failed}</div>
                 </div>
-                <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
-                  <div className="text-xs text-slate-400 mb-1">Avg Latency (ms)</div>
-                  <div className="text-2xl font-bold text-slate-100">{fullScanResults.summary.avg_latency_ms}</div>
-                </div>
               </div>
               <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
                 {fullScanResults.results.map((r, i) => (
-                  <div key={i} className={`text-xs flex items-center justify-between px-2 py-1 rounded border ${r.classification === 'PASS' ? 'bg-green-900/15 border-green-700/40 text-green-300' : r.classification === 'WARN' ? 'bg-yellow-900/15 border-yellow-700/40 text-yellow-300' : 'bg-red-900/15 border-red-700/40 text-red-300'}`}>
+                  <div key={i} className={`text-xs flex items-center justify-between px-2 py-1 rounded border ${r.classification === 'PASS' ? 'bg-green-900/15 border-green-700/40 text-green-300' : r.classification === 'PROTECTED' ? 'bg-blue-900/15 border-blue-700/40 text-blue-300' : r.classification === 'WARN' ? 'bg-yellow-900/15 border-yellow-700/40 text-yellow-300' : 'bg-red-900/15 border-red-700/40 text-red-300'}`}>
                     <div className="flex items-center gap-2">
                       <code className="px-1 py-0.5 bg-slate-700 rounded text-slate-200">{r.method}</code>
                       <span className="font-mono">{r.path}</span>
@@ -610,7 +611,13 @@ export default function ApiHealthDashboard() {
                   </div>
                 ))}
               </div>
-              <div className="text-[10px] text-slate-500">Scan performed at {new Date(fullScanResults.timestamp).toLocaleTimeString()} | Max latency {fullScanResults.summary.max_latency_ms}ms | Expected statuses: {fullScanResults.summary.expected_statuses.join(', ')}</div>
+              <div className="text-[10px] text-slate-500 mt-2">
+                Scan performed at {new Date(fullScanResults.timestamp).toLocaleTimeString()} |
+                Max latency {fullScanResults.summary.max_latency_ms}ms |
+                Avg latency {fullScanResults.summary.avg_latency_ms}ms |
+                Expected statuses: {fullScanResults.summary.expected_statuses.join(', ')} |
+                <span className="text-blue-400">Protected (401/403) = auth-required endpoints</span>
+              </div>
             </div>
           </CardContent>
         )}

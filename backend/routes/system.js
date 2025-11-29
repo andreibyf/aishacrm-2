@@ -153,7 +153,8 @@ export default function createSystemRoutes(_pgPool) {
       { name: 'mcp-node', url: mcpNodeCandidates },
       { name: 'n8n', url: 'http://n8n:5678/' },
       { name: 'n8n-proxy', url: 'http://n8n-proxy:5679/' },
-      { name: 'redis', url: null, type: 'tcp' }
+      { name: 'redis-memory', url: null, type: 'tcp' },
+      { name: 'redis-cache', url: null, type: 'tcp' }
     ];
 
     // Optionally include legacy MCP for debugging visibility
@@ -163,25 +164,27 @@ export default function createSystemRoutes(_pgPool) {
 
     const results = [];
     const memoryClient = req.app?.locals?.memoryClient; // Established during server bootstrap
+    const cacheManager = req.app?.locals?.cacheManager; // Cache manager with redis-cache client
     for (const svc of services) {
       if (!svc.url) {
-        // Implement a lightweight Redis probe using existing memory client if available
-        if (svc.name === 'redis' && svc.type === 'tcp') {
+        // Implement a lightweight Redis probe for both memory and cache instances
+        if ((svc.name === 'redis-memory' || svc.name === 'redis-cache') && svc.type === 'tcp') {
           const start = performance.now ? performance.now() : Date.now();
           let reachable = false; let note = 'no_client';
+          const client = svc.name === 'redis-memory' ? memoryClient : cacheManager?.client;
           try {
-            if (memoryClient) {
+            if (client) {
               // Try a PING if library supports it; otherwise rely on ready state
-              if (typeof memoryClient.ping === 'function') {
+              if (typeof client.ping === 'function') {
                 const pong = await Promise.race([
-                  memoryClient.ping(),
+                  client.ping(),
                   new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 750))
                 ]);
                 if (pong) {
                   reachable = true;
                   note = 'pong';
                 }
-              } else if (memoryClient.isReady || memoryClient.status === 'ready') {
+              } else if (client.isReady || client.status === 'ready') {
                 reachable = true;
                 note = 'ready_state';
               }
