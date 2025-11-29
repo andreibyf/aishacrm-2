@@ -10,11 +10,13 @@ import { systemLogsTests } from '../components/testing/systemLogsTests';
 import { userContextTests } from '../components/testing/userContextTests.jsx';
 import { userMigrationIntegrationTests } from '../components/testing/userMigrationIntegrationTests.jsx';
 import { schemaValidationTests } from '../components/testing/schemaValidationTests';
+import { avatarTests } from '../components/testing/avatarTests.jsx';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Info, TestTube } from "lucide-react";
 
   const testSuites = [
+    avatarTests, // AI Avatar widget and Braid integration tests
     schemaValidationTests, // New comprehensive schema validation tests
     userContextTests,
     userMigrationIntegrationTests,
@@ -85,6 +87,15 @@ import { Info, TestTube } from "lucide-react";
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-3 bg-slate-700 rounded-lg">
+                <div className="font-medium text-slate-200 mb-1 flex items-center gap-2">
+                  🤖 AI Avatar & Braid
+                  <span className="text-xs px-2 py-0.5 bg-purple-900/40 text-purple-300 border border-purple-700/60 rounded">10 Tests</span>
+                </div>
+                <div className="text-sm text-slate-400">
+                  Avatar widget rendering, state management (speaking/listening/idle), Braid MCP integration, health checks, and event handling.
+                </div>
+              </div>
               <div className="p-3 bg-slate-700 rounded-lg">
                 <div className="font-medium text-slate-200 mb-1 flex items-center gap-2">
                   ✅ Schema Validation

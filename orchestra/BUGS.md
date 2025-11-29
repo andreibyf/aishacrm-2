@@ -11,51 +11,16 @@ Status: Resolved ✅
 Priority: High  
 Area: Settings / Security Monitor / Blocked IPs Tab  
 Detected: November 28, 2025
+Resolution: November 28, 2025
 
 Symptoms:
 - Navigating to Settings → Security Monitor → Blocked IPs tab causes page crash
 - Console error: `TypeError: Cannot read properties of undefined (reading 'map')`
 - Error occurs at SecurityMonitor component line 499: `idrStatus.blocked_ips.map((ipData, idx) => {`
-- Full error trace:
-  ```
-  TypeError: Cannot read properties of undefined (reading 'map')
-      at Jn (Settings-CBcDkmPw.js:211:21485)
-      at Ch (entry-Cju4CqvL.js:39:17358)
-      ...
-  ```
-
-Interpretation:
-- `idrStatus.blocked_ips` is undefined when component tries to render Blocked IPs list
-- Guard condition at line 492 checks `!idrStatus || idrStatus.blocked_ips?.length === 0` but doesn't handle undefined `blocked_ips`
-- When `idrStatus` exists but `blocked_ips` is undefined, it falls through to `.map()` call which crashes
-
-Suspected Causes:
-1. **Backend response structure mismatch:**
-   - API endpoint `/api/security/status` returns `idrStatus` object without `blocked_ips` property
-   - Backend may return empty object `{}` or object with different structure
-2. **Race condition:**
-   - Component renders before `fetchIDRStatus()` completes
-   - Initial state has `idrStatus: null` but changes to `{}` before `blocked_ips` is populated
-3. **API error handling:**
-   - Backend returns success status but incomplete data structure
-   - Error in data transformation leaving `blocked_ips` undefined
 
 Root Cause:
 - Line 492 guard condition: `!idrStatus || idrStatus.blocked_ips?.length === 0`
-- This is true when:
-  - `idrStatus` is null/falsy (shows "No IPs blocked")
-  - `blocked_ips` exists and is empty array (shows "No IPs blocked")
-- This is false when:
-  - `idrStatus` exists but `blocked_ips` is undefined → crashes on line 499
-
-Fix:
-- Change guard to: `!idrStatus || !idrStatus.blocked_ips || idrStatus.blocked_ips.length === 0`
-- Or use optional chaining in map: `idrStatus?.blocked_ips?.map(...) || []`
-- Ensure backend always returns `blocked_ips` as array (empty or populated)
-
-Files Affected:
-- `src/components/settings/SecurityMonitor.jsx` (line 492-499)
-- Possibly `backend/routes/security.js` (status endpoint)
+- When `idrStatus` exists but `blocked_ips` is undefined, it falls through to `.map()` call which crashes
 
 Resolution (November 28, 2025):
 - Fixed guard condition at line 492 in SecurityMonitor.jsx
@@ -64,10 +29,226 @@ Resolution (November 28, 2025):
 - Now explicitly checks for undefined `blocked_ips` before accessing length/map
 - Deployed in frontend container rebuild (21.0s build time)
 
+Files Affected:
+- `src/components/settings/SecurityMonitor.jsx` (line 492)
+
+---
+
+### BUG-UI-002 – IDR Dashboard blocked IPs not displaying
+
+Status: Resolved ✅  
+Priority: High  
+Area: Internal Performance Dashboard / Security Status API  
+Detected: November 29, 2025
+Resolution: November 29, 2025
+
+Symptoms:
+- Internal Performance Dashboard did not show blocked IPs section
+- Backend API `/api/security/status` returned `{"status":"success","data":{...}}` but data was incomplete
+- `blocked_ips` array missing from response despite IDR tracking blocked IPs
+
+Root Cause:
+- Backend `security.js` route line 272 called `getSecurityStatus()` without `await` keyword
+- Function returned Promise object instead of resolved data
+- Promise was spread into response object, losing actual data structure
+
+Resolution (November 29, 2025):
+- **Backend Fix** (backend/routes/security.js line 272):
+  - Added `await`: `const status = await getSecurityStatus();`
+  - Added debug logging: `console.log('[Security] Status response:', JSON.stringify(status, null, 2));`
+- **Frontend Enhancement** (src/components/settings/InternalPerformanceDashboard.jsx):
+  - Added securityStatus state and API integration (lines 35, 47)
+  - Added handleUnblockIP function with POST to `/api/security/unblock-ip` (lines 118-143)
+  - Added comprehensive Blocked IPs UI card (lines 244-299):
+    - Shield icon with orange color scheme
+    - Redis availability badge
+    - Per-IP cards with expiration countdown
+    - Unblock button with admin functionality
+    - Empty state with green Shield icon
+- **Configuration** (backend/.env):
+  - Added IDR whitelist: `IDR_WHITELIST_IPS=127.0.0.1,::1,172.16.0.0/12,192.168.0.0/16,10.0.0.0/8`
+  - Added emergency secret: `IDR_EMERGENCY_SECRET=emergency_unblock_secret_2024`
+
+Verification:
+- `curl http://localhost:4001/api/security/status` returns proper JSON with `blocked_ips` array
+- Dashboard displays blocked IPs section with real-time expiration timers
+- Unblock functionality tested and working
+
+Files Affected:
+- `backend/routes/security.js` (line 272)
+- `src/components/settings/InternalPerformanceDashboard.jsx` (lines 35, 47, 118-143, 244-299)
+- `backend/.env` (IDR configuration section)
+
+---
+
+### BUG-UI-003 – Duplicate "Security" tabs in Settings page
+
+Status: Resolved ✅  
+Priority: Low  
+Area: Settings Page Navigation  
+Detected: November 29, 2025
+Resolution: November 29, 2025
+
+Symptoms:
+- Settings page showed two tabs both labeled "Security"
+- Line 165: System Configuration → Security (Lock icon, purple)
+- Line 178: Monitoring & Health → Security (Shield icon, red)
+- Users confused which tab to click for different security functions
+
+Resolution (November 29, 2025):
+- Renamed first tab (line 165): "Security" → "Auth & Access" (Lock icon, purple)
+- Renamed second tab (line 178): "Security" → "Intrusion Detection" (Shield icon, red)
+- Deployed in frontend container rebuild (44.8s build time)
+
+Files Affected:
+- `src/pages/Settings.jsx` (lines 165, 178)
+
 Notes:
-- High priority as it completely blocks access to Blocked IPs management
-- Simple null-safety fix should resolve immediately
-- Should verify backend response structure for consistency
+- Clear visual and semantic distinction between authentication settings and security monitoring
+- No functionality changes, only label improvements
+
+---
+
+## Security & Monitoring
+
+### BUG-SEC-001 – MCP service health check false negatives
+
+Status: Resolved ✅  
+Priority: High  
+Area: Container Health Monitoring / System Health Checks  
+Detected: November 29, 2025
+Resolution: November 29, 2025
+
+Symptoms:
+- Internal Performance Dashboard showed MCP service as "Not reachable" (Code: 0)
+- Docker showed `aishacrm-mcp` container as healthy
+- Health check misalignment between dashboard and actual container status
+
+Root Cause:
+- System.js health check used wrong service name: `braid-mcp-node-server:8000`
+- Docker Compose service name is `mcp` not `braid-mcp-node-server`
+- Health check tried to connect to non-existent hostname
+
+Resolution (November 29, 2025):
+- Updated `backend/routes/system.js` lines 137-145
+- Changed mcpNodeCandidates array first priority from `http://braid-mcp-node-server:8000/health` to `http://mcp:8000/health`
+- Kept `braid-mcp-node-server` as fallback for standalone deployment compatibility
+- Deployed in backend container rebuild (30.3s build time)
+
+Verification:
+- MCP health check now returns Code 200 instead of Code 0
+- Dashboard correctly shows service as reachable
+
+Files Affected:
+- `backend/routes/system.js` (lines 137-145)
+
+---
+
+### BUG-SEC-002 – False positive bulk extraction alerts
+
+Status: Resolved ✅  
+Priority: Medium  
+Area: Intrusion Detection & Response (IDR) / Alert Accuracy  
+Detected: November 29, 2025
+Resolution: November 29, 2025
+
+Symptoms:
+- IDR logged "Bulk data extraction attempt detected (limit: 5000)" even when query returned 0 rows
+- High-severity security alerts triggered for legitimate queries on empty tables
+- URL parameter `?limit=` checked before data fetched, causing false positives
+
+Root Cause:
+- `intrusionDetection.js` checked URL query parameter value before database query execution
+- Alert triggered based on intent (high limit) not actual result (empty dataset)
+- Original threshold: 1000+ records triggered immediate block with high-severity alert
+
+Resolution (November 29, 2025):
+- **Severity Downgrade** (backend/middleware/intrusionDetection.js lines 594-630):
+  - Changed log level: `security_alert` → `warning`
+  - Changed severity: `high` → `medium`
+  - Changed message: "Bulk data extraction attempt detected" → "High data limit requested"
+  - Added console.warn for visibility
+- **Two-Tier Blocking**:
+  - 1000-4999 limit: Log warning, allow request (no block, no 400 error)
+  - 5000+ limit: Block IP for 1 hour, return 400 error
+- Deployed in backend container rebuild (21.4s build time)
+
+Verification:
+- `?limit=500`: No alert (below threshold)
+- `?limit=1500`: Warning logged, request succeeds
+- `?limit=5000`: IP blocked 1 hour, 400 error returned
+
+Files Affected:
+- `backend/middleware/intrusionDetection.js` (lines 594-630)
+
+Notes:
+- Reduces false positive security alerts while maintaining protection against actual bulk extraction attempts
+- More nuanced approach: warnings for moderate limits, blocks for extreme limits
+
+---
+
+### BUG-SEC-003 – Limited threat intelligence (no external CVE data)
+
+Status: Resolved ✅  
+Priority: Medium  
+Area: Threat Intelligence / External API Integration  
+Detected: November 29, 2025
+Resolution: November 29, 2025
+
+Symptoms:
+- Threat intelligence only analyzed internal application logs
+- No external CVE data, IP reputation, or scanner identification
+- Purely internal behavioral analysis without industry threat context
+
+Root Cause:
+- No external API integrations for threat intelligence
+- System could not identify known malicious IPs, bots, or scanners from threat feeds
+
+Resolution (November 29, 2025):
+- **Integrated Two Free APIs** (backend/routes/security.js lines 1-110):
+  1. **GreyNoise Community API** (100% free, no key required):
+     - Identifies scanners and bots
+     - Classification: malicious/benign/unknown
+     - RIOT database for known good actors
+  2. **AbuseIPDB API** (1000 checks/day free tier):
+     - Abuse confidence score (0-100%)
+     - Country, ISP, domain information
+     - Requires API key from abuseipdb.com
+
+- **Threat Score Boosting Logic**:
+  - GreyNoise malicious classification: +50 points
+  - AbuseIPDB confidence >75%: +30 points
+  - AbuseIPDB confidence >50%: +15 points
+  - AbuseIPDB confidence >25%: +5 points
+
+- **Private IP Filtering**:
+  - Added `isPrivateIP()` helper function
+  - Skips external lookups for localhost and RFC1918 addresses
+
+- **Rate Limiting Protection**:
+  - 3-second timeout per request
+  - 100ms delay between calls to avoid API abuse
+
+- **Optional Enrichment**:
+  - GET `/api/security/threat-intelligence?enrich=true` enables external API calls
+  - Default behavior unchanged (internal analysis only)
+  - Enriched data re-sorts IPs by boosted threat scores
+
+- Deployed in backend container rebuild (18.2s build time)
+
+Verification:
+- External APIs accessible and returning proper JSON
+- Threat scores boosted based on external reputation data
+- Private IPs skipped for external lookups
+- Response includes `external_enrichment: true` when enabled
+
+Files Affected:
+- `backend/routes/security.js` (lines 1-110, 405-525)
+
+Notes:
+- Free tier sufficient for typical production load
+- Optional AbuseIPDB API key can be added to `.env` for enhanced data
+- System remains functional without external APIs (graceful fallback)
 
 ---
 ## Production Critical Issues

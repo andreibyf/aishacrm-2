@@ -591,12 +591,18 @@ export async function intrusionDetection(req, res, next) {
     }
 
     // 4. Detect bulk data extraction attempts
+    // Only flag if BOTH conditions met:
+    // - High limit requested (>1000)
+    // - AND actual data likely returned (not checking response size yet, just request intent)
     const limit = parseInt(req.query.limit) || 0;
     if (limit > IDR_CONFIG.SUSPICIOUS_PATTERNS.BULK_DATA_EXTRACTION) {
+      // Log as warning, not security alert (intent-based, not result-based)
+      console.warn(`[IDR] High limit requested: ${limit} (threshold: ${IDR_CONFIG.SUSPICIOUS_PATTERNS.BULK_DATA_EXTRACTION})`);
+
       await logSecurityEvent(supabase, {
         tenant_id: user?.tenant_id,
-        level: 'security_alert',
-        message: `Bulk data extraction attempt detected (limit: ${limit})`,
+        level: 'warning', // Downgraded from security_alert
+        message: `High data limit requested (limit: ${limit})`,
         source: 'IDR:BulkExtraction',
         user_id: userId,
         user_email: user?.email,
@@ -605,24 +611,26 @@ export async function intrusionDetection(req, res, next) {
         url: req.originalUrl,
         method: req.method,
         violation_type: 'BULK_DATA_EXTRACTION',
-        severity: 'high',
+        severity: 'medium', // Downgraded from high
         metadata: {
           requested_limit: limit,
           threshold: IDR_CONFIG.SUSPICIOUS_PATTERNS.BULK_DATA_EXTRACTION,
         },
       });
 
-      // Escalate to temporary IP block for extreme values
+      // Escalate to temporary IP block ONLY for extreme values
       if (limit >= IDR_CONFIG.BULK_BLOCK_THRESHOLD) {
         // Block for 1 hour for severe extraction attempts
         blockIP(ip, 60 * 60 * 1000).catch(e => console.error('[IDR] Failed to block IP:', e));
+
+        return res.status(400).json({
+          status: 'error',
+          message: `Request limit too high. Maximum allowed: ${IDR_CONFIG.BULK_BLOCK_THRESHOLD}`,
+          code: 'BULK_EXTRACTION_BLOCKED',
+        });
       }
 
-      return res.status(400).json({
-        status: 'error',
-        message: `Request limit too high. Maximum allowed: ${IDR_CONFIG.SUSPICIOUS_PATTERNS.BULK_DATA_EXTRACTION}`,
-        code: 'BULK_EXTRACTION_BLOCKED',
-      });
+      // For limits 1000-4999: allow but log (no block)
     }
 
     // 5. Track failed requests

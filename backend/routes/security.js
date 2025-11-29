@@ -18,6 +18,119 @@ import {
   clearTrackingData
 } from "../middleware/intrusionDetection.js";
 
+/**
+ * Enrich IP threat data with external free threat intelligence APIs
+ * - GreyNoise Community API (no key required, rate limited)
+ * - AbuseIPDB (requires API key, 1000 checks/day free tier)
+ */
+async function enrichIPThreatData(ipList) {
+  const ABUSEIPDB_KEY = process.env.ABUSEIPDB_API_KEY;
+  const enrichedIPs = [];
+
+  for (const ipData of ipList) {
+    const enriched = { ...ipData, external_intel: {} };
+
+    // Skip private/local IPs
+    if (isPrivateIP(ipData.ip)) {
+      enriched.external_intel.note = 'Private IP - skipped external lookup';
+      enrichedIPs.push(enriched);
+      continue;
+    }
+
+    try {
+      // GreyNoise Community API (free, no key required)
+      const greynoiseUrl = `https://api.greynoise.io/v3/community/${ipData.ip}`;
+      const greynoiseResp = await fetch(greynoiseUrl, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(3000)
+      });
+
+      if (greynoiseResp.ok) {
+        const greynoiseData = await greynoiseResp.json();
+        enriched.external_intel.greynoise = {
+          noise: greynoiseData.noise || false,
+          riot: greynoiseData.riot || false,
+          classification: greynoiseData.classification || 'unknown',
+          name: greynoiseData.name || null,
+          link: greynoiseData.link || null
+        };
+
+        // Boost threat score if known malicious
+        if (greynoiseData.classification === 'malicious') {
+          enriched.threat_score += 50;
+        }
+      }
+    } catch (error) {
+      console.warn(`[ThreatIntel] GreyNoise lookup failed for ${ipData.ip}:`, error.message);
+    }
+
+    // AbuseIPDB (requires API key)
+    if (ABUSEIPDB_KEY) {
+      try {
+        const abuseUrl = `https://api.abuseipdb.com/api/v2/check?ipAddress=${ipData.ip}&maxAgeInDays=90&verbose`;
+        const abuseResp = await fetch(abuseUrl, {
+          headers: {
+            'Key': ABUSEIPDB_KEY,
+            'Accept': 'application/json'
+          },
+          signal: AbortSignal.timeout(3000)
+        });
+
+        if (abuseResp.ok) {
+          const abuseData = await abuseResp.json();
+          if (abuseData.data) {
+            enriched.external_intel.abuseipdb = {
+              abuse_confidence_score: abuseData.data.abuseConfidenceScore || 0,
+              country_code: abuseData.data.countryCode || null,
+              usage_type: abuseData.data.usageType || null,
+              isp: abuseData.data.isp || null,
+              domain: abuseData.data.domain || null,
+              is_whitelisted: abuseData.data.isWhitelisted || false,
+              total_reports: abuseData.data.totalReports || 0
+            };
+
+            // Boost threat score based on abuse confidence
+            const confidenceScore = abuseData.data.abuseConfidenceScore || 0;
+            if (confidenceScore > 75) enriched.threat_score += 30;
+            else if (confidenceScore > 50) enriched.threat_score += 15;
+            else if (confidenceScore > 25) enriched.threat_score += 5;
+          }
+        }
+      } catch (error) {
+        console.warn(`[ThreatIntel] AbuseIPDB lookup failed for ${ipData.ip}:`, error.message);
+      }
+    }
+
+    enrichedIPs.push(enriched);
+
+    // Rate limiting: small delay between requests
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  // Re-sort by updated threat scores
+  return enrichedIPs.sort((a, b) => b.threat_score - a.threat_score);
+}
+
+/**
+ * Check if IP is private/internal (skip external lookups)
+ */
+function isPrivateIP(ip) {
+  // Remove IPv6 prefix if present
+  const cleanIP = ip.replace(/^::ffff:/, '');
+
+  // Private IPv4 ranges
+  if (/^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)/.test(cleanIP)) {
+    return true;
+  }
+
+  // Localhost
+  if (cleanIP === '127.0.0.1' || cleanIP === '::1' || cleanIP === 'localhost') {
+    return true;
+  }
+
+  return false;
+}
+
 export default function createSecurityRoutes(_pgPool) {
   const router = express.Router();
 
@@ -276,7 +389,9 @@ export default function createSecurityRoutes(_pgPool) {
    */
   router.get("/status", async (req, res) => {
     try {
-      const status = getSecurityStatus();
+      const status = await getSecurityStatus();
+
+      console.log('[Security] Status response:', JSON.stringify(status, null, 2));
 
       res.json({
         status: 'success',
@@ -398,11 +513,11 @@ export default function createSecurityRoutes(_pgPool) {
 
   /**
    * GET /api/security/threat-intelligence
-   * Get threat intelligence summary
+   * Get threat intelligence summary with optional external enrichment
    */
   router.get("/threat-intelligence", async (req, res) => {
     try {
-      const { days = 30 } = req.query;
+      const { days = 30, enrich = 'false' } = req.query;
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - parseInt(days));
 
@@ -484,7 +599,7 @@ export default function createSecurityRoutes(_pgPool) {
       });
 
       // Convert maps to arrays and sort by threat level
-      const topThreateningIPs = Array.from(ipThreatMap.values())
+      let topThreateningIPs = Array.from(ipThreatMap.values())
         .map(ip => ({
           ...ip,
           violation_types: Array.from(ip.violation_types),
@@ -492,6 +607,11 @@ export default function createSecurityRoutes(_pgPool) {
         }))
         .sort((a, b) => b.threat_score - a.threat_score)
         .slice(0, 20);
+
+      // Enrich with external threat intelligence (if requested and API key available)
+      if (enrich === 'true' && topThreateningIPs.length > 0) {
+        topThreateningIPs = await enrichIPThreatData(topThreateningIPs);
+      }
 
       const topThreateningUsers = Array.from(userThreatMap.values())
         .map(user => ({
@@ -509,7 +629,8 @@ export default function createSecurityRoutes(_pgPool) {
             total_alerts: data.length,
             unique_ips: ipThreatMap.size,
             unique_users: userThreatMap.size,
-            period_days: parseInt(days)
+            period_days: parseInt(days),
+            external_enrichment: enrich === 'true'
           },
           top_threatening_ips: topThreateningIPs,
           top_threatening_users: topThreateningUsers,

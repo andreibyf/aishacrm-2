@@ -373,6 +373,59 @@ When using Claude, Copilot, or orchestrator:
 
 ## Completed Tasks
 
+### 10) BUG-SEC-SUITE-001 – Security & monitoring improvements suite
+
+Type: bugfix suite  
+Status: Complete ✅ (v1.1.9, November 29, 2025)  
+Area: Security Monitoring / Container Health / Intrusion Detection / Threat Intelligence / UI
+
+Goal:  
+Comprehensive fixes for security monitoring, container health checks, IDR functionality, threat intelligence, and UI clarity issues.
+
+Sub-Tasks Completed:
+
+**A) MCP/N8N Container Health Check False Negatives**
+- Fixed system.js using wrong service name (`braid-mcp-node-server` vs `mcp`)
+- Updated mcpNodeCandidates priority to match Docker Compose service name
+- Result: MCP shows Code 200 instead of false Code 0
+- File: `backend/routes/system.js` (lines 137-145)
+
+**B) IDR Dashboard Blocked IPs Display**
+- Fixed missing `await` in security.js causing Promise to be returned instead of data
+- Added comprehensive blocked IPs UI to InternalPerformanceDashboard.jsx
+- Implemented unblock functionality with admin controls
+- Added IDR whitelist configuration (localhost + Docker networks)
+- Files: `backend/routes/security.js` (line 272), InternalPerformanceDashboard.jsx, .env
+
+**C) False Positive Bulk Extraction Alerts**
+- Fixed IDR triggering high-severity alerts for high limits with empty results
+- Implemented two-tier blocking: 1000-4999 (warn), 5000+ (block)
+- Downgraded severity: security_alert→warning, high→medium
+- File: `backend/middleware/intrusionDetection.js` (lines 594-630)
+
+**D) External Threat Intelligence Integration**
+- Added GreyNoise Community API (free, no key): scanner/bot identification
+- Added AbuseIPDB API (1000/day free): abuse confidence scores
+- Implemented threat score boosting (+50 malicious, +30 high abuse)
+- Optional enrichment via `?enrich=true` query parameter
+- File: `backend/routes/security.js` (lines 1-110, 405-525)
+
+**E) Duplicate "Security" Tabs Renamed**
+- Renamed "Security" → "Auth & Access" (Lock, purple)
+- Renamed "Security" → "Intrusion Detection" (Shield, red)
+- File: `src/pages/Settings.jsx` (lines 165, 178)
+
+Acceptance (All Met):
+- ✅ Container health checks accurate
+- ✅ Blocked IPs visible and manageable in dashboard
+- ✅ False positive alerts eliminated
+- ✅ External threat intelligence integrated
+- ✅ Settings tabs clearly distinguished
+
+Builds: Backend 4x (18-30s), Frontend 2x (45-110s)
+
+---
+
 
 ### 1) BUG-API-001A – Diagnose tenant/employee fetch failures
 

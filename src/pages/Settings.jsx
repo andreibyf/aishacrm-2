@@ -162,7 +162,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
       // System Configuration
       { id: 'modules', label: 'Module Settings', icon: LayoutGrid, color: 'slate', roles: ['superadmin'] },
       { id: 'cron', label: 'Cron Jobs', icon: Clock, color: 'yellow', roles: ['superadmin'] },
-      { id: 'security', label: 'Security', icon: Lock, color: 'purple', roles: ['superadmin'] },
+      { id: 'security', label: 'Auth & Access', icon: Lock, color: 'purple', roles: ['superadmin'] },
       { id: 'apikeys', label: 'API Keys', icon: Key, color: 'green', roles: ['superadmin'] },
       { id: 'announcements', label: 'Announcements', icon: Megaphone, color: 'slate', roles: ['superadmin'] },
 
@@ -175,7 +175,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
       { id: 'cache-monitor', label: 'Cache Monitor', icon: Database, color: 'emerald', roles: ['superadmin'] },
       { id: 'sync-health', label: 'Sync Health', icon: RefreshCw, color: 'emerald', roles: ['superadmin'] },
       { id: 'mcp-monitor', label: 'MCP Monitor', icon: Server, color: 'emerald', roles: ['superadmin'] },
-      { id: 'security-monitor', label: 'Security', icon: Shield, color: 'red', roles: ['superadmin'] },
+      { id: 'security-monitor', label: 'Intrusion Detection', icon: Shield, color: 'red', roles: ['superadmin'] },
       { id: 'rate-limits', label: 'Rate Limits', icon: Lock, color: 'orange', roles: ['superadmin'] },
       { id: 'system-health', label: 'System Health', icon: Activity, color: 'emerald', roles: ['superadmin'] },
       { id: 'system-logs', label: 'System Logs', icon: FileText, color: 'slate', roles: ['superadmin'] },
