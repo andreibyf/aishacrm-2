@@ -31,7 +31,7 @@
     "dist"
   ],
   "overrides": {
-    "form-data": "^4.0.4"
+    "form-data": "4.0.5"
   },
   "n8n": {
     "n8nNodesApiVersion": 1,
