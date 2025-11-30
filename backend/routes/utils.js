@@ -57,7 +57,7 @@ export default function createUtilsRoutes(_pgPool) {
   // POST /api/utils/generate-unique-id - Generate human-readable unique ID
   router.post('/generate-unique-id', async (req, res) => {
     try {
-      const { entity_type, tenant_id } = req.body;
+      const { entity_type, tenant_id: _tenantId } = req.body;
 
       if (!entity_type) {
         return res.status(400).json({ 

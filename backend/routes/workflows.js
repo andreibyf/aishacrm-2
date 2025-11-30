@@ -532,7 +532,7 @@ export default function createWorkflowRoutes(pgPool) {
             // AI nodes via MCP-first, provider stubs
             case 'ai_classify_opportunity_stage': {
               const provider = (cfg.provider || 'mcp').toLowerCase();
-              const model = cfg.model || 'default';
+              const _model = cfg.model || 'default';
               const text = String(replaceVariables(cfg.text || ''));
               let output = { stage: 'unknown', confidence: 0.0, provider };
               try {

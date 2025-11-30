@@ -61,7 +61,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         setSelectedNodeId(workflow.nodes[0].id);
       }
     }
-  }, [workflow?.id]); // Depend on workflow.id to avoid infinite loops
+  }, [workflow]);
 
   useEffect(() => {
     if (!workflow && nodes.length === 0) {

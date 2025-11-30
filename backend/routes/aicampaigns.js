@@ -78,7 +78,7 @@ export default function createAICampaignRoutes(pgPool) {
         RETURNING *
       `;
       const values = [tenant_id, name, status, description, target_contacts, performance_metrics, metadata];
-      const result = await pgPool.query(insert, values);
+      const result = await pgPool.query(query, values);
       const created = result.rows[0];
       // Fire-and-forget webhook (optional)
       emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.created', { id: created.id, name: created.name, status: created.status }).catch(() => undefined);

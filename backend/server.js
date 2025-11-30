@@ -27,7 +27,7 @@ app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
 // Initialize Database
-const { pgPool, dbConnectionType, ipv4FirstApplied } = await initDatabase(app);
+const { pgPool, dbConnectionType, ipv4FirstApplied: _ipv4FirstApplied } = await initDatabase(app);
 
 // Initialize Services (Redis, Cache, Perf Log Batcher)
 await initServices(app, pgPool);

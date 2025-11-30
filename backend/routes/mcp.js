@@ -1199,8 +1199,6 @@ export default function createMCPRoutes(_pgPool) {
       new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))
     ]);
     
-    // Track individual errors for better diagnostics
-    const errors = [];
     const attempts = baseCandidates.map(base => (async () => {
       const url = base.replace(/\/$/, '') + '/mcp/run';
       const t0 = performance.now ? performance.now() : Date.now();

@@ -28,7 +28,7 @@ async function safeCount(_pgPool, table, tenantId, filterBuilder, options = {}) 
     if (tenantId) {
       try {
         query = query.eq('tenant_id', tenantId);
-      } catch (e) {
+      } catch {
         /* ignore: table may not have tenant_id */ void 0;
       }
     }
@@ -36,7 +36,7 @@ async function safeCount(_pgPool, table, tenantId, filterBuilder, options = {}) 
       try {
         // When toggle OFF: exclude test data (show only real data)
         query = query.or('is_test_data.is.false,is_test_data.is.null');
-      } catch (e) {
+      } catch {
         /* ignore: table may not have is_test_data */ void 0;
       }
     }
@@ -57,19 +57,19 @@ async function safeCount(_pgPool, table, tenantId, filterBuilder, options = {}) 
       try {
         let exact = supabase.from(table).select('*', { count: 'exact', head: true });
         if (tenantId) {
-          try { exact = exact.eq('tenant_id', tenantId); } catch (e) { /* ignore */ void 0; }
+          try { exact = exact.eq('tenant_id', tenantId); } catch { /* ignore */ void 0; }
         }
         if (!includeTestData) {
           try {
             exact = exact.or('is_test_data.is.false,is_test_data.is.null');
-          } catch (e) { /* ignore */ void 0; }
+          } catch { /* ignore */ void 0; }
         }
         if (typeof filterBuilder === 'function') {
-          try { exact = filterBuilder(exact) || exact; } catch (e) { /* ignore */ void 0; }
+          try { exact = filterBuilder(exact) || exact; } catch { /* ignore */ void 0; }
         }
         const { count: exactCount } = await exact;
         return exactCount ?? plannedCount;
-      } catch (e) {
+      } catch {
         // fall back to planned on error
         return plannedCount;
       }
@@ -292,7 +292,7 @@ export default function createReportRoutes(_pgPool) {
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
           q = q.gte('created_date', sinceISO);
           if (!includeTestData) {
-            try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch (e) { /* ignore */ void 0; }
+            try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ void 0; }
           }
           const { count } = await q;
           return count ?? 0;

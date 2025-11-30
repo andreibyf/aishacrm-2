@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import WorkflowNode from './WorkflowNode';
 
 export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDeleteNode, onConnect, onSelectNode, selectedNodeId }) {
@@ -24,10 +24,6 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
     setConnectingFrom(nodeId);
   };
 
-  const getNodeConnections = (nodeId) => {
-    return connections.filter(c => c.from === nodeId);
-  };
-
   // Drag handlers
   const handleDragStart = (nodeId, e) => {
     e.stopPropagation();
@@ -49,7 +45,7 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
     setDragOffset({ x: offsetX, y: offsetY });
   };
 
-  const handleDragMove = (e) => {
+  const handleDragMove = useCallback((e) => {
     if (!draggingNode) return;
 
     const canvas = canvasRef.current;
@@ -70,12 +66,12 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
         y: Math.max(0, newY)
       }
     });
-  };
+  }, [draggingNode, dragOffset, onUpdateNode]);
 
-  const handleDragEnd = () => {
+  const handleDragEnd = useCallback(() => {
     setDraggingNode(null);
     setDragOffset({ x: 0, y: 0 });
-  };
+  }, []);
 
   // Add mouse event listeners for dragging
   useEffect(() => {
@@ -87,7 +83,7 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
         window.removeEventListener('mouseup', handleDragEnd);
       };
     }
-  }, [draggingNode, dragOffset]);
+  }, [draggingNode, handleDragMove, handleDragEnd]);
 
   // Update node positions when nodes or DOM changes
   useEffect(() => {
@@ -287,7 +283,7 @@ export default function WorkflowCanvas({ nodes, connections, onUpdateNode, onDel
         )}
 
         {/* Nodes with absolute positioning */}
-        {nodes.map((node, index) => {
+        {nodes.map((node) => {
           return (
             <div
               key={node.id}

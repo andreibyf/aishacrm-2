@@ -161,18 +161,4 @@ export async function authenticateRequest(req, _res, next) {
   }
 }
 
-// Optional, minimal preview helpers for diagnostics (non-sensitive)
-function previewHeaders(headers = {}) {
-  try {
-    const auth = headers.authorization || '';
-    return {
-      hasAuthorization: !!auth,
-      authPreview: auth ? (auth.startsWith('Bearer ') ? (auth.substring(7, 19) + '...') : auth.slice(0, 12) + '...') : null,
-      userAgent: headers['user-agent'] || null,
-    };
-  } catch {
-    return { error: 'header_preview_failed' };
-  }
-}
-
 export default { authenticateRequest };

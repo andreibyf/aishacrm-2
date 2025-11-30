@@ -1,4 +1,4 @@
-import { initMemoryClient as initMemory, isMemoryAvailable, getMemoryClient } from '../lib/memoryClient.js';
+import { initMemoryClient as initMemory } from '../lib/memoryClient.js';
 import cacheManager from '../lib/cacheManager.js';
 import { initializePerformanceLogBatcher } from '../lib/perfLogBatcher.js';
 import { pool as perfLogPool } from '../lib/supabase-db.js';

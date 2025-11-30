@@ -48,7 +48,7 @@ function resolveBuildVersion() {
   let fileVersion = null;
   try {
     fileVersion = fs.readFileSync('/app/VERSION', 'utf8');
-  } catch (e) {
+  } catch {
     fileVersion = null;
   }
   if (fileVersion && fileVersion.trim()) return fileVersion.trim();

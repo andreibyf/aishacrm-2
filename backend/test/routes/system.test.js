@@ -9,7 +9,6 @@ import { initSupabaseForTests } from '../setup.js';
 let app;
 const testPort = 3101;
 let server;
-let supabaseAvailable = false;
 
 async function request(method, path, body) {
   const res = await fetch(`http://localhost:${testPort}${path}`, {
@@ -23,7 +22,7 @@ async function request(method, path, body) {
 describe('System Routes', () => {
   before(async () => {
     // Initialize Supabase if credentials are available
-    supabaseAvailable = await initSupabaseForTests();
+    await initSupabaseForTests();
     
     const express = (await import('express')).default;
     const createSystemRoutes = (await import('../../routes/system.js')).default;
