@@ -104,9 +104,7 @@ Acceptance:
 
 ## Status
 
-- BRAIN-001: Complete ✅ (docs/AI_BRAIN.md created; schema defined; ARCHITECTURE.md references pending cross-link)  
-- BRAIN-002: Complete ✅ (`backend/lib/aiBrain.js` implemented with `runTask` enforcing Phase 1 policies)  
-- BRAIN-003: Complete ✅ (`POST /api/ai/brain-test` internal endpoint added in `backend/routes/ai.js` with key protection)
+All Brain Phase 1 tasks are complete (see Completed Tasks section below).
 
 
 
@@ -481,6 +479,21 @@ When using Claude, Copilot, or orchestrator:
 
 
 ## Completed Tasks
+
+### BRAIN-001 – Document the AI Brain
+Status: Complete ✅  
+Area: Architecture / Docs  
+Summary: Added `docs/AI_BRAIN.md` defining implementation (OpenAI + Braid MCP + read/create/update tools), input schema (tenant_id, user_id, task_type, context, mode) and output schema (summary, insights, proposed_actions, requires_confirmation). Pending optional cross-link in `ARCHITECTURE.md`.
+
+### BRAIN-002 – Implement aiBrain module (wrapper around MCP)
+Status: Complete ✅  
+Area: Backend  
+Summary: Implemented `backend/lib/aiBrain.js` with `runTask({ tenantId, userId, taskType, context, mode })`. Enforces Phase 1 policies (no delete, no autonomous apply). Centralizes tool invocation; UUID validation and tenant resolution via canonical resolver.
+
+### BRAIN-003 – Add internal API endpoint for Brain experiments
+Status: Complete ✅  
+Area: Backend API  
+Summary: Added protected `POST /api/ai/brain-test` endpoint in `backend/routes/ai.js` requiring `X-Internal-AI-Key`. Routes requests through `aiBrain.runTask` and returns structured Brain output for controlled internal testing.
 
 ### 10) BUG-SEC-SUITE-001 – Security & monitoring improvements suite
 
