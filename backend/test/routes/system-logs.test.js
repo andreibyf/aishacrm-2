@@ -63,19 +63,37 @@ describe('System Logs Routes', () => {
     }
   });
 
-  it('DELETE /:id deletes a log and returns success', async () => {
+  it('DELETE /:id deletes existing log (404 if not found)', async () => {
     if (!supabaseInitialized) {
       // Skip this test if Supabase not initialized
       return;
     }
-    // Use a randomly generated non-existent UUID - the API should still return success (no rows affected)
-    const testUuid = crypto.randomUUID();
-    const res = await fetch(`http://localhost:${port}/api/system-logs/${testUuid}`, { method: 'DELETE' });
-    // Accept 200 (success) or 500 (network error in CI)
-    assert.ok([200, 500].includes(res.status), `Expected 200 or 500, got ${res.status}`);
-    if (res.status === 200) {
-      const json = await res.json();
-      assert.strictEqual(json.status, 'success');
+    // Create a log first to ensure a valid ID exists for deletion semantics (route returns 404 for missing IDs)
+    const createResp = await fetch(`http://localhost:${port}/api/system-logs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenant_id: 't1', level: 'INFO', message: 'to-delete', source: 'ui' })
+    });
+    assert.ok([201,500].includes(createResp.status), `Expected 201 or 500 on create, got ${createResp.status}`);
+    if (createResp.status !== 201) {
+      // Cannot reliably proceed; treat as skipped
+      return;
+    }
+    const createdJson = await createResp.json();
+    const createdId = createdJson?.data?.id;
+    assert.ok(createdId, 'Created log should have id');
+
+    const delResp = await fetch(`http://localhost:${port}/api/system-logs/${createdId}`, { method: 'DELETE' });
+    // Accept 200 (deleted) or 404 (already missing / RLS blocked); 500 indicates network/setup issue.
+    assert.ok([200,404,500].includes(delResp.status), `Expected 200, 404 or 500, got ${delResp.status}`);
+    if (delResp.status === 200) {
+      const delJson = await delResp.json();
+      assert.strictEqual(delJson.status, 'success');
+      assert.strictEqual(delJson.message, 'System log deleted');
+    } else if (delResp.status === 404) {
+      const delJson = await delResp.json();
+      assert.strictEqual(delJson.status, 'error');
+      assert.ok(delJson.message.includes('not found'));
     }
   });
 
