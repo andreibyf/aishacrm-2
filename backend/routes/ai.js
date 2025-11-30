@@ -8,6 +8,7 @@ import { createChatCompletion, buildSystemPrompt, getOpenAIClient } from '../lib
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { summarizeToolResult, BRAID_SYSTEM_PROMPT, generateToolSchemas, executeBraidTool } from '../lib/braidIntegration-v2.js';
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
+import { runTask } from '../lib/aiBrain.js';
 
 export default function createAIRoutes(pgPool) {
   const router = express.Router();
@@ -39,6 +40,111 @@ export default function createAIRoutes(pgPool) {
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
+
+  /**
+   * POST /api/ai/brain-test
+   * Internal-only endpoint for exercising the AI Brain during Phase 1 (Foundation)
+   */
+  router.post('/brain-test', async (req, res) => {
+    const startedAt = Date.now();
+    try {
+      const expectedKey = process.env.INTERNAL_AI_TEST_KEY;
+      if (!expectedKey) {
+        console.error('[AI Brain Test] INTERNAL_AI_TEST_KEY is not configured');
+        return res.status(500).json({
+          status: 'error',
+          message: 'INTERNAL_AI_TEST_KEY is not configured on server',
+        });
+      }
+
+      const providedKey = req.get('X-Internal-AI-Key');
+      if (!providedKey || providedKey !== expectedKey) {
+        console.warn('[AI Brain Test] Unauthorized attempt rejected');
+        return res.status(401).json({
+          status: 'error',
+          message: 'Unauthorized: Invalid or missing X-Internal-AI-Key header',
+        });
+      }
+
+      const { tenant_id, user_id, task_type, context, mode } = req.body || {};
+
+      if (!tenant_id || !user_id || !task_type || !mode) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Missing required fields: tenant_id, user_id, task_type, mode',
+        });
+      }
+
+      const result = await runTask({
+        tenantId: tenant_id,
+        userId: user_id,
+        taskType: task_type,
+        context: context || {},
+        mode,
+      });
+
+      return res.json({
+        status: 'success',
+        data: result,
+      });
+    } catch (error) {
+      const statusCode = error?.statusCode || 500;
+      console.error('[AI Brain Test] Error', {
+        message: error?.message,
+        statusCode,
+        durationMs: Date.now() - startedAt,
+      });
+      return res.status(statusCode).json({
+        status: 'error',
+        message: error?.message || 'Internal server error',
+      });
+    }
+  });
+
+  /*
+    ---- AI Brain Test curl examples ----
+    1) Read-only mode
+       curl -X POST https://app.aishacrm.com/api/ai/brain-test \
+         -H "Content-Type: application/json" \
+         -H "X-Internal-AI-Key: <AI_KEY>" \
+         -d '{
+           "tenant_id": "<TENANT_ID>",
+           "user_id": "<USER_ID>",
+           "task_type": "summarize_entity",
+           "mode": "read_only",
+           "context": { "entity": "leads" }
+         }'
+
+    2) Propose actions mode
+       curl -X POST https://app.aishacrm.com/api/ai/brain-test \
+         -H "Content-Type: application/json" \
+         -H "X-Internal-AI-Key: <AI_KEY>" \
+         -d '{
+           "tenant_id": "<TENANT_ID>",
+           "user_id": "<USER_ID>",
+           "task_type": "improve_followups",
+           "mode": "propose_actions",
+           "context": {
+             "entity": "leads",
+             "criteria": "stale_leads"
+           }
+         }'
+
+    3) apply_allowed (expected 501)
+       curl -X POST https://app.aishacrm.com/api/ai/brain-test \
+         -H "Content-Type: application/json" \
+         -H "X-Internal-AI-Key: <AI_KEY>" \
+         -d '{
+           "tenant_id": "<TENANT_ID>",
+           "user_id": "<USER_ID>",
+           "task_type": "update_records",
+           "mode": "apply_allowed",
+           "context": {
+             "entity": "leads",
+             "changes": { "status": "in_progress" }
+           }
+         }'
+  */
 
   const parseMetadata = (value) => {
     if (!value) return {};

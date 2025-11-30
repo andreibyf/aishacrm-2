@@ -1,18 +1,115 @@
-# AiSHA CRM – Orchestra Plan (Dashboard Bugfixes)
+# AiSHA CRM – Orchestra Plan (AI Brain v0 Using Braid MCP)
 
 ## Current Goal
 
-Type: bugfix  
-Title: Stabilize Dashboard loading and performance
+Type: feature (internal)  
+Title: Promote Braid MCP + OpenAI into the official AiSHA “Brain” layer
 
 Description:  
-The Dashboard must reliably load for authenticated users with a valid tenant and display stats in a timely manner. Current issues include:
-- Dashboard failing to load due to backend “Authentication required” errors.
-- Slow loading of dashboard cards and stats.
+We already have OpenAI integrated with the Braid MCP server and CRM CRUD tools (no delete). The goal of this phase is to:
 
-This phase is strictly bugfix work. No new Dashboard features, layout redesign, or metric expansions.
+- Understand the goal in docs/AI_BRAIN.md
+- Learn the the phases in orchestra\phases and use in conjuntion with this plan
+- Wrap that capability in a single `aiBrain` module in the backend.
+- Define a clear input/output schema for all AI tasks.
+- Route all future AI features through this Brain interface.
+
+
+** No new user-visible features in this phase; this is a structural upgrade.
 
 ---
+
+## Execution Rules
+
+- Do NOT change existing REST/CRUD behavior.
+- Do NOT introduce autonomous writes yet.
+- Only add:
+  - AI brain wrapper module.
+  - Documentation.
+  - A small internal API for experimentation.
+
+---
+
+## Active Tasks
+
+### BRAIN-001 – Document the AI Brain
+
+Area: Architecture / Docs
+
+Steps:
+- Create `docs/AI_BRAIN.md` describing:
+  - Brain implementation: OpenAI + Braid MCP + CRM tools (no delete).
+  - Task input schema (task_type, tenant_id, user_id, context, mode).
+  - Result schema (summary, insights, proposed_actions, requires_confirmation).
+- Link this doc from `ARCHITECTURE.md`.
+
+Acceptance:
+- AI Brain is referenced as a first-class component in docs.
+- Input/output schema is stable enough to implement.
+
+---
+
+### BRAIN-002 – Implement aiBrain module (wrapper around MCP)
+
+Area: Backend
+
+Steps:
+- Add `backend/src/ai/aiBrain.ts` (or equivalent) with:
+  - `runTask({ tenantId, userId, taskType, context, mode })`.
+  - Internal call to the existing OpenAI+Braid MCP setup.
+  - Enforcement of “no delete” policy at the module boundary (defensive).
+- Ensure **no other backend code calls MCP directly**; they must go through `aiBrain`.
+
+Acceptance:
+- Single entrypoint for all future AI features: `aiBrain.runTask`.
+- No new behavior changes; only refactor MCP usage to go through this module.
+
+---
+
+### BRAIN-003 – Add internal API endpoint for Brain experiments
+
+Area: Backend API
+
+Steps:
+- Add an internal-only endpoint, e.g. `POST /api/internal/ai/brain-test`:
+  - Accepts: `taskType`, `context`, `mode`.
+  - Calls `aiBrain.runTask`.
+  - Returns Brain output as JSON.
+- Protected by:
+  - Internal flag, or
+  - Admin-only access.
+
+Acceptance:
+- You can hit a single endpoint to:
+  - Exercise the Brain over live data.
+  - Inspect structured AI outputs without UI changes.
+
+---
+
+## Testing & Validation
+
+- Manual:
+  - Call `/api/internal/ai/brain-test` with:
+    - Task: summarize tenant’s open leads.
+    - Task: propose follow-ups for one account.
+  - Confirm:
+    - Responses respect tenant boundaries.
+    - No delete operations are included in proposed actions.
+
+- Structural:
+  - Search codebase to ensure:
+    - MCP / OpenAI is invoked only inside `aiBrain` (except legacy code you intentionally leave alone but mark as deprecated).
+
+---
+
+## Status
+
+- BRAIN-001: Not started  
+- BRAIN-002: Not started  
+- BRAIN-003: Not started
+
+
+
 
 ## Execution Rules (Critical)
 

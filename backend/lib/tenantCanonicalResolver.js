@@ -89,7 +89,7 @@ export async function resolveCanonicalTenant(identifier) {
         .single();
       if (error && error.code !== 'PGRST116') throw error;
       if (data) {
-        const result = { uuid: data.id, slug: data.tenant_id || data.id, source: 'db-id', found: true };
+        const result = { uuid: data.id, slug: data.tenant_id || null, source: 'db-id', found: true };
         setCached(input, result);
         return result;
       }

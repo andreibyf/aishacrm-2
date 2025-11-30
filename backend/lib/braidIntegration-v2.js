@@ -13,7 +13,7 @@ const TOOLS_DIR = path.join(__dirname, '..', '..', 'braid-llm-kit', 'examples', 
 /**
  * Tool Registry - Maps tool names to Braid files
  */
-const TOOL_REGISTRY = {
+export const TOOL_REGISTRY = {
   // Data Snapshot
   fetch_tenant_snapshot: { file: 'snapshot.braid', function: 'fetchSnapshot', policy: 'READ_ONLY' },
   debug_probe: { file: 'snapshot.braid', function: 'probe', policy: 'READ_ONLY' },
@@ -166,10 +166,15 @@ export function summarizeToolResult(result, toolName) {
 /**
  * Generate OpenAI tool schemas from all registered Braid tools
  */
-export async function generateToolSchemas() {
+export async function generateToolSchemas(allowedTools = null) {
   const schemas = [];
   console.log('[Braid] Generating tool schemas from', TOOLS_DIR);
-  for (const [toolName, config] of Object.entries(TOOL_REGISTRY)) {
+  const filterSet = normalizeToolFilter(allowedTools);
+  const registryEntries = Object.entries(TOOL_REGISTRY).filter(([name]) => !name.startsWith('delete_'));
+  for (const [toolName, config] of registryEntries) {
+    if (filterSet && !filterSet.has(toolName)) {
+      continue;
+    }
     const braidPath = path.join(TOOLS_DIR, config.file);
     try {
       console.log(`[Braid] Loading schema: ${toolName} -> ${braidPath}#${config.function}`);
@@ -188,6 +193,13 @@ export async function generateToolSchemas() {
   }
   console.log(`[Braid] Loaded ${schemas.length} tool schemas`);
   return schemas;
+}
+
+function normalizeToolFilter(allowedTools) {
+  if (!allowedTools) return null;
+  if (allowedTools instanceof Set) return allowedTools;
+  if (Array.isArray(allowedTools)) return new Set(allowedTools);
+  return null;
 }
 
 /**
