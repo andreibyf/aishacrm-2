@@ -1,5 +1,26 @@
 # AiSHA CRM – Orchestra Plan (AI Brain v0 Using Braid MCP)
 
+## Current Task – Phase 2A Conversational Core
+
+Phase 2A (Conversational Core) is now the active feature phase. All prior Brain Phase 1 tasks are completed and documented in Completed Tasks. Platform health bugfix suite is stabilized; feature work shifts to introducing the right-side AI conversational layer without replacing existing UI.
+
+Reference full scoped plan in `orchestra/PLAN_PHASE2A_CONVERSATIONAL_CORE.md` (kept separate for clarity). Key constraints:
+
+- Modes limited to `read_only` and `propose_actions` when invoking `aiBrain.runTask`.
+- No autonomous writes (`apply_allowed`) and no delete_* tool execution.
+- Zero database schema changes; purely UI + thin intent mapping + safe Brain calls.
+
+Active Phase 2A Task IDs:
+- PH2A-CORE-001 (AI Assistant Panel UI)
+- PH2A-CORE-002 (Basic Chat Wiring)
+- PH2A-CORE-003 (Intent Mapping Layer)
+- PH2A-CORE-004 (Conversational Forms – propose only)
+- PH2A-CORE-005 (Voice Input – speech-to-text)
+
+All are currently Not started. Select exactly one to begin; keep changes surgical and aligned with `ARCHITECTURE.md` and `CONVENTIONS.md`.
+
+---
+
 ## Current Goal
 
 Type: feature (internal)  
