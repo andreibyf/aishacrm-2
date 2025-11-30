@@ -104,9 +104,9 @@ Acceptance:
 
 ## Status
 
-- BRAIN-001: Not started  
-- BRAIN-002: Not started  
-- BRAIN-003: Not started
+- BRAIN-001: Complete ✅ (docs/AI_BRAIN.md created; schema defined; ARCHITECTURE.md references pending cross-link)  
+- BRAIN-002: Complete ✅ (`backend/lib/aiBrain.js` implemented with `runTask` enforcing Phase 1 policies)  
+- BRAIN-003: Complete ✅ (`POST /api/ai/brain-test` internal endpoint added in `backend/routes/ai.js` with key protection)
 
 
 
