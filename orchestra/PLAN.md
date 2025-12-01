@@ -853,41 +853,53 @@ Every change must:
 
 ### BUG-AI-001 – Fix Braid snapshot tool tenant propagation
 
-**Status**: Active 🔴  
+**Status**: Complete ✅ (v2.0.1, December 1, 2025)  
 **Priority**: Medium  
 **Area**: AI Routes / Braid Tool Integration
 
 **Goal**:  
 Fix `/api/ai/snapshot-internal` endpoint to properly resolve tenant context so Braid tools can fetch CRM data.
 
-**Symptoms**:
-- LLM tool `fetch_tenant_snapshot` returns 400 error during chat
-- Error: "Valid tenant_id required" despite valid chat session with tenant
-- Core chat/persistence works, but AI cannot access CRM data for insights
+**Resolution Summary**:
+- Added tenant resolution to snapshot endpoint using canonical resolver with PGRST205 handling
+- Flattened accounts schema to align dev database with production (phone, email, assigned_to, address fields)
+- Updated 30+ test files from legacy slug "local-tenant-001" to UUID format "a11dfb63-4b18-4eb8-872e-747af2e37c46"
+- Removed description field from accounts routes (unstructured data belongs in metadata JSONB)
+- Validated end-to-end: AI assistant successfully retrieves CRM data via Braid tools
 
-**Root Cause**:
-- Snapshot endpoint missing tenant validation guard present in `/chat` route
-- No tenant context propagated from chat request to Braid tool execution
+**Implementation Details**:
+1. **Tenant Resolution** (backend/routes/ai.js lines 920-946):
+   - Extract tenant from `x-tenant-id` header or `tenant_id` query parameter using `getTenantId()`
+   - Call `resolveCanonicalTenant()` with PGRST205 error handling
+   - Map to flat `tenantRecord` format: `{ id: uuid, tenant_id: slug, source, found }`
+   - Validation guard: return 400 if `!tenantRecord?.id`
+2. **Schema Alignment** (APPLY_ACCOUNTS_FLATTEN.sql):
+   - Added contact fields: phone (TEXT), email (TEXT), assigned_to (TEXT)
+   - Added address fields: street, city, state, zip, country (all TEXT)
+   - Added employee_count (INTEGER)
+   - Created indexes: idx_accounts_phone, idx_accounts_email, idx_accounts_assigned_to, idx_accounts_city, idx_accounts_employee_count
+3. **Test Data Consistency** (30+ files):
+   - Updated E2E tests: tests/e2e/helpers.ts (TENANT_ID constant), auth.setup.js, all spec files
+   - Updated backend tests: backend/test/*.test.js (8 files)
+   - Updated utility scripts: seed-test-data.js, seed-won-deals.js, test-activities.js, etc.
 
-**Steps**:
-1. Add tenant resolution to `/api/ai/snapshot-internal` route:
-   - Import `getTenantId` and canonical resolver
-   - Extract tenant from headers/session using same pattern as `/chat` route
-   - Call `resolveCanonicalTenant` with extracted identifier
-   - Map result to `tenantRecord` using flat format (`uuid → id`, `slug → tenant_id`)
-2. Add validation guard:
-   - `if (!tenantRecord?.id) return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' })`
-3. Pass tenant context to CRM queries in snapshot endpoint
-4. Test with curl: `POST /api/ai/snapshot-internal` with x-tenant-id header
+**Verification**:
+- Created test account: `POST /api/accounts` → 201 with flattened fields populated
+- Snapshot query: `GET /api/ai/snapshot-internal` → 200 with account data (phone, email, assigned_to, city, state)
+- AI chat test: "Get phone and email for Furst Neulead" → Successful response with contact details
+- Tool execution: `fetch_tenant_snapshot` returned `{"tag":"Ok"}` with CRM data
 
-**Acceptance Criteria**:
-- Snapshot endpoint accepts tenant via header and resolves correctly
-- Braid tools can fetch CRM data during chat sessions
-- Returns 400 only when tenant genuinely missing (not resolution issue)
-- Chat with tool execution completes successfully
+**Files Modified**:
+- `backend/routes/ai.js` - tenant resolution for snapshot endpoint
+- `backend/lib/tenantCanonicalResolver.js` - PGRST205 error handling
+- `backend/routes/accounts.js` - removed description field (4 locations)
+- `backend/migrations/APPLY_ACCOUNTS_FLATTEN.sql` - schema migration
+- 30+ test files - UUID tenant format update
 
-**Files to Modify**:
-- `backend/routes/ai.js` - add tenant resolution to `/api/ai/snapshot-internal` route
+**Git Operations**:
+- Commit: 701d1b9 (40 files changed, +619/-191 lines)
+- Tag: v2.0.1
+- Pushed: December 1, 2025
 
 ---
 

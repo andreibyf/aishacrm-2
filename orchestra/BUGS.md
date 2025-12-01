@@ -113,10 +113,11 @@ Notes:
 
 ### BUG-AI-001 – Braid snapshot tool fails with 400 (missing tenant)
 
-Status: Active 🔴  
+Status: Resolved ✅  
 Priority: Medium  
 Area: AI Routes / Braid Tool Integration / Tenant Resolution  
 Detected: December 1, 2025
+Resolution: December 1, 2025 (v2.0.1)
 
 Symptoms:
 - AI chat with LLM tool execution returns 400 error when calling `fetch_tenant_snapshot` tool
@@ -125,41 +126,55 @@ Symptoms:
 - Core chat persistence works (savedMessage.id returned), but LLM cannot execute Braid CRM tools
 
 Root Cause:
-- `/api/ai/snapshot-internal` endpoint does not have tenant validation guard like `/api/ai/chat`
-- When Braid executor calls snapshot endpoint, no `x-tenant-id` header propagated from original chat request
-- Endpoint expects tenant context but doesn't resolve it from request metadata
+- `/api/ai/snapshot-internal` endpoint did not have tenant validation guard like `/api/ai/chat`
+- When Braid executor called snapshot endpoint, no `x-tenant-id` header propagated from original chat request
+- Endpoint expected tenant context but didn't resolve it from request metadata
+
+Resolution (December 1, 2025):
+- **Added tenant resolution to `/api/ai/snapshot-internal` route** (backend/routes/ai.js lines 920-946):
+  - Imported `getTenantId` helper and `resolveCanonicalTenant` from tenantCanonicalResolver
+  - Extract tenant identifier from `x-tenant-id` header or `tenant_id` query parameter
+  - Call canonical resolver with proper PGRST205 error handling
+  - Map result to flat `tenantRecord` format (`uuid → id`, `slug → tenant_id`)
+  - Added validation guard: `if (!tenantRecord?.id) return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' })`
+- **Flattened accounts schema** (backend/migrations/APPLY_ACCOUNTS_FLATTEN.sql):
+  - Added contact fields: phone, email, assigned_to
+  - Added address fields: street, city, state, zip, country
+  - Added numeric field: employee_count
+  - Created indexes for frequently queried columns
+  - Removed description field from routes (unstructured data in metadata JSONB)
+- **Updated all test data to UUID format** (30+ files):
+  - Changed from legacy slug "local-tenant-001" to UUID "a11dfb63-4b18-4eb8-872e-747af2e37c46"
+  - Ensures consistent tenant isolation across E2E, unit, and integration tests
+
+Verification:
+- Created test account via POST /api/accounts with flattened fields: phone, email, assigned_to, city, state, country
+- Snapshot endpoint returned 200 OK with account data: `{"accounts":[{"id":"...","phone":"+1-555-0100","email":"contact@testcompany.com","assigned_to":"abyfield@4vdataconsulting.com"}]}`
+- AI chat successfully retrieved lead phone/email via Braid tools: "The contact details for Furst Neulead are: Phone Number: +1 954-715-7273, Email: contact@testbeta.com"
+- Tool execution: `{"tool":"fetch_tenant_snapshot","args":{"tenant":"a11dfb63-4b18-4eb8-872e-747af2e37c46","scope":"accounts"},"result_preview":"{\"tag\":\"Ok\"}"}`
 
 Impact:
-- AI assistant cannot fetch CRM data (accounts, leads, contacts, activities) to answer user questions
-- Reduces assistant usefulness to conversation-only (no data insights)
-- Non-blocking for core chat/persistence functionality
-
-Expected Behavior:
-- Braid tool calls should inherit tenant context from parent chat request
-- Snapshot endpoint should resolve tenant from:
-  1. `x-tenant-id` header (if passed by tool executor)
-  2. Conversation metadata (if conversation_id provided)
-  3. User session context (authenticated user's tenant)
-
-Proposed Fix:
-- Add tenant resolution to `/api/ai/snapshot-internal` route (backend/routes/ai.js)
-- Use same `getTenantId` + `resolveTenantRecord` pattern as `/chat` route (lines ~775-795)
-- Add tenant validation guard: `if (!tenantRecord?.id) return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' })`
-- Pass tenant context to Braid executor so tools can include it in internal API calls
+- AI assistant can now fetch CRM data (accounts, leads, contacts, activities) to answer user questions
+- Snapshot endpoint properly resolves tenant from various sources (header, query, session)
+- Test data consistency enforced across entire codebase
+- Dev database schema aligned with production (accounts table flattened)
 
 Files Affected:
-- `backend/routes/ai.js` - `/api/ai/snapshot-internal` route (add tenant resolution)
-- Possibly `backend/lib/braidIntegration-v2.js` - ensure tool calls include tenant context
+- `backend/routes/ai.js` - added tenant resolution to `/api/ai/snapshot-internal` route (lines 920-946)
+- `backend/lib/tenantCanonicalResolver.js` - PGRST205 error handling for missing tenants
+- `backend/routes/accounts.js` - removed description field from POST/PUT routes
+- `backend/migrations/APPLY_ACCOUNTS_FLATTEN.sql` - schema flattening migration
+- 30+ test files - updated TENANT_ID from slug to UUID format
 
 Related Context:
-- See BUG-AI-002 for similar UUID/tenant_id resolution fix in resolveTenantRecord
 - Tenant resolution uses canonical flat format: `{ uuid, slug, source, found }`
 - System tenant UUID: `a11dfb63-4b18-4eb8-872e-747af2e37c46`
+- PGRST205 error handling prevents 404 cascades when tenant table missing
 
 Notes:
-- Low priority since core chat works, but limits AI assistant value proposition
-- Should be fixed before promoting realtime voice (Phase 2C) to production
-- Test with curl: `POST /api/ai/snapshot-internal` with and without tenant headers
+- Fixed as part of comprehensive session addressing tenant resolution, schema alignment, and test data consistency
+- End-to-end validation confirms AI assistant value proposition restored
+- Realtime voice (Phase 2C) can proceed with confidence in tenant-aware tool execution
 
 ---
 
