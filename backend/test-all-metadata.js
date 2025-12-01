@@ -14,7 +14,7 @@
  */
 
 const BASE_URL = 'http://localhost:3001';
-const TENANT_ID = 'local-tenant-001';
+const TENANT_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 const TEST_USER = 'admin@aishacrm.com';
 
 // Test counter

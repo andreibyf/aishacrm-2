@@ -138,7 +138,11 @@ export default function createAIRoutes(pgPool) {
       const apiKey = process.env.ELEVENLABS_API_KEY;
       const voiceId = process.env.ELEVENLABS_VOICE_ID;
       if (!apiKey || !voiceId) {
-        return res.status(400).json({ status: 'error', message: 'ElevenLabs not configured' });
+        console.warn('[AI][TTS] ElevenLabs configuration missing');
+        return res.status(503).json({
+          status: 'error',
+          message: 'TTS service not configured (missing API key or Voice ID)'
+        });
       }
       const content = (text || '').toString().slice(0, 4000);
       if (!content) return res.status(400).json({ status: 'error', message: 'Text required' });
@@ -612,7 +616,6 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
           }
         });
       }
-
       const executedTools = [];
       let assistantResponded = false;
       let conversationMessages = [...messages];
@@ -782,11 +785,12 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       const result = await resolveCanonicalTenant(key);
       
       // Convert canonical result to expected format
-      if (result && result.found && result.tenant) {
+      // resolveCanonicalTenant returns { uuid, slug, source, found }
+      if (result && result.found && result.uuid) {
         return {
-          id: result.tenant.id,
-          tenant_id: result.tenant.tenant_id,
-          name: result.tenant.name
+          id: result.uuid,           // UUID primary key
+          tenant_id: result.slug,    // text business identifier
+          name: result.slug          // use slug as name fallback
         };
       }
       
@@ -875,34 +879,34 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
         return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
       }
 
-  // Fetch accounts
+      // Fetch accounts (select all columns with wildcard)
       const { data: accounts, error: accErr } = await supa
         .from('accounts')
-        .select('id, name, annual_revenue, industry, website, email, phone, assigned_to, metadata')
+        .select('*')
         .eq('tenant_id', tenantRecord.tenant_id)
         .limit(100);
       if (accErr) throw accErr;
 
-      // Fetch leads (phone, job_title are direct columns)
+      // Fetch leads
       const { data: leads, error: leadsErr } = await supa
         .from('leads')
-        .select('id, first_name, last_name, email, company, status, source, phone, job_title, assigned_to')
+        .select('*')
         .eq('tenant_id', tenantRecord.tenant_id)
         .limit(100);
       if (leadsErr) throw leadsErr;
 
-  // Fetch contacts (phone, job_title, assigned_to are direct columns)
+      // Fetch contacts
       const { data: contacts, error: contactsErr } = await supa
         .from('contacts')
-        .select('id, first_name, last_name, email, phone, job_title, account_id, assigned_to, metadata')
+        .select('*')
         .eq('tenant_id', tenantRecord.tenant_id)
         .limit(100);
       if (contactsErr) throw contactsErr;
 
-      // Fetch opportunities (include description, assigned_to)
+      // Fetch opportunities
       const { data: opportunities, error: oppsErr } = await supa
         .from('opportunities')
-        .select('id, name, amount, stage, probability, close_date, description, account_id, contact_id, assigned_to')
+        .select('*')
         .eq('tenant_id', tenantRecord.tenant_id)
         .limit(100);
       if (oppsErr) throw oppsErr;
@@ -910,7 +914,7 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       // Fetch activities
       const { data: activities, error: actsErr } = await supa
         .from('activities')
-        .select('id, type, subject, status, due_date, assigned_to')
+        .select('*')
         .eq('tenant_id', tenantRecord.tenant_id)
         .limit(100);
       if (actsErr) throw actsErr;
@@ -1546,109 +1550,173 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
   // POST /api/ai/chat - AI chat completion
   router.post('/chat', async (req, res) => {
     try {
-  const { messages = [], model = process.env.DEFAULT_OPENAI_MODEL || 'gpt-4o-mini', temperature = 0.7, tenantName } = req.body || {};
-
-      // Basic validation
+      const { messages = [], model = DEFAULT_CHAT_MODEL, temperature = 0.7 } = req.body || {};
       if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ status: 'error', message: 'messages array is required' });
       }
 
-      // Ensure we have a system message at the start
-      let msgs = messages;
-      const hasSystem = msgs[0]?.role === 'system';
-      if (!hasSystem) {
-        msgs = [{ role: 'system', content: buildSystemPrompt({ tenantName }) }, ...messages];
-      }
-
-      // Resolve API key priority: explicit in body > tenant integration > backend env
-  let apiKey = req.body?.api_key || null;
       const tenantIdentifier = getTenantId(req);
-  const tenantRecord = tenantIdentifier ? await resolveTenantRecord(tenantIdentifier) : null;
-  const tenantSlug = tenantRecord?.tenant_id || tenantIdentifier || null;
-      // Allow explicit header override (avoids putting key in body for some clients)
-      if (!apiKey && req.headers['x-openai-key']) {
-        apiKey = req.headers['x-openai-key'];
-      }
-      if (!apiKey && tenantSlug) {
-        try {
-          const { data: ti, error } = await supa
-            .from('tenant_integrations')
-            .select('api_credentials, integration_type')
-            .eq('tenant_id', tenantSlug)
-            .eq('is_active', true)
-            .in('integration_type', ['openai_llm'])
-            .order('updated_at', { ascending: false, nullsFirst: false })
-            .order('created_at', { ascending: false })
-            .limit(1);
-          if (error) throw error;
-          if (ti?.length) {
-            const creds = ti[0].api_credentials || {};
-            apiKey = creds.api_key || creds.apiKey || null;
-          }
-        } catch (e) {
-          console.warn('[ai.chat] Failed to fetch tenant OpenAI integration:', e.message || e);
-        }
-      }
-      // Fall back to authenticated user system settings if present
-      if (!apiKey && req.user?.system_openai_settings?.openai_api_key) {
-        apiKey = req.user.system_openai_settings.openai_api_key;
+      const tenantRecord = await resolveTenantRecord(tenantIdentifier);
+
+      // Enforce tenant context for any chat (tools require tenant isolation)
+      if (!tenantRecord?.id) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Valid tenant_id required (x-tenant-id header)',
+        });
       }
 
-      // Fall back to system settings table
-      if (!apiKey) {
-        try {
-          const { data, error } = await supa
-            .from('system_settings')
-            .select('settings')
-            .not('settings', 'is', null)
-            .limit(1);
-          if (error) throw error;
-          if (data?.length) {
-            const settings = data[0].settings;
-            const systemOpenAI = typeof settings === 'object' 
-              ? settings.system_openai_settings 
-              : JSON.parse(settings || '{}').system_openai_settings;
-            if (systemOpenAI?.enabled && systemOpenAI?.openai_api_key) {
-              apiKey = systemOpenAI.openai_api_key;
+      const apiKey = await resolveTenantOpenAiKey({
+        explicitKey: req.body?.api_key,
+        headerKey: req.headers['x-openai-key'],
+        userKey: req.user?.system_openai_settings?.openai_api_key,
+        tenantSlug: tenantRecord?.tenant_id || tenantIdentifier || null,
+      });
+
+      const client = getOpenAIClient(apiKey || process.env.OPENAI_API_KEY);
+      if (!client) {
+        return res.status(501).json({ status: 'error', message: 'OpenAI API key not configured' });
+      }
+
+      const tenantName = tenantRecord?.name || tenantRecord?.tenant_id || 'CRM Tenant';
+      const systemPrompt = `${buildSystemPrompt({ tenantName })}\n\n${BRAID_SYSTEM_PROMPT}\n\n- ALWAYS call fetch_tenant_snapshot before answering tenant data questions.\n- NEVER hallucinate records; only reference tool data.\n`;
+
+      const convoMessages = [
+        { role: 'system', content: systemPrompt },
+        ...messages.filter(m => m && m.role && m.content)
+      ];
+
+      const tools = await generateToolSchemas();
+      if (!tools || tools.length === 0) {
+        tools.push({
+          type: 'function',
+          function: {
+            name: 'fetch_tenant_snapshot',
+            description: 'Retrieve CRM snapshot (accounts, leads, contacts, opportunities, activities). Use before answering tenant data questions.',
+            parameters: {
+              type: 'object',
+              properties: {
+                scope: { type: 'string', description: 'Optional single category to fetch' },
+                limit: { type: 'integer', description: 'Max records per category (1-10)', minimum: 1, maximum: 10 }
+              }
             }
           }
-        } catch (error) {
-          console.warn('[ai.chat] Failed to resolve system settings:', error.message || error);
+        });
+      }
+
+      const toolInteractions = [];
+      let finalContent = '';
+      let finalUsage = null;
+      let finalModel = model;
+      let loopMessages = [...convoMessages];
+
+      for (let i = 0; i < MAX_TOOL_ITERATIONS; i += 1) {
+        const completion = await client.chat.completions.create({
+          model: finalModel,
+          messages: loopMessages,
+          temperature,
+          tools,
+          tool_choice: 'auto'
+        });
+
+        const choice = completion.choices?.[0];
+        const message = choice?.message;
+        if (!message) break;
+
+        finalUsage = completion.usage;
+        finalModel = completion.model;
+
+        const toolCalls = message.tool_calls || [];
+        if (toolCalls.length === 0) {
+          finalContent = message.content || '';
+          break;
+        }
+
+        loopMessages.push({
+          role: 'assistant',
+          content: message.content || '',
+          tool_calls: toolCalls.map(call => ({
+            id: call.id,
+            type: call.type,
+            function: {
+              name: call.function?.name,
+              arguments: call.function?.arguments
+            }
+          }))
+        });
+
+        for (const call of toolCalls) {
+          const toolName = call.function?.name;
+          let args = {};
+          try {
+            args = call.function?.arguments ? JSON.parse(call.function.arguments) : {};
+          } catch {
+            args = {};
+          }
+
+          let toolResult;
+          try {
+            toolResult = await executeBraidTool(toolName, args, tenantRecord, req.user?.email || null);
+          } catch (err) {
+            toolResult = { error: err.message || String(err) };
+          }
+
+          toolInteractions.push({ tool: toolName, args, result_preview: typeof toolResult === 'string' ? toolResult.slice(0, 400) : JSON.stringify(toolResult).slice(0, 400) });
+          const summary = summarizeToolResult(toolResult, toolName);
+          const toolContent = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
+          loopMessages.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            content: `${summary}\n\n--- Raw Data ---\n${toolContent}`
+          });
         }
       }
 
-      const result = await createChatCompletion({ messages: msgs, model, temperature, apiKey });
-      if (result.status === 'error') {
-        const http = /OPENAI_API_KEY|not configured/i.test(result.error || '') ? 501 : 500; // 501 if key missing
-        return res.status(http).json({ status: 'error', message: result.error });
+      if (!finalContent) {
+        finalContent = 'I could not generate a response right now. Please try again shortly.';
       }
 
-      // Optional: persist assistant reply if a conversation_id was provided
+      // Optional persistence if conversation_id supplied
       const { conversation_id } = req.body || {};
       let savedMessage = null;
-      if (conversation_id && result.content) {
+      if (conversation_id) {
         try {
-          const { data: ins, error } = await supa
-            .from('conversation_messages')
-            .insert({ conversation_id, role: 'assistant', content: result.content, metadata: { model } })
-            .select()
+          // Validate conversation ownership
+          const { data: convCheck, error: convErr } = await supa
+            .from('conversations')
+            .select('id')
+            .eq('id', conversation_id)
+            .eq('tenant_id', tenantRecord.id)
             .single();
-          if (!error) savedMessage = ins || null;
-        } catch (err) {
-          console.warn('[ai.chat] Failed to persist assistant message:', err.message || err);
+          if (!convErr && convCheck?.id) {
+            savedMessage = await insertAssistantMessage(conversation_id, finalContent, {
+              model: finalModel,
+              usage: finalUsage,
+              tool_interactions: toolInteractions,
+              persisted_via: 'chat_endpoint'
+            });
+          }
+        } catch (persistErr) {
+          console.warn('[ai.chat] Persistence failed:', persistErr?.message || persistErr);
         }
       }
 
       return res.json({
         status: 'success',
+        response: finalContent,
+        usage: finalUsage,
+        model: finalModel,
+        tool_interactions: toolInteractions,
+        savedMessage: savedMessage ? { id: savedMessage.id } : null,
         data: {
-          response: result.content,
-          usage: result.usage,
-          model: result.model,
-          savedMessage
+          response: finalContent,
+          usage: finalUsage,
+          model: finalModel,
+          tool_interactions: toolInteractions
         }
       });
     } catch (error) {
+      console.error('[ai.chat] Error:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

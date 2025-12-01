@@ -58,8 +58,8 @@ setup('authenticate as superadmin', async ({ page, request }) => {
       origins: [{
         origin: BASE_URL,
         localStorage: [
-          { name: 'tenant_id', value: 'local-tenant-001' },
-          { name: 'selected_tenant_id', value: 'local-tenant-001' },
+          { name: 'tenant_id', value: 'a11dfb63-4b18-4eb8-872e-747af2e37c46' },
+          { name: 'selected_tenant_id', value: 'a11dfb63-4b18-4eb8-872e-747af2e37c46' },
           { name: 'mock_auth_mode', value: 'true' },
           { name: 'mock_superadmin', value: 'dev@localhost' }
         ]
@@ -92,8 +92,8 @@ setup('authenticate as superadmin', async ({ page, request }) => {
   
   // Remove E2E mock mode - use real cookie auth instead
   await page.addInitScript(() => {
-    localStorage.setItem('tenant_id', 'local-tenant-001');
-    localStorage.setItem('selected_tenant_id', 'local-tenant-001');
+    localStorage.setItem('tenant_id', 'a11dfb63-4b18-4eb8-872e-747af2e37c46');
+    localStorage.setItem('selected_tenant_id', 'a11dfb63-4b18-4eb8-872e-747af2e37c46');
     console.log('[Auth Setup] Tenant context initialized for real auth');
   });
   
@@ -206,8 +206,8 @@ setup('authenticate as superadmin', async ({ page, request }) => {
         {
           origin: BASE_URL,
           localStorage: [
-            { name: 'tenant_id', value: 'local-tenant-001' },
-            { name: 'selected_tenant_id', value: 'local-tenant-001' },
+            { name: 'tenant_id', value: 'a11dfb63-4b18-4eb8-872e-747af2e37c46' },
+            { name: 'selected_tenant_id', value: 'a11dfb63-4b18-4eb8-872e-747af2e37c46' },
             { name: 'mock_auth_mode', value: 'true' },
             { name: 'mock_superadmin', value: SUPERADMIN_EMAIL || 'dev@localhost' }
           ]

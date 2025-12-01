@@ -177,8 +177,9 @@ export default function createAccountRoutes(_pgPool) {
   // POST /api/accounts - Create account (invalidate cache)
   router.post("/", invalidateCache('accounts'), async (req, res) => {
     try {
-      const { tenant_id, name, type, industry, website, phone, email, description, 
-              annual_revenue, employee_count, street, city, state, zip, country, metadata, ...otherFields } = req.body;
+      const { tenant_id, name, type, industry, website, phone, email, 
+        annual_revenue, employee_count, street, city, state, zip, country,
+        assigned_to, metadata, ...otherFields } = req.body;
 
       if (!tenant_id) {
         return res.status(400).json({
@@ -194,19 +195,10 @@ export default function createAccountRoutes(_pgPool) {
         });
       }
 
-      // Store phone, email, description, employee_count, address fields in metadata since they may not be direct columns
-      const combinedMetadata = {
+      // Store only truly custom fields in metadata (not standard columns)
+      const customMetadata = {
         ...(metadata || {}),
-        ...otherFields,
-        ...(phone !== undefined && phone !== null ? { phone } : {}),
-        ...(email !== undefined && email !== null ? { email } : {}),
-        ...(description !== undefined && description !== null ? { description } : {}),
-        ...(employee_count !== undefined && employee_count !== null ? { employee_count } : {}),
-        ...(street !== undefined && street !== null ? { street } : {}),
-        ...(city !== undefined && city !== null ? { city } : {}),
-        ...(state !== undefined && state !== null ? { state } : {}),
-        ...(zip !== undefined && zip !== null ? { zip } : {}),
-        ...(country !== undefined && country !== null ? { country } : {}),
+        ...otherFields, // Any extra fields not in the schema
       };
 
       const nowIso = new Date().toISOString();
@@ -220,8 +212,17 @@ export default function createAccountRoutes(_pgPool) {
           type,
           industry,
           website,
+          phone: phone || null,
+          email: email || null,
           annual_revenue: annual_revenue || null,
-          metadata: combinedMetadata,
+          employee_count: employee_count || null,
+          street: street || null,
+          city: city || null,
+          state: state || null,
+          zip: zip || null,
+          country: country || null,
+          assigned_to: assigned_to || null,
+          metadata: customMetadata,
           created_at: nowIso,
           updated_at: nowIso,
         }])
@@ -350,9 +351,9 @@ export default function createAccountRoutes(_pgPool) {
   router.put("/:id", invalidateCache('accounts'), async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, type, industry, website, phone, email, description,
-              annual_revenue, employee_count, street, city, state, zip, country,
-              metadata, ...otherFields } = req.body;
+      const { name, type, industry, website, phone, email,
+        annual_revenue, employee_count, street, city, state, zip, country,
+        assigned_to, metadata, ...otherFields } = req.body;
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
@@ -369,29 +370,35 @@ export default function createAccountRoutes(_pgPool) {
       }
       if (fetchErr) throw new Error(fetchErr.message);
 
-      // Store phone, email, description, employee_count, address fields in metadata since they may not be direct columns
+      // Store only truly custom fields in metadata (not standard columns)
       const currentMetadata = current?.metadata || {};
       const updatedMetadata = {
         ...currentMetadata,
         ...(metadata || {}),
-        ...otherFields,
-        ...(phone !== undefined ? { phone } : {}),
-        ...(email !== undefined ? { email } : {}),
-        ...(description !== undefined ? { description } : {}),
-        ...(employee_count !== undefined ? { employee_count } : {}),
-        ...(street !== undefined ? { street } : {}),
-        ...(city !== undefined ? { city } : {}),
-        ...(state !== undefined ? { state } : {}),
-        ...(zip !== undefined ? { zip } : {}),
-        ...(country !== undefined ? { country } : {}),
+        ...otherFields, // Any extra fields not in the schema
       };
 
-      const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
+      const payload = {
+        metadata: updatedMetadata,
+        updated_at: new Date().toISOString()
+      };
+
+      // Update column fields directly
       if (name !== undefined) payload.name = name;
       if (type !== undefined) payload.type = type;
       if (industry !== undefined) payload.industry = industry;
       if (website !== undefined) payload.website = website;
+      if (phone !== undefined) payload.phone = phone;
+      if (email !== undefined) payload.email = email;
+      // description removed - keep in metadata for unstructured data
       if (annual_revenue !== undefined) payload.annual_revenue = annual_revenue;
+      if (employee_count !== undefined) payload.employee_count = employee_count;
+      if (street !== undefined) payload.street = street;
+      if (city !== undefined) payload.city = city;
+      if (state !== undefined) payload.state = state;
+      if (zip !== undefined) payload.zip = zip;
+      if (country !== undefined) payload.country = country;
+      if (assigned_to !== undefined) payload.assigned_to = assigned_to;
 
       const { data, error } = await supabase
         .from('accounts')

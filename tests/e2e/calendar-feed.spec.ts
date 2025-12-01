@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || 'http://localhost:4001';
-const TENANT_ID = 'local-tenant-001';
+const TENANT_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 
 test.describe('@smoke Calendar Feed', () => {
   test('calendar feed returns array of activities', async ({ request }) => {

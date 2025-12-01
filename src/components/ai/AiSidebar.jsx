@@ -255,6 +255,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   const [draft, setDraft] = useState('');
   const [draftOrigin, setDraftOrigin] = useState('text');
   const [voiceWarning, setVoiceWarning] = useState(null);
+  const [isContinuousMode, setIsContinuousMode] = useState(true); // Default to continuous conversation
   const bottomMarkerRef = useRef(null);
   const [isRealtimeEnabled, setRealtimeEnabled] = useState(false);
   const [realtimeError, setRealtimeError] = useState(null);
@@ -496,13 +497,23 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   const { isRecording, isTranscribing, error: speechError, startRecording, stopRecording } = useSpeechInput({
     onFinalTranscript: handleVoiceTranscript
   });
+
+  const handleSpeechEnded = useCallback(() => {
+    if (isContinuousMode && !isRecording && !isSending) {
+      // Small delay to ensure natural turn-taking
+      setTimeout(() => {
+        startRecording();
+      }, 300);
+    }
+  }, [isContinuousMode, isRecording, isSending, startRecording]);
+
   const {
     playText: playSpeech,
     stopPlayback,
     isLoading: isSpeechLoading,
     isPlaying: isSpeechPlaying,
     error: speechPlaybackError
-  } = useSpeechOutput();
+  } = useSpeechOutput({ onEnded: handleSpeechEnded });
   const [activeSpeechMessageId, setActiveSpeechMessageId] = useState(null);
   const [autoPlayMessageId, setAutoPlayMessageId] = useState(null);
 
@@ -899,11 +910,25 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                 {speechPlaybackError && <div className="text-amber-600 dark:text-amber-300">Voice playback error: {String(speechPlaybackError.message || speechPlaybackError)}</div>}
                 <div>
                   {isTranscribing && <span>Transcribing...</span>}
+                    {isContinuousMode && !isRecording && !isSending && !isSpeechPlaying && (
+                      <span className="ml-2 text-[10px] opacity-70">(Continuous mode active)</span>
+                    )}
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
+                    variant="ghost"
+                    size="sm"
+                    className={`h-8 px-2 text-xs ${isContinuousMode ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 dark:text-indigo-300' : 'text-slate-500'}`}
+                    onClick={() => setIsContinuousMode(!isContinuousMode)}
+                    title={isContinuousMode ? 'Disable continuous conversation' : 'Enable continuous conversation'}
+                  >
+                    <RefreshCw className={`h-3 w-3 mr-1 ${isContinuousMode ? '' : 'opacity-50'}`} />
+                    {isContinuousMode ? 'Loop On' : 'Loop Off'}
+                  </Button>
+                  <Button
+                    type="button"
                   variant={isRecording ? 'destructive' : 'outline'}
                   onPointerDown={handlePressToTalkStart}
                   onPointerUp={handlePressToTalkEnd}

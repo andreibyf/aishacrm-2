@@ -50,7 +50,7 @@ async function testEmployeesList(tenantId) {
 async function go() {
   log(colors.blue, '\nKey Endpoints Smoke Tests');
   await testHeartbeat('abyfield@4vdataconsulting.com');
-  await testEmployeesList('local-tenant-001');
+  await testEmployeesList('a11dfb63-4b18-4eb8-872e-747af2e37c46');
 }
 
 go().catch(err => {

@@ -35,7 +35,7 @@ interface RouteCommandOptions {
 
 const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
 
-const localIntentSet = new Set<IntentClassification['intent']>(['list_records', 'activities', 'tasks']);
+const localIntentSet = new Set<IntentClassification['intent']>([]); // Disabled to force Braid tool usage for all data queries
 const brainIntentSet = new Set<IntentClassification['intent']>(['summaries', 'forecast']);
 
 const defaultBrainCaller = async (payload: BrainRequestPayload) => {

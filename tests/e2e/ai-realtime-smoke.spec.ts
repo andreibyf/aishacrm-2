@@ -85,11 +85,11 @@ const mockPeerInitScript = () => {
 
 const mockSupportInitScript = () => {
   localStorage.setItem('E2E_TEST_MODE', 'true');
-  localStorage.setItem('selected_tenant_id', 'local-tenant-001');
-  localStorage.setItem('tenant_id', 'local-tenant-001');
+  localStorage.setItem('selected_tenant_id', 'a11dfb63-4b18-4eb8-872e-747af2e37c46');
+  localStorage.setItem('tenant_id', 'a11dfb63-4b18-4eb8-872e-747af2e37c46');
   localStorage.setItem('FORCE_MOCK_USER', 'true');
   localStorage.setItem('ENABLE_REALTIME_TELEMETRY_LOGS', 'true');
-  (window as any).__e2eUser = { id: 'realtime-e2e', email: 'realtime@spec.test', role: 'superadmin', tenant_id: 'local-tenant-001' };
+  (window as any).__e2eUser = { id: 'realtime-e2e', email: 'realtime@spec.test', role: 'superadmin', tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46' };
 };
 
 test.describe('@smoke Realtime voice toggle', () => {

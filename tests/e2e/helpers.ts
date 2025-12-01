@@ -54,13 +54,13 @@ export async function navigate(page: Page, path: string) {
 export async function initE2EUi(page: Page) {
   await page.context().addInitScript(() => {
     localStorage.setItem('E2E_TEST_MODE', 'true');
-    localStorage.setItem('tenant_id', 'local-tenant-001');
-    localStorage.setItem('selected_tenant_id', 'local-tenant-001');
+    localStorage.setItem('tenant_id', 'a11dfb63-4b18-4eb8-872e-747af2e37c46');
+    localStorage.setItem('selected_tenant_id', 'a11dfb63-4b18-4eb8-872e-747af2e37c46');
     (window as any).__e2eUser = {
-      id: 'e2e-test-user-id',
+      id: 'e2e-test-user',
       email: 'e2e@example.com',
       role: 'superadmin',
-      tenant_id: 'local-tenant-001'
+      tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46'
     };
   });
 }

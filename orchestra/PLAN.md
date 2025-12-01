@@ -851,6 +851,46 @@ Every change must:
 
 ## Active Tasks
 
+### BUG-AI-001 – Fix Braid snapshot tool tenant propagation
+
+**Status**: Active 🔴  
+**Priority**: Medium  
+**Area**: AI Routes / Braid Tool Integration
+
+**Goal**:  
+Fix `/api/ai/snapshot-internal` endpoint to properly resolve tenant context so Braid tools can fetch CRM data.
+
+**Symptoms**:
+- LLM tool `fetch_tenant_snapshot` returns 400 error during chat
+- Error: "Valid tenant_id required" despite valid chat session with tenant
+- Core chat/persistence works, but AI cannot access CRM data for insights
+
+**Root Cause**:
+- Snapshot endpoint missing tenant validation guard present in `/chat` route
+- No tenant context propagated from chat request to Braid tool execution
+
+**Steps**:
+1. Add tenant resolution to `/api/ai/snapshot-internal` route:
+   - Import `getTenantId` and canonical resolver
+   - Extract tenant from headers/session using same pattern as `/chat` route
+   - Call `resolveCanonicalTenant` with extracted identifier
+   - Map result to `tenantRecord` using flat format (`uuid → id`, `slug → tenant_id`)
+2. Add validation guard:
+   - `if (!tenantRecord?.id) return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' })`
+3. Pass tenant context to CRM queries in snapshot endpoint
+4. Test with curl: `POST /api/ai/snapshot-internal` with x-tenant-id header
+
+**Acceptance Criteria**:
+- Snapshot endpoint accepts tenant via header and resolves correctly
+- Braid tools can fetch CRM data during chat sessions
+- Returns 400 only when tenant genuinely missing (not resolution issue)
+- Chat with tool execution completes successfully
+
+**Files to Modify**:
+- `backend/routes/ai.js` - add tenant resolution to `/api/ai/snapshot-internal` route
+
+---
+
 ## CRUD Health Tests
 
 ### BUG-CRUD-001 – Auth failures for CRUD health tests (Contacts, Leads, Accounts, Lists)

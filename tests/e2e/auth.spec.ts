@@ -17,7 +17,7 @@ test.describe('@smoke Auth', () => {
   test('unauthenticated context cannot access protected API', async ({ browser }) => {
     const context = await browser.newContext({ storageState: undefined });
     const page = await context.newPage();
-    const resp = await page.request.get(BACKEND_URL + '/api/leads?tenant_id=local-tenant-001');
+    const resp = await page.request.get(BACKEND_URL + '/api/leads?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46');
     // Expect 401/403 or empty guarded response
     expect([401,403,200]).toContain(resp.status());
     if (resp.status() === 200) {

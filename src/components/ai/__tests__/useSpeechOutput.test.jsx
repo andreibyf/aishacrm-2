@@ -32,7 +32,26 @@ beforeEach(() => {
     }
   }
 
-  globalThis.Audio = MockAudio;
+  const mockSpeechSynthesis = {
+    cancel: vi.fn(),
+    getVoices: vi.fn().mockReturnValue([]),
+    speak: vi.fn(),
+    speaking: false,
+  };
+
+  globalThis.speechSynthesis = mockSpeechSynthesis;
+  if (typeof window !== 'undefined') {
+    window.speechSynthesis = mockSpeechSynthesis;
+  }
+
+  globalThis.SpeechSynthesisUtterance = vi.fn().mockImplementation(() => ({
+    voice: null,
+    rate: 1,
+    pitch: 1,
+    onstart: null,
+    onend: null,
+    onerror: null,
+  }));
 });
 
 afterEach(() => {
@@ -44,6 +63,11 @@ afterEach(() => {
   }
   if (originalRevokeObjectURL) {
     globalThis.URL.revokeObjectURL = originalRevokeObjectURL;
+  }
+  delete globalThis.speechSynthesis;
+  delete globalThis.SpeechSynthesisUtterance;
+  if (typeof window !== 'undefined') {
+    delete window.speechSynthesis;
   }
 });
 
@@ -70,8 +94,11 @@ describe('useSpeechOutput', () => {
     expect(result.current.isPlaying).toBe(false);
   });
 
-  it('captures TTS errors for the UI', async () => {
+  it('captures TTS errors for the UI when fallback also fails', async () => {
     globalThis.fetch.mockResolvedValueOnce({ ok: false, status: 500 });
+    // Mock fallback failure by removing speechSynthesis
+    delete globalThis.speechSynthesis;
+
     const { result } = renderHook(() => useSpeechOutput());
 
     let caughtError;
@@ -83,22 +110,45 @@ describe('useSpeechOutput', () => {
       }
     });
 
-    expect(caughtError).toBeInstanceOf(Error);
     expect(result.current.error).toBeInstanceOf(Error);
     expect(result.current.isPlaying).toBe(false);
   });
 
-  it('rejects when the TTS response is not audio', async () => {
+  it('uses fallback when backend TTS fails', async () => {
+    globalThis.fetch.mockResolvedValueOnce({ ok: false, status: 500 });
+    const { result } = renderHook(() => useSpeechOutput());
+
+    await act(async () => {
+      await result.current.playText('fallback case');
+    });
+
+    // Should call window.speechSynthesis.speak
+    expect(globalThis.speechSynthesis.speak).toHaveBeenCalled();
+    // Should not have error
+    expect(result.current.error).toBeNull();
+    expect(result.current.isPlaying).toBe(true);
+  });
+
+  it('rejects when the TTS response is not audio and fallback fails', async () => {
     globalThis.fetch.mockResolvedValueOnce({
       ok: true,
       headers: { get: () => 'application/json' },
       text: async () => JSON.stringify({ message: 'ElevenLabs not configured' })
     });
+    // Mock fallback failure
+    delete globalThis.speechSynthesis;
 
     const { result } = renderHook(() => useSpeechOutput());
 
     await act(async () => {
-      await expect(result.current.playText('hello')).rejects.toThrow('ElevenLabs not configured');
+      // It might not reject the promise anymore if it catches internally, 
+      // but since we removed speechSynthesis, the catch block inside useSpeechOutput 
+      // will catch the "Browser TTS not supported" error and set state.
+      // However, playText re-throws if fallback fails? 
+      // Looking at my code: 
+      // } catch (fallbackErr) { ... setError(...) }
+      // It does NOT rethrow in the fallback catch block.
+      await result.current.playText('hello');
     });
 
     expect(result.current.error).toBeInstanceOf(Error);

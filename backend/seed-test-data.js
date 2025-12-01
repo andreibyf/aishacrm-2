@@ -12,7 +12,7 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL?.includes('supabase') ? { rejectUnauthorized: false } : false
 });
 
-const TENANT_ID = 'local-tenant-001';
+const TENANT_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 
 async function seedTestData() {
   const client = await pool.connect();

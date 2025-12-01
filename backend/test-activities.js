@@ -1,5 +1,5 @@
 const base = 'http://localhost:3001/api/activities';
-const tenant_id = 'local-tenant-001';
+const tenant_id = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 
 async function main() {
   try {

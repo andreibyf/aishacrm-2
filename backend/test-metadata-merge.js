@@ -5,7 +5,7 @@
 import fetch from 'node-fetch';
 
 const BACKEND_URL = 'http://localhost:3001';
-const TEST_TENANT_ID = 'local-tenant-001'; // Updated to match actual tenant
+const TEST_TENANT_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46'; // Updated to match actual tenant
 
 const colors = {
   green: '\x1b[32m',

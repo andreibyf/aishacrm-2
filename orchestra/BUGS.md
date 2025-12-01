@@ -109,6 +109,60 @@ Notes:
 
 ---
 
+## AI & Integrations
+
+### BUG-AI-001 – Braid snapshot tool fails with 400 (missing tenant)
+
+Status: Active 🔴  
+Priority: Medium  
+Area: AI Routes / Braid Tool Integration / Tenant Resolution  
+Detected: December 1, 2025
+
+Symptoms:
+- AI chat with LLM tool execution returns 400 error when calling `fetch_tenant_snapshot` tool
+- Tool interaction error: `{"tag":"Err","error":{"type":"NetworkError","status":400}}`
+- Tool execution: `POST /api/ai/snapshot-internal` → 400 "Valid tenant_id required"
+- Core chat persistence works (savedMessage.id returned), but LLM cannot execute Braid CRM tools
+
+Root Cause:
+- `/api/ai/snapshot-internal` endpoint does not have tenant validation guard like `/api/ai/chat`
+- When Braid executor calls snapshot endpoint, no `x-tenant-id` header propagated from original chat request
+- Endpoint expects tenant context but doesn't resolve it from request metadata
+
+Impact:
+- AI assistant cannot fetch CRM data (accounts, leads, contacts, activities) to answer user questions
+- Reduces assistant usefulness to conversation-only (no data insights)
+- Non-blocking for core chat/persistence functionality
+
+Expected Behavior:
+- Braid tool calls should inherit tenant context from parent chat request
+- Snapshot endpoint should resolve tenant from:
+  1. `x-tenant-id` header (if passed by tool executor)
+  2. Conversation metadata (if conversation_id provided)
+  3. User session context (authenticated user's tenant)
+
+Proposed Fix:
+- Add tenant resolution to `/api/ai/snapshot-internal` route (backend/routes/ai.js)
+- Use same `getTenantId` + `resolveTenantRecord` pattern as `/chat` route (lines ~775-795)
+- Add tenant validation guard: `if (!tenantRecord?.id) return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' })`
+- Pass tenant context to Braid executor so tools can include it in internal API calls
+
+Files Affected:
+- `backend/routes/ai.js` - `/api/ai/snapshot-internal` route (add tenant resolution)
+- Possibly `backend/lib/braidIntegration-v2.js` - ensure tool calls include tenant context
+
+Related Context:
+- See BUG-AI-002 for similar UUID/tenant_id resolution fix in resolveTenantRecord
+- Tenant resolution uses canonical flat format: `{ uuid, slug, source, found }`
+- System tenant UUID: `a11dfb63-4b18-4eb8-872e-747af2e37c46`
+
+Notes:
+- Low priority since core chat works, but limits AI assistant value proposition
+- Should be fixed before promoting realtime voice (Phase 2C) to production
+- Test with curl: `POST /api/ai/snapshot-internal` with and without tenant headers
+
+---
+
 ## Security & Monitoring
 
 ### BUG-SEC-001 – MCP service health check false negatives

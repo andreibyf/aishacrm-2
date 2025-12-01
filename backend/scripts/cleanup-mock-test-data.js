@@ -34,7 +34,7 @@ const EXECUTE_MODE = process.argv.includes('--execute');
 
 // Mock/test patterns to identify
 const MOCK_USER_IDS = ['local-dev-user-001'];
-const MOCK_TENANT_IDS = ['local-tenant-001'];
+const MOCK_TENANT_IDS = ['a11dfb63-4b18-4eb8-872e-747af2e37c46'];
 const TEST_EMAIL_PATTERNS = [
   'dev@localhost',
   '%test@%',

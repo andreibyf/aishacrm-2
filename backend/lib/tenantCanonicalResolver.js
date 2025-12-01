@@ -81,12 +81,26 @@ export async function resolveCanonicalTenant(identifier) {
   // UUID path
   if (isUuid(input)) {
     try {
-      const { data, error } = await supa
-        .from('tenant')
+      // Primary lookup against canonical table name 'tenants' (schema uses plural elsewhere)
+      let { data, error } = await supa
+        .from('tenants')
         .select('id, tenant_id')
         .eq('id', input)
         .limit(1)
         .single();
+
+      // Fallback for legacy singular table name if plural not found
+      // PGRST116 = no rows found, PGRST205 = table not found in schema
+      if ((error && (error.code === 'PGRST116' || error.code === 'PGRST205')) || (!data && !error)) {
+        const legacy = await supa
+          .from('tenant')
+          .select('id, tenant_id')
+          .eq('id', input)
+          .limit(1)
+          .single();
+        data = legacy.data;
+        error = legacy.error;
+      }
       if (error && error.code !== 'PGRST116') throw error;
       if (data) {
         const result = { uuid: data.id, slug: data.tenant_id || null, source: 'db-id', found: true };
@@ -96,7 +110,7 @@ export async function resolveCanonicalTenant(identifier) {
       const result = { uuid: input, slug: input, source: 'uuid-input', found: false };
       setCached(input, result);
       return result;
-    } catch {
+    } catch (err) {
       const result = { uuid: input, slug: input, source: 'uuid-error', found: false };
       setCached(input, result);
       return result;
@@ -105,12 +119,23 @@ export async function resolveCanonicalTenant(identifier) {
 
   // Slug path
   try {
-    const { data, error } = await supa
-      .from('tenant')
+    let { data, error } = await supa
+      .from('tenants')
       .select('id, tenant_id')
       .eq('tenant_id', input)
       .limit(1)
       .single();
+    // PGRST116 = no rows found, PGRST205 = table not found in schema
+    if ((error && (error.code === 'PGRST116' || error.code === 'PGRST205')) || (!data && !error)) {
+      const legacy = await supa
+        .from('tenant')
+        .select('id, tenant_id')
+        .eq('tenant_id', input)
+        .limit(1)
+        .single();
+      data = legacy.data;
+      error = legacy.error;
+    }
     if (error && error.code !== 'PGRST116') throw error;
     if (data) {
       const result = { uuid: data.id, slug: data.tenant_id, source: 'db-slug', found: true };

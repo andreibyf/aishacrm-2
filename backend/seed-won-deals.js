@@ -14,7 +14,7 @@ async function seedWonDeals() {
   try {
     console.log('Creating test accounts, contacts, and won opportunities...\n');
     
-    const tenantId = 'local-tenant-001';
+    const tenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
     
     // Create 5 sample accounts
     const accounts = [
