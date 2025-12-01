@@ -428,11 +428,10 @@ test.describe('Backend API Schema Validation', () => {
         },
       });
       await expectOk(response1);
-      // Backend surfaces unique violation as 500 - error message varies by database
-      const data2 = await expectStatus(response2, 500);
+      const data2 = await expectStatus(response2, 409);
       expect(data2.status).toBe('error');
-      // Supabase returns 'duplicate key' or 'already exists' depending on constraint
-      expect(data2.message.toLowerCase()).toMatch(/duplicate|already exists|unique/);
+      expect(data2.code).toBe('EMPLOYEE_EMAIL_CONFLICT');
+      expect(data2.message).toMatch(/already exists/i);
     });
   });
 });

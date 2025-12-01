@@ -1,3 +1,234 @@
+# AiSHA CRM – Backend Field Parity Bugfix Plan
+
+## Current Goal
+
+Type: bugfix  
+Title: Fix backend/ frontend field mismatch and propagate to dependent components
+
+Description:  
+The frontend allows entry of several fields (e.g., phone, job_title, metadata, secondary contact data, notes). In testing, some of these values are:
+
+- Sent in POST/PUT payloads but missing from GET/list responses, or
+- Present in the DB but stripped by backend serialization, or
+- Missing when consumed by dashboards, AI snapshot endpoints, Braid tools, or reports.
+
+This is a **critical data integrity bug**. The goal is:
+
+1. Restore 1:1 field parity between UI forms, backend APIs, and DB schema.
+2. Audit and fix downstream components that rely on these entities (dashboards, AI snapshot, Braid/MCP tools, exports, reports) so they see the same field set.
+
+No new features. No UI redesign.
+
+---
+
+## Execution Rules (Critical)
+
+Mode: BUGFIX ONLY
+
+Do NOT:
+
+- Redesign entity models or API shapes.
+- Add new business logic unrelated to field parity.
+- Refactor unrelated modules (auth, realtime, AI orchestration, n8n, etc.).
+
+Allowed:
+
+- Add missing fields to SELECT/INSERT/UPDATE/RETURNING.
+- Fix serializers/DTOs so all existing UI fields round-trip.
+- Update downstream consumers (dashboards, AI snapshot, Braid tools, exports) to include the same fields.
+- Add minimal migrations **only if** a field used by the UI truly has no DB column.
+
+Every fix must be covered by at least one test (unit or integration) where practical.
+
+---
+
+## Active Tasks
+
+### BUG-BE-FIELDS-001 – Core CRUD Field Parity (Diagnosis + Fix)
+
+**Area:** Backend CRUD routes/services + frontend models
+
+**Goal:**  
+Make sure each core entity’s CRUD API returns and accepts all fields the UI exposes.
+
+**Scope Entities:**
+
+- Leads
+- Contacts
+- Accounts
+- Opportunities
+- Activities
+
+**Steps:**
+
+1. Inventory UI fields:
+   - Inspect frontend models / API clients / form components for each entity (e.g., `src/api/*`, `src/components/*Form*`).
+   - List the fields that can be edited or displayed.
+
+2. Inspect backend:
+   - For each entity’s endpoints (create/update/get/list), inspect:
+     - DB query columns (Supabase/SQL SELECT, INSERT, UPDATE).
+     - Response serialization / DTO mapping.
+   - Compare:
+     - UI fields vs.
+     - Request payloads vs.
+     - Response JSON vs.
+     - DB columns.
+
+3. Apply minimal fixes:
+   - Include missing columns in SELECT/RETURNING.
+   - Ensure INSERT/UPDATE persist those fields.
+   - Ensure serializers/DTOs expose the full field set.
+
+4. Only if absolutely necessary:
+   - If a UI field is clearly required but has no DB column:
+     - Confirm it is not dead/stale UI.
+     - Add the smallest safe migration (new column) with a default.
+
+**Acceptance:**
+
+- For each entity, a manual or inline mapping exists showing:
+  - UI fields ↔ API fields ↔ DB columns.
+- Creating/updating through the API and re-fetching returns all fields as entered.
+- No regressions in existing CRUD behavior.
+
+---
+
+### BUG-BE-FIELDS-002 – Downstream Component Parity (Dashboards, AI, MCP, Exports)
+
+**Area:** Components that consume entity data
+
+**Goal:**  
+Make sure all downstream components see the same complete field set as the core CRUD APIs.
+
+**Components to review:**
+
+- Dashboard/stat cards and summary endpoints.
+- `/api/ai/snapshot-internal` and any AI snapshot helpers.
+- Braid/MCP integration (`braidIntegration-v2`, Braid tools that read entity data).
+- Any reporting/export endpoints (CSV/Excel/JSON).
+- Any automation/webhook/event publishers that serialize entities.
+
+**Steps:**
+
+1. Dashboards:
+   - Identify backend endpoints feeding dashboard tiles and summary counts.
+   - Ensure they select and return the same fields added in BUG-BE-FIELDS-001 where relevant.
+   - Confirm no fields are silently dropped or renamed.
+
+2. AI Snapshot / Braid tools:
+   - Inspect `/api/ai/snapshot-internal` and related helpers.
+   - Ensure the snapshot includes all core entity fields fixed in BUG-BE-FIELDS-001 (e.g., phone, job_title, metadata, assigned_to, descriptions).
+   - Inspect Braid tool schemas and execution:
+     - Make sure they rely on the updated snapshot/API shapes.
+     - Avoid “partial” projections that strip fields the AI may need.
+
+3. Exports / reporting / webhooks:
+   - Check any export or reporting endpoints to ensure:
+     - They include the corrected field set.
+     - They don’t serialize outdated or incomplete shapes.
+
+4. Apply minimal changes:
+   - Align field lists with updated CRUD/API models.
+   - Avoid introducing new “computed” fields unless already documented.
+
+**Acceptance:**
+
+- Dashboards display expected values for the newly fixed fields.
+- AI snapshot JSON contains the same field set as CRUD endpoints for each entity.
+- Braid tools and any exports that consume these entities see and return complete records.
+- No breaking changes to existing clients.
+
+---
+
+### BUG-BE-FIELDS-003 – Regression Tests (CRUD + Downstream)
+
+**Area:** Backend tests / integration tests
+
+**Goal:**  
+Lock in field parity for core entities and downstream consumers.
+
+**Steps:**
+
+1. CRUD round-trip tests:
+   - For each entity:
+     - Create an entity with all meaningful fields set.
+     - Read it back via:
+       - Detail endpoint.
+       - List endpoint (if applicable).
+     - Assert all fields match.
+
+2. Snapshot / AI tests:
+   - Add tests for `/api/ai/snapshot-internal` (or equivalent snapshot helper) to:
+     - Seed data with the fields fixed in BUG-BE-FIELDS-001.
+     - Assert snapshot payload includes those fields for each entity.
+
+3. Optional: Dashboard / export tests:
+   - If practical, add small tests to ensure dashboard/export endpoints return the expected keys.
+
+**Acceptance:**
+
+- New tests fail on the old behavior (missing fields).
+- All tests pass after fixes in BUG-BE-FIELDS-001/002.
+- CI/orchestrator uses these tests to prevent future regressions.
+
+---
+
+## Testing & Validation Requirements
+
+**Manual:**
+
+- In the actual UI, for each entity:
+  - Create a record with all fields filled.
+  - Navigate away and back; open multiple views (detail, list, dashboard, AI summaries if applicable).
+  - Confirm all values are present and unchanged.
+
+**Automated:**
+
+- All existing tests pass.
+- New CRUD round-trip tests pass for each entity.
+- Snapshot/AI tests confirm all fields are present.
+
+**Environments:**
+
+- Local dev containers (backend + frontend + Supabase).
+- At least one remote environment (e.g., DEV on VPS) using the real Supabase instance.
+
+---
+
+## Status
+
+- BUG-BE-FIELDS-001: Not started  
+- BUG-BE-FIELDS-002: Not started  
+- BUG-BE-FIELDS-003: Not started  
+
+---
+
+## Usage Instructions for AI Tools
+
+When using Copilot or any orchestrator:
+
+1. Read `.github/copilot-instructions.md`.
+2. Read `orchestra/ARCHITECTURE.md`.
+3. Read `orchestra/CONVENTIONS.md`.
+4. Read this PLAN and start with **BUG-BE-FIELDS-001**.
+5. Work one task at a time:
+   - BUG-BE-FIELDS-001: core CRUD parity (diagnose + fix).
+   - BUG-BE-FIELDS-002: propagate fixes to dashboards, AI snapshot, Braid tools, exports.
+   - BUG-BE-FIELDS-003: tests only.
+6. Keep changes minimal and strictly within field parity scope.  
+   No new features, no cross-cutting refactors.
+
+
+
+
+
+
+
+
+
+
+
 # AiSHA CRM – Phase 2C Plan (Hands-Free Voice Chat)
 
 

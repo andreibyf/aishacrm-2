@@ -8,6 +8,47 @@ import express from 'express';
 export default function createEmployeeRoutes(_pgPool) {
   const router = express.Router();
 
+  const isUniqueEmailError = (error) => {
+    if (!error) return false;
+    if (error.code === '23505') return true;
+    const message = (error.message || '').toLowerCase();
+    return message.includes('duplicate key') || message.includes('already exists');
+  };
+
+  const normalizeEmail = (value) => (typeof value === 'string' ? value.trim() : '');
+
+  const respondWithDuplicateEmail = (res) =>
+    res.status(409).json({
+      status: 'error',
+      code: 'EMPLOYEE_EMAIL_CONFLICT',
+      message: 'An employee with this email already exists for this tenant.',
+    });
+
+  const hasTenantEmailConflict = async (supabase, tenantId, email, excludeId) => {
+    const normalized = normalizeEmail(email);
+    if (!normalized) return false;
+    const query = supabase
+      .from('employees')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .ilike('email', normalized)
+      .limit(1);
+    if (excludeId) {
+      query.neq('id', excludeId);
+    }
+    const { data, error } = await query;
+    if (error) {
+      throw error;
+    }
+    console.log('[EmployeeRoutes] tenant email check', {
+      tenantId,
+      email: normalized,
+      matchCount: Array.isArray(data) ? data.length : 0,
+      excludeId,
+    });
+    return Array.isArray(data) && data.length > 0;
+  };
+
   // Helper function to expand metadata fields to top-level properties
   const expandMetadata = (record) => {
     if (!record) return record;
@@ -260,19 +301,14 @@ export default function createEmployeeRoutes(_pgPool) {
   // POST /api/employees - Create employee
   router.post('/', async (req, res) => {
     try {
-      // DEBUG: Log what we received
-      console.log('[Employee POST] Received body:', JSON.stringify(req.body, null, 2));
-      console.log('[Employee POST] Body keys:', Object.keys(req.body));
-      
+      console.log('[EmployeeRoutes] POST body', req.body);
       const { tenant_id, first_name, last_name, email, role, status, phone, department, metadata, ...additionalFields } = req.body;
 
       if (!tenant_id) {
-        console.log('[Employee POST] VALIDATION FAILED: tenant_id missing');
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
       
       if (!first_name || !last_name) {
-        console.log('[Employee POST] VALIDATION FAILED: first_name or last_name missing', { first_name, last_name });
         return res.status(400).json({ status: 'error', message: 'first_name and last_name are required' });
       }
 
@@ -295,6 +331,10 @@ export default function createEmployeeRoutes(_pgPool) {
       
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
+
+      if (await hasTenantEmailConflict(supabase, tenant_id, email)) {
+        return respondWithDuplicateEmail(res);
+      }
 
       // Store phone, department, and any additional fields in metadata since they may not be direct columns
       const combinedMetadata = {
@@ -322,7 +362,12 @@ export default function createEmployeeRoutes(_pgPool) {
         .select()
         .single();
 
-      if (error) throw new Error(error.message);
+      if (error) {
+        if (isUniqueEmailError(error)) {
+          return respondWithDuplicateEmail(res);
+        }
+        throw error;
+      }
 
       const employee = expandMetadata(data);
 
@@ -423,6 +468,10 @@ export default function createEmployeeRoutes(_pgPool) {
         return res.status(404).json({ status: 'error', message: 'Employee not found' });
       }
 
+      if (email !== undefined && (await hasTenantEmailConflict(supabase, tenant_id, email, id))) {
+        return respondWithDuplicateEmail(res);
+      }
+
       // Merge phone, department, and other fields into metadata
       const currentMetadata = current?.metadata || {};
       const updatedMetadata = {
@@ -451,7 +500,10 @@ export default function createEmployeeRoutes(_pgPool) {
         .single();
 
       if (error && error.code !== 'PGRST116') {
-        throw new Error(error.message);
+        if (isUniqueEmailError(error)) {
+          return respondWithDuplicateEmail(res);
+        }
+        throw error;
       }
 
       if (!data) {

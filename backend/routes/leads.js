@@ -137,13 +137,140 @@ export default function createLeadRoutes(_pgPool) {
   router.use(validateTenantAccess);
   router.use(enforceEmployeeDataScope);
 
+  const toNullableString = (value) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    }
+    return null;
+  };
+
+  const toInteger = (value) => {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const toNumeric = (value) => {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = Number.parseFloat(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const toBoolean = (value) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (['true', '1', 'yes', 'y'].includes(normalized)) return true;
+      if (['false', '0', 'no', 'n'].includes(normalized)) return false;
+    }
+    return null;
+  };
+
+  const toTagArray = (value) => {
+    if (!Array.isArray(value)) return null;
+    return value
+      .map((tag) => (typeof tag === 'string' ? tag.trim() : ''))
+      .filter(Boolean);
+  };
+
+  const MIRRORED_METADATA_KEYS = [
+    'score',
+    'score_reason',
+    'estimated_value',
+    'do_not_call',
+    'do_not_text',
+    'address_1',
+    'address_2',
+    'city',
+    'state',
+    'zip',
+    'country',
+    'unique_id',
+    'tags',
+  ];
+
+  const sanitizeMetadataPayload = (...sources) => {
+    const merged = sources.reduce((acc, src) => {
+      if (src && typeof src === 'object' && !Array.isArray(src)) {
+        Object.assign(acc, src);
+      }
+      return acc;
+    }, {});
+
+    MIRRORED_METADATA_KEYS.forEach((key) => {
+      if (key in merged) {
+        delete merged[key];
+      }
+    });
+
+    return merged;
+  };
+
+  const assignStringField = (target, key, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target[key] = null;
+      return;
+    }
+    target[key] = toNullableString(value);
+  };
+
+  const assignIntegerField = (target, key, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target[key] = null;
+      return;
+    }
+    const parsed = toInteger(value);
+    if (parsed !== null) {
+      target[key] = parsed;
+    }
+  };
+
+  const assignNumericField = (target, key, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target[key] = null;
+      return;
+    }
+    const parsed = toNumeric(value);
+    if (parsed !== null) {
+      target[key] = parsed;
+    }
+  };
+
+  const assignBooleanField = (target, key, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target[key] = null;
+      return;
+    }
+    const parsed = toBoolean(value);
+    if (parsed !== null) {
+      target[key] = parsed;
+    }
+  };
+
+  const assignTagsField = (target, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target.tags = null;
+      return;
+    }
+    const parsed = toTagArray(value);
+    if (parsed !== null) {
+      target.tags = parsed;
+    }
+  };
+
 // Helper function to expand metadata fields to top-level properties
   const expandMetadata = (record) => {
     if (!record) return record;
     const { metadata = {}, ...rest } = record;
     return {
-      ...rest,
       ...metadata,
+      ...rest,
       metadata,
     };
   };
@@ -245,7 +372,35 @@ export default function createLeadRoutes(_pgPool) {
   // POST /api/leads - Create lead
   router.post('/', invalidateCache('leads'), async (req, res) => {
     try {
-      const { tenant_id, first_name, last_name, email, phone, company, job_title, title, description, status = 'new', source, metadata, is_test_data, ...otherFields } = req.body;
+      const {
+        tenant_id,
+        first_name,
+        last_name,
+        email,
+        phone,
+        company,
+        job_title,
+        title,
+        description,
+        status = 'new',
+        source,
+        metadata = {},
+        is_test_data,
+        score,
+        score_reason,
+        estimated_value,
+        do_not_call,
+        do_not_text,
+        address_1,
+        address_2,
+        city,
+        state,
+        zip,
+        country,
+        unique_id,
+        tags,
+        ...otherFields
+      } = req.body;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -268,35 +423,51 @@ export default function createLeadRoutes(_pgPool) {
         });
       }
 
-      // Store title and description in metadata since they may not be direct columns
-      const combinedMetadata = {
-        ...(metadata || {}),
-        ...otherFields,
-        ...(title !== undefined && title !== null ? { title } : {}),
-        ...(description !== undefined && description !== null ? { description } : {}),
-      };
+      const normalizedStatus = typeof status === 'string' && status.trim() ? status.trim() : 'new';
+      const metadataExtras = {};
+      if (title !== undefined && title !== null) metadataExtras.title = title;
+      if (description !== undefined && description !== null) metadataExtras.description = description;
+      const combinedMetadata = sanitizeMetadataPayload(metadata, otherFields, metadataExtras);
 
       const nowIso = new Date().toISOString();
+      const leadPayload = {
+        tenant_id,
+        first_name: first_name.trim(),
+        last_name: last_name.trim(),
+        status: normalizedStatus,
+        metadata: combinedMetadata,
+        created_at: nowIso,
+        created_date: nowIso,
+        updated_at: nowIso,
+      };
+
+      assignStringField(leadPayload, 'email', email);
+      assignStringField(leadPayload, 'phone', phone);
+      assignStringField(leadPayload, 'company', company);
+      assignStringField(leadPayload, 'job_title', job_title);
+      assignStringField(leadPayload, 'source', source);
+      assignStringField(leadPayload, 'score_reason', score_reason);
+      assignStringField(leadPayload, 'address_1', address_1);
+      assignStringField(leadPayload, 'address_2', address_2);
+      assignStringField(leadPayload, 'city', city);
+      assignStringField(leadPayload, 'state', state);
+      assignStringField(leadPayload, 'zip', zip);
+      assignStringField(leadPayload, 'country', country);
+      assignStringField(leadPayload, 'unique_id', unique_id);
+      assignIntegerField(leadPayload, 'score', score);
+      assignNumericField(leadPayload, 'estimated_value', estimated_value);
+      assignBooleanField(leadPayload, 'do_not_call', do_not_call);
+      assignBooleanField(leadPayload, 'do_not_text', do_not_text);
+      assignTagsField(leadPayload, tags);
+      if (typeof is_test_data === 'boolean') {
+        leadPayload.is_test_data = is_test_data;
+      }
+
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('leads')
-        .insert([{
-          tenant_id,
-          first_name,
-          last_name,
-          email,
-          phone,
-          company,
-          job_title,
-          status,
-          source,
-          ...(typeof is_test_data === 'boolean' ? { is_test_data } : {}),
-          metadata: combinedMetadata,
-          created_at: nowIso,
-          created_date: nowIso,
-          updated_at: nowIso,
-        }])
+        .insert([leadPayload])
         .select('*')
         .single();
       if (error) throw new Error(error.message);
@@ -413,7 +584,34 @@ export default function createLeadRoutes(_pgPool) {
   router.put('/:id', invalidateCache('leads'), async (req, res) => {
     try {
       const { id } = req.params;
-      const { first_name, last_name, email, phone, title, description, company, job_title, status, source, metadata, is_test_data, ...otherFields } = req.body;
+      const {
+        first_name,
+        last_name,
+        email,
+        phone,
+        title,
+        description,
+        company,
+        job_title,
+        status,
+        source,
+        metadata = {},
+        is_test_data,
+        score,
+        score_reason,
+        estimated_value,
+        do_not_call,
+        do_not_text,
+        address_1,
+        address_2,
+        city,
+        state,
+        zip,
+        country,
+        unique_id,
+        tags,
+        ...otherFields
+      } = req.body;
 
       // Validate required name fields if provided
       if (first_name !== undefined && (!first_name || !first_name.trim())) {
@@ -444,26 +642,42 @@ export default function createLeadRoutes(_pgPool) {
       }
       if (fetchErr) throw new Error(fetchErr.message);
 
-      // Store title and description in metadata since they may not be direct columns
-      const currentMetadata = current?.metadata || {};
-      const updatedMetadata = {
-        ...currentMetadata,
-        ...(metadata || {}),
-        ...otherFields,
-        ...(title !== undefined ? { title } : {}),
-        ...(description !== undefined ? { description } : {}),
-      };
+      const metadataExtras = {};
+      if (title !== undefined) metadataExtras.title = title;
+      if (description !== undefined) metadataExtras.description = description;
+      const updatedMetadata = sanitizeMetadataPayload(current?.metadata, metadata, otherFields, metadataExtras);
 
       const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
-      if (first_name !== undefined) payload.first_name = first_name;
-      if (last_name !== undefined) payload.last_name = last_name;
-      if (email !== undefined) payload.email = email;
-      if (phone !== undefined) payload.phone = phone;
-      if (company !== undefined) payload.company = company;
-      if (job_title !== undefined) payload.job_title = job_title;
-      if (status !== undefined) payload.status = status;
+      if (first_name !== undefined) payload.first_name = first_name.trim();
+      if (last_name !== undefined) payload.last_name = last_name.trim();
+      assignStringField(payload, 'email', email);
+      assignStringField(payload, 'phone', phone);
+      assignStringField(payload, 'company', company);
+      assignStringField(payload, 'job_title', job_title);
+      assignStringField(payload, 'source', source);
+      assignStringField(payload, 'score_reason', score_reason);
+      assignStringField(payload, 'address_1', address_1);
+      assignStringField(payload, 'address_2', address_2);
+      assignStringField(payload, 'city', city);
+      assignStringField(payload, 'state', state);
+      assignStringField(payload, 'zip', zip);
+      assignStringField(payload, 'country', country);
+      assignStringField(payload, 'unique_id', unique_id);
+      if (status !== undefined) {
+        if (status === null) {
+          payload.status = null;
+        } else if (typeof status === 'string') {
+          payload.status = status.trim() || null;
+        } else {
+          payload.status = status;
+        }
+      }
+      assignIntegerField(payload, 'score', score);
+      assignNumericField(payload, 'estimated_value', estimated_value);
+      assignBooleanField(payload, 'do_not_call', do_not_call);
+      assignBooleanField(payload, 'do_not_text', do_not_text);
+      assignTagsField(payload, tags);
       if (typeof is_test_data === 'boolean') payload.is_test_data = is_test_data;
-      if (source !== undefined) payload.source = source;
 
       const { data, error } = await supabase
         .from('leads')

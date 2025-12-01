@@ -52,14 +52,136 @@ export default function createActivityRoutes(_pgPool) {
   router.use(validateTenantAccess);
   router.use(enforceEmployeeDataScope);
 
+  const toNullableString = (value) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    }
+    if (value === null) return null;
+    return value === undefined ? undefined : String(value);
+  };
+
+  const toInteger = (value) => {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const toJsonObject = (value) => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    if (typeof value === 'object' && !Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed;
+        }
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  };
+
+  const MIRRORED_METADATA_KEYS = [
+    'duration',
+    'duration_minutes',
+    'outcome',
+    'ai_call_config',
+    'ai_email_config'
+  ];
+
+  const sanitizeMetadataPayload = (...sources) => {
+    const merged = sources.reduce((acc, src) => {
+      if (src && typeof src === 'object' && !Array.isArray(src)) {
+        Object.assign(acc, src);
+      }
+      return acc;
+    }, {});
+
+    MIRRORED_METADATA_KEYS.forEach((key) => {
+      if (key in merged) {
+        delete merged[key];
+      }
+    });
+
+    return merged;
+  };
+
+  const assignStringField = (target, key, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target[key] = null;
+      return;
+    }
+    target[key] = toNullableString(value);
+  };
+
+  const assignIntegerField = (target, key, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target[key] = null;
+      return;
+    }
+    const parsed = toInteger(value);
+    if (parsed !== null) {
+      target[key] = parsed;
+    }
+  };
+
+  const assignJsonField = (target, key, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target[key] = null;
+      return;
+    }
+    const parsed = toJsonObject(value);
+    if (parsed !== undefined) {
+      target[key] = parsed;
+    }
+  };
+
+  const normalizeStatusValue = (value) => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      return trimmed === 'planned' ? 'scheduled' : trimmed;
+    }
+    return value;
+  };
+
+  const normalizeDueParts = (dateValue, timeValue) => {
+    let datePart = dateValue || null;
+    let timePart = timeValue || null;
+    if (datePart && /T/.test(datePart)) {
+      const d = new Date(datePart);
+      if (!Number.isNaN(d.getTime())) {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        datePart = `${yyyy}-${mm}-${dd}`;
+        if (!timePart) {
+          const hh = String(d.getHours()).padStart(2, '0');
+          const min = String(d.getMinutes()).padStart(2, '0');
+          timePart = `${hh}:${min}`;
+        }
+      }
+    }
+    return { datePart, timePart };
+  };
+
 // Helper function to expand metadata fields to top-level properties
   const _expandMetadata = (record) => {
     if (!record) return record;
+    const metadataObj = record.metadata && typeof record.metadata === 'object' ? record.metadata : {};
     const { metadata = {}, ...rest } = record;
     return {
+      ...metadataObj,
       ...rest,
-      ...metadata,
-      metadata,
+      metadata: metadataObj,
     };
   };
 
@@ -73,7 +195,6 @@ export default function createActivityRoutes(_pgPool) {
         try { meta = JSON.parse(row.metadata); } catch { meta = {}; }
       }
     }
-    // Promote commonly used fields with fallback to metadata (legacy inserts may have only metadata values)
     const description = row.body ?? meta.description ?? null;
     const status = row.status ?? meta.status ?? null;
     const due_date = row.due_date ?? meta.due_date ?? null;
@@ -81,7 +202,9 @@ export default function createActivityRoutes(_pgPool) {
     const assigned_to = row.assigned_to ?? meta.assigned_to ?? null;
     const priority = row.priority ?? meta.priority ?? null;
     const location = row.location ?? meta.location ?? null;
+    const outcome = row.outcome ?? meta.outcome ?? null;
     return {
+      ...meta,
       ...row,
       description,
       status,
@@ -90,7 +213,8 @@ export default function createActivityRoutes(_pgPool) {
       assigned_to,
       priority,
       location,
-      ...meta,
+      outcome,
+      metadata: meta,
     };
   }
 
@@ -518,7 +642,6 @@ export default function createActivityRoutes(_pgPool) {
       }
       const bodyText = activity.description ?? activity.body ?? null;
 
-      // Extract first-class fields we want to promote out of metadata
       const {
         tenant_id,
         type,
@@ -532,7 +655,12 @@ export default function createActivityRoutes(_pgPool) {
         location,
         created_by,
         related_to,
-        // leave remaining fields inside rest for metadata capture
+        duration,
+        duration_minutes,
+        outcome,
+        ai_call_config,
+        ai_email_config,
+        metadata = {},
         ...rest
       } = activity || {};
 
@@ -543,57 +671,45 @@ export default function createActivityRoutes(_pgPool) {
       }
 
       // Normalize status (convert legacy planned -> scheduled)
-      let normalizedStatus = status ?? rest.status ?? null;
-      if (normalizedStatus === 'planned') normalizedStatus = 'scheduled';
-      // Provide default status if missing
-      if (!normalizedStatus) {
+      let normalizedStatus = normalizeStatusValue(status ?? rest.status);
+      if (normalizedStatus === undefined || normalizedStatus === null) {
         normalizedStatus = due_date || due_time ? 'scheduled' : 'in-progress';
       }
 
       // Parse due_date when an ISO timestamp is passed; extract date/time parts
-      let datePart = due_date || null;
-      let timePart = due_time || null;
-      if (datePart && /T/.test(datePart)) {
-        const d = new Date(datePart);
-        if (!isNaN(d.getTime())) {
-          // Format date as YYYY-MM-DD for DATE column
-          const yyyy = d.getFullYear();
-          const mm = String(d.getMonth()+1).padStart(2,'0');
-          const dd = String(d.getDate()).padStart(2,'0');
-          datePart = `${yyyy}-${mm}-${dd}`;
-          if (!timePart) {
-            const hh = String(d.getHours()).padStart(2,'0');
-            const min = String(d.getMinutes()).padStart(2,'0');
-            timePart = `${hh}:${min}`;
-          }
-        }
-      }
+      const { datePart, timePart } = normalizeDueParts(due_date, due_time);
 
-      // Build metadata excluding promoted fields
-      const promotedKeys = new Set(['tenant_id','type','activity_type','subject','related_id','status','due_date','due_time','assigned_to','priority','location','created_by','related_to','description','body']);
-      const meta = { ...Object.fromEntries(Object.entries(rest).filter(([k]) => !promotedKeys.has(k))), description: bodyText };
+      const metadataExtras = { description: bodyText };
+      if (normalizedStatus) metadataExtras.status = normalizedStatus;
+      const meta = sanitizeMetadataPayload(metadata, rest, metadataExtras);
+
+      const activityPayload = {
+        tenant_id,
+        type: normalizedType,
+        subject: subject || null,
+        body: bodyText,
+        related_id: related_id || null,
+        status: normalizedStatus,
+        due_date: datePart || null,
+        due_time: timePart || null,
+        assigned_to: assigned_to || null,
+        priority: priority ?? 'normal',
+        location: location || null,
+        created_by: created_by || null,
+        related_to: related_to || null,
+        metadata: meta,
+      };
+
+      assignIntegerField(activityPayload, 'duration_minutes', duration_minutes ?? duration);
+      assignStringField(activityPayload, 'outcome', outcome);
+      assignJsonField(activityPayload, 'ai_call_config', ai_call_config);
+      assignJsonField(activityPayload, 'ai_email_config', ai_email_config);
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('activities')
-        .insert([{
-          tenant_id,
-          type: normalizedType,
-          subject: subject || null,
-          body: bodyText,
-          related_id: related_id || null,
-          status: normalizedStatus,
-          due_date: datePart || null,
-          due_time: timePart || null,
-          assigned_to: assigned_to || null,
-          // Provide default priority when omitted
-          priority: (priority ?? 'normal'),
-          location: location || null,
-          created_by: created_by || null,
-          related_to: related_to || null,
-          metadata: meta,
-        }])
+        .insert([activityPayload])
         .select('*')
         .single();
       if (error) throw new Error(error.message);
@@ -622,10 +738,37 @@ export default function createActivityRoutes(_pgPool) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-  const payload = req.body || {};
+      const payload = req.body || {};
+      const {
+        activity_type,
+        type,
+        subject,
+        description,
+        body,
+        related_id,
+        status,
+        due_date,
+        due_time,
+        assigned_to,
+        priority,
+        location,
+        related_to,
+        duration,
+        duration_minutes,
+        outcome,
+        ai_call_config,
+        ai_email_config,
+        metadata = {},
+        tenant_id: _tenantId,
+        id: _incomingId,
+        created_at: _createdAt,
+        updated_at: _updatedAt,
+        ...rest
+      } = payload;
 
-      const bodyText = payload.description ?? payload.body ?? null;
-      
+      const hasBodyChange = description !== undefined || body !== undefined;
+      const bodyText = hasBodyChange ? (description ?? body ?? null) : undefined;
+
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       const { data: current, error: fetchErr } = await supabase
@@ -640,28 +783,70 @@ export default function createActivityRoutes(_pgPool) {
         });
       }
       if (fetchErr) throw new Error(fetchErr.message);
-      
+
+      const allowedTypes = ['task', 'email', 'call', 'meeting', 'demo', 'proposal', 'note', 'scheduled_ai_call', 'scheduled_ai_email'];
       const currentMeta = current?.metadata && typeof current.metadata === 'object' ? current.metadata : {};
-      const { tenant_id: _t, description: _d, body: _b, id: _id, created_at: _ca, updated_at: _ua, ...extras } = payload;
-      const newMeta = { ...currentMeta, ...extras, description: bodyText };
+      const metadataExtras = {};
+      if (hasBodyChange) metadataExtras.description = bodyText ?? null;
 
-      const updatePayload = { metadata: newMeta };
-      const updateType = payload.activity_type !== undefined ? payload.activity_type : payload.type;
-      if (updateType !== undefined) updatePayload.type = updateType;
-      if (payload.subject !== undefined) updatePayload.subject = payload.subject;
-      if (bodyText !== undefined) updatePayload.body = bodyText;
-      if (payload.related_id !== undefined) updatePayload.related_id = payload.related_id;
-      if (payload.status !== undefined) updatePayload.status = payload.status;
-      if (payload.due_date !== undefined) updatePayload.due_date = payload.due_date;
-      if (payload.assigned_to !== undefined) updatePayload.assigned_to = payload.assigned_to;
-      if (payload.priority !== undefined) updatePayload.priority = payload.priority;
-
-      if (Object.keys(updatePayload).length === 1 && 'metadata' in updatePayload) {
-        return res.json({
-          status: 'success',
-          data: normalizeActivity(current)
-        });
+      const updatePayload = { updated_at: new Date().toISOString() };
+      const typeCandidate = activity_type ?? type;
+      if (typeCandidate !== undefined) {
+        updatePayload.type = allowedTypes.includes(typeCandidate) ? typeCandidate : 'note';
       }
+      if (subject !== undefined) {
+        updatePayload.subject = toNullableString(subject);
+      }
+      if (hasBodyChange) {
+        updatePayload.body = bodyText ?? null;
+      }
+      if (related_id !== undefined) {
+        updatePayload.related_id = related_id || null;
+      }
+      if (related_to !== undefined) {
+        updatePayload.related_to = related_to || null;
+      }
+      if (status !== undefined) {
+        const normalizedStatus = normalizeStatusValue(status);
+        updatePayload.status = normalizedStatus ?? null;
+        metadataExtras.status = normalizedStatus;
+      }
+      if (due_date !== undefined || due_time !== undefined) {
+        const { datePart, timePart } = normalizeDueParts(
+          due_date !== undefined ? due_date : current?.due_date,
+          due_time !== undefined ? due_time : current?.due_time
+        );
+        if (due_date !== undefined) {
+          updatePayload.due_date = due_date === null ? null : (datePart ?? null);
+        }
+        if (due_time !== undefined) {
+          updatePayload.due_time = due_time === null ? null : (timePart ?? null);
+        }
+      }
+      if (assigned_to !== undefined) {
+        assignStringField(updatePayload, 'assigned_to', assigned_to);
+      }
+      if (priority !== undefined) {
+        assignStringField(updatePayload, 'priority', priority);
+      }
+      if (location !== undefined) {
+        assignStringField(updatePayload, 'location', location);
+      }
+      if (duration_minutes !== undefined || duration !== undefined) {
+        assignIntegerField(updatePayload, 'duration_minutes', duration_minutes ?? duration);
+      }
+      if (outcome !== undefined) {
+        assignStringField(updatePayload, 'outcome', outcome);
+      }
+      if (ai_call_config !== undefined) {
+        assignJsonField(updatePayload, 'ai_call_config', ai_call_config);
+      }
+      if (ai_email_config !== undefined) {
+        assignJsonField(updatePayload, 'ai_email_config', ai_email_config);
+      }
+
+      const sanitizedMetadata = sanitizeMetadataPayload(currentMeta, metadata, rest, metadataExtras);
+      updatePayload.metadata = sanitizedMetadata;
 
       const { data, error } = await supabase
         .from('activities')

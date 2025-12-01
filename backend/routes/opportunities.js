@@ -127,37 +127,127 @@ export default function createOpportunityRoutes(_pgPool) {
   router.use(validateTenantAccess);
   router.use(enforceEmployeeDataScope);
 
-// Helper function to expand metadata fields to top-level properties
-// IMPORTANT: Do not let metadata keys override persisted columns (e.g., stage, amount)
+  const toNullableString = (value) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    }
+    if (value === null) return null;
+    return value === undefined ? undefined : String(value);
+  };
+
+  const toInteger = (value) => {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const toNumeric = (value) => {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = Number.parseFloat(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const toTagArray = (value) => {
+    if (!Array.isArray(value)) return null;
+    return value
+      .map((tag) => (typeof tag === 'string' ? tag.trim() : ''))
+      .filter(Boolean);
+  };
+
+  const MIRRORED_METADATA_KEYS = [
+    'lead_id',
+    'lead_source',
+    'type',
+    'competitor',
+    'tags',
+    'amount',
+    'stage',
+    'probability',
+    'close_date',
+    'name',
+    'account_id',
+    'contact_id',
+  ];
+
+  const sanitizeMetadataPayload = (...sources) => {
+    const merged = sources.reduce((acc, src) => {
+      if (src && typeof src === 'object' && !Array.isArray(src)) {
+        Object.assign(acc, src);
+      }
+      return acc;
+    }, {});
+
+    MIRRORED_METADATA_KEYS.forEach((key) => {
+      if (key in merged) {
+        delete merged[key];
+      }
+    });
+
+    return merged;
+  };
+
+  const assignStringField = (target, key, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target[key] = null;
+      return;
+    }
+    target[key] = toNullableString(value);
+  };
+
+  const assignIntegerField = (target, key, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target[key] = null;
+      return;
+    }
+    const parsed = toInteger(value);
+    if (parsed !== null) {
+      target[key] = parsed;
+    }
+  };
+
+  const assignNumericField = (target, key, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target[key] = null;
+      return;
+    }
+    const parsed = toNumeric(value);
+    if (parsed !== null) {
+      target[key] = parsed;
+    }
+  };
+
+  const assignTagsField = (target, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target.tags = null;
+      return;
+    }
+    const parsed = toTagArray(value);
+    if (parsed !== null) {
+      target.tags = parsed;
+    }
+  };
+
+  const clampProbability = (value) => {
+    const parsed = toInteger(value);
+    if (parsed === null) return null;
+    return Math.min(100, Math.max(0, parsed));
+  };
+
+  // Helper function to expand metadata fields to top-level properties
+  // IMPORTANT: Do not let metadata keys override persisted columns (e.g., stage, amount)
   const expandMetadata = (record) => {
     if (!record) return record;
-    const { metadata = {}, ...rest } = record;
-
-    // Remove any keys from metadata that would shadow real columns
-    // This prevents stale values (like metadata.stage) from overriding the updated column
-    const shadowKeys = [
-      'stage',
-      'amount',
-      'probability',
-      'close_date',
-      'name',
-      'account_id',
-      'contact_id',
-      'tenant_id',
-      'id',
-      'created_at',
-      'updated_at',
-    ];
-
-    const sanitizedMetadata = { ...metadata };
-    for (const key of shadowKeys) {
-      if (key in sanitizedMetadata) delete sanitizedMetadata[key];
-    }
-
+    const { metadata, ...rest } = record;
+    const metadataObj = metadata && typeof metadata === 'object' ? metadata : {};
     return {
+      ...metadataObj,
       ...rest,
-      ...sanitizedMetadata,
-      metadata: sanitizedMetadata,
+      metadata: metadataObj,
     };
   };
 
@@ -349,7 +439,26 @@ export default function createOpportunityRoutes(_pgPool) {
   // POST /api/opportunities - Create new opportunity
   router.post('/', async (req, res) => {
     try {
-      const { tenant_id, name, description, expected_revenue, next_step, account_id, contact_id, amount, stage, probability, close_date, metadata, ...otherFields } = req.body;
+      const {
+        tenant_id,
+        name,
+        description,
+        expected_revenue,
+        next_step,
+        account_id,
+        contact_id,
+        amount,
+        stage,
+        probability,
+        close_date,
+        metadata = {},
+        lead_id,
+        lead_source,
+        type: opportunityType,
+        competitor,
+        tags,
+        ...otherFields
+      } = req.body || {};
       
       if (!tenant_id) {
         return res.status(400).json({
@@ -358,32 +467,40 @@ export default function createOpportunityRoutes(_pgPool) {
         });
       }
 
-      // Store description, expected_revenue, next_step in metadata since they may not be direct columns
-      const combinedMetadata = {
-        ...(metadata || {}),
-        ...otherFields,
-        ...(description !== undefined && description !== null ? { description } : {}),
-        ...(expected_revenue !== undefined && expected_revenue !== null ? { expected_revenue } : {}),
-        ...(next_step !== undefined && next_step !== null ? { next_step } : {}),
-      };
+      const metadataExtras = {};
+      if (description !== undefined && description !== null) metadataExtras.description = description;
+      if (expected_revenue !== undefined && expected_revenue !== null) metadataExtras.expected_revenue = expected_revenue;
+      if (next_step !== undefined && next_step !== null) metadataExtras.next_step = next_step;
+      const combinedMetadata = sanitizeMetadataPayload(metadata, otherFields, metadataExtras);
 
       const nowIso = new Date().toISOString();
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
+      const normalizedStage = typeof stage === 'string' && stage.trim() ? stage.trim().toLowerCase() : 'prospecting';
+      const parsedAmount = toNumeric(amount);
+      const parsedProbability = clampProbability(probability);
+      const opportunityPayload = {
+        tenant_id,
+        name: name?.trim?.() || null,
+        account_id: account_id || null,
+        contact_id: contact_id || null,
+        stage: normalizedStage,
+        metadata: combinedMetadata,
+        created_at: nowIso,
+      };
+
+      opportunityPayload.amount = parsedAmount !== null ? parsedAmount : 0;
+      opportunityPayload.probability = parsedProbability !== null ? parsedProbability : 0;
+      assignStringField(opportunityPayload, 'close_date', close_date);
+      assignStringField(opportunityPayload, 'lead_id', lead_id);
+      assignStringField(opportunityPayload, 'lead_source', lead_source);
+      assignStringField(opportunityPayload, 'type', opportunityType);
+      assignStringField(opportunityPayload, 'competitor', competitor);
+      assignTagsField(opportunityPayload, tags);
+
       const { data, error } = await supabase
         .from('opportunities')
-        .insert([{
-          tenant_id,
-          name,
-          account_id: account_id || null,
-          contact_id: contact_id || null,
-          amount: amount || 0,
-          stage: stage || 'prospecting',
-          probability: probability || 0,
-          close_date: close_date || null,
-          metadata: combinedMetadata,
-          created_at: nowIso,
-        }])
+        .insert([opportunityPayload])
         .select('*')
         .single();
       if (error) throw new Error(error.message);
@@ -407,7 +524,25 @@ export default function createOpportunityRoutes(_pgPool) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, description, expected_revenue, next_step, account_id, contact_id, amount, stage, probability, close_date, metadata, ...otherFields } = req.body;
+      const {
+        name,
+        description,
+        expected_revenue,
+        next_step,
+        account_id,
+        contact_id,
+        amount,
+        stage,
+        probability,
+        close_date,
+        metadata = {},
+        lead_id,
+        lead_source,
+        type: opportunityType,
+        competitor,
+        tags,
+        ...otherFields
+      } = req.body || {};
       let requestedTenantId = req.body?.tenant_id || req.query?.tenant_id || null;
 
       if (!requestedTenantId) {
@@ -430,26 +565,32 @@ export default function createOpportunityRoutes(_pgPool) {
       }
       if (fetchErr) throw new Error(fetchErr.message);
 
-      // Store description, expected_revenue, next_step in metadata since they may not be direct columns
-      const currentMetadata = before?.metadata || {};
-      const updatedMetadata = {
-        ...currentMetadata,
-        ...(metadata || {}),
-        ...otherFields,
-        ...(description !== undefined ? { description } : {}),
-        ...(expected_revenue !== undefined ? { expected_revenue } : {}),
-        ...(next_step !== undefined ? { next_step } : {}),
-      };
-      const normalizedStage = typeof stage === 'string' ? stage.toLowerCase() : null;
+      const metadataExtras = {};
+      if (description !== undefined) metadataExtras.description = description;
+      if (expected_revenue !== undefined) metadataExtras.expected_revenue = expected_revenue;
+      if (next_step !== undefined) metadataExtras.next_step = next_step;
+      const updatedMetadata = sanitizeMetadataPayload(before?.metadata, metadata, otherFields, metadataExtras);
+      const normalizedStage = typeof stage === 'string' ? stage.trim().toLowerCase() : null;
       
       const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
-      if (name !== undefined) payload.name = name;
-      if (account_id !== undefined) payload.account_id = account_id;
-      if (contact_id !== undefined) payload.contact_id = contact_id;
-      if (amount !== undefined) payload.amount = amount;
+      if (name !== undefined) payload.name = name?.trim?.() || null;
+      if (account_id !== undefined) payload.account_id = account_id || null;
+      if (contact_id !== undefined) payload.contact_id = contact_id || null;
+      if (amount !== undefined) {
+        const parsedAmount = toNumeric(amount);
+        payload.amount = parsedAmount !== null ? parsedAmount : null;
+      }
       if (normalizedStage !== null) payload.stage = normalizedStage;
-      if (probability !== undefined) payload.probability = probability;
-      if (close_date !== undefined) payload.close_date = close_date;
+      if (probability !== undefined) {
+        const clamped = clampProbability(probability);
+        payload.probability = clamped !== null ? clamped : null;
+      }
+      assignStringField(payload, 'close_date', close_date);
+      assignStringField(payload, 'lead_id', lead_id);
+      assignStringField(payload, 'lead_source', lead_source);
+      assignStringField(payload, 'type', opportunityType);
+      assignStringField(payload, 'competitor', competitor);
+      assignTagsField(payload, tags);
 
       const { data, error } = await supabase
         .from('opportunities')

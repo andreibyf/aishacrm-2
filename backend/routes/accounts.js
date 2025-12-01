@@ -129,14 +129,84 @@ export default function createAccountRoutes(_pgPool) {
   router.use(validateTenantAccess);
   router.use(enforceEmployeeDataScope);
 
-  // Helper function to expand metadata fields to top-level properties
-  const expandMetadata = (record) => {
+  const toNullableString = (value) => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    }
+    return String(value);
+  };
+
+  const toNumeric = (value) => {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = Number.parseFloat(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const toInteger = (value) => {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const MIRRORED_METADATA_KEYS = [
+    'name',
+    'type',
+    'industry',
+    'website',
+    'phone',
+    'email',
+    'annual_revenue',
+    'employee_count',
+    'street',
+    'city',
+    'state',
+    'zip',
+    'country',
+    'assigned_to'
+  ];
+
+  const sanitizeMetadataPayload = (...sources) => {
+    const merged = sources.reduce((acc, src) => {
+      if (src && typeof src === 'object' && !Array.isArray(src)) {
+        Object.assign(acc, src);
+      }
+      return acc;
+    }, {});
+
+    MIRRORED_METADATA_KEYS.forEach((key) => {
+      if (key in merged) {
+        delete merged[key];
+      }
+    });
+
+    return merged;
+  };
+
+  const assignStringField = (target, key, value) => {
+    if (value === undefined) return;
+    target[key] = toNullableString(value);
+  };
+
+  const assignNumericField = (target, key, value) => {
+    if (value === undefined) return;
+    target[key] = value === null ? null : toNumeric(value);
+  };
+
+  const assignIntegerField = (target, key, value) => {
+    if (value === undefined) return;
+    target[key] = value === null ? null : toInteger(value);
+  };
+
+  const normalizeAccount = (record) => {
     if (!record) return record;
-    const { metadata = {}, ...rest } = record;
+    const metadataObj = record.metadata && typeof record.metadata === 'object' ? record.metadata : {};
     return {
-      ...rest,
-      ...metadata, // Spread all metadata fields to top level
-      metadata, // Keep original for backwards compatibility
+      ...metadataObj,
+      ...record,
+      metadata: metadataObj,
     };
   };
 
@@ -157,7 +227,7 @@ export default function createAccountRoutes(_pgPool) {
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);
 
-      const accounts = (data || []).map(expandMetadata);
+      const accounts = (data || []).map(normalizeAccount);
 
       res.json({
         status: "success",
@@ -177,7 +247,7 @@ export default function createAccountRoutes(_pgPool) {
   // POST /api/accounts - Create account (invalidate cache)
   router.post("/", invalidateCache('accounts'), async (req, res) => {
     try {
-      const { tenant_id, name, type, industry, website, phone, email, 
+      const { tenant_id, name, type, industry, website, phone, email,
         annual_revenue, employee_count, street, city, state, zip, country,
         assigned_to, metadata, ...otherFields } = req.body;
 
@@ -195,37 +265,34 @@ export default function createAccountRoutes(_pgPool) {
         });
       }
 
-      // Store only truly custom fields in metadata (not standard columns)
-      const customMetadata = {
-        ...(metadata || {}),
-        ...otherFields, // Any extra fields not in the schema
+      const nowIso = new Date().toISOString();
+      const metadataPayload = sanitizeMetadataPayload(metadata, otherFields);
+      const insertPayload = {
+        tenant_id,
+        name,
+        metadata: metadataPayload,
+        created_at: nowIso,
+        updated_at: nowIso,
       };
 
-      const nowIso = new Date().toISOString();
+      assignStringField(insertPayload, 'type', type);
+      assignStringField(insertPayload, 'industry', industry);
+      assignStringField(insertPayload, 'website', website);
+      assignStringField(insertPayload, 'phone', phone);
+      assignStringField(insertPayload, 'email', email);
+      assignNumericField(insertPayload, 'annual_revenue', annual_revenue);
+      assignIntegerField(insertPayload, 'employee_count', employee_count);
+      assignStringField(insertPayload, 'street', street);
+      assignStringField(insertPayload, 'city', city);
+      assignStringField(insertPayload, 'state', state);
+      assignStringField(insertPayload, 'zip', zip);
+      assignStringField(insertPayload, 'country', country);
+      assignStringField(insertPayload, 'assigned_to', assigned_to);
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('accounts')
-        .insert([{
-          tenant_id,
-          name,
-          type,
-          industry,
-          website,
-          phone: phone || null,
-          email: email || null,
-          annual_revenue: annual_revenue || null,
-          employee_count: employee_count || null,
-          street: street || null,
-          city: city || null,
-          state: state || null,
-          zip: zip || null,
-          country: country || null,
-          assigned_to: assigned_to || null,
-          metadata: customMetadata,
-          created_at: nowIso,
-          updated_at: nowIso,
-        }])
+        .insert([insertPayload])
         .select('*')
         .single();
       if (error) throw new Error(error.message);
@@ -233,7 +300,7 @@ export default function createAccountRoutes(_pgPool) {
       res.json({
         status: "success",
         message: "Account created",
-        data,
+        data: normalizeAccount(data),
       });
     } catch (error) {
       console.error("Error creating account:", error);
@@ -315,7 +382,7 @@ export default function createAccountRoutes(_pgPool) {
       }
       if (error) throw new Error(error.message);
 
-      const account = expandMetadata(data);
+      const account = normalizeAccount(data);
       res.json({ status: "success", data: account });
     } catch (error) {
       console.error("Error fetching account:", error);
@@ -370,35 +437,28 @@ export default function createAccountRoutes(_pgPool) {
       }
       if (fetchErr) throw new Error(fetchErr.message);
 
-      // Store only truly custom fields in metadata (not standard columns)
       const currentMetadata = current?.metadata || {};
-      const updatedMetadata = {
-        ...currentMetadata,
-        ...(metadata || {}),
-        ...otherFields, // Any extra fields not in the schema
-      };
+      const updatedMetadata = sanitizeMetadataPayload(currentMetadata, metadata, otherFields);
 
       const payload = {
         metadata: updatedMetadata,
         updated_at: new Date().toISOString()
       };
 
-      // Update column fields directly
-      if (name !== undefined) payload.name = name;
-      if (type !== undefined) payload.type = type;
-      if (industry !== undefined) payload.industry = industry;
-      if (website !== undefined) payload.website = website;
-      if (phone !== undefined) payload.phone = phone;
-      if (email !== undefined) payload.email = email;
-      // description removed - keep in metadata for unstructured data
-      if (annual_revenue !== undefined) payload.annual_revenue = annual_revenue;
-      if (employee_count !== undefined) payload.employee_count = employee_count;
-      if (street !== undefined) payload.street = street;
-      if (city !== undefined) payload.city = city;
-      if (state !== undefined) payload.state = state;
-      if (zip !== undefined) payload.zip = zip;
-      if (country !== undefined) payload.country = country;
-      if (assigned_to !== undefined) payload.assigned_to = assigned_to;
+      assignStringField(payload, 'name', name);
+      assignStringField(payload, 'type', type);
+      assignStringField(payload, 'industry', industry);
+      assignStringField(payload, 'website', website);
+      assignStringField(payload, 'phone', phone);
+      assignStringField(payload, 'email', email);
+      assignNumericField(payload, 'annual_revenue', annual_revenue);
+      assignIntegerField(payload, 'employee_count', employee_count);
+      assignStringField(payload, 'street', street);
+      assignStringField(payload, 'city', city);
+      assignStringField(payload, 'state', state);
+      assignStringField(payload, 'zip', zip);
+      assignStringField(payload, 'country', country);
+      assignStringField(payload, 'assigned_to', assigned_to);
 
       const { data, error } = await supabase
         .from('accounts')
@@ -414,7 +474,7 @@ export default function createAccountRoutes(_pgPool) {
       }
       if (error) throw new Error(error.message);
 
-      const updatedAccount = expandMetadata(data);
+      const updatedAccount = normalizeAccount(data);
 
       res.json({
         status: "success",

@@ -172,12 +172,24 @@ async function updateOpportunityStageViaAPI(request: any, tenantId: string, oppo
   return res.json();
 }
 
-async function navigateAndWaitForLoad(page: Page, url: string) {
+type NavigateOptions = {
+  hardRefresh?: boolean;
+  refreshReason?: string;
+};
+
+async function navigateAndWaitForLoad(page: Page, url: string, options: NavigateOptions = {}) {
+  const { hardRefresh = true, refreshReason } = options;
   console.log(`   🌐 Navigating to: ${url}`);
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
     // Ignore timeout - page may still be functional
   });
+  if (hardRefresh) {
+    const reasonSuffix = refreshReason ? ` (${refreshReason})` : '';
+    console.log(`   🔄 Triggering hard refresh${reasonSuffix}...`);
+    await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+  }
   // Pause to allow visual observation
   await page.waitForTimeout(800);
 }

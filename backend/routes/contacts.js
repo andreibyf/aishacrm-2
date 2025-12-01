@@ -136,14 +136,87 @@ export default function createContactRoutes(_pgPool) {
   router.use(validateTenantAccess);
   router.use(enforceEmployeeDataScope);
 
+  const toNullableString = (value) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    }
+    if (value === null) return null;
+    return value === undefined ? undefined : String(value);
+  };
+
+  const toTagArray = (value) => {
+    if (!Array.isArray(value)) return null;
+    return value
+      .map((tag) => (typeof tag === 'string' ? tag.trim() : ''))
+      .filter(Boolean);
+  };
+
+  const MIRRORED_METADATA_KEYS = [
+    'mobile',
+    'lead_source',
+    'address_1',
+    'address_2',
+    'city',
+    'state',
+    'zip',
+    'country',
+    'tags',
+    'email',
+    'phone',
+    'status',
+    'account_id',
+    'first_name',
+    'last_name',
+  ];
+
+  const sanitizeMetadataPayload = (...sources) => {
+    const merged = sources.reduce((acc, src) => {
+      if (src && typeof src === 'object' && !Array.isArray(src)) {
+        Object.assign(acc, src);
+      }
+      return acc;
+    }, {});
+
+    MIRRORED_METADATA_KEYS.forEach((key) => {
+      if (key in merged) {
+        delete merged[key];
+      }
+    });
+
+    return merged;
+  };
+
+  const assignStringField = (target, key, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target[key] = null;
+      return;
+    }
+    target[key] = toNullableString(value);
+  };
+
+  const assignTagsField = (target, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target.tags = null;
+      return;
+    }
+    const parsed = toTagArray(value);
+    if (parsed !== null) {
+      target.tags = parsed;
+    }
+  };
+
   // Helper function to expand metadata fields to top-level properties
   const expandMetadata = (record) => {
     if (!record) return record;
-    const { metadata = {}, ...rest } = record;
+    const { metadata, ...rest } = record;
+    const metadataObj = metadata && typeof metadata === 'object' ? metadata : {};
     return {
+      ...metadataObj,
       ...rest,
-      ...metadata,
-      metadata,
+      metadata: metadataObj,
     };
   };
 
@@ -300,7 +373,16 @@ export default function createContactRoutes(_pgPool) {
         description,
         account_id,
         status = 'active',
-        metadata: incomingMetadata,
+        metadata = {},
+        mobile,
+        lead_source,
+        address_1,
+        address_2,
+        city,
+        state,
+        zip,
+        country,
+        tags,
         ...otherFields
       } = req.body || {};
 
@@ -325,40 +407,54 @@ export default function createContactRoutes(_pgPool) {
         });
       }
 
-      // Store title, department, description, and other fields in metadata since they may not be direct columns
-      const mergedMetadata = {
-        ...(incomingMetadata || {}),
-        ...otherFields,
-        ...(title !== undefined && title !== null ? { title } : {}),
-        ...(department !== undefined && department !== null ? { department } : {}),
-        ...(description !== undefined && description !== null ? { description } : {}),
-      };
+      const normalizedStatus = typeof status === 'string' && status.trim() ? status.trim() : 'active';
+      const metadataExtras = {};
+      if (title !== undefined && title !== null) metadataExtras.title = title;
+      if (department !== undefined && department !== null) metadataExtras.department = department;
+      if (description !== undefined && description !== null) metadataExtras.description = description;
+      const mergedMetadata = sanitizeMetadataPayload(metadata, otherFields, metadataExtras);
 
       const nowIso = new Date().toISOString();
+      const contactPayload = {
+        tenant_id,
+        first_name: first_name.trim(),
+        last_name: last_name.trim(),
+        status: normalizedStatus,
+        metadata: mergedMetadata,
+        created_at: nowIso,
+        updated_at: nowIso,
+      };
+
+      assignStringField(contactPayload, 'email', email);
+      assignStringField(contactPayload, 'phone', phone);
+      assignStringField(contactPayload, 'mobile', mobile);
+      assignStringField(contactPayload, 'lead_source', lead_source);
+      assignStringField(contactPayload, 'address_1', address_1);
+      assignStringField(contactPayload, 'address_2', address_2);
+      assignStringField(contactPayload, 'city', city);
+      assignStringField(contactPayload, 'state', state);
+      assignStringField(contactPayload, 'zip', zip);
+      assignStringField(contactPayload, 'country', country);
+      assignTagsField(contactPayload, tags);
+      if (account_id !== undefined) {
+        contactPayload.account_id = account_id || null;
+      }
+
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('contacts')
-        .insert([{
-          tenant_id,
-          first_name,
-          last_name,
-          email,
-          phone,
-          account_id: account_id || null,
-          status,
-          metadata: mergedMetadata,
-          created_at: nowIso,
-          updated_at: nowIso,
-        }])
+        .insert([contactPayload])
         .select('*')
         .single();
       if (error) throw new Error(error.message);
 
+      const contact = expandMetadata(data);
+
       res.json({
         status: 'success',
         message: 'Contact created',
-        data: { contact: data },
+        data: { contact },
       });
     } catch (error) {
       console.error('Error creating contact:', error);
@@ -464,7 +560,28 @@ export default function createContactRoutes(_pgPool) {
   router.put('/:id', invalidateCache('contacts'), async (req, res) => {
     try {
       const { id } = req.params;
-      const { first_name, last_name, email, phone, title, department, description, account_id, status, metadata, ...otherFields } = req.body;
+      const {
+        first_name,
+        last_name,
+        email,
+        phone,
+        title,
+        department,
+        description,
+        account_id,
+        status,
+        metadata = {},
+        mobile,
+        lead_source,
+        address_1,
+        address_2,
+        city,
+        state,
+        zip,
+        country,
+        tags,
+        ...otherFields
+      } = req.body || {};
 
       // Validate required name fields if provided
       if (first_name !== undefined && (!first_name || !first_name.trim())) {
@@ -495,24 +612,36 @@ export default function createContactRoutes(_pgPool) {
       }
       if (fetchErr) throw new Error(fetchErr.message);
 
-      // Store title, department, description in metadata since they may not be direct columns
-      const currentMetadata = current?.metadata || {};
-      const updatedMetadata = {
-        ...currentMetadata,
-        ...(metadata || {}),
-        ...otherFields,
-        ...(title !== undefined ? { title } : {}),
-        ...(department !== undefined ? { department } : {}),
-        ...(description !== undefined ? { description } : {}),
-      };
+      const metadataExtras = {};
+      if (title !== undefined) metadataExtras.title = title;
+      if (department !== undefined) metadataExtras.department = department;
+      if (description !== undefined) metadataExtras.description = description;
+      const updatedMetadata = sanitizeMetadataPayload(current?.metadata, metadata, otherFields, metadataExtras);
 
       const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
-      if (first_name !== undefined) payload.first_name = first_name;
-      if (last_name !== undefined) payload.last_name = last_name;
-      if (email !== undefined) payload.email = email;
-      if (phone !== undefined) payload.phone = phone;
-      if (account_id !== undefined) payload.account_id = account_id;
-      if (status !== undefined) payload.status = status;
+      if (first_name !== undefined) payload.first_name = first_name?.trim?.() || null;
+      if (last_name !== undefined) payload.last_name = last_name?.trim?.() || null;
+      assignStringField(payload, 'email', email);
+      assignStringField(payload, 'phone', phone);
+      assignStringField(payload, 'mobile', mobile);
+      assignStringField(payload, 'lead_source', lead_source);
+      assignStringField(payload, 'address_1', address_1);
+      assignStringField(payload, 'address_2', address_2);
+      assignStringField(payload, 'city', city);
+      assignStringField(payload, 'state', state);
+      assignStringField(payload, 'zip', zip);
+      assignStringField(payload, 'country', country);
+      assignTagsField(payload, tags);
+      if (account_id !== undefined) payload.account_id = account_id || null;
+      if (status !== undefined) {
+        if (status === null) {
+          payload.status = null;
+        } else if (typeof status === 'string') {
+          payload.status = status.trim() || null;
+        } else {
+          payload.status = status;
+        }
+      }
 
       const { data, error } = await supabase
         .from('contacts')

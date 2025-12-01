@@ -3,6 +3,256 @@
 This file tracks known issues. PLAN.md selects which bugs are currently in scope.
 
 ---
+
+
+## Backend / Frontend Field Mismatch
+
+### BUG-BE-FIELDS-001 – Backend missing fields required by UI
+
+**Status:** Active  
+**Priority:** Critical  
+**Area:** Backend API / DTO mapping / Entity serialization
+
+**Symptoms:**
+
+- Frontend forms allow entry of fields (e.g., phone, job_title, metadata, secondary contact info, etc.), but when:
+  - reopening the record,
+  - viewing details in read-only views,
+  - or running snapshot/AI-driven summaries,
+  some of those fields are blank, defaulted, or missing.
+- Network tab shows the POST/PUT payload contains the values, but:
+  - the corresponding GET or list endpoints omit those properties, or
+  - the values are present in Supabase but stripped by the backend.
+- Automated tests that round-trip entities (create → read) fail with messages like:
+  - “field X missing in response”
+  - “expected value Y, got undefined/null”.
+
+**Suspected Causes:**
+
+- Backend SELECTs or serializers only include a subset of columns (e.g., not selecting phone/job_title/metadata from Supabase).
+- DTOs / mapping functions strip fields not explicitly whitelisted.
+- API response shapes diverged from the TypeScript/JS types used in frontend models (e.g., `entities.js` / `api` clients expect more fields than the API returns).
+
+**Notes:**
+
+- This is **data integrity / UX critical**: users think data is saved, but it is not visible or not round-tripping correctly.
+- Fix must preserve existing schema and migration strategy wherever possible; only add columns if tests and code inspection prove they are truly missing at the DB level.
+
+---
+
+## 2. PLAN for this bugfix (save as `orchestra/PLAN-backend-field-parity.md` or make it the current `PLAN.md`)
+
+```md
+# AiSHA CRM – Orchestra Plan (Backend Field Parity Bugfix)
+
+## Current Goal
+
+Type: bugfix  
+Title: Fix backend/ frontend field mismatch so all editable fields round-trip correctly
+
+Description:  
+The frontend exposes several fields on entity forms (e.g., accounts, leads, contacts, opportunities, activities). Some of these values are accepted on create/update but do not reappear when records are fetched.  
+The backend is likely omitting fields in its SELECT/serialization layer, or the API response types have drifted from the frontend models.
+
+This is a **critical data integrity bugfix**: the objective is to restore 1:1 parity between:
+
+- DB schema
+- backend API models / DTOs
+- frontend entity models and forms
+
+No feature work. No UI redesign. No unrelated refactors.
+
+---
+
+## Execution Rules (Critical)
+
+Mode: BUGFIX ONLY
+
+Do NOT:
+
+- Redesign entity models or routes.
+- Introduce new business logic beyond field parity.
+- Refactor unrelated modules (auth, AI, realtime, etc.).
+
+May only:
+
+- Add missing fields to SELECT/INSERT/UPDATE/RETURNING clauses.
+- Adjust mapping/serialization so that all fields the UI can edit are included in responses.
+- Add tests to lock in the expected shapes.
+
+Schema changes (new DB columns) are allowed **only if** code inspection + tests prove a real schema gap (field exists in UI and models but truly does not exist in Supabase).
+
+Every fix must be covered by at least one regression test.
+
+---
+
+## Active Tasks
+
+### BUG-BE-FIELDS-001 – Map frontend fields to backend entities (diagnosis)
+
+**Area:** Backend API + frontend models
+
+**Goal:**  
+Build an inventory of which fields the frontend expects vs. what the backend actually returns, for each core entity.
+
+**Steps:**
+
+1. Identify primary entities with editable forms:
+   - Leads
+   - Contacts
+   - Accounts
+   - Opportunities
+   - Activities
+2. For each entity:
+   - Inspect frontend models / API clients (e.g., `src/api/entities.*`, form components).
+   - List all fields the UI can edit or display.
+3. For each corresponding backend route:
+   - Inspect handlers/controllers (e.g., `backend/routes/*` or service layer) and queries:
+     - SELECT columns
+     - INSERT/UPDATE payload mapping
+     - response serialization / DTOs
+4. Document mismatches:
+   - Fields present in frontend but missing in backend responses.
+   - Fields saved to DB but never returned.
+   - Any discrepancies between DB columns and entity definitions.
+
+**Scope:**
+
+- Diagnosis only; add logging if needed.
+- No behavior changes yet.
+
+**Acceptance:**
+
+- A concise mapping doc (even inline comments or a short markdown file) for each entity:
+  - “UI fields vs API response fields vs DB columns”
+- A clear list of **missing or mis-mapped fields** per entity.
+
+---
+
+### BUG-BE-FIELDS-002 – Fix backend field parity for core entities
+
+**Area:** Backend routes / services / serializers
+
+**Dependencies:** BUG-BE-FIELDS-001
+
+**Goal:**  
+Ensure every editable/displayed field round-trips correctly:
+
+> “User enters X on the form → backend stores it → subsequent GET/list returns X.”
+
+**Steps:**
+
+1. For each entity where gaps were identified:
+   - Update SELECT queries to include all required columns.
+   - Ensure INSERT/UPDATE handlers accept and persist the fields the UI sends.
+   - Fix serializers/DTOs to return all fields, not a truncated subset.
+2. If a field exists in UI + types but not in DB:
+   - Confirm this is not a stale or dead field.
+   - If required, add minimal migration (new column) with safe default, respecting existing conventions.
+3. Keep changes minimal:
+   - No renaming of existing fields.
+   - No breaking changes to existing clients.
+
+**Scope:**
+
+- Only backend code and migrations directly related to field parity.
+- No changes to validation rules beyond what is necessary to accept existing UI fields.
+
+**Acceptance:**
+
+- For each affected entity:
+  - Create/update record with all fields filled.
+  - Fetch the same record via API (detail + list endpoints).
+  - Confirm values match what was submitted.
+
+---
+
+### BUG-BE-FIELDS-003 – Add regression tests for field round-trip
+
+**Area:** Backend tests (and/or integration tests against API)
+
+**Dependencies:** BUG-BE-FIELDS-002
+
+**Goal:**  
+Lock in the contract so this regression cannot silently return.
+
+**Steps:**
+
+1. For each entity with fixed parity:
+   - Add tests that:
+     - Create an entity with all editable fields populated.
+     - Read it back using the public “get” / “list” endpoints.
+     - Assert all fields match (including optional fields when provided).
+2. If you have shared test helpers for entities, reuse them instead of duplicating logic.
+
+**Scope:**
+
+- Tests only.
+- No new endpoints.
+
+**Acceptance:**
+
+- Tests fail on old behavior (missing fields).
+- Tests pass after fix.
+- CI/Orchestra checks now enforce field parity.
+
+---
+
+## Testing & Validation Requirements
+
+**Manual:**
+
+- For each entity:
+  - Use the actual UI to create/edit a record with all fields filled.
+  - Reload the page or navigate away/back.
+  - Confirm all fields are populated with saved values.
+
+**Automated:**
+
+- All existing test suites pass.
+- New regression tests from BUG-BE-FIELDS-003 pass and clearly describe which fields are being validated.
+
+**Environment:**
+
+- Validate behavior in:
+  - Local dev containers.
+  - At least one remote environment (e.g., DEV VPS).
+
+---
+
+## Status
+
+- BUG-BE-FIELDS-001: Not started  
+- BUG-BE-FIELDS-002: Not started  
+- BUG-BE-FIELDS-003: Not started
+
+---
+
+## Backlog (Do Not Touch)
+
+- Entity-level validation improvements.
+- API versioning / schema documentation overhaul.
+- Additional computed fields or derivations.
+
+---
+
+## Usage Instructions for AI Tools
+
+When using Copilot (or any AI auto mode):
+
+1. Read `.github/copilot-instructions.md`.
+2. Read `orchestra/ARCHITECTURE.md`.
+3. Read `orchestra/CONVENTIONS.md`.
+4. Read this PLAN and select **BUG-BE-FIELDS-001** first.
+5. Work on **one task at a time**:
+   - BUG-BE-FIELDS-001: mapping/diagnosis only.
+   - BUG-BE-FIELDS-002: apply minimal code changes.
+   - BUG-BE-FIELDS-003: tests only.
+6. Keep changes scoped. Do not redesign entities or APIs.
+7. Never introduce unrelated features or refactors without approval.
+
+
+
 ## UI/Frontend Issues
 
 ### BUG-UI-001 – Blocked IPs page crashes on load
