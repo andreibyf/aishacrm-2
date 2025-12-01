@@ -172,6 +172,8 @@ export function initMiddleware(app, pgPool) {
       '/api/users/reset-password',   // Password reset email (Supabase Auth, no direct DB writes)
       '/api/cron/run',               // Scheduled job execution
       '/api/notifications',          // User notification delivery
+      '/api/ai/tts',                 // Voice output proxy (no DB writes)
+      '/api/ai/speech-to-text',      // Voice input transcription (no DB writes)
       '/api/auth/login',             // Authentication login (critical for access)
       '/api/auth/refresh',           // JWT token refresh (critical for sessions)
       '/api/auth/logout',            // Authentication logout

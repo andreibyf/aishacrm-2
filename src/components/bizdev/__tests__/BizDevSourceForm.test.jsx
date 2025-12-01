@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { withAct } from '@/test/uiActHelpers';
 import BizDevSourceForm from '../BizDevSourceForm.jsx';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
@@ -24,9 +25,11 @@ vi.mock('@/api/entities', () => ({
   Lead: { filter: (...args) => filterLeadsMock(...args) },
 }));
 
-function fillBasicFields() {
-  fireEvent.change(screen.getByLabelText(/Source/i), { target: { value: 'Directory Q4' } });
-  fireEvent.change(screen.getByLabelText(/Company Name/i), { target: { value: 'Acme Corp' } });
+async function fillBasicFields() {
+  await withAct(async () => {
+    fireEvent.change(screen.getByLabelText(/Source/i), { target: { value: 'Directory Q4' } });
+    fireEvent.change(screen.getByLabelText(/Company Name/i), { target: { value: 'Acme Corp' } });
+  });
 }
 
 describe('BizDevSourceForm - Unified Submission Pattern', () => {
@@ -44,14 +47,16 @@ describe('BizDevSourceForm - Unified Submission Pattern', () => {
 
     render(<BizDevSourceForm onSubmit={onSubmit} onCancel={vi.fn()} />);
 
-    fillBasicFields();
+    await fillBasicFields();
 
-    fireEvent.click(screen.getByRole('button', { name: /Create Source/i }));
+    await withAct(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Create Source/i }));
+    });
 
     await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
     expect(createMock.mock.calls[0][0]).toEqual(expect.objectContaining({
       tenant_id: 'tenant-123',
-      source: 'Directory Q4',
+      source_name: 'Directory Q4',
       company_name: 'Acme Corp'
     }));
 
@@ -66,8 +71,10 @@ describe('BizDevSourceForm - Unified Submission Pattern', () => {
 
     render(<BizDevSourceForm initialData={existing} onSubmit={onSubmit} onCancel={vi.fn()} />);
 
-    fireEvent.change(screen.getByLabelText(/Company Name/i), { target: { value: 'Beta Limited' } });
-    fireEvent.click(screen.getByRole('button', { name: /Update Source/i }));
+    await withAct(async () => {
+      fireEvent.change(screen.getByLabelText(/Company Name/i), { target: { value: 'Beta Limited' } });
+      fireEvent.click(screen.getByRole('button', { name: /Update Source/i }));
+    });
 
     await waitFor(() => expect(updateMock).toHaveBeenCalledWith(existing.id, expect.objectContaining({
       tenant_id: 'tenant-123',
@@ -84,7 +91,9 @@ describe('BizDevSourceForm - Unified Submission Pattern', () => {
     const { container } = render(<BizDevSourceForm onSubmit={onSubmit} onCancel={vi.fn()} />);
 
     // Intentionally fill only Company Name
-    fireEvent.change(screen.getByLabelText(/Company Name/i), { target: { value: 'Acme Corp' } });
+    await withAct(async () => {
+      fireEvent.change(screen.getByLabelText(/Company Name/i), { target: { value: 'Acme Corp' } });
+    });
 
     // Disable native validation blocking and submit the form programmatically
     const form = container.querySelector('form');
@@ -106,8 +115,10 @@ describe('BizDevSourceForm - Unified Submission Pattern', () => {
     const onSubmit = vi.fn();
     render(<BizDevSourceForm onSubmit={onSubmit} onCancel={vi.fn()} />);
 
-    fillBasicFields();
-    fireEvent.click(screen.getByRole('button', { name: /Create Source/i }));
+    await fillBasicFields();
+    await withAct(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Create Source/i }));
+    });
 
     await waitFor(() => expect(createMock).not.toHaveBeenCalled());
     expect(updateMock).not.toHaveBeenCalled();
@@ -120,7 +131,7 @@ describe('BizDevSourceForm - Unified Submission Pattern', () => {
 
     render(<BizDevSourceForm onSubmit={onSubmit} onCancel={vi.fn()} />);
 
-    fillBasicFields();
+    await fillBasicFields();
     // leave DBA Name empty and submit
     fireEvent.click(screen.getByRole('button', { name: /Create Source/i }));
 

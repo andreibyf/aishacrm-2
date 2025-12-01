@@ -14,3 +14,11 @@ export function createPageUrl(pageName: string) {
     }
     return '/' + pageName.toLowerCase().replace(/ /g, '-');
 }
+
+export {
+    trackRealtimeEvent,
+    trackConnectionStateChange,
+    subscribeToRealtimeTelemetry,
+    getRealtimeTelemetrySnapshot,
+    clearRealtimeTelemetry
+} from './realtimeTelemetry.js';

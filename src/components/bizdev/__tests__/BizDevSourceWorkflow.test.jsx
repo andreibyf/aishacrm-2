@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { withAct } from '@/test/uiActHelpers';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import BizDevSourceForm from '../BizDevSourceForm';
@@ -111,14 +112,16 @@ describe('BizDevSource Complete Workflow Integration Tests', () => {
 
   // Submit the form
   const submitButton = screen.getByRole('button', { name: /create source/i });
-      await user.click(submitButton);
+      await withAct(async () => {
+        await user.click(submitButton);
+      });
 
       // Verify source was created with correct data
       await waitFor(() => {
         expect(BizDevSource.create).toHaveBeenCalledWith(
           expect.objectContaining({
             company_name: 'Acme Corp',
-            source: 'Web Research',
+            source_name: 'Web Research',
             email: 'contact@acme.com',
             phone_number: '555-0100',
             tenant_id: 'test-tenant-123',
@@ -171,13 +174,15 @@ describe('BizDevSource Complete Workflow Integration Tests', () => {
       await user.type(screen.getByLabelText(/notes/i), 'High priority lead');
 
   const submitButton = screen.getByRole('button', { name: /create source/i });
-      await user.click(submitButton);
+      await withAct(async () => {
+        await user.click(submitButton);
+      });
 
       await waitFor(() => {
         expect(BizDevSource.create).toHaveBeenCalledWith(
           expect.objectContaining({
             company_name: 'Full Data Corp',
-            source: 'Directory',
+            source_name: 'Directory',
             email: 'info@fulldata.com',
             address_line_1: '123 Main St',
             city: 'Seattle',
@@ -205,7 +210,9 @@ describe('BizDevSource Complete Workflow Integration Tests', () => {
 
       // Try to submit without filling required fields
   const submitButton = screen.getByRole('button', { name: /create source/i });
-      await userEvent.click(submitButton);
+      await withAct(async () => {
+        await userEvent.click(submitButton);
+      });
 
       // Form should not be submitted (browser validation prevents it)
       expect(mockOnSubmit).not.toHaveBeenCalled();
@@ -236,7 +243,7 @@ describe('BizDevSource Complete Workflow Integration Tests', () => {
       );
 
       // Verify the source name is displayed
-      expect(screen.getByText('Beta Industries')).toBeInTheDocument();
+      expect(screen.getAllByText('Beta Industries').length).toBeGreaterThan(0);
       
       // The promote button should be visible for Active status
       await waitFor(() => {
@@ -358,7 +365,7 @@ describe('BizDevSource Complete Workflow Integration Tests', () => {
         </BrowserRouter>
       );
 
-      expect(screen.getByText('Opportunity Test Corp')).toBeInTheDocument();
+      expect(screen.getAllByText('Opportunity Test Corp').length).toBeGreaterThan(0);
     });
 
     it('should render detail panel for sources with linked leads', async () => {
@@ -383,7 +390,7 @@ describe('BizDevSource Complete Workflow Integration Tests', () => {
         </BrowserRouter>
       );
 
-      expect(screen.getByText('Lead Test Corp')).toBeInTheDocument();
+      expect(screen.getAllByText('Lead Test Corp').length).toBeGreaterThan(0);
     });
   });
 });

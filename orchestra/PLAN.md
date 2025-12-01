@@ -1,23 +1,720 @@
-# AiSHA CRM – Orchestra Plan (AI Brain v0 Using Braid MCP)
+# AiSHA CRM – Phase 2C Plan (Hands-Free Voice Chat)
 
-## Current Task – Phase 2A Conversational Core
 
-Phase 2A (Conversational Core) is now the active feature phase. All prior Brain Phase 1 tasks are completed and documented in Completed Tasks. Platform health bugfix suite is stabilized; feature work shifts to introducing the right-side AI conversational layer without replacing existing UI.
+## Goal
 
-Reference full scoped plan in `orchestra/PLAN_PHASE2A_CONVERSATIONAL_CORE.md` (kept separate for clarity). Key constraints:
+Upgrade the existing Phase 2 voice layer so that voice behaves like a true “live chat with AiSHA”:
 
-- Modes limited to `read_only` and `propose_actions` when invoking `aiBrain.runTask`.
-- No autonomous writes (`apply_allowed`) and no delete_* tool execution.
-- Zero database schema changes; purely UI + thin intent mapping + safe Brain calls.
+- User taps mic → speaks → STT runs → transcript is **auto-sent** as a message.
+- Assistant responds in text and (optionally) voice via ElevenLabs TTS.
+- Tenant isolation and all safety rules still apply.
+- No “review/edit transcript” step for normal usage.
 
-Active Phase 2A Task IDs:
+This is a UX/flow upgrade only. No new Brain modes, no new MCP tools.
+
+---
+
+## Execution Rules
+
+Do NOT:
+
+- Change Brain modes (`read_only`, `propose_actions`, `apply_allowed`).
+- Add any `delete_*` tools or bypass existing Braid policies.
+- Add new backend models or DB tables.
+- Change conversation storage schema.
+
+Allowed:
+
+- Frontend-only changes in AI sidebar/speech hooks.
+- Minor backend tweaks **only** inside existing `/api/ai/speech-to-text` and `/api/ai/tts` routes.
+- Additional safety checks for voice input/output.
+
+---
+
+## Active Tasks
+
+# PLAN – Realtime Voice Interaction (OpenAI Realtime WebRTC)
+
+Phase: **Realtime Voice / Streaming Assistant**  
+Status: **Planned**  
+Owner: **AiSHA Core**  
+Scope: **Add continuous, hands-free voice conversation with AiSHA using OpenAI Realtime API, without breaking existing STT/TTS and text chat flows.**
+
+---
+
+## 1. Goals
+
+- Allow users to **talk to AiSHA in realtime** (push to connect, then natural back-and-forth).
+- Use **OpenAI Realtime WebRTC** for:
+  - Low-latency audio in/out.
+  - Event channel for text/metadata.
+- Keep all existing guarantees:
+  - **Tenant isolation**.
+  - **Read-only / propose-actions** boundaries from Brain Phase 1.
+  - No raw OpenAI API keys in the browser.
+- Do **not** break:
+  - Existing sidebar text chat.
+  - Existing REST-based STT/TTS (Phase 2C); this becomes the fallback path.
+
+Non-Goals (for this phase):
+- No autonomous write/apply mode.
+- No per-tenant custom voice yet (single default voice is fine).
+- No mobile app work; browser only.
+
+---
+
+## 2. Architecture Overview
+
+### 2.1 Backend
+
+- New **Express router** mounted under `/api/ai`:
+  - `GET /api/ai/realtime-token`
+    - Mints an **ephemeral realtime client secret** using OpenAI REST:
+      - `POST https://api.openai.com/v1/realtime/client_secrets`
+    - Session config:
+      - `type: "realtime"`
+      - `model: "gpt-realtime"`
+      - `audio.output.voice: "marin"` (or chosen default)
+      - `instructions`: mirror AiSHA’s CRM-safe system prompt (read-only / propose-actions).
+    - Uses `process.env.OPENAI_API_KEY` (or tenant key when available).
+    - Returns `{ value: "<EPHEMERAL_KEY>", expires_at: ... }`.
+
+- Optional (not required in first cut, but design for later):
+  - `POST /api/ai/realtime-session`
+    - Server-side SDP proxy for environments where client → OpenAI direct is blocked.
+    - Mirrors the `/v1/realtime/calls` pattern from the docs.
+
+- All calls:
+  - Log `{ tenant_id, user_id, mode: "realtime", created_at }` to existing logging system.
+  - Enforce auth (only signed-in users, tenant bound).
+
+### 2.2 Frontend
+
+- New **hook**: `useRealtimeAiSHA`
+  - Responsibilities:
+    - Create and manage `RTCPeerConnection`.
+    - Capture mic via `getUserMedia({ audio: true })`.
+    - Attach local audio track.
+    - Create `DataChannel` `"oai-events"` for events.
+    - Handle remote audio track and pipe to hidden `<audio autoplay>` element.
+    - State:
+      - `isSupported`
+      - `isConnecting`
+      - `isConnected`
+      - `isListening`
+      - `error`
+    - API:
+      - `connectRealtime(options)` → establishes session:
+        - Fetches `/api/ai/realtime-token`.
+        - Performs WebRTC offer/answer with `EPHEMERAL_KEY`.
+      - `sendUserMessage(text)`:
+        - Sends `conversation.item.create` event over data channel.
+        - Also emits a local “user message” into AiSidebar transcript.
+      - `disconnectRealtime()`:
+        - Closes PC/data channel, stops tracks, clears flags.
+
+- **AiSidebar integration**
+  - Add a **Realtime toggle** (Phase name: RT-UI):
+    - “Talk to AiSHA (realtime)” button or switch.
+    - When toggled on:
+      - Calls `connectRealtime`.
+      - Shows **LIVE** indicator.
+      - Mic is “open” for conversation (press-to-connect, not always-on eavesdrop).
+    - When toggled off:
+      - Calls `disconnectRealtime`.
+      - Falls back to existing text + STT/TTS pipeline.
+
+  - Transcript:
+    - Reuse existing message list structure where possible.
+    - Map server events to transcript entries:
+      - When we send `conversation.item.create` (user), add message bubble.
+      - When we receive assistant messages/events, convert to assistant bubbles.
+    - If needed, maintain a simple local “sessionId” for grouping.
+
+- **Safety alignment**
+  - Realtime session instructions must mirror:
+    - BRAID_SYSTEM_PROMPT CRM rules.
+    - Brain Ph1 modes: **read_only / propose_actions** only.
+  - No delete/update calls via realtime; any “do X in CRM” should still route through existing Brain APIs (future phase). For this phase, realtime is **assistant + insight layer**, not executor.
+
+---
+
+## 3. Work Breakdown
+
+### 3.1 Backend Tasks
+
+**RT-BE-001 – Realtime token endpoint**
+
+- Add `backend/routes/aiRealtime.js`:
+  - `GET /api/ai/realtime-token`
+  - Steps:
+    1. Resolve tenant + user from request (same helper as other AI routes).
+    2. Build session config JSON:
+       - `type: "realtime"`, `model: "gpt-realtime"`.
+       - `audio.output.voice` default.
+       - `instructions` including:
+         - Tenant name/slug.
+         - “Read-only / propose-actions only” rule.
+         - No deletes or destructive actions.
+    3. Call `POST /v1/realtime/client_secrets` with server OpenAI key.
+    4. Return `{ value, expires_at }` or 5xx on error.
+  - Add environment docs:
+    - `OPENAI_REALTIME_MODEL` (optional).
+    - Reuse `OPENAI_API_KEY`.
+
+**RT-BE-002 – Wire router into ai.js**
+
+- Import router and mount under `/api/ai`.
+- Ensure CORS / auth settings match other AI routes.
+
+**RT-BE-003 – Logging & safety**
+
+- Log every token mint:
+  - `tenant_uuid`, `tenant_slug`, `user_id`, `ip`, `user_agent`, `expires_at`.
+- Ensure requests require auth token/session cookie (no anonymous).
+
+---
+
+### 3.2 Frontend Tasks
+
+**RT-FE-001 – Hook: useRealtimeAiSHA**
+
+- New file: `src/hooks/useRealtimeAiSHA.js` (or `.ts` if repo is ready).
+- Implement:
+  - Internal `pcRef`, `dcRef`, `audioElementRef`.
+  - `connectRealtime()`:
+    - Guard against double-connect.
+    - Fetch `/api/ai/realtime-token`.
+    - Create `RTCPeerConnection`.
+    - Attach local mic track.
+    - Create data channel `"oai-events"`.
+    - Create offer → POST to `https://api.openai.com/v1/realtime/calls` (with EPHEMERAL_KEY) OR (if using server proxy) to `/api/ai/realtime-session`.
+    - Apply remote answer.
+    - Set `isConnected = true`, `isListening = true`.
+  - `sendUserMessage(text)`:
+    - Send `conversation.item.create` JSON as per docs.
+    - Handle case where `dc` not ready (no-op with error).
+  - `disconnectRealtime()`:
+    - Close PC, DC, stop tracks, reset flags.
+  - Expose:
+    - `{ isSupported, isConnecting, isConnected, isListening, error, connectRealtime, sendUserMessage, disconnectRealtime }`.
+
+**RT-FE-002 – Integrate with AiSidebar**
+
+- Modify `AiSidebar.jsx`:
+  - Import `useRealtimeAiSHA`.
+  - Add realtime toggle button in header/footer:
+    - Show status: “Realtime OFF / ON (LIVE)”.
+  - When realtime ON:
+    - On sending messages from input:
+      - Use `sendUserMessage` instead of existing REST flow.
+      - Still render text message locally.
+    - Listen to incoming data channel messages:
+      - For now, log to console and map any assistant messages into transcript.
+  - When realtime OFF:
+    - Existing text/STT pipeline behaves exactly as before.
+
+- Update transcription UI:
+  - If realtime is ON:
+    - Keep input box for fallback text, but primary interaction is voice.
+  - Ensure existing mic/ElevenLabs buttons remain (for non-realtime mode).
+
+**RT-FE-003 – Realtime indicator**
+
+- New component: `src/components/ai/RealtimeIndicator.jsx`
+  - Simple “LIVE” pill with pulsing dot.
+  - Props: `{ active: boolean }`.
+
+**RT-FE-004 – State & safety integration**
+
+- In `useAiSidebarState` (or equivalent):
+  - Add “mode” flag: `"text" | "realtime"`.
+  - Ensure messages from realtime and from traditional pipeline share a unified transcript model.
+  - Do **not** bypass existing destructive-command filters; if we later wire realtime → Brain, it must still pass through intent filters.
+
+---
+
+## 4. Testing & Verification
+
+**RT-TEST-001 – Backend**
+
+- Manual curl:
+  - `GET /api/ai/realtime-token` as authenticated user.
+  - Confirm `{ value, expires_at }` shape.
+  - Confirm logs written.
+
+**RT-TEST-002 – Browser happy path**
+
+1. Enable realtime toggle in AiSidebar.
+2. Browser prompts for mic access; connection succeeds.
+3. Speak: “Hi AiSHA, summarize my open opportunities.”
+4. Hear spoken answer; transcript shows AiSHA reply.
+
+**RT-TEST-003 – Error handling**
+
+- No mic permission:
+  - Show explicit error.
+- Token failure (5xx):
+  - Show “Unable to start realtime session” and fall back to normal chat.
+- Disconnect from network:
+  - Realtime indicator turns off; user can reconnect.
+
+**RT-TEST-004 – Isolation / safety**
+
+- Confirm no OpenAI secret key appears in browser dev tools.
+- Confirm `EPHEMERAL_KEY` has short lifetime (from API response).
+- Confirm session uses instructions forbidding destructive CRM actions.
+
+---
+
+## 5. Rollout
+
+- **Feature flag** `AI_REALTIME_ENABLED`:
+  - Dev: ON
+  - Staging: ON (limited testers)
+  - Prod: OFF until verification checklist is signed.
+
+- Once stable:
+  - Update marketing copy:
+    - “Talk to AiSHA in realtime.”
+  - Update in-app onboarding to highlight the new “Realtime Voice” mode.
+
+---
+
+## Completed Goals
+
+
+
+### PH2C-VOICE-001 – Auto-Send Voice Transcripts
+
+**Status:** Complete ✅ (validated via `useSpeechInput` + `AiSidebar.voice` vitest suites)  
+**Area:** Frontend (AI sidebar, speech input hook)
+
+**Problem**
+
+Current behavior:
+- Mic → STT → transcript draft → user must manually review + press Send.
+
+Target behavior:
+- Mic → STT → **final transcript is immediately sent** as a message.
+- User sees their voice message appear in the sidebar like any typed message.
+
+**Files to inspect/modify**
+
+- `src/components/ai/useSpeechInput.js`
+- `src/components/ai/useAiSidebarState.jsx`
+- `src/components/ai/AiSidebar.jsx`
+- `src/components/ai/__tests__/useSpeechInput.test.jsx`
+- `src/components/ai/__tests__/AiSidebar.voice.test.jsx` (or equivalent)
+
+**Implementation outline**
+
+1. **Hook callback**
+   - Update `useSpeechInput` to accept an optional `onFinalTranscript(text)` callback.
+   - When STT finishes and returns final text, call `onFinalTranscript` (if provided).
+
+2. **Auto-send wiring**
+   - In `AiSidebar.jsx`, initialize `useSpeechInput({ onFinalTranscript })`.
+   - In `onFinalTranscript`, call:
+     - `sendMessage(text, { origin: 'voice', autoSend: true })`.
+   - Remove/disable any “voice draft” review UI.
+
+3. **State + UX**
+   - `sendMessage` should:
+     - Immediately append a local “user” bubble so the transcript appears right away.
+     - Then call `processChatCommand` as today.
+   - Ensure mic/transcribing state is shown but does not require extra clicks.
+
+4. **Voice safety**
+   - Keep destructive-phrase guard:
+     - If transcript matches unsafe phrases (e.g. “delete all contacts”, “wipe everything”), do **not** auto-send.
+     - Instead, show a warning and optionally drop the transcript or require manual re-try.
+
+**Acceptance**
+
+- Speaking into mic results in:
+  - Final transcript automatically appearing as a user message.
+  - Assistant response returned through the existing chat pipeline.
+- Destructive commands spoken by voice are blocked, not auto-sent.
+- Tests cover:
+  - `onFinalTranscript` firing.
+  - Voice-origin messages calling `sendMessage` with `{ origin: 'voice', autoSend: true }`.
+
+---
+
+### PH2C-VOICE-002 – Auto-Play Assistant Replies (Optional)
+
+**Status:** Complete ✅ (auto-play hooked into `useSpeechOutput`, covered in `AiSidebar.voice` tests)  
+**Area:** Frontend (speech output hook, sidebar UI)
+
+**Goal**
+
+When a message originated from voice (`origin: 'voice'`) and TTS is available, optionally auto-play assistant replies.
+
+**Files**
+
+- `src/components/ai/useSpeechOutput.js`
+- `src/components/ai/AiSidebar.jsx`
+- `src/components/ai/useAiSidebarState.jsx`
+- `src/components/ai/__tests__/useSpeechOutput.test.jsx`
+
+**Implementation outline**
+
+- When a new assistant message arrives for a voice-origin turn:
+  - Optionally call `speakText(responseText)` via `useSpeechOutput`.
+  - Provide a way to stop playback from the UI (existing Listen button can double as stop).
+
+**Acceptance**
+
+- Voice conversation feels “phone-like” when enabled, but can be disabled later without breaking text UX.
+
+---
+
+### PH2C-VOICE-003 – Voice UX & Safety Polish
+
+**Status:** Complete ✅ (press-to-talk UX + safety note/live warnings shipped)  
+**Area:** Frontend only
+
+**Goal**
+
+Ensure users clearly understand that:
+
+- Voice transcripts are treated exactly like text messages.
+- Safety rules apply equally to voice and text.
+
+**Tasks**
+
+- Ensure a small, persistent note in AiSidebar like:
+  > “Voice commands are treated the same as typed messages. Destructive operations are blocked or require explicit confirmation.”
+- Make sure any error states (no STT key, network error, blocked phrase) show clear, non-technical messages.
+
+---
+
+## Testing & Validation
+
+Manual:
+
+- Start mic, speak a normal CRM request (e.g., “Show me all open leads from this week.”):
+  - Transcript appears immediately as a user bubble.
+  - Assistant responds via text.
+  - (Optional) voice output plays automatically.
+- Speak a destructive phrase (e.g., “Delete all contacts for this tenant”):
+  - No message is sent.
+  - A clear safety warning appears.
+
+Automated:
+
+- `npx vitest run src/components/ai/__tests__/useSpeechInput.test.jsx`
+- `npx vitest run src/components/ai/__tests__/AiSidebar.voice.test.jsx`
+- `npx vitest run src/components/ai/__tests__/useSpeechOutput.test.jsx`
+
+---
+
+## Status
+
+- PH2C-VOICE-001: Not started  
+- PH2C-VOICE-002: Not started  
+- PH2C-VOICE-003: Not started
+
+
+
+
+
+# Phase 2C – Speech Layer (Voice Input + Output) 
+
+Type: feature  
+Title: Add safe voice input/output to AiSHA assistant sidebar
+
+Description:  
+Extend the existing conversational sidebar so users can talk to AiSHA and optionally listen to its replies. All voice commands must flow through the existing Phase 2B intent engine and **MUST NOT** bypass safety modes (`read_only` / `propose_actions`) or introduce any autonomous `apply_allowed` paths.
+
+Primary TTS provider: **ElevenLabs** (for assistant voice output).  
+Primary STT provider: OpenAI Whisper (or existing Audio API) for transcription.
+
+---
+
+## Execution Rules (Critical)
+
+Do NOT:
+
+- Add any new write paths or bypass `processChatCommand`.
+- Call Braid / Brain endpoints directly from audio components.
+- Introduce `apply_allowed` mode or delete operations.
+- Auto-submit voice commands without showing the transcript to the user first.
+
+You MAY:
+
+- Add a microphone control to the existing AiSidebar UI.
+- Add TTS playback controls for assistant replies.
+- Add small UX tweaks in the sidebar to support voice (icons, labels, hints).
+
+Every voice command must:
+1. Be transcribed to visible text.
+2. Go through `processChatCommand` (Phase 2B pipeline).
+3. Respect existing routing + safety logic.
+
+---
+
+```
+
+### PH2C-SPEECH-001 – Voice Input (STT) Integration
+
+Area: Frontend only (AiSidebar + AI hooks)
+
+Goal:  
+Allow users to press and hold (or click) a microphone button to record audio, send it to STT, then inject the transcribed text into the sidebar input box.
+
+Steps:
+
+- Add a mic button to `AiSidebar.jsx`:
+  - Visible near the text input.
+  - States: idle, recording, processing, error.
+- Implement `useSpeechInput` hook:
+  - Uses Web Audio / MediaRecorder to capture microphone audio.
+  - Sends audio blob to STT endpoint:
+    - Either OpenAI Whisper (backend `/api/ai/speech-to-text`) or a dedicated audio route.
+  - Returns `{ transcript, isRecording, isTranscribing, error }`.
+- UX rule:
+  - Do NOT auto-send; place transcript in the existing input field and let the user hit “Send”.
+  - If STT fails, show a small inline error and keep any partially captured text (if available).
+
+Scope:
+
+- No backend changes beyond a single STT proxy route (if not already present).
+- No changes to `processChatCommand` logic.
+
+Acceptance:
+
+- User can:
+  - Click/hold mic → speak → see text appear in input.
+  - Edit transcript before sending.
+- No request is sent to `/api/ai/chat` or `/api/ai/brain-test` until user explicitly hits Send.
+
+---
+
+### PH2C-SPEECH-002 – Voice Output (ElevenLabs TTS) Integration
+
+Area: Frontend + small backend proxy for ElevenLabs
+
+Goal:  
+Let users optionally listen to AiSHA’s responses using ElevenLabs.
+
+Steps:
+
+- Backend:
+  - Add `/api/ai/tts` route that:
+    - Validates `text` payload length and tenant/user context.
+    - Uses `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` to call ElevenLabs TTS.
+    - Returns an audio stream or base64 audio.
+  - Add env docs in `.env.example`:
+    ```env
+    # ElevenLabs TTS
+    ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
+    ELEVENLABS_VOICE_ID=default_or_custom_voice_id
+    ```
+- Frontend:
+  - Add a “speaker” icon per assistant message in `AiSidebar.jsx`.
+  - Implement `useSpeechOutput` hook:
+    - Calls `/api/ai/tts` with the assistant message text.
+    - Plays back audio via `Audio` element or Web Audio API.
+    - Handles states: loading, playing, error, cancel.
+  - Preserve messages exactly; do not mutate content for TTS.
+
+Scope:
+
+- No changes to how assistant text is generated (still via `processChatCommand` → backend).
+- TTS is purely a presentation layer.
+
+Acceptance:
+
+- Clicking the speaker icon:
+  - Triggers a TTS call.
+  - Plays the correct message audio.
+  - Shows a minimal playback state (e.g., spinner or “Playing…”).
+- Errors are handled gracefully (inline message, no crashes).
+
+---
+
+### PH2C-SPEECH-003 – Voice Safety & UX Guardrails
+
+Area: Frontend (AiSidebar + hooks) + minimal backend validation
+
+Goal:  
+Ensure voice interaction remains safe, predictable, and doesn’t accidentally trigger risky commands.
+
+Steps:
+
+- UX:
+  - Default to **push-to-talk** or explicit “Start/Stop recording” button.
+  - Show the recognized text clearly before sending.
+  - Add a small note in sidebar: “Voice commands go through the same assistant as text.”
+- Safety checks on transcript:
+  - Before sending transcript to `processChatCommand`, run a cheap local filter:
+    - If it looks like “delete all …”, “wipe …”, “remove everything”, etc., show a confirmation dialog or refuse with a warning.
+  - Even if user confirms, the backend still blocks deletes via Phase 1 policies.
+- Logging:
+  - Tag voice-originated messages in metadata (e.g. `origin: "voice"`).
+  - Ensure logs don’t store raw audio, only text + context.
+
+Scope:
+
+- Frontend-only logic plus minor metadata changes in existing request payloads.
+- No new backend capabilities for writes.
+
+Acceptance:
+
+- Voice-originated messages:
+  - Are clearly marked in logs/metadata.
+  - Still respect `read_only` / `propose_actions` mode.
+  - Cannot bypass the no-delete guarantee.
+
+---
+
+## Testing & Validation Requirements
+
+Manual checks:
+
+- Voice input:
+  - Mic → speak → transcript appears in input field.
+  - User must click “Send” to actually submit.
+- Voice output:
+  - Click speaker icon → assistant message is spoken with ElevenLabs voice.
+  - Network errors degrade gracefully (no crashes, clear message).
+- Safety:
+  - Obvious destructive phrases are flagged before send.
+
+Automated:
+
+- Unit tests for:
+  - `useSpeechInput` (mock STT API).
+  - `useSpeechOutput` (mock TTS API).
+  - Safety filter for transcripts.
+- Regression:
+  - Existing Phase 2A/2B tests still pass.
+
+---
+
+## Status
+
+- PH2C-SPEECH-001: Not started  
+- PH2C-SPEECH-002: Not started  
+- PH2C-SPEECH-003: Not started  
+
+---
+
+## Usage Instructions for AI Tools (Copilot / Orchestrator)
+
+When working on Phase 2C:
+
+1. Read `.github/copilot-instructions.md`.
+2. Read `orchestra/PLAN.md` (especially Phase 2B + Phase 2C sections).
+3. Read existing conversational files:
+   - `AiSidebar.jsx`
+   - `useAiSidebarState.jsx`
+   - `processChatCommand.ts`
+   - `intentClassifier.ts`
+4. Work ONLY on PH2C tasks:
+   - PH2C-SPEECH-001, then 002, then 003.
+5. Do NOT:
+   - Introduce `apply_allowed` mode anywhere.
+   - Add delete operations.
+6. Keep changes small, logged, and covered by basic tests.
+
+
+
+## Phase 2B – Conversational Engine & Intent Layer (Completed)
+
+Objective:
+Transform the sidebar into a full AI command interface that can interpret natural language and translate it into structured CRM intents — without executing writes. This bridges Phase 2A (UI) into Phase 3 (autonomous operations).
+
+Constraints:
+- No backend schema changes.
+- No modification to aiBrain.ts beyond adding a safe "intent_only" taskType wrapper.
+- No new write endpoints.
+- Must use only read-only/propose-actions modes.
+- Must maintain a safe, reversible UI-only layer.
+- Follow `orchestra/PLAN_PHASE2A_CONVERSATIONAL_CORE.md` and Phase 2 global PLAN.
+
+Deliverables:
+1. NLU Intent Classifier (client-side, deterministic)
+   - Map natural language → { intent, entity, filters }
+   - Example intents: “show leads”, “summaries”, “forecast”, “activities due today”
+   - Implement as `src/ai/nlu/intentClassifier.ts`
+   - Zero backend dependency.
+
+2. Command Router
+   - Routes `{intent, entity}` →:
+     - `/api/ai/chat` (raw query), OR
+     - `/api/ai/brain-test` (read_only), OR
+     - local UI action (scroll, filter, open record)
+   - File: `src/ai/engine/commandRouter.ts`
+
+3. Prompt Orchestration Layer
+   - Wraps the chat prompt so requests become:
+     - “User intent: X”
+     - “Target entity: Y”
+     - “Context: Z”
+   - Ensures AiSHA stays in safe modes.
+   - File: `src/ai/engine/promptBuilder.ts`
+
+4. Sidebar Integration
+   - AiSidebar calls `processChatCommand(text)`
+   - That function:
+     - Runs intent classifier
+     - Calls command router
+     - Updates transcript
+
+5. Optional Enhancements
+   - Quick action chips: “Show leads”, “View pipeline”, “My tasks”
+   - CRM-specific autocomplete (Phase 3)
+
+Tests:
+- `intentClassifier.test.ts` (classification)
+- `commandRouter.test.ts` (routing)
+- e2e: user → sidebar → output
+
+Acceptance Criteria:
+- Natural language becomes structured intent.
+- Intent becomes either:
+  - AI read-only response
+  - AI propose-actions preview
+  - UI navigation helper
+- No writes occur.
+- No backend regressions.
+
+Status: **Complete ✅** – intent classifier, prompt builder, command router, and sidebar integration are in place for PH2B. Core unit tests pass.
+
+Verification Notes (Nov 30, 2025):
+- Ran targeted Phase 2B tests: `src/ai/nlu/intentClassifier.test.ts` and `src/ai/engine/commandRouter.test.ts`.
+- Results: 2/2 files passed, 7/7 tests passed.
+- Scope: Verified NLU→Router→Prompt orchestration in read_only/propose_actions; no writes performed.
+
+Documentation Update (Nov 30, 2025):
+- Marked Phase 2B as Completed in this plan.
+- Guardrails remain tracked below as follow-up hardening tasks.
+
+Pending: **Guardrails + regression tests** to ensure production readiness and safety coverage.
+Planned guardrails:
+- Enforce `mode` to `read_only` or `propose_actions` at router boundary.
+- Validate `tenantId` presence and UUID format before routing.
+- Add negative tests (write intents rejected, unsafe commands blocked).
+
+---
+
+## Phase 2A – Conversational Core (Completed)
+
+Phase 2A has been completed for the initial scope: UI drawer and baseline chat wiring. The assistant panel is a right-side drawer (420px), toggled by the avatar, and calls `/api/ai/chat` in read-only/propose-actions modes. Remaining intents/forms/voice are deferred.
+
+Reference full scoped plan in `orchestra/PLAN_PHASE2A_CONVERSATIONAL_CORE.md`.
+
+Completed in Phase 2A:
 - PH2A-CORE-001 (AI Assistant Panel UI)
 - PH2A-CORE-002 (Basic Chat Wiring)
+
+Deferred:
 - PH2A-CORE-003 (Intent Mapping Layer)
 - PH2A-CORE-004 (Conversational Forms – propose only)
 - PH2A-CORE-005 (Voice Input – speech-to-text)
-
-All are currently Not started. Select exactly one to begin; keep changes surgical and aligned with `ARCHITECTURE.md` and `CONVENTIONS.md`.
 
 ---
 
@@ -51,7 +748,7 @@ We already have OpenAI integrated with the Braid MCP server and CRM CRUD tools (
 
 ---
 
-## Active Tasks
+
 
 ### BRAIN-001 – Document the AI Brain
 

@@ -25,6 +25,7 @@ import {
   DollarSign,
   FileText,
   LayoutDashboard,
+  Mic,
   Settings,
   Target,
   TrendingUp,
@@ -272,6 +273,20 @@ const defaultModules = [
       "Task Automation",
       "Smart Recommendations",
       "Context-Aware Assistance",
+    ],
+  },
+  {
+    id: "realtime_voice",
+    name: "Realtime Voice",
+    description: "Hands-free voice conversations with AiSHA using the realtime assistant.",
+    icon: Mic,
+    experimental: true,
+    features: [
+      "OpenAI Realtime streaming",
+      "Live microphone input",
+      "Instant assistant replies",
+      "Telemetry + safety enforcement",
+      "Fallback to text chat",
     ],
   },
   {

@@ -222,11 +222,11 @@ Regression:
 
 ## Status Overview
 
-- PH2A-CORE-001: Not started  
-- PH2A-CORE-002: Not started  
-- PH2A-CORE-003: Not started  
-- PH2A-CORE-004: Not started  
-- PH2A-CORE-005: Not started  
+- PH2A-CORE-001: Completed  
+- PH2A-CORE-002: Completed  
+- PH2A-CORE-003: Deferred  
+- PH2A-CORE-004: Deferred  
+- PH2A-CORE-005: Deferred  
 
 ---
 

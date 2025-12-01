@@ -421,12 +421,16 @@ export async function intrusionDetection(req, res, next) {
   }
 
   // Exempt localhost/loopback traffic (development, testing, internal services)
+  // Normalize IPv6-mapped IPv4 addresses (e.g., ::ffff:172.20.0.1 → 172.20.0.1)
+  const normalizedIP = ip?.startsWith('::ffff:') ? ip.substring(7) : ip;
+
   const isLocalhost =
     ip === '127.0.0.1' ||
     ip === '::1' ||
     ip === '::ffff:127.0.0.1' ||
-    ip?.startsWith('172.') || // Docker network
-    ip?.startsWith('192.168.'); // Local network
+    normalizedIP?.startsWith('172.') || // Docker network (including IPv6-mapped)
+    normalizedIP?.startsWith('192.168.') || // Local network (including IPv6-mapped)
+    normalizedIP?.startsWith('10.'); // Private network (including IPv6-mapped)
 
   if (isLocalhost) {
     return next();

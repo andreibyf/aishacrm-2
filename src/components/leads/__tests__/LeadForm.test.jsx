@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { withAct } from '@/test/uiActHelpers';
 import LeadForm from '../LeadForm.jsx';
 
 // Mock aliases
@@ -23,9 +24,9 @@ vi.mock('@/api/functions', () => ({
   generateUniqueId: vi.fn().mockResolvedValue({ data: { unique_id: 'L-TEST-001' } }),
 }));
 
-// Mock Tenant context hook
+// Mock Tenant context hook with valid UUID
 vi.mock('../../shared/tenantContext', () => ({
-  useTenant: () => ({ selectedTenantId: 'tenant-1' }),
+  useTenant: () => ({ selectedTenantId: '00000000-0000-0000-0000-000000000001' }),
 }));
 
 // Mock useApiManager to avoid real fetching
@@ -103,14 +104,19 @@ describe('LeadForm - Unified Submission Pattern', () => {
       <LeadForm onSubmit={onSubmit} user={baseUser} employees={[{ id: 'e1', user_email: baseUser.email, has_crm_access: true }]} />
     );
 
-    // Fill required fields
-    fireEvent.change(screen.getByLabelText(/First Name/i), { target: { value: 'A' } });
-    fireEvent.change(screen.getByLabelText(/Last Name/i), { target: { value: 'B' } });
+    // Fill required fields (use label text prefix to avoid helper text ambiguity)
+    await withAct(async () => {
+      const firstInput = screen.getByLabelText((name) => name.toLowerCase().startsWith('first name'));
+      const lastInput = screen.getByLabelText((name) => name.toLowerCase().startsWith('last name'));
+      fireEvent.change(firstInput, { target: { value: 'A' } });
+      fireEvent.change(lastInput, { target: { value: 'B' } });
+    });
 
-    // Submit
-    fireEvent.submit(screen.getByTestId('lead-form'));
-
-  await waitFor(() => expect(Lead.create).toHaveBeenCalled());
+    // Submit and wait for create call
+    await withAct(async () => {
+      fireEvent.submit(screen.getByTestId('lead-form'));
+    });
+    await waitFor(() => expect(Lead.create).toHaveBeenCalled());
   expect(generateUniqueId).toHaveBeenCalled();
 
   // Verify assigned_to fallback for non-manager
@@ -130,8 +136,12 @@ describe('LeadForm - Unified Submission Pattern', () => {
       <LeadForm initialData={existing} onSubmit={onSubmit} user={managerUser} isManager employees={[{ id: 'e2', user_email: managerUser.email, has_crm_access: true }]} />
     );
 
-    fireEvent.change(screen.getByLabelText(/First Name/i), { target: { value: 'Jane' } });
-    fireEvent.submit(screen.getByTestId('lead-form'));
+    await withAct(async () => {
+      const firstInput = screen.getByLabelText((name) => name.toLowerCase().startsWith('first name'));
+      fireEvent.change(firstInput, { target: { value: 'Jane' } });
+      fireEvent.submit(screen.getByTestId('lead-form'));
+    });
+    await waitFor(() => expect(Lead.update).toHaveBeenCalledWith(existing.id, expect.any(Object)));
 
     await waitFor(() => expect(Lead.update).toHaveBeenCalledWith(existing.id, expect.any(Object)));
 
@@ -147,14 +157,17 @@ describe('LeadForm - Unified Submission Pattern', () => {
     render(<LeadForm onSubmit={onSubmit} user={baseUser} employees={[]} />);
 
     // Do not fill names
-    fireEvent.submit(screen.getByTestId('lead-form'));
+    await withAct(async () => {
+      fireEvent.submit(screen.getByTestId('lead-form'));
+    });
 
     // No API calls
     expect(Lead.create).not.toHaveBeenCalled();
     expect(onSubmit).not.toHaveBeenCalled();
 
-    // Show accessible errors
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    // Show accessible errors (there may be two alerts for both fields)
+    const alerts = await screen.findAllByRole('alert');
+    expect(alerts.length).toBeGreaterThan(0);
   });
 
   // Manager assignment default behaviour (simplified): ensure create path still assigns when no explicit change
@@ -167,9 +180,13 @@ describe('LeadForm - Unified Submission Pattern', () => {
       <LeadForm onSubmit={onSubmit} user={managerUser} isManager employees={[{ id: 'e1', user_email: managerUser.email, first_name: 'Boss', last_name: 'Man', has_crm_access: true }]} />
     );
 
-    fireEvent.change(screen.getByLabelText(/First Name/i), { target: { value: 'A' } });
-    fireEvent.change(screen.getByLabelText(/Last Name/i), { target: { value: 'B' } });
-    fireEvent.submit(screen.getByTestId('lead-form'));
+    await withAct(async () => {
+      const firstInput = screen.getByLabelText((name) => name.toLowerCase().startsWith('first name'));
+      const lastInput = screen.getByLabelText((name) => name.toLowerCase().startsWith('last name'));
+      fireEvent.change(firstInput, { target: { value: 'A' } });
+      fireEvent.change(lastInput, { target: { value: 'B' } });
+      fireEvent.submit(screen.getByTestId('lead-form'));
+    });
 
     await waitFor(() => expect(Lead.create).toHaveBeenCalled());
     const payload = Lead.create.mock.calls[0][0];
@@ -184,14 +201,20 @@ describe('LeadForm - Unified Submission Pattern', () => {
 
     render(<LeadForm onSubmit={onSubmit} user={baseUser} employees={[]} />);
 
-    fireEvent.change(screen.getByLabelText(/First Name/i), { target: { value: 'A' } });
-    fireEvent.change(screen.getByLabelText(/Last Name/i), { target: { value: 'B' } });
+    await withAct(async () => {
+      const firstInput = screen.getByLabelText((name) => name.toLowerCase().startsWith('first name'));
+      const lastInput = screen.getByLabelText((name) => name.toLowerCase().startsWith('last name'));
+      fireEvent.change(firstInput, { target: { value: 'A' } });
+      fireEvent.change(lastInput, { target: { value: 'B' } });
 
-    // Toggle switches by clicking labels (Switch is a controlled component)
-    fireEvent.click(screen.getByLabelText(/Do Not Call/i));
-    fireEvent.click(screen.getByLabelText(/Do Not Text/i));
+      // Toggle switches via their accessible switches
+      const dncSwitch = screen.getByRole('switch', { name: /Do Not Call/i });
+      const dntSwitch = screen.getByRole('switch', { name: /Do Not Text/i });
+      fireEvent.click(dncSwitch);
+      fireEvent.click(dntSwitch);
 
-    fireEvent.submit(screen.getByTestId('lead-form'));
+      fireEvent.submit(screen.getByTestId('lead-form'));
+    });
 
     await waitFor(() => expect(Lead.create).toHaveBeenCalled());
     const payload = Lead.create.mock.calls[0][0];
