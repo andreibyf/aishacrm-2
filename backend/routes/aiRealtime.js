@@ -1,7 +1,7 @@
 import express from 'express';
 
 const REALTIME_URL = 'https://api.openai.com/v1/realtime/client_secrets';
-const DEFAULT_REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime';
+const DEFAULT_REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-12-17';
 const DEFAULT_REALTIME_VOICE = process.env.OPENAI_REALTIME_VOICE || 'marin';
 const REALTIME_MODULE_NAME = 'Realtime Voice';
 

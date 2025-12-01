@@ -16,7 +16,8 @@ import createAiRealtimeRoutes from './aiRealtime.js';
 export default function createAIRoutes(pgPool) {
   const router = express.Router();
   router.use(createAiRealtimeRoutes(pgPool));
-  const DEFAULT_CHAT_MODEL = process.env.DEFAULT_OPENAI_MODEL || 'gpt-4o-mini';
+  const DEFAULT_CHAT_MODEL = process.env.DEFAULT_OPENAI_MODEL || 'gpt-4o';
+  const DEFAULT_REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-12-17';
   const DEFAULT_STT_MODEL = process.env.OPENAI_STT_MODEL || 'whisper-1';
   const MAX_STT_AUDIO_BYTES = parseInt(process.env.MAX_STT_AUDIO_BYTES || '6000000', 10);
   const MAX_TOOL_ITERATIONS = 3;
