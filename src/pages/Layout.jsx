@@ -78,6 +78,9 @@ import {
 } from "@/components/ai/agentSdkGuard";
 import ClearChatButton from "../components/ai/ClearChatButton";
 import { clearChat } from "../components/ai/chatUtils";
+import AiSidebar from "@/components/ai/AiSidebar";
+import AiAssistantLauncher from "@/components/ai/AiAssistantLauncher.jsx";
+import { AiSidebarProvider, useAiSidebarState } from "@/components/ai/useAiSidebarState.jsx";
 import CronHeartbeat from "../components/shared/CronHeartbeat";
 import UserPresenceHeartbeat from "../components/shared/UserPresenceHeartbeat";
 import GlobalDomPatches from "../components/shared/GlobalDomPatches";
@@ -478,6 +481,12 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   const [moduleSettings, setModuleSettings] = React.useState([]);
   const [currentTenantData, setCurrentTenantData] = React.useState(null);
   const [elevenLabsApiKey, setElevenLabsApiKey] = useState(null);
+  const {
+    isOpen: isAiSidebarOpen,
+    openSidebar: openAiSidebar,
+    toggleSidebar: toggleAiSidebar,
+    realtimeMode: isRealtimeSidebarMode,
+  } = useAiSidebarState();
 
   // CRITICAL: Access tenant context safely WITHOUT destructuring
   const tenantContext = useTenant();
@@ -520,6 +529,14 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       console.warn("Storage access failed to save theme:", e);
     }
   };
+
+  const handleAssistantLauncherClick = React.useCallback(() => {
+    if (isAiSidebarOpen) {
+      toggleAiSidebar();
+      return;
+    }
+    openAiSidebar();
+  }, [isAiSidebarOpen, openAiSidebar, toggleAiSidebar]);
 
   // NEW: ensure theme class is also applied to document.body so Radix Portals inherit light styles
   React.useEffect(() => {
@@ -595,6 +612,41 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     }
     return validTenantId;
   }, [user, selectedTenantId]);
+
+  const effectiveModuleTenantId = React.useMemo(() => {
+    if (selectedTenantId !== null && selectedTenantId !== undefined) {
+      return selectedTenantId;
+    }
+    if (user?.tenant_id) {
+      return user.tenant_id;
+    }
+    if (currentTenantData?.id) {
+      return currentTenantData.id;
+    }
+    return null;
+  }, [currentTenantData?.id, selectedTenantId, user?.tenant_id]);
+
+  const realtimeVoiceModuleEnabled = React.useMemo(() => {
+    if (!Array.isArray(moduleSettings) || moduleSettings.length === 0) {
+      return true;
+    }
+    const moduleName = "Realtime Voice";
+    const matchingEntries = moduleSettings.filter((setting) => setting.module_name === moduleName);
+    if (matchingEntries.length === 0) {
+      return true;
+    }
+    if (effectiveModuleTenantId) {
+      const tenantMatch = matchingEntries.find((setting) => setting.tenant_id === effectiveModuleTenantId);
+      if (tenantMatch) {
+        return tenantMatch.is_enabled !== false;
+      }
+    }
+    const defaultMatch = matchingEntries.find((setting) => !setting.tenant_id);
+    if (defaultMatch) {
+      return defaultMatch.is_enabled !== false;
+    }
+    return matchingEntries[0].is_enabled !== false;
+  }, [effectiveModuleTenantId, moduleSettings]);
 
   // NEW: One-time cleanup of stale tenant IDs on app initialization
   React.useEffect(() => {
@@ -3443,6 +3495,12 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           <ClearChatButton />
 
           <div className="flex flex-1 items-center justify-end gap-x-4 lg:gap-x-6">
+            <AiAssistantLauncher
+              isOpen={isAiSidebarOpen}
+              onToggle={handleAssistantLauncherClick}
+              isRealtimeActive={Boolean(isRealtimeSidebarMode)}
+              realtimeModuleEnabled={realtimeVoiceModuleEnabled}
+            />
             {/* SystemStatusIndicator removed from here, now at AppLayout root */}
             {/* Only superadmins can switch tenants - admins are locked to their assigned tenant */}
             {user?.role === "superadmin" &&
@@ -3512,8 +3570,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       {/* Removed ElevenLabs floating brain widget */}
       {null}
 
-      {/* Avatar Widget removed per user request */}
-      {null}
+      <AiSidebar realtimeVoiceEnabled={realtimeVoiceModuleEnabled} />
     </div>
   );
 }
@@ -3545,9 +3602,11 @@ export default function LayoutWrapper({ children, currentPageName }) {
               <TimezoneProvider>
                 <EmployeeScopeProvider>
                   <LoggerProvider>
-                    <Layout currentPageName={currentPageName}>
-                      {children}
-                    </Layout>
+                    <AiSidebarProvider>
+                      <Layout currentPageName={currentPageName}>
+                        {children}
+                      </Layout>
+                    </AiSidebarProvider>
                   </LoggerProvider>
                 </EmployeeScopeProvider>
               </TimezoneProvider>

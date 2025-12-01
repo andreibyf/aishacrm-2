@@ -4,18 +4,45 @@
  */
 
 import express from 'express';
+import multer from 'multer';
+import { File } from 'node:buffer';
 import { createChatCompletion, buildSystemPrompt, getOpenAIClient } from '../lib/aiProvider.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { summarizeToolResult, BRAID_SYSTEM_PROMPT, generateToolSchemas, executeBraidTool } from '../lib/braidIntegration-v2.js';
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 import { runTask } from '../lib/aiBrain.js';
+import createAiRealtimeRoutes from './aiRealtime.js';
 
 export default function createAIRoutes(pgPool) {
   const router = express.Router();
+  router.use(createAiRealtimeRoutes(pgPool));
   const DEFAULT_CHAT_MODEL = process.env.DEFAULT_OPENAI_MODEL || 'gpt-4o-mini';
+  const DEFAULT_STT_MODEL = process.env.OPENAI_STT_MODEL || 'whisper-1';
+  const MAX_STT_AUDIO_BYTES = parseInt(process.env.MAX_STT_AUDIO_BYTES || '6000000', 10);
   const MAX_TOOL_ITERATIONS = 3;
   const tenantIntegrationKeyCache = new Map();
   const supa = getSupabaseClient();
+
+  const sttUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_STT_AUDIO_BYTES },
+  });
+
+  const maybeParseMultipartAudio = (req, res, next) => {
+    const contentType = req.headers['content-type'] || '';
+    if (!contentType.includes('multipart/form-data')) {
+      return next();
+    }
+
+    return sttUpload.single('file')(req, res, (err) => {
+      if (!err) return next();
+      if (err?.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ status: 'error', message: 'Audio file is too large' });
+      }
+      console.warn('[AI][STT] Multer upload error:', err?.message || err);
+      return res.status(400).json({ status: 'error', message: 'Invalid audio upload' });
+    });
+  };
 
   // SSE clients storage for real-time conversation updates
   const conversationClients = new Map(); // conversationId -> Set<res>
@@ -98,6 +125,121 @@ export default function createAIRoutes(pgPool) {
         status: 'error',
         message: error?.message || 'Internal server error',
       });
+    }
+  });
+
+  /**
+   * POST /api/ai/tts
+   * ElevenLabs TTS proxy – returns audio (binary). Caps text length and validates env.
+   */
+  router.post('/tts', async (req, res) => {
+    try {
+      const { text } = req.body || {};
+      const apiKey = process.env.ELEVENLABS_API_KEY;
+      const voiceId = process.env.ELEVENLABS_VOICE_ID;
+      if (!apiKey || !voiceId) {
+        return res.status(400).json({ status: 'error', message: 'ElevenLabs not configured' });
+      }
+      const content = (text || '').toString().slice(0, 4000);
+      if (!content) return res.status(400).json({ status: 'error', message: 'Text required' });
+
+      const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'xi-api-key': apiKey,
+        },
+        body: JSON.stringify({ text: content }),
+      });
+
+      if (!resp.ok) {
+        const msg = await resp.text();
+        return res.status(resp.status).json({ status: 'error', message: msg || 'TTS error' });
+      }
+
+      const arrayBuffer = await resp.arrayBuffer();
+      res.set('Content-Type', 'audio/mpeg');
+      return res.send(Buffer.from(arrayBuffer));
+    } catch (err) {
+      return res.status(500).json({ status: 'error', message: err?.message || 'Server error' });
+    }
+  });
+
+  /**
+   * POST /api/ai/speech-to-text
+   * Simple STT endpoint – placeholder using OpenAI Whisper if configured, otherwise mock.
+   */
+  router.post('/speech-to-text', maybeParseMultipartAudio, async (req, res) => {
+    try {
+      let audioBuffer = null;
+      let mimeType = null;
+      let fileName = 'speech.webm';
+
+      if (req.file?.buffer) {
+        audioBuffer = req.file.buffer;
+        mimeType = req.file.mimetype || 'audio/webm';
+        fileName = req.file.originalname || fileName;
+      } else if (req.body?.audioBase64) {
+        try {
+          const base64Payload = req.body.audioBase64.includes(',')
+            ? req.body.audioBase64.split(',').pop()
+            : req.body.audioBase64;
+          audioBuffer = Buffer.from(base64Payload, 'base64');
+          mimeType = req.body.mimeType || 'audio/webm';
+          fileName = req.body.fileName || fileName;
+        } catch (err) {
+          console.warn('[AI][STT] Failed to decode base64 audio payload:', err?.message || err);
+          return res.status(400).json({ status: 'error', message: 'Invalid audio payload' });
+        }
+      }
+
+      if (!audioBuffer?.length) {
+        return res.status(400).json({ status: 'error', message: 'No audio provided' });
+      }
+
+      if (audioBuffer.length > MAX_STT_AUDIO_BYTES) {
+        return res.status(400).json({ status: 'error', message: 'Audio exceeds maximum allowed size' });
+      }
+
+      const tenantIdentifier =
+        req.body?.tenant_id || req.query?.tenant_id || req.headers['x-tenant-id'] || req.user?.tenant_id || null;
+
+      const apiKey = await resolveTenantOpenAiKey({
+        explicitKey: req.body?.openai_api_key,
+        headerKey: req.get('x-openai-key'),
+        userKey: req.user?.openai_api_key,
+        tenantSlug: tenantIdentifier,
+      });
+
+      if (!apiKey) {
+        return res.status(400).json({ status: 'error', message: 'OpenAI API key not configured for this tenant' });
+      }
+
+      const client = getOpenAIClient(apiKey);
+      if (!client) {
+        return res.status(500).json({ status: 'error', message: 'Unable to initialize speech model client' });
+      }
+
+      const safeMime = mimeType || 'audio/webm';
+      const safeName = fileName || 'speech.webm';
+      const audioFile = new File([audioBuffer], safeName, { type: safeMime });
+
+      const transcription = await client.audio.transcriptions.create({
+        file: audioFile,
+        model: DEFAULT_STT_MODEL,
+      });
+
+      const transcriptText = transcription?.text?.trim() || '';
+      return res.json({
+        status: 'success',
+        data: {
+          transcript: transcriptText,
+        },
+        text: transcriptText,
+      });
+    } catch (err) {
+      console.error('[AI][STT] Transcription failed:', err?.message || err);
+      return res.status(500).json({ status: 'error', message: 'Unable to transcribe audio right now' });
     }
   });
 
@@ -315,6 +457,10 @@ export default function createAIRoutes(pgPool) {
       }
     } catch (error) {
       console.warn('[AI Routes] Failed to resolve user system OpenAI settings:', error.message || error);
+    }
+
+    if (process.env.OPENAI_API_KEY) {
+      return process.env.OPENAI_API_KEY;
     }
 
     return null;
