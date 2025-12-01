@@ -36,7 +36,7 @@ Allowed:
 # PLAN – Realtime Voice Interaction (OpenAI Realtime WebRTC)
 
 Phase: **Realtime Voice / Streaming Assistant**  
-Status: **Planned**  
+Status: **Active** (env key + feature flag verified Dec 1, 2025)  
 Owner: **AiSHA Core**  
 Scope: **Add continuous, hands-free voice conversation with AiSHA using OpenAI Realtime API, without breaking existing STT/TTS and text chat flows.**
 
@@ -412,9 +412,9 @@ Automated:
 
 ## Status
 
-- PH2C-VOICE-001: Not started  
-- PH2C-VOICE-002: Not started  
-- PH2C-VOICE-003: Not started
+- PH2C-VOICE-001: Active (Phase 2C kicked off Dec 1, 2025)  
+- PH2C-VOICE-002: Complete ✅  
+- PH2C-VOICE-003: Complete ✅
 
 
 
