@@ -5,7 +5,7 @@
 
 import express from 'express';
 import multer from 'multer';
-import { File } from 'node:buffer';
+import { Readable } from 'node:stream';
 import { createChatCompletion, buildSystemPrompt, getOpenAIClient } from '../lib/aiProvider.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { summarizeToolResult, BRAID_SYSTEM_PROMPT, generateToolSchemas, executeBraidTool } from '../lib/braidIntegration-v2.js';
@@ -227,7 +227,19 @@ export default function createAIRoutes(pgPool) {
 
       const safeMime = mimeType || 'audio/webm';
       const safeName = fileName || 'speech.webm';
-      const audioFile = new File([audioBuffer], safeName, { type: safeMime });
+      
+      // Log audio details for debugging
+      console.log('[AI][STT] Processing audio:', {
+        size: audioBuffer.length,
+        mimeType: safeMime,
+        fileName: safeName,
+      });
+
+      // Create a File-like object that OpenAI SDK can handle
+      // OpenAI SDK accepts: File, Blob, or a readable stream with name property
+      const audioFile = await import('openai').then(({ toFile }) => 
+        toFile(audioBuffer, safeName, { type: safeMime })
+      );
 
       const transcription = await client.audio.transcriptions.create({
         file: audioFile,

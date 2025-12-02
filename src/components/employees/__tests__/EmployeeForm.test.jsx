@@ -94,6 +94,13 @@ describe('EmployeeForm - Unified Submission Pattern', () => {
   });
 
   it('should validate required fields before submission', async () => {
+    // Note: The form has HTML5 required validation on inputs.
+    // When submitting with empty required fields, the browser prevents
+    // form submission entirely (no React handler runs).
+    // Our custom validation in handleSubmit runs AFTER browser validation,
+    // so toast.error won't be called when browser blocks submission.
+    // We test that our custom validation works by simulating direct
+    // submission with just whitespace (which passes HTML5 but fails custom).
     render(
       <EmployeeForm
         onSubmit={mockOnSubmit}
@@ -101,6 +108,14 @@ describe('EmployeeForm - Unified Submission Pattern', () => {
         tenantId={testTenantId}
       />
     );
+    
+    // Enter whitespace-only values to bypass HTML5 required validation
+    // but trigger our custom validation that checks for .trim()
+    const firstNameInput = screen.getByPlaceholderText('First name');
+    const lastNameInput = screen.getByPlaceholderText('Last name');
+    
+    fireEvent.change(firstNameInput, { target: { value: '   ' } });
+    fireEvent.change(lastNameInput, { target: { value: 'Doe' } });
 
     const submitButton = screen.getByText('Create Employee');
     fireEvent.click(submitButton);

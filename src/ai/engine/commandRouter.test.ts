@@ -32,22 +32,24 @@ describe('commandRouter', () => {
     expect(callChatApi).toHaveBeenCalled();
   });
 
-  it('routes forecast intent to brain task', async () => {
+  it('routes forecast intent to chat (brain-test disabled)', async () => {
+    // Note: brainIntentSet was disabled to route all requests through /api/ai/chat
+    // Previously this would route to brain-test, now it goes to chat
     const classification: IntentClassification = {
       ...baseClassification,
       intent: 'forecast',
       entity: 'pipeline',
       confidence: 0.7
     };
-    const callBrainTest = vi.fn().mockResolvedValue({ status: 200, data: { summary: 'ok' } });
+    const callChatApi = vi.fn().mockResolvedValue({ status: 200, data: { status: 'success', response: 'Here is your forecast' } });
     const result = await routeCommand({
       text: 'forecast pipeline',
       classification,
       prompt: { ...basePrompt, mode: 'propose_actions' },
-      adapters: { callBrainTest }
+      adapters: { callChatApi }
     });
-    expect(callBrainTest).toHaveBeenCalled();
-    expect(result.type).toBe('ai_brain');
+    expect(callChatApi).toHaveBeenCalled();
+    expect(result.type).toBe('ai_chat');
   });
 
   it('routes unknown intent to chat endpoint', async () => {

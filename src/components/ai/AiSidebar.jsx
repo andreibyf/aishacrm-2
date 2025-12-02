@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { AlertCircle, Loader2, RefreshCw, Send, Sparkles, X, Mic, Square, Volume2, Headphones } from 'lucide-react';
+import { AlertCircle, Loader2, RefreshCw, Send, Sparkles, X, Mic, Square, Volume2, Headphones, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useAiSidebarState } from './useAiSidebarState.jsx';
@@ -630,18 +630,11 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     void sendMessage(safeText, { origin: 'voice', autoSend: true });
   }, [isRealtimeActive, logUiTelemetry, sendMessage, sendViaRealtime]);
 
-  const { isRecording, isTranscribing, error: speechError, startRecording, stopRecording } = useSpeechInput({
-    onFinalTranscript: handleVoiceTranscript
-  });
-
+  // Speech output - must be defined BEFORE useSpeechInput to use isSpeechPlaying for pause detection
   const handleSpeechEnded = useCallback(() => {
-    if (isContinuousMode && !isRecording && !isSending) {
-      // Small delay to ensure natural turn-taking
-      setTimeout(() => {
-        startRecording();
-      }, 300);
-    }
-  }, [isContinuousMode, isRecording, isSending, startRecording]);
+    // Speech output finished - listening will auto-resume via pauseListening prop
+    console.log('[AiSidebar] AI speech ended, listening will resume');
+  }, []);
 
   const {
     playText: playSpeech,
@@ -652,6 +645,27 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   } = useSpeechOutput({ onEnded: handleSpeechEnded });
   const [activeSpeechMessageId, setActiveSpeechMessageId] = useState(null);
   const [autoPlayMessageId, setAutoPlayMessageId] = useState(null);
+
+  // Continuous listening mode - pause when AI is speaking or sending
+  const shouldPauseListening = isSending || isSpeechPlaying;
+
+  const { 
+    isListening, 
+    isRecording, 
+    isTranscribing, 
+    error: speechError, 
+    startListening, 
+    stopListening,
+    toggleListening 
+  } = useSpeechInput({
+    onFinalTranscript: handleVoiceTranscript,
+    continuousMode: true,  // Always use continuous mode internally
+    pauseListening: shouldPauseListening,  // Auto-pause during AI response
+  });
+
+  // Legacy aliases for compatibility
+  const startRecording = startListening;
+  const stopRecording = stopListening;
 
   const pressToTalkActiveRef = useRef(false);
 
@@ -907,6 +921,20 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     handlePressToTalkEnd(event);
   }, [handlePressToTalkEnd, isRealtimeActive]);
 
+  // Toggle continuous listening on/off
+  const handleMicToggle = useCallback(() => {
+    if (isRealtimeActive) return;
+    
+    if (isListening) {
+      stopListening();
+      logUiTelemetry('ui.voice.listening_stopped', {});
+    } else {
+      setVoiceWarning(null);
+      startListening();
+      logUiTelemetry('ui.voice.listening_started', {});
+    }
+  }, [isRealtimeActive, isListening, startListening, stopListening, logUiTelemetry]);
+
   const handleKeyDown = (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
@@ -997,12 +1025,12 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
               variant="ghost"
               size="icon"
               onClick={resetThread}
-              className="text-slate-500 hover:text-slate-900 dark:text-slate-300"
-              title="Reset conversation"
-              aria-label="Reset conversation"
+              className="text-slate-500 hover:text-red-600 dark:text-slate-300 dark:hover:text-red-400"
+              title="Clear chat"
+              aria-label="Clear chat"
               type="button"
             >
-              <RefreshCw className="h-4 w-4" />
+              <Trash2 className="h-4 w-4" />
             </Button>
             <Button
               variant="ghost"
@@ -1220,25 +1248,42 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
               </div>
             )}
             {/* Voice mode hint - show when voice mode active but not realtime */}
-            {voiceModeActive && !isRealtimeActive && (
-              <div className="rounded border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-100">
+            {/* Continuous listening status indicator */}
+            {isListening && (
+              <div className={`rounded border px-3 py-2 text-xs ${
+                isRecording 
+                  ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-100'
+                  : isSending
+                    ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100'
+                    : isSpeechPlaying
+                      ? 'border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-100'
+                      : 'border-slate-300 bg-slate-50 text-slate-900 dark:border-slate-500/40 dark:bg-slate-500/10 dark:text-slate-100'
+              }`}>
                 <div className="flex items-center gap-2">
-                  <Headphones className="h-4 w-4" />
+                  <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />
                   <span>
-                    <strong>Voice Mode Active</strong> — {isRecording ? 'Listening...' : isSpeechPlaying ? 'Speaking...' : 'Ready for voice'}
+                    <strong>Continuous Listening</strong> — {
+                      isRecording 
+                        ? 'Listening... (speak naturally, pauses auto-send)'
+                        : isSending 
+                          ? 'Sending your message...'
+                          : isSpeechPlaying 
+                            ? 'AI is speaking... (mic paused)'
+                            : isTranscribing
+                              ? 'Transcribing...'
+                              : 'Processing...'
+                    }
                   </span>
                 </div>
-                {!isRecording && !isSpeechPlaying && (
-                  <p className="mt-1 text-[10px] opacity-80">
-                    Hold <kbd className="px-1 py-0.5 rounded bg-indigo-200 dark:bg-indigo-800 text-[9px] font-mono">Space</kbd> or the mic button to talk. Your message auto-sends when you release.
-                  </p>
-                )}
+                <p className="mt-1 text-[10px] opacity-80">
+                  Click the stop button to end listening session.
+                </p>
               </div>
             )}
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              {voiceModeActive && !isRealtimeActive
-                ? 'Voice commands auto-send when you stop talking. AI will speak responses back.'
-                : 'Hold the Voice button (or press Space/Enter) to talk. Messages auto-send when you release.'}
+              {isListening
+                ? 'Speak naturally. Pauses are detected automatically and messages are sent. Mic pauses while AI responds.'
+                : 'Click the mic to start continuous listening. Speak naturally — pauses trigger auto-send.'}
             </p>
             <Textarea
                 ref={draftInputRef}
@@ -1261,7 +1306,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                     )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
                 {/* Voice Mode Toggle - enables continuous conversation with auto-speak */}
                 <Button
                   type="button"
@@ -1274,46 +1319,39 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                   data-testid="voice-mode-toggle"
                 >
                   <Headphones className={`h-3 w-3 mr-1 ${voiceModeActive ? '' : 'opacity-50'}`} />
-                  {voiceModeActive ? 'Voice On' : 'Voice'}
+                  Voice
                 </Button>
+                {/* Mic Toggle - click to start/stop continuous listening */}
                 <Button
                   type="button"
-                    variant="ghost"
-                    size="sm"
-                    className={`h-8 px-2 text-xs ${isContinuousMode ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 dark:text-indigo-300' : 'text-slate-500'}`}
-                    onClick={() => setIsContinuousMode(!isContinuousMode)}
-                    title={isContinuousMode ? 'Disable continuous conversation' : 'Enable continuous conversation'}
-                  >
-                    <RefreshCw className={`h-3 w-3 mr-1 ${isContinuousMode ? '' : 'opacity-50'}`} />
-                    {isContinuousMode ? 'Loop On' : 'Loop Off'}
-                  </Button>
-                  <Button
-                    type="button"
-                  variant={isRecording ? 'destructive' : 'outline'}
-                  onPointerDown={handlePressToTalkStart}
-                  onPointerUp={handlePressToTalkEnd}
-                  onPointerLeave={handlePressToTalkCancel}
-                  onPointerCancel={handlePressToTalkCancel}
-                  onKeyDown={handleVoiceKeyDown}
-                  onKeyUp={handleVoiceKeyUp}
-                  onClick={(event) => {
-                    // Prevent stray click toggles when not using press-to-talk
-                    event.preventDefault();
-                    if (isRecording) {
-                      handlePressToTalkEnd(event);
-                    } else {
-                      handlePressToTalkStart(event);
-                    }
-                  }}
-                  disabled={isSending || isRealtimeActive}
-                  title={isRecording ? 'Release to auto-send' : 'Hold to talk'}
-                  aria-label={isRecording ? 'Recording — release to auto-send' : 'Hold to start voice input'}
-                  data-testid="press-to-talk-button"
+                  variant="ghost"
+                  size="icon"
+                  className={`h-8 w-8 ${
+                    isListening 
+                      ? isRecording 
+                        ? 'text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400 animate-pulse' 
+                        : 'text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400'
+                      : 'text-slate-500'
+                  }`}
+                  onClick={handleMicToggle}
+                  disabled={isRealtimeActive}
+                  title={
+                    isListening 
+                      ? isRecording 
+                        ? 'Listening... (click to stop)' 
+                        : isSending 
+                          ? 'Paused while sending...' 
+                          : isSpeechPlaying 
+                            ? 'Paused while AI speaks...' 
+                            : 'Processing...'
+                      : 'Click to start continuous listening'
+                  }
+                  aria-label={isListening ? 'Stop listening' : 'Start continuous listening'}
+                  data-testid="mic-toggle-button"
                 >
-                  {isRecording ? <Square className="h-4 w-4 mr-2" /> : <Mic className="h-4 w-4 mr-2" />}
-                  {isRecording ? 'Listening...' : 'Hold to Talk'}
+                  {isListening ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                 </Button>
-              </div>
+            </div>
             </div>
             <Button type="submit" className="w-full" disabled={sendButtonDisabled}>
               {isSendLoading ? (
