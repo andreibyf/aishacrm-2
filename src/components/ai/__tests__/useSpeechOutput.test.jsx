@@ -31,6 +31,7 @@ beforeEach(() => {
       audioInstances.push(this);
     }
   }
+  globalThis.Audio = MockAudio;
 
   const mockSpeechSynthesis = {
     cancel: vi.fn(),
@@ -44,14 +45,22 @@ beforeEach(() => {
     window.speechSynthesis = mockSpeechSynthesis;
   }
 
-  globalThis.SpeechSynthesisUtterance = vi.fn().mockImplementation(() => ({
-    voice: null,
-    rate: 1,
-    pitch: 1,
-    onstart: null,
-    onend: null,
-    onerror: null,
-  }));
+  // Use a proper class for SpeechSynthesisUtterance mock
+  class MockSpeechSynthesisUtterance {
+    constructor(text) {
+      this.text = text;
+      this.voice = null;
+      this.rate = 1;
+      this.pitch = 1;
+      this.onstart = null;
+      this.onend = null;
+      this.onerror = null;
+    }
+  }
+  globalThis.SpeechSynthesisUtterance = MockSpeechSynthesisUtterance;
+  if (typeof window !== 'undefined') {
+    window.SpeechSynthesisUtterance = MockSpeechSynthesisUtterance;
+  }
 });
 
 afterEach(() => {
