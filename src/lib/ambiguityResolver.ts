@@ -435,25 +435,75 @@ export const buildFallbackMessage = (
 };
 
 /**
+ * Sanitize message text for display - removes control characters and
+ * non-printable content while preserving readable text.
+ */
+export const sanitizeMessageText = (text: unknown): string => {
+  if (!text) return '';
+  const str = String(text);
+
+  // Strip control chars except \n and \t, preserve printable ASCII and common punctuation
+  // This keeps Latin text readable while removing binary garbage
+  return str
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control chars except \t \n \r
+    .trim();
+};
+
+/**
+ * Check if text contains primarily non-Latin scripts (CJK, Arabic, etc.)
+ * that suggest voice recognition picked up the wrong language.
+ */
+export const containsForeignScript = (text: string): boolean => {
+  if (!text) return false;
+
+  // Count characters in different script ranges
+  const cjkPattern = /[\u4E00-\u9FFF\u3400-\u4DBF\uAC00-\uD7AF\u3040-\u30FF]/g; // Chinese, Japanese, Korean
+  const arabicPattern = /[\u0600-\u06FF\u0750-\u077F]/g; // Arabic
+  const cyrillicPattern = /[\u0400-\u04FF]/g; // Cyrillic
+  const latinPattern = /[A-Za-z]/g;
+
+  const cjkCount = (text.match(cjkPattern) || []).length;
+  const arabicCount = (text.match(arabicPattern) || []).length;
+  const cyrillicCount = (text.match(cyrillicPattern) || []).length;
+  const latinCount = (text.match(latinPattern) || []).length;
+  const foreignCount = cjkCount + arabicCount + cyrillicCount;
+
+  // If foreign characters significantly outnumber Latin, it's likely wrong language
+  if (foreignCount > 0 && foreignCount >= latinCount) {
+    return true;
+  }
+
+  // If foreign chars are more than 30% of total text length
+  if (foreignCount > text.length * 0.3) {
+    return true;
+  }
+
+  return false;
+};
+
+/**
  * Check if input looks like an unrecognized voice transcription.
  */
 export const isLikelyVoiceGarble = (text: string): boolean => {
   if (!text) return false;
-  const normalized = text.trim().toLowerCase();
+  const normalized = text.trim();
 
   // Very short, likely mishear
   if (normalized.length < 3) return true;
 
   // All same character repeated
-  if (/^(.)\1+$/.test(normalized)) return true;
+  if (/^(.)\1+$/i.test(normalized)) return true;
 
-  // Mostly non-alphabetic
-  const alphaRatio = (normalized.match(/[a-z]/g) || []).length / normalized.length;
-  if (alphaRatio < 0.5) return true;
+  // Contains foreign scripts (wrong language detected)
+  if (containsForeignScript(normalized)) return true;
+
+  // Mostly non-alphabetic (for ASCII portion)
+  const alphaRatio = (normalized.match(/[a-zA-Z]/g) || []).length / normalized.length;
+  if (alphaRatio < 0.3) return true;
 
   // Common voice recognition artifacts
   const voiceArtifacts = ['um', 'uh', 'hmm', 'ah', 'eh', 'oh'];
-  if (voiceArtifacts.includes(normalized)) return true;
+  if (voiceArtifacts.includes(normalized.toLowerCase())) return true;
 
   return false;
 };

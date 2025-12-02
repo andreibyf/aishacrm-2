@@ -16,6 +16,7 @@ import { listConversationalSchemas, getSchemaById } from '@/components/ai/conver
 import { Account, Activity, Contact, Lead, Opportunity } from '@/api/entities';
 import { toast } from 'sonner';
 import { useUser } from '@/components/shared/useUser.js';
+import { isLikelyVoiceGarble, sanitizeMessageText } from '@/lib/ambiguityResolver';
 
 const QUICK_ACTIONS = [
   { label: 'Show leads', prompt: 'Show me all open leads updated today' },
@@ -206,7 +207,7 @@ function MessageBubble({ message, onSpeak, onStopSpeak, speechState }) {
     : undefined;
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} aisha-message ${!isUser && !isError ? 'assistant' : ''}`}>
+    <div className={`flex mb-3 ${isUser ? 'justify-end' : 'justify-start'} aisha-message ${!isUser && !isError ? 'assistant' : ''}`}>
       <div
         className={`relative max-w-[85%] rounded-2xl px-4 py-3 shadow-lg transition-colors ${bubbleClasses} ${
           isUser ? 'text-[13px] leading-6' : 'text-[14px] leading-6 font-semibold shadow-md'
@@ -233,7 +234,7 @@ function MessageBubble({ message, onSpeak, onStopSpeak, speechState }) {
             )
             }}
           >
-            {message.content}
+            {sanitizeMessageText(message.content)}
           </ReactMarkdown>
         </div>
 
@@ -598,8 +599,16 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     }
   }, [addRealtimeMessage, isRealtimeConnected, isRealtimeListening, logUiTelemetry, sendRealtimeUserMessage]);
   const handleVoiceTranscript = useCallback((text) => {
-    const safeText = (text || '').trim();
+    const safeText = sanitizeMessageText(text || '').trim();
     if (!safeText) return;
+
+    // Check for garbled/foreign script voice transcription
+    if (isLikelyVoiceGarble(safeText)) {
+      setVoiceWarning('Voice not recognized clearly. Please try again or type your request.');
+      logUiTelemetry('ui.voice.blocked', { reason: 'garbled_transcript', textLength: safeText.length }, 'warn');
+      return;
+    }
+
     if (containsDestructiveVoiceCommand(safeText)) {
       setVoiceWarning('Voice command blocked: please rephrase and try again.');
       logUiTelemetry('ui.voice.blocked', { reason: 'dangerous_phrase', textLength: safeText.length }, 'warn');

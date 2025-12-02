@@ -122,7 +122,7 @@ const DESTRUCTIVE_KEYWORDS = ['delete', 'remove all', 'wipe', 'clear all', 'eras
 const MULTI_STEP_PATTERNS = [/\bthen\b/, /\bafter that\b/, /\bnext\b/, /\bfollowed by\b/, /\bfirst\b.*\bthen\b/];
 
 const INTENT_KEYWORDS: Record<Exclude<ConversationalIntent, 'ambiguous'>, string[]> = {
-  query: ['show', 'list', 'find', 'display', 'view', 'see', 'pull'],
+  query: ['show', 'list', 'find', 'display', 'view', 'see', 'pull', 'how many', 'count', 'total', 'do i have', 'what are', 'give me', 'get'],
   create: ['create', 'add', 'log', 'new', 'open a new'],
   update: ['update', 'change', 'set', 'move', 'adjust', 'mark'],
   navigate: ['go to', 'open', 'navigate', 'jump to', 'switch to'],
