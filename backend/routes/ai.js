@@ -1039,10 +1039,11 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       const { agent_name = null, status = 'active', limit = 25 } = req.query || {};
       const safeLimit = Math.min(parseInt(limit, 10) || 25, 100);
 
-      // Query conversations using simple SELECT without ORDER BY (avoid adapter parsing issues)
+      // Query conversations with a minimal column set to avoid schema drift issues
+      // Some deployments may not have optional columns like title/topic.
       let query = supa
         .from('conversations')
-        .select('id, agent_name, status, title, topic, created_date, updated_date')
+        .select('id, agent_name, status, created_date, updated_date')
         .eq('tenant_id', tenantRecord.id);
       if (agent_name) query = query.eq('agent_name', agent_name);
       if (status) query = query.eq('status', status);
@@ -1400,40 +1401,11 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       if (insErr) throw insErr;
       const message = inserted;
 
-      // Auto-generate title and topic from first user message (if not already set)
-      if (role === 'user') {
-        const { data: convState } = await supa
-          .from('conversations')
-          .select('title, topic')
-          .eq('id', id)
-          .limit(1)
-          .single();
-
-        if (convState) {
-          const { title: existingTitle, topic: existingTopic } = convState;
-          const updateData = {};
-          if (!existingTitle) {
-            let autoTitle = generateAutoTitleFromContent(content, 50);
-            updateData.title = autoTitle;
-          }
-          if (!existingTopic || existingTopic === 'general') {
-            const classified = classifyTopicFromText(stripTenantPreamble(content) || content);
-            if (classified && classified !== existingTopic) {
-              updateData.topic = classified;
-            }
-          }
-          updateData.updated_date = new Date().toISOString();
-          if (Object.keys(updateData).length > 1 || ('updated_date' in updateData)) {
-            await supa.from('conversations').update(updateData).eq('id', id);
-          }
-        }
-      } else {
-        // Not a user message, just update timestamp
-        await supa
-          .from('conversations')
-          .update({ updated_date: new Date().toISOString() })
-          .eq('id', id);
-      }
+      // Update last activity timestamp regardless of role; skip optional title/topic logic
+      await supa
+        .from('conversations')
+        .update({ updated_date: new Date().toISOString() })
+        .eq('id', id);
 
       broadcastMessage(id, message);
 

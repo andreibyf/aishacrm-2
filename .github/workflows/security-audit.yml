@@ -1,0 +1,118 @@
+name: Weekly Security Audit
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'  # Mondays 06:00 UTC
+
+jobs:
+  npm-audit:
+    name: Run npm audit (root + backend)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install root deps (production only)
+        run: |
+          npm ci --omit=dev
+        working-directory: .
+
+      - name: Root npm audit (JSON)
+        run: |
+          npm audit --omit=dev --json > audit-root.json || true
+        working-directory: .
+
+      - name: Install backend deps (production only)
+        run: |
+          npm ci --omit=dev
+        working-directory: backend
+
+      - name: Backend npm audit (JSON)
+        run: |
+          npm audit --omit=dev --json > audit-backend.json || true
+        working-directory: backend
+
+      - name: Summarize advisories
+        id: summarize
+        run: |
+          node -e "
+            const fs=require('fs');
+            function summarize(path){
+              if(!fs.existsSync(path)) return {count:0, items:[]};
+              let j; try{ j=JSON.parse(fs.readFileSync(path,'utf8')); }catch{ return {count:0, items:[]}; }
+              const vul=j.vulnerabilities||{}; const names=Object.keys(vul);
+              return { count:names.length, items:names.map(n=>({
+                name:n,
+                severity:vul[n].severity,
+                via:(vul[n].via||[]).map(x=>typeof x==='string'?x:(x.title||'')).slice(0,3)
+              })) };
+            }
+            const root=summarize('audit-root.json');
+            const be=summarize('backend/audit-backend.json');
+            const out={ root, backend:be };
+            console.log(JSON.stringify(out,null,2));
+          " > audit-summary.json
+
+      - name: Upload audit artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-audit
+          path: |
+            audit-root.json
+            backend/audit-backend.json
+            audit-summary.json
+
+      - name: Fail on high/critical advisories
+        run: |
+          node -e "
+            const j=require('./audit-summary.json');
+            const items=[...(j.root.items||[]), ...(j.backend.items||[])];
+            const bad=items.filter(i=>['high','critical'].includes(String(i.severity).toLowerCase()));
+            if(bad.length){
+              console.error('High/Critical advisories found:', bad);
+              process.exit(1);
+            }
+            console.log('No high/critical advisories.');
+          "
+
+      - name: Create GitHub Issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let summary = {};
+            try { summary = JSON.parse(fs.readFileSync('audit-summary.json','utf8')); } catch {}
+            const items = [ ...(summary.root?.items||[]), ...(summary.backend?.items||[]) ];
+            const bad = items.filter(i => ['high','critical'].includes(String(i.severity||'').toLowerCase()));
+            const title = `Security audit found ${bad.length} high/critical advisories`;
+            const bodyLines = [];
+            bodyLines.push('Weekly security audit detected high/critical vulnerabilities.');
+            bodyLines.push('');
+            bodyLines.push('Summary JSON artifacts:');
+            bodyLines.push('- audit-root.json');
+            bodyLines.push('- backend/audit-backend.json');
+            bodyLines.push('- audit-summary.json');
+            bodyLines.push('');
+            if (bad.length) {
+              bodyLines.push('Affected packages:');
+              bad.slice(0, 20).forEach(i => {
+                bodyLines.push(`- ${i.name} (${i.severity}) via: ${Array.isArray(i.via)?i.via.join('; '):''}`);
+              });
+            }
+            bodyLines.push('');
+            bodyLines.push('Remediation: Upgrade affected packages to patched versions and re-run audit.');
+            const body = bodyLines.join('\n');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ['security','dependabot','audit']
+            });
