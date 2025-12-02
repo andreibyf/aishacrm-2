@@ -210,14 +210,23 @@ Lock in field parity for core entities and downstream consumers.
 
 The field parity remediation wave is closed. Future changes to this section should only occur if a regression is reported.
 
-**Active Work (per Dec 1 directive):** Proceed to the Phase 2 Conversational Interface plan and execute Tasks 2.1 → 2.10 sequentially (they act as milestones). Always read:
+**Phase 2 Conversational Interface: COMPLETE ✅ (December 2, 2025)**
 
+All 10 tasks (2.1 → 2.10) are finished. The conversational AI sidebar is fully functional with:
+- Intent detection engine + context-aware suggestions
+- Conversational forms + smart validation
+- Voice input (STT) + voice output (TTS)
+- Full voice mode with push-to-talk
+- Error handling, fallbacks, and user feedback
+
+**Next Phase:** Phase 3 — Autonomous Operations (proactive suggestions, autonomous actions, predictive models)
+
+Always read:
 1. `.github/copilot-instructions.md`
 2. `orchestra/ARCHITECTURE.md`
 3. `orchestra/CONVENTIONS.md`
-4. `orchestra/phases/PHASE_2_CONVERSATIONAL_INTERFACE.md` (current source of truth for active milestones)
-
-Treat each Phase 2 task as its own scoped wave: finish it (including tests) before moving to the next.
+4. `orchestra/phases/PHASE_2_CONVERSATIONAL_INTERFACE.md` (completed reference)
+5. `orchestra/phases/PHASE_3_AUTONOMOUS_OPERATIONS.md` (next phase)
 
 
 

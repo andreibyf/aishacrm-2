@@ -6,26 +6,32 @@ import { routeCommand } from './commandRouter';
 import type { LocalActionDescriptor } from './commandRouter';
 import type { ParsedIntent, ConversationalIntent, ConversationalEntity } from '@/lib/intentParser';
 import { enforceParserSafety, legacyIntentFromParser, parseIntent } from '@/lib/intentParser';
+import { resolveAmbiguity, getContextualExamples, buildFallbackMessage, type ClarificationRequest } from '@/lib/ambiguityResolver';
 
 interface ProcessChatCommandOptions {
   text: string;
   history?: { role: 'user' | 'assistant'; content: string }[];
   context?: PromptContext;
+  origin?: 'text' | 'voice';
+  consecutiveFailures?: number;
 }
 
 interface AssistantMessagePayload {
   content: string;
-  actions?: Array<{ label?: string; type?: string }>;
+  actions?: Array<{ label?: string; type?: string; prompt?: string }>;
   data?: unknown;
   data_summary?: string;
   mode?: string;
+  clarification?: ClarificationRequest;
+  examples?: string[];
 }
 
 interface ProcessChatCommandResult {
-  route: 'local_action' | 'ai_chat' | 'ai_brain';
+  route: 'local_action' | 'ai_chat' | 'ai_brain' | 'clarification';
   assistantMessage: AssistantMessagePayload;
   classification: IntentClassification;
   localAction?: LocalActionDescriptor;
+  needsClarification?: boolean;
 }
 
 type ParserAugmentedClassification = IntentClassification & {
@@ -164,7 +170,45 @@ const normalizeChatResponse = (route: 'ai_chat' | 'ai_brain', response: any): As
   };
 };
 
-export async function processChatCommand({ text, history = [], context }: ProcessChatCommandOptions): Promise<ProcessChatCommandResult> {
+const buildClarificationMessage = (
+  clarification: ClarificationRequest,
+  entity: ConversationalEntity
+): AssistantMessagePayload => {
+  const examples = getContextualExamples(entity);
+
+  // Build action buttons from clarification options
+  const actions = clarification.options.map((opt) => ({
+    label: opt.label,
+    type: 'clarification_option',
+    prompt: opt.prompt
+  }));
+
+  // Add recovery actions
+  if (clarification.canRetry) {
+    actions.push({ label: 'Try again', type: 'retry' });
+  }
+  if (clarification.offerTextFallback) {
+    actions.push({ label: 'Type instead', type: 'switch_to_text' });
+  }
+
+  return {
+    content: clarification.message,
+    actions,
+    data: { clarification, examples },
+    data_summary: clarification.hint || 'Please clarify your request.',
+    mode: 'clarification',
+    clarification,
+    examples
+  };
+};
+
+export async function processChatCommand({
+  text,
+  history = [],
+  context,
+  origin = 'text',
+  consecutiveFailures = 0
+}: ProcessChatCommandOptions): Promise<ProcessChatCommandResult> {
   const sanitizedHistory = ensureHistoryFormat(history);
   let parserResult: ParsedIntent | null = null;
 
@@ -189,6 +233,44 @@ export async function processChatCommand({ text, history = [], context }: Proces
   } else {
     const effectiveParser = enforceParserSafety(parserResult);
     classification = mapParsedToLegacyClassification(effectiveParser, parserResult);
+  }
+
+  // Check for ambiguity and provide clarification if needed
+  const ambiguityCheck = resolveAmbiguity(parserResult, text, { origin });
+
+  if (ambiguityCheck.isAmbiguous && ambiguityCheck.clarification) {
+    const entity = parserResult?.entity || 'general';
+
+    // If we've had multiple failures, enhance the message with fallback suggestions
+    if (consecutiveFailures >= 2) {
+      const fallback = buildFallbackMessage(parserResult, text, consecutiveFailures);
+      const clarification = {
+        ...ambiguityCheck.clarification,
+        message: fallback.content
+      };
+
+      // Add escalation action for persistent failures
+      if (consecutiveFailures >= 3) {
+        clarification.options = [
+          ...clarification.options,
+          { label: 'Contact Support', prompt: '', entity: 'general', intent: 'ambiguous' as const }
+        ];
+      }
+
+      return {
+        route: 'clarification',
+        assistantMessage: buildClarificationMessage(clarification, entity),
+        classification,
+        needsClarification: true
+      };
+    }
+
+    return {
+      route: 'clarification',
+      assistantMessage: buildClarificationMessage(ambiguityCheck.clarification, entity),
+      classification,
+      needsClarification: true
+    };
   }
 
   let prompt = buildPrompt({ text, classification, history: sanitizedHistory, context });
