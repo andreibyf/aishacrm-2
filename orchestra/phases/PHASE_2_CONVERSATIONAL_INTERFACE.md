@@ -568,6 +568,39 @@ voiceSettings: {
 - [ ] Build interactive help system
 - [ ] Add keyboard shortcuts documentation
 - [ ] Implement dark/light theme support
+- [x] Full Voice Interaction Model (continuous + push-to-talk) ✅
+
+> **Status**: Voice Mode Complete ✅ (December 2, 2025)
+>
+> **Implementation**: PH2-VOICE-001 Full Voice Interaction Model
+>
+> **New Files Created**:
+> - `src/hooks/useVoiceInteraction.js` — Unified voice hook coordinating STT, TTS, realtime
+>   - Three modes: idle, continuous, push_to_talk
+>   - Auto-reopens mic after TTS ends in continuous mode
+>   - Maintains safety guards for destructive commands
+> - `src/hooks/usePushToTalkKeybinding.js` — Global spacebar PTT helper
+>   - Detects typing targets (input/textarea/contenteditable) and ignores them
+>   - Handles key repeats and cleanup on unmount
+> - `src/hooks/__tests__/useVoiceInteraction.test.jsx` — 12 tests
+> - `src/hooks/__tests__/usePushToTalkKeybinding.test.jsx` — 6 tests
+>
+> **Modified Files**:
+> - `src/components/ai/AiSidebar.jsx`:
+>   - Voice Mode toggle button (Headphones icon)
+>   - Integrated spacebar PTT for hands-free conversation
+>   - Voice mode status indicator panel
+>   - Auto-speaks AI responses when voice mode active
+>   - New telemetry: ui.voice_mode.enabled/disabled
+> - `src/components/ai/__tests__/AiSidebar.voice.test.jsx` — 3 new tests (16 total)
+>
+> **User Experience**:
+> - Click "Voice" button to enter hands-free mode
+> - Space bar triggers PTT from anywhere (except when typing)
+> - AI responses auto-spoken in voice mode
+> - Click "Voice On" to exit or close sidebar
+>
+> **Test Coverage**: 106 tests passing across all AI-related test suites
 
 **Onboarding Flow**:
 ```
@@ -578,7 +611,191 @@ voiceSettings: {
 5. Dismiss and remember preference
 ```
 
-**Deliverable**: Smooth onboarding experience
+
+## Voice Interaction Model (Continuous + Push-to-Talk)
+
+> **Status**: Complete ✅ (December 2, 2025)
+> 
+> See Task 2.9 above for full implementation details.
+
+## 1. Objective
+
+Enhance AiSHA’s conversational interface with **two fully supported voice input modes**:
+
+### A. Push-to-Talk (PTT) Mode
+
+* User holds **Spacebar** (desktop) or **Mic button** (mobile) to record.
+* Recording stops on release.
+* Transcript is **auto-sent immediately** (no edit/review).
+
+### B. Continuous Listening Mode
+
+* User toggles a **LIVE Voice** switch.
+* Microphone streams continuously into the **Realtime WebRTC session**.
+* AiSHA responds in real time (voice out + text transcript).
+* Silence detection + phrase-boundary detection included.
+
+Both modes must follow AiSHA’s safety logic and routing rules.
+
+---
+
+## 2. Architecture Overview
+
+### 2.1 New Hook: `useVoiceInputMode.js`
+
+Central coordinator managing:
+
+* `pttActive`
+* `continuousMode`
+* `realtimeActive`
+* Routing logic determining whether audio goes to REST or Realtime API
+* Safety checks before sending
+
+### 2.2 Updated: `useSpeechInput.js`
+
+Add:
+
+* `startPttRecording()` / `stopPttRecording()`
+* Extended MediaRecorder pipeline
+* Silence-detection utilities
+* Callback `onTranscript(transcript, origin)` to push results upstream
+
+### 2.3 Updated: `useRealtimeAiSHA.js`
+
+Enhancements:
+
+* Support streaming mic audio into the WebRTC track
+* Auto-disconnect when LIVE mode ends
+* Expose `sendUserMessage()` for voice transcripts
+
+---
+
+## 3. UI & UX Enhancements
+
+### 3.1 AiSidebar UI Additions
+
+* **PTT Mic Button**
+
+  * Shows "Hold Space to Talk"
+  * Built-in PTT state visuals
+
+* **LIVE Mode Toggle**
+
+  * Enables continuous streaming
+  * Shows "LIVE ●" indicator
+  * Auto-resets on WebRTC drop
+
+### 3.2 Behavior Rules
+
+* PTT button is shown unless continuous mode is on
+* Continuous mode hides PTT
+* Both modes must show safety warnings when triggered
+
+---
+
+## 4. Input Routing Logic
+
+Routing decision tree:
+
+```
+if (continuousMode && realtimeActive) → sendRealtimeUserMessage
+else if (pttActive && realtimeActive) → sendRealtimeUserMessage
+else → REST /api/ai/chat via processChatCommand
+```
+
+Metadata added to every transcript:
+
+```
+origin: "voice-ptt" | "voice-live"
+```
+
+---
+
+## 5. Safety Logic
+
+### 5.1 Destructive Phrase Detection
+
+Block transcripts containing phrases like:
+
+* "delete all"
+* "wipe records"
+* "remove everything"
+* Any schema-defined destructive variants
+
+Display sidebar warning:
+
+> "Voice command blocked for safety. Type to confirm."
+
+### 5.2 Continuous Mode Safeguards
+
+LIVE mode auto-disables when:
+
+* WebRTC disconnects
+* STT output contains destructive language
+* Silence exceeds threshold (e.g., 30 seconds)
+* Optional: resource spike conditions
+
+---
+
+## 6. Backend Requirements
+
+No schema modifications.
+
+Ensure endpoints exist:
+
+* `GET /api/ai/realtime-token`
+* `POST /api/ai/speech-to-text`
+* `POST /api/ai/tts`
+
+---
+
+## 7. Testing Plan
+
+### 7.1 Unit Tests (Vitest)
+
+**useVoiceInputMode.test.js**
+
+* PTT toggles correctly
+* Continuous mode routes to realtime
+* Auto-disables on connection drop
+
+**AiSidebar.voice.test.jsx**
+
+* Correct button visibility per mode
+* Press/hold PTT triggers state
+* LIVE toggle activates streaming
+* Destructive phrases blocked
+
+---
+
+## 8. Deliverables
+
+### New File
+
+* `src/hooks/useVoiceInputMode.js`
+
+### Modified Files
+
+* `src/hooks/useSpeechInput.js`
+* `src/hooks/useRealtimeAiSHA.js`
+* `src/components/ai/AiSidebar.jsx`
+
+### Tests
+
+* `src/hooks/__tests__/useVoiceInputMode.test.js`
+* `src/components/ai/__tests__/AiSidebar.voice.test.jsx` (updated)
+
+---
+
+## 9. Acceptance Criteria
+
+* Spacebar + mic PTT fully functional
+* Continuous live voice streaming works with realtime AI
+* LIVE indicator is accurate and auto-resets
+* All voice routes respect safety gating
+* All tests pass
+* No backend changes required
+
 
 ---
 
