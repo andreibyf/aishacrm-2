@@ -250,6 +250,7 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
     isInitializing: false,
     isConnected: false,
     isListening: false,
+    isSpeaking: false, // Track when AI is speaking to mute mic
     error: null,
     errorDetails: null,
   });
@@ -266,6 +267,7 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
   const sessionStartRef = useRef(null);
   const pendingResponseLatencyRef = useRef(null);
   const consoleTelemetryEnabledRef = useRef(shouldConsoleLogTelemetry());
+  const speakingTimeoutRef = useRef(null);
 
   useEffect(() => {
     eventHandlerRef.current = onEvent || null;
@@ -319,12 +321,63 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
     });
   }, []);
 
+  // Mute/unmute mic to prevent feedback when AI is speaking
+  const setMicMuted = useCallback((muted) => {
+    const stream = mediaStreamRef.current;
+    if (!stream) return;
+    stream.getAudioTracks().forEach((track) => {
+      track.enabled = !muted;
+    });
+    if (consoleTelemetryEnabledRef.current) {
+      console.info('[Realtime] Mic', muted ? 'muted' : 'unmuted');
+    }
+  }, []);
+
+  // Handle AI speaking state - mute mic while AI speaks
+  const setAISpeaking = useCallback((speaking) => {
+    // Clear any pending timeout
+    if (speakingTimeoutRef.current) {
+      clearTimeout(speakingTimeoutRef.current);
+      speakingTimeoutRef.current = null;
+    }
+
+    if (speaking) {
+      // AI started speaking - mute mic immediately
+      setMicMuted(true);
+      setState((prev) => ({ ...prev, isSpeaking: true }));
+    } else {
+      // AI stopped speaking - delay unmute slightly to avoid catching tail end
+      speakingTimeoutRef.current = setTimeout(() => {
+        setMicMuted(false);
+        setState((prev) => ({ ...prev, isSpeaking: false }));
+        speakingTimeoutRef.current = null;
+      }, 300); // 300ms delay before unmuting
+    }
+  }, [setMicMuted]);
+
   const emitEvent = useCallback((payload) => {
+    // Detect AI audio events to mute/unmute mic
+    if (payload && typeof payload === 'object') {
+      const eventType = payload.type;
+      
+      // AI started speaking (audio delta received)
+      if (eventType === 'response.audio.delta' || eventType === 'response.audio_transcript.delta') {
+        setAISpeaking(true);
+      }
+      
+      // AI finished speaking
+      if (eventType === 'response.audio.done' || 
+          eventType === 'response.done' || 
+          eventType === 'response.audio_transcript.done') {
+        setAISpeaking(false);
+      }
+    }
+
     if (eventHandlerRef.current) {
       eventHandlerRef.current(payload);
     }
     appendMessageFromPayload(payload);
-  }, [appendMessageFromPayload]);
+  }, [appendMessageFromPayload, setAISpeaking]);
 
   const applyErrorState = useCallback((details, severity = 'error') => {
     setState((prev) => ({
