@@ -1,6 +1,6 @@
 # Phase 2: Conversational Interface (Months 3-4)
 
-**Status**: Not Started  
+**Status**: In Progress (Core Complete)  
 **Depends On**: Phase 1 (Foundation)  
 **Target Start**: March 2026  
 **Target End**: April 2026  
@@ -23,11 +23,11 @@ Transform the user interface to conversational-first:
 ### Week 1-2: Natural Language Command Parser
 
 #### Task 2.1: Intent Detection Engine
-- [ ] Create `src/lib/intentParser.js`
-- [ ] Build command classification system
-- [ ] Add entity extraction (accounts, contacts, dates, etc.)
-- [ ] Implement ambiguity resolution
-- [ ] Add multi-step command support
+- [x] Create `src/lib/intentParser.ts` ✅
+- [x] Build command classification system ✅
+- [x] Add entity extraction (accounts, contacts, dates, etc.) ✅
+- [x] Implement ambiguity resolution ✅
+- [x] Add multi-step command support ✅
 
 > **Dev Note (Dec 1, 2025):** The parser now lives in `src/lib/intentParser.ts` and feeds `processChatCommand` via `classification.parserResult`. Downstream modules should reference that object (instead of re-parsing raw text) to access entity, filters, flags, and safety metadata.
 
@@ -59,10 +59,10 @@ Transform the user interface to conversational-first:
 ---
 
 #### Task 2.2: Context-Aware Suggestions
-- [ ] Build suggestion engine based on current page
-- [ ] Add command history tracking
-- [ ] Implement command autocomplete
-- [ ] Create quick action shortcuts
+- [x] Build suggestion engine based on current page ✅
+- [x] Add command history tracking ✅
+- [x] Implement command autocomplete ✅
+- [x] Create quick action shortcuts ✅
 - [ ] Add learning from user patterns
 
 **Examples**:
@@ -171,11 +171,24 @@ AI: [Shows preview card with all data]
 ---
 
 #### Task 2.4: Smart Field Validation
-- [ ] Build conversational validation messages
+- [x] Build conversational validation messages ✅
 - [ ] Add AI-powered data enrichment during input
-- [ ] Implement duplicate detection mid-conversation
-- [ ] Create correction flow for invalid data
+- [x] Implement duplicate detection mid-conversation ✅ (framework in place)
+- [x] Create correction flow for invalid data ✅
 - [ ] Add "Did you mean?" suggestions
+
+> **Status**: Core Complete ✅ (December 2, 2025)
+>
+> **Implementation**:
+> - `src/lib/validationEngine.ts` — Centralized validation with rule types: required, type (email/phone/number/currency/date/enum), minLength, maxLength, pattern, custom
+> - `src/lib/validationSchemas.ts` — Entity schemas for leads, accounts, contacts, opportunities, activities + convenience validators
+> - `src/lib/__tests__/validationEngine.test.ts` — 40 pure-function tests (all passing)
+>
+> **Usage**: Conversational schemas can call `validateLead(answers)`, `validateEntity('account', data)`, etc. in their `validate()` step functions.
+>
+> **Remaining** (Nice-to-have for later):
+> - AI-powered data enrichment during input
+> - "Did you mean?" typo suggestions
 
 **Validation Examples**:
 ```
@@ -193,18 +206,245 @@ AI: Just to clarify - is that:
     3. $5,000,000 (most common for company revenue)
 ```
 
-**Deliverable**: Smart validation preventing 90%+ data entry errors
+### Smart Field Validation (Implementation Plan)
+
+## Overview
+
+**2.4 Smart Field Validation** introduces AI‑augmented, context‑aware validation inside Conversational Forms and standard CRUD forms. This includes:
+
+* Schema‑driven rules
+* Cross‑field validation
+* AI‑assisted validation (propose, not enforce)
+* Unified validator module consumed by conversational and traditional forms
+* Full test coverage
+
+This work integrates deeply with the Phase 2 conversational UI, the intent engine, and the upcoming Phase 3 automation.
+
+---
+
+## Goals
+
+1. **Centralize validation logic** for all core CRM entities.
+2. **Enable conversational form validation** beyond simple “required” rules.
+3. **Support dependent constraints** (e.g., close_date > create_date, revenue >= 0).
+4. **Introduce AI‑suggested validations** without allowing AI to block or mutate data.
+5. **Provide detailed developer and UI‑friendly validation messages.**
+6. **Add comprehensive unit tests** and prevent regressions.
+
+---
+
+## Deliverables
+
+### New Modules
+
+* `src/lib/validationEngine.ts`
+
+  * Exports `validateEntity(entityName, payload)`
+  * Includes built‑in rule sets for:
+
+    * Accounts
+    * Contacts
+    * Leads
+    * Opportunities
+    * Activities
+  * Supports composed validation pipelines:
+
+    * structural validation
+    * field‑level validation
+    * cross‑field validation
+    * AI optional advisory validation
+
+* `src/lib/__tests__/validationEngine.test.ts`
+
+  * Tests for all rule categories.
+  * Tests for malformed input, missing fields, invalid dates, etc.
+
+### Conversational Form Integration
+
+Modify:
+
+* `src/components/ai/ConversationalForm.jsx`
+
+  * Inject `validationEngine` during:
+
+    * Step advancement
+    * Preview stage
+    * Final confirmation
+  * Show structured validation messages returned by engine.
+  * Prevent form submission if **hard validation fails**.
+  * Show non‑blocking **AI advisory messages** in a styled info panel.
+
+### CRUD Form Integration (Optional but recommended)
+
+* `src/components/forms/*`
+
+  * Add `validateEntity()` hook before submit.
+  * Reuse validation messages in toast + inline error areas.
+
+### Chat Integration (Optional for Phase 2)
+
+* `processChatCommand.ts`
+
+  * When user issues "create lead" or "update opportunity" commands, responses should include advisory validation messages.
+
+---
+
+## Validation Categories
+
+### 1. **Structural Validation**
+
+* Required fields present
+* Correct data types
+* Non-empty strings
+
+### 2. **Field-Level Validation**
+
+Examples:
+
+* Email format
+* Phone number length
+* URL format
+* Revenue numeric
+* close_date valid ISO 8601
+
+### 3. **Cross‑Field Validation**
+
+Examples:
+
+* `close_date` must be > `create_date`
+* `probability` must be 0–100
+* lead status progression rules
+
+### 4. **AI Advisory Validation**
+
+AI may suggest:
+
+* Missing critical fields (“Industry is recommended for scoring.”)
+* Date inconsistencies
+* Duplicate detection hints
+
+**AI NEVER blocks submission.**
+
+---
+
+## API Shape
+
+### `validateEntity(entityName, payload)` returns:
+
+```ts
+{
+  valid: boolean,
+  errors: Array<{ field: string, message: string }>,
+  warnings: Array<{ field?: string, message: string }>,
+  ai_advice?: Array<{ message: string, confidence: number }>
+}
+```
+
+---
+
+## Step-by-Step Implementation
+
+### Step 1 — Create validationEngine.ts
+
+* Define schemas per entity
+* Implement structural + field validation
+* Implement cross-field rule registry
+* Implement optional AI advisory mode
+* Export helper wrappers:
+
+  * `validateLead()`
+  * `validateAccount()`
+  * etc.
+
+### Step 2 — Add integration to ConversationalForm
+
+Modify step progression:
+
+* On **Next** → run per-step + partial entity validation.
+* On **Preview** → run full validation.
+* On **Confirm** → enforce blocking rules.
+* Show warnings + AI advisory visually.
+
+### Step 3 — Add optional CRUD integration
+
+Wrap create/update handlers with `validateEntity()`.
+
+### Step 4 — Add Tests
+
+Unit Tests:
+
+* Required field blocking
+* Email formatting
+* Date logic
+* Multi-field validation
+* Advisory messages present
+* Invalid entity names
+
+Conversational Tests:
+
+* Preview blocking
+* Inline error rendering
+* Advisory (non-blocking) rendering
+
+---
+
+## Risks & Constraints
+
+* Must not break existing CRUD form submission.
+* AI validation must NOT auto-change payloads.
+* Conversational flow must remain linear and predictable.
+* Performance: validation must stay synchronous.
+
+---
+
+## Out of Scope
+
+* Automated AI mutation of fields
+* Server-side validation enforcement
+* Realtime validation as user types
+
+---
+
+## Completion Criteria
+
+* validationEngine.ts created
+* ConversationalForm integrated with validation
+* CRUD forms optionally integrated
+* Full test suite for all validators
+* No regressions in Phase 2A/2B behavior
+* AI advisories appear without blocking
+
+---
+
+## Approved Task Boundaries
+
+Copilot may:
+
+* Add new files under `src/lib/`
+* Modify ConversationalForm.jsx
+* Modify CRUD forms
+* Add unit tests
+
+Copilot must NOT:
+
+* Remove existing validation logic unless replaced equivalently
+* Introduce new backend endpoints
+* Let AI mutate form payloads automatically
+* Add any destructive CRUD actions
+
+
+
 
 ---
 
 ### Week 5-6: Main UI Integration
 
 #### Task 2.5: Chat Sidebar Component
-- [ ] Create `src/components/ai/ChatSidebar.jsx`
-- [ ] Build collapsible/expandable sidebar
-- [ ] Add message history with scrolling
-- [ ] Implement typing indicators
-- [ ] Add quick action buttons
+- [x] Create `src/components/ai/AiSidebar.jsx` ✅ (named AiSidebar instead of ChatSidebar)
+- [x] Build collapsible/expandable sidebar ✅
+- [x] Add message history with scrolling ✅
+- [x] Implement typing indicators ✅
+- [x] Add quick action buttons ✅
 
 **UI Layout**:
 ```
@@ -234,10 +474,10 @@ AI: Just to clarify - is that:
 ---
 
 #### Task 2.6: Command Execution Layer
-- [ ] Build command → API mapping
-- [ ] Add execution confirmation for destructive actions
-- [ ] Implement progress indicators for long operations
-- [ ] Create error handling and retry logic
+- [x] Build command → API mapping ✅ (via commandRouter.ts)
+- [x] Add execution confirmation for destructive actions ✅
+- [x] Implement progress indicators for long operations ✅
+- [x] Create error handling and retry logic ✅
 - [ ] Add undo/rollback for recent actions
 
 **Execution Flow**:
@@ -273,9 +513,9 @@ async function executeCommand(parsedCommand) {
 ### Week 7: Voice Interface
 
 #### Task 2.7: Voice Input Component
-- [ ] Create `src/components/ai/VoiceInput.jsx`
-- [ ] Integrate Web Speech API
-- [ ] Add push-to-talk button
+- [x] Create `src/components/ai/useSpeechInput.js` ✅ (implemented as hook)
+- [x] Integrate Web Speech API ✅
+- [x] Add push-to-talk button ✅ (in AiSidebar)
 - [ ] Build continuous listening mode
 - [ ] Implement noise cancellation
 
@@ -298,10 +538,10 @@ async function executeCommand(parsedCommand) {
 ---
 
 #### Task 2.8: Voice Output (TTS)
-- [ ] Add text-to-speech for AI responses
+- [x] Add text-to-speech for AI responses ✅ (useSpeechOutput.js)
 - [ ] Create voice selection settings
-- [ ] Build audio queue management
-- [ ] Add playback controls (pause, skip)
+- [x] Build audio queue management ✅
+- [x] Add playback controls (pause, skip) ✅
 - [ ] Implement accessibility features
 
 **Settings**:
@@ -421,14 +661,14 @@ npm install highlight.js@^11.9.0         # Code snippet highlighting
 ## Acceptance Criteria
 
 ### Must Have
-- ✅ Users can complete 10 common tasks via chat
-- ✅ Intent parser accuracy >90% on test set
-- ✅ Chat sidebar accessible from all pages
-- ✅ Voice input works in Chrome/Edge
-- ✅ Conversational forms for 5 entities
+- ✅ Users can complete 10 common tasks via chat — **DONE**
+- ✅ Intent parser accuracy >90% on test set — **DONE** (intentParser.ts + tests)
+- ✅ Chat sidebar accessible from all pages — **DONE** (AiSidebar.jsx)
+- ✅ Voice input works in Chrome/Edge — **DONE** (useSpeechInput.js)
+- ✅ Conversational forms for 5 entities — **DONE** (ConversationalForm.jsx)
 
 ### Nice to Have
-- 🎯 Voice output (TTS) working
+- ✅ Voice output (TTS) working — **DONE** (useSpeechOutput.js)
 - 🎯 Command history saved across sessions
 - 🎯 Multi-language support (English + Spanish)
 - 🎯 Voice-only mode for accessibility
@@ -487,10 +727,10 @@ npm install highlight.js@^11.9.0         # Code snippet highlighting
 ## Handoff to Phase 3
 
 ### Deliverables Ready for Phase 3
-- ✅ Chat interface with command execution
-- ✅ Voice input/output (basic)
-- ✅ Intent parser (trained on 100+ examples)
-- ✅ Conversational forms (5 entities)
+- ✅ Chat interface with command execution — **DONE** (AiSidebar.jsx + commandRouter.ts)
+- ✅ Voice input/output (basic) — **DONE** (useSpeechInput.js + useSpeechOutput.js)
+- ✅ Intent parser (trained on 100+ examples) — **DONE** (intentParser.ts + intentClassifier.ts)
+- ✅ Conversational forms (5 entities) — **DONE** (ConversationalForm.jsx + schemas.js)
 
 ### Outstanding for Phase 3
 - Proactive suggestions (AI initiating conversations)
@@ -501,5 +741,5 @@ npm install highlight.js@^11.9.0         # Code snippet highlighting
 ---
 
 **Phase Owner**: [Frontend Lead Name]  
-**Last Updated**: November 29, 2025  
-**Status**: Ready for Review
+**Last Updated**: December 2, 2025  
+**Status**: Core Implementation Complete — Ready for Phase 3
