@@ -10,6 +10,11 @@ import { useRealtimeAiSHA } from '@/hooks/useRealtimeAiSHA.js';
 import { useConfirmDialog } from '@/components/shared/ConfirmDialog.jsx';
 import RealtimeIndicator from './RealtimeIndicator.jsx';
 import { trackRealtimeEvent, subscribeToRealtimeTelemetry, getRealtimeTelemetrySnapshot } from '@/utils/realtimeTelemetry.js';
+import ConversationalForm from '@/components/ai/ConversationalForm.jsx';
+import { listConversationalSchemas, getSchemaById } from '@/components/ai/conversationalForms';
+import { Account, Activity, Contact, Lead, Opportunity } from '@/api/entities';
+import { toast } from 'sonner';
+import { useUser } from '@/components/shared/useUser.js';
 
 const QUICK_ACTIONS = [
   { label: 'Show leads', prompt: 'Show me all open leads updated today' },
@@ -32,6 +37,43 @@ const containsDestructiveVoiceCommand = (text) => {
   if (!text) return false;
   const normalized = text.toLowerCase();
   return DANGEROUS_VOICE_PHRASES.some((phrase) => normalized.includes(phrase));
+};
+
+const conversationalFormHandlers = {
+  lead: {
+    create: (payload) => Lead.create(payload),
+    success: (record) => {
+      const fullName = [record?.first_name, record?.last_name].filter(Boolean).join(' ').trim() || record?.name || 'lead';
+      const status = record?.status || 'new';
+      return `Created lead: ${fullName} (${status})`;
+    }
+  },
+  account: {
+    create: (payload) => Account.create(payload),
+    success: (record) => `Created account: ${record?.name || 'New account'}`
+  },
+  contact: {
+    create: (payload) => Contact.create(payload),
+    success: (record) => {
+      const fullName = [record?.first_name, record?.last_name].filter(Boolean).join(' ').trim() || record?.name || 'contact';
+      return `Created contact: ${fullName}`;
+    }
+  },
+  opportunity: {
+    create: (payload) => Opportunity.create(payload),
+    success: (record) => {
+      const name = record?.name || 'Opportunity';
+      const stage = record?.stage ? ` – ${record.stage}` : '';
+      return `Created opportunity: ${name}${stage}`;
+    }
+  },
+  activity: {
+    create: (payload) => Activity.create(payload),
+    success: (record) => {
+      const subject = record?.subject || 'Activity';
+      return `Logged activity: ${subject}`;
+    }
+  }
 };
 
 const extractTextFromRealtimeContent = (content) => {
@@ -250,22 +292,90 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     clearError,
     sendMessage,
     addRealtimeMessage,
-    setRealtimeMode
+    setRealtimeMode,
+    suggestions,
+    applySuggestion
   } = useAiSidebarState();
   const [draft, setDraft] = useState('');
   const [draftOrigin, setDraftOrigin] = useState('text');
   const [voiceWarning, setVoiceWarning] = useState(null);
   const [isContinuousMode, setIsContinuousMode] = useState(true); // Default to continuous conversation
+  const { user } = useUser();
   const bottomMarkerRef = useRef(null);
+  const draftInputRef = useRef(null);
   const [isRealtimeEnabled, setRealtimeEnabled] = useState(false);
   const [realtimeError, setRealtimeError] = useState(null);
   const [realtimeErrorDetails, setRealtimeErrorDetails] = useState(null);
+  const [activeFormId, setActiveFormId] = useState(null);
+  const [formSubmissionState, setFormSubmissionState] = useState({ isSubmitting: false, error: null });
+  const conversationalSchemaOptions = useMemo(() => listConversationalSchemas(), []);
+  const activeFormSchema = useMemo(() => (activeFormId ? getSchemaById(activeFormId) : null), [activeFormId]);
   const realtimeBufferRef = useRef('');
   const [telemetryContext] = useState(() => buildRealtimeTelemetryContext());
   const [telemetryEntries, setTelemetryEntries] = useState(() => getRealtimeTelemetrySnapshot());
   const showTelemetryDebug = useMemo(() => isTelemetryDebugEnabled(), []);
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
   const isRealtimeFeatureAvailable = Boolean(realtimeVoiceEnabled);
+  const tenantId = user?.tenant_id || telemetryContext.tenantId;
+  const userId = user?.email || telemetryContext.userId;
+  const canUseConversationalForms = Boolean(tenantId);
+  const realtimeHadLiveRef = useRef(false);
+
+  useEffect(() => {
+    if (!tenantId && activeFormId) {
+      setActiveFormId(null);
+      setFormSubmissionState({ isSubmitting: false, error: null });
+    }
+  }, [tenantId, activeFormId]);
+
+  const handleFormChipClick = useCallback(
+    (schemaId) => {
+      if (!tenantId) {
+        toast.error('Select a tenant before starting a guided form.');
+        return;
+      }
+      setActiveFormId(schemaId);
+      setFormSubmissionState({ isSubmitting: false, error: null });
+    },
+    [tenantId]
+  );
+
+  const handleConversationalCancel = useCallback(() => {
+    setActiveFormId(null);
+    setFormSubmissionState({ isSubmitting: false, error: null });
+  }, []);
+
+  const handleConversationalComplete = useCallback(
+    async (payload) => {
+      if (!activeFormSchema) return;
+      const handler = conversationalFormHandlers[activeFormSchema.id];
+      if (!handler) {
+        toast.error('Unsupported conversational form.');
+        return;
+      }
+      setFormSubmissionState({ isSubmitting: true, error: null });
+      try {
+        const result = await handler.create(payload);
+        const successMessage = handler.success ? handler.success(result) : `Created ${activeFormSchema.label}`;
+        addRealtimeMessage({
+          role: 'assistant',
+          content: successMessage,
+          metadata: {
+            origin: 'conversational-form',
+            entity: activeFormSchema.entity
+          }
+        });
+        toast.success(successMessage);
+        setActiveFormId(null);
+        setFormSubmissionState({ isSubmitting: false, error: null });
+      } catch (err) {
+        const errorMessage = err?.message || `Unable to create ${activeFormSchema.label.toLowerCase()}.`;
+        setFormSubmissionState({ isSubmitting: false, error: errorMessage });
+        toast.error(errorMessage);
+      }
+    },
+    [activeFormSchema, addRealtimeMessage]
+  );
 
   const clearRealtimeErrors = useCallback(() => {
     setRealtimeError(null);
@@ -341,17 +451,25 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     [addRealtimeMessage, logUiTelemetry]
   );
 
+  const realtimeHookState = useRealtimeAiSHA({ onEvent: handleRealtimeEvent, telemetryContext });
   const {
     isSupported: isRealtimeSupported,
-    isInitializing: isRealtimeInitializing,
+    isInitializing: rawRealtimeInitializing,
+    isConnecting: rawRealtimeConnecting,
     isConnected: isRealtimeConnected,
     isListening: isRealtimeListening,
+    isLive: realtimeLiveFlag = false,
     error: realtimeStateError,
     errorDetails: realtimeHookErrorDetails,
+    startSession,
     connectRealtime,
-    sendUserMessage: sendRealtimeUserMessage,
-    disconnectRealtime
-  } = useRealtimeAiSHA({ onEvent: handleRealtimeEvent, telemetryContext });
+    stopSession,
+    disconnectRealtime,
+    sendUserMessage: sendRealtimeUserMessage
+  } = realtimeHookState;
+  const isRealtimeInitializing = Boolean(rawRealtimeConnecting ?? rawRealtimeInitializing);
+  const startRealtimeSession = startSession || connectRealtime;
+  const stopRealtimeSession = stopSession || disconnectRealtime;
 
   useEffect(() => {
     if (realtimeHookErrorDetails) {
@@ -375,7 +493,8 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     }
   }, [realtimeHookErrorDetails, realtimeStateError, logUiTelemetry]);
 
-  const isRealtimeActive = isRealtimeEnabled && isRealtimeConnected;
+  const isRealtimeActive = isRealtimeEnabled && (realtimeLiveFlag || isRealtimeConnected);
+  const isRealtimeIndicatorActive = isRealtimeEnabled && (realtimeLiveFlag || (isRealtimeConnected && isRealtimeListening));
 
   const enableRealtime = useCallback(async () => {
     if (!isRealtimeSupported) {
@@ -393,7 +512,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     logUiTelemetry('ui.realtime.toggle', { enabled: true, phase: 'request' });
     try {
       clearRealtimeErrors();
-      await connectRealtime();
+      await startRealtimeSession();
       setRealtimeEnabled(true);
       setRealtimeMode(true);
       logUiTelemetry('ui.realtime.toggle', { enabled: true, phase: 'success' });
@@ -407,17 +526,17 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       }
       logUiTelemetry('ui.realtime.toggle', { enabled: true, phase: 'error', message }, 'error');
     }
-  }, [clearRealtimeErrors, connectRealtime, isRealtimeSupported, logUiTelemetry, setRealtimeMode]);
+  }, [clearRealtimeErrors, isRealtimeSupported, logUiTelemetry, setRealtimeMode, startRealtimeSession]);
 
   const disableRealtime = useCallback(() => {
     logUiTelemetry('ui.realtime.toggle', { enabled: false, phase: 'request' });
-    disconnectRealtime();
+    stopRealtimeSession();
     setRealtimeEnabled(false);
     setRealtimeMode(false);
     realtimeBufferRef.current = '';
     clearRealtimeErrors();
     logUiTelemetry('ui.realtime.toggle', { enabled: false, phase: 'success' });
-  }, [clearRealtimeErrors, disconnectRealtime, logUiTelemetry, setRealtimeMode]);
+  }, [clearRealtimeErrors, logUiTelemetry, setRealtimeMode, stopRealtimeSession]);
 
   const handleRealtimeToggle = useCallback(async () => {
     if (!isRealtimeFeatureAvailable) {
@@ -537,7 +656,10 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   useEffect(() => {
     if (!isOpen) return;
     const timeout = setTimeout(() => {
-      bottomMarkerRef.current?.scrollIntoView({ behavior: 'smooth' });
+      const marker = bottomMarkerRef.current;
+      if (marker && typeof marker.scrollIntoView === 'function') {
+        marker.scrollIntoView({ behavior: 'smooth' });
+      }
     }, 50);
     return () => clearTimeout(timeout);
   }, [messages, isOpen]);
@@ -605,6 +727,24 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     stopPlayback();
     setActiveSpeechMessageId(null);
   }, [stopPlayback]);
+
+  const handleSuggestionClick = useCallback(
+    (suggestionId) => {
+      if (!suggestionId) return;
+      const command = applySuggestion(suggestionId);
+      if (!command) return;
+      const suggestionMeta = suggestions.find((item) => item.id === suggestionId);
+      setDraft(command);
+      setDraftOrigin('text');
+      setVoiceWarning(null);
+      draftInputRef.current?.focus();
+      logUiTelemetry('ui.suggestion.applied', {
+        suggestionId,
+        source: suggestionMeta?.source
+      });
+    },
+    [applySuggestion, logUiTelemetry, suggestions]
+  );
 
   useEffect(() => {
     if (!isSpeechLoading && !isSpeechPlaying) {
@@ -703,6 +843,41 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     }
   }, [disableRealtime, isRealtimeEnabled, isRealtimeFeatureAvailable]);
 
+  useEffect(() => {
+    if (!isRealtimeEnabled) {
+      realtimeHadLiveRef.current = false;
+      return;
+    }
+
+    if (realtimeLiveFlag) {
+      realtimeHadLiveRef.current = true;
+      return;
+    }
+
+    if (isRealtimeInitializing) {
+      return;
+    }
+
+    if (!isRealtimeConnected && realtimeHadLiveRef.current) {
+      logUiTelemetry('ui.realtime.auto_disabled', { reason: 'connection_lost' }, 'warn');
+      realtimeHadLiveRef.current = false;
+      stopRealtimeSession();
+      setRealtimeEnabled(false);
+      setRealtimeMode(false);
+      realtimeBufferRef.current = '';
+      clearRealtimeErrors();
+    }
+  }, [
+    clearRealtimeErrors,
+    isRealtimeConnected,
+    isRealtimeEnabled,
+    isRealtimeInitializing,
+    logUiTelemetry,
+    realtimeLiveFlag,
+    setRealtimeMode,
+    stopRealtimeSession
+  ]);
+
   return (
     <>
       <ConfirmDialogPortal />
@@ -766,7 +941,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
         <div className="flex-1 overflow-y-auto px-4 py-4">
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2 min-h-[24px]">
-              {isRealtimeFeatureAvailable && isRealtimeActive && <RealtimeIndicator active />}
+                {isRealtimeFeatureAvailable && isRealtimeIndicatorActive && <RealtimeIndicator active />}
               {isRealtimeInitializing && (
                 <span className="text-[11px] text-slate-500 dark:text-slate-400">Connecting…</span>
               )}
@@ -841,6 +1016,78 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
               </button>
             ))}
           </div>
+            <div className="mb-4" data-testid="conversational-form-launchers">
+              <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                <Sparkles className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-200" />
+                Guided creations
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {conversationalSchemaOptions.map((schema) => {
+                  const isActive = activeFormId === schema.id;
+                  return (
+                    <button
+                      key={schema.id}
+                      type="button"
+                      onClick={() => handleFormChipClick(schema.id)}
+                      className={`rounded-full border px-3 py-1 text-xs transition ${isActive
+                          ? 'border-emerald-500 bg-emerald-600 text-white shadow-sm'
+                          : 'border-emerald-200 bg-white text-emerald-700 hover:border-emerald-400 hover:bg-emerald-50 dark:border-emerald-500/40 dark:bg-slate-900/60 dark:text-emerald-100'
+                        } ${!canUseConversationalForms ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      disabled={!canUseConversationalForms || formSubmissionState.isSubmitting}
+                    >
+                      {schema.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {!canUseConversationalForms && (
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  Select a tenant to enable guided forms.
+                </p>
+              )}
+            </div>
+            {suggestions.length > 0 && (
+              <div className="mb-4" data-testid="ai-suggestions">
+                <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <Sparkles className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-300" />
+                  Suggestions for this page
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {suggestions.map((suggestion) => (
+                    <button
+                      key={suggestion.id}
+                      type="button"
+                      onClick={() => handleSuggestionClick(suggestion.id)}
+                      className="rounded-full border border-indigo-200 bg-white/90 px-3 py-1 text-xs text-indigo-700 shadow-sm transition hover:border-indigo-400 hover:bg-indigo-50 dark:border-indigo-500/40 dark:bg-slate-900/60 dark:text-indigo-100"
+                      disabled={isSending}
+                      data-source={suggestion.source}
+                    >
+                      {suggestion.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          {activeFormSchema && (
+            <div className="mb-4" data-testid="conversational-form-panel">
+              <div className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-100">
+                Guided {activeFormSchema.label}
+              </div>
+              {formSubmissionState.error && (
+                <div className="mb-2 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100">
+                  {formSubmissionState.error}
+                </div>
+              )}
+              <ConversationalForm
+                schema={activeFormSchema}
+                tenantId={tenantId}
+                userId={userId}
+                onComplete={handleConversationalComplete}
+                onCancel={handleConversationalCancel}
+                isSubmitting={formSubmissionState.isSubmitting}
+              />
+            </div>
+          )}
           {error && (
             <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
               AiSHA is retrying after an error. You can keep trying or close the panel.
@@ -896,6 +1143,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
               Hold the Voice button (or press Space/Enter) to talk. Release to send – voice commands obey the same safety rules as text.
             </p>
             <Textarea
+                ref={draftInputRef}
               value={draft}
               onChange={handleDraftChange}
               onKeyDown={handleKeyDown}

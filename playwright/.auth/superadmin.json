@@ -5,12 +5,20 @@
       "origin": "http://localhost:4000",
       "localStorage": [
         {
-          "name": "selected_tenant_id",
-          "value": "local-tenant-001"
+          "name": "tenant_id",
+          "value": "a11dfb63-4b18-4eb8-872e-747af2e37c46"
         },
         {
-          "name": "tenant_id",
-          "value": "local-tenant-001"
+          "name": "selected_tenant_id",
+          "value": "a11dfb63-4b18-4eb8-872e-747af2e37c46"
+        },
+        {
+          "name": "mock_auth_mode",
+          "value": "true"
+        },
+        {
+          "name": "mock_superadmin",
+          "value": "dev@localhost"
         }
       ]
     }

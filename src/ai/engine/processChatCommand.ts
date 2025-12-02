@@ -1,9 +1,11 @@
 import type { IntentClassification } from '@/ai/nlu/intentClassifier';
-import { classifyIntent } from '@/ai/nlu/intentClassifier';
+import { classifyIntent as legacyClassifyIntent } from '@/ai/nlu/intentClassifier';
 import type { PromptContext } from './promptBuilder';
 import { buildPrompt } from './promptBuilder';
 import { routeCommand } from './commandRouter';
 import type { LocalActionDescriptor } from './commandRouter';
+import type { ParsedIntent, ConversationalIntent, ConversationalEntity } from '@/lib/intentParser';
+import { enforceParserSafety, legacyIntentFromParser, parseIntent } from '@/lib/intentParser';
 
 interface ProcessChatCommandOptions {
   text: string;
@@ -25,6 +27,82 @@ interface ProcessChatCommandResult {
   classification: IntentClassification;
   localAction?: LocalActionDescriptor;
 }
+
+type ParserAugmentedClassification = IntentClassification & {
+  parserResult: ParsedIntent;
+  effectiveParser: ParsedIntent;
+};
+
+const PARSER_TO_LEGACY_INTENT: Record<ConversationalIntent, IntentClassification['intent']> = {
+  query: 'list_records',
+  create: 'tasks',
+  update: 'tasks',
+  navigate: 'activities',
+  analyze: 'summaries',
+  ambiguous: 'generic_question'
+};
+
+const PARSER_TO_LEGACY_ENTITY: Record<ConversationalEntity, IntentClassification['entity']> = {
+  leads: 'leads',
+  accounts: 'accounts',
+  contacts: 'leads',
+  opportunities: 'opportunities',
+  activities: 'activities',
+  dashboard: 'dashboard',
+  general: 'general'
+};
+
+const LEGACY_TO_PARSER_INTENT: Record<IntentClassification['intent'], ConversationalIntent> = {
+  list_records: 'query',
+  summaries: 'analyze',
+  forecast: 'analyze',
+  activities: 'navigate',
+  tasks: 'update',
+  generic_question: 'ambiguous'
+};
+
+const LEGACY_TO_PARSER_ENTITY: Record<IntentClassification['entity'], ConversationalEntity> = {
+  leads: 'leads',
+  accounts: 'accounts',
+  opportunities: 'opportunities',
+  activities: 'activities',
+  tasks: 'activities',
+  pipeline: 'opportunities',
+  dashboard: 'dashboard',
+  general: 'general'
+};
+
+const convertIntentToLegacy = (intent: ConversationalIntent) => PARSER_TO_LEGACY_INTENT[intent] ?? 'generic_question';
+const convertEntityToLegacy = (entity: ConversationalEntity) => PARSER_TO_LEGACY_ENTITY[entity] ?? 'general';
+
+const buildParserFromLegacy = (legacy: IntentClassification): ParsedIntent => ({
+  rawText: legacy.rawText,
+  normalized: legacy.normalized,
+  intent: LEGACY_TO_PARSER_INTENT[legacy.intent] ?? 'ambiguous',
+  entity: LEGACY_TO_PARSER_ENTITY[legacy.entity] ?? 'general',
+  filters: {},
+  confidence: legacy.confidence,
+  isAmbiguous: legacy.intent === 'generic_question' || legacy.entity === 'general',
+  isMultiStep: false,
+  isPotentiallyDestructive: false,
+  detectedPhrases: legacy.matchedKeywords ?? []
+});
+
+const mapParsedToLegacyClassification = (effective: ParsedIntent, original: ParsedIntent): ParserAugmentedClassification => {
+  const filters = legacyIntentFromParser(original);
+  const classification: ParserAugmentedClassification = {
+    rawText: original.rawText,
+    normalized: original.normalized,
+    intent: convertIntentToLegacy(effective.intent),
+    entity: convertEntityToLegacy(effective.entity),
+    filters,
+    confidence: Number(Math.max(0.1, Math.min(0.95, effective.confidence)).toFixed(2)),
+    matchedKeywords: original.detectedPhrases,
+    parserResult: original,
+    effectiveParser: effective
+  };
+  return classification;
+};
 
 const ensureHistoryFormat = (history: ProcessChatCommandOptions['history']) => {
   if (!history) return [];
@@ -88,8 +166,35 @@ const normalizeChatResponse = (route: 'ai_chat' | 'ai_brain', response: any): As
 
 export async function processChatCommand({ text, history = [], context }: ProcessChatCommandOptions): Promise<ProcessChatCommandResult> {
   const sanitizedHistory = ensureHistoryFormat(history);
-  const classification = classifyIntent(text);
-  const prompt = buildPrompt({ text, classification, history: sanitizedHistory, context });
+  let parserResult: ParsedIntent | null = null;
+
+  try {
+    parserResult = parseIntent(text);
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn('intentParser failed, falling back to legacy classifier', error);
+  }
+
+  let classification: ParserAugmentedClassification;
+
+  if (!parserResult) {
+    const legacy = legacyClassifyIntent(text);
+    const fallbackParser = buildParserFromLegacy(legacy);
+    classification = {
+      ...legacy,
+      parserResult: fallbackParser,
+      effectiveParser: fallbackParser
+    };
+    parserResult = fallbackParser;
+  } else {
+    const effectiveParser = enforceParserSafety(parserResult);
+    classification = mapParsedToLegacyClassification(effectiveParser, parserResult);
+  }
+
+  let prompt = buildPrompt({ text, classification, history: sanitizedHistory, context });
+  if (parserResult.isPotentiallyDestructive && prompt.mode !== 'propose_actions') {
+    prompt = { ...prompt, mode: 'propose_actions' };
+  }
 
   const routeResult = await routeCommand({ text, classification, prompt, context });
 
@@ -103,16 +208,25 @@ export async function processChatCommand({ text, history = [], context }: Proces
   }
 
   if (routeResult.type === 'ai_brain') {
+    const assistantMessage = normalizeChatResponse('ai_brain', routeResult.response);
+    if (parserResult.isPotentiallyDestructive) {
+      assistantMessage.mode = 'propose_actions';
+    }
     return {
       route: 'ai_brain',
-      assistantMessage: normalizeChatResponse('ai_brain', routeResult.response),
+      assistantMessage,
       classification
     };
   }
 
+  const assistantMessage = normalizeChatResponse('ai_chat', routeResult.response);
+  if (parserResult.isPotentiallyDestructive) {
+    assistantMessage.mode = 'propose_actions';
+  }
+
   return {
     route: 'ai_chat',
-    assistantMessage: normalizeChatResponse('ai_chat', routeResult.response),
+    assistantMessage,
     classification
   };
 }

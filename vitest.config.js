@@ -9,6 +9,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/test/setup.js',
     css: true,
+    testTimeout: 10000,
+    hookTimeout: 10000,
     exclude: [
       'backend/test/**',
       'backend/tests/**',

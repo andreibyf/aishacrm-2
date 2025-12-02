@@ -61,6 +61,8 @@ const buildSidebarState = (overrides = {}) => ({
   clearError: vi.fn(),
   sendMessage: mockSendMessage,
   setRealtimeMode: vi.fn(),
+  suggestions: [],
+  applySuggestion: vi.fn(() => ''),
   ...overrides
 });
 
@@ -108,13 +110,18 @@ describe('AiSidebar voice', () => {
     realtimeHookState = {
       isSupported: true,
       isInitializing: false,
+      isConnecting: false,
       isConnected: true,
       isListening: true,
+      isLive: true,
       error: null,
       errorDetails: null,
       connectRealtime: mockConnectRealtime,
+      startSession: mockConnectRealtime,
       sendUserMessage: mockRealtimeSend,
-      disconnectRealtime: mockDisconnectRealtime
+      disconnectRealtime: mockDisconnectRealtime,
+      stopSession: mockDisconnectRealtime,
+      messages: [],
     };
   });
 
@@ -297,5 +304,67 @@ describe('AiSidebar voice', () => {
 
     await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
     expect(mockDisconnectRealtime).not.toHaveBeenCalled();
+  });
+
+  it('auto-disables realtime mode when the connection drops unexpectedly', async () => {
+    const { rerender } = render(<AiSidebar />);
+    const toggleButton = await screen.findByRole('button', { name: /Realtime Voice/i });
+
+    await act(async () => {
+      fireEvent.click(toggleButton);
+    });
+    await waitFor(() => expect(mockConnectRealtime).toHaveBeenCalled());
+
+    mockDisconnectRealtime.mockClear();
+    act(() => {
+      realtimeHookState = {
+        ...realtimeHookState,
+        isConnected: false,
+        isListening: false,
+        isLive: false,
+        isInitializing: false,
+      };
+      rerender(<AiSidebar />);
+    });
+
+    await waitFor(() => expect(mockDisconnectRealtime).toHaveBeenCalledTimes(1));
+    expect(mockConfirm).not.toHaveBeenCalled();
+  });
+
+  it('routes voice transcripts through realtime when session is live', async () => {
+    render(<AiSidebar />);
+    const toggleButton = await screen.findByRole('button', { name: /Realtime Voice/i });
+
+    await act(async () => {
+      fireEvent.click(toggleButton);
+    });
+    await waitFor(() => expect(mockConnectRealtime).toHaveBeenCalled());
+
+    act(() => {
+      triggerFinalTranscript?.('summarize my pipeline');
+    });
+
+    await waitFor(() => expect(mockRealtimeSend).toHaveBeenCalledWith('summarize my pipeline'));
+    expect(mockSendMessage).not.toHaveBeenCalled();
+  });
+
+  it('submits typed drafts via realtime when live', async () => {
+    render(<AiSidebar />);
+    const toggleButton = await screen.findByRole('button', { name: /Realtime Voice/i });
+
+    await act(async () => {
+      fireEvent.click(toggleButton);
+    });
+    await waitFor(() => expect(mockConnectRealtime).toHaveBeenCalled());
+
+    const textarea = await screen.findByPlaceholderText(/Ask AiSHA/i);
+    fireEvent.change(textarea, { target: { value: 'Show me my quarterly pipeline.' } });
+
+    await act(async () => {
+      fireEvent.submit(textarea.closest('form'));
+    });
+
+    await waitFor(() => expect(mockRealtimeSend).toHaveBeenCalledWith('Show me my quarterly pipeline.'));
+    expect(mockSendMessage).not.toHaveBeenCalled();
   });
 });

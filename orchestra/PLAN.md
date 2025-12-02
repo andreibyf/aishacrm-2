@@ -2,6 +2,8 @@
 
 ## Current Goal
 
+**Status:** Completed ✅ (December 1, 2025)
+
 Type: bugfix  
 Title: Fix backend/ frontend field mismatch and propagate to dependent components
 
@@ -198,26 +200,24 @@ Lock in field parity for core entities and downstream consumers.
 
 ## Status
 
-- BUG-BE-FIELDS-001: Not started  
-- BUG-BE-FIELDS-002: Not started  
-- BUG-BE-FIELDS-003: Not started  
+- BUG-BE-FIELDS-001: Complete ✅ (December 1, 2025)  
+- BUG-BE-FIELDS-002: Complete ✅ (December 1, 2025)  
+- BUG-BE-FIELDS-003: Complete ✅ (December 1, 2025)  
 
 ---
 
 ## Usage Instructions for AI Tools
 
-When using Copilot or any orchestrator:
+The field parity remediation wave is closed. Future changes to this section should only occur if a regression is reported.
 
-1. Read `.github/copilot-instructions.md`.
-2. Read `orchestra/ARCHITECTURE.md`.
-3. Read `orchestra/CONVENTIONS.md`.
-4. Read this PLAN and start with **BUG-BE-FIELDS-001**.
-5. Work one task at a time:
-   - BUG-BE-FIELDS-001: core CRUD parity (diagnose + fix).
-   - BUG-BE-FIELDS-002: propagate fixes to dashboards, AI snapshot, Braid tools, exports.
-   - BUG-BE-FIELDS-003: tests only.
-6. Keep changes minimal and strictly within field parity scope.  
-   No new features, no cross-cutting refactors.
+**Active Work (per Dec 1 directive):** Proceed to the Phase 2 Conversational Interface plan and execute Tasks 2.1 → 2.10 sequentially (they act as milestones). Always read:
+
+1. `.github/copilot-instructions.md`
+2. `orchestra/ARCHITECTURE.md`
+3. `orchestra/CONVENTIONS.md`
+4. `orchestra/phases/PHASE_2_CONVERSATIONAL_INTERFACE.md` (current source of truth for active milestones)
+
+Treat each Phase 2 task as its own scoped wave: finish it (including tests) before moving to the next.
 
 
 

@@ -29,6 +29,8 @@ Transform the user interface to conversational-first:
 - [ ] Implement ambiguity resolution
 - [ ] Add multi-step command support
 
+> **Dev Note (Dec 1, 2025):** The parser now lives in `src/lib/intentParser.ts` and feeds `processChatCommand` via `classification.parserResult`. Downstream modules should reference that object (instead of re-parsing raw text) to access entity, filters, flags, and safety metadata.
+
 **Parser Architecture**:
 ```javascript
 // Input: "Show me all accounts in California with revenue over $1M"
@@ -89,11 +91,38 @@ suggestions: [
 ### Week 3-4: Conversational Form Builder
 
 #### Task 2.3: Chat-Based Form Component
-- [ ] Create `src/components/ai/ConversationalForm.jsx`
-- [ ] Build field-by-field collection flow
-- [ ] Add validation as conversation
-- [ ] Implement conditional fields based on responses
-- [ ] Add preview and confirmation step
+- [x] Create `src/components/ai/ConversationalForm.jsx`
+- [x] Build field-by-field collection flow
+- [x] Add validation as conversation
+- [x] Implement conditional fields based on responses
+- [x] Add preview and confirmation step
+
+> **Status**: Complete ✅ (December 2, 2025)
+>
+> **Component**: `src/components/ai/ConversationalForm.jsx`  
+> **Test File**: `src/components/ai/__tests__/ConversationalForm.test.jsx`
+>
+> **Implementation Summary**:
+> - Multi-step wizard with `schema.steps[]` driving field collection
+> - `normalizeField()` supports string shortcuts or full field objects
+> - `defaultValidation()` enforces required fields per step
+> - `shouldIncludeStep()` callback enables conditional step visibility
+> - Preview screen shows all collected data before submission
+> - `buildPayload()` transforms answers → API-ready payload
+>
+> **Fixes Applied**:
+> - Added schema guard in `useEffect` to prevent infinite re-render loop when `schema` is `null`
+>
+> **Test Coverage** (7 render-only tests, all passing):
+> 1. Returns `null` when `schema` is not provided
+> 2. Renders the first step prompt
+> 3. Renders Cancel button
+> 4. Renders Preview button for single-step schemas
+> 5. Renders Next button for multi-step schemas
+> 6. Renders input field with correct label
+> 7. Shows step counter (`Step X of Y`)
+>
+> **Known Limitation**: `fireEvent.click()` causes Vitest 4.0.13/jsdom worker crashes. Interaction tests deferred to Playwright E2E.
 
 **Component Interface**:
 ```jsx

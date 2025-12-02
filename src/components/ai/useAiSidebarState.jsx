@@ -1,5 +1,27 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { processChatCommand } from '@/ai/engine/processChatCommand';
+import { addHistoryEntry, getRecentHistory, getSuggestions } from '@/lib/suggestionEngine';
+
+const ROUTE_CONTEXT_RULES = [
+  { test: /^\/?$/, routeName: 'dashboard:home', entity: 'dashboard' },
+  { test: /^\/dashboard/, routeName: 'dashboard:home', entity: 'dashboard' },
+  { test: /^\/leads\/[^/]+$/, routeName: 'leads:detail', entity: 'leads' },
+  { test: /^\/leads/, routeName: 'leads:list', entity: 'leads' },
+  { test: /^\/accounts\/[^/]+$/, routeName: 'accounts:detail', entity: 'accounts' },
+  { test: /^\/accounts/, routeName: 'accounts:list', entity: 'accounts' },
+  { test: /^\/contacts/, routeName: 'contacts:list', entity: 'contacts' },
+  { test: /^\/opportunities/, routeName: 'opportunities:list', entity: 'opportunities' },
+  { test: /^\/activities/, routeName: 'activities:list', entity: 'activities' }
+];
+
+const deriveRouteContext = (path = '/') => {
+  const normalized = path || '/';
+  const rule = ROUTE_CONTEXT_RULES.find((entry) => entry.test.test(normalized));
+  if (!rule) {
+    return { routeName: 'general:home', entity: 'general' };
+  }
+  return { routeName: rule.routeName, entity: rule.entity };
+};
 
 const AiSidebarContext = createContext(null);
 
@@ -29,8 +51,20 @@ const resolveTenantContext = () => {
     context.tenantName = undefined;
   }
   context.currentPath = window.location?.pathname;
+  const routeMeta = deriveRouteContext(context.currentPath || '/');
+  context.routeName = routeMeta.routeName;
+  context.primaryEntity = routeMeta.entity;
   context.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   return context;
+};
+
+const buildSuggestionContext = () => {
+  const tenantContext = resolveTenantContext();
+  return {
+    tenantId: tenantContext.tenantId,
+    routeName: tenantContext.routeName,
+    entity: tenantContext.primaryEntity || 'general'
+  };
 };
 
 const createMessageId = () => {
@@ -55,11 +89,27 @@ export function AiSidebarProvider({ children }) {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState(null);
   const [realtimeMode, setRealtimeMode] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
   const messagesRef = useRef(messages);
+  const suggestionContextRef = useRef(buildSuggestionContext());
+  const suggestionIndexRef = useRef(new Map());
 
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  const refreshSuggestions = useCallback(() => {
+    const context = buildSuggestionContext();
+    suggestionContextRef.current = context;
+    const history = getRecentHistory();
+    const next = getSuggestions({ context, history });
+    suggestionIndexRef.current = new Map(next.map((item) => [item.id, item]));
+    setSuggestions(next);
+  }, []);
+
+  useEffect(() => {
+    refreshSuggestions();
+  }, [refreshSuggestions]);
 
   const openSidebar = useCallback(() => setIsOpen(true), []);
   const closeSidebar = useCallback(() => setIsOpen(false), []);
@@ -68,7 +118,8 @@ export function AiSidebarProvider({ children }) {
   const resetThread = useCallback(() => {
     setMessages([{ ...welcomeMessage, id: createMessageId(), timestamp: Date.now() }]);
     setError(null);
-  }, []);
+    refreshSuggestions();
+  }, [refreshSuggestions]);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -126,6 +177,18 @@ export function AiSidebarProvider({ children }) {
         window.dispatchEvent(new CustomEvent('aisha:ai-local-action', { detail: result.localAction }));
       }
 
+      const parserSummary = result?.classification?.parserResult || result?.classification?.effectiveParser;
+      if (parserSummary) {
+        addHistoryEntry({
+          intent: parserSummary.intent || 'ambiguous',
+          entity: parserSummary.entity || 'general',
+          rawText: text,
+          timestamp: new Date().toISOString(),
+          origin
+        });
+        refreshSuggestions();
+      }
+
       setMessages((prev) => {
         const next = [...prev, assistantMessage];
         messagesRef.current = next;
@@ -146,7 +209,7 @@ export function AiSidebarProvider({ children }) {
     } finally {
       setIsSending(false);
     }
-  }, []);
+  }, [refreshSuggestions]);
 
   const addRealtimeMessage = useCallback((message) => {
     const content = (message?.content || '').toString();
@@ -170,6 +233,11 @@ export function AiSidebarProvider({ children }) {
     });
   }, []);
 
+  const applySuggestion = useCallback((suggestionId) => {
+    const suggestion = suggestionIndexRef.current.get(suggestionId);
+    return suggestion?.command || '';
+  }, []);
+
   const value = useMemo(
     () => ({
       isOpen,
@@ -184,7 +252,9 @@ export function AiSidebarProvider({ children }) {
       sendMessage,
       realtimeMode,
       setRealtimeMode,
-      addRealtimeMessage
+      addRealtimeMessage,
+      suggestions,
+      applySuggestion
     }),
     [
       isOpen,
@@ -199,7 +269,9 @@ export function AiSidebarProvider({ children }) {
       sendMessage,
       realtimeMode,
       setRealtimeMode,
-      addRealtimeMessage
+      addRealtimeMessage,
+      suggestions,
+      applySuggestion
     ]
   );
 

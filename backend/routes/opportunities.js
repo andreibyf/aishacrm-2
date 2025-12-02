@@ -196,7 +196,7 @@ export default function createOpportunityRoutes(_pgPool) {
     target[key] = toNullableString(value);
   };
 
-  const assignIntegerField = (target, key, value) => {
+  const _assignIntegerField = (target, key, value) => {
     if (value === undefined) return;
     if (value === null) {
       target[key] = null;
@@ -208,7 +208,7 @@ export default function createOpportunityRoutes(_pgPool) {
     }
   };
 
-  const assignNumericField = (target, key, value) => {
+  const _assignNumericField = (target, key, value) => {
     if (value === undefined) return;
     if (value === null) {
       target[key] = null;

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { trackRealtimeEvent, trackConnectionStateChange } from '@/utils/realtimeTelemetry.js';
 
 const REALTIME_CALL_URL = 'https://api.openai.com/v1/realtime/calls';
+const MAX_MESSAGE_LOG = 25;
 
 const ERROR_LIBRARY = {
   mic_denied: {
@@ -190,6 +191,59 @@ const isAssistantResponsePayload = (payload) => {
   return false;
 };
 
+const createMessageId = () => {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // ignore crypto issues and fall back
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+};
+
+const flattenRealtimeContent = (input) => {
+  if (!input) return '';
+  if (typeof input === 'string') return input;
+  if (Array.isArray(input)) {
+    return input.map((chunk) => flattenRealtimeContent(chunk)).filter(Boolean).join('');
+  }
+  if (typeof input === 'object') {
+    if (typeof input.text === 'string') return input.text;
+    if (input.text) return flattenRealtimeContent(input.text);
+    if (typeof input.value === 'string') return input.value;
+    if (input.value) return flattenRealtimeContent(input.value);
+    if (input.content) return flattenRealtimeContent(input.content);
+    if (input.delta) return flattenRealtimeContent(input.delta);
+    if (typeof input.transcript === 'string') return input.transcript;
+    if (Array.isArray(input.data)) return flattenRealtimeContent(input.data);
+  }
+  return '';
+};
+
+const extractAssistantMessage = (payload) => {
+  if (!isAssistantResponsePayload(payload)) return null;
+  const candidates = [
+    payload?.item?.content,
+    payload?.delta,
+    payload?.content,
+    payload?.text,
+    payload?.response?.output,
+    payload?.message,
+  ];
+  const text = candidates
+    .map((candidate) => flattenRealtimeContent(candidate))
+    .find((chunk) => Boolean(chunk && chunk.trim().length > 0)) || '';
+  const normalized = text.trim();
+  if (!normalized) return null;
+  return {
+    id: createMessageId(),
+    role: 'assistant',
+    content: normalized,
+    timestamp: Date.now(),
+  };
+};
+
 export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
   const [state, setState] = useState({
     isSupported: getBrowserSupport(),
@@ -199,6 +253,7 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
     error: null,
     errorDetails: null,
   });
+  const [messageLog, setMessageLog] = useState([]);
 
   const pcRef = useRef(null);
   const dcRef = useRef(null);
@@ -252,11 +307,24 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
     logConnectionChange(previous, nextState, reason);
   }, [logConnectionChange]);
 
+  const appendMessageFromPayload = useCallback((payload) => {
+    const normalized = extractAssistantMessage(payload);
+    if (!normalized) return;
+    setMessageLog((prev) => {
+      const next = [...prev, normalized];
+      if (next.length > MAX_MESSAGE_LOG) {
+        return next.slice(next.length - MAX_MESSAGE_LOG);
+      }
+      return next;
+    });
+  }, []);
+
   const emitEvent = useCallback((payload) => {
     if (eventHandlerRef.current) {
       eventHandlerRef.current(payload);
     }
-  }, []);
+    appendMessageFromPayload(payload);
+  }, [appendMessageFromPayload]);
 
   const applyErrorState = useCallback((details, severity = 'error') => {
     setState((prev) => ({
@@ -586,8 +654,10 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
     () => ({
       isSupported: state.isSupported,
       isInitializing: state.isInitializing,
+      isConnecting: state.isInitializing,
       isConnected: state.isConnected,
       isListening: state.isListening,
+      isLive: Boolean(state.isConnected && state.isListening),
       error: state.error,
       errorDetails: state.errorDetails,
     }),
@@ -596,8 +666,16 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
 
   return {
     ...status,
+    messages: messageLog,
     connectRealtime,
+    startSession: connectRealtime,
     sendUserMessage,
     disconnectRealtime,
+    stopSession: disconnectRealtime,
   };
 }
+
+export const __testing__ = {
+  extractAssistantMessage,
+  flattenRealtimeContent,
+};
