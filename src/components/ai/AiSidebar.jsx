@@ -609,18 +609,24 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       return;
     }
 
+    // Destructive commands go to draft for manual review, not auto-sent
     if (containsDestructiveVoiceCommand(safeText)) {
-      setVoiceWarning('Voice command blocked: please rephrase and try again.');
+      setDraft(safeText);
+      setDraftOrigin('voice');
+      setVoiceWarning('This sounds like a destructive command. Please review and send manually if intended.');
       logUiTelemetry('ui.voice.blocked', { reason: 'dangerous_phrase', textLength: safeText.length }, 'warn');
       return;
     }
+
     setVoiceWarning(null);
     if (isRealtimeActive) {
       logUiTelemetry('ui.voice.forwarded', { destination: 'realtime', textLength: safeText.length });
       void sendViaRealtime(safeText);
       return;
     }
-    logUiTelemetry('ui.voice.forwarded', { destination: 'chat', textLength: safeText.length });
+    
+    // Auto-send: voice transcript goes directly to chat, not to input field
+    logUiTelemetry('ui.voice.auto_send', { destination: 'chat', textLength: safeText.length });
     void sendMessage(safeText, { origin: 'voice', autoSend: true });
   }, [isRealtimeActive, logUiTelemetry, sendMessage, sendViaRealtime]);
 
@@ -684,16 +690,18 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     
     if (newVoiceModeActive) {
       // Entering voice mode: start listening if continuous mode enabled
+      setVoiceWarning(null);
       if (isContinuousMode && !isRecording && !isSending && !isRealtimeActive) {
         startRecording();
       }
       logUiTelemetry('ui.voice_mode.enabled', { continuousMode: isContinuousMode });
     } else {
-      // Exiting voice mode: stop any active recording/playback
+      // Exiting voice mode: stop any active recording/playback and clear warnings
       if (isRecording) {
         stopRecording();
       }
       stopPlayback();
+      setVoiceWarning(null);
       logUiTelemetry('ui.voice_mode.disabled');
     }
   }, [voiceModeActive, isContinuousMode, isRecording, isSending, isRealtimeActive, startRecording, stopRecording, stopPlayback, logUiTelemetry]);
@@ -1217,20 +1225,20 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                 <div className="flex items-center gap-2">
                   <Headphones className="h-4 w-4" />
                   <span>
-                    <strong>Voice Mode Active</strong> — {isRecording ? 'Listening...' : isSpeechPlaying ? 'Speaking...' : 'Press Space to talk'}
+                    <strong>Voice Mode Active</strong> — {isRecording ? 'Listening...' : isSpeechPlaying ? 'Speaking...' : 'Ready for voice'}
                   </span>
                 </div>
                 {!isRecording && !isSpeechPlaying && (
                   <p className="mt-1 text-[10px] opacity-80">
-                    Hold <kbd className="px-1 py-0.5 rounded bg-indigo-200 dark:bg-indigo-800 text-[9px] font-mono">Space</kbd> to talk, release to send. Click off to exit voice mode.
+                    Hold <kbd className="px-1 py-0.5 rounded bg-indigo-200 dark:bg-indigo-800 text-[9px] font-mono">Space</kbd> or the mic button to talk. Your message auto-sends when you release.
                   </p>
                 )}
               </div>
             )}
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
               {voiceModeActive && !isRealtimeActive
-                ? 'Voice mode: Press Space to talk, AI will speak responses. Click Voice Mode to exit.'
-                : 'Hold the Voice button (or press Space/Enter) to talk. Release to send – voice commands obey the same safety rules as text.'}
+                ? 'Voice commands auto-send when you stop talking. AI will speak responses back.'
+                : 'Hold the Voice button (or press Space/Enter) to talk. Messages auto-send when you release.'}
             </p>
             <Textarea
                 ref={draftInputRef}
@@ -1298,12 +1306,12 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                     }
                   }}
                   disabled={isSending || isRealtimeActive}
-                  title="Hold to talk"
-                  aria-label={isRecording ? 'Release to stop voice input' : 'Hold to start voice input'}
+                  title={isRecording ? 'Release to auto-send' : 'Hold to talk'}
+                  aria-label={isRecording ? 'Recording — release to auto-send' : 'Hold to start voice input'}
                   data-testid="press-to-talk-button"
                 >
                   {isRecording ? <Square className="h-4 w-4 mr-2" /> : <Mic className="h-4 w-4 mr-2" />}
-                  {isRecording ? 'Release to send' : 'Voice'}
+                  {isRecording ? 'Listening...' : 'Hold to Talk'}
                 </Button>
               </div>
             </div>
