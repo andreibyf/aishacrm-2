@@ -87,6 +87,36 @@ vi.mock('../useSpeechOutput.js', () => ({
   })
 }));
 
+// Mock the new voice interaction hooks
+vi.mock('@/hooks/useVoiceInteraction.js', () => ({
+  useVoiceInteraction: () => ({
+    mode: 'idle',
+    isListening: false,
+    isTranscribing: false,
+    isSpeaking: false,
+    lastTranscript: '',
+    error: null,
+    isVoiceModeActive: false,
+    isRealtimeConnected: false,
+    playSpeech: vi.fn(),
+    stopSpeech: vi.fn(),
+    autoSpeakResponses: true,
+    setMode: vi.fn(),
+    startContinuous: vi.fn(),
+    stopContinuous: vi.fn(),
+    startPushToTalk: vi.fn(),
+    stopPushToTalk: vi.fn(),
+    startRecording: vi.fn(),
+    stopRecording: vi.fn(),
+    sendTextMessage: vi.fn(),
+    reset: vi.fn(),
+  })
+}));
+
+vi.mock('@/hooks/usePushToTalkKeybinding.js', () => ({
+  usePushToTalkKeybinding: vi.fn()
+}));
+
 describe('AiSidebar voice', () => {
   beforeEach(() => {
     mockSendMessage.mockReset();
@@ -366,5 +396,50 @@ describe('AiSidebar voice', () => {
 
     await waitFor(() => expect(mockRealtimeSend).toHaveBeenCalledWith('Show me my quarterly pipeline.'));
     expect(mockSendMessage).not.toHaveBeenCalled();
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PH2-VOICE-001: Voice Mode Toggle Tests
+  // ─────────────────────────────────────────────────────────────────────────
+  it('renders the Voice Mode toggle button', async () => {
+    render(<AiSidebar />);
+    const voiceModeToggle = await screen.findByTestId('voice-mode-toggle');
+    expect(voiceModeToggle).toBeInTheDocument();
+    expect(voiceModeToggle).toHaveTextContent('Voice');
+  });
+
+  it('toggles voice mode on click', async () => {
+    render(<AiSidebar />);
+    const voiceModeToggle = await screen.findByTestId('voice-mode-toggle');
+
+    // Click to enable voice mode
+    await act(async () => {
+      fireEvent.click(voiceModeToggle);
+    });
+
+    // Should now show "Voice On"
+    await waitFor(() => {
+      expect(voiceModeToggle).toHaveTextContent('Voice On');
+    });
+
+    // Check telemetry was logged
+    expect(mockTrackRealtimeEvent).toHaveBeenCalledWith(expect.objectContaining({
+      event: 'ui.voice_mode.enabled',
+    }));
+  });
+
+  it('disables voice mode toggle when realtime is active', async () => {
+    render(<AiSidebar />);
+    const realtimeToggle = await screen.findByRole('button', { name: /Realtime Voice/i });
+
+    // Enable realtime first
+    await act(async () => {
+      fireEvent.click(realtimeToggle);
+    });
+    await waitFor(() => expect(mockConnectRealtime).toHaveBeenCalled());
+
+    // Voice mode toggle should be disabled
+    const voiceModeToggle = await screen.findByTestId('voice-mode-toggle');
+    expect(voiceModeToggle).toBeDisabled();
   });
 });

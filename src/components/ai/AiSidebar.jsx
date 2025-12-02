@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { AlertCircle, Loader2, RefreshCw, Send, Sparkles, X, Mic, Square, Volume2 } from 'lucide-react';
+import { AlertCircle, Loader2, RefreshCw, Send, Sparkles, X, Mic, Square, Volume2, Headphones } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useAiSidebarState } from './useAiSidebarState.jsx';
 import { useSpeechInput } from './useSpeechInput.js';
 import { useSpeechOutput } from './useSpeechOutput.js';
 import { useRealtimeAiSHA } from '@/hooks/useRealtimeAiSHA.js';
+import { usePushToTalkKeybinding } from '@/hooks/usePushToTalkKeybinding.js';
 import { useConfirmDialog } from '@/components/shared/ConfirmDialog.jsx';
 import RealtimeIndicator from './RealtimeIndicator.jsx';
 import { trackRealtimeEvent, subscribeToRealtimeTelemetry, getRealtimeTelemetrySnapshot } from '@/utils/realtimeTelemetry.js';
@@ -299,6 +300,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   const [draft, setDraft] = useState('');
   const [draftOrigin, setDraftOrigin] = useState('text');
   const [voiceWarning, setVoiceWarning] = useState(null);
+  const [voiceModeActive, setVoiceModeActive] = useState(false); // Full voice mode (continuous + auto-speak)
   const [isContinuousMode, setIsContinuousMode] = useState(true); // Default to continuous conversation
   const { user } = useUser();
   const bottomMarkerRef = useRef(null);
@@ -638,6 +640,55 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
 
   const pressToTalkActiveRef = useRef(false);
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Global spacebar Push-to-Talk keybinding
+  // Only active when voice mode is on and not in realtime session
+  // ─────────────────────────────────────────────────────────────────────────
+  const handleSpacebarPTTStart = useCallback(() => {
+    if (isRealtimeActive || isSending || isRecording) return;
+    pressToTalkActiveRef.current = true;
+    setVoiceWarning(null);
+    startRecording();
+  }, [isRealtimeActive, isRecording, isSending, startRecording]);
+
+  const handleSpacebarPTTEnd = useCallback(() => {
+    if (isRealtimeActive) return;
+    if (pressToTalkActiveRef.current) {
+      pressToTalkActiveRef.current = false;
+      stopRecording();
+    }
+  }, [isRealtimeActive, stopRecording]);
+
+  // Enable spacebar PTT when voice mode is active and sidebar is open
+  usePushToTalkKeybinding({
+    enabled: isOpen && voiceModeActive && !isRealtimeActive,
+    onPressStart: handleSpacebarPTTStart,
+    onPressEnd: handleSpacebarPTTEnd,
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Voice mode toggle handler
+  // ─────────────────────────────────────────────────────────────────────────
+  const handleVoiceModeToggle = useCallback(() => {
+    const newVoiceModeActive = !voiceModeActive;
+    setVoiceModeActive(newVoiceModeActive);
+    
+    if (newVoiceModeActive) {
+      // Entering voice mode: start listening if continuous mode enabled
+      if (isContinuousMode && !isRecording && !isSending && !isRealtimeActive) {
+        startRecording();
+      }
+      logUiTelemetry('ui.voice_mode.enabled', { continuousMode: isContinuousMode });
+    } else {
+      // Exiting voice mode: stop any active recording/playback
+      if (isRecording) {
+        stopRecording();
+      }
+      stopPlayback();
+      logUiTelemetry('ui.voice_mode.disabled');
+    }
+  }, [voiceModeActive, isContinuousMode, isRecording, isSending, isRealtimeActive, startRecording, stopRecording, stopPlayback, logUiTelemetry]);
+
   const handleQuickAction = useCallback(
     (promptText) => {
       if (!promptText || isSending) return;
@@ -669,8 +720,16 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       setDraft('');
       setDraftOrigin('text');
       setVoiceWarning(null);
+      // Stop voice mode when sidebar closes
+      if (voiceModeActive) {
+        setVoiceModeActive(false);
+        if (isRecording) {
+          stopRecording();
+        }
+        stopPlayback();
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, voiceModeActive, isRecording, stopRecording, stopPlayback]);
 
   useEffect(() => {
     if (!speechError) return;
@@ -763,13 +822,17 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       .reverse()
       .find((msg) => msg.role === 'user');
 
-    if (!previousUserMessage || previousUserMessage?.metadata?.origin !== 'voice') {
+    // Auto-speak AI responses when:
+    // 1. Voice mode is active (continuous conversation), OR
+    // 2. The previous user message was from voice input
+    const shouldAutoSpeak = voiceModeActive || previousUserMessage?.metadata?.origin === 'voice';
+    if (!shouldAutoSpeak) {
       return;
     }
 
     setAutoPlayMessageId(latest.id);
     void speakMessage(latest);
-  }, [messages, autoPlayMessageId, speakMessage]);
+  }, [messages, autoPlayMessageId, speakMessage, voiceModeActive]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -1139,8 +1202,26 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                 Realtime Voice is active — the assistant streams responses live and the classic mic button is temporarily disabled.
               </div>
             )}
+            {/* Voice mode hint - show when voice mode active but not realtime */}
+            {voiceModeActive && !isRealtimeActive && (
+              <div className="rounded border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-100">
+                <div className="flex items-center gap-2">
+                  <Headphones className="h-4 w-4" />
+                  <span>
+                    <strong>Voice Mode Active</strong> — {isRecording ? 'Listening...' : isSpeechPlaying ? 'Speaking...' : 'Press Space to talk'}
+                  </span>
+                </div>
+                {!isRecording && !isSpeechPlaying && (
+                  <p className="mt-1 text-[10px] opacity-80">
+                    Hold <kbd className="px-1 py-0.5 rounded bg-indigo-200 dark:bg-indigo-800 text-[9px] font-mono">Space</kbd> to talk, release to send. Click off to exit voice mode.
+                  </p>
+                )}
+              </div>
+            )}
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Hold the Voice button (or press Space/Enter) to talk. Release to send – voice commands obey the same safety rules as text.
+              {voiceModeActive && !isRealtimeActive
+                ? 'Voice mode: Press Space to talk, AI will speak responses. Click Voice Mode to exit.'
+                : 'Hold the Voice button (or press Space/Enter) to talk. Release to send – voice commands obey the same safety rules as text.'}
             </p>
             <Textarea
                 ref={draftInputRef}
@@ -1164,6 +1245,20 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {/* Voice Mode Toggle - enables continuous conversation with auto-speak */}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={`h-8 px-2 text-xs ${voiceModeActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-300' : 'text-slate-500'}`}
+                  onClick={handleVoiceModeToggle}
+                  disabled={isRealtimeActive}
+                  title={voiceModeActive ? 'Exit voice mode' : 'Enter voice mode (hands-free conversation)'}
+                  data-testid="voice-mode-toggle"
+                >
+                  <Headphones className={`h-3 w-3 mr-1 ${voiceModeActive ? '' : 'opacity-50'}`} />
+                  {voiceModeActive ? 'Voice On' : 'Voice'}
+                </Button>
                 <Button
                   type="button"
                     variant="ghost"
