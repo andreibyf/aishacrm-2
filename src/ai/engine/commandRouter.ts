@@ -33,20 +33,17 @@ interface RouteCommandOptions {
   adapters?: CommandRouterAdapters;
 }
 
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
-
 const localIntentSet = new Set<IntentClassification['intent']>([]); // Disabled to force Braid tool usage for all data queries
-const brainIntentSet = new Set<IntentClassification['intent']>(['summaries', 'forecast']);
+// Note: brainIntentSet disabled - brain-test requires internal API key not available to frontend
+// All user requests now route through /api/ai/chat which has proper tenant isolation
+const brainIntentSet = new Set<IntentClassification['intent']>([]); // Was: ['summaries', 'forecast']
 
+// Default brain caller - currently disabled but kept for future internal tooling
 const defaultBrainCaller = async (payload: BrainRequestPayload) => {
-  const response = await fetch(`${BACKEND_URL}/api/ai/brain-test`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(payload)
-  });
-  const data = await response.json().catch(() => ({}));
-  return { status: response.status, data };
+  // brain-test endpoint requires X-Internal-AI-Key header (server-side only)
+  // For user-facing requests, use callChatApi instead which routes to /api/ai/chat
+  console.warn('[commandRouter] brain-test endpoint requires internal API key - use chat endpoint instead');
+  return { status: 401, data: { status: 'error', message: 'Brain endpoint requires internal API key' } };
 };
 
 const buildLocalActionDescription = (classification: IntentClassification) => {

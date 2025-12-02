@@ -1296,6 +1296,38 @@ Short description:
 
 ---
 
+### BUG-AI-CHAT-001 – AI Chat returns "Unauthorized: Invalid or missing X-Internal-AI-Key header"
+
+**Status:** Resolved ✅  
+**Date Resolved:** December 2, 2025  
+**Area:** Frontend AI / Command Router / API Routing
+
+**Symptoms:**
+- User sends a chat message via AI Sidebar (e.g., "Give me a dashboard summary")
+- Error message displayed: `I'm having trouble reaching the AI service: Unauthorized: Invalid or missing X-Internal-AI-Key header. Please try again in a bit.`
+- Backend logs show 401 rejection from `/api/ai/brain-test` endpoint
+
+**Root Cause:**
+- `src/ai/engine/commandRouter.ts` routed `summaries` and `forecast` intents to `/api/ai/brain-test` endpoint
+- The `brain-test` endpoint is protected with `X-Internal-AI-Key` header (server-side only secret)
+- Frontend was calling this endpoint without the required header (correctly - secrets should not be in frontend)
+- The `brainIntentSet` incorrectly included user-facing intents that should use `/api/ai/chat`
+
+**Resolution:**
+- Disabled `brainIntentSet` in `commandRouter.ts` - changed from `['summaries', 'forecast']` to `[]`
+- All user-facing requests now route through `/api/ai/chat` which has proper tenant isolation without requiring internal API key
+- Updated `defaultBrainCaller` to log warning and return 401 if called (defensive measure)
+- The `/api/ai/brain-test` endpoint remains available for internal/automated testing with the key
+
+**Files Changed:**
+- `src/ai/engine/commandRouter.ts` - disabled brain routing for user requests
+
+**Prevention:**
+- Protected endpoints requiring internal keys should never be called from frontend code
+- The `brain-test` endpoint is for Phase 1 internal verification only, not user-facing chat
+
+---
+
 ### BUG-CAMP-001 – Rare double-send in campaign worker
 
 **Status:** Backlog  
