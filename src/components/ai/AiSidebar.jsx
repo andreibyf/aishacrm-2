@@ -461,6 +461,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     isConnecting: rawRealtimeConnecting,
     isConnected: isRealtimeConnected,
     isListening: isRealtimeListening,
+    isSpeaking: isRealtimeSpeaking, // AI is speaking, mic is auto-muted
     isLive: realtimeLiveFlag = false,
     error: realtimeStateError,
     errorDetails: realtimeHookErrorDetails,
@@ -696,21 +697,43 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Voice mode toggle handler
+  // Voice mode toggle handler - now uses Realtime API for streaming
   // ─────────────────────────────────────────────────────────────────────────
-  const handleVoiceModeToggle = useCallback(() => {
+  const handleVoiceModeToggle = useCallback(async () => {
     const newVoiceModeActive = !voiceModeActive;
     setVoiceModeActive(newVoiceModeActive);
     
     if (newVoiceModeActive) {
-      // Entering voice mode: start listening if continuous mode enabled
+      // Entering voice mode
       setVoiceWarning(null);
-      if (isContinuousMode && !isRecording && !isSending && !isRealtimeActive) {
-        startRecording();
+      
+      // Use Realtime API if available for true streaming
+      if (isRealtimeSupported && isRealtimeFeatureAvailable) {
+        console.log('[AiSidebar] Voice mode: starting Realtime API');
+        logUiTelemetry('ui.voice_mode.enabled', { mode: 'realtime' });
+        try {
+          await enableRealtime();
+        } catch (err) {
+          console.error('[AiSidebar] Failed to start realtime for voice mode:', err);
+          // Fallback to old STT
+          if (isContinuousMode && !isRecording && !isSending) {
+            startRecording();
+          }
+          logUiTelemetry('ui.voice_mode.fallback', { error: err?.message });
+        }
+      } else {
+        // Fallback: use old continuous mode
+        if (isContinuousMode && !isRecording && !isSending) {
+          startRecording();
+        }
+        logUiTelemetry('ui.voice_mode.enabled', { mode: 'legacy', continuousMode: isContinuousMode });
       }
-      logUiTelemetry('ui.voice_mode.enabled', { continuousMode: isContinuousMode });
     } else {
-      // Exiting voice mode: stop any active recording/playback and clear warnings
+      // Exiting voice mode: stop realtime or recording
+      console.log('[AiSidebar] Voice mode: stopping');
+      if (isRealtimeActive) {
+        disableRealtime();
+      }
       if (isRecording) {
         stopRecording();
       }
@@ -718,7 +741,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       setVoiceWarning(null);
       logUiTelemetry('ui.voice_mode.disabled');
     }
-  }, [voiceModeActive, isContinuousMode, isRecording, isSending, isRealtimeActive, startRecording, stopRecording, stopPlayback, logUiTelemetry]);
+  }, [voiceModeActive, isContinuousMode, isRecording, isSending, isRealtimeActive, isRealtimeSupported, isRealtimeFeatureAvailable, startRecording, stopRecording, stopPlayback, enableRealtime, disableRealtime, logUiTelemetry]);
 
   const handleQuickAction = useCallback(
     (promptText) => {
@@ -924,8 +947,16 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   // Toggle mic - uses Realtime API for true streaming transcription
   // When mic is clicked, it enables Realtime Voice for live streaming
   const handleMicToggle = useCallback(async () => {
+    console.log('[AiSidebar] handleMicToggle called', {
+      isRealtimeActive,
+      isRealtimeSupported,
+      isRealtimeFeatureAvailable,
+      isListening
+    });
+    
     // If realtime is already active, stop it
     if (isRealtimeActive) {
+      console.log('[AiSidebar] Stopping realtime (already active)');
       logUiTelemetry('ui.voice.realtime_stopping', {});
       disableRealtime();
       return;
@@ -933,10 +964,12 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     
     // Start realtime session for streaming transcription
     if (isRealtimeSupported && isRealtimeFeatureAvailable) {
+      console.log('[AiSidebar] Starting realtime voice...');
       setVoiceWarning(null);
       logUiTelemetry('ui.voice.realtime_starting', {});
       try {
         await enableRealtime();
+        console.log('[AiSidebar] Realtime started successfully');
       } catch (err) {
         console.error('[AiSidebar] Failed to start realtime voice:', err);
         // Fallback to non-realtime if realtime fails
@@ -946,6 +979,10 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
         }
       }
     } else {
+      console.log('[AiSidebar] Realtime not available, using fallback STT', {
+        isRealtimeSupported,
+        isRealtimeFeatureAvailable
+      });
       // Fallback: use non-realtime STT if realtime not available
       if (isListening) {
         stopListening();
@@ -1266,12 +1303,27 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
               </div>
             )}
             {isRealtimeFeatureAvailable && isRealtimeActive && (
-              <div className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100">
+              <div className={`rounded border px-3 py-2 text-xs ${
+                isRealtimeSpeaking
+                  ? 'border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-100'
+                  : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100'
+              }`}>
                 <div className="flex items-center gap-2">
-                  <Mic className="h-4 w-4 animate-pulse" />
-                  <span>
-                    <strong>🎙️ Live Voice Active</strong> — Speak naturally, AI transcribes in real-time and responds when you pause.
-                  </span>
+                  {isRealtimeSpeaking ? (
+                    <>
+                      <Volume2 className="h-4 w-4 animate-pulse" />
+                      <span>
+                        <strong>🔊 AI Speaking</strong> — Mic auto-muted to prevent feedback. Will resume when AI finishes.
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="h-4 w-4 animate-pulse" />
+                      <span>
+                        <strong>🎙️ Live Voice Active</strong> — Speak naturally, AI transcribes in real-time and responds when you pause.
+                      </span>
+                    </>
+                  )}
                 </div>
                 <p className="mt-1 text-[10px] opacity-80">
                   Click the stop button to end the voice session.
@@ -1345,10 +1397,9 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className={`h-8 px-2 text-xs ${voiceModeActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-300' : 'text-slate-500'}`}
+                  className={`h-8 px-2 text-xs ${voiceModeActive || isRealtimeActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-300' : 'text-slate-500'}`}
                   onClick={handleVoiceModeToggle}
-                  disabled={isRealtimeActive}
-                  title={voiceModeActive ? 'Exit voice mode' : 'Enter voice mode (hands-free conversation)'}
+                  title={voiceModeActive || isRealtimeActive ? 'Exit voice mode' : 'Enter voice mode (hands-free conversation)'}
                   data-testid="voice-mode-toggle"
                 >
                   <Headphones className={`h-3 w-3 mr-1 ${voiceModeActive ? '' : 'opacity-50'}`} />
@@ -1361,7 +1412,9 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                   size="icon"
                   className={`h-8 w-8 ${
                     isRealtimeActive
-                      ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400 animate-pulse'
+                      ? isRealtimeSpeaking
+                        ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400' // AI speaking, mic muted
+                        : 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400 animate-pulse' // Listening
                       : isListening 
                         ? isRecording 
                           ? 'text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400 animate-pulse' 
@@ -1372,7 +1425,9 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                   disabled={isRealtimeInitializing}
                   title={
                     isRealtimeActive
-                      ? 'Streaming live... (click to stop)'
+                      ? isRealtimeSpeaking
+                        ? 'AI speaking... (mic auto-muted, click to stop session)'
+                        : 'Streaming live... (click to stop)'
                       : isListening 
                         ? isRecording 
                           ? 'Listening... (click to stop)' 

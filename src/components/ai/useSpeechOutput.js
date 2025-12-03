@@ -125,6 +125,7 @@ export function useSpeechOutput({ onEnded } = {}) {
 
       audio.onended = () => {
         setIsPlaying(false);
+        setIsLoading(false);
         stopPlayback();
         onEnded?.();
       };
@@ -134,11 +135,13 @@ export function useSpeechOutput({ onEnded } = {}) {
       audio.onerror = () => {
         // If audio playback fails, try fallback
         console.warn('Audio element playback error, trying fallback');
+        setIsLoading(false);
         playBrowserTTS(payload);
       };
 
       await audio.play();
       setIsPlaying(true);
+      setIsLoading(false); // Audio started playing, no longer loading
     } catch (err) {
       console.warn('Backend TTS failed, switching to browser fallback:', err);
       try {

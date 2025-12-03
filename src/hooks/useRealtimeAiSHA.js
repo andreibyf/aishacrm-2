@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { trackRealtimeEvent, trackConnectionStateChange } from '@/utils/realtimeTelemetry.js';
+import { resolveApiUrl } from '@/utils/resolveApiUrl.js';
+import { supabase } from '@/lib/supabase.js';
 
 const REALTIME_CALL_URL = 'https://api.openai.com/v1/realtime/calls';
 const MAX_MESSAGE_LOG = 25;
@@ -102,6 +104,26 @@ const resolveActiveTenantId = () => {
     if (fallback) {
       return fallback;
     }
+  } catch {
+    // ignore storage errors
+  }
+  return null;
+};
+
+// Get auth token for API requests
+const getAuthToken = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      return session.access_token;
+    }
+  } catch {
+    // ignore session errors
+  }
+  // Fallback to localStorage
+  try {
+    const stored = window.localStorage?.getItem('sb-access-token');
+    if (stored) return stored;
   } catch {
     // ignore storage errors
   }
@@ -360,15 +382,33 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
     if (payload && typeof payload === 'object') {
       const eventType = payload.type;
       
-      // AI started speaking (audio delta received)
-      if (eventType === 'response.audio.delta' || eventType === 'response.audio_transcript.delta') {
+      // Log all events in dev mode for debugging
+      if (consoleTelemetryEnabledRef.current && eventType) {
+        console.info('[Realtime Event]', eventType);
+      }
+      
+      // AI started speaking - detect audio output events
+      // OpenAI Realtime API uses these event types:
+      // - response.audio.delta: audio chunk being sent
+      // - output_audio_buffer.speech_started: audio playback starting
+      // - response.output_item.added with audio type
+      if (eventType === 'response.audio.delta' || 
+          eventType === 'response.audio_transcript.delta' ||
+          eventType === 'output_audio_buffer.speech_started' ||
+          (eventType === 'response.output_item.added' && payload.item?.type === 'audio')) {
         setAISpeaking(true);
       }
       
-      // AI finished speaking
+      // AI finished speaking - detect completion events
+      // - response.audio.done: audio finished
+      // - output_audio_buffer.speech_stopped: audio playback stopped
+      // - response.done: entire response finished
+      // - input_audio_buffer.speech_started: user started talking (implies AI stopped)
       if (eventType === 'response.audio.done' || 
           eventType === 'response.done' || 
-          eventType === 'response.audio_transcript.done') {
+          eventType === 'response.audio_transcript.done' ||
+          eventType === 'output_audio_buffer.speech_stopped' ||
+          eventType === 'input_audio_buffer.speech_started') {
         setAISpeaking(false);
       }
     }
@@ -452,11 +492,17 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
       });
       logTelemetryMetric('disconnect', { reason, hadPeer, hadDataChannel, hadMediaTracks });
     }
+    // Clear speaking timeout
+    if (speakingTimeoutRef.current) {
+      clearTimeout(speakingTimeoutRef.current);
+      speakingTimeoutRef.current = null;
+    }
     setState((prev) => ({
       ...prev,
       isConnected: false,
       isListening: false,
       isInitializing: false,
+      isSpeaking: false,
     }));
   }, [logEvent, logTelemetryMetric, updateConnectionState]);
 
@@ -498,11 +544,35 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
     try {
       const tenantId = resolveActiveTenantId();
       const tokenQuery = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : '';
-      const tokenResponse = await fetch(`/api/ai/realtime-token${tokenQuery}`, {
+      
+      // Get auth token for the request
+      const authToken = await getAuthToken();
+      const tokenUrl = resolveApiUrl(`/api/ai/realtime-token${tokenQuery}`);
+      
+      // Debug logging
+      console.log('[useRealtimeAiSHA] Fetching token from:', tokenUrl);
+      console.log('[useRealtimeAiSHA] Auth token present:', !!authToken);
+      console.log('[useRealtimeAiSHA] Tenant ID:', tenantId);
+      
+      const headers = { 
+        'Cache-Control': 'no-store',
+        'Content-Type': 'application/json',
+      };
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+      
+      const tokenResponse = await fetch(tokenUrl, {
         method: 'GET',
-        headers: { 'Cache-Control': 'no-store' },
+        headers,
+        credentials: 'include',
       });
+      
+      console.log('[useRealtimeAiSHA] Response status:', tokenResponse.status, tokenResponse.statusText);
+      
       if (!tokenResponse.ok) {
+        const errorBody = await tokenResponse.text().catch(() => 'no body');
+        console.error('[useRealtimeAiSHA] Token request failed:', errorBody);
         throw Object.assign(new Error('Failed to request realtime token.'), { stage: 'token' });
       }
 
@@ -627,16 +697,28 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      const answerResponse = await fetch(REALTIME_CALL_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${ephemeralKey}`,
-          'Content-Type': 'application/sdp',
-        },
-        body: offer.sdp,
-      });
+      console.log('[useRealtimeAiSHA] Calling OpenAI realtime API:', REALTIME_CALL_URL);
+      console.log('[useRealtimeAiSHA] Ephemeral key length:', ephemeralKey?.length, 'starts with:', ephemeralKey?.substring(0, 20));
+      
+      let answerResponse;
+      try {
+        answerResponse = await fetch(REALTIME_CALL_URL, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${ephemeralKey}`,
+            'Content-Type': 'application/sdp',
+          },
+          body: offer.sdp,
+        });
+        console.log('[useRealtimeAiSHA] OpenAI response status:', answerResponse.status, answerResponse.statusText);
+      } catch (fetchError) {
+        console.error('[useRealtimeAiSHA] OpenAI fetch error:', fetchError.message, fetchError);
+        throw fetchError;
+      }
 
       if (!answerResponse.ok) {
+        const errText = await answerResponse.text().catch(() => 'no body');
+        console.error('[useRealtimeAiSHA] OpenAI API error:', answerResponse.status, errText);
         throw Object.assign(new Error('Failed to start realtime session.'), { stage: 'connection_failed' });
       }
 
@@ -710,6 +792,7 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
       isConnecting: state.isInitializing,
       isConnected: state.isConnected,
       isListening: state.isListening,
+      isSpeaking: state.isSpeaking, // AI is currently speaking (mic auto-muted)
       isLive: Boolean(state.isConnected && state.isListening),
       error: state.error,
       errorDetails: state.errorDetails,
