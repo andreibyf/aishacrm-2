@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useSpeechOutput } from '../useSpeechOutput.js';
+import { useSpeechOutput } from '../../components/ai/useSpeechOutput.js';
 
 const audioInstances = [];
 const originalAudio = globalThis.Audio;
@@ -110,12 +110,11 @@ describe('useSpeechOutput', () => {
 
     const { result } = renderHook(() => useSpeechOutput());
 
-    let caughtError;
     await act(async () => {
       try {
         await result.current.playText('fail case');
-      } catch (err) {
-        caughtError = err;
+      } catch {
+        // Error expected - we're testing state capture
       }
     });
 

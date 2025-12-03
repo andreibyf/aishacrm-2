@@ -1,4 +1,4 @@
-// src/hooks/__tests__/useVoiceInteraction.test.jsx
+// src/__tests__/ai/useVoiceInteraction.test.jsx
 //
 // NOTE:
 // This suite tests the unified voice interaction hook with mocked dependencies.
@@ -7,7 +7,7 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useVoiceInteraction } from '../useVoiceInteraction.js';
+import { useVoiceInteraction } from '../../hooks/useVoiceInteraction.js';
 
 // Mock dependencies to avoid touching real media / network
 vi.mock('@/components/ai/useSpeechInput.js', () => ({

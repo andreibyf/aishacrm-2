@@ -1,4 +1,4 @@
-// src/hooks/__tests__/usePushToTalkKeybinding.test.jsx
+// src/__tests__/ai/usePushToTalkKeybinding.test.jsx
 //
 // NOTE:
 // This suite tests the PTT keybinding hook using simple jsdom events.
@@ -6,7 +6,7 @@
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { usePushToTalkKeybinding } from '../usePushToTalkKeybinding.js';
+import { usePushToTalkKeybinding } from '../../hooks/usePushToTalkKeybinding.js';
 
 describe('usePushToTalkKeybinding', () => {
   beforeEach(() => {

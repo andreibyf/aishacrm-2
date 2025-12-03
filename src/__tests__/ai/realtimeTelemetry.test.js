@@ -5,7 +5,7 @@ import {
   subscribeToRealtimeTelemetry,
   getRealtimeTelemetrySnapshot,
   clearRealtimeTelemetry
-} from '../realtimeTelemetry.js';
+} from '../../utils/realtimeTelemetry.js';
 
 describe('realtimeTelemetry utilities', () => {
   beforeEach(() => {

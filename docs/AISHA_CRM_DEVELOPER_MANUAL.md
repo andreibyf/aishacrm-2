@@ -571,8 +571,15 @@ src/components/
 │   ├── useUser.js              # User hook
 │   └── ...
 ├── ai/                          # AI-specific components
-│   ├── AiPanel.jsx             # Main AI interface
-│   ├── ChatInterface.jsx       # Chat UI
+│   ├── AiSidebar.jsx           # Main AI sidebar with voice/chat
+│   ├── AiSidebar.css           # Sidebar styles
+│   ├── AvatarWidget.jsx        # Floating AI avatar button
+│   ├── useSpeechInput.js       # STT hook (microphone → transcript)
+│   ├── useSpeechOutput.js      # TTS hook (text → audio playback)
+│   ├── useRealtimeAiSHA.js     # WebRTC Realtime API connection
+│   ├── usePushToTalkKeybinding.js  # Spacebar PTT keybinding
+│   ├── useVoiceInteraction.js  # Unified voice state management
+│   ├── realtimeTelemetry.js    # Voice telemetry events
 │   └── agentSdkGuard.js        # SDK initialization
 ├── settings/                    # Settings page components
 │   ├── ProfileSettings.jsx

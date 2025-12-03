@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { AlertCircle, Loader2, RefreshCw, Send, Sparkles, X, Mic, Square, Volume2, Headphones, Trash2 } from 'lucide-react';
+import { AlertCircle, Building2, CheckSquare, Loader2, RefreshCw, Send, Sparkles, Target, TrendingUp, Users, X, Mic, Square, Volume2, Headphones, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useAiSidebarState } from './useAiSidebarState.jsx';
@@ -23,6 +23,15 @@ const QUICK_ACTIONS = [
   { label: 'View pipeline', prompt: 'Give me the pipeline forecast for this month' },
   { label: 'My tasks', prompt: 'List my tasks due today' }
 ];
+
+// Icons for Guided Creations - matches navigation sidebar
+const ENTITY_ICONS = {
+  lead: Target,
+  account: Building2,
+  contact: Users,
+  opportunity: TrendingUp,
+  activity: CheckSquare,
+};
 
 const DANGEROUS_VOICE_PHRASES = [
   'delete all',
@@ -173,16 +182,11 @@ const isTelemetryDebugEnabled = () => {
   return false;
 };
 
-function MessageBubble({ message, onSpeak, onStopSpeak, speechState }) {
+function MessageBubble({ message }) {
   const isUser = message.role === 'user';
   const isError = Boolean(message.error);
   const isDark = typeof document !== 'undefined' && document.body?.classList?.contains('theme-dark');
   const baseTextColor = isDark ? '#f8fafc' : '#111827';
-
-  const isSpeechActive = speechState?.activeMessageId === message.id;
-  const isSpeechLoading = isSpeechActive && speechState?.isLoading;
-  const isSpeechPlaying = isSpeechActive && speechState?.isPlaying;
-  const disableOtherSpeech = Boolean(speechState?.isLoading && !isSpeechActive);
 
   const bubbleClasses = isUser
     ? 'bg-indigo-600 shadow-indigo-500/30'
@@ -238,34 +242,6 @@ function MessageBubble({ message, onSpeak, onStopSpeak, speechState }) {
           </ReactMarkdown>
         </div>
 
-        {!isUser && !isError && (
-          <div className="mt-2 flex items-center gap-2">
-            <button
-              type="button"
-              className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700"
-              disabled={disableOtherSpeech}
-              onClick={() => {
-                if (isSpeechActive && (isSpeechLoading || isSpeechPlaying)) {
-                  onStopSpeak?.();
-                } else {
-                  onSpeak?.(message);
-                }
-              }}
-              title={isSpeechActive ? 'Stop voice playback' : 'Play voice'}
-              aria-label={isSpeechActive ? 'Stop voice playback' : 'Play voice'}
-            >
-              {isSpeechLoading ? (
-                <Loader2 className="h-3.5 w-3.5 inline-block mr-1 animate-spin" />
-              ) : isSpeechActive && isSpeechPlaying ? (
-                <Square className="h-3.5 w-3.5 inline-block mr-1" />
-              ) : (
-                <Volume2 className="h-3.5 w-3.5 inline-block mr-1" />
-              )}
-              {isSpeechLoading ? 'Loading' : isSpeechActive && isSpeechPlaying ? 'Stop' : 'Listen'}
-            </button>
-          </div>
-        )}
-
         {Array.isArray(message.actions) && message.actions.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {message.actions.map((action, index) => (
@@ -303,6 +279,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   const [voiceWarning, setVoiceWarning] = useState(null);
   const [voiceModeActive, setVoiceModeActive] = useState(false); // Full voice mode (continuous + auto-speak)
   const [isContinuousMode, setIsContinuousMode] = useState(true); // Default to continuous conversation
+  const [isPTTActive, setIsPTTActive] = useState(false); // Track when PTT button is being held
   const { user } = useUser();
   const bottomMarkerRef = useRef(null);
   const draftInputRef = useRef(null);
@@ -469,7 +446,9 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     connectRealtime,
     stopSession,
     disconnectRealtime,
-    sendUserMessage: sendRealtimeUserMessage
+    sendUserMessage: sendRealtimeUserMessage,
+    muteMic: realtimeMuteMic,
+    unmuteMic: realtimeUnmuteMic,
   } = realtimeHookState;
   const isRealtimeInitializing = Boolean(rawRealtimeConnecting ?? rawRealtimeInitializing);
   const startRealtimeSession = startSession || connectRealtime;
@@ -500,7 +479,12 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   const isRealtimeActive = isRealtimeEnabled && (realtimeLiveFlag || isRealtimeConnected);
   const isRealtimeIndicatorActive = isRealtimeEnabled && (realtimeLiveFlag || (isRealtimeConnected && isRealtimeListening));
 
-  const enableRealtime = useCallback(async () => {
+  // enableRealtime now accepts options: { startMuted: boolean }
+  // - startMuted: true = PTT mode (mic starts muted, user holds button to speak)
+  // - startMuted: false = Continuous mode (mic always on, hands-free conversation)
+  const enableRealtime = useCallback(async (options = {}) => {
+    const { startMuted = false } = options;
+
     if (!isRealtimeSupported) {
       const message = 'Realtime voice is not supported in this browser.';
       setRealtimeError(message);
@@ -513,13 +497,15 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       logUiTelemetry('ui.realtime.toggle', { enabled: true, reason: 'unsupported' }, 'warn');
       return;
     }
-    logUiTelemetry('ui.realtime.toggle', { enabled: true, phase: 'request' });
+    logUiTelemetry('ui.realtime.toggle', { enabled: true, phase: 'request', startMuted });
     try {
       clearRealtimeErrors();
-      await startRealtimeSession();
+      // Pass startMuted option to connectRealtime
+      await startRealtimeSession({ startMuted });
       setRealtimeEnabled(true);
       setRealtimeMode(true);
-      logUiTelemetry('ui.realtime.toggle', { enabled: true, phase: 'success' });
+      logUiTelemetry('ui.realtime.toggle', { enabled: true, phase: 'success', pttMode: startMuted });
+      console.log(`[AiSidebar] Realtime enabled - ${startMuted ? 'PTT mode (mic muted)' : 'Continuous mode (mic unmuted)'}`);
     } catch (err) {
       setRealtimeEnabled(false);
       setRealtimeMode(false);
@@ -569,7 +555,8 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       disableRealtime();
       return;
     }
-    await enableRealtime();
+    // Realtime Voice button = continuous mode (hands-free, mic always on)
+    await enableRealtime({ startMuted: false });
   }, [confirm, disableRealtime, enableRealtime, isRealtimeEnabled, isRealtimeFeatureAvailable, logUiTelemetry]);
 
   const sendViaRealtime = useCallback(async (text) => {
@@ -689,32 +676,57 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     }
   }, [isRealtimeActive, stopRecording]);
 
-  // Enable spacebar PTT when voice mode is active and sidebar is open
+  // PTT handlers for Realtime mode (mute/unmute the WebRTC audio stream)
+  const handleRealtimePTTStart = useCallback(() => {
+    if (!isRealtimeActive) return;
+    setIsPTTActive(true);
+    realtimeUnmuteMic?.();
+    console.log('[AiSidebar] Realtime PTT: mic unmuted (PTT pressed)');
+  }, [isRealtimeActive, realtimeUnmuteMic]);
+
+  const handleRealtimePTTEnd = useCallback(() => {
+    if (!isRealtimeActive) return;
+    setIsPTTActive(false);
+    realtimeMuteMic?.();
+    console.log('[AiSidebar] Realtime PTT: mic muted (PTT released)');
+  }, [isRealtimeActive, realtimeMuteMic]);
+
+  // Enable spacebar PTT when voice mode is active and sidebar is open (legacy STT mode)
   usePushToTalkKeybinding({
     enabled: isOpen && voiceModeActive && !isRealtimeActive,
     onPressStart: handleSpacebarPTTStart,
     onPressEnd: handleSpacebarPTTEnd,
   });
 
+  // Enable spacebar PTT for Realtime mode (mutes/unmutes WebRTC audio)
+  // Works in both continuous and PTT modes - spacebar always unmutes while held
+  usePushToTalkKeybinding({
+    enabled: isOpen && isRealtimeActive,
+    onPressStart: handleRealtimePTTStart,
+    onPressEnd: handleRealtimePTTEnd,
+  });
+
   // ─────────────────────────────────────────────────────────────────────────
-  // Voice mode toggle handler - now uses Realtime API for streaming
+  // Voice mode toggle handler - PTT mode (Push-to-Talk)
+  // This starts realtime with mic MUTED - user must hold button/spacebar to speak
   // ─────────────────────────────────────────────────────────────────────────
   const handleVoiceModeToggle = useCallback(async () => {
     const newVoiceModeActive = !voiceModeActive;
     setVoiceModeActive(newVoiceModeActive);
     
     if (newVoiceModeActive) {
-      // Entering voice mode
+      // Entering PTT voice mode
       setVoiceWarning(null);
       
       // Use Realtime API if available for true streaming
       if (isRealtimeSupported && isRealtimeFeatureAvailable) {
-        console.log('[AiSidebar] Voice mode: starting Realtime API');
-        logUiTelemetry('ui.voice_mode.enabled', { mode: 'realtime' });
+        console.log('[AiSidebar] PTT mode: starting Realtime API with mic muted');
+        logUiTelemetry('ui.voice_mode.enabled', { mode: 'ptt' });
         try {
-          await enableRealtime();
+          // PTT mode starts with mic muted - user holds button to speak
+          await enableRealtime({ startMuted: true });
         } catch (err) {
-          console.error('[AiSidebar] Failed to start realtime for voice mode:', err);
+          console.error('[AiSidebar] Failed to start realtime for PTT mode:', err);
           // Fallback to old STT
           if (isContinuousMode && !isRecording && !isSending) {
             startRecording();
@@ -1056,10 +1068,10 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       >
         <style>{`
         .aisha-sidebar { position: fixed; top: 0; right: 0; height: 100%; width: 0; overflow: hidden; z-index: 2000; transition: width 0.25s ease; }
-        .aisha-sidebar.open { width: 420px; }
-        .aisha-sidebar .sidebar-panel { position: absolute; right: 0; top: 0; width: 420px; height: 100%; display: flex; flex-direction: column; background: #ffffff; color: #0f172a; border-left: 1px solid rgba(15,23,42,0.08); box-shadow: -12px 0 35px rgba(15,23,42,0.12); }
+        .aisha-sidebar.open { width: 480px; }
+        .aisha-sidebar .sidebar-panel { position: absolute; right: 0; top: 0; width: 480px; height: 100%; display: flex; flex-direction: column; background: #ffffff; color: #0f172a; border-left: 1px solid rgba(15,23,42,0.08); box-shadow: -12px 0 35px rgba(15,23,42,0.12); }
         .theme-dark .aisha-sidebar .sidebar-panel { background: #0b0f19; color: #f8fafc; border-left: 1px solid rgba(255,255,255,0.05); box-shadow: -12px 0 35px rgba(0,0,0,0.65); }
-        .aisha-sidebar .sidebar-backdrop { position: fixed; top: 0; left: 0; width: calc(100% - 420px); height: 100%; background: rgba(15,23,42,0.2); backdrop-filter: blur(2px); }
+        .aisha-sidebar .sidebar-backdrop { position: fixed; top: 0; left: 0; width: calc(100% - 480px); height: 100%; background: rgba(15,23,42,0.2); backdrop-filter: blur(2px); }
         .theme-dark .aisha-sidebar .sidebar-backdrop { background: rgba(2,6,23,0.35); }
         .aisha-message.assistant .prose, .aisha-message.assistant .prose p, .aisha-message.assistant .prose li, .aisha-message.assistant .prose code, .aisha-message.assistant .prose strong, .aisha-message.assistant .prose em { color: #111827; }
         .theme-dark .aisha-message.assistant .prose, .theme-dark .aisha-message.assistant .prose p, .theme-dark .aisha-message.assistant .prose li, .theme-dark .aisha-message.assistant .prose code, .theme-dark .aisha-message.assistant .prose strong, .theme-dark .aisha-message.assistant .prose em { color: #f8fafc; }
@@ -1189,21 +1201,26 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                 <Sparkles className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-200" />
                 Guided creations
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {conversationalSchemaOptions.map((schema) => {
                   const isActive = activeFormId === schema.id;
+                  const IconComponent = ENTITY_ICONS[schema.id] || Sparkles;
                   return (
                     <button
                       key={schema.id}
                       type="button"
                       onClick={() => handleFormChipClick(schema.id)}
-                      className={`rounded-full border px-3 py-1 text-xs transition ${isActive
+                      title={schema.label}
+                      className={`group relative flex items-center justify-center rounded-lg border p-2 transition-all duration-200 ${isActive
                           ? 'border-emerald-500 bg-emerald-600 text-white shadow-sm'
-                          : 'border-emerald-200 bg-white text-emerald-700 hover:border-emerald-400 hover:bg-emerald-50 dark:border-emerald-500/40 dark:bg-slate-900/60 dark:text-emerald-100'
+                          : 'border-emerald-200 bg-white text-emerald-600 hover:border-emerald-400 hover:bg-emerald-50 hover:pr-[4.5rem] dark:border-emerald-500/40 dark:bg-slate-900/60 dark:text-emerald-300 dark:hover:bg-emerald-900/30'
                         } ${!canUseConversationalForms ? 'opacity-60 cursor-not-allowed' : ''}`}
                       disabled={!canUseConversationalForms || formSubmissionState.isSubmitting}
                     >
-                      {schema.label}
+                      <IconComponent className="h-4 w-4 flex-shrink-0" />
+                      <span className={`ml-1.5 max-w-0 overflow-hidden whitespace-nowrap text-xs font-medium opacity-0 transition-all duration-200 ${isActive ? 'max-w-[60px] opacity-100' : 'group-hover:max-w-[60px] group-hover:opacity-100'}`}>
+                        {schema.label.replace('New ', '')}
+                      </span>
                     </button>
                   );
                 })}
@@ -1268,13 +1285,6 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
             <MessageBubble
               key={message.id}
               message={message}
-              onSpeak={speakMessage}
-              onStopSpeak={stopSpeechPlayback}
-              speechState={{
-                activeMessageId: activeSpeechMessageId,
-                isLoading: isSpeechLoading,
-                isPlaying: isSpeechPlaying
-              }}
             />
           ))}
           {isSending && (
@@ -1365,99 +1375,130 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
             )}
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
               {isRealtimeActive
-                ? 'Live voice streaming active. Speak naturally — AI transcribes and responds in real-time when you pause.'
-                : isListening
-                  ? 'Speak naturally. Pauses are detected automatically and messages are sent. Mic pauses while AI responds.'
-                  : 'Click the mic for live voice streaming. Speak naturally — AI transcribes and responds when you pause.'}
+                  ? 'Hold the talk button or type a message below.'
+                  : 'Type a message or start voice mode to speak with AiSHA.'}
             </p>
             <Textarea
                 ref={draftInputRef}
               value={draft}
               onChange={handleDraftChange}
               onKeyDown={handleKeyDown}
-              placeholder="Ask AiSHA to summarize leads, draft follow-ups, or find CRM insights..."
+                placeholder="Type a message... (Enter to send)"
               className="bg-white text-slate-900 placeholder:text-slate-700 border border-slate-300 dark:bg-slate-900/60 dark:text-slate-100 dark:border-slate-800"
-              rows={3}
+                rows={2}
               disabled={isSending}
             />
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-slate-500 dark:text-slate-400 space-y-1">
-                {speechError && <div className="text-amber-600 dark:text-amber-300">Mic error: {String(speechError.message || speechError)}</div>}
-                {speechPlaybackError && <div className="text-amber-600 dark:text-amber-300">Voice playback error: {String(speechPlaybackError.message || speechPlaybackError)}</div>}
-                <div>
-                  {isTranscribing && <span>Transcribing...</span>}
-                    {isContinuousMode && !isRecording && !isSending && !isSpeechPlaying && (
-                      <span className="ml-2 text-[10px] opacity-70">(Continuous mode active)</span>
-                    )}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex-1 text-xs text-slate-500 dark:text-slate-400">
+                  {speechError && <div className="text-amber-600 dark:text-amber-300 text-[10px]">Mic: {String(speechError.message || speechError)}</div>}
+                  {speechPlaybackError && <div className="text-amber-600 dark:text-amber-300 text-[10px]">Audio: {String(speechPlaybackError.message || speechPlaybackError)}</div>}
+                  {isTranscribing && <span className="text-[10px]">Transcribing...</span>}
                 </div>
-              </div>
-            <div className="flex items-center gap-1">
-                {/* Voice Mode Toggle - enables continuous conversation with auto-speak */}
+                {/* Send text button - small arrow */}
                 <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={`h-8 px-2 text-xs ${voiceModeActive || isRealtimeActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-300' : 'text-slate-500'}`}
-                  onClick={handleVoiceModeToggle}
-                  title={voiceModeActive || isRealtimeActive ? 'Exit voice mode' : 'Enter voice mode (hands-free conversation)'}
-                  data-testid="voice-mode-toggle"
-                >
-                  <Headphones className={`h-3 w-3 mr-1 ${voiceModeActive ? '' : 'opacity-50'}`} />
-                  Voice
-                </Button>
-                {/* Mic Toggle - click to start realtime streaming or fallback to continuous listening */}
-                <Button
-                  type="button"
+                  type="submit"
                   variant="ghost"
                   size="icon"
-                  className={`h-8 w-8 ${
-                    isRealtimeActive
-                      ? isRealtimeSpeaking
-                        ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400' // AI speaking, mic muted
-                        : 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400 animate-pulse' // Listening
-                      : isListening 
-                        ? isRecording 
-                          ? 'text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400 animate-pulse' 
-                          : 'text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400'
-                        : 'text-slate-500'
-                  }`}
-                  onClick={handleMicToggle}
-                  disabled={isRealtimeInitializing}
-                  title={
-                    isRealtimeActive
-                      ? isRealtimeSpeaking
-                        ? 'AI speaking... (mic auto-muted, click to stop session)'
-                        : 'Streaming live... (click to stop)'
-                      : isListening 
-                        ? isRecording 
-                          ? 'Listening... (click to stop)' 
-                          : isSending 
-                            ? 'Paused while sending...' 
-                            : isSpeechPlaying 
-                              ? 'Paused while AI speaks...' 
-                              : 'Processing...'
-                        : 'Click to start live voice (realtime streaming)'
-                  }
-                  aria-label={isRealtimeActive || isListening ? 'Stop listening' : 'Start live voice'}
-                  data-testid="mic-toggle-button"
+                  className="h-8 w-8 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 dark:text-slate-400 dark:hover:text-indigo-400 dark:hover:bg-indigo-900/20"
+                  disabled={!draft.trim() || isSending}
+                  title="Send text message (Enter)"
+                  aria-label="Send text message"
                 >
-                  {isRealtimeActive || isListening ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                  {isSending && !isRealtimeActive ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
                 </Button>
-            </div>
-            </div>
-            <Button type="submit" className="w-full" disabled={sendButtonDisabled}>
-              {isSendLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending
-                </>
-              ) : (
-                <>
-                  <Send className="mr-2 h-4 w-4" />
-                  {isRealtimeActive ? 'Send (Realtime)' : 'Send to AiSHA'}
-                </>
-              )}
-            </Button>
+              </div>
+
+              {/* Bottom action bar - PTT and Voice controls */}
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                {/* Push-to-Talk Button - only show in PTT mode (voiceModeActive), NOT in hands-free Realtime Voice mode */}
+                {isRealtimeActive && voiceModeActive ? (
+                <Button
+                  type="button"
+                    variant={isPTTActive ? 'default' : 'secondary'}
+                    className={`flex-1 h-10 transition-all ${isPTTActive
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/30'
+                      : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700'
+                  }`}
+                    onMouseDown={handleRealtimePTTStart}
+                    onMouseUp={handleRealtimePTTEnd}
+                    onMouseLeave={handleRealtimePTTEnd}
+                    onTouchStart={handleRealtimePTTStart}
+                    onTouchEnd={handleRealtimePTTEnd}
+                  disabled={isRealtimeInitializing}
+                    title="Hold to talk, release to send"
+                    aria-label={isPTTActive ? 'Recording... release to send' : 'Hold to talk'}
+                    data-testid="ptt-button"
+                >
+                    {isPTTActive ? (
+                      <>
+                        <Mic className="h-4 w-4 mr-2 animate-pulse" />
+                        Release to Send
+                      </>
+                    ) : isRealtimeSpeaking ? (
+                      <>
+                        <Volume2 className="h-4 w-4 mr-2 animate-pulse" />
+                        AI Speaking...
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="h-4 w-4 mr-2" />
+                        Hold to Talk
+                      </>
+                    )}
+                </Button>
+                ) : !isRealtimeActive ? (
+                  /* PTT Mode Toggle - click to enable Push-to-Talk mode (only when realtime not active) */
+                  <Button
+                    type="button"
+                    variant={voiceModeActive ? 'default' : 'secondary'}
+                    className={`flex-1 h-10 ${voiceModeActive
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : ''
+                      }`}
+                    onClick={handleVoiceModeToggle}
+                    disabled={isRealtimeInitializing || !isRealtimeFeatureAvailable}
+                    title={voiceModeActive ? 'Click to disable PTT mode' : 'Click to enable Push-to-Talk mode'}
+                    data-testid="voice-mode-toggle"
+                  >
+                    {isRealtimeInitializing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Connecting...
+                      </>
+                    ) : voiceModeActive ? (
+                      <>
+                            <Square className="h-4 w-4 mr-2" />
+                            Stop PTT
+                          </>
+                        ) : (
+                          <>
+                          <Mic className="h-4 w-4 mr-2" />
+                          Push to Talk
+                        </>
+                      )}
+                    </Button>
+                ) : null /* Hands-free Realtime Voice mode - no PTT button needed */}
+
+                {/* Stop session button - only show when realtime is active */}
+                {isRealtimeActive && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-10 w-10 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    onClick={handleMicToggle}
+                    title="End voice session"
+                    aria-label="End voice session"
+                    data-testid="mic-toggle-button"
+                  >
+                    <Square className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
           </form>
         </div>
         </aside>

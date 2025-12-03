@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { useRealtimeAiSHA, __testing__ } from '../useRealtimeAiSHA.js';
+import { useRealtimeAiSHA, __testing__ } from '../../hooks/useRealtimeAiSHA.js';
 
 afterEach(() => {
   vi.restoreAllMocks();

@@ -1180,8 +1180,23 @@ INSERT INTO module_settings (tenant_id, module_name, is_enabled, settings)
 VALUES 
   ('tenant-uuid', 'opportunities', true, '{"stages":["prospect","qualified","proposal","negotiation","closed"]}'),
   ('tenant-uuid', 'workflows', true, '{"max_workflows":50}'),
-  ('tenant-uuid', 'document_processing', false, NULL);
+  ('tenant-uuid', 'document_processing', false, NULL),
+  ('tenant-uuid', 'realtime_voice', true, '{"ptt_enabled":true,"auto_play_responses":true}');
 ```
+
+### Realtime Voice Module
+
+The Realtime Voice module enables AI voice interaction features:
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `is_enabled` | boolean | true | Enables voice mode toggle in AI sidebar |
+| `ptt_enabled` | boolean | true | Enables push-to-talk via spacebar |
+| `auto_play_responses` | boolean | true | Auto-plays TTS for AI responses |
+
+> **⚠️ NOTE**
+>
+> Disabling Realtime Voice shows "Realtime Voice disabled by administrator" in the AI sidebar.
 
 ### Custom Fields
 

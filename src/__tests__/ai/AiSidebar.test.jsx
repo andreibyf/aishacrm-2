@@ -1,8 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import AiSidebar from '../AiSidebar';
-import AiAssistantLauncher from '../AiAssistantLauncher.jsx';
-import { AiSidebarProvider, useAiSidebarState } from '../useAiSidebarState.jsx';
+import AiSidebar from '../../components/ai/AiSidebar';
+import AiAssistantLauncher from '../../components/ai/AiAssistantLauncher.jsx';
+import { AiSidebarProvider, useAiSidebarState } from '../../components/ai/useAiSidebarState.jsx';
 import UserContextInternal from '@/components/shared/UserContext.jsx';
 
 function LauncherBridge() {
@@ -62,7 +62,7 @@ describe('AiSidebar + AvatarWidget integration', () => {
     const suggestionChip = await screen.findByRole('button', { name: /Dashboard overview/i });
     fireEvent.click(suggestionChip);
 
-    const textarea = await screen.findByPlaceholderText(/Ask AiSHA/i);
+    const textarea = await screen.findByPlaceholderText(/Type a message/i);
     await waitFor(() => {
       expect(textarea).toHaveValue('Give me a dashboard summary');
     });
@@ -74,7 +74,8 @@ describe('AiSidebar + AvatarWidget integration', () => {
     const launcherButton = screen.getByLabelText(/Toggle AiSHA assistant/i);
     fireEvent.click(launcherButton);
 
-    const guidedChip = await screen.findByRole('button', { name: /New Lead/i });
+    // Button now uses icon with title attribute instead of visible text
+    const guidedChip = await screen.findByTitle('New Lead');
     fireEvent.click(guidedChip);
 
     expect(await screen.findByText(/What's the lead's name/i)).toBeInTheDocument();

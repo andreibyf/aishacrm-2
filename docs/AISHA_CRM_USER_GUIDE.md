@@ -505,6 +505,7 @@ The AI Assistant is the heart of Aisha CRM, providing intelligent automation and
 ┌─────────────────────────────────────────┐
 │  AI Executive Assistant          [X]    │
 ├─────────────────────────────────────────┤
+│  [Realtime Voice]      🔴 LIVE          │
 │                                         │
 │  AI: Hello! How can I help you today?  │
 │                                         │
@@ -516,9 +517,29 @@ The AI Assistant is the heart of Aisha CRM, providing intelligent automation and
 │  ┌─────────────────────────────────┐   │
 │  │ Type your message...            │   │
 │  └─────────────────────────────────┘   │
-│                             [Send]      │
+│  [🎤 Voice] [🎙️ Hold to Talk] [➡️] [⏹]  │
 └─────────────────────────────────────────┘
 ```
+
+### Voice Controls
+
+| Control | Description |
+|---------|-------------|
+| **Voice Toggle** | Enables/disables voice mode and connects to Realtime API |
+| **Hold to Talk** | Push-to-talk button - hold to speak, release to send |
+| **Send Arrow** | Sends typed text message |
+| **Stop** | Quickly ends voice session (no confirmation) |
+
+> **💡 TIP**
+>
+> Press and hold **Spacebar** anywhere in the sidebar for push-to-talk when voice mode is active.
+
+### Keyboard Shortcuts for Voice
+
+| Shortcut | Action |
+|----------|--------|
+| `Spacebar` (hold) | Push-to-talk while voice mode is active |
+| `Enter` | Send typed message |
 
 ### Capabilities
 
@@ -1987,6 +2008,13 @@ Check current status at: [System Status Page]
 | `F1` | Help |
 | `Esc` | Close dialog/modal |
 
+## AI Voice Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Spacebar` (hold) | Push-to-talk when voice mode is active |
+| `Enter` | Send typed message in AI chat |
+
 ## Navigation Shortcuts
 
 | Shortcut | Action |
@@ -2034,6 +2062,12 @@ Check current status at: [System Status Page]
 **Lead**: A potential customer or opportunity not yet qualified
 
 **Opportunity**: A qualified potential sale in your sales pipeline
+
+**Push-to-Talk (PTT)**: Voice input mode where you hold a button (or spacebar) to speak
+
+**Realtime Voice**: Live streaming voice mode using OpenAI's Realtime API for natural conversation
+
+**Voice Mode**: AI assistant mode that enables speech-to-text and text-to-speech features
 
 **Pipeline**: The sales process from lead to closed deal
 

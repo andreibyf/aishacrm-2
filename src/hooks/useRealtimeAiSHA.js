@@ -329,6 +329,8 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
   const pendingResponseLatencyRef = useRef(null);
   const consoleTelemetryEnabledRef = useRef(shouldConsoleLogTelemetry());
   const speakingTimeoutRef = useRef(null);
+  // PTT mode flag - when true, mic stays muted except when user holds PTT button
+  const pttModeRef = useRef(false);
 
   useEffect(() => {
     eventHandlerRef.current = onEvent || null;
@@ -395,6 +397,8 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
   }, []);
 
   // Handle AI speaking state - mute mic while AI speaks
+  // In PTT mode, mic stays muted even after AI stops - user must hold button
+  // In continuous mode, mic auto-unmutes after AI stops speaking
   const setAISpeaking = useCallback((speaking) => {
     // Clear any pending timeout
     if (speakingTimeoutRef.current) {
@@ -403,16 +407,24 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
     }
 
     if (speaking) {
-      // AI started speaking - mute mic immediately
+      // AI started speaking - mute mic immediately (both modes)
       setMicMuted(true);
       setState((prev) => ({ ...prev, isSpeaking: true }));
     } else {
-      // AI stopped speaking - delay unmute slightly to avoid catching tail end
-      speakingTimeoutRef.current = setTimeout(() => {
-        setMicMuted(false);
-        setState((prev) => ({ ...prev, isSpeaking: false }));
-        speakingTimeoutRef.current = null;
-      }, 300); // 300ms delay before unmuting
+      // AI stopped speaking
+      setState((prev) => ({ ...prev, isSpeaking: false }));
+
+      // Only auto-unmute in continuous mode, NOT in PTT mode
+      if (pttModeRef.current) {
+        // PTT mode: keep mic muted, user must hold button to speak
+        console.info('[Realtime] PTT mode: keeping mic muted after AI stopped');
+      } else {
+        // Continuous mode: delay unmute slightly to avoid catching tail end
+        speakingTimeoutRef.current = setTimeout(() => {
+          setMicMuted(false);
+          speakingTimeoutRef.current = null;
+        }, 300); // 300ms delay before unmuting
+      }
     }
   }, [setMicMuted]);
 
@@ -536,6 +548,8 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
       clearTimeout(speakingTimeoutRef.current);
       speakingTimeoutRef.current = null;
     }
+    // Reset PTT mode flag
+    pttModeRef.current = false;
     setState((prev) => ({
       ...prev,
       isConnected: false,
@@ -557,7 +571,9 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
     return remoteAudioRef.current;
   }, []);
 
-  const connectRealtime = useCallback(async () => {
+  const connectRealtime = useCallback(async (options = {}) => {
+    const { startMuted = false } = options;
+
     if (!state.isSupported) {
       const details = createErrorDetails('general', { message: 'Realtime voice is not supported in this browser.' });
       applyErrorState(details, 'warn');
@@ -573,6 +589,7 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
     connectStartRef.current = getNow();
     logEvent('realtime.connect.requested', {
       hasExistingPeer: Boolean(pcRef.current),
+      startMuted,
     });
     logTelemetryMetric('connect_start', {
       hasExistingPeer: Boolean(pcRef.current),
@@ -850,6 +867,20 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
       const answerSdp = await answerResponse.text();
       await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
 
+      // Set PTT mode flag - this controls whether auto-unmute happens after AI speaks
+      pttModeRef.current = startMuted;
+
+      // If startMuted option was passed, mute the mic immediately after connection
+      // This is used for PTT mode where user must hold button to speak
+      if (startMuted) {
+        setMicMuted(true);
+        logEvent('realtime.session.connected', { startMuted: true, pttMode: true });
+        console.info('[Realtime] Session connected with mic MUTED (PTT mode)');
+      } else {
+        logEvent('realtime.session.connected', { startMuted: false, pttMode: false });
+        console.info('[Realtime] Session connected with mic UNMUTED (continuous mode)');
+      }
+
       setState((prev) => ({
         ...prev,
         isInitializing: false,
@@ -858,7 +889,6 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
         errorDetails: null,
       }));
       updateConnectionState('connected', 'answer_received');
-      logEvent('realtime.session.connected');
       return true;
     } catch (error) {
       console.error('[Realtime Voice] connect error', error);
@@ -870,7 +900,7 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
       updateConnectionState('error', details.code);
       throw error;
     }
-  }, [applyErrorState, cleanup, clearErrorState, emitEvent, ensureAudioElement, logEvent, logTelemetryMetric, state.isSupported, updateConnectionState]);
+  }, [applyErrorState, cleanup, clearErrorState, emitEvent, ensureAudioElement, logEvent, logTelemetryMetric, setMicMuted, state.isSupported, updateConnectionState]);
 
   const sendUserMessage = useCallback(async (text) => {
     const trimmed = (text || '').trim();
@@ -925,6 +955,10 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
     [state],
   );
 
+  // PTT (Push-to-Talk) controls for Realtime mode
+  const muteMic = useCallback(() => setMicMuted(true), [setMicMuted]);
+  const unmuteMic = useCallback(() => setMicMuted(false), [setMicMuted]);
+
   return {
     ...status,
     messages: messageLog,
@@ -933,6 +967,9 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
     sendUserMessage,
     disconnectRealtime,
     stopSession: disconnectRealtime,
+    // PTT controls
+    muteMic,
+    unmuteMic,
   };
 }
 

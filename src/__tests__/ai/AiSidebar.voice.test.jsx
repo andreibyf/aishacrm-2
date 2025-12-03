@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import AiSidebar from '../AiSidebar.jsx';
+import AiSidebar from '../../components/ai/AiSidebar.jsx';
 const mockSendMessage = vi.fn();
 const speechState = {
   transcript: '',
@@ -71,18 +71,18 @@ const buildSidebarState = (overrides = {}) => ({
   ...overrides
 });
 
-vi.mock('../useAiSidebarState.jsx', () => ({
+vi.mock('../../components/ai/useAiSidebarState.jsx', () => ({
   useAiSidebarState: () => mockSidebarState
 }));
 
-vi.mock('../useSpeechInput.js', () => ({
+vi.mock('../../components/ai/useSpeechInput.js', () => ({
   useSpeechInput: (options = {}) => {
     triggerFinalTranscript = options?.onFinalTranscript || null;
     return speechState;
   }
 }));
 
-vi.mock('../useSpeechOutput.js', () => ({
+vi.mock('../../components/ai/useSpeechOutput.js', () => ({
   useSpeechOutput: () => ({
     playText: mockPlayText,
     stopPlayback: mockStopPlayback,
@@ -160,16 +160,7 @@ describe('AiSidebar voice', () => {
     };
   });
 
-  it('calls /api/ai/tts when Listen clicked', async () => {
-    render(<AiSidebar />);
-
-    const listenButton = await screen.findByRole('button', { name: /Play voice/i });
-    fireEvent.click(listenButton);
-
-    await waitFor(() => {
-      expect(mockPlayText).toHaveBeenCalledWith('Hello from AiSHA');
-    });
-  });
+  // Note: Listen button on individual message bubbles was removed - TTS is now handled globally
 
   it('auto-sends safe voice transcripts returned by STT', async () => {
     render(<AiSidebar />);
@@ -222,25 +213,26 @@ describe('AiSidebar voice', () => {
     });
   });
 
-  it('starts and stops recording with toggle mic button', async () => {
+  it('starts realtime voice when voice mode button is clicked', async () => {
     render(<AiSidebar />);
-    const micButton = await screen.findByTestId('mic-toggle-button');
+    const voiceButton = await screen.findByTestId('voice-mode-toggle');
 
-    // Click to start listening
-    fireEvent.click(micButton);
-    expect(speechState.startListening).toHaveBeenCalled();
+    // Click to start - now uses Realtime API when available
+    await act(async () => {
+      fireEvent.click(voiceButton);
+    });
     
-    // Reset mock
-    speechState.startListening.mockClear();
-    
-    // Note: In continuous mode, clicking again should stop listening
-    // The stopListening call happens through the toggleListening function
+    // Should connect to realtime, not legacy STT
+    await waitFor(() => {
+      expect(mockConnectRealtime).toHaveBeenCalled();
+    });
   });
 
   it('emits telemetry events when realtime toggle is used', async () => {
     render(<AiSidebar />);
 
-    const toggleButton = await screen.findByRole('button', { name: /Realtime Voice/i });
+    // Now uses voice-mode-toggle button instead of Realtime Voice button
+    const toggleButton = await screen.findByTestId('voice-mode-toggle');
 
     await act(async () => {
       fireEvent.click(toggleButton);
@@ -252,21 +244,16 @@ describe('AiSidebar voice', () => {
     });
 
     expect(mockTrackRealtimeEvent).toHaveBeenCalledWith(expect.objectContaining({
-      event: 'ui.realtime.toggle',
-      payload: expect.objectContaining({ enabled: true, phase: 'request' })
+      event: 'ui.voice_mode.enabled',
     }));
 
-    await waitFor(() => {
-      expect(mockTrackRealtimeEvent).toHaveBeenCalledWith(expect.objectContaining({
-        event: 'ui.realtime.toggle',
-        payload: expect.objectContaining({ enabled: true, phase: 'success' })
-      }));
-    });
-
+    // Click the explicit "Disable Realtime Voice" button (has confirmation dialog)
+    const disableButton = await screen.findByRole('button', { name: /Disable Realtime Voice/i });
     await act(async () => {
-      fireEvent.click(toggleButton);
+      fireEvent.click(disableButton);
     });
 
+    await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
     await waitFor(() => {
       expect(mockDisconnectRealtime).toHaveBeenCalled();
     });
@@ -274,7 +261,6 @@ describe('AiSidebar voice', () => {
       event: 'ui.realtime.toggle',
       payload: expect.objectContaining({ enabled: false, phase: 'success' })
     }));
-    expect(mockConfirm).toHaveBeenCalledTimes(1);
   });
 
   it('logs telemetry when destructive voice commands are blocked', async () => {
@@ -312,15 +298,17 @@ describe('AiSidebar voice', () => {
 
   it('requires confirmation before disabling realtime voice', async () => {
     render(<AiSidebar />);
-    const toggleButton = await screen.findByRole('button', { name: /Realtime Voice/i });
+    const voiceToggle = await screen.findByTestId('voice-mode-toggle');
 
     await act(async () => {
-      fireEvent.click(toggleButton);
+      fireEvent.click(voiceToggle);
     });
     await waitFor(() => expect(mockConnectRealtime).toHaveBeenCalled());
 
+    // Click the explicit "Disable Realtime Voice" button (triggers confirmation)
+    const disableButton = await screen.findByRole('button', { name: /Disable Realtime Voice/i });
     await act(async () => {
-      fireEvent.click(toggleButton);
+      fireEvent.click(disableButton);
     });
 
     await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
@@ -330,15 +318,17 @@ describe('AiSidebar voice', () => {
   it('keeps realtime session active when disable confirmation is cancelled', async () => {
     mockConfirm.mockResolvedValueOnce(false);
     render(<AiSidebar />);
-    const toggleButton = await screen.findByRole('button', { name: /Realtime Voice/i });
+    const voiceToggle = await screen.findByTestId('voice-mode-toggle');
 
     await act(async () => {
-      fireEvent.click(toggleButton);
+      fireEvent.click(voiceToggle);
     });
     await waitFor(() => expect(mockConnectRealtime).toHaveBeenCalled());
 
+    // Click the explicit "Disable Realtime Voice" button (triggers confirmation, but will be cancelled)
+    const disableButton = await screen.findByRole('button', { name: /Disable Realtime Voice/i });
     await act(async () => {
-      fireEvent.click(toggleButton);
+      fireEvent.click(disableButton);
     });
 
     await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
@@ -347,10 +337,10 @@ describe('AiSidebar voice', () => {
 
   it('auto-disables realtime mode when the connection drops unexpectedly', async () => {
     const { rerender } = render(<AiSidebar />);
-    const toggleButton = await screen.findByRole('button', { name: /Realtime Voice/i });
+    const voiceToggle = await screen.findByTestId('voice-mode-toggle');
 
     await act(async () => {
-      fireEvent.click(toggleButton);
+      fireEvent.click(voiceToggle);
     });
     await waitFor(() => expect(mockConnectRealtime).toHaveBeenCalled());
 
@@ -372,10 +362,10 @@ describe('AiSidebar voice', () => {
 
   it('routes voice transcripts through realtime when session is live', async () => {
     render(<AiSidebar />);
-    const toggleButton = await screen.findByRole('button', { name: /Realtime Voice/i });
+    const voiceToggle = await screen.findByTestId('voice-mode-toggle');
 
     await act(async () => {
-      fireEvent.click(toggleButton);
+      fireEvent.click(voiceToggle);
     });
     await waitFor(() => expect(mockConnectRealtime).toHaveBeenCalled());
 
@@ -389,14 +379,14 @@ describe('AiSidebar voice', () => {
 
   it('submits typed drafts via realtime when live', async () => {
     render(<AiSidebar />);
-    const toggleButton = await screen.findByRole('button', { name: /Realtime Voice/i });
+    const voiceToggle = await screen.findByTestId('voice-mode-toggle');
 
     await act(async () => {
-      fireEvent.click(toggleButton);
+      fireEvent.click(voiceToggle);
     });
     await waitFor(() => expect(mockConnectRealtime).toHaveBeenCalled());
 
-    const textarea = await screen.findByPlaceholderText(/Ask AiSHA/i);
+    const textarea = await screen.findByPlaceholderText(/Type a message/i);
     fireEvent.change(textarea, { target: { value: 'Show me my quarterly pipeline.' } });
 
     await act(async () => {
@@ -414,7 +404,7 @@ describe('AiSidebar voice', () => {
     render(<AiSidebar />);
     const voiceModeToggle = await screen.findByTestId('voice-mode-toggle');
     expect(voiceModeToggle).toBeInTheDocument();
-    expect(voiceModeToggle).toHaveTextContent('Voice');
+    expect(voiceModeToggle).toHaveTextContent(/Push to Talk/i);
   });
 
   it('toggles voice mode on click', async () => {
@@ -426,11 +416,9 @@ describe('AiSidebar voice', () => {
       fireEvent.click(voiceModeToggle);
     });
 
-    // Button text is just "Voice" but should have active styling
+    // Should connect to realtime
     await waitFor(() => {
-      expect(voiceModeToggle).toHaveTextContent('Voice');
-      // Check the button has the active/emerald styling when voice mode is on
-      expect(voiceModeToggle.className).toContain('text-emerald');
+      expect(mockConnectRealtime).toHaveBeenCalled();
     });
 
     // Check telemetry was logged
@@ -439,18 +427,19 @@ describe('AiSidebar voice', () => {
     }));
   });
 
-  it('disables voice mode toggle when realtime is active', async () => {
+  it('shows PTT button after realtime session starts', async () => {
     render(<AiSidebar />);
-    const realtimeToggle = await screen.findByRole('button', { name: /Realtime Voice/i });
+    const voiceModeToggle = await screen.findByTestId('voice-mode-toggle');
 
     // Enable realtime first
     await act(async () => {
-      fireEvent.click(realtimeToggle);
+      fireEvent.click(voiceModeToggle);
     });
     await waitFor(() => expect(mockConnectRealtime).toHaveBeenCalled());
 
-    // Voice mode toggle should be disabled
-    const voiceModeToggle = await screen.findByTestId('voice-mode-toggle');
-    expect(voiceModeToggle).toBeDisabled();
+    // PTT button should now be visible
+    const pttButton = await screen.findByTestId('ptt-button');
+    expect(pttButton).toBeInTheDocument();
+    expect(pttButton).toHaveTextContent(/Hold to Talk/i);
   });
 });
