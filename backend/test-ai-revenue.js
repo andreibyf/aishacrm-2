@@ -5,15 +5,16 @@
 import fetch from 'node-fetch';
 
 async function testAIRevenue() {
+  const tenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
   // Step 1: Create a conversation
   const createConvResponse = await fetch('http://localhost:4001/api/ai/conversations', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-tenant-id': 'labor-depot'
+      'x-tenant-id': tenantId
     },
     body: JSON.stringify({
-      tenant_id: 'labor-depot',
+      tenant_id: tenantId,
       title: 'Account Listing Test',
       mode: 'chat'
     })
@@ -33,10 +34,10 @@ async function testAIRevenue() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-tenant-id': 'labor-depot'
+      'x-tenant-id': tenantId
     },
     body: JSON.stringify({
-      tenant_id: 'labor-depot',
+      tenant_id: tenantId,
       role: 'user',
       content: 'List all accounts in our CRM. What accounts do we have?'
     })

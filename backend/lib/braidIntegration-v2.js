@@ -228,17 +228,20 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
   // CRITICAL: Use tenantRecord.id (UUID) not tenant_id (slug) for API calls
   const tenantUuid = tenantRecord?.id || tenantRecord?.tenant_id || null;
   const deps = createBackendDeps('http://localhost:3001', tenantUuid, userId);
-  
-  // Convert args object to array for Braid function
-  const argArray = Object.values(args);
-  
+
+  // Normalize arguments into a single object for Braid
+  const normalizedArgs = normalizeToolArgs(toolName, args, tenantRecord);
+
+  // Convert object args to positional array based on function signature
+  const positionalArgs = objectToPositionalArgs(toolName, normalizedArgs);
+
   try {
     const result = await executeBraid(
       braidPath,
       config.function,
       policy,
       deps,
-      argArray,
+      positionalArgs,
       { cache: config.policy === 'READ_ONLY', timeout: 30000 }
     );
     
@@ -249,4 +252,134 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
       error: { type: 'ExecutionError', message: error.message, stack: error.stack }
     };
   }
+}
+
+/**
+ * Parameter order for each Braid function (matches .braid file signatures)
+ */
+const BRAID_PARAM_ORDER = {
+  // Snapshot
+  fetchSnapshot: ['tenant', 'scope', 'limit'],
+  probe: ['tenant'],
+
+  // Accounts
+  createAccount: ['tenant', 'name', 'annual_revenue', 'industry', 'website', 'email', 'phone'],
+  updateAccount: ['tenant', 'account_id', 'updates'],
+  getAccountDetails: ['tenant', 'account_id'],
+  listAccounts: ['tenant', 'limit'],
+  deleteAccount: ['tenant', 'account_id'],
+
+  // Leads
+  createLead: ['tenant', 'first_name', 'last_name', 'email', 'company', 'phone', 'source'],
+  updateLead: ['tenant', 'lead_id', 'updates'],
+  convertLeadToAccount: ['tenant', 'lead_id', 'options'],
+  listLeads: ['tenant', 'status', 'limit'],
+  deleteLead: ['tenant', 'lead_id'],
+
+  // Activities
+  createActivity: ['tenant', 'type', 'subject', 'body', 'related_to', 'related_id', 'due_date'],
+  updateActivity: ['tenant', 'activity_id', 'updates'],
+  markActivityComplete: ['tenant', 'activity_id'],
+  getUpcomingActivities: ['tenant', 'days', 'limit'],
+  scheduleMeeting: ['tenant', 'subject', 'attendees', 'date', 'duration', 'location'],
+  deleteActivity: ['tenant', 'activity_id'],
+
+  // Notes
+  createNote: ['tenant', 'content', 'related_to', 'related_id'],
+  updateNote: ['tenant', 'note_id', 'content'],
+  searchNotes: ['tenant', 'query', 'limit'],
+  getNotesForRecord: ['tenant', 'related_to', 'related_id'],
+  deleteNote: ['tenant', 'note_id'],
+
+  // Opportunities
+  createOpportunity: ['tenant', 'name', 'description', 'amount', 'stage', 'probability', 'close_date', 'account_id', 'contact_id'],
+  updateOpportunity: ['tenant', 'opportunity_id', 'updates'],
+  listOpportunitiesByStage: ['tenant', 'stage', 'limit'],
+  getOpportunityForecast: ['tenant', 'period'],
+  markOpportunityWon: ['tenant', 'opportunity_id', 'close_details'],
+  deleteOpportunity: ['tenant', 'opportunity_id'],
+
+  // Contacts
+  createContact: ['tenant', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'account_id'],
+  updateContact: ['tenant', 'contact_id', 'updates'],
+  listContactsForAccount: ['tenant', 'account_id', 'limit'],
+  searchContacts: ['tenant', 'query', 'limit'],
+  deleteContact: ['tenant', 'contact_id'],
+
+  // Web Research
+  searchWeb: ['query', 'limit'],
+  fetchWebPage: ['url'],
+  lookupCompanyInfo: ['company_name']
+};
+
+/**
+ * Convert object args to positional array based on Braid function signature
+ */
+function objectToPositionalArgs(toolName, argsObj) {
+  const config = TOOL_REGISTRY[toolName];
+  if (!config) return [argsObj]; // fallback to object if unknown
+
+  const funcName = config.function;
+  const paramOrder = BRAID_PARAM_ORDER[funcName];
+
+  if (!paramOrder) {
+    console.warn(`[Braid] No param order defined for ${funcName}, passing as object`);
+    return [argsObj];
+  }
+
+  // Extract values in order, using undefined for missing params
+  return paramOrder.map(param => argsObj[param]);
+}
+
+function normalizeToolArgs(toolName, rawArgs, tenantRecord) {
+  // Use UUID for API calls, not the text slug
+  const tenantUuid = tenantRecord?.id || null;
+  const args = rawArgs && typeof rawArgs === 'object' ? { ...rawArgs } : {};
+
+  // Ensure tenant hint for tools that expect it
+  const toolsNeedingTenant = new Set([
+    'fetch_tenant_snapshot',
+    'list_accounts',
+    'list_leads',
+    'list_opportunities_by_stage',
+    'get_upcoming_activities',
+    'get_notes_for_record',
+    'search_contacts',
+  ]);
+
+  if (toolsNeedingTenant.has(toolName)) {
+    const currentTenant = args.tenant || args.tenant_id || null;
+    // Replace missing or placeholder tenants (like "default") with canonical UUID
+    if (!currentTenant || currentTenant === 'default') {
+      args.tenant = tenantUuid;
+    }
+  }
+
+  // Unwrap common filter pattern for listing tools
+  if (args.filter && typeof args.filter === 'object') {
+    const filterTools = new Set([
+      'list_leads',
+      'list_opportunities_by_stage',
+      'list_accounts',
+      'search_contacts',
+    ]);
+
+    if (filterTools.has(toolName)) {
+      Object.assign(args, args.filter);
+      delete args.filter;
+    }
+  }
+
+  // Normalize common scalar fields
+  if (typeof args.limit === 'string') {
+    const n = parseInt(args.limit, 10);
+    if (!Number.isNaN(n)) args.limit = n;
+  }
+  
+  // Normalize status: "all" means no filter (undefined)
+  if (args.status === 'all' || args.status === 'any' || args.status === '') {
+    args.status = undefined;
+  }
+
+  return args;
 }

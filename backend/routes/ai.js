@@ -892,11 +892,14 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
         return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
       }
 
+      // Use UUID for database queries (tenantRecord.id is the UUID)
+      const tenantUuid = tenantRecord.id;
+
       // Fetch accounts (select all columns with wildcard)
       const { data: accounts, error: accErr } = await supa
         .from('accounts')
         .select('*')
-        .eq('tenant_id', tenantRecord.tenant_id)
+        .eq('tenant_id', tenantUuid)
         .limit(100);
       if (accErr) throw accErr;
 
@@ -904,7 +907,7 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       const { data: leads, error: leadsErr } = await supa
         .from('leads')
         .select('*')
-        .eq('tenant_id', tenantRecord.tenant_id)
+        .eq('tenant_id', tenantUuid)
         .limit(100);
       if (leadsErr) throw leadsErr;
 
@@ -912,7 +915,7 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       const { data: contacts, error: contactsErr } = await supa
         .from('contacts')
         .select('*')
-        .eq('tenant_id', tenantRecord.tenant_id)
+        .eq('tenant_id', tenantUuid)
         .limit(100);
       if (contactsErr) throw contactsErr;
 
@@ -920,7 +923,7 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       const { data: opportunities, error: oppsErr } = await supa
         .from('opportunities')
         .select('*')
-        .eq('tenant_id', tenantRecord.tenant_id)
+        .eq('tenant_id', tenantUuid)
         .limit(100);
       if (oppsErr) throw oppsErr;
 
@@ -928,7 +931,7 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       const { data: activities, error: actsErr } = await supa
         .from('activities')
         .select('*')
-        .eq('tenant_id', tenantRecord.tenant_id)
+        .eq('tenant_id', tenantUuid)
         .limit(100);
       if (actsErr) throw actsErr;
 
@@ -1731,6 +1734,135 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // POST /api/ai/realtime-tools/execute - Execute a CRM tool for Realtime Voice
+  // ============================================================================
+  // This endpoint is called by the frontend when the Realtime Voice session
+  // requests a tool call. It executes the tool and returns the result.
+  // Safety: Destructive tools (delete_*, bulk operations) are blocked.
+  // ============================================================================
+  const BLOCKED_REALTIME_TOOLS = [
+    'delete_account', 'delete_lead', 'delete_contact', 'delete_opportunity',
+    'delete_activity', 'delete_note', 'delete_task', 'delete_document',
+    'bulk_delete', 'archive_all', 'reset_data', 'drop_table', 'truncate',
+    'execute_sql', 'run_migration', 'delete_tenant', 'delete_user'
+  ];
+
+  router.post('/realtime-tools/execute', async (req, res) => {
+    const startTime = Date.now();
+    try {
+      const { tool_name, tool_args = {}, tenant_id, call_id } = req.body;
+
+      if (!req.user?.id) {
+        return res.status(401).json({ status: 'error', message: 'Authentication required' });
+      }
+
+      if (!tool_name) {
+        return res.status(400).json({ status: 'error', message: 'tool_name is required' });
+      }
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      // Safety check: Block destructive tools
+      if (tool_name.startsWith('delete_') || BLOCKED_REALTIME_TOOLS.includes(tool_name)) {
+        console.warn(`[AI][Realtime] Blocked destructive tool: ${tool_name}`, {
+          user: req.user?.email,
+          tenant_id
+        });
+        return res.status(403).json({
+          status: 'error',
+          message: `Tool "${tool_name}" is blocked for safety. Realtime Voice cannot execute destructive operations.`,
+          call_id
+        });
+      }
+
+      // Resolve tenant
+      const resolvedTenant = await resolveCanonicalTenant(tenant_id);
+      if (!resolvedTenant?.found || !resolvedTenant?.uuid) {
+        return res.status(404).json({ status: 'error', message: 'Tenant not found', call_id });
+      }
+      // Create tenantRecord in expected format for executeBraidTool
+      const tenantRecord = {
+        id: resolvedTenant.uuid,
+        tenant_id: resolvedTenant.slug,
+        name: resolvedTenant.slug
+      };
+
+      console.log(`[AI][Realtime] Executing tool: ${tool_name}`, {
+        user: req.user?.email,
+        tenant: tenantRecord.id,
+        args: Object.keys(tool_args),
+        call_id
+      });
+
+      // Execute the tool via Braid
+      const toolResult = await executeBraidTool(tool_name, tool_args, tenantRecord, req.user?.email);
+
+      const duration = Date.now() - startTime;
+      console.log(`[AI][Realtime] Tool ${tool_name} completed in ${duration}ms`);
+
+      // Unwrap Braid Result type: { tag: 'Ok', value: ... } -> value
+      // Or { tag: 'Err', error: ... } -> error info
+      let unwrappedResult = toolResult;
+      if (toolResult && typeof toolResult === 'object') {
+        if (toolResult.tag === 'Ok' && 'value' in toolResult) {
+          unwrappedResult = toolResult.value;
+        } else if (toolResult.tag === 'Err' && 'error' in toolResult) {
+          unwrappedResult = { error: toolResult.error };
+        }
+      }
+
+      // Debug: Log the summary counts
+      if (unwrappedResult?.summary) {
+        console.log(`[AI][Realtime] Tool ${tool_name} summary:`, JSON.stringify(unwrappedResult.summary));
+      }
+
+      // For snapshot tool, return a simplified response that's easy for the AI to read
+      // The full data arrays can be overwhelming and cause hallucinations
+      if (tool_name === 'fetch_tenant_snapshot' && unwrappedResult?.summary) {
+        const summary = unwrappedResult.summary;
+        return res.json({
+          status: 'success',
+          call_id,
+          tool_name,
+          data: {
+            message: `CRM Summary: You have exactly ${summary.leads_count} leads, ${summary.contacts_count} contacts, ${summary.accounts_count} accounts, and ${summary.opportunities_count} opportunities.`,
+            counts: {
+              leads: summary.leads_count,
+              contacts: summary.contacts_count,
+              accounts: summary.accounts_count,
+              opportunities: summary.opportunities_count,
+              activities: summary.activities_count
+            },
+            totals: {
+              revenue: summary.total_revenue,
+              forecast: summary.total_forecast
+            }
+          },
+          duration_ms: duration
+        });
+      }
+
+      return res.json({
+        status: 'success',
+        call_id,
+        tool_name,
+        data: unwrappedResult,
+        duration_ms: duration
+      });
+
+    } catch (error) {
+      console.error('[AI][Realtime] Tool execution failed:', error);
+      return res.status(500).json({
+        status: 'error',
+        message: error?.message || 'Tool execution failed',
+        call_id: req.body?.call_id
+      });
     }
   });
 

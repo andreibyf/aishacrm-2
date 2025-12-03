@@ -130,6 +130,45 @@ const getAuthToken = async () => {
   return null;
 };
 
+// Execute a CRM tool via the backend API
+const executeRealtimeTool = async (toolName, toolArgs, callId) => {
+  const tenantId = resolveActiveTenantId();
+  const authToken = await getAuthToken();
+
+  const apiUrl = resolveApiUrl('/api/ai/realtime-tools/execute');
+
+  const headers = {
+    'Content-Type': 'application/json',
+  };
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+
+  console.log(`[Realtime] Executing tool: ${toolName}`, { callId, args: toolArgs });
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: JSON.stringify({
+      tool_name: toolName,
+      tool_args: toolArgs,
+      tenant_id: tenantId,
+      call_id: callId,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'Unknown error');
+    console.error(`[Realtime] Tool execution failed: ${response.status}`, errorText);
+    throw new Error(`Tool execution failed: ${response.status}`);
+  }
+
+  const result = await response.json();
+  console.log(`[Realtime] Tool result for ${toolName}:`, result);
+  return result;
+};
+
 const shouldConsoleLogTelemetry = () => {
   try {
     if (typeof window !== 'undefined' && window?.localStorage?.getItem('ENABLE_REALTIME_TELEMETRY_LOGS') === 'true') {
@@ -652,12 +691,15 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
 
       const bindDataChannelHandlers = (channel) => {
         if (!channel) return;
+        console.log('[Realtime] Binding data channel handlers, channel state:', channel.readyState);
         channel.onopen = () => {
+          console.log('[Realtime] ✓ Data channel OPEN');
           setState((prev) => ({ ...prev, isListening: true }));
           logEvent('realtime.datachannel.open');
           logTelemetryMetric('channel_open');
         };
         channel.onerror = (err) => {
+          console.error('[Realtime] ✗ Data channel ERROR:', err);
           const details = mapErrorToDetails(err, 'datachannel');
           applyErrorState(details);
           markHandledError(err, details);
@@ -665,12 +707,15 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
           logTelemetryMetric('channel_error', { message: err?.message || 'unknown' });
         };
         channel.onclose = () => {
+          console.log('[Realtime] Data channel CLOSED');
           setState((prev) => ({ ...prev, isListening: false }));
           logEvent('realtime.datachannel.closed');
           logTelemetryMetric('channel_closed');
         };
-        channel.onmessage = (event) => {
+        channel.onmessage = async (event) => {
           const payload = typeof event.data === 'string' ? safeJsonParse(event.data) : event.data;
+          // Always log the event type for debugging
+          console.log('[Realtime] ← Message:', payload?.type || 'unknown', payload);
           logEvent('realtime.datachannel.message', {
             messageType: typeof payload === 'object' ? payload?.type || 'object' : typeof payload,
             hasText: Boolean(payload?.delta || payload?.content),
@@ -680,6 +725,77 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
             pendingResponseLatencyRef.current = null;
             logTelemetryMetric('model_latency', { latencyMs, trigger: payload?.type || payload?.role || 'unknown' });
           }
+
+          // Handle tool/function calls from the Realtime API
+          // OpenAI Realtime sends: response.function_call_arguments.done when a tool call is complete
+          if (payload?.type === 'response.function_call_arguments.done' ||
+            payload?.type === 'response.output_item.done' && payload?.item?.type === 'function_call') {
+            const functionCall = payload?.item || payload;
+            const callId = functionCall?.call_id || functionCall?.id || createMessageId();
+            const toolName = functionCall?.name || functionCall?.function?.name;
+            let toolArgs = {};
+
+            // Parse arguments - may come as string or object
+            try {
+              const argsRaw = functionCall?.arguments || functionCall?.function?.arguments || '{}';
+              toolArgs = typeof argsRaw === 'string' ? JSON.parse(argsRaw) : argsRaw;
+            } catch (parseErr) {
+              console.error('[Realtime] Failed to parse tool arguments:', parseErr);
+            }
+
+            if (toolName) {
+              console.log(`[Realtime] Tool call detected: ${toolName}`, { callId, toolArgs });
+              logEvent('realtime.tool.call_detected', { toolName, callId });
+
+              try {
+                // Execute the tool via backend API
+                const result = await executeRealtimeTool(toolName, toolArgs, callId);
+
+                // Send the result back to the Realtime session
+                // Format: conversation.item.create with type=function_call_output
+                const outputPayload = {
+                  type: 'conversation.item.create',
+                  item: {
+                    type: 'function_call_output',
+                    call_id: callId,
+                    output: JSON.stringify(result?.data || result || { status: 'success' }),
+                  },
+                };
+
+                if (channel.readyState === 'open') {
+                  channel.send(JSON.stringify(outputPayload));
+                  console.log(`[Realtime] Sent tool result for ${toolName}`);
+                  logEvent('realtime.tool.result_sent', { toolName, callId, success: true });
+
+                  // Request the model to continue generating a response
+                  const continuePayload = { type: 'response.create' };
+                  channel.send(JSON.stringify(continuePayload));
+                } else {
+                  console.warn('[Realtime] Cannot send tool result - channel not open');
+                  logEvent('realtime.tool.result_failed', { toolName, callId, reason: 'channel_closed' });
+                }
+              } catch (toolError) {
+                console.error(`[Realtime] Tool execution failed: ${toolName}`, toolError);
+                logEvent('realtime.tool.error', { toolName, callId, error: toolError?.message });
+
+                // Send error result back to the model
+                const errorPayload = {
+                  type: 'conversation.item.create',
+                  item: {
+                    type: 'function_call_output',
+                    call_id: callId,
+                    output: JSON.stringify({ error: toolError?.message || 'Tool execution failed' }),
+                  },
+                };
+
+                if (channel.readyState === 'open') {
+                  channel.send(JSON.stringify(errorPayload));
+                  channel.send(JSON.stringify({ type: 'response.create' }));
+                }
+              }
+            }
+          }
+
           emitEvent(payload);
         };
       };
@@ -701,16 +817,23 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
 
       console.log('[useRealtimeAiSHA] Calling OpenAI realtime API:', REALTIME_CALL_URL);
       console.log('[useRealtimeAiSHA] Ephemeral key length:', ephemeralKey?.length, 'starts with:', ephemeralKey?.substring(0, 20));
+      console.log('[useRealtimeAiSHA] SDP offer length:', offer.sdp?.length);
+
+      // Use original fetch to bypass the backoff wrapper which adds credentials: include
+      // Cross-origin requests to OpenAI should NOT include credentials
+      const nativeFetch = window.__originalFetch || window.fetch;
       
       let answerResponse;
       try {
-        answerResponse = await fetch(REALTIME_CALL_URL, {
+        answerResponse = await nativeFetch(REALTIME_CALL_URL, {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${ephemeralKey}`,
+            'Authorization': `Bearer ${ephemeralKey}`,
             'Content-Type': 'application/sdp',
           },
           body: offer.sdp,
+          credentials: 'omit', // Explicitly omit credentials for cross-origin
+          mode: 'cors',
         });
         console.log('[useRealtimeAiSHA] OpenAI response status:', answerResponse.status, answerResponse.statusText);
       } catch (fetchError) {

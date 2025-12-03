@@ -86,11 +86,17 @@ fn listLeads(
   limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/leads";
+  
+  // Build params - only include status if it's a real filter value
   let params = {
     tenant_id: tenant,
-    status: status,
     limit: limit
   };
+  
+  // Add status filter only if not "all", "any", or empty
+  if status != "all" && status != "any" && status != "" && status != null {
+    params.status = status;
+  }
   
   let response = http.get(url, { params: params });
   

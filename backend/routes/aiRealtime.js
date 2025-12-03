@@ -1,12 +1,54 @@
 import express from 'express';
-import { BRAID_SYSTEM_PROMPT } from '../lib/braidIntegration-v2.js';
+import { BRAID_SYSTEM_PROMPT, generateToolSchemas } from '../lib/braidIntegration-v2.js';
 
 const REALTIME_URL = 'https://api.openai.com/v1/realtime/client_secrets';
 const DEFAULT_REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-12-17';
 const DEFAULT_REALTIME_VOICE = process.env.OPENAI_REALTIME_VOICE || 'marin';
 const REALTIME_MODULE_NAME = 'Realtime Voice';
 const REALTIME_SOURCE = 'AI Realtime Tokens';
-const DEFAULT_REALTIME_INSTRUCTIONS = `${BRAID_SYSTEM_PROMPT}\n\nAlways operate in read_only or propose_actions mode. Never execute destructive CRM actions, deletes, or schema changes.`;
+const DEFAULT_REALTIME_INSTRUCTIONS = `${BRAID_SYSTEM_PROMPT}\n\n` +
+  [
+    'You are running in Realtime Voice mode for AiSHA CRM.',
+    '',
+    'When the user asks about any CRM data (accounts, contacts, leads, opportunities, activities, metrics, pipeline,',
+    'revenue, counts, lists, tenant configuration, or anything stored in the database), you MUST:',
+    '1) Choose the most appropriate CRM tool from the available tools.',
+    '2) Call that tool instead of guessing, hallucinating numbers, or saying there is a generic technical issue.',
+    '3) Wait for the tool result, then summarize it clearly in natural language for the user.',
+    '',
+    'Only answer from your own knowledge when the question is clearly NOT about CRM data (for example, general small talk',
+    'or questions about how to use the system).',
+    '',
+    'Never speak or send raw JSON like {"stage":"active"} or {"entity":"opportunities","filters":{...}} as your final answer.',
+    'Treat any JSON-shaped content as internal tool arguments only: call the appropriate tool with those arguments, wait for',
+    'the tool result, and then answer in natural language based solely on that result.',
+    '',
+    'Always operate in read_only or propose_actions mode.',
+    'Never execute destructive CRM actions, deletes, bulk wipes, or schema changes.',
+  ].join(' ');
+
+// Tools that are blocked from Realtime Voice for safety
+const BLOCKED_REALTIME_TOOLS = [
+  'delete_account', 'delete_lead', 'delete_contact', 'delete_opportunity',
+  'delete_activity', 'delete_note', 'delete_task', 'delete_document',
+  'bulk_delete', 'archive_all', 'reset_data', 'drop_table', 'truncate',
+  'execute_sql', 'run_migration', 'delete_tenant', 'delete_user'
+];
+
+/**
+ * Filter tool schemas for Realtime Voice safety.
+ * Removes destructive tools (delete_*, schema changes, bulk operations).
+ */
+const filterRealtimeTools = (tools) => {
+  if (!Array.isArray(tools)) return [];
+  return tools.filter(tool => {
+    const name = tool.name || tool.function?.name || '';
+    // Block any tool starting with delete_ or in the explicit blocklist
+    if (name.startsWith('delete_')) return false;
+    if (BLOCKED_REALTIME_TOOLS.includes(name)) return false;
+    return true;
+  });
+};
 
 const extractClientSecret = (payload) => {
   if (!payload) return { value: null, expires_at: null };
@@ -142,6 +184,31 @@ export default function createAiRealtimeRoutes(pgPool) {
           },
         },
       };
+
+      // Generate and filter tools for Realtime Voice
+      try {
+        const allTools = await generateToolSchemas();
+        console.log(`[AI][Realtime] generateToolSchemas returned ${allTools?.length || 0} tools`);
+        const safeTools = filterRealtimeTools(allTools || []);
+        console.log(`[AI][Realtime] After filtering: ${safeTools.length} safe tools`);
+        if (safeTools.length > 0) {
+          // Convert to OpenAI Realtime format (function calling)
+          sessionPayload.session.tools = safeTools.map(tool => ({
+            type: 'function',
+            name: tool.function?.name || tool.name,
+            description: tool.function?.description || tool.description || '',
+            parameters: tool.function?.parameters || tool.parameters || { type: 'object', properties: {} }
+          }));
+          sessionPayload.session.tool_choice = 'auto';
+          console.log(`[AI][Realtime] Added ${safeTools.length} tools to session payload`);
+          console.log(`[AI][Realtime] Tool names:`, safeTools.slice(0, 5).map(t => t.function?.name || t.name));
+        }
+      } catch (toolError) {
+        console.warn('[AI][Realtime] Failed to generate tool schemas, proceeding without tools:', toolError?.message);
+        console.error('[AI][Realtime] Tool error stack:', toolError?.stack);
+      }
+
+      console.log('[AI][Realtime] Session payload (truncated):', JSON.stringify(sessionPayload).substring(0, 1000));
 
       const response = await fetch(REALTIME_URL, {
         method: 'POST',

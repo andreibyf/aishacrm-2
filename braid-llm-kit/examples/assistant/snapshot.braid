@@ -5,8 +5,12 @@ import { Result, Snapshot, CRMError } from "../spec/types.braid"
 
 fn fetchSnapshot(tenant: String, scope: String, limit: Number) -> Result<Snapshot, CRMError> !net, clock {
   let url = "/api/ai/snapshot-internal";
-  // Tenant isolation handled via x-tenant-id header injected by runtime; no need to pass params
-  let response = http.get(url, {});
+  let params = {
+    tenant_id: tenant,
+    scope: scope,
+    limit: limit
+  };
+  let response = http.get(url, { params: params });
   // Explicitly unwrap and rewrap to ensure value propagates
   return match response {
     Ok{value} => Ok(value),
