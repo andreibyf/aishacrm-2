@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -38,49 +38,60 @@ import {
 } from "lucide-react";
 import { User as UserEntity } from "@/api/entities";
 
-// User & Profile
-import UserInfo from "../components/settings/UserInfo";
-import BrandingSettings from "../components/settings/BrandingSettings";
-import TimezoneSettings from "../components/settings/TimezoneSettings";
+// Lazy loading wrapper for settings sub-components
+const SettingsLoader = ({ children }) => (
+  <Suspense fallback={
+    <div className="flex items-center justify-center p-8">
+      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      <span className="ml-2 text-muted-foreground">Loading...</span>
+    </div>
+  }>
+    {children}
+  </Suspense>
+);
 
-// Access & Security
-import SecuritySettings from "../components/settings/SecuritySettings";
-import ApiKeyManager from "../components/settings/ApiKeyManager";
-import RateLimitManager from "../components/settings/RateLimitManager";
+// User & Profile - lazy loaded
+const UserInfo = lazy(() => import("../components/settings/UserInfo"));
+const BrandingSettings = lazy(() => import("../components/settings/BrandingSettings"));
+const TimezoneSettings = lazy(() => import("../components/settings/TimezoneSettings"));
 
-// Team Management
-import EnhancedUserManagement from "../components/settings/EnhancedUserManagement";
-// import InviteUserDialog from "../components/settings/InviteUserDialog"; // InviteUserDialog is typically used within EnhancedUserManagement, not as a standalone tab.
+// Access & Security - lazy loaded
+const SecuritySettings = lazy(() => import("../components/settings/SecuritySettings"));
+const ApiKeyManager = lazy(() => import("../components/settings/ApiKeyManager"));
+const RateLimitManager = lazy(() => import("../components/settings/RateLimitManager"));
 
-// Client Management
-import TenantManagement from "../components/settings/TenantManagement";
-import ClientOffboarding from "../components/settings/ClientOffboarding"; // New component for tenant deletion
+// Team Management - lazy loaded
+const EnhancedUserManagement = lazy(() => import("../components/settings/EnhancedUserManagement"));
 
-// Integrations & API
-import IntegrationSettings from "../components/settings/IntegrationSettings"; // Global integrations
-import TenantIntegrationSettings from "../components/settings/TenantIntegrationSettings"; // Tenant-specific integrations
+// Client Management - lazy loaded
+const TenantManagement = lazy(() => import("../components/settings/TenantManagement"));
+const ClientOffboarding = lazy(() => import("../components/settings/ClientOffboarding"));
 
-// System Configuration
-import ModuleManager from "../components/shared/ModuleManager";
-import BillingSettings from "../components/settings/BillingSettings";
-import CronJobManager from "../components/settings/CronJobManager";
-import SystemAnnouncements from "../components/settings/SystemAnnouncements";
-import SystemLogsViewer from "../components/settings/SystemLogsViewer"; // NEW: System Logs Viewer
-import ApiHealthDashboard from "../components/settings/ApiHealthDashboard"; // NEW: API Health Monitor
+// Integrations & API - lazy loaded
+const IntegrationSettings = lazy(() => import("../components/settings/IntegrationSettings"));
+const TenantIntegrationSettings = lazy(() => import("../components/settings/TenantIntegrationSettings"));
 
-// Data Management
-import DataConsistencyManager from "../components/settings/DataConsistencyManager";
-import TestDataManager from "../components/settings/TestDataManager";
+// System Configuration - lazy loaded
+const ModuleManager = lazy(() => import("../components/shared/ModuleManager"));
+const BillingSettings = lazy(() => import("../components/settings/BillingSettings"));
+const CronJobManager = lazy(() => import("../components/settings/CronJobManager"));
+const SystemAnnouncements = lazy(() => import("../components/settings/SystemAnnouncements"));
+const SystemLogsViewer = lazy(() => import("../components/settings/SystemLogsViewer"));
+const ApiHealthDashboard = lazy(() => import("../components/settings/ApiHealthDashboard"));
 
-// Monitoring & Health
-import InternalPerformanceDashboard from "../components/settings/InternalPerformanceDashboard";
-import SyncHealthMonitor from "../components/settings/SyncHealthMonitor";
-import MCPServerMonitor from "../components/settings/MCPServerMonitor";
-import SecurityMonitor from "../components/settings/SecurityMonitor";
-import PerformanceMonitor from '../components/settings/PerformanceMonitor';
-import SystemHealthDashboard from "../components/settings/SystemHealthDashboard"; // NEW: SystemHealthDashboard
-import QaConsole from "../components/settings/QaConsole"; // NEW: QA Console (E2E triggers)
-import TenantResolveCacheMonitor from "../components/settings/TenantResolveCacheMonitor"; // NEW: Cache Monitor
+// Data Management - lazy loaded
+const DataConsistencyManager = lazy(() => import("../components/settings/DataConsistencyManager"));
+const TestDataManager = lazy(() => import("../components/settings/TestDataManager"));
+
+// Monitoring & Health - lazy loaded
+const InternalPerformanceDashboard = lazy(() => import("../components/settings/InternalPerformanceDashboard"));
+const SyncHealthMonitor = lazy(() => import("../components/settings/SyncHealthMonitor"));
+const MCPServerMonitor = lazy(() => import("../components/settings/MCPServerMonitor"));
+const SecurityMonitor = lazy(() => import("../components/settings/SecurityMonitor"));
+const PerformanceMonitor = lazy(() => import('../components/settings/PerformanceMonitor'));
+const SystemHealthDashboard = lazy(() => import("../components/settings/SystemHealthDashboard"));
+const QaConsole = lazy(() => import("../components/settings/QaConsole"));
+const TenantResolveCacheMonitor = lazy(() => import("../components/settings/TenantResolveCacheMonitor"));
 
 export default function SettingsPage() { // Renamed from Settings to SettingsPage as per outline
   const [currentUser, setCurrentUser] = useState(null);
@@ -240,6 +251,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
             </TabsList>
 
             {/* TabsContent is now flat, conditional rendering within a single div */}
+            <SettingsLoader>
             <div className="space-y-6 m-0">
               {/* User & Profile */}
               {activeTab === 'profile' && (
@@ -755,6 +767,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                 </Card>
               )}
             </div>
+            </SettingsLoader>
           </Tabs>
         </div>
       </div>
