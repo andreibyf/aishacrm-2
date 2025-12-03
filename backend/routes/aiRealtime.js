@@ -177,7 +177,16 @@ export default function createAiRealtimeRoutes(pgPool) {
       }
 
       const payload = await response.json();
+      console.log('[AI][Realtime] OpenAI response payload keys:', Object.keys(payload));
+      console.log('[AI][Realtime] OpenAI response:', JSON.stringify(payload).substring(0, 500));
+      
       const secret = extractClientSecret(payload);
+      console.log('[AI][Realtime] Extracted secret:', { 
+        hasValue: !!secret.value, 
+        valueLength: secret.value?.length,
+        valuePreview: secret.value?.substring(0, 30),
+        expires_at: secret.expires_at 
+      });
 
       if (!secret.value) {
         console.error('[AI][Realtime] Token response missing value', payload);

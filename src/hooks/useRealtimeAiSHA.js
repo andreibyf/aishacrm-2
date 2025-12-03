@@ -577,7 +577,9 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
       }
 
       const tokenPayload = await tokenResponse.json();
+      console.log('[useRealtimeAiSHA] Token payload:', JSON.stringify(tokenPayload));
       const ephemeralKey = tokenPayload?.value || tokenPayload?.data?.value;
+      console.log('[useRealtimeAiSHA] Full ephemeral key:', ephemeralKey);
       if (!ephemeralKey) {
         const details = createErrorDetails('token_missing');
         applyErrorState(details);
