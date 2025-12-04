@@ -81,6 +81,7 @@ import { clearChat } from "../components/ai/chatUtils";
 import AiSidebar from "@/components/ai/AiSidebar";
 import AiAssistantLauncher from "@/components/ai/AiAssistantLauncher.jsx";
 import { AiSidebarProvider, useAiSidebarState } from "@/components/ai/useAiSidebarState.jsx";
+import SuggestionBadge from "@/components/ai/SuggestionBadge";
 import CronHeartbeat from "../components/shared/CronHeartbeat";
 import UserPresenceHeartbeat from "../components/shared/UserPresenceHeartbeat";
 import GlobalDomPatches from "../components/shared/GlobalDomPatches";
@@ -3513,6 +3514,11 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 selectedTenantId={selectedTenantId}
               />
             )}
+
+            {/* AI Suggestions Badge - Phase 3 Autonomous Operations */}
+            {showNotificationsWidget && selectedTenantId ? (
+              <SuggestionBadge tenantId={selectedTenantId} />
+            ) : null}
 
             {/* DEFERRED: mount notifications after initial load to reduce rate-limit hits */}
             {showNotificationsWidget ? <NotificationPanel user={user} /> : null}

@@ -15,6 +15,7 @@
     "test:integration": "node --test --test-reporter tap __tests__/integration/*.test.js",
     "test:validation": "node --test --test-reporter tap __tests__/validation/*.test.js",
     "test:coverage": "c8 --reporter=text-summary --reporter=lcov node --test --test-reporter tap --experimental-test-isolation=none __tests__/**/*.test.js",
+    "verify:phase3": "node scripts/run_phase3_verification.js",
     "seed": "node scripts/run_seed.js",
     "worker:email": "node workers/emailWorker.js",
     "verify:rls": "node verify-rls.js",

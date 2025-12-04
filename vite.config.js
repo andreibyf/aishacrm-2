@@ -67,48 +67,29 @@ export default defineConfig({
         entryFileNames: 'assets/entry-[hash].js',
         assetFileNames: 'assets/[name]-[hash][extname]',
         // Split vendor libraries into separate chunks for better caching
+        // IMPORTANT: Only split truly independent libraries to avoid circular dependency issues
         manualChunks: (id) => {
           // React core - rarely changes, cache long-term
+          // Include scheduler as it's tightly coupled with react-dom
           if (id.includes('node_modules/react/') || 
               id.includes('node_modules/react-dom/') ||
               id.includes('node_modules/scheduler/')) {
             return 'react-core';
           }
-          // React Router - separate chunk
+          // React Router - separate chunk (independent)
           if (id.includes('node_modules/react-router')) {
             return 'react-router';
           }
-          // Recharts - large charting library, load on demand
-          if (id.includes('node_modules/recharts') || 
-              id.includes('node_modules/d3-')) {
-            return 'charts';
-          }
-          // Radix UI components
-          if (id.includes('node_modules/@radix-ui')) {
-            return 'radix-ui';
-          }
-          // Date utilities
-          if (id.includes('node_modules/date-fns')) {
-            return 'date-utils';
-          }
-          // Supabase client
+          // Supabase client - independent networking library
           if (id.includes('node_modules/@supabase')) {
             return 'supabase';
           }
-          // Lucide icons
-          if (id.includes('node_modules/lucide-react')) {
-            return 'icons';
+          // Date utilities - independent
+          if (id.includes('node_modules/date-fns')) {
+            return 'date-utils';
           }
-          // TanStack Query (used for API caching)
-          if (id.includes('node_modules/@tanstack/react-query')) {
-            return 'tanstack';
-          }
-          // Tailwind utilities
-          if (id.includes('node_modules/tailwind-merge') || 
-              id.includes('node_modules/class-variance-authority') ||
-              id.includes('node_modules/clsx')) {
-            return 'tw-utils';
-          }
+          // Let Vite/Rollup handle all other chunking automatically
+          // This avoids circular dependency issues with recharts/d3/radix
         }
       }
     }

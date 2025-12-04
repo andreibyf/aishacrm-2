@@ -87,7 +87,7 @@ services:
     environment:
       - NODE_ENV=development
       - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
-      - PORT=${PORT:-3001}
+      - PORT=3001
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4000}
       - PGSSLMODE=require
       - REDIS_URL=redis://redis-memory:6379
@@ -96,6 +96,7 @@ services:
       - TENANT_RESOLVE_CACHE_TTL_MS=${TENANT_RESOLVE_CACHE_TTL_MS:-300000}
       - BRAID_MCP_URL=http://mcp:8000
       - MCP_NODE_HEALTH_URL=http://mcp:8000/health
+      - AI_TRIGGERS_WORKER_ENABLED=${AI_TRIGGERS_WORKER_ENABLED:-false}
     dns:
       - 8.8.8.8
       - 8.8.4.4

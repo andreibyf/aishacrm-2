@@ -16,6 +16,10 @@ import { initServices } from "./startup/initServices.js";
 import { initMiddleware } from "./startup/initMiddleware.js";
 import workflowQueue from "./services/workflowQueue.js";
 
+// Import background workers
+import { startCampaignWorker } from "./lib/campaignWorker.js";
+import { startAiTriggersWorker } from "./lib/aiTriggersWorker.js";
+
 // Load environment variables
 // Try .env.local first (for local development), then fall back to .env
 dotenv.config({ path: ".env.local" });
@@ -217,6 +221,7 @@ import createMemoryRoutes from "./routes/memory.js";
 import createAuthRoutes from "./routes/auth.js";
 import createGitHubIssuesRoutes from "./routes/github-issues.js";
 import createSupabaseProxyRoutes from "./routes/supabaseProxy.js";
+import createSuggestionsRoutes from "./routes/suggestions.js";
 
 // Use the pgPool directly; per-request DB time is measured inside the DB adapter
 const measuredPgPool = pgPool;
@@ -279,6 +284,8 @@ app.use("/api/auth", createAuthRoutes(measuredPgPool));
 app.use("/api/github-issues", createGitHubIssuesRoutes);
 // Supabase Auth proxy (CORS-controlled access to /auth/v1/user)
 app.use("/api/supabase-proxy", createSupabaseProxyRoutes());
+// AI Suggestions routes (Phase 3 Autonomous Operations)
+app.use("/api/ai/suggestions", createSuggestionsRoutes(measuredPgPool));
 
 // 404 handler
 app.use((req, res) => {
@@ -579,6 +586,14 @@ server.listen(PORT, async () => {
     startCampaignWorker(pgPool, workerInterval);
   } else {
     console.log('[CampaignWorker] Disabled (set CAMPAIGN_WORKER_ENABLED=true to enable)');
+  }
+
+  // Start AI triggers worker if enabled (Phase 3 Autonomous Operations)
+  if (process.env.AI_TRIGGERS_WORKER_ENABLED === 'true' && pgPool) {
+    const triggersInterval = parseInt(process.env.AI_TRIGGERS_WORKER_INTERVAL_MS || '60000', 10);
+    startAiTriggersWorker(pgPool, triggersInterval);
+  } else {
+    console.log('[AiTriggersWorker] Disabled (set AI_TRIGGERS_WORKER_ENABLED=true to enable)');
   }
 
   // Keep-alive interval to prevent process from exiting
