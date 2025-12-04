@@ -1034,7 +1034,7 @@ export default function LeadsPage() {
 
   return (
     <TooltipProvider>
-      <div className="min-h-screen bg-slate-900 p-4 sm:p-6">
+      <div className="space-y-6">
         <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-800 border-slate-700 text-slate-200">
             <DialogHeader>
@@ -1102,10 +1102,10 @@ export default function LeadsPage() {
           user={user}
         />
 
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-100 mb-2">Leads</h1>
-            <p className="text-slate-400">
+            <h1 className="text-3xl font-bold text-slate-100">Leads</h1>
+            <p className="text-slate-400 mt-1">
               Track and manage your sales leads and prospects.
             </p>
           </div>
@@ -1219,7 +1219,7 @@ export default function LeadsPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-7 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-7 gap-4">
           {[
             {
               label: "Total Leads",
@@ -1297,7 +1297,7 @@ export default function LeadsPage() {
           ))}
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-3 w-5 h-5 text-slate-500" />
             <Input
@@ -1369,7 +1369,7 @@ export default function LeadsPage() {
         {/* Select All Banner */}
         {selectedLeads.size === leads.length && leads.length > 0 &&
           !selectAllMode && totalItems > leads.length && (
-          <div className="mb-4 bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
+          <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-blue-400" />
               <span className="text-blue-200">
@@ -1395,7 +1395,7 @@ export default function LeadsPage() {
         )}
 
         {selectAllMode && (
-          <div className="mb-4 bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
+          <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-blue-400" />
               <span className="text-blue-200 font-semibold">
