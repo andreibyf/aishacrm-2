@@ -190,7 +190,7 @@ export default function TenantSwitcher({ user }) {
           onValueChange={handleTenantChange}
           disabled={loading}
         >
-          <SelectTrigger className="w-[280px] h-8 text-xs bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
+          <SelectTrigger className="w-[280px] h-10 text-xs bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
             <SelectValue
               placeholder={loading
                 ? "Loading clients..."
@@ -234,7 +234,7 @@ export default function TenantSwitcher({ user }) {
           onValueChange={handleTenantChange}
           disabled={loading}
         >
-          <SelectTrigger className="w-36 h-8 text-xs bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
+          <SelectTrigger className="w-36 h-10 text-xs bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
             <SelectValue
               placeholder={loading ? "Loading clients..." : "Select client..."}
             />

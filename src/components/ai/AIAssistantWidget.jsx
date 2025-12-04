@@ -9,6 +9,8 @@ import { generateDailyBriefing } from "@/api/functions";
 import { generateElevenLabsSpeech } from "@/api/functions";
 import { processChatCommand } from "@/api/functions";
 
+const EXEC_AVATAR_SRC = '/assets/aisha-executive-portrait.jpg';
+
 export default function AIAssistantWidget({ user }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -762,7 +764,15 @@ export default function AIAssistantWidget({ user }) {
           <CardHeader className="text-white rounded-t-lg p-4 bg-gradient-to-r from-purple-600 to-blue-600">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg font-semibold">
-                🤖 Ai-SHA Assistant
+                <span className="flex items-center gap-2">
+                  <img
+                    src={EXEC_AVATAR_SRC}
+                    alt="AiSHA assistant"
+                    className="h-8 w-8 rounded-xl object-cover ring-2 ring-white/40"
+                    loading="lazy"
+                  />
+                  <span>AiSHA Executive Assistant</span>
+                </span>
               </CardTitle>
               <div className="flex items-center gap-2">
                 {isSpeaking && <Badge variant="secondary" className="text-xs">Speaking</Badge>}

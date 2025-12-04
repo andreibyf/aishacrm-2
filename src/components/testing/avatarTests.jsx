@@ -316,11 +316,11 @@ export const avatarTests = {
             throw new Error('Avatar image element not found');
           }
 
-          if (!imgElement.src.includes('Ai-SHA-logo-2.png')) {
+          if (!imgElement.src.includes('aisha-executive-portrait.jpg')) {
             throw new Error('Incorrect avatar image source');
           }
 
-          if (imgElement.alt !== 'AI Assistant') {
+          if (imgElement.alt !== 'AiSHA executive assistant') {
             throw new Error('Incorrect avatar alt text');
           }
 

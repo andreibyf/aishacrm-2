@@ -159,7 +159,6 @@ export default function createOpportunityRoutes(_pgPool) {
     'lead_id',
     'lead_source',
     'type',
-    'competitor',
     'tags',
     'amount',
     'stage',
@@ -455,7 +454,6 @@ export default function createOpportunityRoutes(_pgPool) {
         lead_id,
         lead_source,
         type: opportunityType,
-        competitor,
         tags,
         ...otherFields
       } = req.body || {};
@@ -471,6 +469,9 @@ export default function createOpportunityRoutes(_pgPool) {
       if (description !== undefined && description !== null) metadataExtras.description = description;
       if (expected_revenue !== undefined && expected_revenue !== null) metadataExtras.expected_revenue = expected_revenue;
       if (next_step !== undefined && next_step !== null) metadataExtras.next_step = next_step;
+      if (lead_id !== undefined && lead_id !== null) metadataExtras.lead_id = lead_id;
+      if (lead_source !== undefined && lead_source !== null) metadataExtras.lead_source = lead_source;
+      if (opportunityType !== undefined && opportunityType !== null) metadataExtras.type = opportunityType;
       const combinedMetadata = sanitizeMetadataPayload(metadata, otherFields, metadataExtras);
 
       const nowIso = new Date().toISOString();
@@ -492,10 +493,6 @@ export default function createOpportunityRoutes(_pgPool) {
       opportunityPayload.amount = parsedAmount !== null ? parsedAmount : 0;
       opportunityPayload.probability = parsedProbability !== null ? parsedProbability : 0;
       assignStringField(opportunityPayload, 'close_date', close_date);
-      assignStringField(opportunityPayload, 'lead_id', lead_id);
-      assignStringField(opportunityPayload, 'lead_source', lead_source);
-      assignStringField(opportunityPayload, 'type', opportunityType);
-      assignStringField(opportunityPayload, 'competitor', competitor);
       assignTagsField(opportunityPayload, tags);
 
       const { data, error } = await supabase
@@ -539,7 +536,6 @@ export default function createOpportunityRoutes(_pgPool) {
         lead_id,
         lead_source,
         type: opportunityType,
-        competitor,
         tags,
         ...otherFields
       } = req.body || {};
@@ -569,6 +565,9 @@ export default function createOpportunityRoutes(_pgPool) {
       if (description !== undefined) metadataExtras.description = description;
       if (expected_revenue !== undefined) metadataExtras.expected_revenue = expected_revenue;
       if (next_step !== undefined) metadataExtras.next_step = next_step;
+      if (lead_id !== undefined) metadataExtras.lead_id = lead_id;
+      if (lead_source !== undefined) metadataExtras.lead_source = lead_source;
+      if (opportunityType !== undefined) metadataExtras.type = opportunityType;
       const updatedMetadata = sanitizeMetadataPayload(before?.metadata, metadata, otherFields, metadataExtras);
       const normalizedStage = typeof stage === 'string' ? stage.trim().toLowerCase() : null;
       
@@ -586,10 +585,6 @@ export default function createOpportunityRoutes(_pgPool) {
         payload.probability = clamped !== null ? clamped : null;
       }
       assignStringField(payload, 'close_date', close_date);
-      assignStringField(payload, 'lead_id', lead_id);
-      assignStringField(payload, 'lead_source', lead_source);
-      assignStringField(payload, 'type', opportunityType);
-      assignStringField(payload, 'competitor', competitor);
       assignTagsField(payload, tags);
 
       const { data, error } = await supabase

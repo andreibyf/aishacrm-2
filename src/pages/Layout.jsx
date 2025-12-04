@@ -3466,7 +3466,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       </aside>
 
       <div className="lg:pl-64">
-        <header data-testid="app-header" className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-slate-800 bg-slate-900 px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
+        <header data-testid="app-header" className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-x-4 border-b border-slate-800 bg-slate-900 px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
           {/* Removed AI Command brain button */}
           {/* THEME TOGGLE BUTTON */}
           <TooltipProvider>
@@ -3495,25 +3495,30 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
           {/* NEW: Clear prior chat button */}
           <ClearChatButton />
 
-          <div className="flex flex-1 items-center justify-end gap-x-4 lg:gap-x-6">
-            <AiAssistantLauncher
-              isOpen={isAiSidebarOpen}
-              onToggle={handleAssistantLauncherClick}
-              isRealtimeActive={Boolean(isRealtimeSidebarMode)}
-              realtimeModuleEnabled={realtimeVoiceModuleEnabled}
-            />
-            {/* SystemStatusIndicator removed from here, now at AppLayout root */}
-            {/* Only superadmins can switch tenants - admins are locked to their assigned tenant */}
-            {user?.role === "superadmin" &&
-              <TenantSwitcher user={user} />}
-            {/* REMOVED: TenantBrandingChip debug component */}
-
-            {showEmployeeScope && (
-              <EmployeeScopeFilter
-                user={user}
-                selectedTenantId={selectedTenantId}
+          <div className="flex flex-1 items-center justify-end gap-3 lg:gap-4">
+            <div className="flex max-w-[520px] items-center justify-center gap-2 rounded-2xl border border-white/10 bg-slate-900/70 px-2.5 py-1 shadow-inner shadow-slate-950/30">
+              <AiAssistantLauncher
+                isOpen={isAiSidebarOpen}
+                onToggle={handleAssistantLauncherClick}
+                isRealtimeActive={Boolean(isRealtimeSidebarMode)}
+                realtimeModuleEnabled={realtimeVoiceModuleEnabled}
               />
-            )}
+              {/* Only superadmins can switch tenants - admins are locked to their assigned tenant */}
+              {user?.role === "superadmin" && (
+                <div className="flex items-center">
+                  <TenantSwitcher user={user} />
+                </div>
+              )}
+
+              {showEmployeeScope && (
+                <div className="flex items-center">
+                  <EmployeeScopeFilter
+                    user={user}
+                    selectedTenantId={selectedTenantId}
+                  />
+                </div>
+              )}
+            </div>
 
             {/* AI Suggestions Badge - Phase 3 Autonomous Operations */}
             {showNotificationsWidget && selectedTenantId ? (

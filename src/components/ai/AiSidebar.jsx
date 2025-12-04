@@ -18,6 +18,8 @@ import { toast } from 'sonner';
 import { useUser } from '@/components/shared/useUser.js';
 import { isLikelyVoiceGarble, sanitizeMessageText } from '@/lib/ambiguityResolver';
 
+const AISHA_EXECUTIVE_PORTRAIT = '/assets/aisha-executive-portrait.jpg';
+
 const QUICK_ACTIONS = [
   { label: 'Show leads', prompt: 'Show me all open leads updated today' },
   { label: 'View pipeline', prompt: 'Give me the pipeline forecast for this month' },
@@ -182,7 +184,40 @@ const isTelemetryDebugEnabled = () => {
   return false;
 };
 
-function MessageBubble({ message }) {
+function MessageBubble({ message, isWelcomeCard = false }) {
+  if (isWelcomeCard) {
+    return (
+      <div className="mb-3 aisha-message assistant">
+        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-200">
+              <Sparkles className="h-4 w-4" />
+            </span>
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">AiSHA Assistant</p>
+              <div className="prose text-sm max-w-none text-slate-700 dark:text-slate-100">
+                <ReactMarkdown
+                  components={{
+                    p: ({ children }) => <p className="mb-2 last:mb-0 break-words">{children}</p>,
+                    ul: ({ children }) => <ul className="mb-2 last:mb-0 ml-4 list-disc">{children}</ul>,
+                    ol: ({ children }) => <ol className="mb-2 last:mb-0 ml-4 list-decimal">{children}</ol>,
+                    li: ({ children }) => <li className="mb-1 leading-6">{children}</li>,
+                    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                    code: ({ children }) => (
+                      <code className="rounded bg-slate-800/80 px-1 py-0.5 text-xs text-slate-100">{children}</code>
+                    )
+                  }}
+                >
+                  {sanitizeMessageText(message.content)}
+                </ReactMarkdown>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const isUser = message.role === 'user';
   const isError = Boolean(message.error);
   const isDark = typeof document !== 'undefined' && document.body?.classList?.contains('theme-dark');
@@ -299,6 +334,15 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   const tenantId = user?.tenant_id || telemetryContext.tenantId;
   const userId = user?.email || telemetryContext.userId;
   const canUseConversationalForms = Boolean(tenantId);
+  const tenantName = user?.branding_settings?.companyName || telemetryContext.tenantName || user?.display_name;
+  const tenantDisplayName = tenantName || 'No tenant selected';
+  const tenantBadgeSubtitle = tenantId
+    ? `Tenant ID • ${tenantId.slice(0, 8)}${tenantId.length > 8 ? '…' : ''}`
+    : 'Select a tenant to unlock guided forms and insights.';
+  const tenantRoleLabel = user?.role
+    ? user.role.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+    : 'Guest';
+  const hasTenantSelected = Boolean(tenantId);
   const realtimeHadLiveRef = useRef(false);
 
   useEffect(() => {
@@ -478,6 +522,15 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
 
   const isRealtimeActive = isRealtimeEnabled && (realtimeLiveFlag || isRealtimeConnected);
   const isRealtimeIndicatorActive = isRealtimeEnabled && (realtimeLiveFlag || (isRealtimeConnected && isRealtimeListening));
+  const assistantStatusHeadline = isRealtimeFeatureAvailable
+    ? (isRealtimeActive ? 'Live voice + chat' : 'Chat ready • Voice on standby')
+    : 'Chat-only assistant';
+  const assistantStatusSubcopy = isRealtimeFeatureAvailable
+    ? 'Realtime insights with enterprise guardrails.'
+    : 'Voice channel disabled by current tenant policies.';
+  const assistantStatusDotClass = isRealtimeFeatureAvailable
+    ? (isRealtimeActive ? 'bg-emerald-400' : 'bg-sky-400')
+    : 'bg-amber-500';
 
   // enableRealtime now accepts options: { startMuted: boolean }
   // - startMuted: true = PTT mode (mic starts muted, user holds button to speak)
@@ -1068,10 +1121,10 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
       >
         <style>{`
         .aisha-sidebar { position: fixed; top: 0; right: 0; height: 100%; width: 0; overflow: hidden; z-index: 2000; transition: width 0.25s ease; }
-        .aisha-sidebar.open { width: 480px; }
-        .aisha-sidebar .sidebar-panel { position: absolute; right: 0; top: 0; width: 480px; height: 100%; display: flex; flex-direction: column; background: #ffffff; color: #0f172a; border-left: 1px solid rgba(15,23,42,0.08); box-shadow: -12px 0 35px rgba(15,23,42,0.12); }
+        .aisha-sidebar.open { width: 540px; }
+        .aisha-sidebar .sidebar-panel { position: absolute; right: 0; top: 0; width: 540px; height: 100%; display: flex; flex-direction: column; background: #ffffff; color: #0f172a; border-left: 1px solid rgba(15,23,42,0.08); box-shadow: -12px 0 35px rgba(15,23,42,0.12); }
         .theme-dark .aisha-sidebar .sidebar-panel { background: #0b0f19; color: #f8fafc; border-left: 1px solid rgba(255,255,255,0.05); box-shadow: -12px 0 35px rgba(0,0,0,0.65); }
-        .aisha-sidebar .sidebar-backdrop { position: fixed; top: 0; left: 0; width: calc(100% - 480px); height: 100%; background: rgba(15,23,42,0.2); backdrop-filter: blur(2px); }
+        .aisha-sidebar .sidebar-backdrop { position: fixed; top: 0; left: 0; width: calc(100% - 540px); height: 100%; background: rgba(15,23,42,0.2); backdrop-filter: blur(2px); }
         .theme-dark .aisha-sidebar .sidebar-backdrop { background: rgba(2,6,23,0.35); }
         .aisha-message.assistant .prose, .aisha-message.assistant .prose p, .aisha-message.assistant .prose li, .aisha-message.assistant .prose code, .aisha-message.assistant .prose strong, .aisha-message.assistant .prose em { color: #111827; }
         .theme-dark .aisha-message.assistant .prose, .theme-dark .aisha-message.assistant .prose p, .theme-dark .aisha-message.assistant .prose li, .theme-dark .aisha-message.assistant .prose code, .theme-dark .aisha-message.assistant .prose strong, .theme-dark .aisha-message.assistant .prose em { color: #f8fafc; }
@@ -1118,88 +1171,99 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4">
-          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2 min-h-[24px]">
-                {isRealtimeFeatureAvailable && isRealtimeIndicatorActive && <RealtimeIndicator active />}
-              {isRealtimeInitializing && (
-                <span className="text-[11px] text-slate-500 dark:text-slate-400">Connecting…</span>
-              )}
-              {!isRealtimeSupported && (
-                <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Realtime voice requires a supported browser.
-                </span>
-              )}
-            </div>
-            {isRealtimeFeatureAvailable ? (
-              <Button
-                type="button"
-                variant={isRealtimeActive ? 'destructive' : 'secondary'}
-                onClick={() => void handleRealtimeToggle()}
-                disabled={!isRealtimeSupported || isRealtimeInitializing}
-              >
-                {isRealtimeActive ? 'Disable Realtime Voice' : 'Realtime Voice'}
-              </Button>
-            ) : (
-              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                Realtime Voice disabled by administrator
-              </span>
-            )}
-          </div>
-          {!isRealtimeFeatureAvailable && (
-            <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-800/70 dark:bg-slate-900/40 dark:text-slate-200">
-              Voice streaming is currently turned off for this tenant. Visit Settings → Modules to enable the Realtime Voice module.
-            </div>
-          )}
-          {(realtimeError || realtimeErrorDetails) && (
-            <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="mt-0.5 h-4 w-4 text-rose-500" />
-                <div className="flex-1">
-                  <p className="text-sm font-semibold leading-5">{realtimeErrorDetails?.message || realtimeError}</p>
-                  {realtimeErrorDetails?.hint && (
-                    <p className="mt-1 text-[11px] leading-5 text-rose-800/90 dark:text-rose-100">
-                      {realtimeErrorDetails.hint}
+          <div className="flex-1 overflow-y-auto px-5 py-5">
+            <div className="flex flex-col gap-5 pb-2">
+              <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-indigo-50/70 to-slate-50 px-5 py-5 shadow-lg dark:border-slate-700/60 dark:from-slate-900/70 dark:via-slate-900/40 dark:to-slate-950">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+                  <div className="flex flex-1 flex-col gap-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500 dark:text-slate-400">
+                      AiSHA • Executive Assistant
                     </p>
-                  )}
+                    <p className="text-xl font-semibold text-slate-900 dark:text-white">
+                      Precision briefings, revenue intelligence, and voice-ready coaching.
+                    </p>
+                    <p className="text-sm text-slate-500 dark:text-slate-300">
+                      Human-level partner for scheduling, deal rooms, and decision prep across every customer you manage.
+                    </p>
+                    <div className="mt-1 inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
+                      <span className={`h-2 w-2 rounded-full ${assistantStatusDotClass}`} aria-hidden="true" />
+                      Voice ready • Live support
+                    </div>
+                  </div>
+                  <div className="flex flex-shrink-0 justify-center lg:justify-end">
+                    <div className="relative">
+                      <div className="absolute inset-0 translate-y-6 blur-3xl opacity-70" style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.35), transparent 60%)' }} aria-hidden="true" />
+                      <img
+                        src={AISHA_EXECUTIVE_PORTRAIT}
+                        alt="AiSHA Executive Assistant portrait"
+                        loading="lazy"
+                        className="relative z-10 h-40 w-40 rounded-[28px] object-cover shadow-[0_25px_55px_rgba(15,23,42,0.35)] ring-4 ring-white/80 dark:ring-slate-900/70"
+                      />
+                      <span
+                        className={`absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-white text-[10px] font-semibold uppercase tracking-wide text-slate-600 shadow-md dark:border-slate-900 dark:bg-slate-900/80 dark:text-slate-200`}
+                      >
+                        LIVE
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    clearRealtimeErrors();
-                    logUiTelemetry('ui.realtime.error.dismissed', { code: realtimeErrorDetails?.code });
-                  }}
-                  className="text-[11px] font-semibold text-rose-800 underline-offset-2 hover:underline dark:text-rose-100"
-                >
-                  Dismiss
-                </button>
-              </div>
-              {Array.isArray(realtimeErrorDetails?.suggestions) && realtimeErrorDetails.suggestions.length > 0 && (
-                <ul className="mt-2 list-disc pl-6 text-[11px] leading-5 text-rose-900/90 dark:text-rose-100">
-                  {realtimeErrorDetails.suggestions.map((tip, index) => (
-                    <li key={`${tip}-${index}`}>{tip}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-          <div className="mb-4 flex flex-wrap gap-2">
-            {QUICK_ACTIONS.map((action) => (
-              <button
-                key={action.label}
-                type="button"
-                onClick={() => handleQuickAction(action.prompt)}
-                className="rounded-full border border-slate-300 text-slate-600 px-3 py-1 text-xs transition hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-600/70 dark:text-slate-200 dark:hover:text-indigo-200"
-                disabled={isSending}
-              >
-                {action.label}
-              </button>
-            ))}
-          </div>
-            <div className="mb-4" data-testid="conversational-form-launchers">
-              <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                <Sparkles className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-200" />
-                Guided creations
+                <div className="mt-5 grid gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-xs dark:border-slate-700/70 dark:bg-slate-900/40 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Workspace</p>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{tenantDisplayName}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">{tenantBadgeSubtitle}</p>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${hasTenantSelected
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
+                          : 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200'
+                        }`}
+                    >
+                      {hasTenantSelected ? 'Active tenant' : 'Tenant required'}
+                    </span>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">{tenantRoleLabel}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Assistant status</p>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{assistantStatusHeadline}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">{assistantStatusSubcopy}</p>
+                  </div>
+                </div>
+                {!hasTenantSelected && (
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    Select a tenant from the global header to unlock guided forms, personalized data briefs, and secure actions.
+                  </p>
+                )}
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-4 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Quick actions</p>
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500">Tap to run a common request</span>
+                </div>
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {QUICK_ACTIONS.map((action) => (
+                    <button
+                      key={action.label}
+                      type="button"
+                      onClick={() => handleQuickAction(action.prompt)}
+                    className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900/30 dark:text-slate-200 dark:hover:border-indigo-500/60"
+                    disabled={isSending}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-4 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70" data-testid="conversational-form-launchers">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    <Sparkles className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-200" />
+                    Guided creations
+                  </div>
+                  {!canUseConversationalForms && (
+                    <span className="text-[11px] text-amber-600 dark:text-amber-300">Select a tenant to enable</span>
+                  )}
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {conversationalSchemaOptions.map((schema) => {
@@ -1225,15 +1289,11 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                   );
                 })}
               </div>
-              {!canUseConversationalForms && (
-                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                  Select a tenant to enable guided forms.
-                </p>
-              )}
-            </div>
+              </section>
+
             {suggestions.length > 0 && (
-              <div className="mb-4" data-testid="ai-suggestions">
-                <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                <section className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-4 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70" data-testid="ai-suggestions">
+                  <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   <Sparkles className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-300" />
                   Suggestions for this page
                 </div>
@@ -1243,7 +1303,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                       key={suggestion.id}
                       type="button"
                       onClick={() => handleSuggestionClick(suggestion.id)}
-                      className="rounded-full border border-indigo-200 bg-white/90 px-3 py-1 text-xs text-indigo-700 shadow-sm transition hover:border-indigo-400 hover:bg-indigo-50 dark:border-indigo-500/40 dark:bg-slate-900/60 dark:text-indigo-100"
+                      className="rounded-full border border-indigo-200 bg-indigo-50/80 px-3 py-1 text-xs text-indigo-700 shadow-sm transition hover:border-indigo-400 hover:bg-white dark:border-indigo-500/40 dark:bg-indigo-950/40 dark:text-indigo-100"
                       disabled={isSending}
                       data-source={suggestion.source}
                     >
@@ -1251,53 +1311,62 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                     </button>
                   ))}
                 </div>
-              </div>
+                </section>
             )}
-          {activeFormSchema && (
-            <div className="mb-4" data-testid="conversational-form-panel">
-              <div className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-100">
-                Guided {activeFormSchema.label}
-              </div>
-              {formSubmissionState.error && (
-                <div className="mb-2 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100">
-                  {formSubmissionState.error}
+
+              {activeFormSchema && (
+                <section className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-4 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70" data-testid="conversational-form-panel">
+                  <div className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-100">
+                    Guided {activeFormSchema.label}
+                  </div>
+                  {formSubmissionState.error && (
+                    <div className="mb-2 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100">
+                      {formSubmissionState.error}
+                    </div>
+                  )}
+                  <ConversationalForm
+                    schema={activeFormSchema}
+                    tenantId={tenantId}
+                    userId={userId}
+                    onComplete={handleConversationalComplete}
+                    onCancel={handleConversationalCancel}
+                    isSubmitting={formSubmissionState.isSubmitting}
+                  />
+                </section>
+              )}
+
+              {error && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-xs text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
+                  AiSHA is retrying after an error. You can keep trying or close the panel.
+                  <button type="button" className="ml-2 underline" onClick={clearError}>
+                    Dismiss
+                  </button>
                 </div>
               )}
-              <ConversationalForm
-                schema={activeFormSchema}
-                tenantId={tenantId}
-                userId={userId}
-                onComplete={handleConversationalComplete}
-                onCancel={handleConversationalCancel}
-                isSubmitting={formSubmissionState.isSubmitting}
-              />
+
+              <section className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm dark:border-slate-800/70 dark:bg-slate-950/40">
+                <div className="space-y-3">
+                  {messages.map((message, index) => (
+                    <MessageBubble
+                      key={message.id}
+                      message={message}
+                    isWelcomeCard={index === 0 && message.role === 'assistant'}
+                  />
+                ))}
+                  {isSending && (
+                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>AiSHA is thinking...</span>
+                    </div>
+                  )}
+                  <span ref={bottomMarkerRef} />
+                </div>
+              </section>
             </div>
-          )}
-          {error && (
-            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
-              AiSHA is retrying after an error. You can keep trying or close the panel.
-              <button type="button" className="ml-2 underline" onClick={clearError}>
-                Dismiss
-              </button>
-            </div>
-          )}
-          {messages.map((message) => (
-            <MessageBubble
-              key={message.id}
-              message={message}
-            />
-          ))}
-          {isSending && (
-            <div className="mt-4 flex items-center gap-2 text-slate-500 dark:text-slate-400">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-xs">AiSHA is thinking...</span>
-            </div>
-          )}
-          <span ref={bottomMarkerRef} />
         </div>
 
-        <div className="border-t border-slate-200 bg-white p-4 dark:border-slate-800/60 dark:bg-slate-950">
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="border-t border-slate-200 bg-slate-50/80 px-5 py-5 dark:border-slate-800/60 dark:bg-slate-950/70">
+            <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm dark:border-slate-800/60 dark:bg-slate-900/70">
             {voiceWarning && (
               <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
                 {voiceWarning}
@@ -1312,6 +1381,64 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                 )}
               </div>
             )}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/40">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2 min-h-[24px] text-xs text-slate-500 dark:text-slate-400">
+                    {isRealtimeFeatureAvailable && isRealtimeIndicatorActive && <RealtimeIndicator active />}
+                    {isRealtimeInitializing && <span>Connecting…</span>}
+                    {!isRealtimeSupported && <span>Realtime voice requires a supported browser.</span>}
+                  </div>
+                  {isRealtimeFeatureAvailable ? (
+                    <Button
+                      type="button"
+                      variant={isRealtimeActive ? 'destructive' : 'secondary'}
+                      onClick={() => void handleRealtimeToggle()}
+                      disabled={!isRealtimeSupported || isRealtimeInitializing}
+                    >
+                      {isRealtimeActive ? 'Disable Realtime Voice' : 'Enable Realtime Voice'}
+                    </Button>
+                  ) : (
+                    <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                      Realtime Voice disabled by administrator
+                    </span>
+                  )}
+                </div>
+                {!isRealtimeFeatureAvailable && (
+                  <p className="mt-3 rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-[11px] text-slate-600 dark:border-slate-700/70 dark:bg-slate-900/60 dark:text-slate-200">
+                    Voice streaming is currently turned off for this tenant. Visit Settings → Modules to enable the Realtime Voice module.
+                  </p>
+                )}
+                {(realtimeError || realtimeErrorDetails) && (
+                  <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="mt-0.5 h-4 w-4 text-rose-500" />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold leading-5">{realtimeErrorDetails?.message || realtimeError}</p>
+                        {realtimeErrorDetails?.hint && (
+                          <p className="mt-1 text-[11px] leading-5 text-rose-800/90 dark:text-rose-100">{realtimeErrorDetails.hint}</p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          clearRealtimeErrors();
+                          logUiTelemetry('ui.realtime.error.dismissed', { code: realtimeErrorDetails?.code });
+                        }}
+                        className="text-[11px] font-semibold text-rose-800 underline-offset-2 hover:underline dark:text-rose-100"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                    {Array.isArray(realtimeErrorDetails?.suggestions) && realtimeErrorDetails.suggestions.length > 0 && (
+                      <ul className="mt-2 list-disc pl-6 text-[11px] leading-5 text-rose-900/90 dark:text-rose-100">
+                        {realtimeErrorDetails.suggestions.map((tip, index) => (
+                          <li key={`${tip}-${index}`}>{tip}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
             {isRealtimeFeatureAvailable && isRealtimeActive && (
               <div className={`rounded border px-3 py-2 text-xs ${
                 isRealtimeSpeaking
@@ -1384,7 +1511,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
               onChange={handleDraftChange}
               onKeyDown={handleKeyDown}
                 placeholder="Type a message... (Enter to send)"
-              className="bg-white text-slate-900 placeholder:text-slate-700 border border-slate-300 dark:bg-slate-900/60 dark:text-slate-100 dark:border-slate-800"
+                className="bg-white text-slate-900 placeholder:text-slate-700 border border-slate-200 dark:bg-slate-900/60 dark:text-slate-100 dark:border-slate-700"
                 rows={2}
               disabled={isSending}
             />

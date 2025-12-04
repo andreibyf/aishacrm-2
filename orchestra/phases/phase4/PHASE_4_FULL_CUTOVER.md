@@ -1,5 +1,7 @@
 # Phase 4: Full Cutover (Months 7-8)
 
+> Current framing (2025): **Internal Readiness (pre-customer)**. This plan still describes a full external v2.0.0 launch and v1 deprecation, but in the near term we are using Phase 4 to harden a few key flows (e.g., opportunities + activities) and make API Health solid for the Local Development Tenant.
+
 **Status**: Not Started  
 **Depends On**: Phase 3 (Autonomous Operations)  
 **Target Start**: July 2026  
@@ -23,52 +25,144 @@ Complete v2.0.0 launch and v1 deprecation:
 ### Week 1-2: Remaining Endpoint Migration
 
 #### Task 4.1: Endpoint Audit & Planning
-- [ ] List all v1 endpoints not yet migrated
-- [ ] Prioritize by usage (API analytics)
-- [ ] Create migration checklist per endpoint
+- [ ] List all v1-style endpoints still in use
+- [ ] Prioritize by usage (API analytics, logs)
+- [ ] Create migration checklist per endpoint/cluster
 - [ ] Identify breaking changes needed
 - [ ] Document v1 → v2 mapping
+- [ ] Flag AI-dependent vs. "plain" endpoints
 
-**Migration Checklist Template**:
+> This section is intended as a **living audit**, not a one-shot task. Start by capturing the high-priority domains below, then expand per endpoint as we touch each area.
+
+**Migration Checklist Template (per endpoint or cluster)**:
 ```markdown
 ## Endpoint: POST /api/v1/opportunities
 
 ### Current v1 Behavior
 - Input: Basic opportunity fields
 - Output: Created opportunity object
+- Auth/tenant rules: [e.g., tenant-scoped by `tenant_id`, RLS via Supabase]
 
-### v2 AI Enhancements
+### v1 Consumers
+- Frontend components: [e.g., Deal create form, pipeline board]
+- Background jobs: [e.g., campaign worker, workflows]
+- External integrations: [e.g., n8n, webhooks]
+
+### v2 Target Behavior / AI Enhancements
 - [x] AI-powered deal health score on creation
 - [x] Automatic related account/contact suggestions
 - [x] Win probability estimation
 - [x] Suggested next steps
 - [ ] Competitive intelligence integration (future)
 
-### Breaking Changes
+### Breaking Changes / Contracts
 - Response includes `aiContext` object (new)
 - `stage` field now requires enum value (was free text)
+- Error surface / codes: [e.g., stricter validation, 422 on bad enums]
 
 ### Migration Path
-1. Create `/api/v2/ai/opportunities` endpoint
-2. Add AI enrichment middleware
-3. Update response schema
-4. Write tests (unit + integration)
-5. Update API docs
-6. Deploy behind feature flag
+1. Create `/api/v2/ai/opportunities` (or equivalent) endpoint
+2. Add AI enrichment middleware / Braid tool hooks
+3. Update response schema + OpenAPI / API docs
+4. Update all known consumers (frontend, workers, integrations)
+5. Write tests (unit + integration + happy-path E2E)
+6. Deploy behind feature flag or tenant allowlist
 
-### Estimated Effort: 3 days
+### Operational Notes
+- Telemetry: [what to log, how to compare v1 vs v2]
+- Rollback: [conditions + how to revert to v1 behavior]
+
+### Estimated Effort: T-shirt size (S/M/L)
 ```
 
-**Target Endpoints** (30+ remaining):
-- Opportunities (full CRUD)
-- Documents/files
-- Workflows
-- Reports
-- System settings
-- Integrations
-- Webhooks (v2 with AI events)
+**Initial High-Priority Domains to Audit**
 
-**Deliverable**: Complete migration plan with timeline
+These are **starting points**, not an exhaustive list. As we dig into routes and Supabase functions, expand this into a full table.
+
+- Opportunities (full CRUD, pipeline, forecasts)
+- Activities (calls, emails, meetings, tasks)
+- Contacts & Accounts (core CRM objects)
+- Documents / Files (storage, AI summaries, embeddings)
+- Reports & Dashboards (aggregates, AI insights)
+- Workflows & Workflow Executions
+- System & Module Settings (feature flags, AI knobs)
+- Integrations (GitHub issues, telephony, third-party CRMs)
+- Webhooks (including v2 AI event hooks)
+- Memory / AI-specific endpoints (sessions, transcripts, tools)
+
+**Seed Audit: Opportunities Domain (Example)**
+
+This table seeds the audit for the opportunities domain based on `backend/routes/opportunities.js`. Populate the remaining columns as we introduce explicit v2 routes or AI layers.
+
+| Area                | Current Route                    | Style  | Notes / v2 Target                                      |
+|---------------------|----------------------------------|--------|--------------------------------------------------------|
+| List opportunities  | `GET /api/opportunities`         | v1-ish | Supabase `opportunities` query by `tenant_id`, filter + count; candidate for AI sort/prioritization and deal health surfacing. |
+| Create opportunity  | `POST /api/opportunities`        | v1-ish | Basic create with numeric `probability`; future: AI-enriched default stage/amount/probability + suggested next steps. |
+| Get opportunity     | `GET /api/opportunities/:id`     | v1-ish | Tenant-scoped fetch; future: include `aiContext` (health, risks, next-best-actions). |
+| Update opportunity  | `PUT /api/opportunities/:id`     | v1-ish | Manual field updates; future: AI-assisted field updates and change summaries. |
+| Delete opportunity  | `DELETE /api/opportunities/:id`  | v1-ish | Hard delete; v2 should confirm impact (activities, forecasts) and optionally soft-delete. |
+
+> Follow-up: create a dedicated `opportunities` section in a separate audit doc or appendix if this table grows large; keep Phase 4 doc high-level and link out.
+
+**Seed Audit: Activities Domain**
+
+Based on `backend/routes/activities.js`.
+
+| Area                | Current Route                 | Style  | Notes / v2 Target                                                   |
+|---------------------|-------------------------------|--------|---------------------------------------------------------------------|
+| List activities     | `GET /api/activities`         | v1-ish | Supabase `activities` list by `tenant_id`, rich metadata; candidate for AI-ranked agenda and follow-up queue. |
+| Create activity     | `POST /api/activities`        | v1-ish | Creates generic activity (calls, tasks, emails); v2 can auto-fill details from AI (duration, outcome, summaries). |
+| Get activity        | `GET /api/activities/:id`     | v1-ish | Fetch single activity; v2 could attach AI call/email summaries and sentiment. |
+| Update activity     | `PUT /api/activities/:id`     | v1-ish | Manual updates; v2 can suggest status changes, due dates, and owners. |
+| Delete activity     | `DELETE /api/activities/:id`  | v1-ish | Hard/soft delete; consider AI impact on pipelines and reminders. |
+
+**Seed Audit: Accounts Domain**
+
+Based on `backend/routes/accounts.js`.
+
+| Area                | Current Route                | Style  | Notes / v2 Target                                                   |
+|---------------------|------------------------------|--------|---------------------------------------------------------------------|
+| List accounts       | `GET /api/accounts`          | v1-ish | Cached list by `tenant_id`/`type`; v2: AI-prioritized account list, risk flags, upsell opportunities. |
+| Create account      | `POST /api/accounts`         | v1-ish | Basic create with metadata; v2: AI-enriched firmographics and duplicate detection. |
+| Get account         | `GET /api/accounts/:id`      | v1-ish | Single account fetch; v2: roll up AI signals from activities, opportunities, and support history. |
+| Update account      | `PUT /api/accounts/:id`      | v1-ish | Field updates; v2: AI suggestions for ideal customer profile fields and health. |
+| Delete account      | `DELETE /api/accounts/:id`   | v1-ish | Delete account; v2 should gate on dependent contacts/opps and archive instead. |
+
+**Seed Audit: Contacts Domain**
+
+Based on `backend/routes/contacts.js`.
+
+| Area                | Current Route                | Style  | Notes / v2 Target                                                   |
+|---------------------|------------------------------|--------|---------------------------------------------------------------------|
+| List contacts       | `GET /api/contacts`          | v1-ish | Tenant-scoped list with filters and search; v2: AI-ranked people to engage today, plus smart segments. |
+| Create contact      | `POST /api/contacts`         | v1-ish | Basic person record with tags/metadata; v2: AI enrichment (job title, LinkedIn, company) and dedupe. |
+| Get contact         | `GET /api/contacts/:id`      | v1-ish | Single contact view; v2: full timeline + AI summary and relationship strength. |
+| Update contact      | `PUT /api/contacts/:id`      | v1-ish | Field updates; v2: suggestions for best channel/time to contact and compliance flags. |
+| Delete contact      | `DELETE /api/contacts/:id`   | v1-ish | Delete/archive; v2: ensure linked activities/opps are preserved with reassignment strategy. |
+
+**Seed Audit: Leads Domain**
+
+Based on `backend/routes/leads.js`.
+
+| Area                | Current Route             | Style  | Notes / v2 Target                                                   |
+|---------------------|---------------------------|--------|---------------------------------------------------------------------|
+| List leads          | `GET /api/leads`          | v1-ish | Tenant-scoped list with status/source filters; v2: AI scoring, prioritization, and routing suggestions. |
+| Create lead         | `POST /api/leads`         | v1-ish | Lead capture from forms/imports; v2: enrichment (firmographics), spam detection, and auto-qualification. |
+| Get lead            | `GET /api/leads/:id`      | v1-ish | Single lead record; v2: AI summary + next-best-action and objection handling hints. |
+| Update lead         | `PUT /api/leads/:id`      | v1-ish | Status/field updates; v2: AI-assisted stage transitions and playbook recommendations. |
+| Delete/convert lead | `DELETE /api/leads/:id`   | v1-ish | Delete/archive; v2 should prefer convert-to-contact/account/opportunity flows with AI guidance. |
+
+**API Health & Monitoring Coverage (for audited endpoints)**
+
+For each audited domain/endpoint cluster above, ensure we can **observe and test** behavior similarly to existing API Health tools under Settings:
+
+- [ ] Add or update API Health checks for each new `/api/v2/...` endpoint (where applicable)
+- [ ] Verify latency, error rate, and auth/tenant failures are surfaced in API Health dashboards
+- [ ] Include v1 vs v2 comparison checks for migrated endpoints (status codes, payload shape)
+- [ ] Wire basic synthetic tests (ping + simple happy-path) for critical domains (opportunities, activities, accounts, contacts, leads)
+- [ ] Document test harness locations (e.g., Postman collections, Playwright/API tests, or in-app health probes)
+
+**Deliverable**: Living migration inventory doc + initial v1 → v2 mapping and priorities, with API Health coverage items identified for all audited domains
 
 ---
 
@@ -90,6 +184,8 @@ Complete v2.0.0 launch and v1 deprecation:
 - API docs updated
 
 **Deliverable**: 16 v2 endpoints live and tested
+
+> Phase 4A: **Internal Pilot Focus** (pre-customer) – For now, treat Task 4.2 as primarily about hardening two internal flows (Opportunities + Activities) and ensuring they show up cleanly in API Health for the Local Development Tenant. Documents/Reports and broader external migration work remain future-facing until real tenants exist.
 
 ---
 
@@ -345,6 +441,7 @@ Launch Day (August 1, 2026):
 - [ ] Document lessons learned
 - [ ] Plan v2.1 roadmap (iterative improvements)
 
+
 **Retrospective Questions**:
 - What went well?
 - What could have been better?
@@ -354,6 +451,32 @@ Launch Day (August 1, 2026):
 - What new risks emerged?
 
 **Deliverable**: Retrospective document + v2.1 roadmap draft
+
+#### Task 4.11: AiSHA Executive Assistant Branding & Avatar Cutover
+
+- [ ] Finalize AiSHA Executive Assistant visual identity:
+  - [ ] Primary executive-assistant portrait (hero image) for the AI panel
+  - [ ] Compact circular avatar for header pill / launcher (“Ask AiSHA anything – Voice ready”)
+  - [ ] Fallback icon for low-bandwidth / no-image environments
+- [ ] Replace legacy avatar image in all surfaces:
+  - [ ] Top header AiSHA pill (left-side “Ask AiSHA anything” area)
+  - [ ] AiSidebar.jsx (full-screen right-hand assistant panel)
+  - [ ] AiAssistantLauncher / Floating widgets
+  - [ ] Any legacy AIAssistantWidget/CommandPaletteWidget entry points still exposed
+- [ ] Align header pill + tenant badge:
+  - [ ] Ensure avatar, assistant name, status (“Voice ready”), tenant selector, and “Managing Client” badge are vertically centered and visually balanced.
+  - [ ] Confirm layout works at common breakpoints (1280, 1440, 1920).
+- [ ] Update AI panel hero section:
+  - [ ] Use the new executive-assistant portrait as the primary visual in the panel intro state.
+  - [ ] Ensure image scales gracefully and does not interfere with message bubbles or voice controls.
+  - [ ] Maintain dark/light theme contrast and accessibility (AA) for text over/around the portrait.
+- [ ] Regression pass:
+  - [ ] Verify avatar loads correctly for all tenants and roles.
+  - [ ] Verify no impact to realtime voice, Braid tools, or autonomous operations.
+  - [ ] Confirm all snapshots / storybook stories updated (if applicable).
+
+**Deliverable**: Consistent AiSHA Executive Assistant branding and avatar usage across header, AI panel, and launchers, with pixel-correct alignment at cutover.
+
 
 ---
 

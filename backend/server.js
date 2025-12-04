@@ -202,6 +202,11 @@ import createWorkflowRoutes from "./routes/workflows.js";
 import createWorkflowExecutionRoutes from "./routes/workflowexecutions.js";
 import createActivityRoutes from "./routes/activities.js";
 import createOpportunityRoutes from "./routes/opportunities.js";
+import createOpportunityV2Routes from "./routes/opportunities.v2.js";
+import createActivityV2Routes from "./routes/activities.v2.js";
+import createContactV2Routes from "./routes/contacts.v2.js";
+import createAccountV2Routes from "./routes/accounts.v2.js";
+import createLeadsV2Routes from "./routes/leads.v2.js";
 import createNotificationRoutes from "./routes/notifications.js";
 import createSystemLogRoutes from "./routes/system-logs.js";
 import createAuditLogRoutes from "./routes/audit-logs.js";
@@ -262,6 +267,18 @@ app.use("/api/workflowexecutions", createWorkflowExecutionRoutes(measuredPgPool)
 // Route activities through Supabase API (primary test target)
 app.use("/api/activities", createActivityRoutes(measuredPgPool));
 app.use("/api/opportunities", createOpportunityRoutes(measuredPgPool));
+// v2 opportunities endpoints (Phase 4.2 internal pilot).
+// Always mounted in local/dev backend; production gating is handled via CI/CD.
+console.log("✓ Mounting /api/v2/opportunities routes (dev/internal)");
+app.use("/api/v2/opportunities", createOpportunityV2Routes(measuredPgPool));
+console.log("✓ Mounting /api/v2/activities routes (dev/internal)");
+app.use("/api/v2/activities", createActivityV2Routes(measuredPgPool));
+console.log("✓ Mounting /api/v2/contacts routes (dev/internal)");
+app.use("/api/v2/contacts", createContactV2Routes(measuredPgPool));
+console.log("✓ Mounting /api/v2/accounts routes (dev/internal)");
+app.use("/api/v2/accounts", createAccountV2Routes(measuredPgPool));
+console.log("✓ Mounting /api/v2/leads routes (dev/internal)");
+app.use("/api/v2/leads", createLeadsV2Routes(measuredPgPool));
 app.use("/api/notifications", createNotificationRoutes(measuredPgPool));
 app.use("/api/system-logs", createSystemLogRoutes(measuredPgPool));
 app.use("/api/audit-logs", createAuditLogRoutes(measuredPgPool));

@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAiSidebarState } from './useAiSidebarState.jsx'
 
+const EXEC_AVATAR_SRC = '/assets/aisha-executive-portrait.jpg';
+
 export default function AvatarWidget({
   agentId: _agentId,
   apiKey: _apiKey,
@@ -122,8 +124,8 @@ export default function AvatarWidget({
         }}
       >
         <img
-          src="/assets/Ai-SHA-logo-2.png"
-          alt="AI Assistant"
+          src={EXEC_AVATAR_SRC}
+          alt="AiSHA executive assistant"
           style={{
             width: '100%',
             height: '100%',

@@ -17,6 +17,11 @@ Aisha CRM provides comprehensive technical documentation organized into speciali
   - Contact, account, lead, and opportunity management
   - Activities, workflows, and reporting
   - Troubleshooting common issues
+- **[AiSHA Assistant User Guide](./docs/AISHA_ASSISTANT_USER_GUIDE.md)** - Dedicated guide for the executive assistant panel
+  - Drawer layout & hero card
+  - Quick actions, guided forms, and suggestions
+  - Realtime voice / push-to-talk workflows
+  - Preview & troubleshooting checklist for launches
 
 ### 🔧 For System Administrators
 - **[System Administrator Guide](./docs/AISHA_CRM_ADMIN_GUIDE.md)** - Deployment and operations guide
@@ -72,6 +77,7 @@ Aisha CRM provides comprehensive technical documentation organized into speciali
 | Task | Manual | Chapter |
 |------|--------|---------|
 | **Get started as a user** | [User Guide](./docs/AISHA_CRM_USER_GUIDE.md) | Ch 1: Getting Started |
+| **Use the AI assistant** | [AiSHA Assistant Guide](./docs/AISHA_ASSISTANT_USER_GUIDE.md) | Sec. 2–5 |
 | **Deploy to production** | [Admin Guide](./docs/AISHA_CRM_ADMIN_GUIDE.md) | Ch 2: Docker Deployment |
 | **Set up dev environment** | [Developer Manual](./docs/AISHA_CRM_DEVELOPER_MANUAL.md) | Ch 2: Development Setup |
 | **Apply database migration** | [Database Manual Part 1](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md) | Ch 4: Migrations Management |

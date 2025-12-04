@@ -1,13 +1,15 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Brain, MessageSquare, X } from 'lucide-react';
+import { MessageSquare, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 // Replaced direct User.me() usage with global user context hook
 import { Tenant } from "@/api/entities";
 import { useTenant } from "../shared/tenantContext";
 import { checkBackendStatus } from "@/api/functions";
 import { useUser } from "@/components/shared/useUser.js";
+
+const EXEC_AVATAR_SRC = '/assets/aisha-executive-portrait.jpg';
 
 export default function FloatingAIWidget() {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -19,7 +21,7 @@ export default function FloatingAIWidget() {
 
   useEffect(() => {
     let mounted = true;
-    const fallbackLogo = "/assets/Ai-SHA-logo-2.png";
+    const fallbackLogo = EXEC_AVATAR_SRC;
 
     const loadBranding = async () => {
       try {
@@ -109,17 +111,20 @@ export default function FloatingAIWidget() {
                     window.openCommandPalette();
                   }
                 }}
-                className="relative w-16 h-16 aspect-square rounded-full shadow-lg hover:shadow-xl transition-all duration-300 text-white border-0 p-0"
+                className="relative flex h-16 w-16 items-center justify-center rounded-[26px] border border-white/15 bg-slate-900/80 shadow-2xl shadow-slate-950/50 ring-1 ring-white/10 transition hover:-translate-y-0.5"
                 size="lg"
                 aria-label="Open AI Command"
                 title="AI Command"
-                style={{
-                  backgroundImage:
-                    "linear-gradient(135deg, var(--primary-color) 0%, #facc15 30%, #22c55e 60%, var(--accent-color) 100%)",
-                }}
               >
-                <div className="absolute inset-0 rounded-full ring-1 ring-white/15" />
-                <Brain className="w-9 h-9 ai-command-icon relative" strokeWidth={2.25} />
+                <img
+                  src={EXEC_AVATAR_SRC}
+                  alt="AiSHA executive assistant"
+                  className="h-14 w-14 rounded-2xl object-cover"
+                  loading="lazy"
+                />
+                <div className="absolute -bottom-1 -right-1 flex h-3.5 w-10 items-center justify-center rounded-full bg-slate-900/90 text-[9px] font-semibold uppercase tracking-wide text-emerald-300 shadow-lg shadow-emerald-500/30">
+                  LIVE
+                </div>
               </Button>
             </motion.div>
           ) : (

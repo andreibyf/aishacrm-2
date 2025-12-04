@@ -1,5 +1,7 @@
 import React from 'react';
 
+const EXECUTIVE_AVATAR_SRC = '/assets/aisha-executive-portrait.jpg';
+
 function getStatusText({ isOpen, isRealtimeActive }) {
   if (isRealtimeActive) {
     return 'Realtime voice live';
@@ -7,7 +9,7 @@ function getStatusText({ isOpen, isRealtimeActive }) {
   if (isOpen) {
     return 'Assistant open';
   }
-  return 'Ask AiSHA anything';
+  return 'Ready';
 }
 
 function getStatusBadge({ isRealtimeActive, realtimeModuleEnabled }) {
@@ -32,6 +34,9 @@ function getStatusBadge({ isRealtimeActive, realtimeModuleEnabled }) {
   };
 }
 
+const HEADLINE_TEXT = 'Ask AiSHA';
+const SUBHEADLINE_TEXT = 'Executive Assistant';
+
 export default function AiAssistantLauncher({
   isOpen,
   onToggle = () => {},
@@ -45,31 +50,34 @@ export default function AiAssistantLauncher({
     <button
       type="button"
       onClick={onToggle}
-      className="flex items-center gap-3 rounded-full border border-slate-800/70 bg-slate-900/60 px-3 py-2 text-left shadow-lg shadow-slate-950/30 transition hover:border-indigo-400 hover:bg-slate-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+      className="group flex h-10 w-full max-w-full items-center gap-2 rounded-2xl border border-white/15 bg-slate-900/70 px-2.5 py-1.5 text-left text-slate-100 shadow-lg shadow-slate-950/40 backdrop-blur transition hover:-translate-y-0.5 hover:border-indigo-400/60 hover:bg-slate-900/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 sm:w-[210px]"
       aria-pressed={isOpen}
       aria-label="Toggle AiSHA assistant"
     >
-      <div className="relative h-12 w-12">
-        <div className={`absolute inset-0 rounded-full border border-indigo-400/70 ${badge.ringClass}`} />
+      <div className="relative h-9 w-9">
+        <div className={`absolute inset-0 rounded-2xl border border-indigo-300/50 ${badge.ringClass}`} />
         <img
-          src="/assets/Ai-SHA-logo-2.png"
+          src={EXECUTIVE_AVATAR_SRC}
           alt="AiSHA assistant"
-          className="relative z-10 h-full w-full rounded-full object-cover"
+          className="relative z-10 h-full w-full rounded-2xl object-cover"
         />
         <span
-          className={`absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-slate-900 ${badge.dotClass}`}
+          className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-slate-900 ${badge.dotClass}`}
         />
       </div>
-      <div className="flex flex-col">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          AiSHA
+      <div className="flex min-w-0 flex-col justify-center text-slate-100 translate-y-[1px]">
+        <span className="truncate text-[10px] font-semibold uppercase tracking-[0.25em] text-white/80">
+          {HEADLINE_TEXT}
         </span>
-        <span className="text-sm font-semibold text-slate-50">
-          {statusText}
-        </span>
-        <span className="text-[11px] text-slate-400">
-          {badge.label}
-        </span>
+        <div className="mt-0.5 flex min-w-0 items-center gap-2 text-[13px] font-semibold leading-tight text-slate-200">
+          <span className="truncate">
+            {SUBHEADLINE_TEXT}
+          </span>
+          <span className="inline-flex items-center gap-1 text-[11px] font-normal text-slate-300">
+            <span className={`inline-flex h-1.5 w-1.5 rounded-full ${badge.dotClass}`} aria-hidden="true" />
+            {statusText}
+          </span>
+        </div>
       </div>
     </button>
   );

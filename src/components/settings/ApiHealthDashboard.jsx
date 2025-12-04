@@ -140,6 +140,32 @@ export default function ApiHealthDashboard() {
 
     // Define new endpoints to test
     const endpoints = [
+      // Core CRM flows (internal readiness focus)
+      { name: 'Opportunities - List (v1)', method: 'GET', url: `${BACKEND_URL}/api/opportunities?tenant_id=test&limit=1` },
+      { name: 'Activities - List', method: 'GET', url: `${BACKEND_URL}/api/activities?tenant_id=test&limit=1` },
+      // v2 pilot (behind FEATURE_OPPORTUNITIES_V2)
+      { name: 'Opportunities - List (v2)', method: 'GET', url: `${BACKEND_URL}/api/v2/opportunities?tenant_id=test&limit=1`, expectError: false },
+      {
+        name: 'Opportunities - v2 Lifecycle (create/get/update/delete)',
+        type: 'opportunity-v2-lifecycle',
+      },
+      {
+        name: 'Activities - v2 Lifecycle (create/get/update/delete)',
+        type: 'activity-v2-lifecycle',
+      },
+      {
+        name: 'Contacts - v2 Lifecycle (create/get/update/delete)',
+        type: 'contact-v2-lifecycle',
+      },
+      {
+        name: 'Accounts - v2 Lifecycle (create/get/update/delete)',
+        type: 'account-v2-lifecycle',
+      },
+      {
+        name: 'Leads - v2 Lifecycle (create/get/update/delete)',
+        type: 'leads-v2-lifecycle',
+      },
+      // Existing AI Campaigns and Telephony checks
       { name: 'AI Campaigns - List', method: 'GET', url: `${BACKEND_URL}/api/aicampaigns?tenant_id=test&limit=1` },
       { name: 'AI Campaigns - Get', method: 'GET', url: `${BACKEND_URL}/api/aicampaigns/test-id?tenant_id=test`, expectError: true },
       { name: 'Telephony - Inbound Webhook', method: 'POST', url: `${BACKEND_URL}/api/telephony/inbound-webhook`, body: { tenant_id: 'test' }, expectError: true },
@@ -152,6 +178,62 @@ export default function ApiHealthDashboard() {
     for (const endpoint of endpoints) {
       results.tested++;
       try {
+        // Special handler for v2 Opportunities lifecycle test
+        if (endpoint.type === 'opportunity-v2-lifecycle') {
+          const lifecycleResult = await runOpportunityV2LifecycleTest();
+          if (lifecycleResult.status === 'passed') {
+            results.passed++;
+          } else if (lifecycleResult.status === 'failed') {
+            results.failed++;
+          }
+          results.details.push(lifecycleResult);
+          continue;
+        }
+
+        if (endpoint.type === 'activity-v2-lifecycle') {
+          const lifecycleResult = await runActivityV2LifecycleTest();
+          if (lifecycleResult.status === 'passed') {
+            results.passed++;
+          } else if (lifecycleResult.status === 'failed') {
+            results.failed++;
+          }
+          results.details.push(lifecycleResult);
+          continue;
+        }
+
+        if (endpoint.type === 'contact-v2-lifecycle') {
+          const lifecycleResult = await runContactV2LifecycleTest();
+          if (lifecycleResult.status === 'passed') {
+            results.passed++;
+          } else if (lifecycleResult.status === 'failed') {
+            results.failed++;
+          }
+          results.details.push(lifecycleResult);
+          continue;
+        }
+
+        if (endpoint.type === 'account-v2-lifecycle') {
+          const lifecycleResult = await runAccountV2LifecycleTest();
+          if (lifecycleResult.status === 'passed') {
+            results.passed++;
+          } else if (lifecycleResult.status === 'failed') {
+            results.failed++;
+          }
+          results.details.push(lifecycleResult);
+          continue;
+        }
+
+        if (endpoint.type === 'leads-v2-lifecycle') {
+          const lifecycleResult = await runLeadsV2LifecycleTest();
+          if (lifecycleResult.status === 'passed') {
+            results.passed++;
+          } else if (lifecycleResult.status === 'failed') {
+            results.failed++;
+          }
+          results.details.push(lifecycleResult);
+          continue;
+        }
+
         const options = {
           method: endpoint.method,
           headers: { 'Content-Type': 'application/json' }
@@ -224,6 +306,469 @@ export default function ApiHealthDashboard() {
       });
     }
   };
+
+  // Synthetic full lifecycle test for /api/v2/opportunities
+  async function runOpportunityV2LifecycleTest() {
+    const baseName = 'API Health Test Deal';
+    const tenantId = 'test';
+
+    try {
+      // 1) Create
+      const createResp = await fetch(`${BACKEND_URL}/api/v2/opportunities`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          name: `${baseName} ${Date.now()}`,
+          stage: 'prospecting',
+          amount: 1000,
+        }),
+      });
+
+      const createJson = await createResp.json().catch(() => ({}));
+      if (!createResp.ok || !createJson?.data?.opportunity?.id) {
+        return {
+          name: 'Opportunities - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Create failed (${createResp.status}): ${createJson.message || 'no body'}`,
+          statusCode: createResp.status,
+        };
+      }
+
+      const createdId = createJson.data.opportunity.id;
+
+      // 2) Get
+      const getResp = await fetch(`${BACKEND_URL}/api/v2/opportunities/${createdId}?tenant_id=${tenantId}`);
+      const getJson = await getResp.json().catch(() => ({}));
+      if (!getResp.ok || !getJson?.data?.opportunity?.id) {
+        return {
+          name: 'Opportunities - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Get failed (${getResp.status}): ${getJson.message || 'no body'}`,
+          statusCode: getResp.status,
+        };
+      }
+
+      // 3) Update
+      const updateResp = await fetch(`${BACKEND_URL}/api/v2/opportunities/${createdId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          stage: 'proposal',
+        }),
+      });
+
+      const updateJson = await updateResp.json().catch(() => ({}));
+      if (!updateResp.ok || updateJson?.data?.opportunity?.stage !== 'proposal') {
+        return {
+          name: 'Opportunities - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Update failed (${updateResp.status}): ${updateJson.message || 'stage not updated'}`,
+          statusCode: updateResp.status,
+        };
+      }
+
+      // 4) Delete
+      const deleteResp = await fetch(`${BACKEND_URL}/api/v2/opportunities/${createdId}?tenant_id=${tenantId}`, {
+        method: 'DELETE',
+      });
+
+      const deleteJson = await deleteResp.json().catch(() => ({}));
+      if (!deleteResp.ok) {
+        return {
+          name: 'Opportunities - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Delete failed (${deleteResp.status}): ${deleteJson.message || 'no body'}`,
+          statusCode: deleteResp.status,
+        };
+      }
+
+      return {
+        name: 'Opportunities - v2 Lifecycle (create/get/update/delete)',
+        status: 'passed',
+        message: 'Create, get, update, and delete all succeeded',
+        statusCode: 200,
+      };
+    } catch (error) {
+      return {
+        name: 'Opportunities - v2 Lifecycle (create/get/update/delete)',
+        status: 'failed',
+        message: `Network error during lifecycle test: ${error.message}`,
+        statusCode: 0,
+      };
+    }
+  }
+
+  // Synthetic full lifecycle test for /api/v2/activities
+  async function runActivityV2LifecycleTest() {
+    const baseSubject = 'API Health Test Activity';
+    const tenantId = 'test';
+
+    try {
+      // 1) Create
+      const createResp = await fetch(`${BACKEND_URL}/api/v2/activities`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          type: 'task',
+          subject: `${baseSubject} ${Date.now()}`,
+          description: 'Lifecycle test activity',
+          status: 'pending',
+        }),
+      });
+
+      const createJson = await createResp.json().catch(() => ({}));
+      if (!createResp.ok || !createJson?.data?.activity?.id) {
+        return {
+          name: 'Activities - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Create failed (${createResp.status}): ${createJson.message || 'no body'}`,
+          statusCode: createResp.status,
+        };
+      }
+
+      const createdId = createJson.data.activity.id;
+
+      // 2) Get
+      const getResp = await fetch(`${BACKEND_URL}/api/v2/activities/${createdId}?tenant_id=${tenantId}`);
+      const getJson = await getResp.json().catch(() => ({}));
+      if (!getResp.ok || !getJson?.data?.activity?.id) {
+        return {
+          name: 'Activities - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Get failed (${getResp.status}): ${getJson.message || 'no body'}`,
+          statusCode: getResp.status,
+        };
+      }
+
+      // 3) Update
+      const updateResp = await fetch(`${BACKEND_URL}/api/v2/activities/${createdId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          status: 'completed',
+        }),
+      });
+
+      const updateJson = await updateResp.json().catch(() => ({}));
+      if (!updateResp.ok || updateJson?.data?.activity?.status !== 'completed') {
+        return {
+          name: 'Activities - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Update failed (${updateResp.status}): ${updateJson.message || 'status not updated'}`,
+          statusCode: updateResp.status,
+        };
+      }
+
+      // 4) Delete
+      const deleteResp = await fetch(`${BACKEND_URL}/api/v2/activities/${createdId}?tenant_id=${tenantId}`, {
+        method: 'DELETE',
+      });
+
+      const deleteJson = await deleteResp.json().catch(() => ({}));
+      if (!deleteResp.ok) {
+        return {
+          name: 'Activities - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Delete failed (${deleteResp.status}): ${deleteJson.message || 'no body'}`,
+          statusCode: deleteResp.status,
+        };
+      }
+
+      return {
+        name: 'Activities - v2 Lifecycle (create/get/update/delete)',
+        status: 'passed',
+        message: 'Create, get, update, and delete all succeeded',
+        statusCode: 200,
+      };
+    } catch (error) {
+      return {
+        name: 'Activities - v2 Lifecycle (create/get/update/delete)',
+        status: 'failed',
+        message: `Network error during lifecycle test: ${error.message}`,
+        statusCode: 0,
+      };
+    }
+  }
+
+  async function runContactV2LifecycleTest() {
+    const baseName = 'API Health Test Contact';
+    const tenantId = 'test';
+
+    try {
+      // 1) Create
+      const createResp = await fetch(`${BACKEND_URL}/api/v2/contacts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          first_name: baseName,
+          last_name: `${Date.now()}`,
+          email: `test-${Date.now()}@example.com`,
+        }),
+      });
+
+      const createJson = await createResp.json().catch(() => ({}));
+      if (!createResp.ok || !createJson?.data?.contact?.id) {
+        return {
+          name: 'Contacts - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Create failed (${createResp.status}): ${createJson.message || 'no body'}`,
+          statusCode: createResp.status,
+        };
+      }
+
+      const createdId = createJson.data.contact.id;
+
+      // 2) Get
+      const getResp = await fetch(`${BACKEND_URL}/api/v2/contacts/${createdId}?tenant_id=${tenantId}`);
+      const getJson = await getResp.json().catch(() => ({}));
+      if (!getResp.ok || !getJson?.data?.contact?.id) {
+        return {
+          name: 'Contacts - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Get failed (${getResp.status}): ${getJson.message || 'no body'}`,
+          statusCode: getResp.status,
+        };
+      }
+
+      // 3) Update
+      const updateResp = await fetch(`${BACKEND_URL}/api/v2/contacts/${createdId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          last_name: 'Updated',
+        }),
+      });
+
+      const updateJson = await updateResp.json().catch(() => ({}));
+      if (!updateResp.ok || updateJson?.data?.contact?.last_name !== 'Updated') {
+        return {
+          name: 'Contacts - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Update failed (${updateResp.status}): ${updateJson.message || 'last_name not updated'}`,
+          statusCode: updateResp.status,
+        };
+      }
+
+      // 4) Delete
+      const deleteResp = await fetch(`${BACKEND_URL}/api/v2/contacts/${createdId}?tenant_id=${tenantId}`, {
+        method: 'DELETE',
+      });
+
+      const deleteJson = await deleteResp.json().catch(() => ({}));
+      if (!deleteResp.ok) {
+        return {
+          name: 'Contacts - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Delete failed (${deleteResp.status}): ${deleteJson.message || 'no body'}`,
+          statusCode: deleteResp.status,
+        };
+      }
+
+      return {
+        name: 'Contacts - v2 Lifecycle (create/get/update/delete)',
+        status: 'passed',
+        message: 'Create, get, update, and delete all succeeded',
+        statusCode: 200,
+      };
+    } catch (error) {
+      return {
+        name: 'Contacts - v2 Lifecycle (create/get/update/delete)',
+        status: 'failed',
+        message: `Network error during lifecycle test: ${error.message}`,
+        statusCode: 0,
+      };
+    }
+  }
+
+  async function runAccountV2LifecycleTest() {
+    const baseName = 'API Health Test Account';
+    const tenantId = 'test';
+
+    try {
+      // 1) Create
+      const createResp = await fetch(`${BACKEND_URL}/api/v2/accounts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          name: `${baseName} ${Date.now()}`,
+          type: 'prospect',
+        }),
+      });
+
+      const createJson = await createResp.json().catch(() => ({}));
+      if (!createResp.ok || !createJson?.data?.account?.id) {
+        return {
+          name: 'Accounts - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Create failed (${createResp.status}): ${createJson.message || 'no body'}`,
+          statusCode: createResp.status,
+        };
+      }
+
+      const createdId = createJson.data.account.id;
+
+      // 2) Get
+      const getResp = await fetch(`${BACKEND_URL}/api/v2/accounts/${createdId}?tenant_id=${tenantId}`);
+      const getJson = await getResp.json().catch(() => ({}));
+      if (!getResp.ok || !getJson?.data?.account?.id) {
+        return {
+          name: 'Accounts - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Get failed (${getResp.status}): ${getJson.message || 'no body'}`,
+          statusCode: getResp.status,
+        };
+      }
+
+      // 3) Update
+      const updateResp = await fetch(`${BACKEND_URL}/api/v2/accounts/${createdId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          type: 'customer',
+        }),
+      });
+
+      const updateJson = await updateResp.json().catch(() => ({}));
+      if (!updateResp.ok || updateJson?.data?.account?.type !== 'customer') {
+        return {
+          name: 'Accounts - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Update failed (${updateResp.status}): ${updateJson.message || 'type not updated'}`,
+          statusCode: updateResp.status,
+        };
+      }
+
+      // 4) Delete
+      const deleteResp = await fetch(`${BACKEND_URL}/api/v2/accounts/${createdId}?tenant_id=${tenantId}`, {
+        method: 'DELETE',
+      });
+
+      const deleteJson = await deleteResp.json().catch(() => ({}));
+      if (!deleteResp.ok) {
+        return {
+          name: 'Accounts - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Delete failed (${deleteResp.status}): ${deleteJson.message || 'no body'}`,
+          statusCode: deleteResp.status,
+        };
+      }
+
+      return {
+        name: 'Accounts - v2 Lifecycle (create/get/update/delete)',
+        status: 'passed',
+        message: 'Create, get, update, and delete all succeeded',
+        statusCode: 200,
+      };
+    } catch (error) {
+      return {
+        name: 'Accounts - v2 Lifecycle (create/get/update/delete)',
+        status: 'failed',
+        message: `Network error during lifecycle test: ${error.message}`,
+        statusCode: 0,
+      };
+    }
+  }
+
+  async function runLeadsV2LifecycleTest() {
+    const tenantId = 'test';
+
+    try {
+      // 1) Create
+      const createResp = await fetch(`${BACKEND_URL}/api/v2/leads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          first_name: 'API',
+          last_name: `HealthTest ${Date.now()}`,
+          email: 'healthtest@example.com',
+          status: 'new',
+          source: 'api_test',
+        }),
+      });
+
+      const createJson = await createResp.json().catch(() => ({}));
+      if (!createResp.ok || !createJson?.data?.id) {
+        return {
+          name: 'Leads - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Create failed (${createResp.status}): ${createJson.message || 'no body'}`,
+          statusCode: createResp.status,
+        };
+      }
+
+      const createdId = createJson.data.id;
+
+      // 2) Get
+      const getResp = await fetch(`${BACKEND_URL}/api/v2/leads/${createdId}?tenant_id=${tenantId}`);
+      const getJson = await getResp.json().catch(() => ({}));
+      if (!getResp.ok || !getJson?.data?.id) {
+        return {
+          name: 'Leads - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Get failed (${getResp.status}): ${getJson.message || 'no body'}`,
+          statusCode: getResp.status,
+        };
+      }
+
+      // 3) Update
+      const updateResp = await fetch(`${BACKEND_URL}/api/v2/leads/${createdId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          status: 'contacted',
+        }),
+      });
+
+      const updateJson = await updateResp.json().catch(() => ({}));
+      if (!updateResp.ok) {
+        return {
+          name: 'Leads - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Update failed (${updateResp.status}): ${updateJson.message || 'no body'}`,
+          statusCode: updateResp.status,
+        };
+      }
+
+      // 4) Delete
+      const deleteResp = await fetch(`${BACKEND_URL}/api/v2/leads/${createdId}?tenant_id=${tenantId}`, {
+        method: 'DELETE',
+      });
+
+      const deleteJson = await deleteResp.json().catch(() => ({}));
+      if (!deleteResp.ok) {
+        return {
+          name: 'Leads - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Delete failed (${deleteResp.status}): ${deleteJson.message || 'no body'}`,
+          statusCode: deleteResp.status,
+        };
+      }
+
+      return {
+        name: 'Leads - v2 Lifecycle (create/get/update/delete)',
+        status: 'passed',
+        message: 'Create, get, update, and delete all succeeded',
+        statusCode: 200,
+      };
+    } catch (error) {
+      return {
+        name: 'Leads - v2 Lifecycle (create/get/update/delete)',
+        status: 'failed',
+        message: `Network error during lifecycle test: ${error.message}`,
+        statusCode: 0,
+      };
+    }
+  }
 
   if (!healthReport) {
     return (

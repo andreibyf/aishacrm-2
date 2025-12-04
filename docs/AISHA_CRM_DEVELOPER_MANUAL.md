@@ -595,6 +595,14 @@ src/components/
 └── ... (more domains)
 ```
 
+#### AiSidebar overview for Phase 4 workstreams
+
+- **Executive hero card:** `AiSidebar.jsx` renders the AiSHA avatar, tenant badge, and assistant status chips at the top of the drawer. The avatar lives at `public/aisha-avatar.jpg`; keep replacements the same dimensions (1:1 ratio) to preserve the glow ring.
+- **Stacked interaction blocks:** Quick Actions, Guided Creations, suggestions, conversational forms, and transcript history are organized as separate `<section>` elements. When adding new widgets, keep them inside this stack so padding, scrollbar, and focus management remain consistent.
+- **Voice + realtime controls:** The composer footer owns all realtime voice toggles, push-to-talk buttons, and legacy STT states. Route new behavior through `useRealtimeAiSHA`, `useSpeechInput`, and `useSpeechOutput` hooks instead of touching DOM APIs directly.
+- **Preview workflow:** Use the dev servers for UI work—`npm run dev` (frontend) and `cd backend && npm run dev`—so Vite hot reloads the sidebar at `http://localhost:5173`. Docker builds (`docker compose up -d --build frontend`) bake whatever was in `src/` at build time and should be reserved for final verification.
+- **Documentation handshake:** Every sidebar or voice UX change must be mirrored in `docs/AISHA_ASSISTANT_USER_GUIDE.md` so Phase 4 launch, support, and training materials stay synchronized.
+
 ### Backend Route Organization
 
 ```

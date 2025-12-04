@@ -130,7 +130,12 @@ For detailed guides and examples, visit the API documentation at \`/api-docs\``,
       { name: 'telephony', description: 'Phone system integration and call management' },
       { name: 'tenants', description: 'Multi-tenant management and provisioning' },
       { name: 'users', description: 'User authentication, profiles, and sessions' },
-      { name: 'workflows', description: 'Visual workflow automation with AI-powered nodes - Build automated CRM workflows with webhook triggers, CRM entity operations (find/update Accounts, create/update Opportunities, create Activities), AI-driven steps (classify stages, generate emails, enrich accounts, route activities), conditional branching, and background execution via Bull queue. Supports drag-and-drop canvas builder with SVG connections and absolute positioning.' }
+      { name: 'workflows', description: 'Visual workflow automation with AI-powered nodes - Build automated CRM workflows with webhook triggers, CRM entity operations (find/update Accounts, create/update Opportunities, create Activities), AI-driven steps (classify stages, generate emails, enrich accounts, route activities), conditional branching, and background execution via Bull queue. Supports drag-and-drop canvas builder with SVG connections and absolute positioning.' },
+      { name: 'opportunities-v2', description: 'v2 Opportunity management with flattened metadata (internal pilot)' },
+      { name: 'activities-v2', description: 'v2 Activity tracking with flattened metadata (internal pilot)' },
+      { name: 'contacts-v2', description: 'v2 Contact management with flattened metadata (internal pilot)' },
+      { name: 'accounts-v2', description: 'v2 Account management with flattened metadata (internal pilot)' },
+      { name: 'leads-v2', description: 'v2 Lead management with flattened metadata (internal pilot)' }
     ]
   },
   // Paths to files containing OpenAPI definitions

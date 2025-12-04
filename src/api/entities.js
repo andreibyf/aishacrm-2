@@ -156,8 +156,14 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   
   // Diagnostic logging for key entities during tests
   const isOpportunity = entityName === 'Opportunity';
-  const isDebugEntity = isOpportunity || entityName === 'Employee' || entityName === 'Account' || entityName === 'Contact';
-  const entityPath = pluralize(entityName);
+  const isActivity = entityName === 'Activity';
+  const isDebugEntity = isOpportunity || isActivity || entityName === 'Employee' || entityName === 'Account' || entityName === 'Contact';
+  // Opportunities and Activities always use v2 API paths; no feature flag opt-in
+  const entityPath = isOpportunity
+    ? 'v2/opportunities'
+    : isActivity
+      ? 'v2/activities'
+      : pluralize(entityName);
   let url = `${BACKEND_URL}/api/${entityPath}`;
 
   // Determine tenant_id preference order:

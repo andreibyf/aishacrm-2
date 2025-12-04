@@ -387,7 +387,7 @@ export default function createTestingRoutes(_pgPool) {
         // { method: 'GET', path: `/api/reports/data-quality?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/metrics/performance?tenant_id={TENANT_ID}` },
         
-        // Core CRM Entities
+        // Core CRM Entities (v1)
         { method: 'GET', path: `/api/accounts?tenant_id={TENANT_ID}` },
         { method: 'POST', path: '/api/accounts', body: { tenant_id: tenantId, name: `Scan Account ${Date.now()}` } },
         { method: 'GET', path: `/api/contacts?tenant_id={TENANT_ID}` },
@@ -397,6 +397,13 @@ export default function createTestingRoutes(_pgPool) {
         { method: 'GET', path: `/api/notes?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/clients?tenant_id={TENANT_ID}` },
         
+        // Core CRM Entities (v2 - flattened metadata)
+        { method: 'GET', path: `/api/v2/accounts?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/v2/contacts?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/v2/opportunities?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/v2/activities?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/v2/leads?tenant_id={TENANT_ID}` },
+
         // Users & Employees
         { method: 'GET', path: `/api/users?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/employees?tenant_id={TENANT_ID}` },
