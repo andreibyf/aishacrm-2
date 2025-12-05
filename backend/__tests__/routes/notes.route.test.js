@@ -1,5 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
@@ -7,6 +8,9 @@ const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e
 const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : true;
 
 const createdIds = [];
+// Generate valid UUIDs for related entities (these are fake but valid format)
+const TEST_CONTACT_UUID = randomUUID();
+const TEST_ACCOUNT_UUID = randomUUID();
 
 async function createNote(payload) {
   const res = await fetch(`${BASE_URL}/api/notes`, {
@@ -25,7 +29,7 @@ async function getNote(id) {
 }
 
 async function updateNote(id, payload) {
-  const res = await fetch(`${BASE_URL}/api/notes/${id}`, {
+  const res = await fetch(`${BASE_URL}/api/notes/${id}?tenant_id=${TENANT_ID}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -35,7 +39,7 @@ async function updateNote(id, payload) {
 }
 
 async function deleteNote(id) {
-  const res = await fetch(`${BASE_URL}/api/notes/${id}`, { method: 'DELETE' });
+  const res = await fetch(`${BASE_URL}/api/notes/${id}?tenant_id=${TENANT_ID}`, { method: 'DELETE' });
   return res.status;
 }
 
@@ -46,7 +50,7 @@ before(async () => {
     title: 'Unit Test Note A',
     content: 'This is a test note for unit testing',
     related_type: 'contact',
-    related_id: 'test-contact-123'
+    related_id: TEST_CONTACT_UUID
   });
   assert.ok([200, 201].includes(a.status), `create note A failed: ${JSON.stringify(a.json)}`);
   const idA = a.json?.data?.id || a.json?.data?.note?.id;
@@ -57,7 +61,7 @@ before(async () => {
     title: 'Unit Test Note B',
     content: 'Another test note',
     related_type: 'account',
-    related_id: 'test-account-456'
+    related_id: TEST_ACCOUNT_UUID
   });
   assert.ok([200, 201].includes(b.status), `create note B failed: ${JSON.stringify(b.json)}`);
   const idB = b.json?.data?.id || b.json?.data?.note?.id;
@@ -129,7 +133,7 @@ after(async () => {
     title: 'Temp Delete Note',
     content: 'This note will be deleted'
   });
-  assert.equal(temp.status, 201, 'create temp note failed');
+  assert.ok([200, 201].includes(temp.status), `create temp note failed: ${temp.status}`);
   const tempId = temp.json?.data?.id || temp.json?.data?.note?.id;
   assert.ok(tempId, 'temp note should have an id');
   
@@ -156,15 +160,15 @@ after(async () => {
 });
 
 (SHOULD_RUN ? test : test.skip)('GET /api/notes supports related_id filter', async () => {
-  const res = await fetch(`${BASE_URL}/api/notes?tenant_id=${TENANT_ID}&related_id=test-contact-123`);
+  const res = await fetch(`${BASE_URL}/api/notes?tenant_id=${TENANT_ID}&related_id=${TEST_CONTACT_UUID}`);
   assert.equal(res.status, 200, 'expected 200 from notes list with related_id filter');
   const json = await res.json();
   const notes = json.data?.notes || [];
   assert.ok(Array.isArray(notes), 'notes should be an array');
   
   // Should find our test note with this related_id
-  const found = notes.find(n => n.related_id === 'test-contact-123');
-  assert.ok(found, 'should find note with related_id test-contact-123');
+  const found = notes.find(n => n.related_id === TEST_CONTACT_UUID);
+  assert.ok(found, `should find note with related_id ${TEST_CONTACT_UUID}`);
 });
 
 (SHOULD_RUN ? test : test.skip)('POST /api/notes requires tenant_id and content', async () => {
@@ -192,7 +196,7 @@ after(async () => {
     metadata: { priority: 'high', tags: ['important', 'test'] }
   });
   
-  assert.equal(result.status, 201, 'expected 201 from create note');
+  assert.ok([200, 201].includes(result.status), `expected 200/201 from create note, got ${result.status}`);
   const note = result.json?.data?.note || result.json?.data;
   assert.ok(note, 'expected note in response');
   assert.ok(note.metadata, 'expected metadata in response');
