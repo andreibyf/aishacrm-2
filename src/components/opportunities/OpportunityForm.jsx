@@ -152,11 +152,14 @@ export default function OpportunityForm({
   }, [formData.account_id, contacts]);
 
   // Filter leads based on selected account
+  // Show leads that match the account OR have no account (so they can be linked)
   useEffect(() => {
     if (formData.account_id) {
-      const filtered = leads.filter(l => l.account_id === formData.account_id);
+      // Show leads that match the selected account OR have no account assigned
+      const filtered = leads.filter(l => !l.account_id || l.account_id === formData.account_id);
       setFilteredLeads(filtered);
     } else {
+      // No account selected - show all leads
       setFilteredLeads(leads);
     }
   }, [formData.account_id, leads]);
@@ -384,35 +387,33 @@ export default function OpportunityForm({
             />
           </div>
 
-          {/* Lead (Optional) */}
-          {leads.length > 0 && (
-            <div>
-              <Label htmlFor="opp-lead" className="text-slate-300">Related Lead</Label>
-              <Select value={formData.lead_id || ""} onValueChange={value => handleChange('lead_id', value)}>
-                <SelectTrigger id="opp-lead" className="bg-slate-700 border-slate-600 text-white">
-                  <SelectValue placeholder="Select lead (optional)" />
-                </SelectTrigger>
-                <SelectContent 
-                  className="bg-slate-800 border-slate-600 text-slate-200"
-                  position="popper" 
-                  sideOffset={5}
-                  style={{ zIndex: 2147483647 }}
-                >
-                  <SelectItem value={null} className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">None</SelectItem>
-                  {filteredLeads.map(lead => (
-                    <SelectItem key={lead.id} value={lead.id} className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">
-                      {lead.first_name} {lead.last_name} {lead.company ? `- ${lead.company}` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          {/* Lead (Optional) - always show, even if no leads exist */}
+          <div>
+            <Label htmlFor="opp-lead" className="text-slate-300">Related Lead</Label>
+            <Select value={formData.lead_id || ""} onValueChange={value => handleChange('lead_id', value === "" ? null : value)}>
+              <SelectTrigger id="opp-lead" className="bg-slate-700 border-slate-600 text-white">
+                <SelectValue placeholder="Select lead (optional)" />
+              </SelectTrigger>
+              <SelectContent 
+                className="bg-slate-800 border-slate-600 text-slate-200"
+                position="popper" 
+                sideOffset={5}
+                style={{ zIndex: 2147483647 }}
+              >
+                <SelectItem value="" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">None</SelectItem>
+                {filteredLeads.map(lead => (
+                  <SelectItem key={lead.id} value={lead.id} className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">
+                    {lead.first_name} {lead.last_name} {lead.company ? `- ${lead.company}` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           {/* Assigned To */}
           <div>
             <Label htmlFor="opp-assigned" className="text-slate-300">Assigned To</Label>
-            <Select value={formData.assigned_to || ""} onValueChange={value => handleChange('assigned_to', value)}>
+            <Select value={formData.assigned_to || ""} onValueChange={value => handleChange('assigned_to', value === "" ? null : value)}>
               <SelectTrigger id="opp-assigned" className="bg-slate-700 border-slate-600 text-white">
                 <SelectValue placeholder="Select user" />
               </SelectTrigger>
@@ -422,7 +423,7 @@ export default function OpportunityForm({
                 sideOffset={5}
                 style={{ zIndex: 2147483647 }}
               >
-                <SelectItem value={null} className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">Unassigned</SelectItem>
+                <SelectItem value="" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">Unassigned</SelectItem>
                 {employees.map(emp => (
                   <SelectItem key={emp.id} value={emp.user_email || emp.email} className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">
                     {emp.first_name} {emp.last_name}
