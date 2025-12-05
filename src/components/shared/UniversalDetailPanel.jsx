@@ -926,9 +926,9 @@ export default function UniversalDetailPanel({
                             <DropdownMenuItem
                               onClick={() => {
                                 setEditingNote(note);
-                                setNewNoteTitle(note.title);
-                                setNewNoteContent(note.content);
-                                setNewNoteType(note.type);
+                                setNewNoteTitle(note.title || '');
+                                setNewNoteContent(note.content || '');
+                                setNewNoteType(note.type || note.metadata?.type || 'general');
                               }}
                               className="text-slate-200 hover:bg-slate-700 cursor-pointer"
                             >
