@@ -620,77 +620,65 @@ export default function createReportRoutes(_pgPool) {
    */
   router.get('/data-quality', async (req, res) => {
     try {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
       let { tenant_id } = req.query;
-            // Build WHERE clause for tenant filtering
-      const tenantWhere = tenant_id ? `WHERE tenant_id = $1` : '';
-      const params = tenant_id ? [tenant_id] : [];
+
+      // Helper to analyze a table's data quality using Supabase
+      async function analyzeTable(tableName, fields, tenantId) {
+        // Get all records for analysis
+        let query = supabase.from(tableName).select(fields.join(','));
+        if (tenantId) {
+          query = query.eq('tenant_id', tenantId);
+        }
+        const { data, error } = await query;
+        
+        if (error) {
+          console.error(`Error analyzing ${tableName}:`, error);
+          return { total: 0, missingFields: {} };
+        }
+        
+        const records = data || [];
+        const total = records.length;
+        const missingFields = {};
+        
+        // Count missing values for each field
+        fields.forEach(field => {
+          missingFields[field] = records.filter(r => 
+            r[field] === null || r[field] === '' || r[field] === undefined
+          ).length;
+        });
+        
+        return { total, missingFields };
+      }
 
       // Analyze Contacts
-      const contactsQuery = `
-        SELECT 
-          COUNT(*) as total,
-          COUNT(*) FILTER (WHERE email IS NULL OR email = '') as missing_email,
-          COUNT(*) FILTER (WHERE phone IS NULL OR phone = '') as missing_phone,
-          COUNT(*) FILTER (WHERE first_name IS NULL OR first_name = '') as missing_first_name,
-          COUNT(*) FILTER (WHERE last_name IS NULL OR last_name = '') as missing_last_name
-        FROM contact ${tenantWhere}
-      `;
-      const contactsResult = await pgPool.query(contactsQuery, params);
-      const contacts = contactsResult.rows[0];
-      const contactsTotal = parseInt(contacts.total);
-      const contactsIssues = parseInt(contacts.missing_email) + parseInt(contacts.missing_phone) + 
-                             parseInt(contacts.missing_first_name) + parseInt(contacts.missing_last_name);
-      const contactsIssuesPercent = contactsTotal > 0 ? (contactsIssues / (contactsTotal * 4)) * 100 : 0;
+      const contactFields = ['email', 'phone', 'first_name', 'last_name'];
+      const contactsAnalysis = await analyzeTable('contacts', contactFields, tenant_id);
+      const contactsTotal = contactsAnalysis.total;
+      const contactsIssues = Object.values(contactsAnalysis.missingFields).reduce((a, b) => a + b, 0);
+      const contactsIssuesPercent = contactsTotal > 0 ? (contactsIssues / (contactsTotal * contactFields.length)) * 100 : 0;
 
       // Analyze Accounts
-      const accountsQuery = `
-        SELECT 
-          COUNT(*) as total,
-          COUNT(*) FILTER (WHERE name IS NULL OR name = '') as missing_name,
-          COUNT(*) FILTER (WHERE industry IS NULL OR industry = '') as missing_industry,
-          COUNT(*) FILTER (WHERE website IS NULL OR website = '') as missing_website
-        FROM account ${tenantWhere}
-      `;
-      const accountsResult = await pgPool.query(accountsQuery, params);
-      const accounts = accountsResult.rows[0];
-      const accountsTotal = parseInt(accounts.total);
-      const accountsIssues = parseInt(accounts.missing_name) + parseInt(accounts.missing_industry) + 
-                             parseInt(accounts.missing_website);
-      const accountsIssuesPercent = accountsTotal > 0 ? (accountsIssues / (accountsTotal * 3)) * 100 : 0;
+      const accountFields = ['name', 'industry', 'website'];
+      const accountsAnalysis = await analyzeTable('accounts', accountFields, tenant_id);
+      const accountsTotal = accountsAnalysis.total;
+      const accountsIssues = Object.values(accountsAnalysis.missingFields).reduce((a, b) => a + b, 0);
+      const accountsIssuesPercent = accountsTotal > 0 ? (accountsIssues / (accountsTotal * accountFields.length)) * 100 : 0;
 
       // Analyze Leads
-      const leadsQuery = `
-        SELECT 
-          COUNT(*) as total,
-          COUNT(*) FILTER (WHERE email IS NULL OR email = '') as missing_email,
-          COUNT(*) FILTER (WHERE phone IS NULL OR phone = '') as missing_phone,
-          COUNT(*) FILTER (WHERE status IS NULL OR status = '') as missing_status,
-          COUNT(*) FILTER (WHERE source IS NULL OR source = '') as missing_source
-        FROM lead ${tenantWhere}
-      `;
-      const leadsResult = await pgPool.query(leadsQuery, params);
-      const leads = leadsResult.rows[0];
-      const leadsTotal = parseInt(leads.total);
-      const leadsIssues = parseInt(leads.missing_email) + parseInt(leads.missing_phone) + 
-                          parseInt(leads.missing_status) + parseInt(leads.missing_source);
-      const leadsIssuesPercent = leadsTotal > 0 ? (leadsIssues / (leadsTotal * 4)) * 100 : 0;
+      const leadFields = ['email', 'phone', 'status', 'source'];
+      const leadsAnalysis = await analyzeTable('leads', leadFields, tenant_id);
+      const leadsTotal = leadsAnalysis.total;
+      const leadsIssues = Object.values(leadsAnalysis.missingFields).reduce((a, b) => a + b, 0);
+      const leadsIssuesPercent = leadsTotal > 0 ? (leadsIssues / (leadsTotal * leadFields.length)) * 100 : 0;
 
       // Analyze Opportunities
-      const oppsQuery = `
-        SELECT 
-          COUNT(*) as total,
-          COUNT(*) FILTER (WHERE account_id IS NULL) as missing_account,
-          COUNT(*) FILTER (WHERE stage IS NULL OR stage = '') as missing_stage,
-          COUNT(*) FILTER (WHERE close_date IS NULL) as missing_close_date,
-          COUNT(*) FILTER (WHERE amount IS NULL) as missing_amount
-        FROM opportunity ${tenantWhere}
-      `;
-      const oppsResult = await pgPool.query(oppsQuery, params);
-      const opps = oppsResult.rows[0];
-      const oppsTotal = parseInt(opps.total);
-      const oppsIssues = parseInt(opps.missing_account) + parseInt(opps.missing_stage) + 
-                         parseInt(opps.missing_close_date) + parseInt(opps.missing_amount);
-      const oppsIssuesPercent = oppsTotal > 0 ? (oppsIssues / (oppsTotal * 4)) * 100 : 0;
+      const oppFields = ['account_id', 'stage', 'close_date', 'amount'];
+      const oppsAnalysis = await analyzeTable('opportunities', oppFields, tenant_id);
+      const oppsTotal = oppsAnalysis.total;
+      const oppsIssues = Object.values(oppsAnalysis.missingFields).reduce((a, b) => a + b, 0);
+      const oppsIssuesPercent = oppsTotal > 0 ? (oppsIssues / (oppsTotal * oppFields.length)) * 100 : 0;
 
       // Build response
       const report = {
@@ -699,10 +687,10 @@ export default function createReportRoutes(_pgPool) {
           issues_count: contactsIssues,
           issues_percentage: Math.round(contactsIssuesPercent * 100) / 100,
           missing_fields: {
-            email: parseInt(contacts.missing_email),
-            phone: parseInt(contacts.missing_phone),
-            first_name: parseInt(contacts.missing_first_name),
-            last_name: parseInt(contacts.missing_last_name)
+            email: contactsAnalysis.missingFields.email || 0,
+            phone: contactsAnalysis.missingFields.phone || 0,
+            first_name: contactsAnalysis.missingFields.first_name || 0,
+            last_name: contactsAnalysis.missingFields.last_name || 0
           }
         },
         accounts: {
@@ -710,9 +698,9 @@ export default function createReportRoutes(_pgPool) {
           issues_count: accountsIssues,
           issues_percentage: Math.round(accountsIssuesPercent * 100) / 100,
           missing_fields: {
-            name: parseInt(accounts.missing_name),
-            industry: parseInt(accounts.missing_industry),
-            website: parseInt(accounts.missing_website)
+            name: accountsAnalysis.missingFields.name || 0,
+            industry: accountsAnalysis.missingFields.industry || 0,
+            website: accountsAnalysis.missingFields.website || 0
           }
         },
         leads: {
@@ -720,10 +708,10 @@ export default function createReportRoutes(_pgPool) {
           issues_count: leadsIssues,
           issues_percentage: Math.round(leadsIssuesPercent * 100) / 100,
           missing_fields: {
-            email: parseInt(leads.missing_email),
-            phone: parseInt(leads.missing_phone),
-            status: parseInt(leads.missing_status),
-            source: parseInt(leads.missing_source)
+            email: leadsAnalysis.missingFields.email || 0,
+            phone: leadsAnalysis.missingFields.phone || 0,
+            status: leadsAnalysis.missingFields.status || 0,
+            source: leadsAnalysis.missingFields.source || 0
           }
         },
         opportunities: {
@@ -731,10 +719,10 @@ export default function createReportRoutes(_pgPool) {
           issues_count: oppsIssues,
           issues_percentage: Math.round(oppsIssuesPercent * 100) / 100,
           missing_fields: {
-            account_id: parseInt(opps.missing_account),
-            stage: parseInt(opps.missing_stage),
-            close_date: parseInt(opps.missing_close_date),
-            amount: parseInt(opps.missing_amount)
+            account_id: oppsAnalysis.missingFields.account_id || 0,
+            stage: oppsAnalysis.missingFields.stage || 0,
+            close_date: oppsAnalysis.missingFields.close_date || 0,
+            amount: oppsAnalysis.missingFields.amount || 0
           }
         }
       };
@@ -749,6 +737,580 @@ export default function createReportRoutes(_pgPool) {
     } catch (error) {
       console.error('Error analyzing data quality:', error);
       res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // POST /api/reports/export-insights-pdf - Generate AI Insights PDF with data
+  router.post('/export-insights-pdf', async (req, res) => {
+    let browser;
+    try {
+      const { tenant_id, tenant_name, industry, business_model, geographic_focus, insights } = req.body;
+
+      if (!insights) {
+        return res.status(400).json({ status: 'error', message: 'No insights data provided. Please generate insights first.' });
+      }
+
+      // Import puppeteer
+      const puppeteer = await import('puppeteer');
+
+      // Launch browser
+      browser = await puppeteer.default.launch({
+        headless: 'new',
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+      });
+
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1200, height: 800 });
+
+      // Helper to safely get array items
+      const safeArray = (arr) => Array.isArray(arr) ? arr : [];
+      const safeStr = (str) => str || 'N/A';
+      
+      // Helper to format large numbers
+      const formatLargeNumber = (num) => {
+        if (num === null || num === undefined || typeof num !== 'number' || isNaN(num)) return num;
+        if (Math.abs(num) >= 1e9) return (num / 1e9).toFixed(1).replace(/\.0$/, "") + "B";
+        if (Math.abs(num) >= 1e6) return (num / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+        if (Math.abs(num) >= 1e3) return (num / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
+        return num.toFixed(1);
+      };
+
+      // Helper to format display value with unit
+      const formatDisplayValue = (value, unit) => {
+        if (value === null || value === undefined || typeof value !== 'number' || isNaN(value)) return value;
+        if (unit && typeof unit === 'string') {
+          const lowerUnit = unit.toLowerCase();
+          if (lowerUnit.includes("usd") || lowerUnit.includes("dollar")) return "$" + formatLargeNumber(value);
+          if (lowerUnit.includes("percent") || lowerUnit === "%") return value.toFixed(1) + "%";
+        }
+        return value.toLocaleString("en-US", { maximumFractionDigits: 2 }) + (unit ? " " + unit : "");
+      };
+
+      // Build comprehensive HTML from insights data
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Executive Market Intelligence Report</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:wght@300;400;700&display=swap');
+            
+            * { box-sizing: border-box; }
+            body { 
+              font-family: 'Inter', sans-serif; 
+              margin: 0; 
+              padding: 0; 
+              color: #1e293b; 
+              background: #fff; 
+              line-height: 1.5;
+            }
+            
+            .page-container {
+              max-width: 100%;
+              margin: 0 auto;
+            }
+
+            /* Cover Page */
+            .cover-page {
+              height: 1123px; /* A4 height approx */
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
+              padding: 60px;
+              background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+              color: white;
+              position: relative;
+              page-break-after: always;
+            }
+            
+            .cover-logo {
+              font-size: 24px;
+              font-weight: 700;
+              letter-spacing: 1px;
+              margin-bottom: 100px;
+              color: #60a5fa;
+              text-transform: uppercase;
+            }
+            
+            .cover-title {
+              font-family: 'Merriweather', serif;
+              font-size: 48px;
+              font-weight: 700;
+              margin-bottom: 20px;
+              line-height: 1.2;
+            }
+            
+            .cover-subtitle {
+              font-size: 24px;
+              font-weight: 300;
+              opacity: 0.9;
+              margin-bottom: 60px;
+              color: #94a3b8;
+            }
+            
+            .cover-meta {
+              margin-top: auto;
+              border-top: 1px solid #334155;
+              padding-top: 30px;
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 20px;
+            }
+            
+            .cover-meta-item {
+              font-size: 14px;
+            }
+            
+            .cover-meta-label {
+              color: #64748b;
+              font-size: 12px;
+              text-transform: uppercase;
+              letter-spacing: 1px;
+              margin-bottom: 5px;
+            }
+            
+            .cover-meta-value {
+              font-weight: 600;
+              color: white;
+            }
+
+            /* Content Pages */
+            .content-page {
+              padding: 40px 50px;
+              background: white;
+            }
+            
+            .header-strip {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-bottom: 2px solid #f1f5f9;
+              padding-bottom: 15px;
+              margin-bottom: 30px;
+            }
+            
+            .header-title {
+              font-size: 12px;
+              text-transform: uppercase;
+              color: #64748b;
+              font-weight: 600;
+              letter-spacing: 1px;
+            }
+            
+            .section {
+              margin-bottom: 40px;
+              page-break-inside: avoid;
+            }
+            
+            .section-title {
+              font-family: 'Merriweather', serif;
+              font-size: 22px;
+              font-weight: 700;
+              color: #0f172a;
+              margin-bottom: 20px;
+              padding-bottom: 10px;
+              border-bottom: 1px solid #e2e8f0;
+              display: flex;
+              align-items: center;
+              gap: 10px;
+            }
+            
+            .section-icon {
+              color: #3b82f6;
+            }
+            
+            .narrative-box {
+              font-size: 15px;
+              line-height: 1.8;
+              color: #334155;
+              text-align: justify;
+            }
+            
+            /* SWOT Grid */
+            .swot-grid {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 20px;
+              margin-top: 20px;
+            }
+            
+            .swot-card {
+              padding: 20px;
+              border-radius: 8px;
+              background: #f8fafc;
+              border: 1px solid #e2e8f0;
+            }
+            
+            .swot-header {
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              margin-bottom: 15px;
+              font-weight: 700;
+              font-size: 14px;
+              text-transform: uppercase;
+            }
+            
+            .swot-strengths .swot-header { color: #059669; }
+            .swot-weaknesses .swot-header { color: #dc2626; }
+            .swot-opportunities .swot-header { color: #0284c7; }
+            .swot-threats .swot-header { color: #d97706; }
+            
+            .swot-list {
+              margin: 0;
+              padding-left: 20px;
+              font-size: 13px;
+              color: #475569;
+            }
+            
+            .swot-list li {
+              margin-bottom: 8px;
+            }
+
+            /* Indicators */
+            .indicators-grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 15px;
+            }
+            
+            .indicator-card {
+              background: white;
+              border: 1px solid #e2e8f0;
+              border-radius: 8px;
+              padding: 20px;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            }
+            
+            .indicator-name {
+              font-size: 12px;
+              color: #64748b;
+              font-weight: 600;
+              text-transform: uppercase;
+              margin-bottom: 8px;
+            }
+            
+            .indicator-value {
+              font-size: 24px;
+              font-weight: 700;
+              color: #0f172a;
+              margin-bottom: 5px;
+            }
+            
+            .indicator-trend {
+              font-size: 12px;
+              display: flex;
+              align-items: center;
+              gap: 5px;
+            }
+            
+            .trend-up { color: #16a34a; }
+            .trend-down { color: #dc2626; }
+            .trend-stable { color: #64748b; }
+
+            /* News */
+            .news-item {
+              display: flex;
+              gap: 15px;
+              margin-bottom: 20px;
+              padding-bottom: 20px;
+              border-bottom: 1px solid #f1f5f9;
+            }
+            
+            .news-date {
+              min-width: 100px;
+              font-size: 12px;
+              color: #94a3b8;
+              font-weight: 600;
+            }
+            
+            .news-content h4 {
+              margin: 0 0 5px 0;
+              font-size: 15px;
+              color: #1e293b;
+            }
+            
+            .news-desc {
+              font-size: 13px;
+              color: #64748b;
+              margin: 0;
+            }
+            
+            .sentiment-badge {
+              display: inline-block;
+              padding: 2px 8px;
+              border-radius: 12px;
+              font-size: 10px;
+              font-weight: 600;
+              text-transform: uppercase;
+              margin-left: 8px;
+            }
+            
+            .sentiment-positive { background: #dcfce7; color: #166534; }
+            .sentiment-negative { background: #fee2e2; color: #991b1b; }
+            .sentiment-neutral { background: #f1f5f9; color: #475569; }
+
+            /* Recommendations */
+            .rec-card {
+              background: #f8fafc;
+              border-left: 4px solid #3b82f6;
+              padding: 20px;
+              margin-bottom: 15px;
+              border-radius: 0 8px 8px 0;
+            }
+            
+            .rec-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 10px;
+            }
+            
+            .rec-title {
+              font-weight: 700;
+              color: #1e293b;
+              font-size: 15px;
+            }
+            
+            .rec-priority {
+              font-size: 11px;
+              font-weight: 700;
+              text-transform: uppercase;
+              padding: 4px 10px;
+              border-radius: 4px;
+            }
+            
+            .priority-high { background: #fee2e2; color: #991b1b; }
+            .priority-medium { background: #fef3c7; color: #92400e; }
+            .priority-low { background: #dcfce7; color: #166534; }
+            
+            .rec-desc {
+              font-size: 13px;
+              color: #475569;
+              line-height: 1.6;
+            }
+
+            .footer {
+              text-align: center;
+              font-size: 10px;
+              color: #cbd5e1;
+              margin-top: 50px;
+              padding-top: 20px;
+              border-top: 1px solid #f1f5f9;
+            }
+            
+            .badge {
+              display: inline-block;
+              padding: 4px 12px;
+              background: #e0e7ff;
+              color: #4338ca;
+              border-radius: 16px;
+              font-size: 12px;
+              font-weight: 500;
+              margin-right: 5px;
+              margin-bottom: 5px;
+            }
+          </style>
+        </head>
+        <body>
+          <!-- Cover Page -->
+          <div class="cover-page">
+            <div class="cover-logo">AISHA CRM INTELLIGENCE</div>
+            <div class="cover-title">Executive Market<br>Intelligence Report</div>
+            <div class="cover-subtitle">Strategic Analysis & Recommendations</div>
+            
+            <div class="cover-meta">
+              <div class="cover-meta-item">
+                <div class="cover-meta-label">Prepared For</div>
+                <div class="cover-meta-value">${safeStr(tenant_name)}</div>
+              </div>
+              <div class="cover-meta-item">
+                <div class="cover-meta-label">Date</div>
+                <div class="cover-meta-value">${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+              </div>
+              <div class="cover-meta-item">
+                <div class="cover-meta-label">Industry Focus</div>
+                <div class="cover-meta-value">${safeStr(industry)}</div>
+              </div>
+              <div class="cover-meta-item">
+                <div class="cover-meta-label">Region</div>
+                <div class="cover-meta-value">${safeStr(geographic_focus)}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Content Pages -->
+          <div class="content-page">
+            <div class="header-strip">
+              <div class="header-title">Market Intelligence Report</div>
+              <div class="header-title">Confidential</div>
+            </div>
+
+            <!-- Market Overview -->
+            ${insights.market_overview ? `
+              <div class="section">
+                <div class="section-title">
+                  <span class="section-icon">🌐</span> Market Overview
+                </div>
+                <div class="narrative-box">
+                  ${insights.market_overview}
+                </div>
+              </div>
+            `: ''}
+
+            <!-- SWOT Analysis -->
+            ${(insights.swot_analysis?.strengths?.length || insights.swot_analysis?.weaknesses?.length || insights.swot_analysis?.opportunities?.length || insights.swot_analysis?.threats?.length) ? `
+              <div class="section">
+                <div class="section-title">
+                  <span class="section-icon">📊</span> SWOT Analysis
+                </div>
+                <div class="swot-grid">
+                  <div class="swot-card swot-strengths">
+                    <div class="swot-header">Strengths</div>
+                    <ul class="swot-list">
+                      ${safeArray(insights.swot_analysis?.strengths).map(s => `<li>${s}</li>`).join('') || '<li>No data</li>'}
+                    </ul>
+                  </div>
+                  <div class="swot-card swot-weaknesses">
+                    <div class="swot-header">Weaknesses</div>
+                    <ul class="swot-list">
+                      ${safeArray(insights.swot_analysis?.weaknesses).map(w => `<li>${w}</li>`).join('') || '<li>No data</li>'}
+                    </ul>
+                  </div>
+                  <div class="swot-card swot-opportunities">
+                    <div class="swot-header">Opportunities</div>
+                    <ul class="swot-list">
+                      ${safeArray(insights.swot_analysis?.opportunities).map(o => `<li>${o}</li>`).join('') || '<li>No data</li>'}
+                    </ul>
+                  </div>
+                  <div class="swot-card swot-threats">
+                    <div class="swot-header">Threats</div>
+                    <ul class="swot-list">
+                      ${safeArray(insights.swot_analysis?.threats).map(t => `<li>${t}</li>`).join('') || '<li>No data</li>'}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            `: ''}
+
+            <!-- Competitive Landscape -->
+            ${insights.competitive_landscape ? `
+              <div class="section">
+                <div class="section-title">
+                  <span class="section-icon">🏆</span> Competitive Landscape
+                </div>
+                <div class="narrative-box">
+                  <p>${insights.competitive_landscape.overview || ''}</p>
+                  
+                  ${safeArray(insights.competitive_landscape.major_competitors).length > 0 ? `
+                    <div style="margin-top: 20px;">
+                      <strong style="display: block; margin-bottom: 10px; font-size: 13px; text-transform: uppercase; color: #64748b;">Major Competitors</strong>
+                      <div>
+                        ${safeArray(insights.competitive_landscape.major_competitors).map(c => `<span class="badge">${c}</span>`).join('')}
+                      </div>
+                    </div>
+                  `: ''}
+                  
+                  ${insights.competitive_landscape.market_dynamics ? `
+                    <div style="margin-top: 20px; background: #f1f5f9; padding: 15px; border-radius: 6px; font-size: 13px;">
+                      <strong>Market Dynamics:</strong> ${insights.competitive_landscape.market_dynamics}
+                    </div>
+                  `: ''}
+                </div>
+              </div>
+            `: ''}
+
+            <!-- Economic Indicators -->
+            ${safeArray(insights.economic_indicators).length > 0 ? `
+              <div class="section">
+                <div class="section-title">
+                  <span class="section-icon">📈</span> Key Economic Indicators
+                </div>
+                <div class="indicators-grid">
+                  ${safeArray(insights.economic_indicators).map(ind => `
+                    <div class="indicator-card">
+                      <div class="indicator-name">${ind.name || 'Indicator'}</div>
+                      <div class="indicator-value">${formatDisplayValue(ind.current_value, ind.unit)}</div>
+                      <div class="indicator-trend ${ind.trend === 'up' ? 'trend-up' : ind.trend === 'down' ? 'trend-down' : 'trend-stable'}">
+                        ${ind.trend === 'up' ? '▲' : ind.trend === 'down' ? '▼' : '●'} ${ind.trend ? ind.trend.toUpperCase() : 'STABLE'}
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            `: ''}
+
+            <!-- Major News -->
+            ${safeArray(insights.major_news).length > 0 ? `
+              <div class="section">
+                <div class="section-title">
+                  <span class="section-icon">📰</span> Major News & Events
+                </div>
+                <div>
+                  ${safeArray(insights.major_news).slice(0, 5).map(news => `
+                    <div class="news-item">
+                      <div class="news-date">${news.date || 'Recent'}</div>
+                      <div class="news-content">
+                        <h4>
+                          ${news.title}
+                          <span class="sentiment-badge sentiment-${news.impact || 'neutral'}">${news.impact || 'neutral'}</span>
+                        </h4>
+                        <p class="news-desc">${news.description || ''}</p>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            `: ''}
+
+            <!-- Strategic Recommendations -->
+            ${safeArray(insights.recommendations).length > 0 ? `
+              <div class="section">
+                <div class="section-title">
+                  <span class="section-icon">⚡</span> Strategic Recommendations
+                </div>
+                <div>
+                  ${safeArray(insights.recommendations).map(rec => `
+                    <div class="rec-card">
+                      <div class="rec-header">
+                        <div class="rec-title">${rec.title}</div>
+                        <div class="rec-priority priority-${rec.priority || 'medium'}">${rec.priority || 'MEDIUM'} PRIORITY</div>
+                      </div>
+                      <div class="rec-desc">${rec.description || ''}</div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            `: ''}
+
+            <div class="footer">
+              Generated by Aisha CRM Intelligence • ${new Date().getFullYear()} • Confidential & Proprietary
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+
+      const pdfBuffer = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: { top: '0', right: '0', bottom: '0', left: '0' } // Zero margins because we handle padding in CSS
+      });
+
+      const pdfData = Buffer.from(pdfBuffer);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="ai_insights_report_${Date.now()}.pdf"`);
+      res.setHeader('Content-Length', pdfData.length);
+      res.end(pdfData);
+
+    } catch (error) {
+      console.error('Error generating AI insights PDF:', error);
+      res.status(500).json({ status: 'error', message: error.message, details: 'Failed to generate PDF report' });
+    } finally {
+      if (browser) await browser.close();
     }
   });
 
@@ -976,6 +1538,116 @@ export default function createReportRoutes(_pgPool) {
           </body>
           </html>
         `;
+      } else if (report_type === 'ai-insights' || report_type === 'insights') {
+        // AI Market Insights Report
+        // Note: This generates a template for manually-triggered insights
+        // The actual insights are generated via /api/mcp/market-insights
+        
+        // Get tenant info for context
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
+        
+        let tenantInfo = { name: 'Unknown Tenant', industry: 'Not specified' };
+        if (tenant_id) {
+          const { data: tenantData } = await supabase
+            .from('tenants')
+            .select('name, industry, business_model, geographic_focus')
+            .eq('id', tenant_id)
+            .single();
+          if (tenantData) {
+            tenantInfo = tenantData;
+          }
+        }
+
+        htmlContent = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>AI Market Insights Report</title>
+            <style>
+              body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 40px; color: #1e293b; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); }
+              .container { max-width: 900px; margin: 0 auto; background: white; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); overflow: hidden; }
+              .header { background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); color: white; padding: 40px; text-align: center; }
+              .header h1 { margin: 0 0 10px 0; font-size: 32px; font-weight: 700; }
+              .header p { margin: 0; opacity: 0.9; font-size: 16px; }
+              .content { padding: 40px; }
+              .section { margin-bottom: 30px; padding: 25px; background: #f8fafc; border-radius: 12px; border-left: 4px solid #3b82f6; }
+              .section h2 { color: #3b82f6; margin: 0 0 15px 0; font-size: 20px; display: flex; align-items: center; gap: 10px; }
+              .section h2::before { content: ''; width: 8px; height: 8px; background: #3b82f6; border-radius: 50%; }
+              .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 30px; }
+              .info-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+              .info-card .label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+              .info-card .value { font-size: 18px; font-weight: 600; color: #1e293b; }
+              .note { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; padding: 15px; margin-top: 30px; }
+              .note-title { font-weight: 600; color: #92400e; margin-bottom: 5px; }
+              .note-text { color: #78350f; font-size: 14px; }
+              .footer { text-align: center; padding: 30px; background: #f1f5f9; color: #64748b; font-size: 12px; }
+              .badge { display: inline-block; padding: 4px 12px; background: #e0e7ff; color: #4338ca; border-radius: 20px; font-size: 12px; font-weight: 500; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>🧠 AI Market Insights Report</h1>
+                <p>Powered by Aisha CRM Intelligence</p>
+              </div>
+              
+              <div class="content">
+                <div class="info-grid">
+                  <div class="info-card">
+                    <div class="label">Organization</div>
+                    <div class="value">${tenantInfo.name || 'N/A'}</div>
+                  </div>
+                  <div class="info-card">
+                    <div class="label">Industry</div>
+                    <div class="value">${tenantInfo.industry || 'Not specified'}</div>
+                  </div>
+                  <div class="info-card">
+                    <div class="label">Business Model</div>
+                    <div class="value"><span class="badge">${tenantInfo.business_model || 'B2B'}</span></div>
+                  </div>
+                  <div class="info-card">
+                    <div class="label">Geographic Focus</div>
+                    <div class="value">${tenantInfo.geographic_focus || 'North America'}</div>
+                  </div>
+                </div>
+
+                <div class="section">
+                  <h2>Market Overview</h2>
+                  <p>AI-generated market analysis provides real-time insights into your industry landscape, competitive positioning, and growth opportunities.</p>
+                </div>
+
+                <div class="section">
+                  <h2>Key Indicators Tracked</h2>
+                  <ul style="color: #475569; line-height: 1.8;">
+                    <li><strong>Market Size & Growth</strong> - Current market valuation and projected growth rates</li>
+                    <li><strong>Industry Trends</strong> - Emerging patterns and technology adoption</li>
+                    <li><strong>Competitive Landscape</strong> - Key players and market positioning</li>
+                    <li><strong>Economic Indicators</strong> - GDP impact, employment trends, investment flows</li>
+                    <li><strong>Risk Assessment</strong> - Potential threats and mitigation strategies</li>
+                    <li><strong>Opportunities</strong> - Actionable growth opportunities for your business</li>
+                  </ul>
+                </div>
+
+                <div class="note">
+                  <div class="note-title">💡 Interactive Insights Available</div>
+                  <div class="note-text">
+                    For detailed, real-time AI-generated insights including market indicators, trend analysis, 
+                    and personalized recommendations, please use the interactive AI Insights dashboard in the 
+                    Aisha CRM application. Click "Generate Insights" to get the latest market intelligence.
+                  </div>
+                </div>
+              </div>
+
+              <div class="footer">
+                <p>Generated on ${new Date().toLocaleString()}</p>
+                <p>Aisha CRM - AI-Powered Customer Relationship Management</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `;
       } else {
         throw new Error(`Unsupported report type: ${report_type}`);
       }
@@ -995,13 +1667,16 @@ export default function createReportRoutes(_pgPool) {
         }
       });
 
+      // Convert to Buffer if needed (puppeteer returns Uint8Array in newer versions)
+      const pdfData = Buffer.from(pdfBuffer);
+
       // Set response headers
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${report_type}_report_${Date.now()}.pdf"`);
-      res.setHeader('Content-Length', pdfBuffer.length);
+      res.setHeader('Content-Length', pdfData.length);
 
-      // Send PDF
-      res.send(pdfBuffer);
+      // Send PDF as binary
+      res.end(pdfData);
 
     } catch (error) {
       console.error('Error generating PDF:', error);

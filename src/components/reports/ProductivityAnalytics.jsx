@@ -276,18 +276,18 @@ export default function ProductivityAnalytics({ tenantFilter }) {
   const insights = [
     {
       type: "completion",
-      bgColor: "bg-blue-50",
-      textColor: "text-blue-900",
-      borderColor: "border-blue-200",
+      bgColor: "bg-blue-900/30",
+      textColor: "text-blue-200",
+      borderColor: "border-blue-700",
       message: stats.highestCompletionDate
         ? `Your highest completion rate was during the week of ${stats.highestCompletionDate}. Schedule important tasks during these periods.`
         : "Track your activities to see completion patterns.",
     },
     {
       type: "improvement",
-      bgColor: "bg-green-50",
-      textColor: "text-green-900",
-      borderColor: "border-green-200",
+      bgColor: "bg-green-900/30",
+      textColor: "text-green-200",
+      borderColor: "border-green-700",
       message: stats.completionRate < 70
         ? `Your completion rate of ${
           stats.completionRate.toFixed(1)
@@ -298,18 +298,18 @@ export default function ProductivityAnalytics({ tenantFilter }) {
     },
     {
       type: "focus",
-      bgColor: "bg-purple-50",
-      textColor: "text-purple-900",
-      borderColor: "border-purple-200",
+      bgColor: "bg-purple-900/30",
+      textColor: "text-purple-200",
+      borderColor: "border-purple-700",
       message: stats.mostProductiveType !== "N/A"
         ? `Most productive activity type: "${stats.mostProductiveType}". Focus more energy on high-performing tasks.`
         : "Complete more activities to identify your most productive task types.",
     },
     {
       type: "deadline",
-      bgColor: "bg-amber-50",
-      textColor: "text-amber-900",
-      borderColor: "border-amber-200",
+      bgColor: "bg-amber-900/30",
+      textColor: "text-amber-200",
+      borderColor: "border-amber-700",
       message: stats.overdueCount > 0
         ? `You have ${stats.overdueCount} overdue tasks. Consider using time-blocking and setting realistic deadlines to improve efficiency.`
         : "No overdue tasks! Your deadline management is excellent.",

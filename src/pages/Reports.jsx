@@ -214,8 +214,63 @@ export default function ReportsPage() {
     setIsExporting(true);
     try {
       if (format === 'pdf') {
-        // Export PDF via backend endpoint
         const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+        
+        // Special handling for AI Insights - use POST with insights data
+        if (activeTab === 'insights') {
+          // Try to get insights data from the component's data attribute
+          const insightsElement = document.querySelector('[data-ai-insights]');
+          const insightsData = insightsElement?.getAttribute('data-ai-insights');
+          
+          if (!insightsData || insightsData === 'null') {
+            toast.error('Please generate insights first before exporting');
+            setIsExporting(false);
+            return;
+          }
+          
+          try {
+            const insights = JSON.parse(insightsData);
+            const response = await fetch(`${BACKEND_URL}/api/reports/export-insights-pdf`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                tenant_id: currentScopedFilter?.tenant_id,
+                tenant_name: currentTenantData?.name || 'Unknown Tenant',
+                industry: currentTenantData?.industry || 'Not specified',
+                business_model: currentTenantData?.business_model || 'B2B',
+                geographic_focus: currentTenantData?.geographic_focus || 'North America',
+                insights
+              })
+            });
+            
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.message || 'Failed to generate PDF');
+            }
+            
+            // Download the PDF
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `ai_insights_report_${Date.now()}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            
+            toast.success('AI Insights PDF downloaded successfully!');
+            setIsExporting(false);
+            return;
+          } catch (parseError) {
+            console.error('Error parsing insights data:', parseError);
+            toast.error('Failed to export insights. Please try regenerating them.');
+            setIsExporting(false);
+            return;
+          }
+        }
+        
+        // Standard PDF export for other report types
         const params = new URLSearchParams();
         if (currentScopedFilter?.tenant_id) {
           params.append('tenant_id', currentScopedFilter.tenant_id);

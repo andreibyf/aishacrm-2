@@ -73,6 +73,9 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        USE_SYSTEM_CHROMIUM: "true"
+        PUPPETEER_SKIP_DOWNLOAD: "1"
     container_name: aishacrm-backend
     restart: unless-stopped
     depends_on:
@@ -114,34 +117,9 @@ services:
     networks:
       - aishanet
 
-  # MCP Server (local build mirroring production image usage)
-  mcp:
-    build:
-      context: ./braid-mcp-node-server
-      dockerfile: Dockerfile
-    container_name: aishacrm-mcp
-    restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_started
-      redis-memory:
-        condition: service_healthy
-    ports:
-      - "4002:8000"
-    env_file:
-      - ./.env
-    environment:
-      - NODE_ENV=development
-      - CRM_BACKEND_URL=http://backend:3001
-      - REDIS_URL=redis://redis-memory:6379
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8000/health || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-    networks:
-      - aishanet
+  # NOTE: MCP is now provided by braid-mcp-node-server's own docker-compose.yml
+  # with braid-mcp-server (coordinator) + braid-mcp-1, braid-mcp-2 (worker nodes)
+  # Run: cd braid-mcp-node-server && docker compose up -d
 
   # Frontend (Vite dev server for development, or built static for production-like testing)
   frontend:
