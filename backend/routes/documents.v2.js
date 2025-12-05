@@ -21,7 +21,7 @@ export default function createDocumentV2Routes(_pgPool) {
   /**
    * Build AI context for a document
    */
-  async function buildDocumentAiContext(document, options = {}) {
+  async function buildDocumentAiContext(document, _options = {}) {
     const startTime = Date.now();
     
     if (!document) {
@@ -38,7 +38,7 @@ export default function createDocumentV2Routes(_pgPool) {
 
     try {
       const supabase = getSupabaseClient();
-      const { tenant_id, id, name, file_type, file_size, related_type, related_id, created_at } = document;
+      const { tenant_id: _tenant_id, id: _id, name, file_type, file_size, related_type, related_id, created_at } = document;
 
       // Classify document type
       const classification = classifyDocument(name, file_type);
@@ -547,7 +547,7 @@ export default function createDocumentV2Routes(_pgPool) {
    */
   router.post('/analyze', async (req, res) => {
     try {
-      const { tenant_id, document_url, document_id, content } = req.body;
+      const { tenant_id, document_url: _document_url, document_id, content } = req.body;
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });

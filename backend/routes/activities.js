@@ -177,7 +177,7 @@ export default function createActivityRoutes(_pgPool) {
   const _expandMetadata = (record) => {
     if (!record) return record;
     const metadataObj = record.metadata && typeof record.metadata === 'object' ? record.metadata : {};
-    const { metadata = {}, ...rest } = record;
+    const { metadata: _metadata = {}, ...rest } = record;
     return {
       ...metadataObj,
       ...rest,

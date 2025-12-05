@@ -13,7 +13,7 @@
 import { getSupabaseClient } from './supabase-db.js';
 
 const ENABLE_AI_ENRICHMENT = process.env.AI_ENRICHMENT_ENABLED !== 'false';
-const AI_ENRICHMENT_TIMEOUT = parseInt(process.env.AI_ENRICHMENT_TIMEOUT_MS || '500', 10);
+const _AI_ENRICHMENT_TIMEOUT = parseInt(process.env.AI_ENRICHMENT_TIMEOUT_MS || '500', 10); // Reserved for future timeout
 const SLOW_THRESHOLD_MS = parseInt(process.env.AI_CONTEXT_SLOW_THRESHOLD_MS || '500', 10);
 
 /**
@@ -28,7 +28,7 @@ function warnIfSlow(entityType, entityId, processingTime) {
 /**
  * Build AI context for an Opportunity
  */
-export async function buildOpportunityAiContext(opportunity, options = {}) {
+export async function buildOpportunityAiContext(opportunity, _options = {}) {
   const startTime = Date.now();
   
   if (!opportunity || !ENABLE_AI_ENRICHMENT) {
@@ -37,7 +37,7 @@ export async function buildOpportunityAiContext(opportunity, options = {}) {
 
   try {
     const supabase = getSupabaseClient();
-    const { tenant_id, id, account_id, contact_id, stage, amount, probability, close_date } = opportunity;
+    const { tenant_id, id, account_id, contact_id, stage: _stage, amount: _amount, probability: _probability, close_date } = opportunity;
 
     // Fetch related data in parallel
     const [activitiesResult, accountResult, contactResult] = await Promise.all([
@@ -105,7 +105,7 @@ export async function buildOpportunityAiContext(opportunity, options = {}) {
 /**
  * Build AI context for an Activity
  */
-export async function buildActivityAiContext(activity, options = {}) {
+export async function buildActivityAiContext(activity, _options = {}) {
   const startTime = Date.now();
   
   if (!activity || !ENABLE_AI_ENRICHMENT) {
@@ -114,7 +114,7 @@ export async function buildActivityAiContext(activity, options = {}) {
 
   try {
     const supabase = getSupabaseClient();
-    const { tenant_id, related_type, related_id, type, status, due_date } = activity;
+    const { tenant_id: _tenant_id, related_type, related_id, type: _type, status, due_date: _due_date } = activity;
 
     // Fetch related entity
     let relatedEntity = null;
@@ -164,7 +164,7 @@ export async function buildActivityAiContext(activity, options = {}) {
 /**
  * Build AI context for a Contact
  */
-export async function buildContactAiContext(contact, options = {}) {
+export async function buildContactAiContext(contact, _options = {}) {
   const startTime = Date.now();
   
   if (!contact || !ENABLE_AI_ENRICHMENT) {
@@ -173,7 +173,7 @@ export async function buildContactAiContext(contact, options = {}) {
 
   try {
     const supabase = getSupabaseClient();
-    const { tenant_id, id, account_id, email, job_title } = contact;
+    const { tenant_id, id, account_id, email: _email, job_title } = contact;
 
     // Fetch related data
     const [activitiesResult, accountResult, opportunitiesResult] = await Promise.all([
@@ -239,7 +239,7 @@ export async function buildContactAiContext(contact, options = {}) {
 /**
  * Build AI context for an Account
  */
-export async function buildAccountAiContext(account, options = {}) {
+export async function buildAccountAiContext(account, _options = {}) {
   const startTime = Date.now();
   
   if (!account || !ENABLE_AI_ENRICHMENT) {
@@ -248,7 +248,7 @@ export async function buildAccountAiContext(account, options = {}) {
 
   try {
     const supabase = getSupabaseClient();
-    const { tenant_id, id, industry, annual_revenue } = account;
+    const { tenant_id, id, industry: _industry, annual_revenue } = account;
 
     // Fetch related data
     const [contactsResult, opportunitiesResult, activitiesResult] = await Promise.all([
@@ -305,7 +305,7 @@ export async function buildAccountAiContext(account, options = {}) {
 /**
  * Build AI context for a Lead
  */
-export async function buildLeadAiContext(lead, options = {}) {
+export async function buildLeadAiContext(lead, _options = {}) {
   const startTime = Date.now();
   
   if (!lead || !ENABLE_AI_ENRICHMENT) {
@@ -314,7 +314,7 @@ export async function buildLeadAiContext(lead, options = {}) {
 
   try {
     const supabase = getSupabaseClient();
-    const { tenant_id, id, status, source, company, score } = lead;
+    const { tenant_id, id, status, source: _source, company, score } = lead;
 
     // Fetch related activities
     const { data: activities } = await supabase
@@ -391,7 +391,7 @@ function createStubContext(entityType, startTime, error = null) {
 }
 
 function calculateDealHealth(opportunity, activities) {
-  const { stage, close_date, updated_at } = opportunity;
+  const { stage: _stage, close_date, updated_at } = opportunity;
   const daysSinceUpdate = updated_at ? Math.floor((Date.now() - new Date(updated_at)) / (1000 * 60 * 60 * 24)) : 999;
   const daysToClose = close_date ? Math.ceil((new Date(close_date) - new Date()) / (1000 * 60 * 60 * 24)) : null;
   
@@ -483,7 +483,7 @@ function generateOpportunityInsights(opportunity, activities, account, contact) 
   return insights;
 }
 
-function generateActivitySuggestions(activity, relatedEntity) {
+function generateActivitySuggestions(activity, _relatedEntity) {
   const suggestions = [];
   const { status, due_date, type } = activity;
 
@@ -520,7 +520,7 @@ function generateActivitySuggestions(activity, relatedEntity) {
 
 function generateActivityInsights(activity) {
   const insights = [];
-  const { type, status, due_date } = activity;
+  const { type: _type, status, due_date } = activity;
 
   if (status === 'overdue' || (due_date && new Date(due_date) < new Date() && status !== 'completed')) {
     insights.push('This activity is overdue');
@@ -660,7 +660,7 @@ function generateAccountSuggestions(account, contacts, opportunities, activities
   return suggestions;
 }
 
-function generateAccountInsights(account, contacts, opportunities, activities) {
+function generateAccountInsights(account, contacts, opportunities, _activities) {
   const insights = [];
 
   if (contacts.length > 0) {

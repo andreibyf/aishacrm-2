@@ -158,7 +158,8 @@ export default function TenantSwitcher({ user }) {
     return selectedTenantId ?? "all";
   };
 
-  const getCurrentTenantName = () => {
+  // Reserved for future display use (e.g., header showing current tenant)
+  const _getCurrentTenantName = () => {
     if (!selectedTenantId) return "All Clients";
     const tenantsArray = Array.isArray(tenants) ? tenants : [];
     // Match by UUID id only

@@ -5,8 +5,7 @@
 
 import express from 'express';
 import multer from 'multer';
-import { Readable } from 'node:stream';
-import { createChatCompletion, buildSystemPrompt, getOpenAIClient } from '../lib/aiProvider.js';
+import { buildSystemPrompt, getOpenAIClient } from '../lib/aiProvider.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { summarizeToolResult, BRAID_SYSTEM_PROMPT, generateToolSchemas, executeBraidTool } from '../lib/braidIntegration-v2.js';
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
@@ -17,7 +16,6 @@ export default function createAIRoutes(pgPool) {
   const router = express.Router();
   router.use(createAiRealtimeRoutes(pgPool));
   const DEFAULT_CHAT_MODEL = process.env.DEFAULT_OPENAI_MODEL || 'gpt-4o';
-  const DEFAULT_REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-12-17';
   const DEFAULT_STT_MODEL = process.env.OPENAI_STT_MODEL || 'whisper-1';
   const MAX_STT_AUDIO_BYTES = parseInt(process.env.MAX_STT_AUDIO_BYTES || '6000000', 10);
   const MAX_TOOL_ITERATIONS = 3;
@@ -328,68 +326,6 @@ export default function createAIRoutes(pgPool) {
         console.warn('[AI Routes] Failed to broadcast conversation update:', err.message || err);
       }
     });
-  };
-
-  // Simple keyword-based topic classifier
-  // Returns one of: leads, accounts, opportunities, contacts, support, general
-  const classifyTopicFromText = (text) => {
-    if (!text || typeof text !== 'string') return 'general';
-    const t = text.toLowerCase();
-
-    // Leads-related keywords
-    if (/(lead|leads|prospect|prospecting|mql|sql|source|campaign|list build|qualification|pipeline\s?gen)/.test(t)) {
-      return 'leads';
-    }
-
-    // Opportunities / deals keywords
-    if (/(opportunity|opportunities|deal|deals|pipeline|stage|close\s?date|forecast|quote|proposal)/.test(t)) {
-      return 'opportunities';
-    }
-
-    // Accounts / companies keywords
-    if (/(account|accounts|customer\s?account|company|companies|organization|org|client|clients)/.test(t)) {
-      return 'accounts';
-    }
-
-    // Contacts / people keywords
-    if (/(contact|contacts|person|people|individual|email list|phone list|prospect list)/.test(t)) {
-      return 'contacts';
-    }
-
-    // Support / issues keywords
-    if (/(support|ticket|issue|bug|incident|helpdesk|escalation|sla)/.test(t)) {
-      return 'support';
-    }
-
-    return 'general';
-  };
-
-  // Strip tenant/client boilerplate from message content before using it for titles/topics
-  const stripTenantPreamble = (text) => {
-    if (!text || typeof text !== 'string') return '';
-    let out = text;
-    // Remove bracketed preambles that mention client/tenant
-    out = out.replace(/\[[^\]]*\]/g, (match) => (/client|tenant/i.test(match) ? '' : match));
-    // Drop lines that are boilerplate labels
-    out = out
-      .split(/\r?\n/)
-      .filter((line) => !/^\s*(client\s*id|client\s*name|tenant\s*id|tenant|client)\s*:/i.test(line.trim()))
-      .join('\n');
-    // Collapse whitespace
-    out = out.replace(/[\t ]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
-    return out;
-  };
-
-  // Generate a concise title from user content with boilerplate removed
-  const generateAutoTitleFromContent = (text, maxLen = 50) => {
-    const cleaned = stripTenantPreamble(text) || '';
-    let candidate = cleaned || (typeof text === 'string' ? text : '');
-    const firstLine = (candidate.split(/\r?\n/).map((s) => s.trim()).find(Boolean)) || candidate.trim();
-    const sentence = firstLine.split(/[.!?]/)[0].trim() || firstLine;
-    let title = sentence.slice(0, maxLen);
-    if (sentence.length > maxLen) title += '...';
-    if (!title) title = 'New conversation';
-    return title;
   };
 
   const resolveTenantOpenAiKey = async ({ explicitKey, headerKey, userKey, tenantSlug }) => {

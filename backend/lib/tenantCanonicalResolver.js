@@ -110,7 +110,7 @@ export async function resolveCanonicalTenant(identifier) {
       const result = { uuid: input, slug: input, source: 'uuid-input', found: false };
       setCached(input, result);
       return result;
-    } catch (err) {
+    } catch (_err) {
       const result = { uuid: input, slug: input, source: 'uuid-error', found: false };
       setCached(input, result);
       return result;

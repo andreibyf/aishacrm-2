@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { AlertCircle, Building2, CheckSquare, Loader2, RefreshCw, Send, Sparkles, Target, TrendingUp, Users, X, Mic, Square, Volume2, Headphones, Trash2 } from 'lucide-react';
+import { AlertCircle, Building2, CheckSquare, Loader2, Send, Sparkles, Target, TrendingUp, Users, X, Mic, Square, Volume2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useAiSidebarState } from './useAiSidebarState.jsx';
@@ -313,7 +313,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   const [draftOrigin, setDraftOrigin] = useState('text');
   const [voiceWarning, setVoiceWarning] = useState(null);
   const [voiceModeActive, setVoiceModeActive] = useState(false); // Full voice mode (continuous + auto-speak)
-  const [isContinuousMode, setIsContinuousMode] = useState(true); // Default to continuous conversation
+  const [isContinuousMode, _setIsContinuousMode] = useState(true); // Default to continuous conversation
   const [isPTTActive, setIsPTTActive] = useState(false); // Track when PTT button is being held
   const { user } = useUser();
   const bottomMarkerRef = useRef(null);
@@ -689,7 +689,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     isPlaying: isSpeechPlaying,
     error: speechPlaybackError
   } = useSpeechOutput({ onEnded: handleSpeechEnded });
-  const [activeSpeechMessageId, setActiveSpeechMessageId] = useState(null);
+  const [_activeSpeechMessageId, setActiveSpeechMessageId] = useState(null);
   const [autoPlayMessageId, setAutoPlayMessageId] = useState(null);
 
   // Continuous listening mode - pause when AI is speaking or sending
@@ -702,7 +702,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     error: speechError, 
     startListening, 
     stopListening,
-    toggleListening 
+    toggleListening: _toggleListening 
   } = useSpeechInput({
     onFinalTranscript: handleVoiceTranscript,
     continuousMode: true,  // Always use continuous mode internally
@@ -906,7 +906,8 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     }
   }, [playSpeech]);
 
-  const stopSpeechPlayback = useCallback(() => {
+  // Reserved for future UI button to stop speech playback
+  const _stopSpeechPlayback = useCallback(() => {
     stopPlayback();
     setActiveSpeechMessageId(null);
   }, [stopPlayback]);
@@ -990,7 +991,8 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     }
   }, [isRealtimeActive, isRecording, stopRecording]);
 
-  const handlePressToTalkCancel = useCallback((event) => {
+  // Reserved for future cancel gesture on PTT
+  const _handlePressToTalkCancel = useCallback((event) => {
     if (event) {
       event.preventDefault();
       event.stopPropagation();
@@ -1001,14 +1003,16 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     stopRecording();
   }, [isRealtimeActive, isRecording, stopRecording]);
 
-  const handleVoiceKeyDown = useCallback((event) => {
+  // Reserved for future keyboard PTT support
+  const _handleVoiceKeyDown = useCallback((event) => {
     if (isRealtimeActive) return;
     if (event.code !== 'Space' && event.code !== 'Enter') return;
     if (pressToTalkActiveRef.current) return;
     handlePressToTalkStart(event);
   }, [handlePressToTalkStart, isRealtimeActive]);
 
-  const handleVoiceKeyUp = useCallback((event) => {
+  // Reserved for future keyboard PTT support
+  const _handleVoiceKeyUp = useCallback((event) => {
     if (isRealtimeActive) return;
     if (event.code !== 'Space' && event.code !== 'Enter') return;
     handlePressToTalkEnd(event);
@@ -1072,8 +1076,9 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     }
   };
 
-  const sendButtonDisabled = !draft.trim() || (isRealtimeActive ? !isRealtimeConnected || isRealtimeInitializing : isSending);
-  const isSendLoading = isRealtimeActive ? isRealtimeInitializing : isSending;
+  // Reserved for future send button state refinement
+  const _sendButtonDisabled = !draft.trim() || (isRealtimeActive ? !isRealtimeConnected || isRealtimeInitializing : isSending);
+  const _isSendLoading = isRealtimeActive ? isRealtimeInitializing : isSending;
 
   useEffect(() => {
     if (!isRealtimeFeatureAvailable && isRealtimeEnabled) {

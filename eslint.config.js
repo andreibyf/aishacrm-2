@@ -94,8 +94,8 @@ export default [
       'react/jsx-no-target-blank': 'off',
       'react/prop-types': 'off',
       'react-refresh/only-export-components': 'off',
-      // Keep unused vars as warnings, ignore underscored args/vars
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      // Keep unused vars as warnings, ignore underscored args/vars/caught errors
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
       // Disallow direct Postgres access; use Supabase client instead
       'no-restricted-imports': [
         'error',
