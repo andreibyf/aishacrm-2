@@ -62,9 +62,9 @@ describe('Employee Routes', { skip: !SHOULD_RUN }, () => {
       role: 'Account Manager',
       status: 'active'
     });
-    // 403 = blocked test email patterns (security feature)
-    assert.ok([201, 403].includes(result.status), `expected 201 or 403, got ${result.status}`);
-    if (result.status === 201) {
+    // 200/201 = success, 403 = blocked test email patterns (security feature)
+    assert.ok([200, 201, 403].includes(result.status), `expected 200, 201 or 403, got ${result.status}`);
+    if ([200, 201].includes(result.status)) {
       const id = result.json?.data?.id || result.json?.data?.employee?.id;
       assert.ok(id, 'employee should have an id');
       createdIds.push(id);

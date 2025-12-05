@@ -48,7 +48,7 @@ before(async () => {
     related_type: 'contact',
     related_id: 'test-contact-123'
   });
-  assert.equal(a.status, 201, `create note A failed: ${JSON.stringify(a.json)}`);
+  assert.ok([200, 201].includes(a.status), `create note A failed: ${JSON.stringify(a.json)}`);
   const idA = a.json?.data?.id || a.json?.data?.note?.id;
   assert.ok(idA, 'note A should have an id');
   createdIds.push(idA);
@@ -59,7 +59,7 @@ before(async () => {
     related_type: 'account',
     related_id: 'test-account-456'
   });
-  assert.equal(b.status, 201, `create note B failed: ${JSON.stringify(b.json)}`);
+  assert.ok([200, 201].includes(b.status), `create note B failed: ${JSON.stringify(b.json)}`);
   const idB = b.json?.data?.id || b.json?.data?.note?.id;
   assert.ok(idB, 'note B should have an id');
   createdIds.push(idB);

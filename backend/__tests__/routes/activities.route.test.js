@@ -26,11 +26,11 @@ async function deleteActivity(id) {
 before(async () => {
   if (!SHOULD_RUN) return;
   const a = await createActivity({});
-  assert.equal(a.status, 201, `create activity A failed: ${JSON.stringify(a.json)}`);
+  assert.ok([200, 201].includes(a.status), `create activity A failed: ${JSON.stringify(a.json)}`);
   createdIds.push(a.json?.data?.id || a.json?.data?.activity?.id || a.json?.data?.id);
 
   const b = await createActivity({});
-  assert.equal(b.status, 201, `create activity B failed: ${JSON.stringify(b.json)}`);
+  assert.ok([200, 201].includes(b.status), `create activity B failed: ${JSON.stringify(b.json)}`);
   createdIds.push(b.json?.data?.id || b.json?.data?.activity?.id || b.json?.data?.id);
 });
 

@@ -269,7 +269,7 @@ describe('Suggestion Actions', { skip: !SHOULD_RUN }, () => {
     const res = await fetch(`${BASE_URL}/api/ai/suggestions/${testSuggestionId}/approve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: 'test-user' })
+      body: JSON.stringify({ tenant_id: TENANT_ID, user_id: 'test-user' })
     });
     
     assert.ok([200, 404].includes(res.status), `Expected 200 or 404, got ${res.status}`);
@@ -289,6 +289,7 @@ describe('Suggestion Actions', { skip: !SHOULD_RUN }, () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
+        tenant_id: TENANT_ID,
         user_id: 'test-user',
         rejection_reason: 'Test rejection'
       })

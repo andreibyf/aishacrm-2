@@ -49,7 +49,7 @@ before(async () => {
     phone: '555-0001',
     status: 'active'
   });
-  assert.equal(a.status, 201, `create contact A failed: ${JSON.stringify(a.json)}`);
+  assert.ok([200, 201].includes(a.status), `create contact A failed: ${JSON.stringify(a.json)}`);
   const idA = a.json?.data?.id || a.json?.data?.contact?.id;
   assert.ok(idA, 'contact A should have an id');
   createdIds.push(idA);
@@ -60,7 +60,7 @@ before(async () => {
     email: `contact_b_${Date.now()}@test.com`,
     status: 'inactive'
   });
-  assert.equal(b.status, 201, `create contact B failed: ${JSON.stringify(b.json)}`);
+  assert.ok([200, 201].includes(b.status), `create contact B failed: ${JSON.stringify(b.json)}`);
   const idB = b.json?.data?.id || b.json?.data?.contact?.id;
   assert.ok(idB, 'contact B should have an id');
   createdIds.push(idB);

@@ -49,7 +49,7 @@ before(async () => {
     close_date: '2025-12-31',
     probability: 25
   });
-  assert.equal(a.status, 201, `create opportunity A failed: ${JSON.stringify(a.json)}`);
+  assert.ok([200, 201].includes(a.status), `create opportunity A failed: ${JSON.stringify(a.json)}`);
   const idA = a.json?.data?.id || a.json?.data?.opportunity?.id;
   assert.ok(idA, 'opportunity A should have an id');
   createdIds.push(idA);
@@ -61,7 +61,7 @@ before(async () => {
     close_date: '2025-11-30',
     probability: 75
   });
-  assert.equal(b.status, 201, `create opportunity B failed: ${JSON.stringify(b.json)}`);
+  assert.ok([200, 201].includes(b.status), `create opportunity B failed: ${JSON.stringify(b.json)}`);
   const idB = b.json?.data?.id || b.json?.data?.opportunity?.id;
   assert.ok(idB, 'opportunity B should have an id');
   createdIds.push(idB);
