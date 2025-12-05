@@ -390,7 +390,7 @@ export default function OpportunityForm({
           {/* Lead (Optional) - always show, even if no leads exist */}
           <div>
             <Label htmlFor="opp-lead" className="text-slate-300">Related Lead</Label>
-            <Select value={formData.lead_id || ""} onValueChange={value => handleChange('lead_id', value === "" ? null : value)}>
+            <Select value={formData.lead_id || "__none__"} onValueChange={value => handleChange('lead_id', value === "__none__" ? null : value)}>
               <SelectTrigger id="opp-lead" className="bg-slate-700 border-slate-600 text-white">
                 <SelectValue placeholder="Select lead (optional)" />
               </SelectTrigger>
@@ -400,7 +400,7 @@ export default function OpportunityForm({
                 sideOffset={5}
                 style={{ zIndex: 2147483647 }}
               >
-                <SelectItem value="" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">None</SelectItem>
+                <SelectItem value="__none__" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">None</SelectItem>
                 {filteredLeads.map(lead => (
                   <SelectItem key={lead.id} value={lead.id} className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">
                     {lead.first_name} {lead.last_name} {lead.company ? `- ${lead.company}` : ''}
@@ -413,7 +413,7 @@ export default function OpportunityForm({
           {/* Assigned To */}
           <div>
             <Label htmlFor="opp-assigned" className="text-slate-300">Assigned To</Label>
-            <Select value={formData.assigned_to || ""} onValueChange={value => handleChange('assigned_to', value === "" ? null : value)}>
+            <Select value={formData.assigned_to || "__unassigned__"} onValueChange={value => handleChange('assigned_to', value === "__unassigned__" ? null : value)}>
               <SelectTrigger id="opp-assigned" className="bg-slate-700 border-slate-600 text-white">
                 <SelectValue placeholder="Select user" />
               </SelectTrigger>
@@ -423,7 +423,7 @@ export default function OpportunityForm({
                 sideOffset={5}
                 style={{ zIndex: 2147483647 }}
               >
-                <SelectItem value="" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">Unassigned</SelectItem>
+                <SelectItem value="__unassigned__" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">Unassigned</SelectItem>
                 {employees.map(emp => (
                   <SelectItem key={emp.id} value={emp.user_email || emp.email} className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">
                     {emp.first_name} {emp.last_name}
