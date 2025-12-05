@@ -10,6 +10,87 @@
  */
 
 import { emitTenantWebhooks } from './webhookEmitter.js';
+import { getSupabaseClient } from './supabase-db.js';
+
+/**
+ * Create an in-app notification for call completions
+ * Notifies the contact/lead owner with call summary and customer name
+ */
+async function createCallNotification({
+  tenant_id,
+  contact_id,
+  contact_type,
+  contact_name,
+  direction,
+  outcome,
+  summary,
+  sentiment
+}) {
+  try {
+    const supabase = getSupabaseClient();
+    
+    // Get the assigned user for this contact/lead
+    const table = contact_type === 'lead' ? 'leads' : 'contacts';
+    const { data: record } = await supabase
+      .from(table)
+      .select('assigned_to')
+      .eq('id', contact_id)
+      .eq('tenant_id', tenant_id)
+      .single();
+    
+    if (!record?.assigned_to) return;
+
+    // Get user email
+    const { data: user } = await supabase
+      .from('users')
+      .select('email')
+      .eq('id', record.assigned_to)
+      .single();
+    
+    if (!user?.email) return;
+
+    // Build notification
+    const emoji = direction === 'inbound' ? '📞' : '📤';
+    const name = contact_name || 'Unknown';
+    
+    let title, message;
+    if (outcome === 'answered' && summary) {
+      title = `${emoji} Call with ${name}`;
+      message = summary.length > 250 ? summary.substring(0, 247) + '...' : summary;
+    } else if (outcome === 'answered') {
+      title = `${emoji} Call completed: ${name}`;
+      message = `${direction === 'inbound' ? 'Inbound' : 'Outbound'} call with ${name} completed.`;
+    } else if (outcome === 'voicemail') {
+      title = `${emoji} Voicemail left for ${name}`;
+      message = `Left voicemail. Consider following up.`;
+    } else if (outcome === 'no-answer' || outcome === 'busy') {
+      title = `${emoji} ${name} didn't answer`;
+      message = `Call ended: ${outcome}. Schedule a callback?`;
+    } else {
+      return; // Don't notify for failed calls, etc.
+    }
+
+    // Determine notification type based on sentiment
+    const type = sentiment === 'positive' ? 'success' 
+               : sentiment === 'negative' ? 'warning' 
+               : 'info';
+
+    await supabase.from('notifications').insert({
+      tenant_id,
+      user_email: user.email,
+      title,
+      message,
+      type,
+      is_read: false,
+      link: `/${contact_type}s?id=${contact_id}`,
+      metadata: { contact_id, contact_type, direction, outcome, sentiment }
+    });
+
+    console.log(`[CallFlow] Notification created for ${user.email}: ${title}`);
+  } catch (error) {
+    console.warn('[CallFlow] Notification creation failed:', error.message);
+  }
+}
 
 /**
  * Process inbound call webhook
@@ -143,7 +224,7 @@ export async function handleInboundCall(pgPool, payload) {
     });
   }
 
-  // Step 6: Emit webhook
+  // Step 8: Emit webhook
   await emitTenantWebhooks(tenant_id, 'call.inbound', {
     contact_id: contactId,
     contact_type: contactType,
@@ -153,6 +234,18 @@ export async function handleInboundCall(pgPool, payload) {
     summary,
     action_items: actionItems
   }).catch(err => console.error('[CallFlow] Webhook emission failed:', err.message));
+
+  // Step 9: Create in-app notification for assigned user
+  await createCallNotification({
+    tenant_id,
+    contact_id: contactId,
+    contact_type: contactType,
+    contact_name: contactName,
+    direction: 'inbound',
+    outcome: 'answered',
+    summary,
+    sentiment
+  });
 
   return {
     success: true,
@@ -330,6 +423,18 @@ export async function handleOutboundCall(pgPool, payload) {
     action_items: actionItems,
     campaign_id
   }).catch(err => console.error('[CallFlow] Webhook emission failed:', err.message));
+
+  // Step 8: Create in-app notification for assigned user
+  await createCallNotification({
+    tenant_id,
+    contact_id: contactId,
+    contact_type: contactType,
+    contact_name: contactName,
+    direction: 'outbound',
+    outcome,
+    summary,
+    sentiment
+  });
 
   return {
     success: true,
