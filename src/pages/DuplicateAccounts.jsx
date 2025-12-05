@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { formatIndustry } from "@/utils/industryUtils";
 import {
   AlertTriangle,
   ArrowDownCircle,
@@ -522,7 +523,7 @@ export default function DuplicateAccounts() {
                                     <span className="font-medium">
                                       Industry:
                                     </span>{" "}
-                                    {account.industry.replace(/_/g, " ")}
+                                    {formatIndustry(account.industry)}
                                   </p>
                                 )}
                                 {account?.website && (

@@ -4,6 +4,7 @@ import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, DollarSign } from "lucide-react";
 import { createPageUrl } from "@/utils";
+import { formatIndustry } from "@/utils/industryUtils";
 
 export default function TopAccounts({ tenantFilter, showTestData }) {
   const [accounts, setAccounts] = React.useState([]);
@@ -135,7 +136,7 @@ export default function TopAccounts({ tenantFilter, showTestData }) {
                     </p>
                     <p className="text-slate-500 text-xs">
                       {account.dealCount} {account.dealCount === 1 ? 'deal' : 'deals'} won
-                      {account.industry && ` • ${account.industry}`}
+                      {account.industry && ` • ${formatIndustry(account.industry)}`}
                     </p>
                   </div>
                 </div>

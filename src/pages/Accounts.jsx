@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/tooltip";
 import StatusHelper from "../components/shared/StatusHelper";
 import { ComponentHelp } from "../components/shared/ComponentHelp";
+import { formatIndustry } from "@/utils/industryUtils";
 
 // Helper to add delay between API calls
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1243,7 +1244,7 @@ export default function AccountsPage() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-sm text-slate-300">
-                            {account.industry || (
+                            {formatIndustry(account.industry) || (
                               <span className="text-slate-500">—</span>
                             )}
                           </td>

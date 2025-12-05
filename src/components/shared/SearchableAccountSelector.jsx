@@ -3,6 +3,7 @@ import { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Check, ChevronsUpDown, X } from "lucide-react";
+import { formatIndustry } from "@/utils/industryUtils";
 import {
   Command,
   // CommandInput, // Reserved for future use
@@ -107,7 +108,7 @@ export default function SearchableAccountSelector({ value, onChange, accounts, p
                 <div className="flex flex-col">
                   <span>{account.name}</span>
                   {account.industry && (
-                    <span className="text-xs text-slate-400">{account.industry}</span>
+                    <span className="text-xs text-slate-400">{formatIndustry(account.industry)}</span>
                   )}
                 </div>
               </CommandItem>
