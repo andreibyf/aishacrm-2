@@ -160,14 +160,30 @@ WHERE metadata ? 'is_test_data'
   AND lower(metadata ->> 'is_test_data') IN ('true','false');
 
 -- ---------------------------------------------------------------------------
--- Activities - Add assigned_to, is_test_data
+-- Activities - Add assigned_to, is_test_data, updated_at
 -- ---------------------------------------------------------------------------
 ALTER TABLE activities
   ADD COLUMN IF NOT EXISTS assigned_to UUID REFERENCES employees(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS is_test_data BOOLEAN DEFAULT false;
+  ADD COLUMN IF NOT EXISTS is_test_data BOOLEAN DEFAULT false,
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_activities_assigned_to ON activities(tenant_id, assigned_to) WHERE assigned_to IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_activities_is_test_data ON activities(tenant_id, is_test_data) WHERE is_test_data = true;
+
+-- Set updated_at trigger for activities if not exists
+CREATE OR REPLACE FUNCTION update_activities_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS activities_updated_at_trigger ON activities;
+CREATE TRIGGER activities_updated_at_trigger
+  BEFORE UPDATE ON activities
+  FOR EACH ROW
+  EXECUTE FUNCTION update_activities_updated_at();
 
 -- Backfill from metadata
 UPDATE activities
