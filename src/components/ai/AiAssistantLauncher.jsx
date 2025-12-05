@@ -50,7 +50,7 @@ export default function AiAssistantLauncher({
     <button
       type="button"
       onClick={onToggle}
-      className="group flex h-10 w-full max-w-full items-center gap-2 rounded-2xl border border-white/15 bg-slate-900/70 px-2.5 py-1.5 text-left text-slate-100 shadow-lg shadow-slate-950/40 backdrop-blur transition hover:-translate-y-0.5 hover:border-indigo-400/60 hover:bg-slate-900/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 sm:w-[210px]"
+      className="group flex h-10 w-[210px] items-center gap-2 rounded-2xl border border-white/15 bg-slate-900/70 px-2.5 py-1.5 text-left text-slate-100 shadow-lg shadow-slate-950/40 backdrop-blur transition hover:-translate-y-0.5 hover:border-indigo-400/60 hover:bg-slate-900/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
       aria-pressed={isOpen}
       aria-label="Toggle AiSHA assistant"
     >

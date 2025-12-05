@@ -358,10 +358,15 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
         toast.error('Select a tenant before starting a guided form.');
         return;
       }
-      setActiveFormId(schemaId);
+      // Toggle off if clicking the same chip, otherwise select new one
+      if (activeFormId === schemaId) {
+        setActiveFormId(null);
+      } else {
+        setActiveFormId(schemaId);
+      }
       setFormSubmissionState({ isSubmitting: false, error: null });
     },
-    [tenantId]
+    [tenantId, activeFormId]
   );
 
   const handleConversationalCancel = useCallback(() => {
@@ -1275,16 +1280,18 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                       type="button"
                       onClick={() => handleFormChipClick(schema.id)}
                       title={schema.label}
-                      className={`group relative flex items-center justify-center rounded-lg border p-2 transition-all duration-200 ${isActive
-                          ? 'border-emerald-500 bg-emerald-600 text-white shadow-sm'
-                          : 'border-emerald-200 bg-white text-emerald-600 hover:border-emerald-400 hover:bg-emerald-50 hover:pr-[4.5rem] dark:border-emerald-500/40 dark:bg-slate-900/60 dark:text-emerald-300 dark:hover:bg-emerald-900/30'
+                      className={`group relative flex items-center justify-center rounded-lg border p-2 transition-colors duration-200 ${isActive
+                          ? 'border-emerald-500 bg-emerald-600 text-white shadow-sm pr-3'
+                          : 'border-emerald-200 bg-white text-emerald-600 hover:border-emerald-400 hover:bg-emerald-50 dark:border-emerald-500/40 dark:bg-slate-900/60 dark:text-emerald-300 dark:hover:bg-emerald-900/30'
                         } ${!canUseConversationalForms ? 'opacity-60 cursor-not-allowed' : ''}`}
                       disabled={!canUseConversationalForms || formSubmissionState.isSubmitting}
                     >
                       <IconComponent className="h-4 w-4 flex-shrink-0" />
-                      <span className={`ml-1.5 max-w-0 overflow-hidden whitespace-nowrap text-xs font-medium opacity-0 transition-all duration-200 ${isActive ? 'max-w-[60px] opacity-100' : 'group-hover:max-w-[60px] group-hover:opacity-100'}`}>
-                        {schema.label.replace('New ', '')}
-                      </span>
+                      {isActive && (
+                        <span className="ml-1.5 whitespace-nowrap text-xs font-medium">
+                          {schema.label.replace('New ', '')}
+                        </span>
+                      )}
                     </button>
                   );
                 })}

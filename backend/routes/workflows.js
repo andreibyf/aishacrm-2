@@ -1047,6 +1047,81 @@ export default function createWorkflowRoutes(pgPool) {
     }
   });
 
+  // PATCH /api/workflows/:id/status - Toggle workflow active status
+  /**
+   * @openapi
+   * /api/workflows/{id}/status:
+   *   patch:
+   *     summary: Toggle workflow active status
+   *     tags: [workflows]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, is_active]
+   *             properties:
+   *               tenant_id: { type: string }
+   *               is_active: { type: boolean }
+   *     responses:
+   *       200:
+   *         description: Workflow status updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
+  router.patch('/:id/status', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { tenant_id, is_active } = req.body;
+
+      if (!tenant_id) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'tenant_id is required' 
+        });
+      }
+
+      if (typeof is_active !== 'boolean') {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'is_active must be a boolean' 
+        });
+      }
+
+      const result = await pgPool.query(
+        `UPDATE workflow 
+         SET is_active = $1, updated_at = NOW() 
+         WHERE id = $2 AND tenant_id = $3 
+         RETURNING id, name, is_active`,
+        [is_active, id, tenant_id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ 
+          status: 'error', 
+          message: 'Workflow not found or access denied' 
+        });
+      }
+
+      res.json({
+        status: 'success',
+        message: `Workflow ${is_active ? 'activated' : 'deactivated'}`,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Error updating workflow status:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // Execute workflow by ID (no internal HTTP)
   /**
    * @openapi

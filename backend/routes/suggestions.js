@@ -467,22 +467,45 @@ export default function createSuggestionsRoutes(pgPool) {
         return res.status(404).json({ status: 'error', message: 'Tenant not found' });
       }
 
+      // First check current status - Supabase wrapper doesn't support IN clause in UPDATE WHERE
+      const checkQuery = `
+        SELECT id, status FROM ai_suggestions 
+        WHERE id = $1 AND tenant_id = $2
+      `;
+      const checkResult = await pgPool.query(checkQuery, [id, resolved.uuid]);
+      
+      if (checkResult.rows.length === 0) {
+        return res.status(404).json({ 
+          status: 'error', 
+          message: 'Suggestion not found' 
+        });
+      }
+      
+      const currentStatus = checkResult.rows[0].status;
+      if (currentStatus !== 'pending') {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: `Suggestion already processed with status: ${currentStatus}` 
+        });
+      }
+
+      // Now update - Supabase wrapper only parses $N parameters, not literals
       const query = `
         UPDATE ai_suggestions
-        SET status = 'approved', 
+        SET status = $3, 
             reviewed_at = NOW(), 
-            reviewed_by = $3,
+            reviewed_by = $4,
             updated_at = NOW()
-        WHERE id = $1 AND tenant_id = $2 AND status = 'pending'
+        WHERE id = $1 AND tenant_id = $2
         RETURNING *
       `;
 
-      const result = await pgPool.query(query, [id, resolved.uuid, userId]);
+      const result = await pgPool.query(query, [id, resolved.uuid, 'approved', userId]);
 
       if (result.rows.length === 0) {
         return res.status(404).json({ 
           status: 'error', 
-          message: 'Suggestion not found or already processed' 
+          message: 'Suggestion not found or update failed' 
         });
       }
 
@@ -543,20 +566,45 @@ export default function createSuggestionsRoutes(pgPool) {
         return res.status(404).json({ status: 'error', message: 'Tenant not found' });
       }
 
+      // First check current status - Supabase wrapper doesn't support IN clause in UPDATE WHERE
+      const checkQuery = `
+        SELECT id, status FROM ai_suggestions 
+        WHERE id = $1 AND tenant_id = $2
+      `;
+      const checkResult = await pgPool.query(checkQuery, [id, resolved.uuid]);
+      
+      if (checkResult.rows.length === 0) {
+        return res.status(404).json({ 
+          status: 'error', 
+          message: 'Suggestion not found' 
+        });
+      }
+      
+      const currentStatus = checkResult.rows[0].status;
+      if (currentStatus !== 'pending' && currentStatus !== 'approved') {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: `Suggestion already processed with status: ${currentStatus}` 
+        });
+      }
+
+      // Now update - Supabase wrapper only parses $N parameters, not literals
+      // So status must be passed as a parameter, not as 'rejected' literal
       const query = `
         UPDATE ai_suggestions
-        SET status = 'rejected', 
+        SET status = $3, 
             reviewed_at = NOW(), 
-            reviewed_by = $3,
-            apply_result = $4,
+            reviewed_by = $4,
+            apply_result = $5,
             updated_at = NOW()
-        WHERE id = $1 AND tenant_id = $2 AND status IN ('pending', 'approved')
+        WHERE id = $1 AND tenant_id = $2
         RETURNING *
       `;
 
       const result = await pgPool.query(query, [
         id, 
         resolved.uuid, 
+        'rejected',  // status as parameter
         userId,
         JSON.stringify({ rejection_reason: reason || 'User rejected' }),
       ]);
@@ -564,7 +612,7 @@ export default function createSuggestionsRoutes(pgPool) {
       if (result.rows.length === 0) {
         return res.status(404).json({ 
           status: 'error', 
-          message: 'Suggestion not found or already processed' 
+          message: 'Suggestion not found or update failed' 
         });
       }
 
@@ -574,7 +622,7 @@ export default function createSuggestionsRoutes(pgPool) {
         status: 'success',
         data: result.rows[0],
         message: 'Suggestion rejected.',
-      });
+      })
     } catch (error) {
       console.error('[Suggestions] Error rejecting suggestion:', error);
       res.status(500).json({ status: 'error', message: error.message });
@@ -625,12 +673,12 @@ export default function createSuggestionsRoutes(pgPool) {
         return res.status(404).json({ status: 'error', message: 'Tenant not found' });
       }
 
-      // Fetch the suggestion
+      // Fetch the suggestion - Supabase wrapper requires $N for WHERE values
       const fetchQuery = `
         SELECT * FROM ai_suggestions
-        WHERE id = $1 AND tenant_id = $2 AND status = 'approved'
+        WHERE id = $1 AND tenant_id = $2 AND status = $3
       `;
-      const fetchResult = await pgPool.query(fetchQuery, [id, resolved.uuid]);
+      const fetchResult = await pgPool.query(fetchQuery, [id, resolved.uuid, 'approved']);
 
       if (fetchResult.rows.length === 0) {
         return res.status(404).json({ 

@@ -41,17 +41,18 @@ const TRIGGER_ICONS = {
 function CompactSuggestionItem({ suggestion, onApprove, onReject, isProcessing }) {
   const icon = TRIGGER_ICONS[suggestion.trigger_type] || '💡';
   const name = suggestion.record_name || `${suggestion.record_type}`;
+  const reasoning = suggestion.reasoning || '';
 
   return (
-    <div className="flex items-start gap-2 p-2 hover:bg-muted rounded-md transition-colors">
-      <span className="text-lg">{icon}</span>
-      <div className="flex-1 min-w-0">
+    <div className="flex items-start gap-2 p-2 hover:bg-muted rounded-md transition-colors overflow-hidden">
+      <span className="text-lg flex-shrink-0">{icon}</span>
+      <div className="flex-1 min-w-0 overflow-hidden">
         <p className="text-sm font-medium truncate">{name}</p>
-        <p className="text-xs text-muted-foreground truncate">
-          {suggestion.reasoning?.slice(0, 60)}...
+        <p className="text-xs text-muted-foreground line-clamp-2">
+          {reasoning.length > 80 ? `${reasoning.slice(0, 80)}...` : reasoning}
         </p>
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 flex-shrink-0">
         <Button 
           size="icon" 
           variant="ghost" 
@@ -178,6 +179,36 @@ export default function SuggestionBadge({ tenantId, onViewAll }) {
     }
   }, [backendUrl, tenantId]);
 
+  /**
+   * Dismiss all suggestions
+   */
+  const handleDismissAll = useCallback(async () => {
+    if (suggestions.length === 0) return;
+    
+    try {
+      setIsProcessing(true);
+      
+      // Reject all suggestions in parallel
+      await Promise.all(
+        suggestions.map(s => 
+          fetch(`${backendUrl}/api/ai/suggestions/${s.id}/reject`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tenant_id: tenantId, reason: 'Bulk dismissal from notification panel' }),
+          })
+        )
+      );
+      
+      setSuggestions([]);
+      toast.success('All suggestions dismissed');
+    } catch (err) {
+      console.error('Error dismissing all suggestions:', err);
+      toast.error('Failed to dismiss suggestions');
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [backendUrl, tenantId, suggestions]);
+
   // Fetch on mount and when opened
   useEffect(() => {
     fetchSuggestions();
@@ -246,16 +277,28 @@ export default function SuggestionBadge({ tenantId, onViewAll }) {
           )}
         </ScrollArea>
         
-        {suggestions.length > 0 && onViewAll && (
-          <div className="p-2 border-t">
+        {suggestions.length > 0 && (
+          <div className="p-2 border-t flex items-center gap-2">
             <Button 
-              variant="ghost" 
-              className="w-full justify-between text-sm"
-              onClick={() => { setIsOpen(false); onViewAll(); }}
+              variant="outline" 
+              size="sm"
+              className="flex-1 text-xs text-muted-foreground"
+              onClick={handleDismissAll}
+              disabled={isProcessing}
             >
-              View all suggestions
-              <ChevronRight className="h-4 w-4" />
+              Dismiss All
             </Button>
+            {onViewAll && (
+              <Button 
+                variant="ghost" 
+                size="sm"
+                className="flex-1 justify-between text-xs"
+                onClick={() => { setIsOpen(false); onViewAll(); }}
+              >
+                View all
+                <ChevronRight className="h-3 w-3" />
+              </Button>
+            )}
           </div>
         )}
       </PopoverContent>

@@ -6,7 +6,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { AlertCircle, Building2, Globe } from "lucide-react";
 import { Tenant } from "@/api/entities";
 import { useTenant } from "./tenantContext";
@@ -259,14 +258,6 @@ export default function TenantSwitcher({ user }) {
         </Select>
       </div>
 
-      <div className="hidden lg:block">
-        <Badge
-          variant="outline"
-          className="text-xs bg-slate-700/50 text-slate-300 border-slate-600"
-        >
-          Managing Client: {getCurrentTenantName()}
-        </Badge>
-      </div>
     </div>
   );
 }

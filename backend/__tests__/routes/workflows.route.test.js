@@ -6,13 +6,24 @@ const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e
 // In CI, run only if explicitly enabled
 const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : true;
 
+// Test data prefix for easy identification and cleanup
+const TEST_PREFIX = '[TEST-AUTO]';
+
 const createdIds = [];
 
 async function createWorkflow(payload) {
   const res = await fetch(`${BASE_URL}/api/workflows`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tenant_id: TENANT_ID, ...payload })
+    body: JSON.stringify({ 
+      tenant_id: TENANT_ID,
+      // Mark as test data for easy identification
+      is_test_data: true,
+      ...payload,
+      // Prefix name for visibility
+      name: payload.name ? `${TEST_PREFIX} ${payload.name}` : `${TEST_PREFIX} Workflow`,
+      description: payload.description ? `${TEST_PREFIX} ${payload.description}` : `${TEST_PREFIX} Auto-created by test suite`
+    })
   });
   const json = await res.json();
   return { status: res.status, json };
@@ -26,13 +37,16 @@ async function deleteWorkflow(id) {
 describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
 
   before(async () => {
-    // Create test workflow
+    // Create test workflow with sample nodes for realistic testing
     const wf = await createWorkflow({
-      name: 'Test Workflow',
-      description: 'Automated test workflow',
-      trigger_type: 'manual',
+      name: 'Workflow',
+      description: 'Setup workflow',
+      trigger_type: 'webhook',
       status: 'draft',
-      steps: []
+      nodes: [
+        { id: 'trigger-1', type: 'webhook_trigger', config: {}, position: { x: 400, y: 200 } }
+      ],
+      connections: []
     });
     if (wf.status === 201) {
       const id = wf.json?.data?.id || wf.json?.data?.workflow?.id;
@@ -41,8 +55,9 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
   });
 
   after(async () => {
+    // Clean up all test workflows
     for (const id of createdIds.filter(Boolean)) {
-      try { await deleteWorkflow(id); } catch { /* ignore */ }
+      try { await deleteWorkflow(id); } catch { /* ignore cleanup errors */ }
     }
   });
 
@@ -54,13 +69,18 @@ describe('Workflow Routes', { skip: !SHOULD_RUN }, () => {
     assert.ok(json.data?.workflows || Array.isArray(json.data), 'expected workflows array');
   });
 
-  test('POST /api/workflows creates new workflow', async () => {
+  test('POST /api/workflows creates new workflow with nodes', async () => {
     const result = await createWorkflow({
       name: `Workflow ${Date.now()}`,
-      description: 'Created by test',
+      description: 'Created dynamically',
       trigger_type: 'event',
       trigger_config: { event: 'lead.created' },
-      status: 'draft'
+      status: 'draft',
+      nodes: [
+        { id: 'trigger-1', type: 'webhook_trigger', config: {}, position: { x: 400, y: 100 } },
+        { id: 'action-1', type: 'create_lead', config: {}, position: { x: 400, y: 300 } }
+      ],
+      connections: [{ from: 'trigger-1', to: 'action-1' }]
     });
     assert.equal(result.status, 201, `expected 201, got ${result.status}: ${JSON.stringify(result.json)}`);
     const id = result.json?.data?.id || result.json?.data?.workflow?.id;

@@ -635,31 +635,30 @@ async function handleUpdateQuery(sql, params) {
       }
     }
     
-    // Fallback for other stale columns (status, due_date, etc.)
-    const staleCols = ['status','due_date'];
-    let removed = false;
-    for (const c of staleCols) {
-      if (c in updateData) {
-        delete updateData[c];
-        removed = true;
-      }
-    }
-    if (removed) {
-      let retry = supabaseClient.from(table).update(updateData);
-      const whereConditions2 = wherePart.split(/\s+and\s+/i);
-      for (const cond of whereConditions2) {
-        const eqMatch = cond.trim().match(/([a-z_]+)\s*=\s*\$(\d+)/i);
-        if (eqMatch) {
-          const colName = eqMatch[1];
-          const paramNum = parseInt(eqMatch[2], 10) - 1;
-          if (paramNum >= 0 && paramNum < params.length) {
-            retry = retry.eq(colName, params[paramNum]);
+    // Only remove the SPECIFIC column mentioned in the error, not all "stale" columns
+    // The old behavior was removing status/due_date blindly, which broke status updates
+    if (colMatch) {
+      const missingCol = colMatch[1];
+      if (Object.prototype.hasOwnProperty.call(updateData, missingCol)) {
+        console.warn(`[Supabase API] Removing missing column '${missingCol}' from UPDATE on ${table}`);
+        delete updateData[missingCol];
+        
+        let retry = supabaseClient.from(table).update(updateData);
+        const whereConditions2 = wherePart.split(/\s+and\s+/i);
+        for (const cond of whereConditions2) {
+          const eqMatch = cond.trim().match(/([a-z_]+)\s*=\s*\$(\d+)/i);
+          if (eqMatch) {
+            const colName = eqMatch[1];
+            const paramNum = parseInt(eqMatch[2], 10) - 1;
+            if (paramNum >= 0 && paramNum < params.length) {
+              retry = retry.eq(colName, params[paramNum]);
+            }
           }
         }
+        const retryRes = await retry.select();
+        if (retryRes.error) throw retryRes.error;
+        return { rows: retryRes.data || [], rowCount: retryRes.data?.length || 0 };
       }
-      const retryRes = await retry.select();
-      if (retryRes.error) throw retryRes.error;
-      return { rows: retryRes.data || [], rowCount: retryRes.data?.length || 0 };
     }
   }
   if (error) throw error;

@@ -130,6 +130,11 @@ export default function createMCPRoutes(_pgPool) {
           "crm.get_tenant_stats",
           "crm.list_workflows",
           "crm.execute_workflow",
+          "crm.update_workflow",
+          "crm.toggle_workflow_status",
+          "crm.list_workflow_templates",
+          "crm.get_workflow_template",
+          "crm.instantiate_workflow_template",
         ],
       });
 
@@ -210,6 +215,73 @@ export default function createMCPRoutes(_pgPool) {
 
       // CRM MCP toolset
       if (server_id === "crm") {
+        // Workflow template read tools don't require tenant_id (system templates are public)
+        if (tool_name === "crm.list_workflow_templates") {
+          const { category, include_inactive = false } = parameters || {};
+          
+          let query = supa
+            .from('workflow_template')
+            .select('id, name, description, category, parameters, use_cases, is_active, is_system, created_at')
+            .order('category', { ascending: true })
+            .order('name', { ascending: true });
+
+          if (!include_inactive) {
+            query = query.eq('is_active', true);
+          }
+          if (category) {
+            query = query.eq('category', category);
+          }
+
+          const { data, error } = await query;
+          if (error) throw error;
+
+          // Format for AI consumption with parameter summaries
+          const templates = (data || []).map(t => ({
+            ...t,
+            parameter_summary: (t.parameters || []).map(p => 
+              `${p.name} (${p.type}${p.required ? ', required' : ''}): ${p.description}`
+            ).join('; '),
+          }));
+
+          return res.json({
+            status: "success",
+            data: templates,
+            meta: {
+              total: templates.length,
+              categories: [...new Set(templates.map(t => t.category))],
+            },
+          });
+        }
+
+        if (tool_name === "crm.get_workflow_template") {
+          const { template_id } = parameters || {};
+          if (!template_id) {
+            return res.status(400).json({
+              status: "error",
+              message: "template_id is required",
+            });
+          }
+
+          const { data, error } = await supa
+            .from('workflow_template')
+            .select('*')
+            .eq('id', template_id)
+            .single();
+
+          if (error) {
+            if (error.code === 'PGRST116') {
+              return res.status(404).json({
+                status: "error",
+                message: "Template not found",
+              });
+            }
+            throw error;
+          }
+
+          return res.json({ status: "success", data });
+        }
+
+        // All other CRM tools require tenant_id
         const { tenant_id } = parameters || {};
         if (!tenant_id) {
           return res.status(400).json({
@@ -572,6 +644,235 @@ export default function createMCPRoutes(_pgPool) {
               execution_id: execution.id,
             });
           }
+        }
+
+        // crm.update_workflow - Update workflow configuration
+        if (tool_name === "crm.update_workflow") {
+          const { workflow_id, name, description, nodes, connections, is_active } = parameters || {};
+          if (!workflow_id) {
+            return res.status(400).json({
+              status: "error",
+              message: "workflow_id is required",
+            });
+          }
+
+          // Verify workflow exists and belongs to tenant
+          const { data: existing, error: checkErr } = await supa
+            .from('workflow')
+            .select('id, metadata')
+            .eq('id', workflow_id)
+            .eq('tenant_id', tenant_id)
+            .maybeSingle();
+
+          if (checkErr) throw checkErr;
+          if (!existing) {
+            return res.status(404).json({
+              status: "error",
+              message: "Workflow not found or access denied",
+            });
+          }
+
+          // Build update object
+          const updates = { updated_at: new Date().toISOString() };
+          if (name !== undefined) updates.name = name;
+          if (description !== undefined) updates.description = description;
+          if (is_active !== undefined) updates.is_active = is_active;
+
+          // Update metadata if nodes or connections provided
+          if (nodes !== undefined || connections !== undefined) {
+            const existingMeta = existing.metadata || {};
+            updates.metadata = {
+              ...existingMeta,
+              ...(nodes !== undefined && { nodes }),
+              ...(connections !== undefined && { connections }),
+            };
+          }
+
+          const { data, error } = await supa
+            .from('workflow')
+            .update(updates)
+            .eq('id', workflow_id)
+            .eq('tenant_id', tenant_id)
+            .select()
+            .single();
+
+          if (error) throw error;
+
+          return res.json({
+            status: "success",
+            message: "Workflow updated successfully",
+            data,
+          });
+        }
+
+        // crm.toggle_workflow_status - Activate or deactivate a workflow
+        if (tool_name === "crm.toggle_workflow_status") {
+          const { workflow_id, is_active } = parameters || {};
+          if (!workflow_id) {
+            return res.status(400).json({
+              status: "error",
+              message: "workflow_id is required",
+            });
+          }
+          if (typeof is_active !== 'boolean') {
+            return res.status(400).json({
+              status: "error",
+              message: "is_active must be a boolean",
+            });
+          }
+
+          const { data, error } = await supa
+            .from('workflow')
+            .update({ is_active, updated_at: new Date().toISOString() })
+            .eq('id', workflow_id)
+            .eq('tenant_id', tenant_id)
+            .select('id, name, is_active')
+            .single();
+
+          if (error) {
+            if (error.code === 'PGRST116') {
+              return res.status(404).json({
+                status: "error",
+                message: "Workflow not found or access denied",
+              });
+            }
+            throw error;
+          }
+
+          return res.json({
+            status: "success",
+            message: `Workflow ${is_active ? 'activated' : 'deactivated'}`,
+            data,
+          });
+        }
+
+        // crm.instantiate_workflow_template - Create a workflow from a template
+        if (tool_name === "crm.instantiate_workflow_template") {
+          const { template_id, name: workflowName, parameters: paramValues = {} } = parameters || {};
+          if (!template_id) {
+            return res.status(400).json({
+              status: "error",
+              message: "template_id is required",
+            });
+          }
+
+          // Fetch template
+          const { data: template, error: templateError } = await supa
+            .from('workflow_template')
+            .select('*')
+            .eq('id', template_id)
+            .eq('is_active', true)
+            .single();
+
+          if (templateError) {
+            if (templateError.code === 'PGRST116') {
+              return res.status(404).json({
+                status: "error",
+                message: "Template not found or inactive",
+              });
+            }
+            throw templateError;
+          }
+
+          // Validate parameters
+          const templateParams = template.parameters || [];
+          const errors = [];
+          const validated = {};
+
+          for (const param of templateParams) {
+            const value = paramValues[param.name];
+            if (param.required && (value === undefined || value === null || value === '')) {
+              if (param.default !== undefined && param.default !== '') {
+                validated[param.name] = param.default;
+              } else {
+                errors.push(`Missing required parameter: ${param.name}`);
+              }
+            } else if (value !== undefined) {
+              validated[param.name] = value;
+            } else if (param.default !== undefined) {
+              validated[param.name] = param.default;
+            }
+          }
+
+          if (errors.length > 0) {
+            return res.status(400).json({
+              status: "error",
+              message: "Parameter validation failed",
+              errors,
+            });
+          }
+
+          // Substitute parameters in template
+          function substituteParams(obj) {
+            if (typeof obj === 'string') {
+              return obj.replace(/\{\{(\w+)\}\}/g, (match, paramName) => {
+                if (Object.prototype.hasOwnProperty.call(validated, paramName)) {
+                  return validated[paramName];
+                }
+                return match;
+              });
+            }
+            if (Array.isArray(obj)) return obj.map(substituteParams);
+            if (obj && typeof obj === 'object') {
+              const result = {};
+              for (const [key, value] of Object.entries(obj)) {
+                result[key] = substituteParams(value);
+              }
+              return result;
+            }
+            return obj;
+          }
+
+          const nodes = substituteParams(template.template_nodes);
+          const connections = substituteParams(template.template_connections);
+
+          // Create workflow
+          const finalName = workflowName || `${template.name} (from template)`;
+          const metadata = {
+            nodes,
+            connections,
+            webhook_url: null,
+            execution_count: 0,
+            last_executed: null,
+            template_id: template.id,
+            template_name: template.name,
+            instantiated_parameters: validated,
+          };
+
+          const { data: workflow, error: workflowError } = await supa
+            .from('workflow')
+            .insert({
+              tenant_id,
+              name: finalName,
+              description: template.description,
+              trigger_type: template.trigger_type,
+              trigger_config: template.trigger_config,
+              is_active: true,
+              metadata,
+            })
+            .select()
+            .single();
+
+          if (workflowError) throw workflowError;
+
+          // Update webhook URL
+          const webhookUrl = `/api/workflows/${workflow.id}/webhook`;
+          await supa
+            .from('workflow')
+            .update({ metadata: { ...metadata, webhook_url: webhookUrl } })
+            .eq('id', workflow.id);
+
+          return res.status(201).json({
+            status: "success",
+            message: `Workflow "${finalName}" created from template "${template.name}"`,
+            data: {
+              workflow_id: workflow.id,
+              workflow_name: finalName,
+              webhook_url: webhookUrl,
+              template_used: template.name,
+              parameters_applied: validated,
+            },
+          });
         }
 
         return res.status(400).json({

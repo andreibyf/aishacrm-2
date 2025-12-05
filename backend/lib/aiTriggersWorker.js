@@ -448,6 +448,31 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
   const { triggerId, recordType, recordId, context, priority = 'normal' } = triggerData;
 
   try {
+    // Check if there's already a pending OR recently rejected suggestion for this trigger+record
+    // Cooldown: Don't recreate suggestions rejected within the last 24 hours
+    const cooldownHours = 24;
+    const cooldownDate = new Date();
+    cooldownDate.setHours(cooldownDate.getHours() - cooldownHours);
+    
+    const { data: existing, error: checkError } = await supabase
+      .from('ai_suggestions')
+      .select('id, status, updated_at')
+      .eq('tenant_id', tenantUuid)
+      .eq('trigger_id', triggerId)
+      .eq('record_id', recordId)
+      .or(`status.eq.pending,and(status.eq.rejected,updated_at.gte.${cooldownDate.toISOString()})`)
+      .limit(1);
+    
+    if (checkError) {
+      console.error(`[AiTriggersWorker] Error checking existing suggestion:`, checkError.message);
+    }
+    
+    if (existing && existing.length > 0) {
+      const existingStatus = existing[0].status;
+      console.log(`[AiTriggersWorker] Skipping ${triggerId}:${recordId} - existing ${existingStatus} suggestion`);
+      return null;
+    }
+
     // Generate AI suggestion using propose_actions mode
     const suggestion = await generateAiSuggestion(tenantUuid, triggerId, recordType, recordId, context);
     

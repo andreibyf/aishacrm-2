@@ -21,7 +21,7 @@ export default function SystemAnnouncements() {
     const [editingAnnouncement, setEditingAnnouncement] = useState(null);
     const [newAnnouncement, setNewAnnouncement] = useState({
         title: "",
-        message: "",
+        content: "",
         type: "info",
         target_tenant_id: "all",
         is_active: true,
@@ -73,16 +73,27 @@ export default function SystemAnnouncements() {
                     if (data.target_tenant_id === 'all') {
                         targetUsers = await User.list();
                     } else {
-                        targetUsers = await User.filter({ tenant_id: data.target_tenant_id });
+                        // User.list accepts filters object
+                        targetUsers = await User.list({ tenant_id: data.target_tenant_id });
+                    }
+                    
+                    // Ensure we have an array
+                    if (!Array.isArray(targetUsers)) {
+                        targetUsers = targetUsers?.data?.users || targetUsers?.data || [];
                     }
 
                     if (targetUsers.length > 0) {
                         const notificationRecords = targetUsers.map(user => ({
+                            tenant_id: user.tenant_id,
                             user_email: user.email,
                             title: `📢 ${data.title}`,
-                            description: data.message.substring(0, 100) + (data.message.length > 100 ? '...' : ''),
-                            link: '/Dashboard', // Link to dashboard when clicked
-                            icon: 'Megaphone'
+                            message: data.content.substring(0, 100) + (data.content.length > 100 ? '...' : ''),
+                            type: 'info',
+                            metadata: {
+                                link: '/Dashboard',
+                                icon: 'Megaphone',
+                                announcement_id: _newAnn?.id
+                            }
                         }));
                         await Notification.bulkCreate(notificationRecords);
                         console.log(`Created ${notificationRecords.length} notifications for announcement.`);
@@ -166,8 +177,8 @@ export default function SystemAnnouncements() {
                                 <Input id="title" value={editingAnnouncement?.title || newAnnouncement.title} onChange={(e) => handleInputChange('title', e.target.value)} required className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500" />
                             </div>
                             <div>
-                                <Label htmlFor="message" className="text-slate-200">Message</Label>
-                                <Textarea id="message" value={editingAnnouncement?.message || newAnnouncement.message} onChange={(e) => handleInputChange('message', e.target.value)} required className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500" />
+                                <Label htmlFor="content" className="text-slate-200">Message</Label>
+                                <Textarea id="content" value={editingAnnouncement?.content || newAnnouncement.content} onChange={(e) => handleInputChange('content', e.target.value)} required className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500" />
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
@@ -240,7 +251,7 @@ export default function SystemAnnouncements() {
                                             </TableCell>
                                             <TableCell>
                                                 <p className="font-medium text-slate-200">{ann.title}</p>
-                                                <p className="text-sm text-slate-400 truncate max-w-xs">{ann.message}</p>
+                                                <p className="text-sm text-slate-400 truncate max-w-xs">{ann.content}</p>
                                             </TableCell>
                                             <TableCell className="text-slate-200">{ann.target_tenant_id === 'all' ? 'All Tenants' : tenants.find(t => t.id === ann.target_tenant_id)?.name || 'N/A'}</TableCell>
                                             <TableCell className="space-x-2">

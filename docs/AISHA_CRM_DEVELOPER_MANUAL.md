@@ -1696,6 +1696,69 @@ For full v2 migration details, see [API v2 Migration Guide](./API_V2_MIGRATION_G
 
 ---
 
+## 7.6.1 MCP Workflow Tools
+
+The AI Brain exposes workflow management capabilities through MCP tools. These allow the AI assistant to automate workflow creation and management on behalf of users.
+
+### Available Tools
+
+| Tool | Purpose | Requires tenant_id |
+|------|---------|-------------------|
+| `crm.list_workflow_templates` | List all available templates | ❌ No |
+| `crm.get_workflow_template` | Get template details with nodes/connections | ❌ No |
+| `crm.instantiate_workflow_template` | Create workflow from template | ✅ Yes |
+| `crm.update_workflow` | Update workflow config (name, nodes, connections) | ✅ Yes |
+| `crm.toggle_workflow_status` | Activate/deactivate workflow | ✅ Yes |
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                  WORKFLOW_TEMPLATE                       │
+│  (System-wide, read-only for AI)                        │
+│  ├── is_system=true → Cannot be modified               │
+│  └── Used as blueprints for creating workflows         │
+└───────────────────────────┬─────────────────────────────┘
+                            │ instantiate
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                     WORKFLOW                             │
+│  (Tenant-scoped, fully manageable by AI)                │
+│  ├── tenant_id = required                              │
+│  ├── AI can: create, update, activate, deactivate      │
+│  └── AI can NOT: delete templates                      │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Example: Instantiate a Template
+
+```bash
+curl -X POST http://localhost:4001/api/mcp/execute-tool \
+  -H "Content-Type: application/json" \
+  -d '{
+    "server_id": "crm",
+    "tool_name": "crm.instantiate_workflow_template",
+    "parameters": {
+      "tenant_id": "a11dfb63-4b18-4eb8-872e-747af2e37c46",
+      "template_id": "f5f68326-47d4-4069-b014-2a37ca75916a",
+      "name": "My Custom Lead Workflow",
+      "parameters": {
+        "email_subject": "Welcome!",
+        "email_body": "Thank you for your interest."
+      }
+    }
+  }'
+```
+
+### Permissions Model
+
+- **Templates** are read-only references (system templates cannot be modified or deleted)
+- **Workflows** are tenant-specific instances that can be configured
+- AI can create workflows FROM templates with custom parameters
+- AI can update workflow configurations but cannot delete templates
+
+---
+
 ## 7.7 Deprecation Headers
 
 All v1 endpoints with v2 alternatives now return deprecation headers.
