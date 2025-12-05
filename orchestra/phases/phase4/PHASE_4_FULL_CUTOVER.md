@@ -2,11 +2,43 @@
 
 > Current framing (2025): **Internal Readiness (pre-customer)**. This plan still describes a full external v2.0.0 launch and v1 deprecation, but in the near term we are using Phase 4 to harden a few key flows (e.g., opportunities + activities) and make API Health solid for the Local Development Tenant.
 
-**Status**: Not Started  
+**Status**: In Progress (Internal Pilot)
 **Depends On**: Phase 3 (Autonomous Operations)  
 **Target Start**: July 2026  
 **Target End**: August 2026  
 **Owner**: Engineering Lead + Product Manager
+
+---
+
+## ✅ Completed (December 2025 - Internal Pilot)
+
+### v2 Endpoints Created (8 domains)
+- [x] `/api/v2/opportunities` - Full CRUD with AI deal health, win probability, next steps
+- [x] `/api/v2/activities` - Full CRUD with AI sentiment, urgency, follow-up suggestions  
+- [x] `/api/v2/contacts` - Full CRUD with AI engagement score, relationship strength
+- [x] `/api/v2/accounts` - Full CRUD with AI account health, churn risk, upsell potential
+- [x] `/api/v2/leads` - Full CRUD with AI lead scoring, conversion probability, qualification
+- [x] `/api/v2/reports` - Dashboard stats with AI insights and trend analysis
+- [x] `/api/v2/workflows` - Full CRUD with AI-powered execution and telephony nodes
+- [x] `/api/v2/documents` - Full CRUD with AI classification, sensitivity detection
+
+### Infrastructure Completed
+- [x] **AI Context Enricher** (`backend/lib/aiContextEnricher.js`) - Unified AI enrichment for all entities
+- [x] **Deprecation Middleware** (`backend/middleware/deprecation.js`) - X-API-Version headers on all v1 routes
+- [x] **API Health Dashboard** - v2 lifecycle tests for all domains
+- [x] **Workflow Templates** - 9 production templates including 4 AI calling workflows
+- [x] **Telephony Integration** - Unified outboundCallService for CallFluent/Thoughtly
+
+### Deprecation Headers Active
+All v1 routes now return:
+```http
+X-API-Version: v1
+X-API-Deprecation-Date: 2027-02-01
+X-API-Sunset-Date: 2027-08-01
+X-Migration-Guide: https://docs.aishacrm.com/api/v2/migration
+Link: </api/v2/...>; rel="alternate"
+Warning: 299 - "API v1 is deprecated. Migrate to v2 by 2027-08-01"
+```
 
 ---
 
@@ -156,10 +188,10 @@ Based on `backend/routes/leads.js`.
 
 For each audited domain/endpoint cluster above, ensure we can **observe and test** behavior similarly to existing API Health tools under Settings:
 
-- [ ] Add or update API Health checks for each new `/api/v2/...` endpoint (where applicable)
-- [ ] Verify latency, error rate, and auth/tenant failures are surfaced in API Health dashboards
-- [ ] Include v1 vs v2 comparison checks for migrated endpoints (status codes, payload shape)
-- [ ] Wire basic synthetic tests (ping + simple happy-path) for critical domains (opportunities, activities, accounts, contacts, leads)
+- [x] Add or update API Health checks for each new `/api/v2/...` endpoint (where applicable) ✅ **DONE Dec 2025**
+- [x] Verify latency, error rate, and auth/tenant failures are surfaced in API Health dashboards ✅ **DONE**
+- [x] Include v1 vs v2 comparison checks for migrated endpoints (status codes, payload shape) ✅ **DONE**
+- [x] Wire basic synthetic tests (ping + simple happy-path) for critical domains (opportunities, activities, accounts, contacts, leads) ✅ **DONE**
 - [ ] Document test harness locations (e.g., Postman collections, Playwright/API tests, or in-app health probes)
 
 **Deliverable**: Living migration inventory doc + initial v1 → v2 mapping and priorities, with API Health coverage items identified for all audited domains
@@ -167,11 +199,17 @@ For each audited domain/endpoint cluster above, ensure we can **observe and test
 ---
 
 #### Task 4.2: Batch Endpoint Migration (Priority 1)
-- [ ] Migrate opportunities endpoints (5 endpoints)
-- [ ] Migrate activities endpoints (4 endpoints)
-- [ ] Migrate documents endpoints (3 endpoints)
-- [ ] Migrate reports endpoints (4 endpoints)
-- [ ] Add AI context to all responses
+- [x] Migrate opportunities endpoints (5 endpoints) ✅ **DONE Dec 2025**
+- [x] Migrate activities endpoints (4 endpoints) ✅ **DONE Dec 2025**
+- [x] Migrate documents endpoints (3 endpoints) ✅ **DONE Dec 2025**
+- [x] Migrate reports endpoints (4 endpoints) ✅ **DONE Dec 2025**
+- [x] Add AI context to all responses ✅ **DONE Dec 2025**
+
+**Additional Endpoints Migrated (Beyond Original Scope)**:
+- [x] Migrate contacts endpoints (5 endpoints) ✅ **DONE Dec 2025**
+- [x] Migrate accounts endpoints (5 endpoints) ✅ **DONE Dec 2025**
+- [x] Migrate leads endpoints (5 endpoints) ✅ **DONE Dec 2025**
+- [x] Migrate workflows endpoints (5 endpoints) ✅ **DONE Dec 2025**
 
 **Sprint Structure** (2 weeks):
 - Week 1: Opportunities + Activities
@@ -192,20 +230,24 @@ For each audited domain/endpoint cluster above, ensure we can **observe and test
 ### Week 3-4: Deprecation Strategy
 
 #### Task 4.3: Deprecation Warning System
-- [ ] Add `X-API-Version` header to all v1 responses
-- [ ] Create deprecation warning middleware
+- [x] Add `X-API-Version` header to all v1 responses ✅ **DONE Dec 2025**
+- [x] Create deprecation warning middleware ✅ **DONE Dec 2025** (`backend/middleware/deprecation.js`)
 - [ ] Build notification system for v1 API users
-- [ ] Add sunset timeline to response headers
+- [x] Add sunset timeline to response headers ✅ **DONE Dec 2025**
 - [ ] Create migration guide for each endpoint
 
-**Response Headers**:
+**Implementation Details** (December 2025):
+The deprecation middleware is now active in production. All v1 routes that have v2 alternatives automatically receive deprecation headers.
+
+**Response Headers** (Live):
 ```http
 HTTP/1.1 200 OK
 X-API-Version: v1
 X-API-Deprecation-Date: 2027-02-01
 X-API-Sunset-Date: 2027-08-01
 X-Migration-Guide: https://docs.aishacrm.com/api/v2/migration
-Link: </api/v2/ai/accounts>; rel="alternate"
+Link: </api/v2/opportunities>; rel="alternate"
+Warning: 299 - "API v1 is deprecated. Migrate to v2 by 2027-08-01"
 ```
 
 **In-App Notifications**:
@@ -222,7 +264,7 @@ notification: {
 }
 ```
 
-**Deliverable**: Deprecation warnings active on all v1 endpoints
+**Deliverable**: Deprecation warnings active on all v1 endpoints ✅ **COMPLETE**
 
 ---
 

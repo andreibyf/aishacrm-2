@@ -98,8 +98,8 @@ function ChatMessage({ role, content, createdDate, grouped }) {
               'You'
             ) : (
               <img 
-                src="/aisha-avatar.jpg" 
-                alt="AI Assistant" 
+                src="/assets/aisha-executive-portrait.jpg" 
+                alt="AiSHA Executive Assistant" 
                 className="w-full h-full object-cover"
               />
             )}
@@ -659,8 +659,8 @@ export default function AgentChat({
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full overflow-hidden shadow-lg border-2 border-cyan-500/30">
               <img 
-                src="/aisha-avatar.jpg" 
-                alt="Ai-SHA Assistant" 
+                src="/assets/aisha-executive-portrait.jpg" 
+                alt="AiSHA Executive Assistant" 
                 className="w-full h-full object-cover"
               />
             </div>

@@ -6,6 +6,7 @@
 import express from 'express';
 import { handleInboundCall, handleOutboundCall } from '../lib/callFlowHandler.js';
 import { normalizeWebhook } from '../lib/webhookAdapters.js';
+import { initiateOutboundCall, checkProviderStatus, getProviderAgents } from '../lib/outboundCallService.js';
 
 export default function createTelephonyRoutes(pgPool) {
   const router = express.Router();
@@ -38,6 +39,167 @@ export default function createTelephonyRoutes(pgPool) {
       });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  /**
+   * @openapi
+   * /api/telephony/initiate-call:
+   *   post:
+   *     summary: Initiate an outbound AI call
+   *     description: Trigger an outbound call via CallFluent or Thoughtly AI agent. The AI agent will call the specified phone number with the provided context.
+   *     tags: [telephony]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, provider, phone_number]
+   *             properties:
+   *               tenant_id:
+   *                 type: string
+   *                 format: uuid
+   *               provider:
+   *                 type: string
+   *                 enum: [callfluent, thoughtly]
+   *               phone_number:
+   *                 type: string
+   *                 description: Phone number to call (E.164 format preferred)
+   *               contact_id:
+   *                 type: string
+   *                 format: uuid
+   *                 description: Optional contact/lead ID for context
+   *               contact_name:
+   *                 type: string
+   *                 description: Name for AI agent context
+   *               contact_email:
+   *                 type: string
+   *               company:
+   *                 type: string
+   *               purpose:
+   *                 type: string
+   *                 description: Call purpose/objective for AI agent
+   *               talking_points:
+   *                 type: array
+   *                 items:
+   *                   type: string
+   *                 description: Key points for AI to cover
+   *               agent_id:
+   *                 type: string
+   *                 description: Specific AI agent ID (optional, uses tenant default)
+   *     responses:
+   *       200:
+   *         description: Call initiated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 provider:
+   *                   type: string
+   *                 status:
+   *                   type: string
+   *                 call_id:
+   *                   type: string
+   *                 message:
+   *                   type: string
+   */
+  router.post('/initiate-call', async (req, res) => {
+    try {
+      const result = await initiateOutboundCall(req.body);
+      res.json(result);
+    } catch (error) {
+      console.error('[Telephony] Initiate call error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to initiate call',
+        message: error.message
+      });
+    }
+  });
+
+  /**
+   * @openapi
+   * /api/telephony/provider-status/{provider}:
+   *   get:
+   *     summary: Check AI calling provider status
+   *     description: Check if a calling provider (CallFluent or Thoughtly) is configured and ready for the tenant
+   *     tags: [telephony]
+   *     parameters:
+   *       - in: path
+   *         name: provider
+   *         required: true
+   *         schema:
+   *           type: string
+   *           enum: [callfluent, thoughtly]
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     responses:
+   *       200:
+   *         description: Provider status
+   */
+  router.get('/provider-status/:provider', async (req, res) => {
+    try {
+      const { provider } = req.params;
+      const { tenant_id } = req.query;
+
+      if (!tenant_id) {
+        return res.status(400).json({ error: 'tenant_id required' });
+      }
+
+      const status = await checkProviderStatus(tenant_id, provider);
+      res.json(status);
+    } catch (error) {
+      console.error('[Telephony] Provider status error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * @openapi
+   * /api/telephony/agents/{provider}:
+   *   get:
+   *     summary: Get available AI agents for provider
+   *     description: List configured AI agents for CallFluent or Thoughtly
+   *     tags: [telephony]
+   *     parameters:
+   *       - in: path
+   *         name: provider
+   *         required: true
+   *         schema:
+   *           type: string
+   *           enum: [callfluent, thoughtly]
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     responses:
+   *       200:
+   *         description: Available agents
+   */
+  router.get('/agents/:provider', async (req, res) => {
+    try {
+      const { provider } = req.params;
+      const { tenant_id } = req.query;
+
+      if (!tenant_id) {
+        return res.status(400).json({ error: 'tenant_id required' });
+      }
+
+      const agents = await getProviderAgents(tenant_id, provider);
+      res.json(agents);
+    } catch (error) {
+      console.error('[Telephony] Get agents error:', error);
+      res.status(500).json({ error: error.message });
     }
   });
 

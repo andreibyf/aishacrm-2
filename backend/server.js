@@ -207,6 +207,10 @@ import createActivityV2Routes from "./routes/activities.v2.js";
 import createContactV2Routes from "./routes/contacts.v2.js";
 import createAccountV2Routes from "./routes/accounts.v2.js";
 import createLeadsV2Routes from "./routes/leads.v2.js";
+import createReportsV2Routes from "./routes/reports.v2.js";
+import createWorkflowV2Routes from "./routes/workflows.v2.js";
+import createDocumentV2Routes from "./routes/documents.v2.js";
+import createWorkflowTemplateRoutes from "./routes/workflow-templates.js";
 import createNotificationRoutes from "./routes/notifications.js";
 import createSystemLogRoutes from "./routes/system-logs.js";
 import createAuditLogRoutes from "./routes/audit-logs.js";
@@ -227,6 +231,11 @@ import createAuthRoutes from "./routes/auth.js";
 import createGitHubIssuesRoutes from "./routes/github-issues.js";
 import createSupabaseProxyRoutes from "./routes/supabaseProxy.js";
 import createSuggestionsRoutes from "./routes/suggestions.js";
+import { createDeprecationMiddleware } from "./middleware/deprecation.js";
+
+// Apply v1 deprecation headers middleware (before routes)
+app.use(createDeprecationMiddleware());
+console.log("✓ v1 API deprecation headers middleware enabled");
 
 // Use the pgPool directly; per-request DB time is measured inside the DB adapter
 const measuredPgPool = pgPool;
@@ -279,6 +288,14 @@ console.log("✓ Mounting /api/v2/accounts routes (dev/internal)");
 app.use("/api/v2/accounts", createAccountV2Routes(measuredPgPool));
 console.log("✓ Mounting /api/v2/leads routes (dev/internal)");
 app.use("/api/v2/leads", createLeadsV2Routes(measuredPgPool));
+console.log("✓ Mounting /api/v2/reports routes (dev/internal)");
+app.use("/api/v2/reports", createReportsV2Routes(measuredPgPool));
+console.log("✓ Mounting /api/v2/workflows routes (dev/internal)");
+app.use("/api/v2/workflows", createWorkflowV2Routes(measuredPgPool));
+console.log("✓ Mounting /api/v2/documents routes (dev/internal)");
+app.use("/api/v2/documents", createDocumentV2Routes(measuredPgPool));
+console.log("✓ Mounting /api/workflow-templates routes");
+app.use("/api/workflow-templates", createWorkflowTemplateRoutes(measuredPgPool));
 app.use("/api/notifications", createNotificationRoutes(measuredPgPool));
 app.use("/api/system-logs", createSystemLogRoutes(measuredPgPool));
 app.use("/api/audit-logs", createAuditLogRoutes(measuredPgPool));

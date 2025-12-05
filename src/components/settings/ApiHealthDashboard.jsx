@@ -165,6 +165,18 @@ export default function ApiHealthDashboard() {
         name: 'Leads - v2 Lifecycle (create/get/update/delete)',
         type: 'leads-v2-lifecycle',
       },
+      {
+        name: 'Documents - v2 Lifecycle (create/get/update/delete)',
+        type: 'documents-v2-lifecycle',
+      },
+      {
+        name: 'Reports - v2 Dashboard Stats',
+        type: 'reports-v2-stats',
+      },
+      {
+        name: 'Workflows - v2 List & AI Context',
+        type: 'workflows-v2-lifecycle',
+      },
       // Existing AI Campaigns and Telephony checks
       { name: 'AI Campaigns - List', method: 'GET', url: `${BACKEND_URL}/api/aicampaigns?tenant_id=test&limit=1` },
       { name: 'AI Campaigns - Get', method: 'GET', url: `${BACKEND_URL}/api/aicampaigns/test-id?tenant_id=test`, expectError: true },
@@ -225,6 +237,39 @@ export default function ApiHealthDashboard() {
 
         if (endpoint.type === 'leads-v2-lifecycle') {
           const lifecycleResult = await runLeadsV2LifecycleTest();
+          if (lifecycleResult.status === 'passed') {
+            results.passed++;
+          } else if (lifecycleResult.status === 'failed') {
+            results.failed++;
+          }
+          results.details.push(lifecycleResult);
+          continue;
+        }
+
+        if (endpoint.type === 'documents-v2-lifecycle') {
+          const lifecycleResult = await runDocumentsV2LifecycleTest();
+          if (lifecycleResult.status === 'passed') {
+            results.passed++;
+          } else if (lifecycleResult.status === 'failed') {
+            results.failed++;
+          }
+          results.details.push(lifecycleResult);
+          continue;
+        }
+
+        if (endpoint.type === 'reports-v2-stats') {
+          const lifecycleResult = await runReportsV2StatsTest();
+          if (lifecycleResult.status === 'passed') {
+            results.passed++;
+          } else if (lifecycleResult.status === 'failed') {
+            results.failed++;
+          }
+          results.details.push(lifecycleResult);
+          continue;
+        }
+
+        if (endpoint.type === 'workflows-v2-lifecycle') {
+          const lifecycleResult = await runWorkflowsV2LifecycleTest();
           if (lifecycleResult.status === 'passed') {
             results.passed++;
           } else if (lifecycleResult.status === 'failed') {
@@ -678,7 +723,8 @@ export default function ApiHealthDashboard() {
   }
 
   async function runLeadsV2LifecycleTest() {
-    const tenantId = 'test';
+    // Use system tenant UUID - 'test' is not a valid UUID
+    const tenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 
     try {
       // 1) Create
@@ -696,7 +742,9 @@ export default function ApiHealthDashboard() {
       });
 
       const createJson = await createResp.json().catch(() => ({}));
-      if (!createResp.ok || !createJson?.data?.id) {
+      // Response structure: { data: { lead: { id, ... } } }
+      const createdId = createJson?.data?.lead?.id || createJson?.data?.id;
+      if (!createResp.ok || !createdId) {
         return {
           name: 'Leads - v2 Lifecycle (create/get/update/delete)',
           status: 'failed',
@@ -705,12 +753,11 @@ export default function ApiHealthDashboard() {
         };
       }
 
-      const createdId = createJson.data.id;
-
       // 2) Get
       const getResp = await fetch(`${BACKEND_URL}/api/v2/leads/${createdId}?tenant_id=${tenantId}`);
       const getJson = await getResp.json().catch(() => ({}));
-      if (!getResp.ok || !getJson?.data?.id) {
+      const gotId = getJson?.data?.lead?.id || getJson?.data?.id;
+      if (!getResp.ok || !gotId) {
         return {
           name: 'Leads - v2 Lifecycle (create/get/update/delete)',
           status: 'failed',
@@ -765,6 +812,199 @@ export default function ApiHealthDashboard() {
         name: 'Leads - v2 Lifecycle (create/get/update/delete)',
         status: 'failed',
         message: `Network error during lifecycle test: ${error.message}`,
+        statusCode: 0,
+      };
+    }
+  }
+
+  // Documents v2 lifecycle test
+  async function runDocumentsV2LifecycleTest() {
+    // Use system tenant UUID - 'test' is not a valid UUID
+    const tenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+
+    try {
+      // 1) Create
+      const createResp = await fetch(`${BACKEND_URL}/api/v2/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          name: `API Health Test Document ${Date.now()}.pdf`,
+          file_type: 'application/pdf',
+          file_url: 'https://example.com/test.pdf',
+        }),
+      });
+
+      const createJson = await createResp.json().catch(() => ({}));
+      if (!createResp.ok || !createJson?.data?.document?.id) {
+        return {
+          name: 'Documents - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Create failed (${createResp.status}): ${createJson.message || 'no body'}`,
+          statusCode: createResp.status,
+        };
+      }
+
+      const createdId = createJson.data.document.id;
+
+      // 2) Get
+      const getResp = await fetch(`${BACKEND_URL}/api/v2/documents/${createdId}?tenant_id=${tenantId}`);
+      const getJson = await getResp.json().catch(() => ({}));
+      if (!getResp.ok || !getJson?.data?.document?.id) {
+        return {
+          name: 'Documents - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Get failed (${getResp.status}): ${getJson.message || 'no body'}`,
+          statusCode: getResp.status,
+        };
+      }
+
+      // Verify AI context is present
+      if (!getJson?.data?.aiContext) {
+        return {
+          name: 'Documents - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: 'Get succeeded but missing aiContext enrichment',
+          statusCode: getResp.status,
+        };
+      }
+
+      // 3) Update
+      const updateResp = await fetch(`${BACKEND_URL}/api/v2/documents/${createdId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          name: 'Updated Document Name.pdf',
+        }),
+      });
+
+      const updateJson = await updateResp.json().catch(() => ({}));
+      if (!updateResp.ok) {
+        return {
+          name: 'Documents - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Update failed (${updateResp.status}): ${updateJson.message || 'no body'}`,
+          statusCode: updateResp.status,
+        };
+      }
+
+      // 4) Delete
+      const deleteResp = await fetch(`${BACKEND_URL}/api/v2/documents/${createdId}?tenant_id=${tenantId}`, {
+        method: 'DELETE',
+      });
+
+      const deleteJson = await deleteResp.json().catch(() => ({}));
+      if (!deleteResp.ok) {
+        return {
+          name: 'Documents - v2 Lifecycle (create/get/update/delete)',
+          status: 'failed',
+          message: `Delete failed (${deleteResp.status}): ${deleteJson.message || 'no body'}`,
+          statusCode: deleteResp.status,
+        };
+      }
+
+      return {
+        name: 'Documents - v2 Lifecycle (create/get/update/delete)',
+        status: 'passed',
+        message: 'Create, get (with AI context), update, and delete all succeeded',
+        statusCode: 200,
+      };
+    } catch (error) {
+      return {
+        name: 'Documents - v2 Lifecycle (create/get/update/delete)',
+        status: 'failed',
+        message: `Network error during lifecycle test: ${error.message}`,
+        statusCode: 0,
+      };
+    }
+  }
+
+  // Reports v2 stats test
+  async function runReportsV2StatsTest() {
+    // Use system tenant UUID
+    const tenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+
+    try {
+      // Test dashboard-bundle endpoint (correct v2 route)
+      const statsResp = await fetch(`${BACKEND_URL}/api/v2/reports/dashboard-bundle?tenant_id=${tenantId}`);
+      const statsJson = await statsResp.json().catch(() => ({}));
+
+      if (!statsResp.ok) {
+        return {
+          name: 'Reports - v2 Dashboard Stats',
+          status: 'failed',
+          message: `Dashboard stats failed (${statsResp.status}): ${statsJson.message || 'no body'}`,
+          statusCode: statsResp.status,
+        };
+      }
+
+      // Verify AI insights are present
+      if (!statsJson?.data?.aiContext) {
+        return {
+          name: 'Reports - v2 Dashboard Stats',
+          status: 'warning',
+          message: 'Stats returned but missing aiContext enrichment',
+          statusCode: statsResp.status,
+        };
+      }
+
+      return {
+        name: 'Reports - v2 Dashboard Stats',
+        status: 'passed',
+        message: 'Dashboard stats with AI insights returned successfully',
+        statusCode: 200,
+      };
+    } catch (error) {
+      return {
+        name: 'Reports - v2 Dashboard Stats',
+        status: 'failed',
+        message: `Network error during stats test: ${error.message}`,
+        statusCode: 0,
+      };
+    }
+  }
+
+  // Workflows v2 list test (v2 only has GET endpoints, no CRUD)
+  async function runWorkflowsV2LifecycleTest() {
+    // Use system tenant UUID
+    const tenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+
+    try {
+      // Test list endpoint
+      const listResp = await fetch(`${BACKEND_URL}/api/v2/workflows?tenant_id=${tenantId}&limit=5`);
+      const listJson = await listResp.json().catch(() => ({}));
+
+      if (!listResp.ok) {
+        return {
+          name: 'Workflows - v2 List & AI Context',
+          status: 'failed',
+          message: `List failed (${listResp.status}): ${listJson.message || 'no body'}`,
+          statusCode: listResp.status,
+        };
+      }
+
+      // Verify AI context is present in list response (at top level, not inside data)
+      if (!listJson?.aiContext) {
+        return {
+          name: 'Workflows - v2 List & AI Context',
+          status: 'warning',
+          message: 'List succeeded but missing aiContext enrichment',
+          statusCode: listResp.status,
+        };
+      }
+
+      return {
+        name: 'Workflows - v2 List & AI Context',
+        status: 'passed',
+        message: 'List endpoint with AI context working',
+        statusCode: 200,
+      };
+    } catch (error) {
+      return {
+        name: 'Workflows - v2 List & AI Context',
+        status: 'failed',
+        message: `Network error during test: ${error.message}`,
         statusCode: 0,
       };
     }

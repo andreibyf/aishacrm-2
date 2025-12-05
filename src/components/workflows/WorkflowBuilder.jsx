@@ -1011,6 +1011,95 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           </div>
         );
 
+      case 'initiate_call':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">AI Calling Provider</Label>
+              <Select
+                value={node.config?.provider || 'callfluent'}
+                onValueChange={(value) => {
+                  updateNodeConfig(node.id, { ...node.config, provider: value });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="callfluent">CallFluent</SelectItem>
+                  <SelectItem value="thoughtly">Thoughtly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-slate-200">Phone Number</Label>
+              {getAvailableFields().length > 0 ? (
+                <Select
+                  value={node.config?.phone_number?.replace(/[{}]/g, '') || 'phone'}
+                  onValueChange={(value) => {
+                    updateNodeConfig(node.id, { ...node.config, phone_number: `{{${value}}}` });
+                  }}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                    <SelectValue placeholder="Select phone field" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    {getAvailableFields().map(field => (
+                      <SelectItem key={field} value={field}>
+                        {'{{'}{field}{'}}'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={node.config?.phone_number || '{{phone}}'}
+                  onChange={(e) => {
+                    updateNodeConfig(node.id, { ...node.config, phone_number: e.target.value });
+                  }}
+                  placeholder="{{phone}}"
+                  className="bg-slate-800 border-slate-700 text-slate-200"
+                />
+              )}
+              <p className="text-xs text-slate-500 mt-1">
+                Phone number from webhook data or contact lookup
+              </p>
+            </div>
+            <div>
+              <Label className="text-slate-200">Call Purpose</Label>
+              <Input
+                value={node.config?.purpose || 'Follow-up call'}
+                onChange={(e) => {
+                  updateNodeConfig(node.id, { ...node.config, purpose: e.target.value });
+                }}
+                placeholder="Main objective for the AI call"
+                className="bg-slate-800 border-slate-700 text-slate-200"
+              />
+            </div>
+            <div>
+              <Label className="text-slate-200">Talking Points</Label>
+              <textarea
+                value={(node.config?.talking_points || []).join('\n')}
+                onChange={(e) => {
+                  const points = e.target.value.split('\n').filter(p => p.trim());
+                  updateNodeConfig(node.id, { ...node.config, talking_points: points });
+                }}
+                placeholder="Enter each talking point on a new line"
+                className="w-full min-h-[80px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Key points for the AI agent to cover during the call
+              </p>
+            </div>
+            <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+              <p className="text-xs text-slate-400">
+                <strong>Note:</strong> Requires CallFluent or Thoughtly integration configured in tenant settings.
+                The AI agent will call the contact and follow the provided talking points.
+              </p>
+            </div>
+          </div>
+        );
+
       // Account: Find
       case 'find_account':
         return (

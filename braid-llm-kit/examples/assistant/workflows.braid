@@ -1,0 +1,69 @@
+// Executive Assistant Tools - Workflow Template Management
+// List available templates and instantiate workflows from them
+
+import { Result, CRMError } from "../../spec/types.braid"
+
+// List all available workflow templates
+fn listWorkflowTemplates(
+  tenant: String,
+  category: String
+) -> Result<Array, CRMError> !net {
+  let url = "/api/workflow-templates";
+  let params = {
+    tenant_id: tenant,
+    is_active: true
+  };
+  
+  // Add category filter if provided
+  if category != "" {
+    params.category = category;
+  }
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+// Get detailed information about a specific template
+fn getWorkflowTemplate(
+  tenant: String,
+  template_id: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/workflow-templates/" + template_id;
+  let params = { tenant_id: tenant };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+// Instantiate a workflow from a template with provided parameters
+fn instantiateWorkflowTemplate(
+  tenant: String,
+  template_id: String,
+  workflow_name: String,
+  parameters: Object
+) -> Result<Object, CRMError> !net {
+  let url = "/api/workflow-templates/" + template_id + "/instantiate";
+  let payload = {
+    tenant_id: tenant,
+    workflow_name: workflow_name,
+    parameters: parameters
+  };
+  
+  let response = http.post(url, { body: payload });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

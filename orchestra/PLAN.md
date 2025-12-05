@@ -2091,3 +2091,40 @@ Steps:
 3. Add unit tests for deterministic stubs and variable propagation.  
 4. Document usage in `docs/workflows/ai-nodes.md` (short guide).
 
+---
+
+## Backlog – Future Cleanup Tasks
+
+### DEPRECATE-001 – Remove Legacy AI Agent Module
+
+**Status:** Not started  
+**Priority:** Low  
+**Area:** Frontend – Navigation / Components / Permissions
+
+**Context:**  
+The legacy AI Agent module (`src/components/agents/AgentChat.jsx`) and related navigation items are superseded by the unified AiSHA Executive Assistant (`AiSidebar.jsx`). This module should be deprecated and eventually removed.
+
+**Scope:**
+- `src/components/agents/AgentChat.jsx` – 826 lines, separate chat UI
+- `src/pages/Layout.jsx` lines 125-130 – "AI Agent" in secondaryNavItems
+- `src/components/agents/` folder – Legacy agent components
+- Navigation permissions for "Agent" page
+
+**Tasks:**
+1. Add deprecation notice to AgentChat.jsx
+2. Hide "AI Agent" nav item from non-superadmin users
+3. Migrate any unique functionality to AiSidebar
+4. Remove AgentChat and related components
+5. Remove "Agent" from navigation permissions
+6. Archive components to `archive/unused-components/`
+
+**Acceptance Criteria:**
+- No user-facing "AI Agent" menu item in production
+- All assistant functionality available via AiSHA sidebar
+- Legacy code archived (not deleted) for reference
+- No console errors or broken routes
+
+**Notes:**
+- Phase 4 only updated avatar paths in legacy module for visual consistency
+- Full removal deferred to avoid scope creep during cutover
+

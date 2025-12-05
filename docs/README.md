@@ -32,6 +32,11 @@ Braid is an **AI-native language designed by LLMs, for LLMs** with:
 - [TERMINAL_RULES.md](./TERMINAL_RULES.md) - **MANDATORY** terminal & directory rules
 - [DEV_QUICK_START.md](./DEV_QUICK_START.md) - Development workflow guide
 
+**API Documentation:**
+- [API_V2_MIGRATION_GUIDE.md](./API_V2_MIGRATION_GUIDE.md) - v2 AI-enhanced endpoints
+- [DEPRECATION_HEADERS.md](./DEPRECATION_HEADERS.md) - v1 sunset timeline
+- [API_HEALTH_MONITORING.md](./API_HEALTH_MONITORING.md) - Self-healing API monitoring
+
 **TL;DR:**
 1. ALWAYS run `Get-Location` before executing commands
 2. Use separate terminals for backend, frontend, and your work
@@ -172,4 +177,42 @@ See `backend/README.md` for backend setup details.
 ⚠️ **Important**: Never commit your `.env` file to version control. It contains sensitive configuration.
 
 See `SECURITY_PERFORMANCE_REVIEW.md` for detailed security and performance guidelines.
+
+---
+
+## 📁 Documentation Organization
+
+**66 Active Documents** organized by category:
+
+### Core Manuals
+- `AISHA_CRM_USER_GUIDE.md` - End-user documentation
+- `AISHA_CRM_ADMIN_GUIDE.md` - Administrator guide
+- `AISHA_CRM_DEVELOPER_MANUAL.md` - Developer reference (incl. v2 APIs)
+- `AISHA_CRM_DATABASE_MANUAL_PART1/2.md` - Schema documentation
+- `AISHA_CRM_SECURITY_MANUAL_PART1/2.md` - Security architecture
+
+### API & Integration
+- `API_V2_MIGRATION_GUIDE.md` - v2 AI-enhanced endpoints ⭐ **NEW**
+- `DEPRECATION_HEADERS.md` - v1 sunset timeline ⭐ **NEW**
+- `API_HEALTH_MONITORING.md` - Self-healing API system
+- `API_ERROR_TYPES.md` - Error handling patterns
+
+### Database & Setup
+- `SUPABASE_SETUP_GUIDE.md` - Database setup (consolidated)
+- `SUPABASE_AUTH_GUIDE.md` - Authentication (consolidated)
+- `DATABASE_UUID_vs_TENANT_ID.md` - Tenant identification
+- `DATABASE_CONFIGURATION.md` - Connection settings
+
+### Infrastructure
+- `DOCKER_DEPLOYMENT.md` - Docker deployment guide
+- `DOCKER-SETUP.md` - Local Docker setup
+- `CLOUDFLARE_TUNNEL_CONFIG.md` - Tunnel configuration
+- `CI_CD_SCHEMA_VALIDATION.md` - CI/CD pipeline
+
+### Archive
+Historical and completed work documentation is preserved in `docs/archive/` (46 files) for reference.
+
+---
+
+*Last Updated: December 4, 2025*
 

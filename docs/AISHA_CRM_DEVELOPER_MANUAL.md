@@ -53,6 +53,8 @@
 - [7.3 Authentication & Authorization](#73-authentication--authorization)
 - [7.4 Rate Limiting](#74-rate-limiting)
 - [7.5 Versioning](#75-versioning)
+- [7.6 API v2 (AI-Enhanced)](#76-api-v2-ai-enhanced)
+- [7.7 Deprecation Headers](#77-deprecation-headers)
 
 ### Chapter 8: Testing
 - [8.1 Testing Strategy](#81-testing-strategy)
@@ -597,7 +599,7 @@ src/components/
 
 #### AiSidebar overview for Phase 4 workstreams
 
-- **Executive hero card:** `AiSidebar.jsx` renders the AiSHA avatar, tenant badge, and assistant status chips at the top of the drawer. The avatar lives at `public/aisha-avatar.jpg`; keep replacements the same dimensions (1:1 ratio) to preserve the glow ring.
+- **Executive hero card:** `AiSidebar.jsx` renders the AiSHA avatar, tenant badge, and assistant status chips at the top of the drawer. The avatar lives at `public/assets/aisha-executive-portrait.jpg`; keep replacements the same dimensions (1:1 ratio) to preserve the glow ring.
 - **Stacked interaction blocks:** Quick Actions, Guided Creations, suggestions, conversational forms, and transcript history are organized as separate `<section>` elements. When adding new widgets, keep them inside this stack so padding, scrollbar, and focus management remain consistent.
 - **Voice + realtime controls:** The composer footer owns all realtime voice toggles, push-to-talk buttons, and legacy STT states. Route new behavior through `useRealtimeAiSHA`, `useSpeechInput`, and `useSpeechOutput` hooks instead of touching DOM APIs directly.
 - **Preview workflow:** Use the dev servers for UI work—`npm run dev` (frontend) and `cd backend && npm run dev`—so Vite hot reloads the sidebar at `http://localhost:5173`. Docker builds (`docker compose up -d --build frontend`) bake whatever was in `src/` at build time and should be reserved for final verification.
@@ -1601,7 +1603,135 @@ export default {
 
 ---
 
-*[Continue with Chapters 4-12...]*
+*[Continue with Chapters 4-9...]*
+
+---
+
+# Chapter 7: API Development (Excerpt)
+
+## 7.6 API v2 (AI-Enhanced)
+
+As of December 2025, AiSHA CRM provides AI-enhanced v2 API endpoints that return intelligent context alongside standard data.
+
+### Available v2 Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `/api/v2/opportunities` | Deal management with win probability, health scoring |
+| `/api/v2/activities` | Activity tracking with sentiment, urgency detection |
+| `/api/v2/contacts` | Contact management with engagement scoring |
+| `/api/v2/accounts` | Account management with health and churn prediction |
+| `/api/v2/leads` | Lead management with AI scoring and qualification |
+| `/api/v2/reports` | Dashboard stats with trend analysis |
+| `/api/v2/workflows` | Workflow management with health analysis |
+| `/api/v2/documents` | Document management with AI classification |
+
+### Response Structure
+
+All v2 endpoints return an `aiContext` object:
+
+```javascript
+{
+  "status": "success",
+  "data": { /* entity data */ },
+  "aiContext": {
+    "confidence": 0.85,           // AI confidence level
+    "suggestions": [...],          // Recommended actions
+    "predictions": {...},          // Predicted outcomes
+    "insights": [...]              // AI-generated insights
+  },
+  "meta": {
+    "api_version": "v2",
+    "processingTime": 45
+  }
+}
+```
+
+### Creating v2 Routes
+
+v2 route files follow the pattern `backend/routes/{entity}.v2.js`:
+
+```javascript
+// backend/routes/opportunities.v2.js
+import express from 'express';
+import { getSupabaseClient } from '../lib/supabase-db.js';
+import { buildEntityAiContext } from '../lib/aiContextEnricher.js';
+
+export default function createOpportunityV2Routes() {
+  const router = express.Router();
+
+  router.get('/', async (req, res) => {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('opportunities')
+      .select('*');
+
+    // Add AI context enrichment
+    const aiContext = await buildEntityAiContext('opportunity', data);
+
+    res.json({
+      status: 'success',
+      data,
+      aiContext,
+      meta: { api_version: 'v2' }
+    });
+  });
+
+  return router;
+}
+```
+
+### Route Registration
+
+Register v2 routes in `backend/server.js`:
+
+```javascript
+import createOpportunityV2Routes from './routes/opportunities.v2.js';
+
+// Mount v2 routes
+app.use('/api/v2/opportunities', createOpportunityV2Routes());
+```
+
+For full v2 migration details, see [API v2 Migration Guide](./API_V2_MIGRATION_GUIDE.md).
+
+---
+
+## 7.7 Deprecation Headers
+
+All v1 endpoints with v2 alternatives now return deprecation headers.
+
+### Headers Returned
+
+```http
+X-API-Version: v1
+X-API-Deprecation-Date: 2027-02-01
+X-API-Sunset-Date: 2027-08-01
+X-Migration-Guide: https://docs.aishacrm.com/api/v2/migration
+Link: </api/v2/opportunities>; rel="alternate"
+Warning: 299 - "API v1 is deprecated. Migrate to v2 by 2027-08-01"
+```
+
+### Deprecation Middleware
+
+The middleware is located at `backend/middleware/deprecation.js`:
+
+```javascript
+// Usage in server.js
+import { addDeprecationHeaders } from './middleware/deprecation.js';
+
+// Apply to all API routes
+app.use('/api', addDeprecationHeaders);
+```
+
+### Timeline
+
+| Date | Milestone |
+|------|-----------|
+| December 2025 | v2 available, deprecation headers active |
+| February 2027 | Official deprecation date |
+| August 2027 | v1 sunset - endpoints return 410 Gone |
+
+For full deprecation details, see [Deprecation Headers](./DEPRECATION_HEADERS.md).
 
 ---
 

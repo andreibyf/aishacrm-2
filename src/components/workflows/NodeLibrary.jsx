@@ -1,4 +1,4 @@
-import { Search, Edit, Mail, Plus, GitBranch, UserPlus, Globe, Building2, Briefcase, Activity, Brain, Sparkles } from 'lucide-react'
+import { Search, Edit, Mail, Plus, GitBranch, UserPlus, Globe, Building2, Briefcase, Activity, Brain, Sparkles, Phone } from 'lucide-react'
 
 const nodeTypes = [
   {
@@ -56,6 +56,13 @@ const nodeTypes = [
     icon: Mail,
     description: 'Send an email',
     color: 'purple'
+  },
+  {
+    type: 'initiate_call',
+    label: 'AI Call',
+    icon: Phone,
+    description: 'Initiate AI outbound call via CallFluent/Thoughtly',
+    color: 'rose'
   }
   ,
   // Account nodes

@@ -88,7 +88,7 @@ The footer exposes all voice states so users always know whether the mic or spea
 | UI/UX iteration | Run `npm run dev` (frontend) and `npm run dev` inside `backend/`. Preview at `http://localhost:5173` with hot reload.
 | Docker validation | After finishing tweaks, run `docker compose up -d --build frontend` so the container picks up the latest bundle and opens `http://localhost:4000`.
 | Voice QA | Use Chromium-based browsers with mic permissions. Test both realtime and legacy STT fallbacks. Verify warning banners and telemetry debug card (enable via `VITE_AI_DEBUG_TELEMETRY=true`).
-| Asset updates | Replace `public/aisha-avatar.jpg` with a same-sized square image to keep the glow ring aligned. Clear cache or hard-refresh to see the change.
+| Asset updates | Replace `public/assets/aisha-executive-portrait.jpg` with a same-sized square image to keep the glow ring aligned. Clear cache or hard-refresh to see the change.
 
 ---
 

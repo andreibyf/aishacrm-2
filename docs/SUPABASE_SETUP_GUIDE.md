@@ -1,232 +1,324 @@
-# Supabase Production Database Setup Guide
+# Supabase Setup Guide
+
+> **Version 2.0** | Consolidated: December 4, 2025  
+> Consolidates: `SUPABASE_CLOUD_SETUP.md`, `SUPABASE_SETUP_GUIDE.md`
 
 ## Overview
-Setting up production Supabase database while still in development phase.
-This allows us to test against real production infrastructure before going live.
 
-## Prerequisites
-1. Supabase project created at https://supabase.com
-2. Project URL and API keys from Supabase dashboard
-3. Database password from project settings
+This guide covers complete Supabase setup for Aisha CRM, including local development configurations and production cloud setup.
 
-## Step 1: Get Supabase Connection Details
+---
 
-From your Supabase Dashboard (https://supabase.com/dashboard):
+## Quick Start Checklist
 
-1. **Project Settings** → **Database**
-   - Host: `db.xxx.supabase.co`
-   - Database name: `postgres`
-   - Port: `5432`
-   - User: `postgres`
-   - Password: (your database password)
+- [ ] Create Supabase project (or use existing)
+- [ ] Configure environment variables
+- [ ] Run database migrations
+- [ ] Enable Row Level Security (RLS)
+- [ ] Create initial tenant and admin user
+- [ ] Test connection from backend
 
-2. **Project Settings** → **API**
-   - Project URL: `https://xxx.supabase.co`
-   - `Publishable` key (safe to use in browser with RLS)
-   - `service_role` secret key (DO NOT expose to frontend!)
+---
 
-## Step 2: Update Environment Variables
+## 1. Project Creation
 
-Create/Update `.env` in backend directory:
+### Option A: Supabase Cloud (Production)
 
-```bash
-# Supabase Production Database
-SUPABASE_DB_HOST=db.xxx.supabase.co
-SUPABASE_DB_NAME=postgres
-SUPABASE_DB_USER=postgres
-SUPABASE_DB_PASSWORD=your_database_password
-SUPABASE_DB_PORT=5432
+1. Go to [supabase.com](https://supabase.com) and sign in
+2. Click **New Project**
+3. Select organization
+4. Configure:
+   - **Project name**: `aishacrm-prod` (or your preference)
+   - **Database password**: Generate strong password (save securely!)
+   - **Region**: Choose closest to your users
+   - **Pricing plan**: Pro recommended for production
+5. Wait for project provisioning (~2 minutes)
 
-# For backend API calls
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_SERVICE_KEY=your_service_role_key
+### Option B: Local Development (Docker)
 
-# Mode switch
-USE_SUPABASE_PROD=true  # Set to false to use local Docker
-```
-
-## Step 3: Apply Database Schema to Supabase
-
-### Option A: Via Supabase Dashboard (Recommended)
-
-1. Go to **SQL Editor** in Supabase Dashboard
-2. Run the migration scripts in order:
-   - `001_init.sql`
-   - `002_add_created_date.sql` (if needed)
-   - `003_create_apikey.sql`
-   - `007_crud_enhancements.sql`
-
-### Option B: Via Command Line
+Aisha CRM uses Supabase Cloud even for development. Local Supabase is not required but can be set up:
 
 ```bash
-# Using psql
-psql "postgresql://postgres:YOUR_PASSWORD@db.xxx.supabase.co:5432/postgres" < backend/migrations/001_init.sql
-psql "postgresql://postgres:YOUR_PASSWORD@db.xxx.supabase.co:5432/postgres" < backend/migrations/007_crud_enhancements.sql
+# Install Supabase CLI
+npm install -g supabase
+
+# Initialize local project
+supabase init
+
+# Start local instance
+supabase start
 ```
 
-## Step 4: Enable Row Level Security (RLS)
+---
 
-Run this in Supabase SQL Editor:
+## 2. Environment Configuration
+
+### Backend `.env` Variables
+
+```bash
+# Supabase Connection (Required)
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# Direct Database Connection (Optional - for migrations)
+DATABASE_URL=postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
+
+# System Tenant (Required)
+SYSTEM_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
+```
+
+### Frontend `.env` Variables
+
+```bash
+# Supabase Client (Required)
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+### Finding Your Keys
+
+1. Go to Supabase Dashboard → **Settings** → **API**
+2. Copy:
+   - **Project URL** → `SUPABASE_URL` / `VITE_SUPABASE_URL`
+   - **anon public** key → `SUPABASE_ANON_KEY` / `VITE_SUPABASE_ANON_KEY`
+   - **service_role** key → `SUPABASE_SERVICE_ROLE_KEY` (backend only!)
+
+> ⚠️ **NEVER expose service_role key to frontend or commit to Git**
+
+---
+
+## 3. Database Migrations
+
+### Running Migrations
+
+```bash
+cd backend
+
+# Apply all migrations
+node apply-supabase-migrations.js
+
+# Or apply single migration
+node apply-single-sql.js migrations/082_create_documents_table.sql
+```
+
+### Migration Directory Structure
+
+```
+backend/migrations/
+├── 001_initial_schema.sql
+├── 002_create_tenants.sql
+├── ...
+├── 088_workflow_execution_indexes.sql
+└── 089_create_documents_table.sql
+```
+
+### Migration Best Practices
+
+1. **Never modify existing migrations** - create new ones
+2. **Test migrations locally first** - use Supabase SQL Editor
+3. **Include rollback comments** - document how to undo
+4. **Version numbering** - use sequential 3-digit prefixes
+
+---
+
+## 4. Row Level Security (RLS)
+
+Aisha CRM uses RLS extensively for multi-tenant isolation.
+
+### RLS Overview
+
+- **50+ tables** have RLS enabled
+- **Policies based on `tenant_id`** (UUID column)
+- **Service role bypasses RLS** - use carefully
+
+### Applying RLS Policies
+
+```bash
+cd backend
+node apply-rls-policies.js
+```
+
+### Common RLS Pattern
 
 ```sql
--- Enable RLS on all tables
-ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
+-- Enable RLS
 ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE opportunities ENABLE ROW LEVEL SECURITY;
-ALTER TABLE activities ENABLE ROW LEVEL SECURITY;
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE employees ENABLE ROW LEVEL SECURITY;
-ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE system_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE modulesettings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE apikey ENABLE ROW LEVEL SECURITY;
 
--- Create policies for service role (backend access)
--- Service role bypasses RLS by default, but we can add explicit policies for clarity
-
--- Policy: Allow backend service role to access all tenant data
-CREATE POLICY "Service role has full access" ON contacts
+-- Tenant isolation policy
+CREATE POLICY "tenant_isolation" ON accounts
   FOR ALL
-  USING (true)
-  WITH CHECK (true);
+  USING (tenant_id = current_setting('app.tenant_id')::uuid);
 
-CREATE POLICY "Service role has full access" ON leads
-  FOR ALL
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY "Service role has full access" ON accounts
-  FOR ALL
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY "Service role has full access" ON opportunities
-  FOR ALL
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY "Service role has full access" ON activities
-  FOR ALL
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY "Service role has full access" ON employees
-  FOR ALL
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY "Service role has full access" ON notifications
-  FOR ALL
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY "Service role has full access" ON system_logs
-  FOR ALL
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY "Service role has full access" ON modulesettings
-  FOR ALL
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY "Service role has full access" ON apikey
-  FOR ALL
-  USING (true)
-  WITH CHECK (true);
-
--- Note: If you want to add user-level RLS later (for direct Supabase client access),
--- you would add policies based on auth.uid() and tenant_id matching
+-- Service role bypass (already handled by Supabase)
 ```
 
-## Step 5: Update Backend Connection
-
-The backend `server.js` will need to be updated to use Supabase connection when configured.
-
-See `SUPABASE_BACKEND_CONFIG.md` for implementation details.
-
-## Step 6: Test Connection
+### Verifying RLS
 
 ```bash
-# Test from backend directory
 cd backend
-npm run dev
-
-# You should see:
-# "✓ PostgreSQL connection pool initialized"
-# "Database: Connected (Supabase Production)"
+node check-rls-simple.js
 ```
 
-## Step 7: Verify CRUD Operations
+---
 
-1. Start backend: `cd backend && npm run dev`
-2. Test API:
+## 5. Initial Data Setup
+
+### Create System Tenant
+
+```sql
+INSERT INTO tenants (id, name, slug, is_active)
+VALUES (
+  'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+  'System Tenant',
+  'system',
+  true
+);
+```
+
+### Create Admin User
+
+See `SUPABASE_AUTH_GUIDE.md` for complete user creation process.
+
+Quick version:
 ```bash
-# Create contact
-curl -X POST http://localhost:3001/api/contacts \
-  -H "Content-Type: application/json" \
-  -d '{"tenant_id":"test-tenant","first_name":"John","last_name":"Doe","email":"john@test.com"}'
-
-# List contacts
-curl "http://localhost:3001/api/contacts?tenant_id=test-tenant"
+cd backend
+node create-test-user.js
 ```
 
-## Security Considerations
+---
 
-### ✅ Safe for Production Database in Dev Mode:
-- Backend uses `service_role` key (server-side only)
-- All tenant isolation handled by backend
-- RLS enabled as additional security layer
-- No sensitive data during testing phase
+## 6. Connection Pooling
 
-### ⚠️ Before Going Live:
-1. Review all RLS policies
-2. Add user-level authentication policies if using Supabase Auth
-3. Rotate API keys if they were exposed
-4. Review audit logs in Supabase dashboard
-5. Set up database backups
-6. Configure monitoring and alerts
+### Pooler Configuration
 
-## Rollback to Local Docker
+Supabase provides built-in connection pooling via Supavisor.
 
-If you need to switch back to local Docker:
+**Pooler URL Format:**
+```
+postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
+```
+
+**Direct URL Format (for migrations):**
+```
+postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
+```
+
+### When to Use Each
+
+| Connection Type | Use Case |
+|----------------|----------|
+| Pooler (port 6543) | Application queries, high concurrency |
+| Direct (port 5432) | Migrations, schema changes |
+
+---
+
+## 7. Production Configuration
+
+### Recommended Settings
+
+**Database → Settings → Database:**
+- Connection pooling: **Transaction** mode
+- Pool size: **15-25** for Pro plan
+
+**Authentication → Settings:**
+- Site URL: Your production frontend URL
+- Redirect URLs: Add all valid redirect URLs
+
+**API → Settings:**
+- Rate limiting: Enable for production
+
+### Security Checklist
+
+- [ ] Strong database password (32+ characters)
+- [ ] Service role key only in backend (never frontend)
+- [ ] RLS enabled on all tenant tables
+- [ ] SSL enforced for connections
+- [ ] Backup schedule configured
+- [ ] Monitoring alerts set up
+
+---
+
+## 8. Troubleshooting
+
+### Common Issues
+
+**Connection refused:**
+```bash
+# Check if Supabase project is paused
+# Go to Dashboard → Project Settings → Pause compute
+```
+
+**RLS policy blocking queries:**
+```sql
+-- Check current tenant context
+SELECT current_setting('app.tenant_id', true);
+
+-- Temporarily disable for debugging (use service role)
+```
+
+**Migration fails:**
+```bash
+# Check for syntax errors
+# Run SQL directly in Supabase SQL Editor first
+```
+
+**Slow queries:**
+```sql
+-- Check for missing indexes
+EXPLAIN ANALYZE SELECT * FROM your_query;
+```
+
+### Useful Diagnostic Queries
+
+```sql
+-- List all tables with RLS status
+SELECT schemaname, tablename, rowsecurity
+FROM pg_tables
+WHERE schemaname = 'public'
+ORDER BY tablename;
+
+-- Check active connections
+SELECT count(*) FROM pg_stat_activity;
+
+-- View recent errors
+SELECT * FROM pg_stat_activity
+WHERE state = 'active'
+ORDER BY query_start DESC;
+```
+
+---
+
+## 9. Backup & Recovery
+
+### Automatic Backups
+
+Supabase Pro includes:
+- Point-in-time recovery (7 days)
+- Daily backups
+
+### Manual Backup
 
 ```bash
-# In backend/.env
-USE_SUPABASE_PROD=false
+# Export schema and data
+pg_dump -h db.[project-ref].supabase.co -U postgres -d postgres > backup.sql
 ```
 
-Backend will automatically use local Docker PostgreSQL (localhost:5432).
+### Restore
 
-## Monitoring
+```bash
+# Restore to database
+psql -h db.[project-ref].supabase.co -U postgres -d postgres < backup.sql
+```
 
-- **Supabase Dashboard**: Check Database → Performance, Logs
-- **Backend Logs**: All queries logged with execution time
-- **Error Tracking**: Backend error logs show DB issues
+---
 
-## Next Steps
+## Related Documentation
 
-1. Apply schema to Supabase
-2. Enable RLS policies
-3. Update backend connection config
-4. Test CRUD operations
-5. Run full test suite
-6. Monitor performance and errors
-7. Document any production-specific configurations
+- `SUPABASE_AUTH_GUIDE.md` - Authentication setup and testing
+- `AISHA_CRM_DATABASE_MANUAL_PART1.md` - Complete schema documentation
+- `DATABASE_UUID_vs_TENANT_ID.md` - Tenant identification patterns
 
-## Troubleshooting
+---
 
-**Connection Issues:**
-- Verify IP allowlist in Supabase (Settings → Database → Connection Pooling)
-- Check database password is correct
-- Ensure SSL mode is enabled
-
-**RLS Blocking Queries:**
-- Make sure backend uses `service_role` key (bypasses RLS)
-- Check policies are created with `USING (true)`
-
-**Performance:**
-- Supabase has connection pooling by default
-- Use connection pool URL for better performance
-- Monitor query performance in dashboard
+*Last Updated: December 4, 2025*

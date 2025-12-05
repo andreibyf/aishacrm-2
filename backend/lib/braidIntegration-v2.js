@@ -65,7 +65,18 @@ export const TOOL_REGISTRY = {
   // Web Research
   search_web: { file: 'web-research.braid', function: 'searchWeb', policy: 'READ_ONLY' },
   fetch_web_page: { file: 'web-research.braid', function: 'fetchWebPage', policy: 'READ_ONLY' },
-  lookup_company_info: { file: 'web-research.braid', function: 'lookupCompanyInfo', policy: 'READ_ONLY' }
+  lookup_company_info: { file: 'web-research.braid', function: 'lookupCompanyInfo', policy: 'READ_ONLY' },
+
+  // Workflow Templates
+  list_workflow_templates: { file: 'workflows.braid', function: 'listWorkflowTemplates', policy: 'READ_ONLY' },
+  get_workflow_template: { file: 'workflows.braid', function: 'getWorkflowTemplate', policy: 'READ_ONLY' },
+  instantiate_workflow_template: { file: 'workflows.braid', function: 'instantiateWorkflowTemplate', policy: 'WRITE_OPERATIONS' },
+
+  // Telephony & AI Calling
+  initiate_call: { file: 'telephony.braid', function: 'initiateCall', policy: 'WRITE_OPERATIONS' },
+  call_contact: { file: 'telephony.braid', function: 'callContact', policy: 'WRITE_OPERATIONS' },
+  check_calling_provider: { file: 'telephony.braid', function: 'checkCallingProvider', policy: 'READ_ONLY' },
+  get_calling_agents: { file: 'telephony.braid', function: 'getCallingAgents', policy: 'READ_ONLY' }
 };
 
 /**
@@ -80,6 +91,8 @@ You are AI-SHA - an AI Super Hi-performing Assistant designed to be an Executive
 - **Notes & Documentation:** Create, search, and organize notes across all records
 - **Sales Pipeline:** Track opportunities, update stages, forecast revenue
 - **Web Research:** Search for company information, fetch external data
+- **Workflow Automation:** Create workflows from templates with customizable parameters
+- **AI Calling:** Initiate outbound calls via CallFluent or Thoughtly AI agents
 - **Proactive Assistance:** Suggest next actions, follow-ups, priority tasks
 
 **Data Structure Guide (CRITICAL - Matches DB):**
@@ -89,12 +102,30 @@ You are AI-SHA - an AI Super Hi-performing Assistant designed to be an Executive
 - Opportunities: {id, name, description, amount, stage, probability, close_date, account_id, contact_id, assigned_to}
 - Activities: {id, type, subject, body, status, due_date, assigned_to}
 
+**Workflow Templates (Available Categories):**
+- lead_management: Lead capture, nurturing, qualification automation
+- email_marketing: Welcome emails, follow-up sequences
+- sales_pipeline: Opportunity follow-up, deal tracking
+- ai_calling: AI-powered outbound calls via CallFluent or Thoughtly
+- data_sync: Contact/account synchronization
+- task_automation: Activity reminders, scheduling
+
+When creating a workflow, ALWAYS use list_workflow_templates first to see available templates and their required parameters, then use instantiate_workflow_template with the correct parameter values.
+
+**AI Calling (CallFluent & Thoughtly):**
+- Use check_calling_provider to verify if a provider is configured before calling
+- Use initiate_call to call a phone number directly with context
+- Use call_contact to call a contact by their ID (fetches contact info automatically)
+- Supported providers: 'callfluent', 'thoughtly'
+- Always provide a clear purpose and talking points for the AI agent
+
 **Best Practices:**
 - Always use tools to fetch current data before answering
 - Be proactive: suggest follow-ups, next actions, related records
 - Use proper date formats (ISO 8601)
 - All operations are tenant-isolated
 - Check calendar for conflicts before scheduling
+- Before initiating calls, confirm contact has a valid phone number
 `;
 
 /**

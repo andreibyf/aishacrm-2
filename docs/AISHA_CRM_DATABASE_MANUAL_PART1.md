@@ -93,7 +93,7 @@ graph TB
 - **UUID Primary Keys:** All tables use `gen_random_uuid()`
 - **JSONB Metadata:** Flexible schema via `metadata` columns
 - **Audit Logging:** Comprehensive change tracking
-- **RLS Enabled:** 48+ tables with row-level security
+- **RLS Enabled:** 50+ tables with row-level security
 
 ---
 
@@ -371,6 +371,14 @@ workflow_execution -- Workflow run history
 cron_job         -- Scheduled tasks
 conversations    -- AI conversation threads
 conversation_messages -- Chat messages
+```
+
+#### Documents & Storage (1 table)
+```sql
+documents        -- Document metadata with AI classification
+                 -- Stores file metadata, entity relationships, and AI-generated
+                 -- classifications (type, sensitivity, retention recommendations)
+                 -- Actual files stored in Supabase Storage
 ```
 
 ---

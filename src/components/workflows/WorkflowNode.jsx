@@ -41,6 +41,7 @@ export default function WorkflowNode({ node, isSelected, isConnecting, onClick, 
       case 'find_contact': return 'Find Contact';
       case 'update_contact': return 'Update Contact';
       case 'send_email': return 'Send Email';
+      case 'initiate_call': return 'AI Call';
       default: return node.type;
     }
   };
@@ -67,6 +68,11 @@ export default function WorkflowNode({ node, isSelected, isConnecting, onClick, 
       case 'find_contact': return 'Search for a contact';
       case 'update_contact': return 'Update contact fields';
       case 'send_email': return 'Queue email for delivery';
+      case 'initiate_call':
+        if (node.config?.provider) {
+          return `${node.config.provider} AI call`;
+        }
+        return 'Initiate AI outbound call';
       default: return '';
     }
   };

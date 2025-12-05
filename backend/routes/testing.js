@@ -403,6 +403,9 @@ export default function createTestingRoutes(_pgPool) {
         { method: 'GET', path: `/api/v2/opportunities?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/v2/activities?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/v2/leads?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/v2/reports/dashboard-bundle?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/v2/reports/health-summary?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/v2/workflows?tenant_id={TENANT_ID}` },
 
         // Users & Employees
         { method: 'GET', path: `/api/users?tenant_id={TENANT_ID}` },
@@ -420,6 +423,7 @@ export default function createTestingRoutes(_pgPool) {
         // Workflows & Automation
         { method: 'GET', path: `/api/workflows?tenant_id={TENANT_ID}` },
         { method: 'GET', path: `/api/workflowexecutions?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/workflow-templates?tenant_id={TENANT_ID}` },
         
         // Business Development
         { method: 'GET', path: `/api/bizdev?tenant_id={TENANT_ID}` },

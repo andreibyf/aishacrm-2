@@ -5,6 +5,7 @@
 
 import express from 'express';
 import workflowQueue from '../services/workflowQueue.js';
+import { initiateOutboundCall } from '../lib/outboundCallService.js';
 
 // Helper: lift workflow fields from metadata and align shape with frontend expectations
 function normalizeWorkflow(row) {
@@ -615,6 +616,61 @@ export default function createWorkflowRoutes(pgPool) {
               } catch (e) {
                 log.status = 'error';
                 log.error = `AI routing failed: ${e.message}`;
+              }
+              break;
+            }
+            case 'initiate_call': {
+              // Initiate outbound AI call via CallFluent or Thoughtly
+              const provider = cfg.provider || 'callfluent';
+              let phoneNumber = replaceVariables(cfg.phone_number || '{{phone}}');
+              const purpose = replaceVariables(cfg.purpose || 'Follow-up call');
+              const talkingPointsRaw = cfg.talking_points || [];
+              const talkingPoints = talkingPointsRaw.map(tp => replaceVariables(tp));
+
+              // Get contact info from context
+              const lead = context.variables.found_lead;
+              const contact = context.variables.found_contact;
+              const entity = lead || contact;
+
+              if (!phoneNumber || phoneNumber === '{{phone}}') {
+                phoneNumber = entity?.phone;
+              }
+
+              if (!phoneNumber) {
+                log.status = 'error';
+                log.error = 'No phone number available for call';
+                break;
+              }
+
+              try {
+                const callResult = await initiateOutboundCall({
+                  tenant_id: workflow.tenant_id,
+                  provider,
+                  phone_number: phoneNumber,
+                  contact_id: entity?.id,
+                  contact_name: entity?.first_name ? `${entity.first_name} ${entity.last_name || ''}`.trim() : entity?.name,
+                  contact_email: entity?.email,
+                  company: entity?.company,
+                  purpose,
+                  talking_points: talkingPoints,
+                  agent_id: cfg.agent_id,
+                  metadata: {
+                    workflow_id: workflow.id,
+                    workflow_name: workflow.name
+                  }
+                });
+
+                log.output = {
+                  call_initiated: callResult.success,
+                  provider,
+                  call_id: callResult.call_id,
+                  phone_number: phoneNumber,
+                  status: callResult.status
+                };
+                context.variables.call_result = callResult;
+              } catch (callError) {
+                log.status = 'error';
+                log.error = `Call initiation failed: ${callError.message}`;
               }
               break;
             }
