@@ -19,8 +19,27 @@ ALTER TABLE leads
   ADD COLUMN IF NOT EXISTS state TEXT,
   ADD COLUMN IF NOT EXISTS zip TEXT,
   ADD COLUMN IF NOT EXISTS country TEXT,
-  ADD COLUMN IF NOT EXISTS unique_id TEXT,
-  ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}'::text[];
+  ADD COLUMN IF NOT EXISTS unique_id TEXT;
+
+-- Handle tags column: if it exists as JSONB, rename it and create new TEXT[] column
+DO $$
+BEGIN
+  -- Check if tags column exists and is JSONB
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'leads' AND column_name = 'tags' AND data_type = 'jsonb'
+  ) THEN
+    ALTER TABLE leads RENAME COLUMN tags TO tags_jsonb_old;
+  END IF;
+  
+  -- Add TEXT[] column if it doesn't exist
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'leads' AND column_name = 'tags' AND udt_name = '_text'
+  ) THEN
+    ALTER TABLE leads ADD COLUMN tags TEXT[] DEFAULT '{}'::text[];
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_leads_city ON leads(tenant_id, city) WHERE city IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_leads_state ON leads(tenant_id, state) WHERE state IS NOT NULL;
@@ -105,9 +124,25 @@ SET unique_id = COALESCE(unique_id, metadata ->> 'unique_id')
 WHERE metadata ? 'unique_id'
   AND (metadata ->> 'unique_id') <> '';
 
+-- Backfill tags from old JSONB column if it exists
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'leads' AND column_name = 'tags_jsonb_old'
+  ) THEN
+    UPDATE leads
+    SET tags = ARRAY(SELECT jsonb_array_elements_text(tags_jsonb_old))
+    WHERE (tags IS NULL OR tags = '{}'::text[])
+      AND tags_jsonb_old IS NOT NULL
+      AND jsonb_typeof(tags_jsonb_old) = 'array';
+  END IF;
+END $$;
+
+-- Backfill tags from metadata
 UPDATE leads
 SET tags = ARRAY(SELECT jsonb_array_elements_text(metadata -> 'tags'))
-WHERE (tags IS NULL OR array_length(tags, 1) IS NULL)
+WHERE (tags IS NULL OR tags = '{}'::text[])
   AND metadata ? 'tags'
   AND jsonb_typeof(metadata -> 'tags') = 'array';
 
@@ -130,8 +165,25 @@ ALTER TABLE contacts
   ADD COLUMN IF NOT EXISTS city TEXT,
   ADD COLUMN IF NOT EXISTS state TEXT,
   ADD COLUMN IF NOT EXISTS zip TEXT,
-  ADD COLUMN IF NOT EXISTS country TEXT,
-  ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}'::text[];
+  ADD COLUMN IF NOT EXISTS country TEXT;
+
+-- Handle tags column: if it exists as JSONB, rename it and create new TEXT[] column
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'contacts' AND column_name = 'tags' AND data_type = 'jsonb'
+  ) THEN
+    ALTER TABLE contacts RENAME COLUMN tags TO tags_jsonb_old;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'contacts' AND column_name = 'tags' AND udt_name = '_text'
+  ) THEN
+    ALTER TABLE contacts ADD COLUMN tags TEXT[] DEFAULT '{}'::text[];
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_contacts_city ON contacts(tenant_id, city) WHERE city IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_contacts_state ON contacts(tenant_id, state) WHERE state IS NOT NULL;
@@ -180,9 +232,25 @@ SET country = COALESCE(country, metadata ->> 'country')
 WHERE metadata ? 'country'
   AND (metadata ->> 'country') <> '';
 
+-- Backfill tags from old JSONB column if it exists
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'contacts' AND column_name = 'tags_jsonb_old'
+  ) THEN
+    UPDATE contacts
+    SET tags = ARRAY(SELECT jsonb_array_elements_text(tags_jsonb_old))
+    WHERE (tags IS NULL OR tags = '{}'::text[])
+      AND tags_jsonb_old IS NOT NULL
+      AND jsonb_typeof(tags_jsonb_old) = 'array';
+  END IF;
+END $$;
+
+-- Backfill tags from metadata
 UPDATE contacts
 SET tags = ARRAY(SELECT jsonb_array_elements_text(metadata -> 'tags'))
-WHERE (tags IS NULL OR array_length(tags, 1) IS NULL)
+WHERE (tags IS NULL OR tags = '{}'::text[])
   AND metadata ? 'tags'
   AND jsonb_typeof(metadata -> 'tags') = 'array';
 
@@ -200,8 +268,25 @@ ALTER TABLE opportunities
   ADD COLUMN IF NOT EXISTS lead_id UUID REFERENCES leads(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS lead_source TEXT,
   ADD COLUMN IF NOT EXISTS type TEXT,
-  ADD COLUMN IF NOT EXISTS competitor TEXT,
-  ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}'::text[];
+  ADD COLUMN IF NOT EXISTS competitor TEXT;
+
+-- Handle tags column: if it exists as JSONB, rename it and create new TEXT[] column
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'opportunities' AND column_name = 'tags' AND data_type = 'jsonb'
+  ) THEN
+    ALTER TABLE opportunities RENAME COLUMN tags TO tags_jsonb_old;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'opportunities' AND column_name = 'tags' AND udt_name = '_text'
+  ) THEN
+    ALTER TABLE opportunities ADD COLUMN tags TEXT[] DEFAULT '{}'::text[];
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_opportunities_lead_id ON opportunities(tenant_id, lead_id);
 CREATE INDEX IF NOT EXISTS idx_opportunities_type ON opportunities(tenant_id, type) WHERE type IS NOT NULL;
@@ -230,9 +315,25 @@ SET competitor = COALESCE(competitor, metadata ->> 'competitor')
 WHERE metadata ? 'competitor'
   AND (metadata ->> 'competitor') <> '';
 
+-- Backfill tags from old JSONB column if it exists
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'opportunities' AND column_name = 'tags_jsonb_old'
+  ) THEN
+    UPDATE opportunities
+    SET tags = ARRAY(SELECT jsonb_array_elements_text(tags_jsonb_old))
+    WHERE (tags IS NULL OR tags = '{}'::text[])
+      AND tags_jsonb_old IS NOT NULL
+      AND jsonb_typeof(tags_jsonb_old) = 'array';
+  END IF;
+END $$;
+
+-- Backfill tags from metadata
 UPDATE opportunities
 SET tags = ARRAY(SELECT jsonb_array_elements_text(metadata -> 'tags'))
-WHERE (tags IS NULL OR array_length(tags, 1) IS NULL)
+WHERE (tags IS NULL OR tags = '{}'::text[])
   AND metadata ? 'tags'
   AND jsonb_typeof(metadata -> 'tags') = 'array';
 
