@@ -23,6 +23,10 @@ jobs:
             context: .
             dockerfile: backend/Dockerfile
             image: ghcr.io/${{ github.repository }}-backend
+          - service: mcp
+            context: ./braid-mcp-node-server
+            dockerfile: braid-mcp-node-server/Dockerfile
+            image: ghcr.io/${{ github.repository }}-mcp
     
     steps:
       - name: Checkout code
@@ -98,7 +102,7 @@ jobs:
           username: ${{ secrets.PROD_VPS_USER }}
           key: ${{ secrets.PROD_VPS_SSH_KEY }}
           port: ${{ secrets.PROD_VPS_PORT || 22 }}
-          source: "docker-compose.prod.yml,nginx-n8n.conf"
+          source: "docker-compose.prod.yml,nginx-n8n.conf,braid-mcp-node-server/docker-compose.prod.yml,braid-mcp-node-server/.env.example"
           target: "/opt/aishacrm/"
           strip_components: 0
 
@@ -119,9 +123,11 @@ jobs:
             # Pull specific version tags
             docker pull ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG
             docker pull ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG
+            docker pull ghcr.io/andreibyf/aishacrm-2-mcp:$VERSION_TAG
             # Tag as latest locally
             docker tag ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-frontend:latest
             docker tag ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-backend:latest
+            docker tag ghcr.io/andreibyf/aishacrm-2-mcp:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-mcp:latest
             # Write version to .env for runtime injection
             if grep -q "^VITE_APP_BUILD_VERSION=" .env 2>/dev/null; then
               sed -i "s/^VITE_APP_BUILD_VERSION=.*/VITE_APP_BUILD_VERSION=$VERSION_TAG/" .env
@@ -140,12 +146,28 @@ jobs:
                 echo "GITHUB_TOKEN=$MCP_GITHUB_TOKEN" >> .env
               fi
             fi
-            # Restart services with version info (force recreate to detect :latest image changes)
+            # Restart main services with version info (force recreate to detect :latest image changes)
             docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend n8n n8n-proxy
-            # If token changed, recreate MCP to pick up new env
-            if [ -n "$MCP_GITHUB_TOKEN" ]; then
-              docker compose -f docker-compose.prod.yml up -d --force-recreate mcp
+            
+            # Deploy MCP server (separate compose file)
+            echo "Deploying MCP server..."
+            cd /opt/aishacrm/braid-mcp-node-server
+            # Create .env from example if it doesn't exist
+            if [ ! -f .env ]; then
+              cp .env.example .env 2>/dev/null || echo "No .env.example found"
             fi
+            # Update MCP .env with GitHub token if provided
+            if [ -n "$MCP_GITHUB_TOKEN" ]; then
+              if grep -q "^GITHUB_TOKEN=" .env 2>/dev/null; then
+                sed -i "s/^GITHUB_TOKEN=.*/GITHUB_TOKEN=$MCP_GITHUB_TOKEN/" .env
+              else
+                echo "GITHUB_TOKEN=$MCP_GITHUB_TOKEN" >> .env
+              fi
+            fi
+            # Start MCP services using production compose (uses GHCR images)
+            docker compose -f docker-compose.prod.yml up -d --force-recreate
+            
+            cd /opt/aishacrm
             echo "Deployment completed: $VERSION_TAG"
             # Verify deployment
             sleep 3
