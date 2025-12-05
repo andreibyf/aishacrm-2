@@ -188,14 +188,16 @@ export default function UniversalDetailPanel({
     try {
       const relatedTo = entityType.toLowerCase();
       const entityName = getEntityName(entity); // Pre-calculate for activity
+      // For SuperAdmin users, tenant_id may be null; use entity's tenant_id as fallback
+      const effectiveTenantId = user?.tenant_id || entity.tenant_id;
 
       const noteData = {
         related_type: relatedTo,
         related_id: entity.id,
         title: newNoteTitle || `${newNoteType.charAt(0).toUpperCase() + newNoteType.slice(1)} Note`,
         content: newNoteContent,
-        tenant_id: user.tenant_id,
-        created_by: user.email // Assuming user.email for created_by
+        tenant_id: effectiveTenantId,
+        created_by: user?.email // Assuming user.email for created_by
       };
 
       // Persist note type inside metadata (backend has no 'type' column for notes)
@@ -218,7 +220,7 @@ export default function UniversalDetailPanel({
         const isScheduledActivity = ['follow_up', 'call_log', 'meeting', 'email'].includes(newNoteType);
 
         const activityData = {
-          tenant_id: user.tenant_id,
+          tenant_id: effectiveTenantId,
           type: activityType,
           subject: newNoteTitle || newNoteContent.substring(0, 50), // Use newNoteTitle, or first 50 chars of content
           description: newNoteContent,
