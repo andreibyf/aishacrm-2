@@ -1,7 +1,8 @@
 services:
-  braid-mcp-node-server:
+  # MCP Server - coordinates requests
+  braid-mcp-server:
     build: .
-    container_name: braid-mcp-node-server
+    container_name: braid-mcp-server
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -9,7 +10,58 @@ services:
       - ./.env
     environment:
       NODE_ENV: production
+      MCP_ROLE: server
       # Talk to backend and redis via host-mapped ports
+      CRM_BACKEND_URL: http://host.docker.internal:4001
+      REDIS_URL: redis://host.docker.internal:6379
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    networks:
+      - aishanet
+
+  # MCP Node 1 - worker node
+  braid-mcp-1:
+    build: .
+    container_name: braid-mcp-1
+    restart: unless-stopped
+    depends_on:
+      - braid-mcp-server
+    env_file:
+      - ./.env
+    environment:
+      NODE_ENV: production
+      MCP_ROLE: node
+      MCP_NODE_ID: "1"
+      MCP_SERVER_URL: http://braid-mcp-server:8000
+      CRM_BACKEND_URL: http://host.docker.internal:4001
+      REDIS_URL: redis://host.docker.internal:6379
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    networks:
+      - aishanet
+
+  # MCP Node 2 - additional capacity for multi-tenant scaling
+  braid-mcp-2:
+    build: .
+    container_name: braid-mcp-2
+    restart: unless-stopped
+    depends_on:
+      - braid-mcp-server
+    env_file:
+      - ./.env
+    environment:
+      NODE_ENV: production
+      MCP_ROLE: node
+      MCP_NODE_ID: "2"
+      MCP_SERVER_URL: http://braid-mcp-server:8000
       CRM_BACKEND_URL: http://host.docker.internal:4001
       REDIS_URL: redis://host.docker.internal:6379
     healthcheck:
