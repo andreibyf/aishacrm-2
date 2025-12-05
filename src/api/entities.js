@@ -351,8 +351,8 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       options.body = JSON.stringify(bodyData);
     }
 
-    // Special-case Opportunity PUT: also append tenant_id as query param to avoid any body parsing ambiguity
-    if (entityName === 'Opportunity' && method === 'PUT' && tenantId !== undefined) {
+    // Special-case entities that require tenant_id as query param for PUT
+    if ((entityName === 'Opportunity' || entityName === 'Note') && method === 'PUT' && tenantId !== undefined) {
       const delimiter = url.includes('?') ? '&' : '?';
       url += `${delimiter}tenant_id=${encodeURIComponent(tenantId)}`;
     }
