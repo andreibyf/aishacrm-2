@@ -23,7 +23,7 @@ export default function CalendarPage() {
   const [selected, setSelected] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const { selectedTenantId } = useTenant();
-  const { cachedRequest } = useApiManager();
+  const { cachedRequest, clearCache } = useApiManager();
 
   // User provided by context
 
@@ -79,6 +79,18 @@ export default function CalendarPage() {
     console.log('[Calendar] Loaded activities:', normalized.length);
     setActivities(normalized);
   }, [currentUser, selectedTenantId, cachedRequest]);
+
+  // Listen for activity modifications to refresh calendar
+  useEffect(() => {
+    const handleActivityModified = (event) => {
+      if (event.detail?.entity === 'Activity') {
+        clearCache('Activity');
+        loadActivities();
+      }
+    };
+    window.addEventListener('entity-modified', handleActivityModified);
+    return () => window.removeEventListener('entity-modified', handleActivityModified);
+  }, [clearCache, loadActivities]);
 
   useEffect(() => {
     loadActivities();
