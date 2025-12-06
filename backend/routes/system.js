@@ -148,6 +148,9 @@ export default function createSystemRoutes(_pgPool) {
       { name: 'frontend', url: 'http://frontend:3000/' },
       // Correct MCP server; try multiple candidates for portability
       { name: 'mcp-node', url: mcpNodeCandidates },
+      // MCP replica containers (braid-mcp-node-server scaled instances)
+      { name: 'mcp-node-1', url: 'http://braid-mcp-1:8000/health' },
+      { name: 'mcp-node-2', url: 'http://braid-mcp-2:8000/health' },
       { name: 'redis-memory', url: null, type: 'tcp' },
       { name: 'redis-cache', url: null, type: 'tcp' }
       // NOTE: n8n containers removed from health check - they are optional (--profile workflows)
@@ -214,7 +217,7 @@ export default function createSystemRoutes(_pgPool) {
           const dt = Math.round((performance.now ? performance.now() : Date.now()) - t0);
           if (!ok) throw new Error('bad_status_' + resp.status);
           // Additional validation: for MCP health endpoint, check response body
-          if (svc.name === 'mcp-node' && url.includes('/health')) {
+          if (svc.name.startsWith('mcp-node') && url.includes('/health')) {
             try {
               const body = await resp.text();
               const data = JSON.parse(body);
