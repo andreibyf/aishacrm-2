@@ -632,7 +632,10 @@ export default function ActivitiesPage() {
     try {
       if (activity.due_time) {
         const datePart = activity.due_date.split('T')[0];
-        const utcString = `${datePart}T${activity.due_time}:00.000Z`;
+        // Normalize time to HH:mm:ss format (database returns HH:mm:ss, form submits HH:mm)
+        const parts = activity.due_time.split(':');
+        const timePart = parts.length === 2 ? `${parts[0]}:${parts[1]}:00` : activity.due_time;
+        const utcString = `${datePart}T${timePart}.000Z`;
         const localDate = utcToLocal(utcString, offsetMinutes);
         return format(localDate, 'MMM d, yyyy h:mm a');
       } else {

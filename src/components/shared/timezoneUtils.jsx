@@ -160,11 +160,21 @@ function isValidDateString(dateStr) {
   return dateRegex.test(dateStr);
 }
 
-// Validate time string format
+// Validate time string format (accepts HH:mm or HH:mm:ss)
 function isValidTimeString(timeStr) {
   if (!timeStr || typeof timeStr !== 'string') return false;
-  const timeRegex = /^\d{2}:\d{2}$/;
+  const timeRegex = /^\d{2}:\d{2}(:\d{2})?$/;
   return timeRegex.test(timeStr);
+}
+
+// Normalize time to HH:mm:ss format
+function normalizeTimeString(timeStr) {
+  if (!timeStr) return null;
+  const parts = timeStr.split(':');
+  if (parts.length === 2) {
+    return `${parts[0]}:${parts[1]}:00`;
+  }
+  return timeStr; // Already has seconds
 }
 
 // Helper function to format activity date/time for display
@@ -198,8 +208,9 @@ export function formatActivityDateTime(activity, offsetMinutes = null) {
         return 'Invalid time';
       }
 
-      // Create UTC datetime string from stored values
-      const utcString = `${datePart}T${activity.due_time}:00.000Z`;
+      // Normalize time to HH:mm:ss and create UTC datetime string
+      const normalizedTime = normalizeTimeString(activity.due_time);
+      const utcString = `${datePart}T${normalizedTime}.000Z`;
       
       // Convert to local time using user's timezone offset
       const displayDate = utcToLocal(utcString, offsetMinutes);
