@@ -23,6 +23,7 @@ export const TOOL_REGISTRY = {
   update_account: { file: 'accounts.braid', function: 'updateAccount', policy: 'WRITE_OPERATIONS' },
   get_account_details: { file: 'accounts.braid', function: 'getAccountDetails', policy: 'READ_ONLY' },
   list_accounts: { file: 'accounts.braid', function: 'listAccounts', policy: 'READ_ONLY' },
+  search_accounts: { file: 'accounts.braid', function: 'searchAccounts', policy: 'READ_ONLY' },
   delete_account: { file: 'accounts.braid', function: 'deleteAccount', policy: 'WRITE_OPERATIONS' },
   
   // Lead Management
@@ -30,6 +31,8 @@ export const TOOL_REGISTRY = {
   update_lead: { file: 'leads.braid', function: 'updateLead', policy: 'WRITE_OPERATIONS' },
   convert_lead_to_account: { file: 'leads.braid', function: 'convertLeadToAccount', policy: 'WRITE_OPERATIONS' },
   list_leads: { file: 'leads.braid', function: 'listLeads', policy: 'READ_ONLY' },
+  search_leads: { file: 'leads.braid', function: 'searchLeads', policy: 'READ_ONLY' },
+  get_lead_details: { file: 'leads.braid', function: 'getLeadDetails', policy: 'READ_ONLY' },
   delete_lead: { file: 'leads.braid', function: 'deleteLead', policy: 'WRITE_OPERATIONS' },
   
   // Activity & Calendar
@@ -37,6 +40,9 @@ export const TOOL_REGISTRY = {
   update_activity: { file: 'activities.braid', function: 'updateActivity', policy: 'WRITE_OPERATIONS' },
   mark_activity_complete: { file: 'activities.braid', function: 'markActivityComplete', policy: 'WRITE_OPERATIONS' },
   get_upcoming_activities: { file: 'activities.braid', function: 'getUpcomingActivities', policy: 'READ_ONLY' },
+  list_activities: { file: 'activities.braid', function: 'listActivities', policy: 'READ_ONLY' },
+  search_activities: { file: 'activities.braid', function: 'searchActivities', policy: 'READ_ONLY' },
+  get_activity_details: { file: 'activities.braid', function: 'getActivityDetails', policy: 'READ_ONLY' },
   schedule_meeting: { file: 'activities.braid', function: 'scheduleMeeting', policy: 'WRITE_OPERATIONS' },
   delete_activity: { file: 'activities.braid', function: 'deleteActivity', policy: 'WRITE_OPERATIONS' },
   
@@ -45,12 +51,15 @@ export const TOOL_REGISTRY = {
   update_note: { file: 'notes.braid', function: 'updateNote', policy: 'WRITE_OPERATIONS' },
   search_notes: { file: 'notes.braid', function: 'searchNotes', policy: 'READ_ONLY' },
   get_notes_for_record: { file: 'notes.braid', function: 'getNotesForRecord', policy: 'READ_ONLY' },
+  get_note_details: { file: 'notes.braid', function: 'getNoteDetails', policy: 'READ_ONLY' },
   delete_note: { file: 'notes.braid', function: 'deleteNote', policy: 'WRITE_OPERATIONS' },
   
   // Opportunities
   create_opportunity: { file: 'opportunities.braid', function: 'createOpportunity', policy: 'WRITE_OPERATIONS' },
   update_opportunity: { file: 'opportunities.braid', function: 'updateOpportunity', policy: 'WRITE_OPERATIONS' },
   list_opportunities_by_stage: { file: 'opportunities.braid', function: 'listOpportunitiesByStage', policy: 'READ_ONLY' },
+  search_opportunities: { file: 'opportunities.braid', function: 'searchOpportunities', policy: 'READ_ONLY' },
+  get_opportunity_details: { file: 'opportunities.braid', function: 'getOpportunityDetails', policy: 'READ_ONLY' },
   get_opportunity_forecast: { file: 'opportunities.braid', function: 'getOpportunityForecast', policy: 'READ_ONLY' },
   mark_opportunity_won: { file: 'opportunities.braid', function: 'markOpportunityWon', policy: 'WRITE_OPERATIONS' },
   delete_opportunity: { file: 'opportunities.braid', function: 'deleteOpportunity', policy: 'WRITE_OPERATIONS' },
@@ -59,6 +68,7 @@ export const TOOL_REGISTRY = {
   create_contact: { file: 'contacts.braid', function: 'createContact', policy: 'WRITE_OPERATIONS' },
   update_contact: { file: 'contacts.braid', function: 'updateContact', policy: 'WRITE_OPERATIONS' },
   list_contacts_for_account: { file: 'contacts.braid', function: 'listContactsForAccount', policy: 'READ_ONLY' },
+  get_contact_details: { file: 'contacts.braid', function: 'getContactDetails', policy: 'READ_ONLY' },
   search_contacts: { file: 'contacts.braid', function: 'searchContacts', policy: 'READ_ONLY' },
   delete_contact: { file: 'contacts.braid', function: 'deleteContact', policy: 'WRITE_OPERATIONS' },
   
@@ -80,10 +90,109 @@ export const TOOL_REGISTRY = {
 };
 
 /**
+ * Human-readable descriptions for each tool
+ * These are exposed to the AI to help it understand when to use each tool
+ */
+const TOOL_DESCRIPTIONS = {
+  // Snapshot
+  fetch_tenant_snapshot: 'Get a high-level summary of all CRM data: counts of accounts, leads, contacts, opportunities, activities, and aggregate revenue/forecast. Use this first to understand the overall state.',
+
+  // Accounts
+  create_account: 'Create a new Account (company/organization) record in the CRM.',
+  update_account: 'Update an existing Account record by its ID. Can modify name, revenue, industry, website, email, phone, etc.',
+  get_account_details: 'Get the full details of a specific Account by its ID. Returns all fields including name, annual_revenue, industry, website, email, phone, assigned_to, and metadata.',
+  list_accounts: 'List Accounts in the CRM. IMPORTANT: If more than 5 results, summarize the count and tell user to check the Accounts page in the UI for the full list. Use industry filter to narrow results.',
+  search_accounts: 'Search for Accounts by name, industry, or website. Use this when the user mentions an account by name (e.g., "Acme Corp") to find matching account records.',
+
+  // Leads
+  create_lead: 'Create a new Lead (potential prospect) record in the CRM.',
+  update_lead: 'Update an existing Lead record by its ID. Can modify name, email, company, status, source, phone, job_title, etc.',
+  convert_lead_to_account: 'Convert a qualified Lead into an Account. Creates the account and optionally a contact.',
+  list_leads: 'List Leads in the CRM. FIRST ask user: "Would you like all leads, or filter by status (new, contacted, qualified, unqualified, converted)?" Pass status="all" for all leads. IMPORTANT: If more than 5 results, summarize the count and tell user to check the Leads page in the UI for the full list.',
+  search_leads: 'Search for Leads by name, email, or company. ALWAYS use this first when user asks about a lead by name or wants lead details. Use get_lead_details only when you have the lead ID.',
+  get_lead_details: 'Get the full details of a specific Lead by its UUID. Only use when you already have the lead_id from a previous search or list.',
+
+  // Activities
+  create_activity: 'Create a new Activity (task, meeting, call, email) in the CRM.',
+  update_activity: 'Update an existing Activity record by its ID.',
+  mark_activity_complete: 'Mark an Activity as completed.',
+  list_activities: 'List Activities in the CRM. FIRST ask user: "Would you like all activities, or filter by status (pending, completed, overdue)?" Pass status="all" for all activities. IMPORTANT: If more than 5 results, summarize the count and tell user to check the Activities page in the UI for the full list.',
+  search_activities: 'Search for Activities by subject, body, or type. ALWAYS use this first when user asks about an activity by name or keyword.',
+  get_activity_details: 'Get the full details of a specific Activity by its UUID. Only use when you already have the activity_id.',
+
+  // Notes
+  create_note: 'Create a new Note attached to any CRM record (account, lead, contact, opportunity).',
+  update_note: 'Update an existing Note by its ID.',
+  search_notes: 'Search notes by keyword across all records.',
+  get_notes_for_record: 'Get all notes attached to a specific record (account, lead, contact, or opportunity) by record ID.',
+  get_note_details: 'Get the full details of a specific Note by its ID.',
+
+  // Opportunities
+  create_opportunity: 'Create a new Opportunity (deal/sale) in the CRM.',
+  update_opportunity: 'Update an existing Opportunity by its ID. Can modify name, amount, stage, probability, close_date, etc.',
+  list_opportunities_by_stage: 'List Opportunities filtered by stage. FIRST ask user: "Which stage would you like? Options: prospecting, qualification, proposal, negotiation, closed_won, closed_lost, or all?" IMPORTANT: If more than 5 results, summarize the count and tell user to check the Opportunities page in the UI.',
+  search_opportunities: 'Search for Opportunities by name or description. Use this when the user mentions an opportunity/deal by name (e.g., "Enterprise License Deal") to find matching opportunities.',
+  get_opportunity_details: 'Get the full details of a specific Opportunity by its ID. Returns name, description, amount, stage, probability, close_date, account_id, contact_id.',
+  get_opportunity_forecast: 'Get a probability-weighted revenue forecast for all opportunities.',
+  mark_opportunity_won: 'Mark an Opportunity as won (closed successfully).',
+
+  // Contacts
+  create_contact: 'Create a new Contact (individual person) associated with an Account.',
+  update_contact: 'Update an existing Contact by its ID.',
+  list_contacts_for_account: 'List all Contacts belonging to a specific Account. IMPORTANT: If more than 5 results, summarize the count and tell user to check the Contacts page in the UI for the full list.',
+  get_contact_details: 'Get the full details of a specific Contact by its ID. Returns first_name, last_name, email, phone, job_title, account_id.',
+  search_contacts: 'Search contacts by name, email, or other fields.',
+
+  // Web Research
+  search_web: 'Search the web for information using a query. Returns search results.',
+  fetch_web_page: 'Fetch the content of a specific web page by URL.',
+  lookup_company_info: 'Look up publicly available information about a company by name or domain.',
+
+  // Workflows
+  list_workflow_templates: 'List all available workflow templates that can be instantiated.',
+  get_workflow_template: 'Get details of a specific workflow template including required parameters.',
+  instantiate_workflow_template: 'Create and start a new workflow instance from a template with specific parameters.',
+
+  // Telephony
+  initiate_call: 'Initiate an AI-powered outbound phone call to a phone number.',
+  call_contact: 'Initiate an AI-powered outbound phone call to a Contact by their ID.',
+  check_calling_provider: 'Check if a calling provider (CallFluent, Thoughtly) is configured and available.',
+  get_calling_agents: 'List available AI calling agents and their configurations.'
+};
+
+/**
  * Enhanced system prompt for Executive Assistant
  */
 export const BRAID_SYSTEM_PROMPT = `
 You are AI-SHA - an AI Super Hi-performing Assistant designed to be an Executive Assistant for CRM operations.
+
+**CRITICAL BOUNDARIES:**
+- You ONLY have access to data within THIS CRM system for the user's assigned tenant
+- You CANNOT access, retrieve, or provide information about other CRMs, external systems, or other tenants
+- If asked about "another CRM", "different system", "other tenant", or data outside your scope, politely explain:
+  "I can only provide information from your CRM. I don't have access to external systems or other tenants."
+- You are bound to the user's tenant context - never attempt to access or discuss data from other tenants
+
+**AMBIGUOUS TERM HANDLING (CRITICAL):**
+When users say vague terms like "client", "customer", "company", or "person", you MUST clarify:
+- "Client" or "Customer" could mean: Account, Lead, or Contact
+- "Company" could mean: Account or the company field on a Lead
+- "Person" could mean: Lead, Contact, or User
+- "Deal" or "Sale" typically means: Opportunity
+
+Always ask for clarification: "When you say 'client', do you mean an Account, Lead, or Contact?
+- **Account**: A company/organization you do business with
+- **Lead**: A potential prospect not yet converted
+- **Contact**: An individual person associated with an Account"
+
+Do NOT assume - always clarify ambiguous references before taking action.
+
+**CONVERSATION END PHRASES:**
+When the user says any of these phrases, respond with a brief, friendly sign-off and indicate you're going back to standby:
+- "Thanks", "Thank you", "Thanks Aisha"
+- "Goodbye", "Bye", "Bye Aisha"
+- "That's all", "Done", "I'm done"
+Example response: "You're welcome! Let me know if you need anything else. Going back to standby."
 
 **Your Capabilities:**
 - **CRM Management:** Create, read, update accounts, leads, contacts, opportunities
@@ -101,6 +210,20 @@ You are AI-SHA - an AI Super Hi-performing Assistant designed to be an Executive
 - Contacts: {id, first_name, last_name, email, phone, job_title, account_id, assigned_to}
 - Opportunities: {id, name, description, amount, stage, probability, close_date, account_id, contact_id, assigned_to}
 - Activities: {id, type, subject, body, status, due_date, assigned_to}
+
+**CRITICAL - Listing vs Searching Data:**
+**CRITICAL - Listing vs Searching Data:**
+- When user asks "how many leads" or "list all leads": Use list_leads with status="all" to get ALL records
+- When user asks about a SPECIFIC lead by name (e.g., "Jennifer Martinez"): Use search_leads first
+- When user says "give me information on the lead": Use list_leads with status="all" FIRST to see what leads exist, then get details
+- NEVER guess entity IDs - always search or list first to find the actual ID
+
+**LISTING DATA - CLARIFICATION & LIMITS (CRITICAL):**
+- Before listing Leads, Activities, or Opportunities: ASK user if they want all records or filter by status/stage
+- Example: "Would you like all leads, or should I filter by status (new, contacted, qualified, unqualified, converted)?"
+- LIMIT RULE: If a list returns MORE than 5 items, provide a summary count and the first 5, then say:
+  "I found [X] [entity type]. Here are the first 5. For the complete list, please check the [Entity] page in the CRM."
+- Never read out more than 5 items in voice/chat - it's overwhelming and the UI is better for browsing
 
 **Workflow Templates (Available Categories):**
 - lead_management: Lead capture, nurturing, qualification automation
@@ -126,6 +249,7 @@ When creating a workflow, ALWAYS use list_workflow_templates first to see availa
 - All operations are tenant-isolated
 - Check calendar for conflicts before scheduling
 - Before initiating calls, confirm contact has a valid phone number
+- When uncertain about which entity (Account/Lead/Contact) is meant, ASK before acting
 `;
 
 /**
@@ -216,6 +340,10 @@ export async function generateToolSchemas(allowedTools = null) {
       }
       // Override name to match registry
       schema.function.name = toolName;
+      // Use human-readable description if available
+      if (TOOL_DESCRIPTIONS[toolName]) {
+        schema.function.description = TOOL_DESCRIPTIONS[toolName];
+      }
       schemas.push(schema);
     } catch (error) {
       console.error(`[Braid] Failed to load schema for ${toolName} at ${braidPath}:`, error?.stack || error?.message || error);
@@ -361,6 +489,7 @@ const BRAID_PARAM_ORDER = {
   updateLead: ['tenant', 'lead_id', 'updates'],
   convertLeadToAccount: ['tenant', 'lead_id', 'options'],
   listLeads: ['tenant', 'status', 'limit'],
+  getLeadDetails: ['tenant', 'lead_id'],
   deleteLead: ['tenant', 'lead_id'],
 
   // Activities
@@ -368,6 +497,8 @@ const BRAID_PARAM_ORDER = {
   updateActivity: ['tenant', 'activity_id', 'updates'],
   markActivityComplete: ['tenant', 'activity_id'],
   getUpcomingActivities: ['tenant', 'days', 'limit'],
+  listActivities: ['tenant', 'status', 'limit'],
+  getActivityDetails: ['tenant', 'activity_id'],
   scheduleMeeting: ['tenant', 'subject', 'attendees', 'date', 'duration', 'location'],
   deleteActivity: ['tenant', 'activity_id'],
 
@@ -376,12 +507,14 @@ const BRAID_PARAM_ORDER = {
   updateNote: ['tenant', 'note_id', 'content'],
   searchNotes: ['tenant', 'query', 'limit'],
   getNotesForRecord: ['tenant', 'related_to', 'related_id'],
+  getNoteDetails: ['tenant', 'note_id'],
   deleteNote: ['tenant', 'note_id'],
 
   // Opportunities
   createOpportunity: ['tenant', 'name', 'description', 'amount', 'stage', 'probability', 'close_date', 'account_id', 'contact_id'],
   updateOpportunity: ['tenant', 'opportunity_id', 'updates'],
   listOpportunitiesByStage: ['tenant', 'stage', 'limit'],
+  getOpportunityDetails: ['tenant', 'opportunity_id'],
   getOpportunityForecast: ['tenant', 'period'],
   markOpportunityWon: ['tenant', 'opportunity_id', 'close_details'],
   deleteOpportunity: ['tenant', 'opportunity_id'],
@@ -390,6 +523,7 @@ const BRAID_PARAM_ORDER = {
   createContact: ['tenant', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'account_id'],
   updateContact: ['tenant', 'contact_id', 'updates'],
   listContactsForAccount: ['tenant', 'account_id', 'limit'],
+  getContactDetails: ['tenant', 'contact_id'],
   searchContacts: ['tenant', 'query', 'limit'],
   deleteContact: ['tenant', 'contact_id'],
 
@@ -423,23 +557,20 @@ function normalizeToolArgs(toolName, rawArgs, tenantRecord) {
   const tenantUuid = tenantRecord?.id || null;
   const args = rawArgs && typeof rawArgs === 'object' ? { ...rawArgs } : {};
 
-  // Ensure tenant hint for tools that expect it
-  const toolsNeedingTenant = new Set([
-    'fetch_tenant_snapshot',
-    'list_accounts',
-    'list_leads',
-    'list_opportunities_by_stage',
-    'get_upcoming_activities',
-    'get_notes_for_record',
-    'search_contacts',
-  ]);
-
-  if (toolsNeedingTenant.has(toolName)) {
-    const currentTenant = args.tenant || args.tenant_id || null;
-    // Replace missing or placeholder tenants (like "default") with canonical UUID
-    if (!currentTenant || currentTenant === 'default') {
-      args.tenant = tenantUuid;
-    }
+  // CRITICAL: Always inject the tenant from the authorized context
+  // This ensures ALL operations (create, update, delete, list) use the correct tenant
+  // The AI model should NOT be trusted to pass the tenant - we enforce it server-side
+  const currentTenant = args.tenant || args.tenant_id || null;
+  if (!currentTenant || currentTenant === 'default') {
+    args.tenant = tenantUuid;
+  } else if (currentTenant !== tenantUuid) {
+    // Security: If AI passed a different tenant, override it with the authorized one
+    console.warn('[Braid Security] Overriding AI-provided tenant with authorized context', {
+      toolName,
+      providedTenant: currentTenant,
+      authorizedTenant: tenantUuid
+    });
+    args.tenant = tenantUuid;
   }
 
   // Unwrap common filter pattern for listing tools

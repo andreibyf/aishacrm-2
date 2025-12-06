@@ -749,12 +749,8 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       };
     }
 
-    // Superadmins can access any tenant
-    if (user.role === 'superadmin') {
-      return { authorized: true };
-    }
-
-    // User must have a tenant_id assigned
+    // ALL users (including superadmins) must have a tenant_id assigned and can only access that tenant
+    // This keeps everyone in tenant context - no global access even for superadmins
     if (!user.tenant_id) {
       return { 
         authorized: false, 

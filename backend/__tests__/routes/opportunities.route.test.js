@@ -195,3 +195,26 @@ after(async () => {
   assert.equal(updated.stage, 'won', 'stage should advance to won');
   assert.equal(updated.probability, 100, 'won deals should have 100% probability');
 });
+
+(SHOULD_RUN ? test : test.skip)('GET /api/opportunities/search returns matching opportunities', async () => {
+  const res = await fetch(`${BASE_URL}/api/opportunities/search?tenant_id=${TENANT_ID}&q=Unit`);
+  assert.equal(res.status, 200, 'expected 200 from opportunities search');
+  const json = await res.json();
+  assert.equal(json.status, 'success');
+  assert.ok(json.data?.opportunities || Array.isArray(json.data), 'expected opportunities array in search response');
+  assert.ok(Number.isInteger(json.data?.total), 'expected total count in search response');
+});
+
+(SHOULD_RUN ? test : test.skip)('GET /api/opportunities/search requires q parameter', async () => {
+  const res = await fetch(`${BASE_URL}/api/opportunities/search?tenant_id=${TENANT_ID}`);
+  assert.equal(res.status, 400, 'expected 400 when q is missing');
+  const json = await res.json();
+  assert.equal(json.status, 'error');
+});
+
+(SHOULD_RUN ? test : test.skip)('GET /api/opportunities/search requires tenant_id', async () => {
+  const res = await fetch(`${BASE_URL}/api/opportunities/search?q=test`);
+  assert.equal(res.status, 400, 'expected 400 when tenant_id is missing');
+  const json = await res.json();
+  assert.equal(json.status, 'error');
+});

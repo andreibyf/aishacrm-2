@@ -234,6 +234,77 @@ export default function createActivityRoutes(_pgPool) {
     }
   };
 
+  // GET /api/activities/search - Search activities by subject or body
+  /**
+   * @openapi
+   * /api/activities/search:
+   *   get:
+   *     summary: Search activities by subject or body
+   *     tags: [activities]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: q
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 25 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Search results
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
+  router.get('/search', async (req, res) => {
+    try {
+      let { tenant_id, q = '' } = req.query;
+      const limit = parseInt(req.query.limit || '25', 10);
+      const offset = parseInt(req.query.offset || '0', 10);
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      if (!q || !q.trim()) {
+        return res.status(400).json({ status: 'error', message: 'q is required' });
+      }
+
+      const like = `%${q}%`;
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error, count } = await supabase
+        .from('activities')
+        .select('*', { count: 'exact' })
+        .eq('tenant_id', tenant_id)
+        .or(`subject.ilike.${like},body.ilike.${like},type.ilike.${like}`)
+        .order('updated_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (error) throw new Error(error.message);
+
+      res.json({
+        status: 'success',
+        data: {
+          activities: data || [],
+          total: count || 0,
+          limit,
+          offset,
+        },
+      });
+    } catch (error) {
+      console.error('Error searching activities:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // GET /api/activities - List activities for a tenant
   router.get('/', async (req, res) => {
     try {
@@ -267,8 +338,10 @@ export default function createActivityRoutes(_pgPool) {
       
       let query = supabase.from('activities').select('*').eq('tenant_id', tenant_id);
       
-      // Simple column filters via Supabase
-      if (req.query.status) query = query.eq('status', req.query.status);
+      // Simple column filters via Supabase (ignore 'all' or 'any' as they mean no filter)
+      if (req.query.status && req.query.status !== 'all' && req.query.status !== 'any' && req.query.status !== '') {
+        query = query.eq('status', req.query.status);
+      }
       if (req.query.type) query = query.eq('type', req.query.type);
       if (req.query.related_id) query = query.eq('related_id', req.query.related_id);
       

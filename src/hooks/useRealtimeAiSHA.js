@@ -930,6 +930,37 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
     logTelemetryMetric('user_message_sent', { textLength: trimmed.length });
   }, [applyErrorState, logEvent, logTelemetryMetric]);
 
+  /**
+   * Trigger the AI to speak a greeting without user input.
+   * Used for wake word activation to acknowledge "Hey Aisha".
+   */
+  const triggerGreeting = useCallback(() => {
+    if (!dcRef.current || dcRef.current.readyState !== 'open') {
+      logEvent('realtime.greeting.rejected', { reason: 'channel_not_ready' }, 'warn');
+      return false;
+    }
+    // Send a system-level hint to trigger a greeting response
+    // We inject a user message that prompts a short greeting, then trigger response
+    const greetingPrompt = {
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: '[SYSTEM: User just said your wake word. Greet them briefly and ask how you can help. Keep it short and friendly, like "Hi! How can I help you today?"]',
+          },
+        ],
+      },
+    };
+    dcRef.current.send(JSON.stringify(greetingPrompt));
+    dcRef.current.send(JSON.stringify({ type: 'response.create' }));
+    logEvent('realtime.greeting.triggered', {});
+    logTelemetryMetric('greeting_triggered', {});
+    return true;
+  }, [logEvent, logTelemetryMetric]);
+
   const disconnectRealtime = useCallback(() => {
     logEvent('realtime.disconnect.requested', {
       hasPeer: Boolean(pcRef.current),
@@ -965,6 +996,7 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
     connectRealtime,
     startSession: connectRealtime,
     sendUserMessage,
+    triggerGreeting,
     disconnectRealtime,
     stopSession: disconnectRealtime,
     // PTT controls

@@ -87,16 +87,49 @@ fn listLeads(
 ) -> Result<Array, CRMError> !net {
   let url = "/api/leads";
   
-  // Build params - only include status if it's a real filter value
+  // Build params with optional status filter
   let params = {
     tenant_id: tenant,
+    status: status,
     limit: limit
   };
   
-  // Add status filter only if not "all", "any", or empty
-  if status != "all" && status != "any" && status != "" && status != null {
-    params.status = status;
-  }
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getLeadDetails(
+  tenant: String,
+  lead_id: String
+) -> Result<Lead, CRMError> !net {
+  let url = "/api/leads/" + lead_id;
+  let params = { tenant_id: tenant };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn searchLeads(
+  tenant: String,
+  query: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/leads/search";
+  let params = {
+    tenant_id: tenant,
+    q: query,
+    limit: limit
+  };
   
   let response = http.get(url, { params: params });
   

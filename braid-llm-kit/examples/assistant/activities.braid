@@ -18,7 +18,6 @@ fn createActivity(
     tenant_id: tenant,
     subject: subject,
     activity_type: activity_type,
-    type: activity_type, // Added for backend normalization compatibility
     due_date: due_date,
     assigned_to: assigned_to,
     related_to_type: related_to_type,
@@ -105,7 +104,6 @@ fn scheduleMeeting(
     tenant_id: tenant,
     subject: subject,
     activity_type: "meeting",
-    type: "meeting", // Added for backend normalization compatibility
     due_date: date_time,
     assigned_to: assigned_to,
     body: "Attendees: meeting",
@@ -130,6 +128,64 @@ fn deleteActivity(
   let response = http.delete(url, {});
   return match response {
     Ok{value} => Ok(true),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn listActivities(
+  tenant: String,
+  status: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/activities";
+  let params = {
+    tenant_id: tenant,
+    status: status,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getActivityDetails(
+  tenant: String,
+  activity_id: String
+) -> Result<Activity, CRMError> !net {
+  let url = "/api/activities/" + activity_id;
+  let params = { tenant_id: tenant };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn searchActivities(
+  tenant: String,
+  query: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/activities/search";
+  let params = {
+    tenant_id: tenant,
+    q: query,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
     Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };

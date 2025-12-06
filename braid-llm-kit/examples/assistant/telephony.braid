@@ -34,6 +34,7 @@ fn initiateCall(
 }
 
 // Initiate call to a specific contact by ID
+// Note: This function gets contact details first, then initiates the call
 fn callContact(
   tenant: String,
   contact_id: String,
@@ -41,28 +42,12 @@ fn callContact(
   purpose: String,
   talking_points: Array
 ) -> Result<Object, CRMError> !net {
-  // First get contact details
-  let contact_url = "/api/contacts/" + contact_id;
-  let contact_params = { tenant_id: tenant };
-  
-  let contact_response = http.get(contact_url, { params: contact_params });
-  
-  let contact = match contact_response {
-    Ok{value} => value.data,
-    Err{error} => return Err({ tag: "NetworkError", url: contact_url, code: error.status }),
-    _ => return Err({ tag: "NetworkError", url: contact_url, code: 500 })
-  };
-  
-  // Then initiate the call
+  // Initiate the call using the contact ID directly
   let call_url = "/api/telephony/initiate-call";
   let payload = {
     tenant_id: tenant,
     provider: provider,
-    phone_number: contact.phone,
     contact_id: contact_id,
-    contact_name: contact.first_name + " " + contact.last_name,
-    contact_email: contact.email,
-    company: contact.company,
     purpose: purpose,
     talking_points: talking_points
   };

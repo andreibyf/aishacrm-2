@@ -93,9 +93,11 @@ export async function routeCommand({
     return { type: 'ai_brain', response };
   }
 
+  // Pass tenantId from context to API call for proper tenant isolation
   const response = await callChat({
     messages: prompt.messages,
-    temperature: 0.2
+    temperature: 0.2,
+    tenantId: context?.tenantId
   });
   return { type: 'ai_chat', response };
 }

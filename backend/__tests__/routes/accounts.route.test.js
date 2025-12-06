@@ -187,4 +187,27 @@ describe('Accounts Routes', { skip: !SHOULD_RUN }, () => {
       try { await deleteAccount(id); } catch { /* ignore */ }
     }
   });
+
+  test('GET /api/accounts/search returns matching accounts', async () => {
+    const res = await fetch(`${BASE_URL}/api/accounts/search?tenant_id=${TENANT_ID}&q=Unit`);
+    assert.equal(res.status, 200, 'expected 200 from accounts search');
+    const json = await res.json();
+    assert.equal(json.status, 'success');
+    assert.ok(json.data?.accounts || Array.isArray(json.data), 'expected accounts array in search response');
+    assert.ok(Number.isInteger(json.data?.total), 'expected total count in search response');
+  });
+
+  test('GET /api/accounts/search requires q parameter', async () => {
+    const res = await fetch(`${BASE_URL}/api/accounts/search?tenant_id=${TENANT_ID}`);
+    assert.equal(res.status, 400, 'expected 400 when q is missing');
+    const json = await res.json();
+    assert.equal(json.status, 'error');
+  });
+
+  test('GET /api/accounts/search requires tenant_id', async () => {
+    const res = await fetch(`${BASE_URL}/api/accounts/search?q=test`);
+    assert.equal(res.status, 400, 'expected 400 when tenant_id is missing');
+    const json = await res.json();
+    assert.equal(json.status, 'error');
+  });
 });

@@ -257,22 +257,18 @@ export const TenantProvider = ({ children }) => {
     }
   }, []); // Empty dependency array means this runs once on mount
 
-  // Auto-select tenant for non-superadmin users when none chosen yet
-  // ONLY in development mode - production requires explicit tenant selection
+  // Auto-select tenant for users who have an assigned tenant_id when none chosen yet
+  // This ensures users (including superadmins with assigned tenants) see their tenant's data by default
   useEffect(() => {
-    // Skip auto-selection in production
-    if (import.meta.env.PROD) {
-      return;
-    }
-    
     // Only apply if we have a loaded user, user has a tenant_id, and no explicit selection yet
     if (!user) return;
-    if (selectedTenantId !== null) return; // user already picked or restored
-    const role = (user.role || '').toLowerCase();
-    if (role && role !== 'superadmin' && user.tenant_id) {
-      logTenantEvent('INFO', '[DEV ONLY] Auto-selecting tenant based on user.tenant_id', {
+    if (selectedTenantId !== null) return; // user already picked or restored from localStorage
+    
+    // If user has an assigned tenant, use it as the default
+    if (user.tenant_id) {
+      logTenantEvent('INFO', 'Auto-selecting tenant based on user.tenant_id', {
         autoTenantId: user.tenant_id,
-        userRole: role,
+        userRole: user.role,
       });
       setSelectedTenantIdState(user.tenant_id);
       try {

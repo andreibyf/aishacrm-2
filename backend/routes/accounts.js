@@ -210,6 +210,79 @@ export default function createAccountRoutes(_pgPool) {
     };
   };
 
+  // GET /api/accounts/search - Search accounts by name, industry, or website
+  /**
+   * @openapi
+   * /api/accounts/search:
+   *   get:
+   *     summary: Search accounts by name, industry, or website
+   *     tags: [accounts]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: q
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 25 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Search results
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
+  router.get('/search', cacheList('accounts', 180), async (req, res) => {
+    try {
+      let { tenant_id, q = '' } = req.query;
+      const limit = parseInt(req.query.limit || '25', 10);
+      const offset = parseInt(req.query.offset || '0', 10);
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      if (!q || !q.trim()) {
+        return res.status(400).json({ status: 'error', message: 'q is required' });
+      }
+
+      const like = `%${q}%`;
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error, count } = await supabase
+        .from('accounts')
+        .select('*', { count: 'exact' })
+        .eq('tenant_id', tenant_id)
+        .or(`name.ilike.${like},industry.ilike.${like},website.ilike.${like},email.ilike.${like}`)
+        .order('updated_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (error) throw new Error(error.message);
+
+      const accounts = (data || []).map(normalizeAccount);
+
+      res.json({
+        status: 'success',
+        data: {
+          accounts,
+          total: count || 0,
+          limit,
+          offset,
+        },
+      });
+    } catch (error) {
+      console.error('Error searching accounts:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // GET /api/accounts - List accounts (with caching)
   router.get("/", cacheList('accounts', 180), async (req, res) => {
     try {

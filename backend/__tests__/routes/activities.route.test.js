@@ -49,3 +49,26 @@ after(async () => {
   assert.ok(Number.isInteger(json.data?.total), 'expected total in response');
   assert.ok(Array.isArray(json.data?.activities), 'expected activities array');
 });
+
+(SHOULD_RUN ? test : test.skip)('GET /api/activities/search returns matching activities', async () => {
+  const res = await fetch(`${BASE_URL}/api/activities/search?tenant_id=${TENANT_ID}&q=UT`);
+  assert.equal(res.status, 200, 'expected 200 from activities search');
+  const json = await res.json();
+  assert.equal(json.status, 'success');
+  assert.ok(json.data?.activities || Array.isArray(json.data), 'expected activities array in search response');
+  assert.ok(Number.isInteger(json.data?.total), 'expected total count in search response');
+});
+
+(SHOULD_RUN ? test : test.skip)('GET /api/activities/search requires q parameter', async () => {
+  const res = await fetch(`${BASE_URL}/api/activities/search?tenant_id=${TENANT_ID}`);
+  assert.equal(res.status, 400, 'expected 400 when q is missing');
+  const json = await res.json();
+  assert.equal(json.status, 'error');
+});
+
+(SHOULD_RUN ? test : test.skip)('GET /api/activities/search requires tenant_id', async () => {
+  const res = await fetch(`${BASE_URL}/api/activities/search?q=test`);
+  assert.equal(res.status, 400, 'expected 400 when tenant_id is missing');
+  const json = await res.json();
+  assert.equal(json.status, 'error');
+});

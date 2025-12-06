@@ -103,3 +103,19 @@ fn deleteContact(
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
+
+fn getContactDetails(
+  tenant: String,
+  contact_id: String
+) -> Result<Contact, CRMError> !net {
+  let url = "/api/contacts/" + contact_id;
+  let params = { tenant_id: tenant };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

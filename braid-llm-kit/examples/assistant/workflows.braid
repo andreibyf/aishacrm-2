@@ -11,13 +11,9 @@ fn listWorkflowTemplates(
   let url = "/api/workflow-templates";
   let params = {
     tenant_id: tenant,
-    is_active: true
+    is_active: true,
+    category: category
   };
-  
-  // Add category filter if provided
-  if category != "" {
-    params.category = category;
-  }
   
   let response = http.get(url, { params: params });
   

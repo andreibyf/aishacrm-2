@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { processChatCommand } from '@/ai/engine/processChatCommand';
 import { addHistoryEntry, getRecentHistory, getSuggestions } from '@/lib/suggestionEngine';
+import { useUser } from '@/components/shared/useUser';
 
 const ROUTE_CONTEXT_RULES = [
   { test: /^\/?$/, routeName: 'dashboard:home', entity: 'dashboard' },
@@ -32,16 +33,23 @@ const welcomeMessage = {
   timestamp: Date.now()
 };
 
-const resolveTenantContext = () => {
+const resolveTenantContext = (user = null) => {
   if (typeof window === 'undefined') {
     return {};
   }
   const context = {};
   try {
-    context.tenantId =
-      localStorage.getItem('selected_tenant_id') ||
-      localStorage.getItem('tenant_id') ||
-      undefined;
+    // Priority: 1. Authenticated user's assigned tenant_id (most authoritative)
+    //           2. localStorage selected_tenant_id (superadmin manual selection)
+    //           3. localStorage tenant_id (legacy fallback)
+    if (user?.tenant_id) {
+      context.tenantId = user.tenant_id;
+    } else {
+      context.tenantId =
+        localStorage.getItem('selected_tenant_id') ||
+        localStorage.getItem('tenant_id') ||
+        undefined;
+    }
   } catch {
     context.tenantId = undefined;
   }
@@ -84,6 +92,7 @@ const createMessageId = () => {
 };
 
 export function AiSidebarProvider({ children }) {
+  const { user } = useUser();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState(() => [{ ...welcomeMessage, id: createMessageId(), timestamp: Date.now() }]);
   const [isSending, setIsSending] = useState(false);
@@ -91,8 +100,14 @@ export function AiSidebarProvider({ children }) {
   const [realtimeMode, setRealtimeMode] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const messagesRef = useRef(messages);
+  const userRef = useRef(user);
   const suggestionContextRef = useRef(buildSuggestionContext());
   const suggestionIndexRef = useRef(new Map());
+
+  // Keep userRef updated for use in sendMessage
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -151,7 +166,8 @@ export function AiSidebarProvider({ children }) {
       .filter((msg) => msg.role === 'assistant' || msg.role === 'user')
       .map((msg) => ({ role: msg.role, content: msg.content }));
 
-    const context = resolveTenantContext();
+    // Use authenticated user's tenant_id as primary source for AI context
+    const context = resolveTenantContext(userRef.current);
 
     try {
       const result = await processChatCommand({ text, history: chatHistory, context });

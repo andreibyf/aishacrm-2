@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { AlertCircle, Building2, CheckSquare, Loader2, Send, Sparkles, Target, TrendingUp, Users, X, Mic, Square, Volume2, Trash2, ClipboardList, BarChart3, ListTodo } from 'lucide-react';
+import { AlertCircle, Building2, CheckSquare, Loader2, Send, Sparkles, Target, TrendingUp, Users, X, Mic, Volume2, Trash2, ClipboardList, BarChart3, ListTodo, Ear } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useAiSidebarState } from './useAiSidebarState.jsx';
@@ -8,6 +8,7 @@ import { useSpeechInput } from './useSpeechInput.js';
 import { useSpeechOutput } from './useSpeechOutput.js';
 import { useRealtimeAiSHA } from '@/hooks/useRealtimeAiSHA.js';
 import { usePushToTalkKeybinding } from '@/hooks/usePushToTalkKeybinding.js';
+import { useWakeWordDetection } from '@/hooks/useWakeWordDetection.js';
 import { useConfirmDialog } from '@/components/shared/ConfirmDialog.jsx';
 import RealtimeIndicator from './RealtimeIndicator.jsx';
 import { trackRealtimeEvent, subscribeToRealtimeTelemetry, getRealtimeTelemetrySnapshot } from '@/utils/realtimeTelemetry.js';
@@ -42,6 +43,25 @@ const ENTITY_ICONS = {
   contact: Users,
   opportunity: TrendingUp,
   activity: CheckSquare,
+};
+
+// Sign-off phrases that indicate the AI is ending the conversation
+const AI_SIGNOFF_PHRASES = [
+  'going back to standby',
+  'back to standby',
+  'going to standby',
+  'returning to standby',
+  'goodbye',
+  'bye for now',
+  'talk to you later',
+  "let me know if you need anything else",
+  "i'll be here if you need me",
+];
+
+const containsSignoffPhrase = (text) => {
+  if (!text) return false;
+  const normalized = text.toLowerCase();
+  return AI_SIGNOFF_PHRASES.some((phrase) => normalized.includes(phrase));
 };
 
 const DANGEROUS_VOICE_PHRASES = [
@@ -369,6 +389,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   const [voiceModeActive, setVoiceModeActive] = useState(false); // Full voice mode (continuous + auto-speak)
   const [isContinuousMode, _setIsContinuousMode] = useState(true); // Default to continuous conversation
   const [isPTTActive, setIsPTTActive] = useState(false); // Track when PTT button is being held
+  const [isWakeWordModeEnabled, setWakeWordModeEnabled] = useState(false); // Hands-free wake word listening
   const { user } = useUser();
   const bottomMarkerRef = useRef(null);
   const draftInputRef = useRef(null);
@@ -380,6 +401,9 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   const conversationalSchemaOptions = useMemo(() => listConversationalSchemas(), []);
   const activeFormSchema = useMemo(() => (activeFormId ? getSchemaById(activeFormId) : null), [activeFormId]);
   const realtimeBufferRef = useRef('');
+  const wakeWordModeRef = useRef(false); // Track wake word mode for sign-off detection
+  const pendingSignoffRef = useRef(false); // Track if we should end session after AI sign-off
+  const pendingGreetingRef = useRef(false); // Track if we should trigger greeting after connection
   const [telemetryContext] = useState(() => buildRealtimeTelemetryContext());
   const [telemetryEntries, setTelemetryEntries] = useState(() => getRealtimeTelemetrySnapshot());
   const showTelemetryDebug = useMemo(() => isTelemetryDebugEnabled(), []);
@@ -398,6 +422,11 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     : 'Guest';
   const hasTenantSelected = Boolean(tenantId);
   const realtimeHadLiveRef = useRef(false);
+
+  // Keep wake word mode ref in sync for event handler access
+  useEffect(() => {
+    wakeWordModeRef.current = isWakeWordModeEnabled;
+  }, [isWakeWordModeEnabled]);
 
   useEffect(() => {
     if (!tenantId && activeFormId) {
@@ -501,6 +530,21 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
         const finalized = realtimeBufferRef.current.trim();
         if (finalized) {
           addRealtimeMessage({ role: 'assistant', content: finalized });
+
+          // Check if AI's response contains a sign-off phrase (wake word mode auto-end)
+          if (wakeWordModeRef.current && containsSignoffPhrase(finalized)) {
+            console.log('[AiSidebar] AI sign-off detected - scheduling session end');
+            pendingSignoffRef.current = true;
+            // Short delay to let the AI finish speaking before ending
+            setTimeout(() => {
+              if (pendingSignoffRef.current) {
+                pendingSignoffRef.current = false;
+                logUiTelemetry('ui.realtime.auto_end', { reason: 'ai_signoff' });
+                // Use window dispatch to trigger disableRealtime since we can't call it directly here
+                window.dispatchEvent(new CustomEvent('aisha-session-end-requested'));
+              }
+            }, 2000);
+          }
         }
         realtimeBufferRef.current = '';
         return;
@@ -550,6 +594,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     stopSession,
     disconnectRealtime,
     sendUserMessage: sendRealtimeUserMessage,
+    triggerGreeting,
     muteMic: realtimeMuteMic,
     unmuteMic: realtimeUnmuteMic,
   } = realtimeHookState;
@@ -636,9 +681,109 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     setRealtimeEnabled(false);
     setRealtimeMode(false);
     realtimeBufferRef.current = '';
+    pendingSignoffRef.current = false;
     clearRealtimeErrors();
     logUiTelemetry('ui.realtime.toggle', { enabled: false, phase: 'success' });
   }, [clearRealtimeErrors, logUiTelemetry, setRealtimeMode, stopRealtimeSession]);
+
+  // Listen for AI sign-off event to auto-end session when wake word mode is active
+  useEffect(() => {
+    const handleSessionEndRequest = () => {
+      console.log('[AiSidebar] Received session end request from AI sign-off');
+      toast.info('Going back to standby...', { duration: 1500, icon: '💤' });
+      disableRealtime();
+    };
+
+    window.addEventListener('aisha-session-end-requested', handleSessionEndRequest);
+    return () => {
+      window.removeEventListener('aisha-session-end-requested', handleSessionEndRequest);
+    };
+  }, [disableRealtime]);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Wake Word Detection - Hands-free "Hey Aisha" activation
+  // When enabled, listens for wake word and auto-activates realtime session
+  // ─────────────────────────────────────────────────────────────────────────
+  const handleWakeWordDetected = useCallback(async () => {
+    console.log('[AiSidebar] Wake word detected - activating realtime');
+    logUiTelemetry('ui.wakeword.detected', { action: 'activate' });
+
+    // Mark that we should trigger a greeting once connected
+    pendingGreetingRef.current = true;
+
+    // Start realtime session with mic unmuted (continuous mode)
+    if (!isRealtimeEnabled && isRealtimeSupported && isRealtimeFeatureAvailable) {
+      try {
+        await enableRealtime({ startMuted: false });
+      } catch (err) {
+        console.error('[AiSidebar] Wake word activation failed:', err);
+        pendingGreetingRef.current = false;
+        toast.error('Failed to activate voice. Try again.');
+      }
+    }
+  }, [enableRealtime, isRealtimeEnabled, isRealtimeFeatureAvailable, isRealtimeSupported, logUiTelemetry]);
+
+  // Trigger AI greeting when realtime becomes connected (after wake word activation)
+  useEffect(() => {
+    if (isRealtimeConnected && realtimeLiveFlag && pendingGreetingRef.current) {
+      pendingGreetingRef.current = false;
+      console.log('[AiSidebar] Connection ready - triggering wake word greeting');
+      // Small delay to ensure the data channel is fully ready
+      const timer = setTimeout(() => {
+        if (triggerGreeting) {
+          triggerGreeting();
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isRealtimeConnected, realtimeLiveFlag, triggerGreeting]);
+
+  const handleEndPhraseDetected = useCallback(() => {
+    console.log('[AiSidebar] End phrase detected - deactivating realtime');
+    logUiTelemetry('ui.wakeword.end_phrase', { action: 'deactivate' });
+
+    // Acknowledge the end
+    toast.info('Going back to standby...', { duration: 1500, icon: '💤' });
+
+    // Stop realtime session
+    if (isRealtimeEnabled) {
+      disableRealtime();
+    }
+  }, [disableRealtime, isRealtimeEnabled, logUiTelemetry]);
+
+  const {
+    isAwake: _isWakeWordAwake,
+    status: wakeWordStatus,
+    error: _wakeWordError,
+    lastTranscript: _wakeWordLastTranscript,
+    forceWake: _forceWakeWord,
+    forceSleep: _forceSleepWakeWord,
+  } = useWakeWordDetection({
+    // IMPORTANT: Disable wake word detection when realtime session is active
+    // The realtime WebRTC session handles its own audio streaming
+    // We only want wake word detection when waiting for "Aisha" to start
+    // Once realtime is active, end phrases are handled by the AI itself via conversation
+    enabled: isWakeWordModeEnabled && isOpen && isRealtimeFeatureAvailable && !isRealtimeActive,
+    onWakeDetected: handleWakeWordDetected,
+    onEndDetected: handleEndPhraseDetected,
+    autoSleepMs: 60000, // 60 second timeout for auto-sleep
+  });
+
+  const handleWakeWordModeToggle = useCallback(async () => {
+    const newEnabled = !isWakeWordModeEnabled;
+    setWakeWordModeEnabled(newEnabled);
+
+    if (newEnabled) {
+      logUiTelemetry('ui.wakeword.enabled', {});
+      toast.success('Say "Aisha" to activate voice', { duration: 3000, icon: '👂' });
+    } else {
+      logUiTelemetry('ui.wakeword.disabled', {});
+      // Also disable realtime if it was activated by wake word
+      if (isRealtimeEnabled) {
+        disableRealtime();
+      }
+    }
+  }, [disableRealtime, isRealtimeEnabled, isWakeWordModeEnabled, logUiTelemetry]);
 
   const handleRealtimeToggle = useCallback(async () => {
     if (!isRealtimeFeatureAvailable) {
@@ -752,7 +897,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   const { 
     isListening, 
     isRecording, 
-    isTranscribing, 
+    isTranscribing: _isTranscribing, 
     error: speechError, 
     startListening, 
     stopListening,
@@ -1675,6 +1820,23 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                   </button>
                 )}
 
+                {/* Wake word mode toggle - "Hey Aisha" hands-free activation */}
+                {isRealtimeFeatureAvailable && !isRealtimeActive && (
+                  <button
+                    type="button"
+                    className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-all ${isWakeWordModeEnabled
+                      ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/50'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                      }`}
+                    onClick={handleWakeWordModeToggle}
+                    disabled={!isRealtimeSupported}
+                    title={isWakeWordModeEnabled ? 'Wake word listening active - say "Aisha" to activate' : 'Enable wake word detection - say "Aisha" to start'}
+                  >
+                    <Ear className={`h-3.5 w-3.5 ${isWakeWordModeEnabled && wakeWordStatus === 'listening' ? 'animate-pulse' : ''}`} />
+                    <span>{isWakeWordModeEnabled ? (wakeWordStatus === 'listening' ? 'Listening...' : 'Wake Word On') : 'Wake Word'}</span>
+                  </button>
+                )}
+
                 {/* Stop button - only during active session */}
                 {isRealtimeActive && (
                   <button
@@ -1700,6 +1862,23 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                 {isRealtimeFeatureAvailable && isRealtimeIndicatorActive && (
                   <div className="ml-auto">
                     <RealtimeIndicator active />
+                  </div>
+                )}
+
+                {/* Wake word status indicator */}
+                {isWakeWordModeEnabled && !isRealtimeActive && (
+                  <div className="ml-auto flex items-center gap-1.5 text-xs">
+                    <span className={`h-2 w-2 rounded-full ${wakeWordStatus === 'listening'
+                        ? 'bg-emerald-500 animate-pulse'
+                        : wakeWordStatus === 'awake'
+                          ? 'bg-amber-500'
+                          : 'bg-slate-400'
+                      }`} />
+                    <span className="text-slate-500 dark:text-slate-400">
+                      {wakeWordStatus === 'listening' && 'Say "Aisha"'}
+                      {wakeWordStatus === 'awake' && 'Listening...'}
+                      {wakeWordStatus === 'ending' && 'Goodbye!'}
+                    </span>
                   </div>
                 )}
               </div>

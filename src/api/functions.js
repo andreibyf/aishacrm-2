@@ -49,12 +49,18 @@ const createFunctionProxy = (functionName) => {
         const opts = args[0] || {};
         // Unified tenant ID resolution: explicit opts.tenantId > selected_tenant_id (new) > tenant_id (legacy) > ''
         let tenantId = opts.tenantId || '';
+        let tenantSource = opts.tenantId ? 'user.tenant_id' : '';
         if (!tenantId && typeof localStorage !== 'undefined') {
           tenantId = localStorage.getItem('selected_tenant_id') || '';
+          tenantSource = tenantId ? 'selected_tenant_id' : '';
           if (!tenantId) {
             // Legacy fallback if older key still present
             tenantId = localStorage.getItem('tenant_id') || '';
+            tenantSource = tenantId ? 'tenant_id (legacy)' : 'none';
           }
+        }
+        if (import.meta.env.DEV) {
+          console.log(`[processChatCommand] tenantId=${tenantId} (source: ${tenantSource})`);
         }
         const messages = Array.isArray(opts.messages)
           ? opts.messages
