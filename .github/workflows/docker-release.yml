@@ -152,7 +152,8 @@ jobs:
               fi
             fi
             # Restart main services with version info (force recreate to detect :latest image changes)
-            docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend n8n n8n-proxy
+            # NOTE: n8n is optional - use --profile workflows to include it
+            docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend
             
             # Deploy MCP server (separate compose file with 3 containers)
             echo "Deploying MCP server cluster (1 server + 2 nodes)..."

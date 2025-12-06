@@ -151,10 +151,10 @@ export default function createSystemRoutes(_pgPool) {
       { name: 'frontend', url: 'http://frontend:3000/' },
       // Correct MCP server; try multiple candidates for portability
       { name: 'mcp-node', url: mcpNodeCandidates },
-      { name: 'n8n', url: 'http://n8n:5678/' },
-      { name: 'n8n-proxy', url: 'http://n8n-proxy:5679/' },
       { name: 'redis-memory', url: null, type: 'tcp' },
       { name: 'redis-cache', url: null, type: 'tcp' }
+      // NOTE: n8n containers removed from health check - they are optional (--profile workflows)
+      // To enable n8n: docker compose --profile workflows up -d
     ];
 
     // Optionally include legacy MCP for debugging visibility

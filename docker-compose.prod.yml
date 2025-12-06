@@ -114,13 +114,15 @@ services:
       retries: 3
       start_period: 15s
 
-  # n8n - Workflow automation platform (external access only - not embedded in CRM UI)
+  # n8n - Workflow automation platform (OPTIONAL - not part of core CRM)
+  # To start n8n: docker compose -f docker-compose.prod.yml --profile workflows up -d
   # Access at http://localhost:5679 (via n8n-proxy on production VPS)
   # Used for building custom workflows that can call CRM APIs via webhooks
   n8n:
     image: n8nio/n8n:latest
     container_name: aishacrm-n8n
     restart: unless-stopped
+    profiles: [workflows]
     ports:
       - "127.0.0.1:5678:5678"
     environment:
@@ -151,10 +153,12 @@ services:
 
   # nginx proxy for n8n - strips X-Frame-Options header (external use)
   # Note: n8n is no longer embedded in CRM UI; this proxy remains for potential external iframe embedding
+  # To start: docker compose -f docker-compose.prod.yml --profile workflows up -d
   n8n-proxy:
     image: nginx:alpine
     container_name: aishacrm-n8n-proxy
     restart: unless-stopped
+    profiles: [workflows]
     depends_on:
       - n8n
     ports:
