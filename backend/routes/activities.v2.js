@@ -1,13 +1,9 @@
 import express from 'express';
-import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildActivityAiContext } from '../lib/aiContextEnricher.js';
 
 export default function createActivityV2Routes(_pgPool) {
   const router = express.Router();
-
-  router.use(validateTenantAccess);
-  router.use(enforceEmployeeDataScope);
 
   const expandMetadata = (record) => {
     if (!record) return record;
@@ -54,6 +50,7 @@ export default function createActivityV2Routes(_pgPool) {
       const supabase = getSupabaseClient();
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
+      const includeStats = req.query.include_stats === 'true' || req.query.include_stats === '1';
 
       let q = supabase
         .from('activities')
@@ -83,6 +80,48 @@ export default function createActivityV2Routes(_pgPool) {
 
       const activities = (data || []).map(expandMetadata);
 
+      // Compute counts if requested
+      let counts = null;
+      if (includeStats) {
+        // Fetch all activities for this tenant to compute status counts
+        const { data: allData, error: allError } = await supabase
+          .from('activities')
+          .select('status, due_date, due_time')
+          .eq('tenant_id', tenant_id);
+
+        if (!allError && allData) {
+          const now = new Date();
+          const buildDueDateTime = (a) => {
+            if (!a.due_date) return null;
+            try {
+              if (a.due_time) {
+                const [h, m, s] = a.due_time.split(':');
+                const date = new Date(a.due_date);
+                date.setHours(parseInt(h, 10) || 0, parseInt(m, 10) || 0, parseInt(s || '0', 10) || 0, 0);
+                return date;
+              }
+              const date = new Date(a.due_date);
+              date.setHours(23, 59, 59, 999);
+              return date;
+            } catch { return new Date(a.due_date); }
+          };
+
+          counts = {
+            total: allData.length,
+            scheduled: allData.filter(a => a.status === 'scheduled').length,
+            in_progress: allData.filter(a => a.status === 'in_progress' || a.status === 'in-progress').length,
+            overdue: allData.filter(a => {
+              if (a.status === 'completed' || a.status === 'cancelled') return false;
+              const due = buildDueDateTime(a);
+              if (!due) return false;
+              return due < now;
+            }).length,
+            completed: allData.filter(a => a.status === 'completed').length,
+            cancelled: allData.filter(a => a.status === 'cancelled').length,
+          };
+        }
+      }
+
       res.json({
         status: 'success',
         data: {
@@ -90,6 +129,7 @@ export default function createActivityV2Routes(_pgPool) {
           total: count || 0,
           limit,
           offset,
+          counts,
         },
       });
     } catch (error) {

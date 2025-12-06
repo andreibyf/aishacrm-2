@@ -8,6 +8,21 @@ import { AlertCircle, CheckCircle2, Copy, PlayCircle, Loader2, XCircle, RefreshC
 import { toast } from 'sonner';
 import { BACKEND_URL } from '../../api/entities';
 import { createHealthIssue, generateAPIFixSuggestion } from '../../utils/githubIssueCreator';
+import { supabase } from '../../lib/supabase';
+
+// Helper to get auth headers for authenticated API requests
+async function getAuthHeaders() {
+  const headers = { 'Content-Type': 'application/json' };
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+  } catch (e) {
+    console.warn('Failed to get auth session for API health test:', e);
+  }
+  return headers;
+}
 
 export default function ApiHealthDashboard() {
   const [healthReport, setHealthReport] = useState(null);
@@ -356,12 +371,14 @@ export default function ApiHealthDashboard() {
   async function runOpportunityV2LifecycleTest() {
     const baseName = 'API Health Test Deal';
     const tenantId = 'test';
+    const authHeaders = await getAuthHeaders();
 
     try {
       // 1) Create
       const createResp = await fetch(`${BACKEND_URL}/api/v2/opportunities`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
+        credentials: 'include',
         body: JSON.stringify({
           tenant_id: tenantId,
           name: `${baseName} ${Date.now()}`,
@@ -383,7 +400,10 @@ export default function ApiHealthDashboard() {
       const createdId = createJson.data.opportunity.id;
 
       // 2) Get
-      const getResp = await fetch(`${BACKEND_URL}/api/v2/opportunities/${createdId}?tenant_id=${tenantId}`);
+      const getResp = await fetch(`${BACKEND_URL}/api/v2/opportunities/${createdId}?tenant_id=${tenantId}`, {
+        headers: authHeaders,
+        credentials: 'include',
+      });
       const getJson = await getResp.json().catch(() => ({}));
       if (!getResp.ok || !getJson?.data?.opportunity?.id) {
         return {
@@ -397,7 +417,8 @@ export default function ApiHealthDashboard() {
       // 3) Update
       const updateResp = await fetch(`${BACKEND_URL}/api/v2/opportunities/${createdId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
+        credentials: 'include',
         body: JSON.stringify({
           tenant_id: tenantId,
           stage: 'proposal',
@@ -417,6 +438,8 @@ export default function ApiHealthDashboard() {
       // 4) Delete
       const deleteResp = await fetch(`${BACKEND_URL}/api/v2/opportunities/${createdId}?tenant_id=${tenantId}`, {
         method: 'DELETE',
+        headers: authHeaders,
+        credentials: 'include',
       });
 
       const deleteJson = await deleteResp.json().catch(() => ({}));
@@ -449,12 +472,14 @@ export default function ApiHealthDashboard() {
   async function runActivityV2LifecycleTest() {
     const baseSubject = 'API Health Test Activity';
     const tenantId = 'test';
+    const authHeaders = await getAuthHeaders();
 
     try {
       // 1) Create
       const createResp = await fetch(`${BACKEND_URL}/api/v2/activities`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
+        credentials: 'include',
         body: JSON.stringify({
           tenant_id: tenantId,
           type: 'task',
@@ -477,7 +502,10 @@ export default function ApiHealthDashboard() {
       const createdId = createJson.data.activity.id;
 
       // 2) Get
-      const getResp = await fetch(`${BACKEND_URL}/api/v2/activities/${createdId}?tenant_id=${tenantId}`);
+      const getResp = await fetch(`${BACKEND_URL}/api/v2/activities/${createdId}?tenant_id=${tenantId}`, {
+        headers: authHeaders,
+        credentials: 'include',
+      });
       const getJson = await getResp.json().catch(() => ({}));
       if (!getResp.ok || !getJson?.data?.activity?.id) {
         return {
@@ -491,7 +519,8 @@ export default function ApiHealthDashboard() {
       // 3) Update
       const updateResp = await fetch(`${BACKEND_URL}/api/v2/activities/${createdId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
+        credentials: 'include',
         body: JSON.stringify({
           tenant_id: tenantId,
           status: 'completed',
@@ -511,6 +540,8 @@ export default function ApiHealthDashboard() {
       // 4) Delete
       const deleteResp = await fetch(`${BACKEND_URL}/api/v2/activities/${createdId}?tenant_id=${tenantId}`, {
         method: 'DELETE',
+        headers: authHeaders,
+        credentials: 'include',
       });
 
       const deleteJson = await deleteResp.json().catch(() => ({}));
@@ -542,12 +573,14 @@ export default function ApiHealthDashboard() {
   async function runContactV2LifecycleTest() {
     const baseName = 'API Health Test Contact';
     const tenantId = 'test';
+    const authHeaders = await getAuthHeaders();
 
     try {
       // 1) Create
       const createResp = await fetch(`${BACKEND_URL}/api/v2/contacts`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
+        credentials: 'include',
         body: JSON.stringify({
           tenant_id: tenantId,
           first_name: baseName,
@@ -569,7 +602,10 @@ export default function ApiHealthDashboard() {
       const createdId = createJson.data.contact.id;
 
       // 2) Get
-      const getResp = await fetch(`${BACKEND_URL}/api/v2/contacts/${createdId}?tenant_id=${tenantId}`);
+      const getResp = await fetch(`${BACKEND_URL}/api/v2/contacts/${createdId}?tenant_id=${tenantId}`, {
+        headers: authHeaders,
+        credentials: 'include',
+      });
       const getJson = await getResp.json().catch(() => ({}));
       if (!getResp.ok || !getJson?.data?.contact?.id) {
         return {
@@ -583,7 +619,8 @@ export default function ApiHealthDashboard() {
       // 3) Update
       const updateResp = await fetch(`${BACKEND_URL}/api/v2/contacts/${createdId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
+        credentials: 'include',
         body: JSON.stringify({
           tenant_id: tenantId,
           last_name: 'Updated',
@@ -603,6 +640,8 @@ export default function ApiHealthDashboard() {
       // 4) Delete
       const deleteResp = await fetch(`${BACKEND_URL}/api/v2/contacts/${createdId}?tenant_id=${tenantId}`, {
         method: 'DELETE',
+        headers: authHeaders,
+        credentials: 'include',
       });
 
       const deleteJson = await deleteResp.json().catch(() => ({}));
@@ -634,12 +673,14 @@ export default function ApiHealthDashboard() {
   async function runAccountV2LifecycleTest() {
     const baseName = 'API Health Test Account';
     const tenantId = 'test';
+    const authHeaders = await getAuthHeaders();
 
     try {
       // 1) Create
       const createResp = await fetch(`${BACKEND_URL}/api/v2/accounts`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
+        credentials: 'include',
         body: JSON.stringify({
           tenant_id: tenantId,
           name: `${baseName} ${Date.now()}`,
@@ -660,7 +701,10 @@ export default function ApiHealthDashboard() {
       const createdId = createJson.data.account.id;
 
       // 2) Get
-      const getResp = await fetch(`${BACKEND_URL}/api/v2/accounts/${createdId}?tenant_id=${tenantId}`);
+      const getResp = await fetch(`${BACKEND_URL}/api/v2/accounts/${createdId}?tenant_id=${tenantId}`, {
+        headers: authHeaders,
+        credentials: 'include',
+      });
       const getJson = await getResp.json().catch(() => ({}));
       if (!getResp.ok || !getJson?.data?.account?.id) {
         return {
@@ -674,7 +718,8 @@ export default function ApiHealthDashboard() {
       // 3) Update
       const updateResp = await fetch(`${BACKEND_URL}/api/v2/accounts/${createdId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
+        credentials: 'include',
         body: JSON.stringify({
           tenant_id: tenantId,
           type: 'customer',
@@ -694,6 +739,8 @@ export default function ApiHealthDashboard() {
       // 4) Delete
       const deleteResp = await fetch(`${BACKEND_URL}/api/v2/accounts/${createdId}?tenant_id=${tenantId}`, {
         method: 'DELETE',
+        headers: authHeaders,
+        credentials: 'include',
       });
 
       const deleteJson = await deleteResp.json().catch(() => ({}));
@@ -725,12 +772,14 @@ export default function ApiHealthDashboard() {
   async function runLeadsV2LifecycleTest() {
     // Use system tenant UUID - 'test' is not a valid UUID
     const tenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+    const authHeaders = await getAuthHeaders();
 
     try {
       // 1) Create
       const createResp = await fetch(`${BACKEND_URL}/api/v2/leads`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
+        credentials: 'include',
         body: JSON.stringify({
           tenant_id: tenantId,
           first_name: 'API',
@@ -754,7 +803,10 @@ export default function ApiHealthDashboard() {
       }
 
       // 2) Get
-      const getResp = await fetch(`${BACKEND_URL}/api/v2/leads/${createdId}?tenant_id=${tenantId}`);
+      const getResp = await fetch(`${BACKEND_URL}/api/v2/leads/${createdId}?tenant_id=${tenantId}`, {
+        headers: authHeaders,
+        credentials: 'include',
+      });
       const getJson = await getResp.json().catch(() => ({}));
       const gotId = getJson?.data?.lead?.id || getJson?.data?.id;
       if (!getResp.ok || !gotId) {
@@ -769,7 +821,8 @@ export default function ApiHealthDashboard() {
       // 3) Update
       const updateResp = await fetch(`${BACKEND_URL}/api/v2/leads/${createdId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
+        credentials: 'include',
         body: JSON.stringify({
           tenant_id: tenantId,
           status: 'contacted',
@@ -789,6 +842,8 @@ export default function ApiHealthDashboard() {
       // 4) Delete
       const deleteResp = await fetch(`${BACKEND_URL}/api/v2/leads/${createdId}?tenant_id=${tenantId}`, {
         method: 'DELETE',
+        headers: authHeaders,
+        credentials: 'include',
       });
 
       const deleteJson = await deleteResp.json().catch(() => ({}));
@@ -821,12 +876,14 @@ export default function ApiHealthDashboard() {
   async function runDocumentsV2LifecycleTest() {
     // Use system tenant UUID - 'test' is not a valid UUID
     const tenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+    const authHeaders = await getAuthHeaders();
 
     try {
       // 1) Create
       const createResp = await fetch(`${BACKEND_URL}/api/v2/documents`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
+        credentials: 'include',
         body: JSON.stringify({
           tenant_id: tenantId,
           name: `API Health Test Document ${Date.now()}.pdf`,
@@ -848,7 +905,10 @@ export default function ApiHealthDashboard() {
       const createdId = createJson.data.document.id;
 
       // 2) Get
-      const getResp = await fetch(`${BACKEND_URL}/api/v2/documents/${createdId}?tenant_id=${tenantId}`);
+      const getResp = await fetch(`${BACKEND_URL}/api/v2/documents/${createdId}?tenant_id=${tenantId}`, {
+        headers: authHeaders,
+        credentials: 'include',
+      });
       const getJson = await getResp.json().catch(() => ({}));
       if (!getResp.ok || !getJson?.data?.document?.id) {
         return {
@@ -872,7 +932,8 @@ export default function ApiHealthDashboard() {
       // 3) Update
       const updateResp = await fetch(`${BACKEND_URL}/api/v2/documents/${createdId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
+        credentials: 'include',
         body: JSON.stringify({
           tenant_id: tenantId,
           name: 'Updated Document Name.pdf',
@@ -892,6 +953,8 @@ export default function ApiHealthDashboard() {
       // 4) Delete
       const deleteResp = await fetch(`${BACKEND_URL}/api/v2/documents/${createdId}?tenant_id=${tenantId}`, {
         method: 'DELETE',
+        headers: authHeaders,
+        credentials: 'include',
       });
 
       const deleteJson = await deleteResp.json().catch(() => ({}));
@@ -924,10 +987,14 @@ export default function ApiHealthDashboard() {
   async function runReportsV2StatsTest() {
     // Use system tenant UUID
     const tenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+    const authHeaders = await getAuthHeaders();
 
     try {
       // Test dashboard-bundle endpoint (correct v2 route)
-      const statsResp = await fetch(`${BACKEND_URL}/api/v2/reports/dashboard-bundle?tenant_id=${tenantId}`);
+      const statsResp = await fetch(`${BACKEND_URL}/api/v2/reports/dashboard-bundle?tenant_id=${tenantId}`, {
+        headers: authHeaders,
+        credentials: 'include',
+      });
       const statsJson = await statsResp.json().catch(() => ({}));
 
       if (!statsResp.ok) {
@@ -969,10 +1036,14 @@ export default function ApiHealthDashboard() {
   async function runWorkflowsV2LifecycleTest() {
     // Use system tenant UUID
     const tenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+    const authHeaders = await getAuthHeaders();
 
     try {
       // Test list endpoint
-      const listResp = await fetch(`${BACKEND_URL}/api/v2/workflows?tenant_id=${tenantId}&limit=5`);
+      const listResp = await fetch(`${BACKEND_URL}/api/v2/workflows?tenant_id=${tenantId}&limit=5`, {
+        headers: authHeaders,
+        credentials: 'include',
+      });
       const listJson = await listResp.json().catch(() => ({}));
 
       if (!listResp.ok) {

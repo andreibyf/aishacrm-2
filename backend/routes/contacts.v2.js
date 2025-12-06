@@ -9,15 +9,11 @@
  */
 
 import express from 'express';
-import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildContactAiContext } from '../lib/aiContextEnricher.js';
 
 export default function createContactV2Routes(_pgPool) {
   const router = express.Router();
-
-  router.use(validateTenantAccess);
-  router.use(enforceEmployeeDataScope);
 
   /**
    * Flatten metadata fields into top-level properties for consistent API shape
