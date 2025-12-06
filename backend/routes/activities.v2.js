@@ -1,9 +1,13 @@
 import express from 'express';
+import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildActivityAiContext } from '../lib/aiContextEnricher.js';
 
 export default function createActivityV2Routes(_pgPool) {
   const router = express.Router();
+
+  router.use(validateTenantAccess);
+  router.use(enforceEmployeeDataScope);
 
   const expandMetadata = (record) => {
     if (!record) return record;

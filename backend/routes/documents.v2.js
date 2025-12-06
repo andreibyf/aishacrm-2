@@ -9,10 +9,13 @@
  */
 
 import express from 'express';
+import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 
 export default function createDocumentV2Routes(_pgPool) {
   const router = express.Router();
+
+  router.use(validateTenantAccess);
 
   /**
    * Build AI context for a document

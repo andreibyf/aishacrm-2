@@ -1,4 +1,5 @@
 import express from 'express';
+import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildOpportunityAiContext } from '../lib/opportunityAiContext.js';
 
@@ -7,6 +8,9 @@ import { buildOpportunityAiContext } from '../lib/opportunityAiContext.js';
 
 export default function createOpportunityV2Routes(_pgPool) {
   const router = express.Router();
+
+  router.use(validateTenantAccess);
+  router.use(enforceEmployeeDataScope);
 
   const expandMetadata = (record) => {
     if (!record) return record;

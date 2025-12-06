@@ -1,5 +1,5 @@
 import express from 'express';
-import { validateTenantAccess as _validateTenantAccess, enforceEmployeeDataScope as _enforceEmployeeDataScope } from '../middleware/validateTenant.js';
+import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 
 export default function createOpportunityRoutes(_pgPool) {
   const router = express.Router();
@@ -123,9 +123,9 @@ export default function createOpportunityRoutes(_pgPool) {
    *                       format: date-time
    */
 
-  // NOTE: validateTenantAccess removed - causes 401 in production when running API health tests
-  // router.use(validateTenantAccess);
-  // router.use(enforceEmployeeDataScope);
+  // Apply tenant validation and employee data scope to all routes
+  router.use(validateTenantAccess);
+  router.use(enforceEmployeeDataScope);
 
   const toNullableString = (value) => {
     if (typeof value === 'string') {

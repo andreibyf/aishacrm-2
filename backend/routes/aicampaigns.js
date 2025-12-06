@@ -1,9 +1,12 @@
 import express from 'express';
+import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { emitTenantWebhooks } from '../lib/webhookEmitter.js';
 
 // Real routes for AI Campaigns backed by ai_campaign table (singular)
 export default function createAICampaignRoutes(pgPool) {
   const router = express.Router();
+  router.use(validateTenantAccess);
+  router.use(enforceEmployeeDataScope);
 
   // GET /api/aicampaigns - list with basic filters and pagination
   router.get('/', async (req, res) => {

@@ -294,9 +294,12 @@ export default function ApiHealthDashboard() {
           continue;
         }
 
+        // Get auth headers for authenticated requests
+        const authHeaders = await getAuthHeaders();
         const options = {
           method: endpoint.method,
-          headers: { 'Content-Type': 'application/json' }
+          headers: authHeaders,
+          credentials: 'include'
         };
 
         if (endpoint.body) {
