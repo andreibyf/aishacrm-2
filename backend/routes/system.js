@@ -134,16 +134,13 @@ export default function createSystemRoutes(_pgPool) {
   // For non-HTTP services (redis), uses the initialized memory client for a lightweight ping.
   router.get('/containers-status', async (req, res) => {
     const mcpNodeCandidates = [
-      // Prefer Docker compose service name (most reliable in aishanet)
-      'http://mcp:8000/health',
-      // Fallback to standalone compose container name
-      'http://braid-mcp-node-server:8000/health',
-      // Then any explicit override
+      // Explicit override from env (highest priority)
       process.env.MCP_NODE_HEALTH_URL,
+      // Production container name (braid-mcp-node-server compose)
+      'http://braid-mcp-server:8000/health',
       // Host gateway only for local dev (backend running outside Docker)
       process.env.NODE_ENV === 'development' ? 'http://host.docker.internal:8000/health' : null,
     ].filter(Boolean);
-    // Note: localhost:8000 removed to avoid false positives from other services
 
     const services = [
       // Internal Docker DNS names should target internal container ports
