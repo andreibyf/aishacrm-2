@@ -227,15 +227,19 @@ export default function UniversalDetailPanel({
           status: isScheduledActivity ? 'scheduled' : 'completed', // Updated status logic
           related_to: relatedTo,
           related_id: entity.id,
-          related_name: entityName, // Use pre-calculated entityName
-          related_email: entity.email || null, // New field
-          assigned_to: entity.assigned_to || user.email, // Use entity's assigned_to or current user
+          assigned_to: entity.assigned_to || user?.email, // Use entity's assigned_to or current user
           due_date: isScheduledActivity ? new Date().toISOString().split('T')[0] : null // Updated due_date logic
         };
 
-        await Activity.create(activityData);
-        toast.success(`Activity created for this ${newNoteType}`);
-        window.dispatchEvent(new CustomEvent('entity-modified', { detail: { entity: 'Activity' } })); // Dispatch event for activities list refresh
+        try {
+          await Activity.create(activityData);
+          toast.success(`Activity created for this ${newNoteType}`);
+          window.dispatchEvent(new CustomEvent('entity-modified', { detail: { entity: 'Activity' } })); // Dispatch event for activities list refresh
+        } catch (activityError) {
+          console.error("Failed to create activity from note:", activityError);
+          // Don't block note save if activity creation fails
+          toast.error("Note saved, but failed to create related activity");
+        }
       }
 
       // Reset form
