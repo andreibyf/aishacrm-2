@@ -147,7 +147,7 @@ export default function createSystemRoutes(_pgPool) {
       { name: 'backend', url: 'http://backend:3001/health' },
       { name: 'frontend', url: 'http://frontend:3000/' },
       // Correct MCP server; try multiple candidates for portability
-      { name: 'mcp-node', url: mcpNodeCandidates },
+      { name: 'mcp-node-server', url: mcpNodeCandidates },
       // MCP replica containers (braid-mcp-node-server scaled instances)
       { name: 'mcp-node-1', url: 'http://braid-mcp-1:8000/health' },
       { name: 'mcp-node-2', url: 'http://braid-mcp-2:8000/health' },
