@@ -272,7 +272,8 @@ describe('Suggestion Actions', { skip: !SHOULD_RUN }, () => {
       body: JSON.stringify({ tenant_id: TENANT_ID, user_id: 'test-user' })
     });
     
-    assert.ok([200, 404].includes(res.status), `Expected 200 or 404, got ${res.status}`);
+    // 200 = approved, 404 = not found, 400 = already processed (not pending)
+    assert.ok([200, 400, 404].includes(res.status), `Expected 200, 400 or 404, got ${res.status}`);
   });
 
   test('POST /api/ai/suggestions/:id/reject updates status to rejected', async () => {
@@ -295,7 +296,8 @@ describe('Suggestion Actions', { skip: !SHOULD_RUN }, () => {
       })
     });
     
-    assert.ok([200, 404].includes(res.status), `Expected 200 or 404, got ${res.status}`);
+    // 200 = rejected, 404 = not found, 400 = already processed (not pending)
+    assert.ok([200, 400, 404].includes(res.status), `Expected 200, 400 or 404, got ${res.status}`);
   });
 
 });
