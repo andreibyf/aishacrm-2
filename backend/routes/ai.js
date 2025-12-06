@@ -7,7 +7,7 @@ import express from 'express';
 import multer from 'multer';
 import { buildSystemPrompt, getOpenAIClient } from '../lib/aiProvider.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
-import { summarizeToolResult, BRAID_SYSTEM_PROMPT, generateToolSchemas, executeBraidTool } from '../lib/braidIntegration-v2.js';
+import { summarizeToolResult, BRAID_SYSTEM_PROMPT, generateToolSchemas, executeBraidTool, TOOL_ACCESS_TOKEN } from '../lib/braidIntegration-v2.js';
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 import { runTask } from '../lib/aiBrain.js';
 import createAiRealtimeRoutes from './aiRealtime.js';
@@ -449,9 +449,10 @@ export default function createAIRoutes(pgPool) {
     }
   };
 
-  const executeToolCall = async ({ toolName, args, tenantRecord, userEmail = null }) => {
+  const executeToolCall = async ({ toolName, args, tenantRecord, userEmail = null, accessToken = null }) => {
     // Route execution through Braid SDK tool registry
-    return await executeBraidTool(toolName, args || {}, tenantRecord, userEmail);
+    // SECURITY: accessToken must be provided after tenant authorization passes
+    return await executeBraidTool(toolName, args || {}, tenantRecord, userEmail, accessToken);
   };
 
   const generateAssistantResponse = async ({
@@ -616,6 +617,7 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
                 args: parsedArgs,
                 tenantRecord,
                 userEmail,
+                accessToken: TOOL_ACCESS_TOKEN, // SECURITY: Unlocks tool execution after authorization
               });
             } catch (toolError) {
               toolResult = { error: toolError.message || String(toolError) };
@@ -717,6 +719,85 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       req.query?.tenantId ||
       req.user?.tenant_id
     );
+  };
+
+  /**
+   * Validates that the user is authorized to access the requested tenant.
+   * This is a CRITICAL security function to prevent cross-tenant data access.
+   * 
+   * Authorization rules:
+   * - Superadmin: Can access any tenant
+   * - Other roles: Can only access their assigned tenant_id
+   * 
+   * @param {Object} req - Express request object with req.user populated
+   * @param {string} requestedTenantId - The tenant identifier (UUID or slug) being accessed
+   * @param {Object} tenantRecord - The resolved tenant record (with id, tenant_id)
+   * @returns {Object} { authorized: boolean, error?: string }
+   */
+  const validateUserTenantAccess = (req, requestedTenantId, tenantRecord) => {
+    const user = req.user;
+    
+    // No user context - cannot authorize
+    if (!user) {
+      // In development mode without auth, allow access (matches middleware behavior)
+      if (process.env.NODE_ENV === 'development') {
+        return { authorized: true };
+      }
+      return { 
+        authorized: false, 
+        error: "I'm sorry, but I can't process your request without authentication. Please log in and try again." 
+      };
+    }
+
+    // Superadmins can access any tenant
+    if (user.role === 'superadmin') {
+      return { authorized: true };
+    }
+
+    // User must have a tenant_id assigned
+    if (!user.tenant_id) {
+      return { 
+        authorized: false, 
+        error: "I'm sorry, but your account isn't assigned to any tenant. Please contact your administrator to get proper access." 
+      };
+    }
+
+    // Check if the requested tenant matches the user's assigned tenant
+    // Compare against both the UUID (tenantRecord.id) and the slug (tenantRecord.tenant_id)
+    const userTenantId = user.tenant_id;
+    
+    // If no tenant record found, fall back to comparing the raw requested identifier
+    if (!tenantRecord) {
+      if (requestedTenantId !== userTenantId) {
+        return { 
+          authorized: false, 
+          error: "I'm sorry, but I can only help you with data from your assigned tenant. The tenant you're asking about isn't accessible with your current permissions." 
+        };
+      }
+      return { authorized: true };
+    }
+
+    // Check if user's tenant matches either the UUID or slug of the requested tenant
+    const isAuthorized = 
+      userTenantId === tenantRecord.id ||           // UUID match
+      userTenantId === tenantRecord.tenant_id;      // Slug match
+
+    if (!isAuthorized) {
+      console.warn('[AI Security] Cross-tenant access attempt blocked:', {
+        user_id: user.id,
+        user_email: user.email,
+        user_tenant_id: userTenantId,
+        requested_tenant_uuid: tenantRecord?.id,
+        requested_tenant_slug: tenantRecord?.tenant_id,
+        requested_identifier: requestedTenantId
+      });
+      return { 
+        authorized: false, 
+        error: "I'm sorry, but I can only access data for your assigned tenant. If you need access to other tenants, please contact your administrator." 
+      };
+    }
+
+    return { authorized: true };
   };
 
   // Use canonical tenant resolver for consistent caching
@@ -828,6 +909,13 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
         return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
       }
 
+      // SECURITY: Validate user has access to this tenant
+      const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
+      if (!authCheck.authorized) {
+        console.warn('[AI Security] Snapshot blocked - unauthorized tenant access');
+        return res.status(403).json({ status: 'error', message: authCheck.error });
+      }
+
       // Use UUID for database queries (tenantRecord.id is the UUID)
       const tenantUuid = tenantRecord.id;
 
@@ -932,6 +1020,13 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
         return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
       }
 
+      // SECURITY: Validate user has access to this tenant
+      const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
+      if (!authCheck.authorized) {
+        console.warn('[AI Security] Conversation creation blocked - unauthorized tenant access');
+        return res.status(403).json({ status: 'error', message: authCheck.error });
+      }
+
       const enrichedMetadata = {
         ...metadata,
         tenant_slug: metadata?.tenant_slug ?? tenantRecord.tenant_id ?? tenantIdentifier ?? null,
@@ -985,6 +1080,13 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
           },
         });
         return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
+      }
+
+      // SECURITY: Validate user has access to this tenant
+      const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
+      if (!authCheck.authorized) {
+        console.warn('[AI Security] Conversation list blocked - unauthorized tenant access');
+        return res.status(403).json({ status: 'error', message: authCheck.error });
       }
 
       const { agent_name = null, status = 'active', limit = 25 } = req.query || {};
@@ -1083,6 +1185,13 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
         return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
       }
 
+      // SECURITY: Validate user has access to this tenant
+      const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
+      if (!authCheck.authorized) {
+        console.warn('[AI Security] Conversation fetch blocked - unauthorized tenant access');
+        return res.status(403).json({ status: 'error', message: authCheck.error });
+      }
+
       // Get conversation
       const { data: conv, error: convErr } = await supa
         .from('conversations')
@@ -1137,6 +1246,13 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
 
       if (!tenantRecord?.id) {
         return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
+      }
+
+      // SECURITY: Validate user has access to this tenant
+      const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
+      if (!authCheck.authorized) {
+        console.warn('[AI Security] Conversation update blocked - unauthorized tenant access');
+        return res.status(403).json({ status: 'error', message: authCheck.error });
       }
 
       // Verify conversation belongs to tenant
@@ -1211,6 +1327,13 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
         return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
       }
 
+      // SECURITY: Validate user has access to this tenant
+      const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
+      if (!authCheck.authorized) {
+        console.warn('[AI Security] Conversation delete blocked - unauthorized tenant access');
+        return res.status(403).json({ status: 'error', message: authCheck.error });
+      }
+
       // Verify conversation belongs to tenant before deleting
       const { data: conv, error } = await supa
         .from('conversations')
@@ -1265,6 +1388,13 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
 
       if (!tenantRecord?.id) {
         return res.status(400).json({ status: 'error', message: 'Tenant context required' });
+      }
+
+      // SECURITY: Validate user has access to this tenant
+      const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
+      if (!authCheck.authorized) {
+        console.warn('[AI Security] Messages fetch blocked - unauthorized tenant access');
+        return res.status(403).json({ status: 'error', message: authCheck.error });
       }
 
       // Verify conversation belongs to tenant
@@ -1328,6 +1458,13 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
           },
         });
         return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
+      }
+
+      // SECURITY: Validate user has access to this tenant
+      const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
+      if (!authCheck.authorized) {
+        console.warn('[AI Security] Message blocked - unauthorized tenant access');
+        return res.status(403).json({ status: 'error', message: authCheck.error });
       }
 
       const { data: conv, error } = await supa
@@ -1423,6 +1560,13 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
         return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
       }
 
+      // SECURITY: Validate user has access to this tenant
+      const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
+      if (!authCheck.authorized) {
+        console.warn('[AI Security] Stream blocked - unauthorized tenant access');
+        return res.status(403).json({ status: 'error', message: authCheck.error });
+      }
+
       // Verify conversation exists
       const { data: convCheck, error } = await supa
         .from('conversations')
@@ -1488,6 +1632,13 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
           status: 'error',
           message: 'Valid tenant_id required (x-tenant-id header)',
         });
+      }
+
+      // SECURITY: Validate user has access to this tenant
+      const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
+      if (!authCheck.authorized) {
+        console.warn('[AI Security] Chat blocked - unauthorized tenant access');
+        return res.status(403).json({ status: 'error', message: authCheck.error });
       }
 
       const apiKey = await resolveTenantOpenAiKey({
@@ -1580,7 +1731,9 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
 
           let toolResult;
           try {
-            toolResult = await executeBraidTool(toolName, args, tenantRecord, req.user?.email || null);
+            // SECURITY: Pass the access token to unlock tool execution
+            // The token is only available after tenant authorization passed above
+            toolResult = await executeBraidTool(toolName, args, tenantRecord, req.user?.email || null, TOOL_ACCESS_TOKEN);
           } catch (err) {
             toolResult = { error: err.message || String(err) };
           }
@@ -1737,7 +1890,8 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       });
 
       // Execute the tool via Braid
-      const toolResult = await executeBraidTool(tool_name, tool_args, tenantRecord, req.user?.email);
+      // SECURITY: Pass the access token - only available after authorization validated above
+      const toolResult = await executeBraidTool(tool_name, tool_args, tenantRecord, req.user?.email, TOOL_ACCESS_TOKEN);
 
       const duration = Date.now() - startTime;
       console.log(`[AI][Realtime] Tool ${tool_name} completed in ${duration}ms`);

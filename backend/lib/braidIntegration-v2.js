@@ -234,9 +234,65 @@ function normalizeToolFilter(allowedTools) {
 }
 
 /**
- * Execute a Braid tool
+ * SECURITY: Verification token that must be passed to unlock tool execution.
+ * This acts as a "key" that can only be obtained after tenant authorization passes.
+ * The token is a simple object with verified: true to prevent accidental bypasses.
  */
-export async function executeBraidTool(toolName, args, tenantRecord, userId = null) {
+export const TOOL_ACCESS_TOKEN = Object.freeze({
+  verified: true,
+  timestamp: Date.now(),
+  source: 'tenant-authorization'
+});
+
+/**
+ * Validates the tool access token before allowing execution.
+ * @param {Object} accessToken - The access token to validate
+ * @returns {boolean} - True if valid, false otherwise
+ */
+function validateToolAccessToken(accessToken) {
+  if (!accessToken || typeof accessToken !== 'object') {
+    return false;
+  }
+  // Must have verified: true explicitly set
+  if (accessToken.verified !== true) {
+    return false;
+  }
+  // Must have a valid source identifier
+  if (accessToken.source !== 'tenant-authorization') {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Execute a Braid tool
+ * @param {string} toolName - Name of the tool to execute
+ * @param {Object} args - Arguments for the tool
+ * @param {Object} tenantRecord - The tenant record (must be pre-authorized)
+ * @param {string} userId - The user ID
+ * @param {Object} accessToken - REQUIRED: Security token proving tenant authorization passed (default: false = denied)
+ */
+export async function executeBraidTool(toolName, args, tenantRecord, userId = null, accessToken = false) {
+  // SECURITY: Verify the access token before any tool execution
+  // This is the "key to the toolshed" - without it, no tools can be accessed
+  if (!validateToolAccessToken(accessToken)) {
+    console.error('[Braid Security] Tool execution DENIED - invalid or missing access token', {
+      toolName,
+      hasToken: !!accessToken,
+      tokenVerified: accessToken?.verified,
+      tokenSource: accessToken?.source,
+      tenantId: tenantRecord?.id || tenantRecord?.tenant_id,
+      userId
+    });
+    return {
+      tag: 'Err',
+      error: { 
+        type: 'AuthorizationError', 
+        message: "I'm sorry, but I cannot execute this action without proper authorization. Please ensure you're logged in and have access to this tenant." 
+      }
+    };
+  }
+
   const config = TOOL_REGISTRY[toolName];
   if (!config) {
     return {

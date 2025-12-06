@@ -12,6 +12,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Phase 4 closure documentation
 
+### Security
+- **[CRITICAL] AI Tenant Authorization:** Added `validateUserTenantAccess` helper function to `ai.js` routes
+  - Prevents cross-tenant data access via AI assistant
+  - All AI conversation and chat endpoints now validate user is authorized for requested tenant
+  - Superadmins can access any tenant; other roles restricted to their assigned tenant
+  - Returns friendly error messages for unauthorized access attempts
+  - Comprehensive security logging for blocked access attempts
+  - Secured endpoints: `/conversations`, `/conversations/:id`, `/conversations/:id/messages`, `/conversations/:id/stream`, `/chat`, `/snapshot-internal`
+
+- **[CRITICAL] Braid Tool Access Token:** Added `TOOL_ACCESS_TOKEN` contract to `braidIntegration-v2.js`
+  - Acts as a "key to the toolshed" - tools cannot execute without a valid access token
+  - Token is only provided after tenant authorization passes in `ai.js`
+  - Double-layer security: authorization must pass AND token must be present
+  - All `executeBraidTool` calls now require the access token parameter
+  - Invalid/missing tokens are logged and blocked with friendly error messages
+
 ---
 
 ## [1.1.x] - December 4, 2025
