@@ -485,6 +485,7 @@ export default function createOpportunityRoutes(_pgPool) {
         name: name?.trim?.() || null,
         account_id: account_id || null,
         contact_id: contact_id || null,
+        lead_id: lead_id || null,
         stage: normalizedStage,
         metadata: combinedMetadata,
         created_at: nowIso,
@@ -575,6 +576,7 @@ export default function createOpportunityRoutes(_pgPool) {
       if (name !== undefined) payload.name = name?.trim?.() || null;
       if (account_id !== undefined) payload.account_id = account_id || null;
       if (contact_id !== undefined) payload.contact_id = contact_id || null;
+      if (lead_id !== undefined) payload.lead_id = lead_id || null;
       if (amount !== undefined) {
         const parsedAmount = toNumeric(amount);
         payload.amount = parsedAmount !== null ? parsedAmount : null;
