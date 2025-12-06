@@ -265,3 +265,38 @@ export function getTimezoneDisplayName(timezone) {
   
   return `${displayNames[timezone] || timezone} (${offsetString})`;
 }
+
+/**
+ * Convert a UTC time string (HH:mm or HH:mm:ss) to local time for display.
+ * Uses the user's browser timezone offset.
+ * @param {string} utcTimeStr - Time in UTC (e.g., "17:30:00")
+ * @param {string} dateStr - Optional date string (YYYY-MM-DD) for DST accuracy, defaults to today
+ * @returns {string} - Formatted local time (e.g., "2:30 PM")
+ */
+export function formatUtcTimeToLocal(utcTimeStr, dateStr = null) {
+  if (!utcTimeStr) return '';
+  
+  try {
+    // Use provided date or today
+    const datePart = dateStr || format(new Date(), 'yyyy-MM-dd');
+    
+    // Normalize time to HH:mm:ss
+    const normalizedTime = normalizeTimeString(utcTimeStr);
+    if (!normalizedTime) return utcTimeStr;
+    
+    // Create UTC datetime string
+    const utcString = `${datePart}T${normalizedTime}.000Z`;
+    
+    // Get user's timezone offset
+    const offsetMinutes = new Date().getTimezoneOffset();
+    
+    // Convert to local time
+    const displayDate = utcToLocal(utcString, offsetMinutes);
+    
+    // Format as local time (e.g., "2:30 PM")
+    return format(displayDate, 'h:mm a');
+  } catch (e) {
+    console.error('formatUtcTimeToLocal error:', e);
+    return utcTimeStr; // Fallback to raw value
+  }
+}

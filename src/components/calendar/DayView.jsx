@@ -2,6 +2,7 @@
 import { format } from "date-fns";
 import { Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { formatUtcTimeToLocal } from "@/components/shared/timezoneUtils";
 
 // Matching the stat card colors - semi-transparent backgrounds
 const statusColors = {
@@ -36,7 +37,7 @@ export default function DayView({ currentDate, activities, onActivityClick }) {
               {a.due_time && (
                 <div className="flex items-center gap-1 text-slate-400 text-sm">
                   <Clock className="w-3 h-3" />
-                  {a.due_time}
+                  {formatUtcTimeToLocal(a.due_time, a.due_date)}
                 </div>
               )}
             </div>

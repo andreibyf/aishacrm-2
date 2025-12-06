@@ -1,6 +1,7 @@
 
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, isSameMonth, isToday } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { formatUtcTimeToLocal } from "@/components/shared/timezoneUtils";
 
 // Matching the stat card colors - semi-transparent backgrounds
 const statusColors = {
@@ -29,7 +30,7 @@ function DayCell({ date, inCurrentMonth, activitiesForDay, onActivityClick }) {
           title={a.subject}>
 
             <div className="text-[11px] text-slate-300 truncate">{a.subject}</div>
-            {a.due_time && <div className="text-[10px] text-slate-500">{a.due_time}</div>}
+            {a.due_time && <div className="text-[10px] text-slate-500">{formatUtcTimeToLocal(a.due_time, a.due_date)}</div>}
             <div className="mt-1 flex flex-wrap gap-1">
               <Badge variant="outline" className="text-[10px] border-slate-600">{a.type}</Badge>
               {a.status &&
