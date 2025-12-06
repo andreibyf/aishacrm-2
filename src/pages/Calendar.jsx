@@ -50,7 +50,10 @@ export default function CalendarPage() {
       filter = { ...filter, assigned_to: currentUser.email };
     }
 
-    const list = await cachedRequest("Activity", "filter", { filter }, () => Activity.filter(filter));
+    const result = await cachedRequest("Activity", "filter", { filter }, () => Activity.filter(filter));
+    
+    // Handle both array and { activities: [...] } response formats
+    const list = Array.isArray(result) ? result : (result?.activities || []);
     
     // Normalize dates: use due_date if available, otherwise default to today
     const todayStr = format(new Date(), "yyyy-MM-dd");
