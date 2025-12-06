@@ -4,6 +4,7 @@
  */
 
 import { BACKEND_URL } from '@/api/entities';
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
 // Helper to read tenant ID consistently (new key first, legacy fallback)
 function resolveTenantId() {
@@ -19,6 +20,38 @@ function resolveTenantId() {
 }
 
 /**
+ * Get authorization headers for API calls.
+ * Mirrors the auth pattern from entities.js for consistency.
+ * @returns {Promise<Object>} Headers object with Authorization if available
+ */
+async function getAuthHeaders() {
+  const headers = {};
+  
+  try {
+    // Prefer explicit Supabase session token
+    if (isSupabaseConfigured()) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+      if (accessToken) {
+        headers.Authorization = `Bearer ${accessToken}`;
+      }
+    }
+    
+    // Fallback: token persisted in localStorage
+    if (!headers.Authorization && typeof window !== 'undefined') {
+      const stored = localStorage.getItem('sb-access-token');
+      if (stored) {
+        headers.Authorization = `Bearer ${stored}`;
+      }
+    }
+  } catch (err) {
+    console.warn('[Conversations API] Auth header error:', err?.message);
+  }
+  
+  return headers;
+}
+
+/**
  * Create a new conversation
  * @param {Object} options - Conversation options
  * @param {string} options.agent_name - Agent name (default: 'crm_assistant')
@@ -27,13 +60,15 @@ function resolveTenantId() {
  */
 export async function createConversation({ agent_name = 'crm_assistant', metadata = {} } = {}) {
   const tenantId = resolveTenantId();
-  console.log(`[Conversations API] Creating conversation for tenant ${tenantId}`);
+  const authHeaders = await getAuthHeaders();
+  console.log(`[Conversations API] Creating conversation for tenant ${tenantId}`, { hasAuth: !!authHeaders.Authorization });
   
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-tenant-id': tenantId,
+      ...authHeaders,
     },
     credentials: 'include',
     body: JSON.stringify({ agent_name, metadata }),
@@ -56,11 +91,13 @@ export async function createConversation({ agent_name = 'crm_assistant', metadat
  */
 export async function getConversation(conversationId) {
   const tenantId = resolveTenantId();
+  const authHeaders = await getAuthHeaders();
   console.log(`[Conversations API] Getting conversation ${conversationId} for tenant ${tenantId}`);
   
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations/${conversationId}`, {
     headers: {
       'x-tenant-id': tenantId,
+      ...authHeaders,
     },
     credentials: 'include',
   });
@@ -84,6 +121,7 @@ export async function getConversation(conversationId) {
  */
 export async function listConversations({ agent_name, limit } = {}) {
   const tenantId = resolveTenantId();
+  const authHeaders = await getAuthHeaders();
   const params = new URLSearchParams();
   if (agent_name) params.set('agent_name', agent_name);
   if (limit) params.set('limit', String(limit));
@@ -93,6 +131,7 @@ export async function listConversations({ agent_name, limit } = {}) {
   const response = await fetch(url, {
     headers: {
       'x-tenant-id': tenantId,
+      ...authHeaders,
     },
     credentials: 'include',
   });
@@ -116,6 +155,7 @@ export async function listConversations({ agent_name, limit } = {}) {
  */
 export async function updateConversation(conversationId, { title, topic }) {
   const tenantId = resolveTenantId();
+  const authHeaders = await getAuthHeaders();
   console.log(`[Conversations API] Updating conversation ${conversationId}:`, { title, topic });
   
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations/${conversationId}`, {
@@ -123,6 +163,7 @@ export async function updateConversation(conversationId, { title, topic }) {
     headers: {
       'Content-Type': 'application/json',
       'x-tenant-id': tenantId,
+      ...authHeaders,
     },
     credentials: 'include',
     body: JSON.stringify({ title, topic }),
@@ -145,12 +186,14 @@ export async function updateConversation(conversationId, { title, topic }) {
  */
 export async function deleteConversation(conversationId) {
   const tenantId = resolveTenantId();
+  const authHeaders = await getAuthHeaders();
   console.log(`[Conversations API] Deleting conversation ${conversationId} for tenant ${tenantId}`);
   
   const response = await fetch(`${BACKEND_URL}/api/ai/conversations/${conversationId}`, {
     method: 'DELETE',
     headers: {
       'x-tenant-id': tenantId,
+      ...authHeaders,
     },
     credentials: 'include',
   });
@@ -179,10 +222,12 @@ export async function addMessage(conversation, { role, content, file_urls = [] }
     metadata.file_urls = file_urls;
   }
   const tenantId = resolveTenantId();
+  const authHeaders = await getAuthHeaders();
   
   const headers = {
     'Content-Type': 'application/json',
     'x-tenant-id': tenantId,
+    ...authHeaders,
   };
   
   // Pass user name to backend for AI context
