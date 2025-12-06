@@ -233,7 +233,7 @@ export default function UniversalDetailPanel({
           related_name: entityName, // Denormalized entity name for display
           related_email: entityEmail, // Denormalized entity email for display
           assigned_to: entity.assigned_to || user?.email, // Use entity's assigned_to or current user
-          due_date: isScheduledActivity ? new Date().toISOString().split('T')[0] : null // Updated due_date logic
+          due_date: new Date().toISOString().split('T')[0] // Always set due_date so activity shows on calendar
         };
 
         try {

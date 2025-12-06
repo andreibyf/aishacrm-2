@@ -53,24 +53,29 @@ export default function CalendarPage() {
     const list = await cachedRequest("Activity", "filter", { filter }, () => Activity.filter(filter));
     
     // CRITICAL FIX: Normalize dates properly - treat due_date as local date, not UTC
+    // Use due_date if available, otherwise fallback to created_at so all activities show
     const normalized = (list || [])
-      .filter(a => !!a.due_date)
+      .filter(a => !!(a.due_date || a.created_at))
       .map(a => {
-        // Parse the stored due_date (which is in YYYY-MM-DD format)
+        const dateSource = a.due_date || (a.created_at ? a.created_at.split('T')[0] : null);
+        if (!dateSource) return null;
+        // Parse the date (which is in YYYY-MM-DD format)
         // Create a date object treating the date as local (not UTC)
-        const [year, month, day] = a.due_date.split('-').map(Number);
+        const [year, month, day] = dateSource.split('-').map(Number);
         const localDate = new Date(year, month - 1, day);
         
         // Format as YYYY-MM-DD for grouping (this will be in local timezone)
         const dateKey = format(localDate, "yyyy-MM-dd");
         
-        console.log('[Calendar] Activity:', a.subject, 'due_date:', a.due_date, '_dateKey:', dateKey);
+        if (import.meta.env.DEV) {
+          console.log('[Calendar] Activity:', a.subject, 'date:', dateSource, '_dateKey:', dateKey);
+        }
         
         return {
           ...a,
           _dateKey: dateKey,
         };
-      });
+      }).filter(Boolean);
     
     console.log('[Calendar] Loaded activities:', normalized.length);
     setActivities(normalized);
