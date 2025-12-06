@@ -107,6 +107,7 @@ const pluralize = (entityName) => {
     "tenant": "tenants",
     "systembranding": "systembrandings",
     "synchealth": "synchealths",
+    "cronjob": "cron/jobs", // Backend uses /api/cron/jobs not /api/cronjobs
   };
 
   if (irregularPlurals[name]) {
