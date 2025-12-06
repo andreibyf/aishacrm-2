@@ -698,6 +698,7 @@ export default function createActivityRoutes(_pgPool) {
         priority: priority ?? 'normal',
         location: location || null,
         created_by: created_by || null,
+        created_date: new Date().toISOString(),
         related_to: related_to || null,
         related_name: related_name || null,
         related_email: related_email || null,
