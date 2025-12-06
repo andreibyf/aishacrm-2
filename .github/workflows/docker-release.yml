@@ -118,8 +118,13 @@ jobs:
           port: ${{ secrets.PROD_VPS_PORT || 22 }}
           envs: VERSION_TAG,MCP_GITHUB_TOKEN
           script: |
+            set -e  # Exit on any error
             cd /opt/aishacrm
             echo "Deploying version: $VERSION_TAG"
+            
+            # Ensure aishanet network exists
+            docker network inspect aishanet >/dev/null 2>&1 || docker network create aishanet
+            
             # Pull specific version tags
             docker pull ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG
             docker pull ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG
@@ -149,13 +154,24 @@ jobs:
             # Restart main services with version info (force recreate to detect :latest image changes)
             docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend n8n n8n-proxy
             
-            # Deploy MCP server (separate compose file)
-            echo "Deploying MCP server..."
+            # Deploy MCP server (separate compose file with 3 containers)
+            echo "Deploying MCP server cluster (1 server + 2 nodes)..."
+            
+            # Ensure MCP directory exists
+            mkdir -p /opt/aishacrm/braid-mcp-node-server
             cd /opt/aishacrm/braid-mcp-node-server
-            # Create .env from example if it doesn't exist
+            
+            # Create .env from example if it doesn't exist, or create minimal one
             if [ ! -f .env ]; then
-              cp .env.example .env 2>/dev/null || echo "No .env.example found"
+              if [ -f .env.example ]; then
+                cp .env.example .env
+                echo "Created .env from .env.example"
+              else
+                echo "NODE_ENV=production" > .env
+                echo "Created minimal .env"
+              fi
             fi
+            
             # Update MCP .env with GitHub token if provided
             if [ -n "$MCP_GITHUB_TOKEN" ]; then
               if grep -q "^GITHUB_TOKEN=" .env 2>/dev/null; then
@@ -164,13 +180,33 @@ jobs:
                 echo "GITHUB_TOKEN=$MCP_GITHUB_TOKEN" >> .env
               fi
             fi
+            
+            # Check if docker-compose.prod.yml exists
+            if [ ! -f docker-compose.prod.yml ]; then
+              echo "ERROR: docker-compose.prod.yml not found in /opt/aishacrm/braid-mcp-node-server/"
+              echo "SCP may have failed. Listing directory contents:"
+              ls -la /opt/aishacrm/braid-mcp-node-server/
+              exit 1
+            fi
+            
             # Start MCP services using production compose (uses GHCR images)
+            echo "Starting MCP containers..."
             docker compose -f docker-compose.prod.yml up -d --force-recreate
+            
+            # Verify MCP deployment
+            echo "Verifying MCP deployment..."
+            sleep 5
+            docker ps --filter "name=braid-mcp" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
             
             cd /opt/aishacrm
             echo "Deployment completed: $VERSION_TAG"
-            # Verify deployment
-            sleep 3
+            
+            # Final verification - all containers
+            echo "=== All AishaCRM containers ==="
+            docker ps --filter "name=aishacrm" --format "table {{.Names}}\t{{.Status}}"
+            docker ps --filter "name=braid-mcp" --format "table {{.Names}}\t{{.Status}}"
+            
+            # Verify frontend version
             docker exec aishacrm-frontend cat /app/dist/env-config.js | grep VITE_APP_BUILD_VERSION || true
       
       - name: Deployment summary
