@@ -3,6 +3,37 @@
 
 const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
 
+/**
+ * Helper to render AvatarWidget wrapped in required context provider.
+ * AvatarWidget uses useAiSidebarState() which requires AiSidebarProvider.
+ */
+const renderAvatarWithProvider = async (React, ReactDOM, container, props = {}) => {
+  const { default: AvatarWidget } = await import('../ai/AvatarWidget.jsx');
+  const { AiSidebarProvider } = await import('../ai/useAiSidebarState.jsx');
+  
+  const defaultProps = {
+    agentId: 'test-agent',
+    apiKey: 'test-key',
+    onMessage: () => {},
+    onNavigate: () => {}
+  };
+  
+  const mergedProps = { ...defaultProps, ...props };
+  
+  const root = ReactDOM.createRoot(container);
+  await new Promise(resolve => {
+    // Wrap AvatarWidget in AiSidebarProvider as the component requires this context
+    root.render(
+      React.createElement(AiSidebarProvider, null,
+        React.createElement(AvatarWidget, mergedProps)
+      )
+    );
+    setTimeout(resolve, 100);
+  });
+  
+  return root;
+};
+
 export const avatarTests = {
   name: 'Avatar Widget & Braid Integration',
   tests: [
@@ -18,20 +49,10 @@ export const avatarTests = {
           // Dynamically import React and the Avatar component
           const React = await import('react');
           const ReactDOM = await import('react-dom/client');
-          const { default: AvatarWidget } = await import('../ai/AvatarWidget.jsx');
 
-          const mockProps = {
+          const root = await renderAvatarWithProvider(React, ReactDOM, container, {
             agentId: 'test-agent-123',
-            apiKey: 'test-api-key',
-            onMessage: () => {},
-            onNavigate: () => {}
-          };
-
-          // Render the component
-          const root = ReactDOM.createRoot(container);
-          await new Promise(resolve => {
-            root.render(React.createElement(AvatarWidget, mockProps));
-            setTimeout(resolve, 100);
+            apiKey: 'test-api-key'
           });
 
           // Check if the avatar launcher element exists
@@ -71,18 +92,8 @@ export const avatarTests = {
         try {
           const React = await import('react');
           const ReactDOM = await import('react-dom/client');
-          const { default: AvatarWidget } = await import('../ai/AvatarWidget.jsx');
 
-          const root = ReactDOM.createRoot(container);
-          await new Promise(resolve => {
-            root.render(React.createElement(AvatarWidget, {
-              agentId: 'test-agent',
-              apiKey: 'test-key',
-              onMessage: () => {},
-              onNavigate: () => {}
-            }));
-            setTimeout(resolve, 100);
-          });
+          const root = await renderAvatarWithProvider(React, ReactDOM, container);
 
           // Trigger speaking event
           window.dispatchEvent(new CustomEvent('ai:speaking'));
@@ -116,18 +127,8 @@ export const avatarTests = {
         try {
           const React = await import('react');
           const ReactDOM = await import('react-dom/client');
-          const { default: AvatarWidget } = await import('../ai/AvatarWidget.jsx');
 
-          const root = ReactDOM.createRoot(container);
-          await new Promise(resolve => {
-            root.render(React.createElement(AvatarWidget, {
-              agentId: 'test-agent',
-              apiKey: 'test-key',
-              onMessage: () => {},
-              onNavigate: () => {}
-            }));
-            setTimeout(resolve, 100);
-          });
+          const root = await renderAvatarWithProvider(React, ReactDOM, container);
 
           // Trigger listening event
           window.dispatchEvent(new CustomEvent('ai:listening', { detail: { isListening: true } }));
@@ -254,18 +255,8 @@ export const avatarTests = {
         try {
           const React = await import('react');
           const ReactDOM = await import('react-dom/client');
-          const { default: AvatarWidget } = await import('../ai/AvatarWidget.jsx');
 
-          const root = ReactDOM.createRoot(container);
-          await new Promise(resolve => {
-            root.render(React.createElement(AvatarWidget, {
-              agentId: 'test-agent',
-              apiKey: 'test-key',
-              onMessage: () => {},
-              onNavigate: () => {}
-            }));
-            setTimeout(resolve, 100);
-          });
+          const root = await renderAvatarWithProvider(React, ReactDOM, container);
 
           // Unmount component (event listeners should be cleaned up by React's useEffect cleanup)
           root.unmount();
@@ -296,18 +287,10 @@ export const avatarTests = {
         try {
           const React = await import('react');
           const ReactDOM = await import('react-dom/client');
-          const { default: AvatarWidget } = await import('../ai/AvatarWidget.jsx');
 
-          const root = ReactDOM.createRoot(container);
-          await new Promise(resolve => {
-            root.render(React.createElement(AvatarWidget, {
-              agentId: 'test-agent',
-              apiKey: 'test-key',
-              onMessage: () => {},
-              onNavigate: () => {}
-            }));
-            setTimeout(resolve, 200);
-          });
+          // Use longer timeout for image loading
+          const root = await renderAvatarWithProvider(React, ReactDOM, container);
+          await new Promise(resolve => setTimeout(resolve, 100)); // Extra time for image
 
           const avatarElement = document.getElementById('ai-avatar-launcher');
           const imgElement = avatarElement.querySelector('img');
@@ -344,18 +327,8 @@ export const avatarTests = {
         try {
           const React = await import('react');
           const ReactDOM = await import('react-dom/client');
-          const { default: AvatarWidget } = await import('../ai/AvatarWidget.jsx');
 
-          const root = ReactDOM.createRoot(container);
-          await new Promise(resolve => {
-            root.render(React.createElement(AvatarWidget, {
-              agentId: 'test-agent',
-              apiKey: 'test-key',
-              onMessage: () => {},
-              onNavigate: () => {}
-            }));
-            setTimeout(resolve, 100);
-          });
+          const root = await renderAvatarWithProvider(React, ReactDOM, container);
 
           const avatarElement = document.getElementById('ai-avatar-launcher');
           // Select the bottom-right status dot explicitly
