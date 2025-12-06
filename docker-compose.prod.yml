@@ -15,6 +15,9 @@ services:
       timeout: 3s
       retries: 3
       start_period: 5s
+    networks:
+      - default
+      - aishanet
 
   # Redis Cache - API response caching
   redis-cache:
@@ -57,9 +60,9 @@ services:
       - REDIS_CACHE_URL=redis://redis-cache:6379
       - SYSTEM_TENANT_ID=${SYSTEM_TENANT_ID:-a11dfb63-4b18-4eb8-872e-747af2e37c46}
       - TENANT_RESOLVE_CACHE_TTL_MS=${TENANT_RESOLVE_CACHE_TTL_MS:-300000}
-      # MCP Server URL (internal Docker network)
-      - BRAID_MCP_URL=http://mcp:8000
-      - MCP_NODE_HEALTH_URL=http://mcp:8000/health
+      # MCP Server URL (braid-mcp-server on aishanet network)
+      - BRAID_MCP_URL=http://braid-mcp-server:8000
+      - MCP_NODE_HEALTH_URL=http://braid-mcp-server:8000/health
       # IDR Configuration
       - IDR_WHITELIST_IPS=${IDR_WHITELIST_IPS:-}
       - IDR_EMERGENCY_SECRET=${IDR_EMERGENCY_SECRET:-}
@@ -72,6 +75,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks:
+      - default
+      - aishanet
 
   # NOTE: MCP is now provided by braid-mcp-node-server's own docker-compose.yml
   # with braid-mcp-server (coordinator) + braid-mcp-1, braid-mcp-2 (worker nodes)
@@ -167,3 +173,7 @@ volumes:
     driver: local
   n8n_data:
     driver: local
+
+networks:
+  aishanet:
+    external: true
