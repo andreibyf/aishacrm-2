@@ -218,6 +218,9 @@ export default function UniversalDetailPanel({
         
         // Determine activity status and due date based on note type
         const isScheduledActivity = ['follow_up', 'call_log', 'meeting', 'email'].includes(newNoteType);
+        
+        // Get entity email for denormalized activity fields (entityName already calculated above)
+        const entityEmail = entity.email || null;
 
         const activityData = {
           tenant_id: effectiveTenantId,
@@ -227,6 +230,8 @@ export default function UniversalDetailPanel({
           status: isScheduledActivity ? 'scheduled' : 'completed', // Updated status logic
           related_to: relatedTo,
           related_id: entity.id,
+          related_name: entityName, // Denormalized entity name for display
+          related_email: entityEmail, // Denormalized entity email for display
           assigned_to: entity.assigned_to || user?.email, // Use entity's assigned_to or current user
           due_date: isScheduledActivity ? new Date().toISOString().split('T')[0] : null // Updated due_date logic
         };

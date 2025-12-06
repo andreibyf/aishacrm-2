@@ -655,6 +655,8 @@ export default function createActivityRoutes(_pgPool) {
         location,
         created_by,
         related_to,
+        related_name,
+        related_email,
         duration,
         duration_minutes,
         outcome,
@@ -697,6 +699,8 @@ export default function createActivityRoutes(_pgPool) {
         location: location || null,
         created_by: created_by || null,
         related_to: related_to || null,
+        related_name: related_name || null,
+        related_email: related_email || null,
         metadata: meta,
       };
 
@@ -753,6 +757,8 @@ export default function createActivityRoutes(_pgPool) {
         priority,
         location,
         related_to,
+        related_name,
+        related_email,
         duration,
         duration_minutes,
         outcome,
@@ -805,6 +811,12 @@ export default function createActivityRoutes(_pgPool) {
       }
       if (related_to !== undefined) {
         updatePayload.related_to = related_to || null;
+      }
+      if (related_name !== undefined) {
+        updatePayload.related_name = related_name || null;
+      }
+      if (related_email !== undefined) {
+        updatePayload.related_email = related_email || null;
       }
       if (status !== undefined) {
         const normalizedStatus = normalizeStatusValue(status);
