@@ -11,6 +11,7 @@ import { summarizeToolResult, BRAID_SYSTEM_PROMPT, generateToolSchemas, executeB
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 import { runTask } from '../lib/aiBrain.js';
 import createAiRealtimeRoutes from './aiRealtime.js';
+import { routeChat } from '../flows/index.js';
 
 export default function createAIRoutes(pgPool) {
   const router = express.Router();
@@ -1635,6 +1636,63 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       if (!authCheck.authorized) {
         console.warn('[AI Security] Chat blocked - unauthorized tenant access');
         return res.status(403).json({ status: 'error', message: authCheck.error });
+      }
+
+      // Goal-based routing: Check if this message is part of a multi-turn goal
+      const conversationIdForGoal = req.body?.conversation_id;
+      if (conversationIdForGoal && messages.length > 0) {
+        const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
+        if (lastUserMessage?.content) {
+          try {
+            const routeResult = await routeChat({
+              conversationId: conversationIdForGoal,
+              tenantId: tenantRecord.id,
+              userText: lastUserMessage.content,
+            });
+
+            // If the goal flow handled the message, return its response directly
+            if (routeResult.handled && routeResult.message) {
+              // Persist the goal response if needed
+              let savedMessage = null;
+              try {
+                const { data: convCheck, error: convErr } = await supa
+                  .from('conversations')
+                  .select('id')
+                  .eq('id', conversationIdForGoal)
+                  .eq('tenant_id', tenantRecord.id)
+                  .single();
+                if (!convErr && convCheck?.id) {
+                  savedMessage = await insertAssistantMessage(conversationIdForGoal, routeResult.message, {
+                    model: 'goal-flow',
+                    goal_type: routeResult.goal?.goalType || null,
+                    persisted_via: 'goal_router',
+                  });
+                }
+              } catch (persistErr) {
+                console.warn('[ai.chat] Goal response persistence failed:', persistErr?.message);
+              }
+
+              return res.json({
+                status: 'success',
+                response: routeResult.message,
+                model: 'goal-flow',
+                goal: routeResult.goal ? {
+                  id: routeResult.goal.goalId,
+                  type: routeResult.goal.goalType,
+                  status: routeResult.goal.status,
+                } : null,
+                savedMessage: savedMessage ? { id: savedMessage.id } : null,
+                data: {
+                  response: routeResult.message,
+                  goal: routeResult.goal,
+                },
+              });
+            }
+          } catch (routeErr) {
+            // Log but don't fail - fall through to normal AI chat
+            console.warn('[ai.chat] Goal routing error, falling back to AI:', routeErr?.message);
+          }
+        }
       }
 
       const apiKey = await resolveTenantOpenAiKey({

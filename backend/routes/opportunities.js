@@ -344,8 +344,8 @@ export default function createOpportunityRoutes(_pgPool) {
         .select('*', { count: 'exact' })
         .eq('tenant_id', tenant_id);
 
-      // Stage filter (ignore 'all' or 'any' as they mean no filter)
-      if (stage && stage !== 'all' && stage !== 'any' && stage !== '') {
+      // Stage filter (ignore 'all', 'any', '', 'undefined' as they mean no filter)
+      if (stage && stage !== 'all' && stage !== 'any' && stage !== '' && stage !== 'undefined') {
         q = q.eq('stage', stage.toLowerCase());
       }
 

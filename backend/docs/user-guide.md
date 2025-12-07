@@ -275,35 +275,90 @@ Aisha's AI Assistant is like having a personal data analyst available 24/7. Use 
 ### How to Access the AI Assistant
 -   Click the **AI Assistant icon** (often a robot or sparkle icon) in the application header.
 -   Use the keyboard shortcut (e.g., `Ctrl/⌘ + K`).
+-   Say "Hey Aisha" if Wake Word detection is enabled (microphone required).
 
-### What You Can Ask: The Art of the Possible
-You can ask questions, give commands, and request summaries.
+### Recognized Keywords and Phrases
 
-**1. Finding Information (Search)**
--   "Show me all contacts at Acme Corporation."
--   "Find opportunities closing this month worth more than $5,000."
--   "List my overdue tasks."
+AiSHA understands natural language and recognizes keywords associated with different CRM entities. Here's what you can say:
 
-**2. Creating Records (Commands)**
--   "Create a follow-up task for the 'Global Tech' opportunity for tomorrow."
--   "Add a note to John Smith's contact record about our lunch meeting."
--   "Schedule a call with Jane Doe for Friday at 3 PM."
+#### Leads & Prospects
+**Keywords:** lead, leads, prospect, prospects, prospecting, inbound, outbound, cold lead, warm lead, hot lead, lead source, lead score, lead status, qualified lead, unqualified, nurture, nurturing
 
-**3. Updating Records (Commands)**
--   "Change the stage of the 'Project Phoenix' opportunity to 'Negotiation'."
--   "Update Jane Doe's email to jane.doe@newemail.com."
--   "Mark my task 'Send proposal' as complete."
+**Examples:**
+- "Show me my hot leads"
+- "Create a new prospect"
+- "What leads came in this week?"
+- "How many qualified leads do we have?"
 
-**4. Analyzing Data (Summaries & Insights)**
--   "Summarize my team's activity this week."
--   "What's my total pipeline value?"
--   "How many leads did we get from the website last month?"
+#### Accounts & Companies
+**Keywords:** account, accounts, company, companies, organization, business, client, customer, vendor, partner, enterprise, SME, SMB, account manager, account owner, revenue, ARR, MRR
+
+**Examples:**
+- "List all enterprise accounts"
+- "What's the revenue for this client?"
+- "Show me partner companies"
+- "Find accounts in California"
+
+#### Contacts & People
+**Keywords:** contact, contacts, person, people, stakeholder, decision maker, buyer, champion, influencer, executive, CEO, CFO, CTO, phone number, email address, LinkedIn
+
+**Examples:**
+- "Find the decision maker at Acme Corp"
+- "Show me all CEOs in my contacts"
+- "Who's the champion for this deal?"
+- "Get John Smith's phone number"
+
+#### Opportunities & Pipeline
+**Keywords:** opportunity, opportunities, deal, deals, pipeline, stage, funnel, sales cycle, win, won, lost, close, closed, proposal, quote, negotiation, discovery, demo, POC, contract, forecast, close date, due date, deal value, probability, win rate
+
+**Stage names:** prospecting, qualification, qualified, needs analysis, value proposition, proposal sent, negotiation, closed-won, closed-lost
+
+**Examples:**
+- "What's in my pipeline?"
+- "Show deals closing this month"
+- "What's the forecast?"
+- "Move this deal to negotiation"
+- "How many proposals are pending?"
+
+#### Activities & Tasks
+**Keywords:** activity, activities, task, tasks, todo, call, calls, follow up, follow-up, meeting, meetings, appointment, calendar, schedule, email, note, reminder, due, overdue, pending, completed
+
+**Time references:** today, tomorrow, this week, next week, Monday, Tuesday, Wednesday, Thursday, Friday, morning, afternoon, 11am, 2pm, etc.
+
+**Examples:**
+- "Schedule a call for Monday at 11am"
+- "What's on my calendar today?"
+- "Add a follow-up task"
+- "Show overdue activities"
+- "Book a meeting with Jane for tomorrow afternoon"
+
+#### Dashboard & Analytics
+**Keywords:** dashboard, overview, summary, report, reports, analytics, metrics, KPI, performance, stats, statistics, chart, trend, insight
+
+**Examples:**
+- "Show me the dashboard"
+- "What are my KPIs?"
+- "Give me a summary of this week"
+- "How is my team performing?"
+
+### Actions You Can Request
+
+| Action Type | Keywords | Examples |
+|-------------|----------|----------|
+| **Create** | create, add, new, schedule, book | "Create a new lead", "Add a contact", "Schedule a meeting" |
+| **Update** | update, edit, change, modify, move | "Update the account", "Change the status", "Move to next stage" |
+| **View** | show, list, display, view, see, get | "Show me leads", "List all accounts", "View my tasks" |
+| **Search** | find, search, lookup, look up | "Find deals over $50k", "Search for John Smith" |
+| **Assign** | assign, reassign, transfer | "Assign this lead to Sarah", "Reassign the opportunity" |
+| **Convert** | convert | "Convert this lead to an account" |
+| **Delete** | delete, remove | "Delete this task" (requires confirmation) |
 
 ### Tips for Getting the Best Results
 -   **Be Specific**: "Show contacts in California" is better than "Show me my West Coast contacts."
 -   **Use Full Names**: Refer to "John Smith" instead of "John."
 -   **Speak Naturally**: You don't need to use rigid commands. "Tell me about my top deals" works just as well as "List opportunities sorted by amount descending."
 -   **Trust but Verify**: For critical actions like updating data, the AI will ask for confirmation. Always review the change before accepting.
+-   **Use Time References**: Say "tomorrow", "next Monday", or "at 3pm" for scheduling activities.
 
 <div class="page-break"></div>
 

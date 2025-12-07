@@ -37,11 +37,18 @@ export default function ChatInterface({ user }) {
     setInput('');
     setIsLoading(true);
 
-    // Add user message
-    setMessages(prev => [...prev, { role: 'user', content: userMessage, timestamp: new Date() }]);
+    // Add user message to local state
+    const newUserMessage = { role: 'user', content: userMessage, timestamp: new Date() };
+    setMessages(prev => [...prev, newUserMessage]);
 
     try {
-      const response = await processChatCommand({ message: userMessage });
+      // Build conversation history for the backend (include previous messages + new user message)
+      // Filter to only role/content for API, exclude system messages and metadata
+      const conversationHistory = [...messages, newUserMessage]
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(m => ({ role: m.role, content: m.content }));
+
+      const response = await processChatCommand({ messages: conversationHistory });
       
       if (response.status === 200) {
         const data = response.data;

@@ -307,6 +307,96 @@ const buildClarificationForReason = (
  * Determines if a parsed intent is ambiguous and needs clarification.
  * Returns a structured clarification request if so.
  */
+// CRM Entity Keywords organized by category for intent detection
+// This helps the AI understand what type of action/entity the user is referring to
+export const CRM_KEYWORD_CATEGORIES = {
+  // Lead-related terms
+  leads: [
+    'lead', 'leads', 'prospect', 'prospects', 'prospecting',
+    'inbound', 'outbound', 'cold lead', 'warm lead', 'hot lead',
+    'lead source', 'lead score', 'lead status', 'qualified lead',
+    'unqualified', 'nurture', 'nurturing'
+  ],
+  
+  // Account-related terms  
+  accounts: [
+    'account', 'accounts', 'company', 'companies', 'organization', 'organizations',
+    'business', 'businesses', 'client', 'clients', 'customer', 'customers',
+    'vendor', 'vendors', 'partner', 'partners', 'enterprise', 'sme', 'smb',
+    'account manager', 'account owner', 'revenue', 'arr', 'mrr'
+  ],
+  
+  // Contact-related terms
+  contacts: [
+    'contact', 'contacts', 'person', 'people', 'individual', 'individuals',
+    'stakeholder', 'stakeholders', 'decision maker', 'decision-maker',
+    'buyer', 'buyers', 'champion', 'influencer', 'executive', 'ceo', 'cfo', 'cto',
+    'phone number', 'email address', 'linkedin'
+  ],
+  
+  // Opportunity-related terms (pipeline, stages, deals)
+  opportunities: [
+    'opportunity', 'opportunities', 'deal', 'deals', 'pipeline', 'pipelines',
+    'stage', 'stages', 'funnel', 'sales cycle', 'win', 'won', 'lost', 'close', 'closed',
+    'proposal', 'proposals', 'quote', 'quotes', 'negotiation', 'negotiating',
+    'discovery', 'demo', 'presentation', 'poc', 'proof of concept',
+    'contract', 'contracts', 'signing', 'closed won', 'closed lost',
+    'forecast', 'forecasting', 'expected close', 'close date', 'due date',
+    'deal size', 'deal value', 'amount', 'probability', 'win rate',
+    // Stage names
+    'prospecting', 'qualification', 'qualified', 'needs analysis',
+    'value proposition', 'decision makers', 'perception analysis',
+    'proposal sent', 'negotiation review', 'closed-won', 'closed-lost'
+  ],
+  
+  // Activity-related terms (tasks, calls, meetings, calendar)
+  activities: [
+    'activity', 'activities', 'task', 'tasks', 'todo', 'to-do', 'to do',
+    'call', 'calls', 'calling', 'phone call', 'follow up', 'follow-up', 'followup',
+    'meeting', 'meetings', 'appointment', 'appointments', 'calendar', 'schedule', 'scheduled',
+    'scheduling', 'reschedule', 'rescheduling', 'book', 'booked', 'booking',
+    'email', 'emails', 'emailing', 'send email', 'sent email',
+    'note', 'notes', 'log', 'logged', 'logging', 'record', 'recorded',
+    'reminder', 'reminders', 'due', 'overdue', 'pending', 'completed', 'done',
+    'today', 'tomorrow', 'this week', 'next week', 'monday', 'tuesday', 'wednesday',
+    'thursday', 'friday', 'morning', 'afternoon', 'evening',
+    '11am', '11 am', '10am', '10 am', '9am', '9 am', '2pm', '2 pm', '3pm', '3 pm'
+  ],
+  
+  // Dashboard/Analytics terms
+  dashboard: [
+    'dashboard', 'overview', 'summary', 'report', 'reports', 'reporting',
+    'analytics', 'metrics', 'kpi', 'kpis', 'performance', 'stats', 'statistics',
+    'chart', 'charts', 'graph', 'graphs', 'trend', 'trends', 'insight', 'insights'
+  ],
+  
+  // General CRM action terms (helps identify intent even without specific entity)
+  actions: [
+    'create', 'creating', 'add', 'adding', 'new',
+    'update', 'updating', 'edit', 'editing', 'modify', 'change', 'changing',
+    'delete', 'deleting', 'remove', 'removing',
+    'list', 'show', 'display', 'view', 'see', 'find', 'search', 'lookup', 'look up',
+    'export', 'import', 'download', 'upload',
+    'assign', 'assigning', 'reassign', 'transfer',
+    'convert', 'converting', 'merge', 'merging'
+  ]
+} as const;
+
+// Flatten all keywords for quick CRM-entity detection
+const ALL_CRM_KEYWORDS = Object.values(CRM_KEYWORD_CATEGORIES).flat();
+
+// Helper to detect which category a message relates to
+export const detectCrmCategory = (text: string): string | null => {
+  const lowerText = text.toLowerCase();
+  for (const [category, keywords] of Object.entries(CRM_KEYWORD_CATEGORIES)) {
+    if (category === 'actions') continue; // Skip actions, they're modifiers not entities
+    if (keywords.some(keyword => lowerText.includes(keyword))) {
+      return category;
+    }
+  }
+  return null;
+};
+
 export const resolveAmbiguity = (
   parsed: ParsedIntent | null,
   rawText: string,
@@ -314,6 +404,19 @@ export const resolveAmbiguity = (
 ): AmbiguityResolution => {
   const text = (rawText || '').trim();
   const origin = options?.origin || 'text';
+  const lowerText = text.toLowerCase();
+
+  // If the message mentions CRM entities or actions, let the AI handle it
+  // This allows natural language queries like "schedule a call for Monday" to pass through
+  const mentionsCrmEntity = ALL_CRM_KEYWORDS.some(keyword => lowerText.includes(keyword));
+  
+  if (mentionsCrmEntity && text.length >= 8) {
+    // Let the backend AI handle CRM-related queries
+    return {
+      isAmbiguous: false,
+      clarification: null
+    };
+  }
 
   // Empty input
   if (!text) {

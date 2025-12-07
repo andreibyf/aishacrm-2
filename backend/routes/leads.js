@@ -406,7 +406,7 @@ export default function createLeadRoutes(_pgPool) {
         }
       }
 
-      if (status && status !== 'all' && status !== 'any' && status !== '') {
+      if (status && status !== 'all' && status !== 'any' && status !== '' && status !== 'undefined') {
         let parsedStatus = status;
         if (typeof status === 'string' && status.startsWith('{')) {
           try {

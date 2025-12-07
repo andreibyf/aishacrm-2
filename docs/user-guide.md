@@ -51,6 +51,44 @@ Your personal AI assistant that can:
 - Provide insights and recommendations
 - Access via chat interface or WhatsApp integration
 
+#### Talking to AiSHA - Recognized Keywords and Phrases
+
+AiSHA understands natural language and recognizes keywords associated with different CRM entities. Here's what you can say:
+
+**Leads & Prospects**
+- Keywords: lead, leads, prospect, prospects, prospecting, inbound, outbound, cold lead, warm lead, hot lead, lead source, lead score, lead status, qualified lead, unqualified, nurture, nurturing
+- Examples: "Show me my hot leads", "Create a new prospect", "What leads came in this week?"
+
+**Accounts & Companies**
+- Keywords: account, accounts, company, companies, organization, business, client, customer, vendor, partner, enterprise, SME, SMB, account manager, account owner, revenue, ARR, MRR
+- Examples: "List all enterprise accounts", "What's the revenue for this client?", "Show me partner companies"
+
+**Contacts & People**
+- Keywords: contact, contacts, person, people, stakeholder, decision maker, buyer, champion, influencer, executive, CEO, CFO, CTO, phone number, email address, LinkedIn
+- Examples: "Find the decision maker at Acme Corp", "Show me all CEOs in my contacts", "Who's the champion for this deal?"
+
+**Opportunities & Pipeline**
+- Keywords: opportunity, opportunities, deal, deals, pipeline, stage, funnel, sales cycle, win, won, lost, close, closed, proposal, quote, negotiation, discovery, demo, POC, contract, forecast, close date, due date, deal value, probability, win rate
+- Stage names: prospecting, qualification, qualified, needs analysis, value proposition, proposal sent, negotiation, closed-won, closed-lost
+- Examples: "What's in my pipeline?", "Show deals closing this month", "What's the forecast?", "Move this deal to negotiation"
+
+**Activities & Tasks**
+- Keywords: activity, activities, task, tasks, todo, call, calls, follow up, follow-up, meeting, meetings, appointment, calendar, schedule, email, note, reminder, due, overdue, pending, completed
+- Time references: today, tomorrow, this week, next week, Monday, Tuesday, Wednesday, Thursday, Friday, morning, afternoon, 11am, 2pm, etc.
+- Examples: "Schedule a call for Monday at 11am", "What's on my calendar today?", "Add a follow-up task", "Show overdue activities"
+
+**Dashboard & Analytics**
+- Keywords: dashboard, overview, summary, report, reports, analytics, metrics, KPI, performance, stats, statistics, chart, trend, insight
+- Examples: "Show me the dashboard", "What are my KPIs?", "Give me a summary of this week"
+
+**Actions You Can Request**
+- Create/Add: "Create a new lead", "Add a contact", "Schedule a meeting"
+- Update/Edit: "Update the account", "Change the status", "Modify the close date"
+- View/Show: "Show me leads", "List all accounts", "Find contacts at Google"
+- Search: "Search for deals over $50k", "Look up John Smith", "Find overdue tasks"
+- Assign: "Assign this lead to Sarah", "Reassign the opportunity"
+- Convert: "Convert this lead to an account"
+
 ### AI Telephony
 Automated call tracking and management:
 - Automatic call logging and notes

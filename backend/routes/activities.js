@@ -338,8 +338,8 @@ export default function createActivityRoutes(_pgPool) {
       
       let query = supabase.from('activities').select('*').eq('tenant_id', tenant_id);
       
-      // Simple column filters via Supabase (ignore 'all' or 'any' as they mean no filter)
-      if (req.query.status && req.query.status !== 'all' && req.query.status !== 'any' && req.query.status !== '') {
+      // Simple column filters via Supabase (ignore 'all', 'any', '', 'undefined' as they mean no filter)
+      if (req.query.status && req.query.status !== 'all' && req.query.status !== 'any' && req.query.status !== '' && req.query.status !== 'undefined') {
         query = query.eq('status', req.query.status);
       }
       if (req.query.type) query = query.eq('type', req.query.type);
