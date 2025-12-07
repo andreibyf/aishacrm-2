@@ -1,5 +1,5 @@
 import { isLocalDevMode } from './mockData';
-import { getBackendUrl } from '@/utils/getBackendUrl';
+import { getBackendUrl } from '@/api/backendUrl';
 
 // Optional direct MCP server URL (useful for connecting your own MCP instance)
 const MCP_SERVER_URL = import.meta.env.VITE_MCP_SERVER_URL || null;

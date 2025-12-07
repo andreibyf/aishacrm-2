@@ -23,9 +23,10 @@ import {
   Globe,
   Ban
 } from "lucide-react";
+import { getBackendUrl } from "@/api/backendUrl";
 
 export default function SecurityMonitor() {
-  const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || "http://localhost:4001";
+  const BACKEND_URL = getBackendUrl();
 
   const [alerts, setAlerts] = useState([]);
   const [statistics, setStatistics] = useState(null);

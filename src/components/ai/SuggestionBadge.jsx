@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
+import { getBackendUrl } from "@/api/backendUrl";
 
 // Trigger icons for compact display
 const TRIGGER_ICONS = {
@@ -85,7 +86,7 @@ export default function SuggestionBadge({ tenantId, onViewAll }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
-  const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || '';
+  const backendUrl = getBackendUrl();
 
   /**
    * Fetch pending suggestions

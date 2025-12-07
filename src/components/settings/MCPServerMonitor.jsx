@@ -31,9 +31,10 @@ import {
 import { mcpServerPublic as _mcpServerPublic } from "@/api/functions";
 import { createHealthIssue, generateMCPFixSuggestion } from "@/utils/githubIssueCreator";
 import { toast } from "sonner";
+import { getBackendUrl } from "@/api/backendUrl";
 
 export default function MCPServerMonitor() {
-  const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || "http://localhost:4001";
+  const BACKEND_URL = getBackendUrl();
   // Backend proxy health endpoint - only reliable method from browser in Docker environments
   const MCP_PROXY_URL = `${BACKEND_URL}/api/mcp/health-proxy`;
   const resolveTenantId = () => {

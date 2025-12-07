@@ -1,7 +1,9 @@
 // Avatar Widget Tests with Braid Integration
 // Tests the AvatarWidget component functionality, state management, and Braid MCP integration
 
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+import { getBackendUrl } from '@/api/backendUrl';
+
+const BACKEND_URL = getBackendUrl();
 
 /**
  * Helper to render AvatarWidget wrapped in required context provider.

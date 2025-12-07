@@ -23,9 +23,10 @@ import { format } from 'date-fns';
 import { updateEmployeeSecure } from "@/api/functions";
 import { canDeleteUser } from "@/utils/permissions";
 import { useUser } from '@/components/shared/useUser.js';
+import { getBackendUrl } from "@/api/backendUrl";
 
 // Backend API URL
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = getBackendUrl();
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {

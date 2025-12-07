@@ -29,10 +29,11 @@ import {
   Zap,
 } from "lucide-react";
 import { mcpServerPublic as _mcpServerPublic } from "@/api/functions";
+import { getBackendUrl } from "@/api/backendUrl";
 
 export default function MCPServerMonitor() {
   const BRAID_MCP_URL = "http://localhost:8000";
-  const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || "http://localhost:4001";
+  const BACKEND_URL = getBackendUrl();
 
   // State management
   const [isTesting, setIsTesting] = useState(false);

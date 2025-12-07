@@ -44,6 +44,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { toast } from "sonner";
+import { getBackendUrl } from "@/api/backendUrl";
 
 // Trigger type icons and labels
 const TRIGGER_CONFIG = {
@@ -284,7 +285,7 @@ export default function SuggestionQueue({ tenantId }) {
   const [filter, setFilter] = useState('all');
   const [error, setError] = useState(null);
 
-  const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || '';
+  const backendUrl = getBackendUrl();
 
   /**
    * Fetch suggestions from backend

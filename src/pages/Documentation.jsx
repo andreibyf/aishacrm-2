@@ -29,6 +29,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import UserContext from "@/components/shared/UserContext";
 import { useContext } from "react";
+import { getBackendUrl } from "@/api/backendUrl";
 
 export default function DocumentationPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -40,7 +41,7 @@ export default function DocumentationPage() {
   
   const handleDownloadPDF = async () => {
     // Prefer backend-generated PDF from our markdown-based User Guide
-    const backendUrl = (import.meta.env.VITE_AISHACRM_BACKEND_URL || '').replace(/\/$/, '');
+    const backendUrl = getBackendUrl().replace(/\/$/, '');
     const candidates = [
       backendUrl ? `${backendUrl}/api/documentation/user-guide.pdf` : null,
       // Local static fallbacks if present

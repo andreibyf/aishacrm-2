@@ -2,6 +2,8 @@
 // Provides exponential backoff with jitter and a short cooling period after repeated 429s.
 // Safe to import early (before app render). Keeps original fetch at window.__originalFetch.
 
+import { getBackendUrl } from '@/api/backendUrl';
+
 /*
 Contract:
 initRateLimitBackoff(options?) -> installs global fetch wrapper.
@@ -28,7 +30,7 @@ function computeDelay(count) {
 }
 
 async function fetchWithBackoff(input, init) {
-  const BACKEND_URL = (import.meta?.env?.VITE_AISHACRM_BACKEND_URL) || 'http://localhost:4001';
+  const BACKEND_URL = getBackendUrl();
 
   const urlString = typeof input === 'string' ? input : (input && input.url) || '';
   let key = 'unknown';

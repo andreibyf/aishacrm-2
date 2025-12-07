@@ -33,6 +33,7 @@ import ForecastingDashboard from "../components/reports/ForecastingDashboard";
 import AIMarketInsights from "../components/reports/AIMarketInsights";
 import DataQualityReport from "../components/reports/DataQualityReport";
 import { exportReportToCSV } from "@/api/functions";
+import { getBackendUrl } from "@/api/backendUrl";
 
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -214,7 +215,7 @@ export default function ReportsPage() {
     setIsExporting(true);
     try {
       if (format === 'pdf') {
-        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+        const BACKEND_URL = getBackendUrl();
         
         // Special handling for AI Insights - use POST with insights data
         if (activeTab === 'insights') {

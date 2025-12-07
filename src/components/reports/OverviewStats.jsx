@@ -23,10 +23,11 @@ import {
 } from "recharts";
 import { Account, Lead, Opportunity } from "@/api/entities";
 import TrendIndicator from "./TrendIndicator";
+import { getBackendUrl } from "@/api/backendUrl";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 
-const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+const BACKEND_URL = getBackendUrl();
 
 export default function OverviewStats({ tenantFilter }) {
   const [stats, setStats] = useState({
