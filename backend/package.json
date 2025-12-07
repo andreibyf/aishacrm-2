@@ -9,6 +9,7 @@
     "dev": "node dev-server.js",
     "dev:unlimited": "node --watch server.js",
     "test": "node --test --test-reporter tap __tests__/**/*.test.js",
+    "test:safe": "bash scripts/run-tests-safe.sh",
     "test:routes": "node --test --test-reporter tap __tests__/routes/*.test.js",
     "test:auth": "node --test --test-reporter tap __tests__/auth/*.test.js",
     "test:system": "node --test --test-reporter tap __tests__/system/*.test.js",

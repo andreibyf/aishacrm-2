@@ -25,6 +25,8 @@ export default [
       'logseq/bak/**',
       'playwright-report/**',
       'test-results/**',
+      'playwright/.cache/**',
+      'orchestra/**',
     ],
   },
   {

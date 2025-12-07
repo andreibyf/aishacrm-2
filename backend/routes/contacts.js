@@ -451,7 +451,7 @@ export default function createContactRoutes(_pgPool) {
 
       const contact = expandMetadata(data);
 
-      res.json({
+      res.status(201).json({
         status: 'success',
         message: 'Contact created',
         data: { contact },

@@ -7,6 +7,7 @@
 
 export { pickModel } from "./modelRouter.js";
 export { resolveLLMApiKey } from "./keyResolver.js";
+export { generateChatCompletion } from "./llmClient.js";
 export {
   getTenantIdFromRequest,
   resolveTenantRecord,

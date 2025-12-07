@@ -24,11 +24,11 @@ const DEFAULT_PREFS_TTL = 3600; // 1 hour
 /**
  * Initialize Redis client
  */
-export async function initMemoryClient(redisUrl = process.env.REDIS_URL) {
+export async function initMemoryClient(redisUrl = process.env.REDIS_MEMORY_URL || process.env.REDIS_URL) {
   if (redisClient) return redisClient;
   
   if (!redisUrl) {
-    console.warn('[MemoryClient] REDIS_URL not set, memory features disabled');
+    console.warn('[MemoryClient] REDIS_MEMORY_URL not set, memory features disabled');
     return null;
   }
 

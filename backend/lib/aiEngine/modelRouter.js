@@ -1,6 +1,9 @@
 /**
  * Central LLM model selection logic.
- * Each "capability" maps to a model tier.
+ * Each “capability” maps to a model tier.
+ *
+ * This is model-name focused. Provider selection is handled separately
+ * (e.g. OpenAI, Groq, local OpenAI-compatible server).
  */
 
 export function pickModel({ capability, override } = {}) {

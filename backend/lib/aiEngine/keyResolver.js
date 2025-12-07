@@ -1,9 +1,10 @@
 /**
- * Unified LLM API key resolver for OpenAI (future-proofed for Anthropic/local models).
+ * Unified LLM API key resolver for OpenAI-style providers.
+ * Future-proofed for other providers but currently focused on OpenAI keys.
  */
 
 import { getSupabaseClient } from "../supabase-db.js";
-const supa = getSupabaseClient();
+// Note: Do NOT call getSupabaseClient() at module load time - defer to function call
 
 export async function resolveLLMApiKey({
   explicitKey,
@@ -12,6 +13,9 @@ export async function resolveLLMApiKey({
   tenantSlugOrId,
   provider = "openai",
 } = {}) {
+  // Get Supabase client at call time (after server initialization)
+  const supa = getSupabaseClient();
+
   // Highest precedence: explicit overrides
   if (explicitKey) return explicitKey;
   if (headerKey) return headerKey;
@@ -94,9 +98,17 @@ export async function resolveLLMApiKey({
     console.warn("[AIEngine][KeyResolver] user system_openai_settings lookup failed:", e?.message || e);
   }
 
-  // Environment fallback
+  // Environment fallback (per-provider)
   if (provider === "openai" && process.env.OPENAI_API_KEY) {
     return process.env.OPENAI_API_KEY;
+  }
+
+  if (provider === "groq" && process.env.GROQ_API_KEY) {
+    return process.env.GROQ_API_KEY;
+  }
+
+  if (provider === "local" && process.env.LOCAL_LLM_API_KEY) {
+    return process.env.LOCAL_LLM_API_KEY;
   }
 
   return null;

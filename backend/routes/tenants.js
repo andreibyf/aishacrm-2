@@ -321,7 +321,7 @@ export default function createTenantRoutes(_pgPool) {
         );
       }
 
-      res.json({
+      res.status(201).json({
         status: "success",
         message: "Tenant created",
         data: created,

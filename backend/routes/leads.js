@@ -548,7 +548,7 @@ export default function createLeadRoutes(_pgPool) {
       const lead = expandMetadata(data);
 
       console.log('[Leads POST] Successfully created lead:', lead.id);
-      res.json({
+      res.status(201).json({
         status: 'success',
         message: 'Lead created',
         data: { lead },

@@ -370,7 +370,7 @@ export default function createAccountRoutes(_pgPool) {
         .single();
       if (error) throw new Error(error.message);
 
-      res.json({
+      res.status(201).json({
         status: "success",
         message: "Account created",
         data: normalizeAccount(data),

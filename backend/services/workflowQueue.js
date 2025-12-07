@@ -1,6 +1,6 @@
 import Bull from 'bull';
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://redis-cache:6379';
+const REDIS_URL = process.env.REDIS_MEMORY_URL || process.env.REDIS_URL || 'redis://redis-memory:6379';
 
 console.log('[WorkflowQueue] Initializing workflow execution queue with Redis:', REDIS_URL);
 

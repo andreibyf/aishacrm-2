@@ -371,7 +371,7 @@ export default function createEmployeeRoutes(_pgPool) {
 
       const employee = expandMetadata(data);
 
-      res.json({
+      res.status(201).json({
         status: 'success',
         message: 'Employee created',
         data: { employee },

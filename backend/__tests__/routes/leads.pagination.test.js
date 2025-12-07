@@ -31,7 +31,7 @@ before(async () => {
   // Ensure at least 3 leads for pagination checks
   for (let i = 0; i < 3; i++) {
     const r = await createLead({});
-    assert.equal(r.status, 200, `create lead failed: ${JSON.stringify(r.json)}`);
+    assert.equal(r.status, 201, `create lead failed: ${JSON.stringify(r.json)}`);
     const id = r.json?.data?.id || r.json?.data?.lead?.id || r.json?.data?.id;
     if (id) createdIds.push(id);
   }

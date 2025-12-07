@@ -6,8 +6,7 @@
 import express from "express";
 import fetch from "node-fetch";
 import { getSupabaseClient } from "../lib/supabase-db.js";
-import { createChatCompletion } from "../lib/aiProvider.js";
-import { resolveLLMApiKey } from "../lib/aiEngine/index.js";
+import { resolveLLMApiKey, pickModel, generateChatCompletion } from "../lib/aiEngine/index.js";
 
 export default function createMCPRoutes(_pgPool) {
   const router = express.Router();
@@ -891,16 +890,26 @@ export default function createMCPRoutes(_pgPool) {
           prompt = "",
           schema = {},
           context = null,
-          model = process.env.DEFAULT_OPENAI_MODEL || "gpt-4o-mini",
+          model,
           temperature = 0.2,
           api_key,
           tenant_id: tenantIdParam,
+          provider: providerParam,
         } = parameters || {};
 
-        // Resolve key using centralized aiEngine key resolver
-        const apiKey = await resolveLLMApiKey({ explicitKey: api_key, tenantSlugOrId: tenantIdParam });
+        // Multi-provider support: resolve provider from param or env
+        const provider = providerParam || process.env.LLM_JSON_PROVIDER || process.env.LLM_PROVIDER || "openai";
+        const defaultJsonModel = pickModel({ capability: "json_strict" });
+        const finalModel = model || defaultJsonModel;
+
+        // Resolve key using centralized aiEngine key resolver with provider awareness
+        const apiKey = await resolveLLMApiKey({
+          explicitKey: api_key,
+          tenantSlugOrId: tenantIdParam,
+          provider,
+        });
         if (!apiKey) {
-          return res.status(501).json({ status: "error", message: "OpenAI API key not configured" });
+          return res.status(501).json({ status: "error", message: `API key not configured for provider: ${provider}` });
         }
 
         const SYSTEM_INSTRUCTIONS = `You are a strict JSON generator. Produce ONLY valid JSON that exactly matches the provided JSON Schema.\n- Do not include any commentary or code fences.\n- If you are unsure, return the closest valid JSON.\n`;
@@ -921,9 +930,16 @@ export default function createMCPRoutes(_pgPool) {
           { role: "user", content: userContentParts.join("\n\n") || "Generate JSON." },
         ];
 
-        const result = await createChatCompletion({ messages, model, temperature, apiKey });
+        const result = await generateChatCompletion({
+          provider,
+          model: finalModel,
+          messages,
+          temperature,
+          apiKey,
+        });
+
         if (result.status === "error") {
-          const http = /OPENAI_API_KEY|not configured/i.test(result.error || '') ? 501 : 500;
+          const http = /api key|not configured/i.test(result.error || '') ? 501 : 500;
           return res.status(http).json({ status: "error", message: result.error });
         }
         let jsonOut = null;
@@ -936,7 +952,16 @@ export default function createMCPRoutes(_pgPool) {
             try { jsonOut = JSON.parse(match[0]); } catch { jsonOut = null; }
           }
         }
-        return res.json({ status: "success", data: { json: jsonOut, raw: result.content, model: result.model, usage: result.usage } });
+        return res.json({
+          status: "success",
+          data: {
+            json: jsonOut,
+            raw: result.content,
+            model: result.raw?.model || finalModel,
+            provider,
+            usage: result.raw?.usage || null,
+          },
+        });
       }
 
       // Default stub
@@ -1145,8 +1170,15 @@ export default function createMCPRoutes(_pgPool) {
         `News: ${(searchResults || []).map(r => `${r.title}: ${r.snippet || ''}`).join(" | ").slice(0, 1500)}`,
       ];
 
-      // Generate JSON via LLM MCP tool using centralized key resolver
-      const apiKey = await resolveLLMApiKey({ explicitKey: body.api_key || null, tenantSlugOrId: tenantId });
+      // Multi-provider support: resolve provider from body or env
+      const provider = body.provider || process.env.MARKET_INSIGHTS_LLM_PROVIDER || process.env.LLM_PROVIDER || "openai";
+
+      // Generate JSON via LLM MCP tool using centralized key resolver with provider
+      const apiKey = await resolveLLMApiKey({
+        explicitKey: body.api_key || null,
+        tenantSlugOrId: tenantId,
+        provider,
+      });
       if (!apiKey) {
         // Fallback: return a baseline insights object without LLM
         const strip = (s) => String(s || '').replace(/<[^>]+>/g, '').trim();
@@ -1211,19 +1243,29 @@ export default function createMCPRoutes(_pgPool) {
             { name: 'Industry Index', current_value: 108, trend: 'up', unit: 'index' },
           ],
         };
-        return res.json({ status: 'success', data: { insights: baseline, model: null, usage: null, fallback: true } });
+        return res.json({ status: 'success', data: { insights: baseline, model: null, provider: null, usage: null, fallback: true } });
       }
 
+      // API key was resolved successfully - proceed with LLM call
       const SYSTEM = `You are a strict JSON generator. Output ONLY JSON matching the schema. No commentary.`;
       const messages = [
         { role: "system", content: SYSTEM },
         { role: "user", content: `${prompt}\n\nSchema:\n${JSON.stringify(schema)}\n\nContext:\n${context.join("\n")}` },
       ];
-      const model = body.model || process.env.DEFAULT_OPENAI_MODEL || "gpt-4o-mini";
+      const defaultInsightsModel = pickModel({ capability: "brain_read_only" });
+      const model = body.model || defaultInsightsModel;
       const temperature = typeof body.temperature === "number" ? body.temperature : 0.2;
-      const result = await createChatCompletion({ messages, model, temperature, apiKey });
+
+      const result = await generateChatCompletion({
+        provider,
+        model,
+        messages,
+        temperature,
+        apiKey,
+      });
+
       if (result.status === "error") {
-        const http = /OPENAI_API_KEY|not configured/i.test(result.error || '') ? 501 : 500;
+        const http = /api key|not configured/i.test(result.error || '') ? 501 : 500;
         return res.status(http).json({ status: "error", message: result.error });
       }
       let insights = null;
@@ -1240,7 +1282,15 @@ export default function createMCPRoutes(_pgPool) {
         };
       }
 
-      return res.json({ status: "success", data: { insights, model: result.model, usage: result.usage } });
+      return res.json({
+        status: "success",
+        data: {
+          insights,
+          model: result.raw?.model || model,
+          provider,
+          usage: result.raw?.usage || null,
+        },
+      });
     } catch (error) {
       res.status(500).json({ status: "error", message: error.message });
     }

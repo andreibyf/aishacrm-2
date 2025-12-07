@@ -27,11 +27,11 @@ before(async () => {
   if (!SHOULD_RUN) return;
   // Seed two leads with different statuses
   const a = await createLead({ first_name: 'Unit', last_name: 'TestA', email: `a_${Date.now()}@test.com`, company: 'UT', status: 'new' });
-  assert.equal(a.status, 200, `create lead A failed: ${JSON.stringify(a.json)}`);
+  assert.equal(a.status, 201, `create lead A failed: ${JSON.stringify(a.json)}`);
   createdIds.push(a.json?.data?.id || a.json?.data?.lead?.id || a.json?.data?.id);
 
   const b = await createLead({ first_name: 'Unit', last_name: 'TestB', email: `b_${Date.now()}@test.com`, company: 'UT', status: 'lost' });
-  assert.equal(b.status, 200, `create lead B failed: ${JSON.stringify(b.json)}`);
+  assert.equal(b.status, 201, `create lead B failed: ${JSON.stringify(b.json)}`);
   createdIds.push(b.json?.data?.id || b.json?.data?.lead?.id || b.json?.data?.id);
 });
 

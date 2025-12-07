@@ -38,7 +38,7 @@ async function initRedisClient() {
 
   try {
     // Ensure Redis/Valkey client is initialized before retrieving instance
-    await initMemoryClient(process.env.REDIS_URL);
+    await initMemoryClient(process.env.REDIS_MEMORY_URL || process.env.REDIS_URL);
     redisClient = getMemoryClient();
     
     if (redisClient) {

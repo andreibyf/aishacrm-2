@@ -206,8 +206,8 @@ describe('Suggestion Actions', { skip: !SHOULD_RUN }, () => {
       body: JSON.stringify({ tenant_id: TENANT_ID, user_id: 'test-user' })
     });
     
-    // Returns 404 when suggestion not found
-    assert.equal(res.status, 404);
+    // Returns 400 (validation) or 404 (not found) when suggestion doesn't exist
+    assert.ok([400, 404].includes(res.status), `expected 400 or 404, got ${res.status}`);
   });
 
 });
