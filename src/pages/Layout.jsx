@@ -2243,7 +2243,8 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 console.log("[Login] Supabase auth successful, calling backend login...");
                 
                 // Call backend /api/auth/login to get JWT cookies
-                const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || '';
+                // Use runtime env (window._env_) with fallback to build-time env
+                const backendUrl = window._env_?.VITE_AISHACRM_BACKEND_URL || import.meta.env.VITE_AISHACRM_BACKEND_URL || '';
                 const loginResponse = await fetch(`${backendUrl}/api/auth/login`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },

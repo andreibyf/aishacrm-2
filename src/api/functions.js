@@ -1,4 +1,5 @@
 import { isLocalDevMode } from './mockData';
+import { getBackendUrl } from '@/utils/getBackendUrl';
 
 // Optional direct MCP server URL (useful for connecting your own MCP instance)
 const MCP_SERVER_URL = import.meta.env.VITE_MCP_SERVER_URL || null;
@@ -45,7 +46,7 @@ const createFunctionProxy = (functionName) => {
     // Unified handler for chat: always call backend /api/ai/chat so ChatInterface works
     if (functionName === 'processChatCommand') {
       try {
-        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+        const BACKEND_URL = getBackendUrl();
         const opts = args[0] || {};
         // Unified tenant ID resolution: explicit opts.tenantId > selected_tenant_id (new) > tenant_id (legacy) > ''
         let tenantId = opts.tenantId || '';
@@ -97,7 +98,7 @@ const createFunctionProxy = (functionName) => {
             // ========================================
             if (functionName === 'getDashboardStats') {
               try {
-                const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+                const BACKEND_URL = getBackendUrl();
                 const opts = args[0] || {};
                 const params = new URLSearchParams();
                 if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
@@ -116,7 +117,7 @@ const createFunctionProxy = (functionName) => {
 
             if (functionName === 'getDashboardBundle') {
               try {
-                const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+                const BACKEND_URL = getBackendUrl();
                 const opts = args[0] || {};
                 const params = new URLSearchParams();
                 if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
@@ -139,7 +140,7 @@ const createFunctionProxy = (functionName) => {
 
       if (functionName === 'executeWorkflow') {
         try {
-          const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+          const BACKEND_URL = getBackendUrl();
           const { workflow_id, payload, input_data } = args[0] || {};
           const body = { workflow_id, payload: payload ?? input_data };
           const response = await fetch(`${BACKEND_URL}/api/workflows/execute`, {
@@ -279,7 +280,7 @@ const createFunctionProxy = (functionName) => {
 
       if (functionName === 'testSuites') {
         try {
-          const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+          const BACKEND_URL = getBackendUrl();
           const response = await fetch(`${BACKEND_URL}/api/testing/suites`);
           if (response.ok) {
             const result = await response.json();
@@ -352,7 +353,7 @@ const createFunctionProxy = (functionName) => {
       
       if (functionName === 'listPerformanceLogs') {
         try {
-          const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+          const BACKEND_URL = getBackendUrl();
           const params = new URLSearchParams();
           
           if (args[0]?.tenant_id) params.append('tenant_id', args[0].tenant_id);
@@ -656,7 +657,7 @@ const createFunctionProxy = (functionName) => {
       
       if (functionName === 'validateAndImport') {
         try {
-          const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+          const BACKEND_URL = getBackendUrl();
           const payload = args[0] || {};
           const response = await fetch(`${BACKEND_URL}/api/validation/validate-and-import`, {
             method: 'POST',
@@ -688,7 +689,7 @@ const createFunctionProxy = (functionName) => {
         return { data: { success: false, error: 'OpenAI API key is required for connectivity test.' } };
       }
 
-      const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+      const BACKEND_URL = getBackendUrl();
       const headers = { 'Content-Type': 'application/json' };
       const tenantHeader = payload.tenantId || payload.tenant_id;
       if (tenantHeader) headers['x-tenant-id'] = tenantHeader;
@@ -738,7 +739,7 @@ const createFunctionProxy = (functionName) => {
 
     if (functionName === 'getDashboardStats') {
       try {
-        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+        const BACKEND_URL = getBackendUrl();
         const opts = args[0] || {};
         const params = new URLSearchParams();
         if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
@@ -759,7 +760,7 @@ const createFunctionProxy = (functionName) => {
 
     if (functionName === 'getDashboardBundle') {
       try {
-        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+        const BACKEND_URL = getBackendUrl();
         const opts = args[0] || {};
         const params = new URLSearchParams();
         if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
@@ -781,7 +782,7 @@ const createFunctionProxy = (functionName) => {
 
     if (functionName === 'cleanupOrphanedData') {
       try {
-        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+        const BACKEND_URL = getBackendUrl();
         const response = await fetch(`${BACKEND_URL}/api/system/cleanup-orphans`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -800,7 +801,7 @@ const createFunctionProxy = (functionName) => {
     if (functionName === 'validateAndImport') {
       console.log('[validateAndImport] Non-local mode handler called');
       try {
-        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+        const BACKEND_URL = getBackendUrl();
         const payload = args[0] || {};
         console.log('[validateAndImport] Calling', `${BACKEND_URL}/api/validation/validate-and-import`, 'with payload:', payload);
         const response = await fetch(`${BACKEND_URL}/api/validation/validate-and-import`, {
@@ -824,7 +825,7 @@ const createFunctionProxy = (functionName) => {
     // generateUniqueId: always call backend route
     if (functionName === 'generateUniqueId') {
       try {
-        const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
+        const BACKEND_URL = getBackendUrl();
         const payload = args[0] || {};
         const response = await fetch(`${BACKEND_URL}/api/utils/generate-unique-id`, {
           method: 'POST',
