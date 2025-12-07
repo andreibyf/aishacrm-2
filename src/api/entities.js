@@ -2,6 +2,7 @@
 import { createMockUser, isLocalDevMode } from "./mockData";
 import { apiHealthMonitor } from "../utils/apiHealthMonitor";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
+import { logDev } from "../utils/devLogger";
 
 // Re-export for use by other components
 export { supabase, isSupabaseConfigured };
@@ -13,7 +14,7 @@ export const getBuildVersion = () => {
 };
 // Initialize with runtime value
 export const ENTITIES_BUILD_VERSION = getBuildVersion();
-console.log('[Entities] Build version:', ENTITIES_BUILD_VERSION);
+logDev('[Entities] Build version:', ENTITIES_BUILD_VERSION);
 
 // Backend base URL: in dev, use relative path and Vite proxy to avoid CORS
 // In production, normalize to HTTPS when the app is served over HTTPS to avoid mixed-content blocks
@@ -146,7 +147,7 @@ const makeDevFallback = (entityName, method, data, id) => {
 const callBackendAPI = async (entityName, method, data = null, id = null) => {
   // ENTRY POINT DEBUG - log exactly what we receive
   if (method === 'POST') {
-    console.log('[callBackendAPI ENTRY]', {
+    logDev('[callBackendAPI ENTRY]', {
       entityName,
       method,
       dataReceived: data,
@@ -268,7 +269,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   try {
     // Prefer explicit Supabase session token
     const supabaseConfigured = isSupabaseConfigured();
-    console.log("[callBackendAPI] Auth check", { 
+    logDev("[callBackendAPI] Auth check", { 
       entityName, 
       supabaseConfigured,
       url: url.substring(0, 80)
@@ -277,7 +278,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     if (supabaseConfigured) {
       const { data: { session } } = await supabase.auth.getSession();
       const accessToken = session?.access_token;
-      console.log("[callBackendAPI] Supabase session", { 
+      logDev("[callBackendAPI] Supabase session", { 
         hasSession: !!session, 
         hasToken: !!accessToken,
         tokenPreview: accessToken ? accessToken.substring(0, 20) + '...' : null
@@ -289,13 +290,13 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     // Fallback: token persisted in localStorage (RateLimitManager pattern)
     if (!options.headers.Authorization && typeof window !== 'undefined') {
       const stored = localStorage.getItem('sb-access-token');
-      console.log("[callBackendAPI] Fallback localStorage token", { hasStored: !!stored });
+      logDev("[callBackendAPI] Fallback localStorage token", { hasStored: !!stored });
       if (stored) {
         options.headers.Authorization = `Bearer ${stored}`;
       }
     }
     
-    console.log("[callBackendAPI] Final auth header", { 
+    logDev("[callBackendAPI] Final auth header", { 
       hasAuth: !!options.headers.Authorization,
       entityName 
     });
@@ -372,7 +373,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   }
 
   if (isDebugEntity) {
-    console.log('[API Debug] Preparing request', {
+    logDev('[API Debug] Preparing request', {
       entity: entityName,
       method,
       id,
@@ -383,7 +384,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
 
   // Enhanced debug for all POST requests during tests
   if (method === 'POST' || isDebugEntity) {
-    console.log('[API Debug] Final request configuration', {
+    logDev('[API Debug] Final request configuration', {
       entity: entityName,
       method,
       url,
@@ -396,7 +397,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   try {
     response = await fetch(url, options);
     if (isDebugEntity) {
-      console.log('[API Debug] Fetch completed', {
+      logDev('[API Debug] Fetch completed', {
         url,
         status: response.status,
         statusText: response.statusText,
@@ -489,7 +490,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
 
   // CRITICAL DEBUG: Log all POST responses to understand data structure
   if (method === 'POST') {
-    console.log('[callBackendAPI POST Response]', {
+    logDev('[callBackendAPI POST Response]', {
       entityName,
       url,
       status: result?.status,
@@ -506,7 +507,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   if (isDebugEntity) {
     // Log stage-related fields if present
     const stageVal = result?.data?.stage || result?.stage;
-    console.log('[API Debug] Parsed response JSON', {
+    logDev('[API Debug] Parsed response JSON', {
       url,
       hasData: !!result?.data,
       topLevelKeys: Object.keys(result || {}),
@@ -543,7 +544,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
         'employee', 'account', 'contact', 'lead', 'opportunity', 'user', 'tenant', 'activity', 'workflow', 'opportunities', 'employees', 'accounts', 'contacts', 'users', 'tenants', 'activities', 'workflows'
       ]);
 
-      console.log('[API Debug] Checking response format:', {
+      logDev('[API Debug] Checking response format:', {
         isArray: Array.isArray(result.data),
         hasId: result.data && Object.prototype.hasOwnProperty.call(result.data, 'id'),
         keys: result.data ? Object.keys(result.data) : null
@@ -723,7 +724,7 @@ export const Tenant = {
 
   async update(id, data) {
     try {
-      console.log("[Tenant.update] Updating tenant:", id, "with data:", data);
+      logDev("[Tenant.update] Updating tenant:", id, "with data:", data);
 
       const response = await fetch(`${BACKEND_URL}/api/tenants/${id}`, {
         method: "PUT",
@@ -733,7 +734,7 @@ export const Tenant = {
         body: JSON.stringify(data),
       });
 
-      console.log(
+      logDev(
         "[Tenant.update] Response status:",
         response.status,
         response.statusText,
@@ -748,7 +749,7 @@ export const Tenant = {
       }
 
       const result = await response.json();
-      console.log("[Tenant.update] Response data:", result);
+      logDev("[Tenant.update] Response data:", result);
       return result.data || result;
     } catch (error) {
       console.error(`[Tenant.update] Error updating tenant ${id}:`, error);
@@ -803,7 +804,7 @@ export const AuditLog = {
       params.append("offset", filters.offset || 0);
 
       const url = `${BACKEND_URL}/api/audit-logs?${params}`;
-      console.log("[AuditLog.list] Fetching from:", url);
+      logDev("[AuditLog.list] Fetching from:", url);
 
       const response = await fetch(url, {
         method: "GET",
@@ -814,7 +815,7 @@ export const AuditLog = {
         },
       });
 
-      console.log(
+      logDev(
         "[AuditLog.list] Response status:",
         response.status,
         response.statusText,
@@ -825,13 +826,13 @@ export const AuditLog = {
       }
 
       const result = await response.json();
-      console.log("[AuditLog.list] Response data:", result);
+      logDev("[AuditLog.list] Response data:", result);
 
       // Handle {status: 'success', data: {'audit-logs': [...], total: N}} format
       if (
         result.status === "success" && result.data && result.data["audit-logs"]
       ) {
-        console.log(
+        logDev(
           "[AuditLog.list] Returning",
           result.data["audit-logs"].length,
           "audit logs",
@@ -840,7 +841,7 @@ export const AuditLog = {
       }
 
       // Fallback: return data directly if format is different
-      console.log("[AuditLog.list] Using fallback return format");
+      logDev("[AuditLog.list] Using fallback return format");
       return result.data || result;
     } catch (error) {
       console.error("[AuditLog.list] Error fetching audit logs:", error);
@@ -1021,7 +1022,7 @@ export const BizDevSource = {
         throw new Error('tenant_id is required for BizDevSource.update');
       }
       const url = `${BACKEND_URL}/api/bizdevsources/${id}?tenant_id=${encodeURIComponent(tenant_id)}`;
-      console.log('[BizDevSource.update] PUT', { url, id, tenant_id });
+      logDev('[BizDevSource.update] PUT', { url, id, tenant_id });
       // Exclude tenant_id from body (route expects it only in query for validation)
       const { tenant_id: _omit, tenantId: _omit2, ...rest } = data || {};
       const response = await fetch(url, {
@@ -1029,14 +1030,14 @@ export const BizDevSource = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(rest),
       });
-      console.log('[BizDevSource.update] Response', { status: response.status, ok: response.ok });
+      logDev('[BizDevSource.update] Response', { status: response.status, ok: response.ok });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error('[BizDevSource.update] Error', errorData);
         throw new Error(errorData.message || `Failed to update BizDevSource: ${response.status}`);
       }
       const result = await response.json();
-      console.log('[BizDevSource.update] Success', result);
+      logDev('[BizDevSource.update] Success', result);
       return result.data || result;
     } catch (err) {
       console.error('[BizDevSource.update] Exception', err);
@@ -1053,7 +1054,7 @@ export const BizDevSource = {
     try {
       const url = `${BACKEND_URL}/api/bizdevsources/${id}/promote`;
       const startedAt = performance.now();
-      console.log('[BizDevSource.promote] Making API call:', { url, id, tenant_id, startedAt });
+      logDev('[BizDevSource.promote] Making API call:', { url, id, tenant_id, startedAt });
 
       // Abort after 8s to avoid infinite spinner when network stalls
       const controller = new AbortController();
@@ -1084,7 +1085,7 @@ export const BizDevSource = {
       }
 
       const afterFetch = performance.now();
-      console.log('[BizDevSource.promote] Response received:', {
+      logDev('[BizDevSource.promote] Response received:', {
         status: response.status,
         statusText: response.statusText,
         ok: response.ok,
@@ -1108,7 +1109,7 @@ export const BizDevSource = {
 
       const parseStarted = performance.now();
       const result = await response.json();
-      console.log('[BizDevSource.promote] Success:', { result, parseElapsedMs: Math.round(performance.now() - parseStarted) });
+      logDev('[BizDevSource.promote] Success:', { result, parseElapsedMs: Math.round(performance.now() - parseStarted) });
       return result.data;
     } catch (error) {
       console.error('[BizDevSource.promote] Error:', error);
@@ -1131,7 +1132,7 @@ export const SystemLog = {
     if (isLocalDevMode()) {
       // Silent fallback: don't try to POST to backend if it's not running
       // Just log to console and return success
-      console.log("[Local Dev Mode] SystemLog.create (not persisted):", data);
+      logDev("[Local Dev Mode] SystemLog.create (not persisted):", data);
       return {
         id: `local-log-${Date.now()}`,
         ...data,
@@ -1253,7 +1254,7 @@ export const User = {
         }
 
         if (!user) {
-          console.log("[Supabase Auth] No authenticated user");
+          logDev("[Supabase Auth] No authenticated user");
           return null;
         }
 
@@ -1267,7 +1268,7 @@ export const User = {
           );
           if (response.ok) {
             const result = await response.json();
-            console.log('[User.me] RAW API response:', result); // DEBUG: See what backend actually returns
+            logDev('[User.me] RAW API response:', result); // DEBUG: See what backend actually returns
             const rawUsers = result.data?.users || result.data || result;
             const users = Array.isArray(rawUsers) ? rawUsers.filter(u => (u.email || '').toLowerCase() === user.email.toLowerCase()) : [];
 
@@ -1285,7 +1286,7 @@ export const User = {
                 safeUsers[0];
 
               userData = preferred;
-              console.log('[Supabase Auth] User record selected (exact match filtering):', { email: userData.email, role: userData.role, tenant_id: userData.tenant_id });
+              logDev('[Supabase Auth] User record selected (exact match filtering):', { email: userData.email, role: userData.role, tenant_id: userData.tenant_id });
             } else if (rawUsers && rawUsers.length > 0) {
               console.warn('[Supabase Auth] Raw users returned but none passed filtering; possible test-pattern suppression or mismatch.', { requested: user.email, rawCount: rawUsers.length });
             }
@@ -1303,7 +1304,7 @@ export const User = {
               const employees = result.data || result;
               if (employees && employees.length > 0) {
                 userData = employees[0];
-                console.log(
+                logDev(
                   "[Supabase Auth] User data loaded from employees table:",
                   userData.role,
                   userData.metadata?.access_level,
@@ -1325,7 +1326,7 @@ export const User = {
 
           // If still not found, auto-create CRM record from auth metadata and re-fetch
           if (!userData) {
-            console.log(
+            logDev(
               "[Supabase Auth] Ensuring CRM user record exists for:",
               user.email,
             );
@@ -1461,7 +1462,7 @@ export const User = {
           throw new Error(error.message);
         }
 
-        console.log("[Supabase Auth] Sign in successful:", data.user?.email);
+        logDev("[Supabase Auth] Sign in successful:", data.user?.email);
 
         // ⚠️ CHECK 1: Password Expiration
         const passwordExpiresAt = data.user.user_metadata?.password_expires_at;
@@ -1553,7 +1554,7 @@ export const User = {
           throw new Error(error.message);
         }
 
-        console.log("[Supabase Auth] Sign out successful");
+        logDev("[Supabase Auth] Sign out successful");
         return true;
       } catch (err) {
         console.error("[Supabase Auth] Exception in signOut():", err);
@@ -1591,7 +1592,7 @@ export const User = {
           throw new Error(error.message);
         }
 
-        console.log("[Supabase Auth] Sign up successful:", data.user?.email);
+        logDev("[Supabase Auth] Sign up successful:", data.user?.email);
 
         return {
           id: data.user?.id,
@@ -1631,7 +1632,7 @@ export const User = {
           throw new Error(error.message);
         }
 
-        console.log("[Supabase Auth] User updated successfully");
+        logDev("[Supabase Auth] User updated successfully");
 
         return {
           id: data.user.id,
@@ -1658,7 +1659,7 @@ export const User = {
    */
   list: async (filters) => {
     // ALWAYS use backend API for listing users (don't mock this - we need real data)
-    console.log("[User.list] Fetching users via backend API");
+    logDev("[User.list] Fetching users via backend API");
     return callBackendAPI("user", "GET", filters);
   },
 
@@ -1667,7 +1668,7 @@ export const User = {
    */
   update: async (userId, updates) => {
     // ALWAYS use backend API for user updates (don't mock this - we need real persistence)
-    console.log(
+    logDev(
       "[User.update] Updating user via backend API:",
       userId,
       updates,

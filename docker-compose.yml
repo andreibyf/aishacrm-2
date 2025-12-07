@@ -100,6 +100,7 @@ services:
       - BRAID_MCP_URL=http://mcp:8000
       - MCP_NODE_HEALTH_URL=http://mcp:8000/health
       - AI_TRIGGERS_WORKER_ENABLED=${AI_TRIGGERS_WORKER_ENABLED:-false}
+      - MCP_NODE_ID=aishacrm-backend
     dns:
       - 8.8.8.8
       - 8.8.4.4

@@ -17,6 +17,7 @@ import { createAuditLog } from "@/api/functions";
 import TagInput from "../shared/TagInput";
 import LazyAccountSelector from "../shared/LazyAccountSelector";
 import CreateAccountDialog from "../accounts/CreateAccountDialog";
+import { logDev } from "@/utils/devLogger";
 
 // New imports for duplicate detection
 import { checkDuplicateBeforeCreate } from "@/api/functions";
@@ -57,9 +58,9 @@ export default function ContactForm({
   const contact = initialData || contactProp;
   const onSuccess = onSubmit || onSuccessProp;
   
-  console.log('[ContactForm] === COMPONENT MOUNT ===');
-  console.log('[ContactForm] contact:', contact?.id, contact?.first_name, contact?.last_name);
-  console.log('[ContactForm] userProp:', userProp?.email, userProp?.role);
+  logDev('[ContactForm] === COMPONENT MOUNT ===');
+  logDev('[ContactForm] contact:', contact?.id, contact?.first_name, contact?.last_name);
+  logDev('[ContactForm] userProp:', userProp?.email, userProp?.role);
   
   // Use global user unless an explicit override is provided via props
   const { user: contextUser, loading: contextUserLoading } = useUser();
@@ -114,48 +115,48 @@ export default function ContactForm({
 
   const isSuperadmin = user?.role === 'superadmin';
 
-  console.log('[ContactForm] Initial state set, isSuperadmin:', isSuperadmin);
-  console.log('[ContactForm] Current user state:', user?.email, 'Loading:', userLoading);
+  logDev('[ContactForm] Initial state set, isSuperadmin:', isSuperadmin);
+  logDev('[ContactForm] Current user state:', user?.email, 'Loading:', userLoading);
 
   const dupCheckAvailableRef = useRef(true);
 
   const checkForDuplicates = useCallback(async (data) => {
-    console.log('[ContactForm] checkForDuplicates called');
+    logDev('[ContactForm] checkForDuplicates called');
     if (!dupCheckAvailableRef.current) {
-      console.log('[ContactForm] Duplicate check disabled for this session (unavailable).');
+      logDev('[ContactForm] Duplicate check disabled for this session (unavailable).');
       return;
     }
     
     // Skip duplicate check for test data
     if (data.is_test_data) {
-      console.log('[ContactForm] Test data flagged, skipping duplicate check');
+      logDev('[ContactForm] Test data flagged, skipping duplicate check');
       setDuplicateWarning(null);
       setCheckingDuplicates(false);
       return;
     }
     
     if (contact) {
-      console.log('[ContactForm] Editing existing contact, skipping duplicate check');
+      logDev('[ContactForm] Editing existing contact, skipping duplicate check');
       return;
     }
 
     if (!data.email && !data.phone) {
-      console.log('[ContactForm] No email or phone, skipping duplicate check');
+      logDev('[ContactForm] No email or phone, skipping duplicate check');
       setDuplicateWarning(null);
       return;
     }
 
     if (!user) { // Ensure user is loaded before checking duplicates
-      console.log('[ContactForm] User not available yet, cannot perform duplicate check.');
+      logDev('[ContactForm] User not available yet, cannot perform duplicate check.');
       return;
     }
 
-    console.log('[ContactForm] Starting duplicate check...');
+    logDev('[ContactForm] Starting duplicate check...');
     setCheckingDuplicates(true);
     try {
       const tenantId = user.role === 'superadmin' && selectedTenantId ? selectedTenantId : user.tenant_id;
       if (!tenantId) {
-        console.log('[ContactForm] No tenant ID, skipping duplicate check');
+        logDev('[ContactForm] No tenant ID, skipping duplicate check');
         setCheckingDuplicates(false);
         return;
       }
@@ -169,7 +170,7 @@ export default function ContactForm({
         tenant_id: tenantId
       };
 
-      console.log('[ContactForm] Calling checkDuplicateBeforeCreate...', checkData);
+      logDev('[ContactForm] Calling checkDuplicateBeforeCreate...', checkData);
       const response = await cachedRequest(
         'Contact',
         'checkDuplicate',
@@ -177,12 +178,12 @@ export default function ContactForm({
         () => checkDuplicateBeforeCreate(checkData)
       );
 
-      console.log('[ContactForm] Duplicate check response:', response);
+      logDev('[ContactForm] Duplicate check response:', response);
       if (response.data?.has_duplicates) {
-        console.log('[ContactForm] Duplicates found:', response.data.duplicates.length);
+        logDev('[ContactForm] Duplicates found:', response.data.duplicates.length);
         setDuplicateWarning(response.data.duplicates);
       } else {
-        console.log('[ContactForm] No duplicates found');
+        logDev('[ContactForm] No duplicates found');
         setDuplicateWarning(null);
       }
     } catch (error) {
@@ -196,7 +197,7 @@ export default function ContactForm({
       }
       setDuplicateWarning(null);
     } finally {
-      console.log('[ContactForm] Duplicate check complete');
+      logDev('[ContactForm] Duplicate check complete');
       setCheckingDuplicates(false);
     }
   }, [contact, user, selectedTenantId, cachedRequest, logError]);
@@ -205,10 +206,10 @@ export default function ContactForm({
   const initializedRef = useRef(false);
 
   useEffect(() => {
-    console.log('[ContactForm] === useEffect: loadInitialFormData ===');
+    logDev('[ContactForm] === useEffect: loadInitialFormData ===');
     const loadInitialFormData = () => {
       if (contact) {
-        console.log('[ContactForm] Loading existing contact data into form');
+        logDev('[ContactForm] Loading existing contact data into form');
         setFormData({
           first_name: contact.first_name || "",
           last_name: contact.last_name || "",
@@ -230,18 +231,18 @@ export default function ContactForm({
           assigned_to: contact.assigned_to || user?.email || "",
           is_test_data: contact.is_test_data || false,
         });
-        console.log('[ContactForm] Form data loaded for existing contact');
+        logDev('[ContactForm] Form data loaded for existing contact');
         initializedRef.current = true;
       } else {
         // For new contact, only initialize once per open to avoid wiping user input
         if (initializedRef.current) {
-          console.log('[ContactForm] Skipping re-initialization (already initialized)');
+          logDev('[ContactForm] Skipping re-initialization (already initialized)');
           return;
         }
-        console.log('[ContactForm] Creating new contact form');
+        logDev('[ContactForm] Creating new contact form');
         const urlParams = new URLSearchParams(window.location.search);
         const accountId = urlParams.get('accountId');
-        console.log('[ContactForm] URL accountId:', accountId);
+        logDev('[ContactForm] URL accountId:', accountId);
 
         const newContactInitialState = {
           first_name: "",
@@ -272,21 +273,21 @@ export default function ContactForm({
           last_name: prev.last_name || newContactInitialState.last_name,
         }));
         initializedRef.current = true;
-        console.log('[ContactForm] New contact form initialized (preserving existing name fields if present)');
+        logDev('[ContactForm] New contact form initialized (preserving existing name fields if present)');
         
         // Only check for duplicates if we have email or phone and user is available
         if (user && (newContactInitialState.email || newContactInitialState.phone)) {
-          console.log('[ContactForm] Checking for duplicates on new contact');
+          logDev('[ContactForm] Checking for duplicates on new contact');
           checkForDuplicates(newContactInitialState);
         }
       }
     };
 
     if (user) {
-      console.log('[ContactForm] User available, loading form data');
+      logDev('[ContactForm] User available, loading form data');
       loadInitialFormData();
     } else {
-      console.log('[ContactForm] Waiting for user to load form data...');
+      logDev('[ContactForm] Waiting for user to load form data...');
     }
   // Important: do NOT depend on checkForDuplicates or selectedTenantId here to prevent resets
   // We intentionally omit checkForDuplicates from deps to avoid re-initializing the form
@@ -296,18 +297,18 @@ export default function ContactForm({
 
   // Separate effect for loading tags
   useEffect(() => {
-    console.log('[ContactForm] === useEffect: loadExistingTags ===');
+    logDev('[ContactForm] === useEffect: loadExistingTags ===');
     const loadExistingTags = async () => {
-      console.log('[ContactForm] Starting to load tags...');
+      logDev('[ContactForm] Starting to load tags...');
       try {
-        console.log('[ContactForm] Fetching contacts and leads for tags with tenant:', selectedTenantId);
+        logDev('[ContactForm] Fetching contacts and leads for tags with tenant:', selectedTenantId);
         const [contactsData, leadsData] = await Promise.all([
           cachedRequest('Contact', 'list', { limit: 100, tenant_id: selectedTenantId }, () => Contact.list({ tenant_id: selectedTenantId }, null, 100)),
           cachedRequest('Lead', 'list', { limit: 100, tenant_id: selectedTenantId }, () => Lead?.list({ tenant_id: selectedTenantId }, null, 100) || []),
         ]);
 
-        console.log('[ContactForm] Contacts fetched:', contactsData?.length);
-        console.log('[ContactForm] Leads fetched:', leadsData?.length);
+        logDev('[ContactForm] Contacts fetched:', contactsData?.length);
+        logDev('[ContactForm] Leads fetched:', leadsData?.length);
 
         const tagCounts = {};
         [...contactsData, ...leadsData].forEach(item => {
@@ -324,7 +325,7 @@ export default function ContactForm({
           .map(([name, count]) => ({ name, count }))
           .sort((a, b) => b.count - a.count);
 
-        console.log('[ContactForm] Tags loaded:', tagList.length);
+        logDev('[ContactForm] Tags loaded:', tagList.length);
         setAllTags(tagList);
       } catch (error) {
         console.error("[ContactForm] Failed to load existing tags:", error);
@@ -336,15 +337,15 @@ export default function ContactForm({
     };
 
     if (user) { // Ensure user is loaded before loading tags
-      console.log('[ContactForm] User available, loading tags');
+      logDev('[ContactForm] User available, loading tags');
       loadExistingTags();
     } else {
-      console.log('[ContactForm] Waiting for user to load tags...');
+      logDev('[ContactForm] Waiting for user to load tags...');
     }
   }, [user, selectedTenantId, cachedRequest, logError]);
 
   const handleChange = (field, value) => {
-    console.log('[ContactForm] Field changed:', field, value);
+    logDev('[ContactForm] Field changed:', field, value);
     
     // Clear field error when user starts typing
     if (field === 'first_name' || field === 'last_name') {
@@ -360,7 +361,7 @@ export default function ContactForm({
       // while preserving manual input. (Not implemented yet; just documenting rationale.)
 
       if (!contact && user && (field === 'email' || field === 'phone')) {
-        console.log('[ContactForm] Email/phone changed, checking for duplicates...');
+        logDev('[ContactForm] Email/phone changed, checking for duplicates...');
         checkForDuplicates(updated);
       }
 
@@ -369,7 +370,7 @@ export default function ContactForm({
   };
 
   const handleCreateAccountSuccess = (newAccount) => {
-    console.log('[ContactForm] New account created:', newAccount.id);
+    logDev('[ContactForm] New account created:', newAccount.id);
     setFormData(prev => ({ ...prev, account_id: newAccount.id }));
     setShowCreateAccount(false);
     toast({
@@ -380,7 +381,7 @@ export default function ContactForm({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('[ContactForm] === FORM SUBMIT ===');
+    logDev('[ContactForm] === FORM SUBMIT ===');
     setSubmitError(null);
     setSubmitProgress("");
     
@@ -396,7 +397,7 @@ export default function ContactForm({
     if (!formData.first_name?.trim() && !formData.last_name?.trim()) {
       errors.first_name = 'First name or last name is required';
       errors.last_name = 'First name or last name is required';
-      console.log('[ContactForm] ERROR: Missing required fields (need at least first_name OR last_name)');
+      logDev('[ContactForm] ERROR: Missing required fields (need at least first_name OR last_name)');
       setFieldErrors(errors);
       toast({
         title: "Missing Information",
@@ -409,7 +410,7 @@ export default function ContactForm({
 
     // Superadmin must have a selected tenant for writes (backend enforces this)
     if (user?.role === 'superadmin' && !selectedTenantId) {
-      console.log('[ContactForm] ERROR: Superadmin write without selected tenant');
+      logDev('[ContactForm] ERROR: Superadmin write without selected tenant');
       toast({
         title: 'Select a tenant',
         description: 'As superadmin, please pick a tenant (top-right selector) before creating a contact.',
@@ -421,18 +422,18 @@ export default function ContactForm({
 
     // Skip duplicate check for test data or if no duplicates found
     if (!contact && duplicateWarning && duplicateWarning.length > 0 && !formData.is_test_data) {
-      console.log('[ContactForm] Duplicate warning present, prompting user...');
+      logDev('[ContactForm] Duplicate warning present, prompting user...');
       const proceed = window.confirm(
         `Warning: ${duplicateWarning.length} potential duplicate(s) found. Do you want to proceed anyway?`
       );
       if (!proceed) {
-        console.log('[ContactForm] User cancelled submission due to duplicates');
+        logDev('[ContactForm] User cancelled submission due to duplicates');
         setIsSubmitting(false);
         return;
       }
     }
 
-    console.log('[ContactForm] Starting submission...');
+    logDev('[ContactForm] Starting submission...');
     setIsSubmitting(true);
     setSubmitProgress("Preparing contact data...");
 
@@ -447,7 +448,7 @@ export default function ContactForm({
         }
       });
       
-      console.log('[ContactForm] Enriching contact data...');
+      logDev('[ContactForm] Enriching contact data...');
       setSubmitProgress("Enriching contact data...");
       // Use tenant_id from user context, selectedTenantId, or null (backend will handle)
       const tenantId = user?.tenant_id || selectedTenantId || null;
@@ -455,17 +456,17 @@ export default function ContactForm({
         submissionData,
         tenantId
       );
-      console.log('[ContactForm] Data enriched successfully');
+      logDev('[ContactForm] Data enriched successfully');
       
       let result;
       if (contact) {
-        console.log('[ContactForm] Updating existing contact with ID:', contact.id);
+        logDev('[ContactForm] Updating existing contact with ID:', contact.id);
         setSubmitProgress("Updating contact...");
         result = await Contact.update(contact.id, enrichedData);
-        console.log('[ContactForm] Contact updated successfully, result:', result?.id);
+        logDev('[ContactForm] Contact updated successfully, result:', result?.id);
 
         try {
-          console.log('[ContactForm] Creating audit log for update...');
+          logDev('[ContactForm] Creating audit log for update...');
           setSubmitProgress("Creating audit log...");
           const auditLogData = {
             action_type: 'update',
@@ -490,7 +491,7 @@ export default function ContactForm({
             }
           };
           await cachedRequest('Utility', 'createAuditLog', auditLogData, () => createAuditLog(auditLogData));
-          console.log('[ContactForm] Audit log created for update');
+          logDev('[ContactForm] Audit log created for update');
         } catch (auditError) {
           console.warn('[ContactForm] Audit log creation failed (non-critical) during update:', auditError.message);
           if (logError) {
@@ -500,11 +501,11 @@ export default function ContactForm({
       } else {
         // For new contacts, use tenant from context if available, otherwise backend will handle
         const tenantIdForNewContact = user?.role === 'superadmin' && selectedTenantId ? selectedTenantId : (user?.tenant_id || null);
-        console.log('[ContactForm] Creating new contact with target tenant:', tenantIdForNewContact || 'auto-assign');
+        logDev('[ContactForm] Creating new contact with target tenant:', tenantIdForNewContact || 'auto-assign');
 
         if (!enrichedData.unique_id) {
           try {
-            console.log('[ContactForm] Generating unique ID for new contact...');
+            logDev('[ContactForm] Generating unique ID for new contact...');
             setSubmitProgress("Generating unique ID...");
             // Only pass tenant_id if we have one; backend can handle null
             const idResponse = await cachedRequest(
@@ -515,7 +516,7 @@ export default function ContactForm({
             );
             if (idResponse.data?.unique_id) {
               enrichedData.unique_id = idResponse.data.unique_id;
-              console.log('[ContactForm] Unique ID generated:', enrichedData.unique_id);
+              logDev('[ContactForm] Unique ID generated:', enrichedData.unique_id);
             }
           } catch (error) {
             console.warn('[ContactForm] Failed to generate unique ID (non-critical) for new contact:', error.message);
@@ -528,16 +529,16 @@ export default function ContactForm({
           }
         }
 
-        console.log('[ContactForm] Attempting to create contact...');
+        logDev('[ContactForm] Attempting to create contact...');
         setSubmitProgress("Creating contact...");
         result = await Contact.create({
           ...enrichedData,
           tenant_id: tenantIdForNewContact,
         });
-        console.log('[ContactForm] Contact created successfully, result:', result?.id);
+        logDev('[ContactForm] Contact created successfully, result:', result?.id);
 
         try {
-          console.log('[ContactForm] Creating audit log for create...');
+          logDev('[ContactForm] Creating audit log for create...');
           setSubmitProgress("Creating audit log...");
           const auditLogData = {
             action_type: 'create',
@@ -547,7 +548,7 @@ export default function ContactForm({
             new_values: enrichedData
           };
           await cachedRequest('Utility', 'createAuditLog', auditLogData, () => createAuditLog(auditLogData));
-          console.log('[ContactForm] Audit log created for create');
+          logDev('[ContactForm] Audit log created for create');
         } catch (auditError) {
           console.warn('[ContactForm] Audit log creation failed (non-critical) during create:', auditError.message);
           if (logError) {
@@ -556,19 +557,19 @@ export default function ContactForm({
         }
       }
 
-      console.log('[ContactForm] Finalizing submission...');
+      logDev('[ContactForm] Finalizing submission...');
       setSubmitProgress("Finalizing...");
       clearCache();
       window.dispatchEvent(new CustomEvent('entity-modified', { detail: { entity: 'Contact' } }));
 
-      console.log('[ContactForm] === SUBMIT SUCCESS ===');
+      logDev('[ContactForm] === SUBMIT SUCCESS ===');
       toast({
         title: "Success!",
         description: contact ? "Contact updated successfully!" : "Contact created successfully!",
         variant: "default",
       });
 
-      console.log('[ContactForm] Calling onSuccess callback:', typeof onSuccess, result?.id);
+      logDev('[ContactForm] Calling onSuccess callback:', typeof onSuccess, result?.id);
       if (onSuccess) {
         onSuccess(result);
       } else {
@@ -587,13 +588,13 @@ export default function ContactForm({
       });
       setSubmitError(error.message || "An unexpected error occurred while saving the contact.");
     } finally {
-      console.log('[ContactForm] Submit complete, cleaning up submission state');
+      logDev('[ContactForm] Submit complete, cleaning up submission state');
       setIsSubmitting(false);
       setSubmitProgress("");
     }
   };
 
-  console.log('[ContactForm] Rendering component, user available:', !!user, 'userLoading:', userLoading);
+  logDev('[ContactForm] Rendering component, user available:', !!user, 'userLoading:', userLoading);
 
   // Basic validity check to disable submit until required fields are present
   // Use useMemo to ensure this recalculates when formData changes
@@ -604,7 +605,7 @@ export default function ContactForm({
   }, [formData.first_name, formData.last_name]);
 
   if (userLoading || !user) {
-    console.log('[ContactForm] Showing loader (userLoading:', userLoading, ', user:', !!user, ')');
+    logDev('[ContactForm] Showing loader (userLoading:', userLoading, ', user:', !!user, ')');
     return (
       <div className="flex items-center justify-center p-8">
         <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
@@ -613,7 +614,7 @@ export default function ContactForm({
     );
   }
 
-  console.log('[ContactForm] User data available, rendering full form.');
+  logDev('[ContactForm] User data available, rendering full form.');
 
   return (
     <>

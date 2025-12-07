@@ -5,6 +5,7 @@
 
 import express from 'express';
 import multer from 'multer';
+import OpenAI from 'openai';
 import { buildSystemPrompt, getOpenAIClient } from '../lib/aiProvider.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { summarizeToolResult, BRAID_SYSTEM_PROMPT, generateToolSchemas, executeBraidTool, TOOL_ACCESS_TOKEN } from '../lib/braidIntegration-v2.js';
@@ -12,7 +13,30 @@ import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 import { runTask } from '../lib/aiBrain.js';
 import createAiRealtimeRoutes from './aiRealtime.js';
 import { routeChat } from '../flows/index.js';
-import { resolveLLMApiKey, pickModel, getTenantIdFromRequest } from '../lib/aiEngine/index.js';
+import { resolveLLMApiKey, pickModel, getTenantIdFromRequest, selectLLMConfigForTenant } from '../lib/aiEngine/index.js';
+import { logLLMActivity } from '../lib/aiEngine/activityLogger.js';
+
+/**
+ * Create provider-specific OpenAI-compatible client for tool calling.
+ * Note: Anthropic is not supported for tool calling in this path (different API format).
+ * Supported: openai, groq, local (all OpenAI-compatible)
+ */
+function createProviderClient(provider, apiKey) {
+  let baseUrl;
+  switch (provider) {
+    case 'groq':
+      baseUrl = process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
+      break;
+    case 'local':
+      baseUrl = process.env.LOCAL_LLM_BASE_URL || 'http://localhost:1234/v1';
+      break;
+    case 'openai':
+    default:
+      baseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+      break;
+  }
+  return new OpenAI({ apiKey, baseURL: baseUrl });
+}
 
 export default function createAIRoutes(pgPool) {
   const router = express.Router();
@@ -379,43 +403,60 @@ export default function createAIRoutes(pgPool) {
       const tenantSlug = tenantRecord?.tenant_id || tenantIdentifier || null;
       const conversationMetadata = parseMetadata(conversation?.metadata);
 
+      // Per-tenant model/provider selection
+      const modelConfig = selectLLMConfigForTenant({
+        capability: 'chat_tools',
+        tenantSlugOrId: tenantSlug,
+        overrideModel: requestDescriptor.modelOverride || conversationMetadata?.model || null,
+      });
+
+      // Resolve API key for the selected provider
       const apiKey = await resolveLLMApiKey({
         explicitKey: requestDescriptor.bodyApiKey,
         headerKey: requestDescriptor.headerApiKey,
         userKey: requestDescriptor.userApiKey,
         tenantSlugOrId: tenantSlug,
+        provider: modelConfig.provider,
       });
 
       if (!apiKey) {
         await logAiEvent({
           level: 'WARNING',
-          message: 'AI agent blocked: missing OpenAI API key',
+          message: `AI agent blocked: missing API key for provider ${modelConfig.provider}`,
           tenantRecord,
           tenantIdentifier,
           metadata: {
             operation: 'agent_followup',
             conversation_id: conversationId,
             agent_name: conversation?.agent_name,
+            provider: modelConfig.provider,
           },
         });
 
-        await insertAssistantMessage(conversationId, 'I cannot reach the AI model right now because no OpenAI API key is configured for this client. Please contact an administrator.', {
+        await insertAssistantMessage(conversationId, `I cannot reach the AI model right now because no API key is configured for ${modelConfig.provider}. Please contact an administrator.`, {
           reason: 'missing_api_key',
         });
         return;
       }
 
-      const client = getOpenAIClient(apiKey);
+      // Create provider-aware client (Anthropic not supported for tool calling)
+      const client = modelConfig.provider === 'anthropic'
+        ? createProviderClient('openai', await resolveLLMApiKey({ tenantSlugOrId: tenantSlug, provider: 'openai' }))
+        : createProviderClient(modelConfig.provider, apiKey);
+
+      console.log(`[AI][generateAssistantResponse] Using provider=${modelConfig.provider}, model=${modelConfig.model}`);
+
       if (!client) {
         await logAiEvent({
           level: 'ERROR',
-          message: 'AI agent blocked: failed to initialize OpenAI client',
+          message: 'AI agent blocked: failed to initialize LLM client',
           tenantRecord,
           tenantIdentifier,
           metadata: {
             operation: 'agent_followup',
             conversation_id: conversationId,
             agent_name: conversation?.agent_name,
+            provider: modelConfig.provider,
           },
         });
 
@@ -454,7 +495,8 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
         messages.push({ role: row.role, content: row.content });
       }
 
-      const model = requestDescriptor.modelOverride || conversationMetadata?.model || DEFAULT_CHAT_MODEL;
+      // Use model from modelConfig already resolved above
+      const model = modelConfig.model;
       const rawTemperature = requestDescriptor.temperatureOverride ?? conversationMetadata?.temperature ?? 0.2;
       const temperature = Math.min(Math.max(Number(rawTemperature) || 0.2, 0), 2);
 
@@ -482,12 +524,26 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       let conversationMessages = [...messages];
 
       for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
+        const startTime = Date.now();
         const response = await client.chat.completions.create({
           model,
           messages: conversationMessages,
           tools,
           tool_choice: 'auto',
           temperature,
+        });
+        const durationMs = Date.now() - startTime;
+
+        // Log LLM activity
+        logLLMActivity({
+          tenantId: tenantRecord?.id,
+          capability: 'chat_tools',
+          provider: modelConfig.provider,
+          model: response.model || model,
+          nodeId: `ai:generateAssistantResponse:iter${iteration}`,
+          status: 'success',
+          durationMs,
+          usage: response.usage || null,
         });
 
         const choice = response.choices?.[0];
@@ -1605,16 +1661,34 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
         }
       }
 
+      // Per-tenant model/provider selection
+      const tenantSlugForModel = tenantRecord?.tenant_id || tenantIdentifier;
+      const tenantModelConfig = selectLLMConfigForTenant({
+        capability: 'chat_tools',
+        tenantSlugOrId: tenantSlugForModel,
+        overrideModel: model, // model from request body
+      });
+
+      // Resolve API key for the selected provider
       const apiKey = await resolveLLMApiKey({
         explicitKey: req.body?.api_key,
         headerKey: req.headers['x-openai-key'],
         userKey: req.user?.system_openai_settings?.openai_api_key,
         tenantSlugOrId: tenantRecord?.tenant_id || tenantIdentifier || null,
+        provider: tenantModelConfig.provider,
       });
 
-      const client = getOpenAIClient(apiKey || process.env.OPENAI_API_KEY);
+      // Create provider-aware client (Anthropic falls back to OpenAI for tool calling)
+      const effectiveProvider = tenantModelConfig.provider === 'anthropic' ? 'openai' : tenantModelConfig.provider;
+      const effectiveApiKey = tenantModelConfig.provider === 'anthropic'
+        ? await resolveLLMApiKey({ tenantSlugOrId: tenantSlugForModel, provider: 'openai' })
+        : apiKey;
+
+      const client = createProviderClient(effectiveProvider, effectiveApiKey || process.env.OPENAI_API_KEY);
+      console.log(`[ai.chat] Using provider=${effectiveProvider}, model=${tenantModelConfig.model}`);
+
       if (!client) {
-        return res.status(501).json({ status: 'error', message: 'OpenAI API key not configured' });
+        return res.status(501).json({ status: 'error', message: `API key not configured for provider ${effectiveProvider}` });
       }
 
       const tenantName = tenantRecord?.name || tenantRecord?.tenant_id || 'CRM Tenant';
@@ -1646,16 +1720,30 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       const toolInteractions = [];
       let finalContent = '';
       let finalUsage = null;
-      let finalModel = model;
+      let finalModel = tenantModelConfig.model; // Use tenant-aware model
       let loopMessages = [...convoMessages];
 
       for (let i = 0; i < MAX_TOOL_ITERATIONS; i += 1) {
+        const startTime = Date.now();
         const completion = await client.chat.completions.create({
           model: finalModel,
           messages: loopMessages,
           temperature,
           tools,
           tool_choice: 'auto'
+        });
+        const durationMs = Date.now() - startTime;
+
+        // Log LLM activity for /chat route
+        logLLMActivity({
+          tenantId: tenantRecord?.id,
+          capability: 'chat_tools',
+          provider: effectiveProvider,
+          model: completion.model || finalModel,
+          nodeId: `ai:chat:iter${i}`,
+          status: 'success',
+          durationMs,
+          usage: completion.usage || null,
         });
 
         const choice = completion.choices?.[0];

@@ -217,8 +217,8 @@ function RecentActivities(props) {
 
   const descriptionText =
     memoTenantFilter && memoTenantFilter.tenant_id
-      ? `Showing recent activities for Client ID: ${memoTenantFilter.tenant_id}`
-      : "Showing recent activities for all clients";
+      ? `Client: ${memoTenantFilter.tenant_id.slice(0, 8)}...`
+      : "All clients";
 
   const handleRefresh = () => {
     fetchActivities();
@@ -251,28 +251,28 @@ function RecentActivities(props) {
 
   return (
     <Card className="shadow-lg border-0 bg-slate-800 border-slate-700">
-      <CardHeader className="border-b border-slate-700">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
+      <CardHeader className="border-b border-slate-700 pb-3">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <div className="min-w-0">
             <CardTitle className="flex items-center gap-2 text-slate-100">
-              <ActivityIcon className="w-5 h-5 text-indigo-400" />
+              <ActivityIcon className="w-5 h-5 text-indigo-400 flex-shrink-0" />
               Recent Activities
             </CardTitle>
-            <CardDescription className="text-slate-400">
+            <CardDescription className="text-slate-400 text-sm mt-1">
               {descriptionText} • Last {timeframeWeeks} week{timeframeWeeks === "1" ? "" : "s"}
             </CardDescription>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <Select value={timeframeWeeks} onValueChange={setTimeframeWeeks}>
-              <SelectTrigger className="w-32 bg-slate-700 border-slate-600 text-slate-200">
+              <SelectTrigger className="w-28 bg-slate-700 border-slate-600 text-slate-200 text-sm h-8">
                 <SelectValue placeholder="Timeframe" />
               </SelectTrigger>
               <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                <SelectItem value="1">Last 1 week</SelectItem>
-                <SelectItem value="2">Last 2 weeks</SelectItem>
-                <SelectItem value="3">Last 3 weeks</SelectItem>
-                <SelectItem value="4">Last 4 weeks</SelectItem>
+                <SelectItem value="1">1 week</SelectItem>
+                <SelectItem value="2">2 weeks</SelectItem>
+                <SelectItem value="3">3 weeks</SelectItem>
+                <SelectItem value="4">4 weeks</SelectItem>
               </SelectContent>
             </Select>
 
@@ -280,7 +280,7 @@ function RecentActivities(props) {
               <Button
                 variant={viewMode === "summary" ? "default" : "ghost"}
                 size="sm"
-                className={viewMode === "summary" ? "bg-indigo-600 hover:bg-indigo-700" : "text-slate-300 hover:bg-slate-700"}
+                className={`h-8 px-3 ${viewMode === "summary" ? "bg-indigo-600 hover:bg-indigo-700" : "text-slate-300 hover:bg-slate-700"}`}
                 onClick={() => setViewMode("summary")}
               >
                 Summary
@@ -288,7 +288,7 @@ function RecentActivities(props) {
               <Button
                 variant={viewMode === "list" ? "default" : "ghost"}
                 size="sm"
-                className={viewMode === "list" ? "bg-indigo-600 hover:bg-indigo-700" : "text-slate-300 hover:bg-slate-700"}
+                className={`h-8 px-3 ${viewMode === "list" ? "bg-indigo-600 hover:bg-indigo-700" : "text-slate-300 hover:bg-slate-700"}`}
                 onClick={() => setViewMode("list")}
               >
                 List
@@ -299,7 +299,7 @@ function RecentActivities(props) {
               variant="ghost"
               size="sm"
               onClick={handleRefresh}
-              className="text-slate-400 hover:text-slate-200 hover:bg-slate-700"
+              className="text-slate-400 hover:text-slate-200 hover:bg-slate-700 h-8 w-8 p-0"
               disabled={loading}
             >
               <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />

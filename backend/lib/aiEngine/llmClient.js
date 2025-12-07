@@ -1,18 +1,22 @@
 /**
- * Multi-provider LLM client for OpenAI-style chat completions.
+ * Multi-provider LLM client for chat completions.
  *
  * Supports:
- * - provider: "openai"  → https://api.openai.com/v1/chat/completions
- * - provider: "groq"    → https://api.groq.com/openai/v1/chat/completions
- * - provider: "local"   → LOCAL_LLM_BASE_URL (OpenAI-compatible)
+ * - provider: "openai"     -> https://api.openai.com/v1/chat/completions
+ * - provider: "groq"       -> https://api.groq.com/openai/v1/chat/completions
+ * - provider: "local"      -> LOCAL_LLM_BASE_URL (OpenAI-compatible)
+ * - provider: "anthropic"  -> https://api.anthropic.com/v1/messages
  *
- * This is intentionally minimal and uses fetch + JSON only,
- * so it can be dropped into existing code that used a single-provider client.
+ * Returns normalized shape: { status: "success"|"error", content?, raw?, error? }
  */
 
 import fetch from "node-fetch";
 
-function resolveBaseUrl(provider, explicitBaseUrl) {
+// ============================================================================
+// OpenAI-compatible providers (openai, groq, local)
+// ============================================================================
+
+function resolveOpenAIBaseUrl(provider, explicitBaseUrl) {
   if (explicitBaseUrl) return explicitBaseUrl.replace(/\/$/, "");
 
   switch (provider) {
@@ -27,7 +31,7 @@ function resolveBaseUrl(provider, explicitBaseUrl) {
   }
 }
 
-function resolveAuthHeader(provider, explicitApiKey) {
+function resolveOpenAIAuthHeader(provider, explicitApiKey) {
   if (explicitApiKey) return `Bearer ${explicitApiKey}`;
 
   if (provider === "openai" && process.env.OPENAI_API_KEY) {
@@ -45,29 +49,9 @@ function resolveAuthHeader(provider, explicitApiKey) {
   return null;
 }
 
-/**
- * generateChatCompletion
- *
- * @param {Object} opts
- * @param {string} opts.provider   - "openai" | "groq" | "local"
- * @param {string} opts.model      - model name
- * @param {Array}  opts.messages   - OpenAI-style messages
- * @param {number} [opts.temperature]
- * @param {string} [opts.apiKey]   - explicit API key override
- * @param {string} [opts.baseUrl]  - explicit base URL override
- *
- * @returns {Promise<{ status: "success"|"error", content?: string, raw?: any, error?: string }>}
- */
-export async function generateChatCompletion({
-  provider = "openai",
-  model,
-  messages,
-  temperature = 0.2,
-  apiKey,
-  baseUrl,
-}) {
-  const finalBaseUrl = resolveBaseUrl(provider, baseUrl);
-  const authHeader = resolveAuthHeader(provider, apiKey);
+async function callOpenAICompatible({ provider, model, messages, temperature, apiKey, baseUrl }) {
+  const finalBaseUrl = resolveOpenAIBaseUrl(provider, baseUrl);
+  const authHeader = resolveOpenAIAuthHeader(provider, apiKey);
 
   if (!authHeader) {
     return {
@@ -121,4 +105,159 @@ export async function generateChatCompletion({
       error: err?.message || String(err),
     };
   }
+}
+
+// ============================================================================
+// Anthropic provider
+// ============================================================================
+
+function resolveAnthropicBaseUrl(explicitBaseUrl) {
+  if (explicitBaseUrl) return explicitBaseUrl.replace(/\/$/, "");
+  return (process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com").replace(/\/$/, "");
+}
+
+/**
+ * Convert OpenAI-style messages to Anthropic format.
+ * Anthropic uses separate system param and messages array.
+ */
+function convertToAnthropicFormat(messages) {
+  let systemPrompt = "";
+  const anthropicMessages = [];
+
+  for (const msg of messages || []) {
+    if (msg.role === "system") {
+      // Concatenate all system messages into one
+      systemPrompt += (systemPrompt ? "\n\n" : "") + (msg.content || "");
+    } else if (msg.role === "user" || msg.role === "assistant") {
+      anthropicMessages.push({
+        role: msg.role,
+        content: msg.content || "",
+      });
+    }
+  }
+
+  return { systemPrompt, anthropicMessages };
+}
+
+async function callAnthropic({ model, messages, temperature, apiKey, baseUrl }) {
+  const finalBaseUrl = resolveAnthropicBaseUrl(baseUrl);
+
+  if (!apiKey && !process.env.ANTHROPIC_API_KEY) {
+    return {
+      status: "error",
+      error: "Missing API key for provider anthropic",
+    };
+  }
+
+  const finalApiKey = apiKey || process.env.ANTHROPIC_API_KEY;
+  const anthropicVersion = process.env.ANTHROPIC_VERSION || "2023-06-01";
+  const url = `${finalBaseUrl}/v1/messages`;
+
+  const { systemPrompt, anthropicMessages } = convertToAnthropicFormat(messages);
+
+  // Anthropic requires at least one user message
+  if (anthropicMessages.length === 0) {
+    anthropicMessages.push({ role: "user", content: "Hello" });
+  }
+
+  const body = {
+    model,
+    max_tokens: 4096,
+    messages: anthropicMessages,
+    temperature,
+  };
+
+  // Only add system if non-empty
+  if (systemPrompt) {
+    body.system = systemPrompt;
+  }
+
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "x-api-key": finalApiKey,
+        "anthropic-version": anthropicVersion,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      return {
+        status: "error",
+        error: `HTTP ${resp.status}: ${text}`,
+      };
+    }
+
+    const json = await resp.json();
+
+    // Anthropic returns content as array of blocks
+    let content = "";
+    if (json?.content && Array.isArray(json.content)) {
+      content = json.content
+        .filter((block) => block.type === "text")
+        .map((block) => block.text || "")
+        .join("");
+    }
+
+    // Normalize usage to OpenAI-like format
+    const usage = json?.usage
+      ? {
+        prompt_tokens: json.usage.input_tokens || 0,
+        completion_tokens: json.usage.output_tokens || 0,
+        total_tokens: (json.usage.input_tokens || 0) + (json.usage.output_tokens || 0),
+      }
+      : null;
+
+    return {
+      status: "success",
+      content,
+      raw: {
+        ...json,
+        model: json.model,
+        usage,
+      },
+    };
+  } catch (err) {
+    return {
+      status: "error",
+      error: err?.message || String(err),
+    };
+  }
+}
+
+// ============================================================================
+// Main export: generateChatCompletion
+// ============================================================================
+
+/**
+ * generateChatCompletion
+ *
+ * @param {Object} opts
+ * @param {string} opts.provider   - "openai" | "groq" | "local" | "anthropic"
+ * @param {string} opts.model      - model name
+ * @param {Array}  opts.messages   - OpenAI-style messages [{ role, content }]
+ * @param {number} [opts.temperature]
+ * @param {string} [opts.apiKey]   - explicit API key override
+ * @param {string} [opts.baseUrl]  - explicit base URL override
+ *
+ * @returns {Promise<{ status: "success"|"error", content?: string, raw?: any, error?: string }>}
+ */
+export async function generateChatCompletion({
+  provider = "openai",
+  model,
+  messages,
+  temperature = 0.2,
+  apiKey,
+  baseUrl,
+}) {
+  // Route to appropriate provider handler
+  if (provider === "anthropic") {
+    return callAnthropic({ model, messages, temperature, apiKey, baseUrl });
+  }
+
+  // OpenAI-compatible providers: openai, groq, local
+  return callOpenAICompatible({ provider, model, messages, temperature, apiKey, baseUrl });
 }

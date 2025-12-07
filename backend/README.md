@@ -108,6 +108,87 @@ The AI chat endpoints under `/api/ai/*` now use the Supabase JavaScript client f
 
 See: `docs/AI_CONVERSATIONS.md` for migration SQL, endpoints, and testing steps.
 
+### Multi-Provider LLM Engine
+
+The backend supports multiple LLM providers with automatic failover via the `lib/aiEngine/` module:
+
+**Supported Providers:**
+- **OpenAI:** gpt-4o, gpt-4o-mini (default)
+- **Anthropic:** claude-3-5-sonnet, claude-3-haiku
+- **Groq:** llama-3.3-70b, llama-3.1-8b
+- **Local:** Any OpenAI-compatible server
+
+**Configuration:**
+```bash
+# Primary provider
+LLM_PROVIDER=openai
+
+# API keys (add keys for providers you want to use)
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GROQ_API_KEY=gsk_...
+
+# Failover chain (optional)
+LLM_FAILOVER_CHAIN=openai,anthropic,groq
+```
+
+**Key Functions:**
+- `selectLLMConfigForTenant(capability, tenantId)` - Get provider+model for a task
+- `callLLMWithFailover(options)` - Auto-failover across providers
+- `resolveLLMApiKey(options)` - Cascading key resolution
+
+See: `lib/aiEngine/README.md` for full documentation.
+
+### LLM Activity Monitor
+
+Real-time monitoring of all LLM calls with token usage tracking.
+
+**API Endpoints:**
+- `GET /api/system/llm-activity` - Get recent LLM calls (with filters)
+- `GET /api/system/llm-activity/stats` - Aggregated stats (tokens, providers, durations)
+- `DELETE /api/system/llm-activity` - Clear activity log
+
+**Query Parameters for `/llm-activity`:**
+- `limit` - Max entries (default: 100)
+- `provider` - Filter by provider (openai, anthropic, groq)
+- `capability` - Filter by capability (chat_tools, json_strict, etc.)
+- `status` - Filter by status (success, error, failover)
+- `since` - ISO timestamp for incremental fetches
+
+**Stats Response:**
+```json
+{
+  "totalEntries": 42,
+  "last5Minutes": 12,
+  "requestsPerMinute": 3,
+  "avgDurationMs": 1500,
+  "byProvider": { "openai": 10, "anthropic": 2 },
+  "byStatus": { "success": 11, "error": 1 },
+  "tokenUsage": {
+    "last5Minutes": { "promptTokens": 5000, "completionTokens": 500, "totalTokens": 5500 },
+    "allTime": { "totalTokens": 25000, "entriesInBuffer": 42 }
+  }
+}
+```
+
+**Frontend:** Settings → LLM Monitor tab (auto-refresh, filters, color-coded badges)
+
+### Per-Tenant LLM Configuration
+
+Override provider/model for specific tenants:
+
+```bash
+# Tenant "ACME_INC" uses Anthropic
+LLM_PROVIDER__TENANT_ACME_INC=anthropic
+MODEL_CHAT_TOOLS__TENANT_ACME_INC=claude-3-5-sonnet-20241022
+
+# Tenant "FASTCO" uses Groq for speed
+LLM_PROVIDER__TENANT_FASTCO=groq
+MODEL_CHAT_TOOLS__TENANT_FASTCO=llama-3.3-70b-versatile
+```
+
+**Note:** If only provider is set (no model override), the system automatically selects appropriate models for that provider using `getProviderDefaultModel()`.
+
 ## 🔧 Configuration
 
 ### Database Setup

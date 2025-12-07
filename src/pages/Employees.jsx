@@ -1,3 +1,4 @@
+import { logDev } from "@/utils/devLogger";
 import { Employee } from "@/api/entities";
 import { useUser } from "../components/shared/useUser.js";
 import { useTenant } from "../components/shared/tenantContext";
@@ -47,11 +48,11 @@ export default function Employees() {
 
   // Debug: Log user state
   useEffect(() => {
-    console.log('[Employees] User state changed:', { currentUser: currentUser?.email, userLoading });
+    logDev('[Employees] User state changed:', { currentUser: currentUser?.email, userLoading });
   }, [currentUser, userLoading]);
 
   useEffect(() => {
-    console.log('[Employees] isFormOpen changed:', isFormOpen);
+    logDev('[Employees] isFormOpen changed:', isFormOpen);
   }, [isFormOpen]);
 
   // Removed local User.me() fetch; currentUser provided by context
@@ -82,9 +83,9 @@ export default function Employees() {
                        currentUser.role === 'superadmin' || 
                        currentUser.employee_role === 'manager';
       
-      console.log('[Employees] Effective tenant ID:', effectiveTenantId);
-      console.log('[Employees] Loading with filter:', filter);
-      console.log('[Employees] canSeeAll:', canSeeAll);
+      logDev('[Employees] Effective tenant ID:', effectiveTenantId);
+      logDev('[Employees] Loading with filter:', filter);
+      logDev('[Employees] canSeeAll:', canSeeAll);
       
       let allEmployees;
       if (canSeeAll) {
@@ -99,8 +100,8 @@ export default function Employees() {
         }, "-created_date");
       }
       
-      console.log('[Employees] Loaded employees:', allEmployees?.length || 0);
-      console.log('[Employees] Sample employee tenant IDs:', allEmployees?.slice(0, 3).map(e => e.tenant_id));
+      logDev('[Employees] Loaded employees:', allEmployees?.length || 0);
+      logDev('[Employees] Sample employee tenant IDs:', allEmployees?.slice(0, 3).map(e => e.tenant_id));
       
       const filtered = allEmployees.filter(emp => 
         (emp.first_name + ' ' + emp.last_name).toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -128,7 +129,7 @@ export default function Employees() {
   const handleSave = async () => {
     setIsFormOpen(false);
     setEditingEmployee(null);
-    console.log('[Employees] Reloading after save...');
+    logDev('[Employees] Reloading after save...');
     await loadEmployees();
     toast.success('Employee list refreshed');
   };
@@ -152,12 +153,12 @@ export default function Employees() {
         await loadEmployees();
       } catch (error) {
         if (import.meta.env.DEV) {
-          console.log('[DELETE DEBUG] Error object:', error);
-          console.log('[DELETE DEBUG] Error type:', typeof error);
-          console.log('[DELETE DEBUG] Error is null?', error === null);
-          console.log('[DELETE DEBUG] Error is undefined?', error === undefined);
-          console.log('[DELETE DEBUG] Error.response:', error?.response);
-          console.log('[DELETE DEBUG] Error.message:', error?.message);
+          logDev('[DELETE DEBUG] Error object:', error);
+          logDev('[DELETE DEBUG] Error type:', typeof error);
+          logDev('[DELETE DEBUG] Error is null?', error === null);
+          logDev('[DELETE DEBUG] Error is undefined?', error === undefined);
+          logDev('[DELETE DEBUG] Error.response:', error?.response);
+          logDev('[DELETE DEBUG] Error.message:', error?.message);
         }
         
         let errorMessage = "Failed to delete employee";
@@ -189,7 +190,7 @@ export default function Employees() {
       }
       
       if (currentUser?.role === 'superadmin' && selectedTenantId) {
-          console.log('[Employees] Using selected tenant for form:', selectedTenantId);
+          logDev('[Employees] Using selected tenant for form:', selectedTenantId);
           return selectedTenantId;
       }
       
@@ -202,7 +203,7 @@ export default function Employees() {
           return null;
       }
       
-      console.log('[Employees] Using user tenant for form:', tenantId);
+      logDev('[Employees] Using user tenant for form:', tenantId);
       return tenantId;
   };
 
@@ -322,7 +323,7 @@ export default function Employees() {
           </div>
           <Button
             onClick={() => { 
-              console.log('[Employees] Add Employee clicked', { currentUser, userLoading, isFormOpen });
+              logDev('[Employees] Add Employee clicked', { currentUser, userLoading, isFormOpen });
               setEditingEmployee(null); 
               setIsFormOpen(true); 
             }}
@@ -459,11 +460,11 @@ export default function Employees() {
                                     loadEmployees();
                                   } catch (err) {
                                     if (import.meta.env.DEV) {
-                                      console.log('[DROPDOWN DELETE DEBUG] Error object:', err);
-                                      console.log('[DROPDOWN DELETE DEBUG] Error type:', typeof err);
-                                      console.log('[DROPDOWN DELETE DEBUG] Error.response:', err?.response);
-                                      console.log('[DROPDOWN DELETE DEBUG] Error.message:', err?.message);
-                                      console.log('[DROPDOWN DELETE DEBUG] Error keys:', err ? Object.keys(err) : 'null/undefined');
+                                      logDev('[DROPDOWN DELETE DEBUG] Error object:', err);
+                                      logDev('[DROPDOWN DELETE DEBUG] Error type:', typeof err);
+                                      logDev('[DROPDOWN DELETE DEBUG] Error.response:', err?.response);
+                                      logDev('[DROPDOWN DELETE DEBUG] Error.message:', err?.message);
+                                      logDev('[DROPDOWN DELETE DEBUG] Error keys:', err ? Object.keys(err) : 'null/undefined');
                                     }
                                     
                                     let msg = "Failed to delete employee";

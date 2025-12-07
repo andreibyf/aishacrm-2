@@ -27,6 +27,7 @@ import {
   FileText, // Added for System Logs
   ExternalLink, // Added for External Tools
   BookOpen, // Added for API Documentation
+  Brain, // Added for LLM Activity Monitor
 
   // Icons for components not in outline's tabs array but preserved:
   Globe, // for TimezoneSettings (Regional Settings)
@@ -92,6 +93,7 @@ const PerformanceMonitor = lazy(() => import('../components/settings/Performance
 const SystemHealthDashboard = lazy(() => import("../components/settings/SystemHealthDashboard"));
 const QaConsole = lazy(() => import("../components/settings/QaConsole"));
 const TenantResolveCacheMonitor = lazy(() => import("../components/settings/TenantResolveCacheMonitor"));
+const LLMActivityMonitor = lazy(() => import("../components/settings/LLMActivityMonitor"));
 
 export default function SettingsPage() { // Renamed from Settings to SettingsPage as per outline
   const [currentUser, setCurrentUser] = useState(null);
@@ -184,6 +186,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
       // Monitoring & Health
       { id: 'performance', label: 'Performance', icon: Activity, color: 'emerald', roles: ['superadmin'] },
       { id: 'cache-monitor', label: 'Cache Monitor', icon: Database, color: 'emerald', roles: ['superadmin'] },
+      { id: 'llm-monitor', label: 'LLM Monitor', icon: Brain, color: 'purple', roles: ['superadmin'] },
       { id: 'sync-health', label: 'Sync Health', icon: RefreshCw, color: 'emerald', roles: ['superadmin'] },
       { id: 'mcp-monitor', label: 'MCP Monitor', icon: Server, color: 'emerald', roles: ['superadmin'] },
       { id: 'security-monitor', label: 'Intrusion Detection', icon: Shield, color: 'red', roles: ['superadmin'] },
@@ -586,6 +589,23 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                   </CardContent>
                 </Card>
               )}
+
+                {activeTab === 'llm-monitor' && isAdmin && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Brain className="w-5 h-5 text-purple-400" />
+                        LLM Activity Monitor
+                      </CardTitle>
+                      <CardDescription>
+                        Real-time view of all LLM calls: tenant, capability, provider, model, node ID, duration, tokens
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <LLMActivityMonitor />
+                    </CardContent>
+                  </Card>
+                )}
 
               {activeTab === 'security-monitor' && isAdmin && ( // New Security Monitor tab
                 <Card>

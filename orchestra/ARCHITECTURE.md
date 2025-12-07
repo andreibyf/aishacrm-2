@@ -12,7 +12,13 @@ AiSHA CRM is:
 - **Caching & Memory:** Two Redis instances:
   - `REDIS_MEMORY_URL` (ephemeral – presence, session, real-time coordination).
   - `REDIS_CACHE_URL` (persistent cache – activity stats, aggregations, response caching). :contentReference[oaicite:5]{index=5}  
-- **AI Layer:** Braid SDK plus OpenAI/GitHub models and MCP tools, hooked through backend AI routes and frontend AI components. :contentReference[oaicite:6]{index=6}  
+- **AI Layer:** Multi-provider LLM engine (`backend/lib/aiEngine/`) with automatic failover:
+  - **Providers:** OpenAI (gpt-4o), Anthropic (Claude 3.5 Sonnet), Groq (Llama 3.3), Local LLMs
+  - **Capability-based routing:** chat_tools, json_strict, brain_read_only, brain_plan_actions
+  - **Per-tenant configuration:** Override provider/model via `LLM_PROVIDER__TENANT_*` env vars
+  - **Failover chain:** Primary → fallback providers with automatic retry
+  - **Activity monitoring:** Real-time LLM call logging with token usage tracking
+  - **Integration:** Braid SDK plus MCP tools, hooked through backend AI routes and frontend AI components :contentReference[oaicite:6]{index=6}  
 - **Orchestration/Deployment:** Docker + docker-compose with fixed external ports:
   - Frontend: container 5173 → host 4000
   - Backend: container 3001 → host 4001 :contentReference[oaicite:7]{index=7}  

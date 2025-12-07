@@ -5,6 +5,7 @@
 
 import express from 'express';
 import { getCacheStats } from '../lib/cacheMiddleware.js';
+import { getLLMActivity, getLLMActivityStats, clearLLMActivity } from '../lib/aiEngine/activityLogger.js';
 
 export default function createSystemRoutes(_pgPool) {
   const router = express.Router();
@@ -362,6 +363,68 @@ export default function createSystemRoutes(_pgPool) {
       });
     } catch (err) {
       console.error('[System] Cache stats error:', err);
+      return res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  // ============================================================================
+  // LLM Activity Monitoring Endpoints
+  // ============================================================================
+
+  // GET /api/system/llm-activity - Get recent LLM activity logs
+  router.get('/llm-activity', async (req, res) => {
+    try {
+      const { limit, tenantId, provider, capability, status, since } = req.query;
+
+      const entries = getLLMActivity({
+        limit: limit ? parseInt(limit, 10) : 100,
+        tenantId,
+        provider,
+        capability,
+        status,
+        since,
+      });
+
+      return res.status(200).json({
+        status: 'success',
+        data: entries,
+        meta: {
+          count: entries.length,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (err) {
+      console.error('[System] LLM activity error:', err);
+      return res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  // GET /api/system/llm-activity/stats - Get LLM activity statistics
+  router.get('/llm-activity/stats', async (req, res) => {
+    try {
+      const stats = getLLMActivityStats();
+
+      return res.status(200).json({
+        status: 'success',
+        data: stats,
+      });
+    } catch (err) {
+      console.error('[System] LLM activity stats error:', err);
+      return res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  // DELETE /api/system/llm-activity - Clear LLM activity logs
+  router.delete('/llm-activity', async (req, res) => {
+    try {
+      clearLLMActivity();
+
+      return res.status(200).json({
+        status: 'success',
+        message: 'LLM activity logs cleared',
+      });
+    } catch (err) {
+      console.error('[System] LLM activity clear error:', err);
       return res.status(500).json({ status: 'error', message: err.message });
     }
   });

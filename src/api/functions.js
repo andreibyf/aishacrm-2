@@ -1,5 +1,6 @@
 import { isLocalDevMode } from './mockData';
 import { getBackendUrl } from '@/api/backendUrl';
+import { logDev } from '@/utils/devLogger';
 
 // Optional direct MCP server URL (useful for connecting your own MCP instance)
 const MCP_SERVER_URL = import.meta.env.VITE_MCP_SERVER_URL || null;
@@ -61,7 +62,7 @@ const createFunctionProxy = (functionName) => {
           }
         }
         if (import.meta.env.DEV) {
-          console.log(`[processChatCommand] tenantId=${tenantId} (source: ${tenantSource})`);
+          logDev(`[processChatCommand] tenantId=${tenantId} (source: ${tenantSource})`);
         }
         const messages = Array.isArray(opts.messages)
           ? opts.messages
@@ -206,7 +207,7 @@ const createFunctionProxy = (functionName) => {
       // ========================================
       
       if (functionName === 'checkBackendStatus') {
-        console.log('[Local Dev Mode] checkBackendStatus: returning mock healthy status');
+        logDev('[Local Dev Mode] checkBackendStatus: returning mock healthy status');
         return { 
           data: { 
             success: true, 
@@ -219,7 +220,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'checkR2Config') {
-        console.log('[Local Dev Mode] checkR2Config: returning mock config status');
+        logDev('[Local Dev Mode] checkR2Config: returning mock config status');
         return {
           data: {
             current_env_status: {
@@ -235,7 +236,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'testStripeConnection') {
-        console.log('[Local Dev Mode] testStripeConnection: returning mock success');
+        logDev('[Local Dev Mode] testStripeConnection: returning mock success');
         return {
           data: {
             success: true,
@@ -246,7 +247,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'testSystemOpenAI') {
-        console.log('[Local Dev Mode] testSystemOpenAI: returning mock success');
+        logDev('[Local Dev Mode] testSystemOpenAI: returning mock success');
         return {
           data: {
             success: true,
@@ -263,7 +264,7 @@ const createFunctionProxy = (functionName) => {
       
       if (functionName === 'runComponentTests') {
         const { testNames } = args[0] || {};
-        console.log('[Local Dev Mode] runComponentTests: returning mock test results for', testNames);
+        logDev('[Local Dev Mode] runComponentTests: returning mock test results for', testNames);
         return {
           data: {
             status: 'success',
@@ -303,7 +304,7 @@ const createFunctionProxy = (functionName) => {
 
       if (functionName === 'checkUserRecord') {
         const { userId } = args[0] || {};
-        console.log('[Local Dev Mode] checkUserRecord: returning mock diagnostic for', userId);
+        logDev('[Local Dev Mode] checkUserRecord: returning mock diagnostic for', userId);
         return {
           data: {
             success: true,
@@ -320,7 +321,7 @@ const createFunctionProxy = (functionName) => {
 
       if (functionName === 'diagnoseLeadVisibility') {
         const { leadId } = args[0] || {};
-        console.log('[Local Dev Mode] diagnoseLeadVisibility: returning mock diagnostic for', leadId);
+        logDev('[Local Dev Mode] diagnoseLeadVisibility: returning mock diagnostic for', leadId);
         return {
           data: {
             success: true,
@@ -337,7 +338,7 @@ const createFunctionProxy = (functionName) => {
 
       if (functionName === 'fixLeadVisibility') {
         const { leadId } = args[0] || {};
-        console.log('[Local Dev Mode] fixLeadVisibility: returning mock fix result for', leadId);
+        logDev('[Local Dev Mode] fixLeadVisibility: returning mock fix result for', leadId);
         return {
           data: {
             success: true,
@@ -396,7 +397,7 @@ const createFunctionProxy = (functionName) => {
       // ========================================
       
       if (functionName === 'cleanupTestRecords') {
-        console.log('[Local Dev Mode] cleanupTestRecords: returning mock cleanup result');
+        logDev('[Local Dev Mode] cleanupTestRecords: returning mock cleanup result');
         return {
           data: {
             success: true,
@@ -407,7 +408,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'cleanupOrphanedData') {
-        console.log('[Local Dev Mode] cleanupOrphanedData: returning mock cleanup result');
+        logDev('[Local Dev Mode] cleanupOrphanedData: returning mock cleanup result');
         return {
           data: {
             success: true,
@@ -419,7 +420,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'detectOrphanedRecords') {
-        console.log('[Local Dev Mode] detectOrphanedRecords: returning mock detection result');
+        logDev('[Local Dev Mode] detectOrphanedRecords: returning mock detection result');
         return {
           data: {
             success: true,
@@ -430,7 +431,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'syncDenormalizedFields') {
-        console.log('[Local Dev Mode] syncDenormalizedFields: returning mock sync result');
+        logDev('[Local Dev Mode] syncDenormalizedFields: returning mock sync result');
         return {
           data: {
             success: true,
@@ -441,7 +442,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'checkDataVolume') {
-        console.log('[Local Dev Mode] checkDataVolume: returning mock volume data');
+        logDev('[Local Dev Mode] checkDataVolume: returning mock volume data');
         return {
           data: {
             success: true,
@@ -457,7 +458,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'archiveAgedData') {
-        console.log('[Local Dev Mode] archiveAgedData: returning mock archive result');
+        logDev('[Local Dev Mode] archiveAgedData: returning mock archive result');
         return {
           data: {
             success: true,
@@ -483,7 +484,7 @@ const createFunctionProxy = (functionName) => {
       }
       
       if (functionName === 'cleanupUserData') {
-        console.log('[Local Dev Mode] cleanupUserData: returning mock cleanup result');
+        logDev('[Local Dev Mode] cleanupUserData: returning mock cleanup result');
         return {
           data: {
             success: true,
@@ -495,7 +496,7 @@ const createFunctionProxy = (functionName) => {
 
       if (functionName === 'updateEmployeeSecure') {
         const { employeeId, updates } = args[0] || {};
-        console.log('[Local Dev Mode] updateEmployeeSecure: returning mock update result for', employeeId);
+        logDev('[Local Dev Mode] updateEmployeeSecure: returning mock update result for', employeeId);
         return {
           data: {
             success: true,
@@ -507,7 +508,7 @@ const createFunctionProxy = (functionName) => {
 
       if (functionName === 'updateEmployeeUserAccess') {
         const { employeeId, access } = args[0] || {};
-        console.log('[Local Dev Mode] updateEmployeeUserAccess: returning mock access update for', employeeId);
+        logDev('[Local Dev Mode] updateEmployeeUserAccess: returning mock access update for', employeeId);
         return {
           data: {
             success: true,
@@ -519,7 +520,7 @@ const createFunctionProxy = (functionName) => {
 
       if (functionName === 'deleteTenantWithData') {
         const { tenantId } = args[0] || {};
-        console.log('[Local Dev Mode] deleteTenantWithData: returning mock delete result for', tenantId);
+        logDev('[Local Dev Mode] deleteTenantWithData: returning mock delete result for', tenantId);
         return {
           data: {
             success: true,
@@ -534,7 +535,7 @@ const createFunctionProxy = (functionName) => {
       // ========================================
       
       if (functionName === 'seedDocumentation') {
-        console.log('[Local Dev Mode] seedDocumentation: returning mock seed result');
+        logDev('[Local Dev Mode] seedDocumentation: returning mock seed result');
         return {
           data: {
             success: true,
@@ -545,7 +546,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'mcpServerPublic') {
-        console.log('[Local Dev Mode] mcpServerPublic: returning mock MCP server status');
+        logDev('[Local Dev Mode] mcpServerPublic: returning mock MCP server status');
         return {
           data: {
             success: true,
@@ -615,7 +616,7 @@ const createFunctionProxy = (functionName) => {
       // ========================================
       
       if (functionName === 'createCheckoutSession') {
-        console.log('[Local Dev Mode] createCheckoutSession: returning mock checkout URL');
+        logDev('[Local Dev Mode] createCheckoutSession: returning mock checkout URL');
         return {
           data: {
             success: true,
@@ -626,7 +627,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'createBillingPortalSession') {
-        console.log('[Local Dev Mode] createBillingPortalSession: returning mock portal URL');
+        logDev('[Local Dev Mode] createBillingPortalSession: returning mock portal URL');
         return {
           data: {
             success: true,
@@ -641,7 +642,7 @@ const createFunctionProxy = (functionName) => {
       // ========================================
       
       if (functionName === 'createInitialCronJobs') {
-        console.log('[Local Dev Mode] createInitialCronJobs: returning mock cron init result');
+        logDev('[Local Dev Mode] createInitialCronJobs: returning mock cron init result');
         return {
           data: {
             success: true,
@@ -799,11 +800,11 @@ const createFunctionProxy = (functionName) => {
     }
     // Non-local: call backend validate-and-import directly when Base44 doesn't expose it
     if (functionName === 'validateAndImport') {
-      console.log('[validateAndImport] Non-local mode handler called');
+      logDev('[validateAndImport] Non-local mode handler called');
       try {
         const BACKEND_URL = getBackendUrl();
         const payload = args[0] || {};
-        console.log('[validateAndImport] Calling', `${BACKEND_URL}/api/validation/validate-and-import`, 'with payload:', payload);
+        logDev('[validateAndImport] Calling', `${BACKEND_URL}/api/validation/validate-and-import`, 'with payload:', payload);
         const response = await fetch(`${BACKEND_URL}/api/validation/validate-and-import`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -811,7 +812,7 @@ const createFunctionProxy = (functionName) => {
           body: JSON.stringify(payload),
         });
         const json = await response.json();
-        console.log('[validateAndImport] Response status:', response.status, 'json:', json);
+        logDev('[validateAndImport] Response status:', response.status, 'json:', json);
         if (!response.ok) {
           return { data: { status: 'error', error: json?.message || response.statusText } };
         }

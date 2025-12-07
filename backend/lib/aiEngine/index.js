@@ -5,7 +5,7 @@
  * for all AI-related routes (ai.js, aiRealtime.js, mcp.js).
  */
 
-export { pickModel } from "./modelRouter.js";
+export { pickModel, selectLLMConfigForTenant } from "./modelRouter.js";
 export { resolveLLMApiKey } from "./keyResolver.js";
 export { generateChatCompletion } from "./llmClient.js";
 export {
@@ -13,3 +13,9 @@ export {
   resolveTenantRecord,
   validateUserTenantAccess,
 } from "./tenantContext.js";
+export {
+  logLLMActivity,
+  getLLMActivity,
+  getLLMActivityStats,
+  clearLLMActivity,
+} from "./activityLogger.js";

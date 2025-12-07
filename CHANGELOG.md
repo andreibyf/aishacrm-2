@@ -10,6 +10,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - 2025-12-06
 
 ### Added
+- **Multi-Provider LLM Support:** AI engine now supports multiple LLM providers with automatic failover
+  - **OpenAI:** gpt-4o, gpt-4o-mini, gpt-4o-realtime-preview
+  - **Anthropic:** claude-3-5-sonnet-20241022, claude-3-haiku-20240307
+  - **Groq:** llama-3.3-70b-versatile, llama-3.1-8b-instant (or custom models)
+  - **Local:** Any OpenAI-compatible server (LM Studio, vLLM, etc.)
+  - Configurable failover chain via `LLM_FAILOVER_CHAIN` env var
+  - Per-tenant provider overrides via `tenant_integrations` table
+
+- **aiEngine Abstraction Layer:** New `backend/lib/aiEngine/` module for unified LLM access
+  - `selectLLMConfigForTenant()` - Gets provider+model config with tenant overrides
+  - `callLLMWithFailover()` - Automatic provider failover on errors
+  - `resolveLLMApiKey()` - Cascading key resolution (explicit → tenant → system → env)
+  - `getProviderDefaultModel()` - Provider-specific model defaults per capability
+
+- **Capability-Based Model Routing:** Models selected by task requirements
+  - `chat_tools` - Full tool calling (gpt-4o, claude-3-5-sonnet, llama-3.3-70b)
+  - `chat_light` - Quick responses (gpt-4o-mini, claude-3-haiku, llama-3.1-8b)
+  - `json_strict` - Structured JSON output
+  - `brain_read_only` / `brain_plan_actions` - AI Brain analytics and planning
+  - `realtime_voice` - WebRTC voice (OpenAI only)
+
 - **Wake Word Detection:** Hands-free "Hey Aisha" wake word activation for realtime voice
   - New `useWakeWordDetection.js` hook using Web Speech API
   - Recognizes: "Aisha", "Hey Aisha", "Hi Aisha", "AI-SHA", "Isha", "Alisha", "Ayesha"

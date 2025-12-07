@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { getOpenAIClient } from './aiProvider.js';
+import OpenAI from 'openai';
+import { selectLLMConfigForTenant, resolveLLMApiKey } from './aiEngine/index.js';
+import { logLLMActivity } from './aiEngine/activityLogger.js';
 import { BRAID_SYSTEM_PROMPT, executeBraidTool, generateToolSchemas, summarizeToolResult, } from './braidIntegration-v2.js';
 import { resolveCanonicalTenant, isUuid as isUuidHelper } from './tenantCanonicalResolver.js';
 const READ_ONLY_NAME_REGEX = /^(search_|list_|get_|fetch_|lookup_|debug_)/i;
@@ -126,9 +128,38 @@ export async function runTask(params) {
         const toolSchemas = (await generateToolSchemas(allowedToolNames));
         const filteredSchemas = filterToolSchemas(toolSchemas, allowedToolNames);
         const systemPrompt = buildSystemPrompt({ ...params, context }, tenant);
-        const openai = getOpenAIClient();
+
+        // Use aiEngine for multi-provider model/key resolution
+        const capability = params.mode === 'propose_actions' ? 'brain_plan_actions' : 'brain_read_only';
+        const llmConfig = selectLLMConfigForTenant({
+            capability,
+            tenantSlugOrId: tenant.uuid,
+        });
+
+        // Resolve API key for the selected provider
+        const apiKey = await resolveLLMApiKey({
+            tenantSlugOrId: tenant.uuid,
+            provider: llmConfig.provider,
+        });
+
+        if (!apiKey) {
+            throw new BrainError(`No API key configured for provider ${llmConfig.provider}`, 500);
+        }
+
+        // Create provider-specific OpenAI client (works for OpenAI, Groq, Local - all OpenAI-compatible)
+        // Note: Anthropic not supported for tool calling in this path
+        const baseUrl = llmConfig.provider === 'groq'
+            ? (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1')
+            : llmConfig.provider === 'local'
+                ? (process.env.LOCAL_LLM_BASE_URL || 'http://localhost:1234/v1')
+                : (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1');
+
+        const openai = new OpenAI({ apiKey, baseURL: baseUrl });
+
+        console.log(`[AI Brain] Using provider=${llmConfig.provider}, model=${llmConfig.model}, capability=${capability}`);
+
         const completionPayload = {
-            model: process.env.DEFAULT_OPENAI_MODEL || 'gpt-4o-mini',
+            model: llmConfig.model,
             messages: [
                 { role: 'system', content: systemPrompt },
                 {
@@ -143,7 +174,22 @@ export async function runTask(params) {
             completionPayload.tools = filteredSchemas;
             completionPayload.tool_choice = 'auto';
         }
+        const startTime = Date.now();
         const completion = await openai.chat.completions.create(completionPayload);
+        const durationMs = Date.now() - startTime;
+
+        // Log LLM activity for AI Brain
+        logLLMActivity({
+            tenantId: tenant.uuid,
+            capability,
+            provider: llmConfig.provider,
+            model: completion.model || llmConfig.model,
+            nodeId: `aiBrain:${params.taskType}:${params.mode}`,
+            status: 'success',
+            durationMs,
+            usage: completion.usage || null,
+        });
+
         const choice = completion?.choices?.[0];
         const assistantMessage = choice?.message || {};
         const summary = sanitizeTextContent(assistantMessage.content) || 'No summary provided.';

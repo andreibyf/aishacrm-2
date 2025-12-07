@@ -1,3 +1,4 @@
+import { logDev } from "@/utils/devLogger";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Opportunity } from "@/api/entities";
 import { Account } from "@/api/entities";
@@ -166,7 +167,7 @@ export default function OpportunitiesPage() {
         // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
         if ((user.role === 'superadmin' || user.role === 'admin') && !tenantFilter.tenant_id) {
           if (import.meta.env.DEV) {
-            console.log("[Opportunities] Skipping data load - no tenant selected");
+            logDev("[Opportunities] Skipping data load - no tenant selected");
           }
           supportingDataLoaded.current = true;
           setSupportingDataReady(true);
@@ -174,7 +175,7 @@ export default function OpportunitiesPage() {
         }
 
         if (import.meta.env.DEV) {
-          console.log(
+          logDev(
             "[Opportunities] Loading supporting data with tenant filter:",
             tenantFilter,
           );
@@ -224,7 +225,7 @@ export default function OpportunitiesPage() {
         setEmployees(employeesData || []);
 
         if (import.meta.env.DEV) {
-          console.log("[Opportunities] Supporting data loaded successfully");
+          logDev("[Opportunities] Supporting data loaded successfully");
         }
         supportingDataLoaded.current = true; // Mark as loaded (ref)
         setSupportingDataReady(true); // notify effects to proceed
@@ -276,7 +277,7 @@ export default function OpportunitiesPage() {
         return;
       }
 
-      console.log(
+      logDev(
         "[Opportunities] Loading stats with filter:",
         effectiveFilter,
       );
@@ -288,7 +289,7 @@ export default function OpportunitiesPage() {
         10000,
       );
 
-      console.log(
+      logDev(
         "[Opportunities] Loaded opportunities for stats:",
         allOpportunities?.length,
       );
@@ -315,7 +316,7 @@ export default function OpportunitiesPage() {
         ).length || 0,
       };
 
-      console.log("[Opportunities] Calculated stats:", stats);
+      logDev("[Opportunities] Calculated stats:", stats);
       setTotalStats(stats);
     } catch (error) {
       console.error("Failed to load total stats:", error);
@@ -372,7 +373,7 @@ export default function OpportunitiesPage() {
       // Calculate offset for pagination
       const skip = (page - 1) * size;
 
-      console.log(
+      logDev(
         "[Opportunities] Loading page:",
         page,
         "size:",
@@ -394,7 +395,7 @@ export default function OpportunitiesPage() {
       const countQuery = await Opportunity.filter(effectiveFilter, "id", 10000);
       const totalCount = countQuery?.length || 0;
 
-      console.log(
+      logDev(
         "[Opportunities] Loaded:",
         opportunitiesData?.length,
         "Total:",
@@ -910,7 +911,7 @@ export default function OpportunitiesPage() {
 
   const handleStageChange = async (opportunityId, newStage) => {
     try {
-      console.log('[Opportunities] handleStageChange:', { opportunityId, newStage, tenant: selectedTenantId });
+      logDev('[Opportunities] handleStageChange:', { opportunityId, newStage, tenant: selectedTenantId });
       
       // Include tenant_id in the update - use selectedTenantId from useTenant hook
       const updateData = {
@@ -919,7 +920,7 @@ export default function OpportunitiesPage() {
       };
       
       await Opportunity.update(opportunityId, updateData);
-      console.log('[Opportunities] Stage update successful, clearing cache and reloading...');
+      logDev('[Opportunities] Stage update successful, clearing cache and reloading...');
       
       clearCache("Opportunity");
       await Promise.all([
@@ -932,7 +933,7 @@ export default function OpportunitiesPage() {
       const updated = await Opportunity.filter({ id: opportunityId, tenant_id: selectedTenantId }, "id", 1).then(
         (r) => r[0],
       );
-      console.log('[Opportunities] Retrieved updated opportunity:', updated);
+      logDev('[Opportunities] Retrieved updated opportunity:', updated);
       return updated;
     } catch (error) {
       console.error("Error updating opportunity stage:", error);
@@ -958,7 +959,7 @@ export default function OpportunitiesPage() {
         <SimpleModal
           open={isFormOpen}
           onOpenChange={(open) => {
-            console.log("[Opportunities] Modal onOpenChange:", open);
+            logDev("[Opportunities] Modal onOpenChange:", open);
             setIsFormOpen(open);
             if (!open) {
               setEditingOpportunity(null);
@@ -976,11 +977,11 @@ export default function OpportunitiesPage() {
             users={users}
             leads={leads}
             onSubmit={async (result) => {
-              console.log("[Opportunities] Form submitted with result:", result);
+              logDev("[Opportunities] Form submitted with result:", result);
               await handleSave();
             }}
             onCancel={() => {
-              console.log("[Opportunities] Form cancelled");
+              logDev("[Opportunities] Form cancelled");
               setIsFormOpen(false);
               setEditingOpportunity(null);
             }}
@@ -1012,7 +1013,7 @@ export default function OpportunitiesPage() {
               setDetailOpportunity(null);
             }}
             onEdit={(opp) => {
-              console.log(
+              logDev(
                 "[Opportunities] Edit clicked from detail panel:",
                 opp.id,
               );
@@ -1044,7 +1045,7 @@ export default function OpportunitiesPage() {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    console.log(
+                    logDev(
                       "[Opportunities] View mode button clicked, current:",
                       viewMode,
                     );
@@ -1070,7 +1071,7 @@ export default function OpportunitiesPage() {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    console.log("[Opportunities] Import button clicked");
+                    logDev("[Opportunities] Import button clicked");
                     setIsImportOpen(true);
                   }}
                   className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
@@ -1105,10 +1106,10 @@ export default function OpportunitiesPage() {
               <TooltipTrigger asChild>
                 <Button
                   onClick={() => {
-                    console.log("[Opportunities] Add button clicked");
+                    logDev("[Opportunities] Add button clicked");
                     setEditingOpportunity(null);
                     setIsFormOpen(true);
-                    console.log("[Opportunities] State after click:", {
+                    logDev("[Opportunities] State after click:", {
                       isFormOpen: true,
                       editingOpportunity: null,
                     });

@@ -6,7 +6,160 @@
 import express from "express";
 import fetch from "node-fetch";
 import { getSupabaseClient } from "../lib/supabase-db.js";
-import { resolveLLMApiKey, pickModel, generateChatCompletion } from "../lib/aiEngine/index.js";
+import { resolveLLMApiKey, pickModel, generateChatCompletion, selectLLMConfigForTenant } from "../lib/aiEngine/index.js";
+import { logLLMActivity } from "../lib/aiEngine/activityLogger.js";
+
+/**
+ * callLLMWithFailover
+ * 
+ * Attempts to call the LLM with automatic failover between providers.
+ * Primary provider is tried first; on failure, falls back to secondary.
+ * 
+ * Failover logic:
+ * - If primary = "anthropic" -> secondary = "openai"
+ * - Otherwise -> secondary = "anthropic"
+ * 
+ * @param {Object} opts
+ * @param {string} [opts.tenantId] - Tenant identifier for key/model resolution
+ * @param {Array} opts.messages - OpenAI-style messages
+ * @param {string} [opts.capability] - Model capability ("json_strict", "chat_tools", etc.)
+ * @param {number} [opts.temperature] - Temperature for completion
+ * @param {string} [opts.explicitModel] - Override model
+ * @param {string} [opts.explicitProvider] - Override provider
+ * @param {string} [opts.explicitApiKey] - Override API key
+ * @returns {Promise<{ ok: boolean, result?: object, provider?: string, model?: string, error?: string }>}
+ */
+async function callLLMWithFailover({
+  tenantId,
+  messages,
+  capability = "json_strict",
+  temperature = 0.2,
+  explicitModel = null,
+  explicitProvider = null,
+  explicitApiKey = null,
+} = {}) {
+  // Get base config from tenant settings
+  const baseConfig = selectLLMConfigForTenant({
+    capability,
+    tenantSlugOrId: tenantId,
+    overrideModel: explicitModel,
+    providerOverride: explicitProvider,
+  });
+
+  // Determine primary and secondary providers
+  const primaryProvider = explicitProvider || baseConfig.provider || process.env.LLM_PROVIDER || "openai";
+  const secondaryProvider = primaryProvider === "anthropic" ? "openai" : "anthropic";
+
+  // Build candidate list: primary first, then secondary
+  const candidates = [
+    { provider: primaryProvider, model: explicitModel || baseConfig.model },
+    { provider: secondaryProvider, model: null }, // Will use default for this provider
+  ];
+
+  const errors = [];
+
+  const totalAttempts = candidates.length;
+
+  for (let attemptIndex = 0; attemptIndex < candidates.length; attemptIndex++) {
+    const candidate = candidates[attemptIndex];
+    const provider = candidate.provider;
+    const attempt = attemptIndex + 1;
+
+    // Get model for this provider
+    let model = candidate.model;
+    if (!model) {
+      const cfg = selectLLMConfigForTenant({
+        capability,
+        tenantSlugOrId: tenantId,
+        providerOverride: provider,
+      });
+      model = cfg.model;
+    }
+
+    // Resolve API key for this provider
+    const apiKey = await resolveLLMApiKey({
+      explicitKey: explicitApiKey,
+      tenantSlugOrId: tenantId,
+      provider,
+    });
+
+    if (!apiKey) {
+      errors.push({ provider, error: `No API key for provider ${provider}` });
+      // Log missing key with structured format
+      logLLMActivity({
+        tenantId,
+        capability,
+        provider,
+        model,
+        nodeId: "mcp:callLLMWithFailover",
+        status: "error",
+        error: `No API key for provider ${provider}`,
+        attempt,
+        totalAttempts,
+      });
+      continue;
+    }
+
+    // Attempt the call
+    const startTime = Date.now();
+    const result = await generateChatCompletion({
+      provider,
+      model,
+      messages,
+      temperature,
+      apiKey,
+    });
+    const durationMs = Date.now() - startTime;
+
+    if (result.status === "success") {
+      // Log successful LLM activity with attempt info
+      logLLMActivity({
+        tenantId,
+        capability,
+        provider,
+        model: result.raw?.model || model,
+        nodeId: "mcp:callLLMWithFailover",
+        status: errors.length > 0 ? "failover" : "success",
+        durationMs,
+        usage: result.raw?.usage || null,
+        attempt,
+        totalAttempts,
+      });
+
+      return {
+        ok: true,
+        result,
+        provider,
+        model: result.raw?.model || model,
+        usage: result.raw?.usage || null,
+      };
+    }
+
+    // Log failure and continue to next candidate
+    errors.push({ provider, error: result.error });
+
+    // Log failed attempt with structured format
+    logLLMActivity({
+      tenantId,
+      capability,
+      provider,
+      model,
+      nodeId: "mcp:callLLMWithFailover",
+      status: "error",
+      durationMs,
+      error: result.error,
+      attempt,
+      totalAttempts,
+    });
+  }
+
+  // All candidates failed
+  return {
+    ok: false,
+    error: errors.map((e) => `${e.provider}: ${e.error}`).join("; "),
+    errors,
+  };
+}
 
 export default function createMCPRoutes(_pgPool) {
   const router = express.Router();
@@ -897,21 +1050,6 @@ export default function createMCPRoutes(_pgPool) {
           provider: providerParam,
         } = parameters || {};
 
-        // Multi-provider support: resolve provider from param or env
-        const provider = providerParam || process.env.LLM_JSON_PROVIDER || process.env.LLM_PROVIDER || "openai";
-        const defaultJsonModel = pickModel({ capability: "json_strict" });
-        const finalModel = model || defaultJsonModel;
-
-        // Resolve key using centralized aiEngine key resolver with provider awareness
-        const apiKey = await resolveLLMApiKey({
-          explicitKey: api_key,
-          tenantSlugOrId: tenantIdParam,
-          provider,
-        });
-        if (!apiKey) {
-          return res.status(501).json({ status: "error", message: `API key not configured for provider: ${provider}` });
-        }
-
         const SYSTEM_INSTRUCTIONS = `You are a strict JSON generator. Produce ONLY valid JSON that exactly matches the provided JSON Schema.\n- Do not include any commentary or code fences.\n- If you are unsure, return the closest valid JSON.\n`;
 
         const userContentParts = [];
@@ -930,36 +1068,42 @@ export default function createMCPRoutes(_pgPool) {
           { role: "user", content: userContentParts.join("\n\n") || "Generate JSON." },
         ];
 
-        const result = await generateChatCompletion({
-          provider,
-          model: finalModel,
+        // Use callLLMWithFailover for automatic provider failover
+        const failoverResult = await callLLMWithFailover({
+          tenantId: tenantIdParam,
           messages,
+          capability: "json_strict",
           temperature,
-          apiKey,
+          explicitModel: model,
+          explicitProvider: providerParam,
+          explicitApiKey: api_key,
         });
 
-        if (result.status === "error") {
-          const http = /api key|not configured/i.test(result.error || '') ? 501 : 500;
-          return res.status(http).json({ status: "error", message: result.error });
+        if (!failoverResult.ok) {
+          const isKeyError = /api key|not configured/i.test(failoverResult.error || '');
+          return res.status(isKeyError ? 501 : 500).json({ status: "error", message: failoverResult.error });
         }
+
+        // Parse JSON from result
         let jsonOut = null;
         try {
-          jsonOut = JSON.parse(result.content || "null");
+          jsonOut = JSON.parse(failoverResult.result.content || "null");
         } catch {
           // try to extract JSON block heuristically
-          const match = (result.content || "").match(/\{[\s\S]*\}\s*$/);
+          const match = (failoverResult.result.content || "").match(/\{[\s\S]*\}\s*$/);
           if (match) {
             try { jsonOut = JSON.parse(match[0]); } catch { jsonOut = null; }
           }
         }
+
         return res.json({
           status: "success",
           data: {
             json: jsonOut,
-            raw: result.content,
-            model: result.raw?.model || finalModel,
-            provider,
-            usage: result.raw?.usage || null,
+            raw: failoverResult.result.content,
+            model: failoverResult.model,
+            provider: failoverResult.provider,
+            usage: failoverResult.usage,
           },
         });
       }
@@ -1170,19 +1314,29 @@ export default function createMCPRoutes(_pgPool) {
         `News: ${(searchResults || []).map(r => `${r.title}: ${r.snippet || ''}`).join(" | ").slice(0, 1500)}`,
       ];
 
-      // Multi-provider support: resolve provider from body or env
-      const provider = body.provider || process.env.MARKET_INSIGHTS_LLM_PROVIDER || process.env.LLM_PROVIDER || "openai";
+      // Build messages for LLM call
+      const SYSTEM = `You are a strict JSON generator. Output ONLY JSON matching the schema. No commentary.`;
+      const messages = [
+        { role: "system", content: SYSTEM },
+        { role: "user", content: `${prompt}\n\nSchema:\n${JSON.stringify(schema)}\n\nContext:\n${context.join("\n")}` },
+      ];
+      const temperature = typeof body.temperature === "number" ? body.temperature : 0.2;
 
-      // Generate JSON via LLM MCP tool using centralized key resolver with provider
-      const apiKey = await resolveLLMApiKey({
-        explicitKey: body.api_key || null,
-        tenantSlugOrId: tenantId,
-        provider,
+      // Use callLLMWithFailover for automatic provider failover
+      const failoverResult = await callLLMWithFailover({
+        tenantId,
+        messages,
+        capability: "brain_read_only",
+        temperature,
+        explicitModel: body.model,
+        explicitProvider: body.provider,
+        explicitApiKey: body.api_key,
       });
-      if (!apiKey) {
-        // Fallback: return a baseline insights object without LLM
+
+      // Build fallback baseline helper
+      const buildBaseline = () => {
         const strip = (s) => String(s || '').replace(/<[^>]+>/g, '').trim();
-        const baseline = {
+        return {
           market_overview: overview || `Market context for ${INDUSTRY} in ${LOCATION}.`,
           swot_analysis: {
             strengths: [
@@ -1243,33 +1397,21 @@ export default function createMCPRoutes(_pgPool) {
             { name: 'Industry Index', current_value: 108, trend: 'up', unit: 'index' },
           ],
         };
-        return res.json({ status: 'success', data: { insights: baseline, model: null, provider: null, usage: null, fallback: true } });
+      };
+
+      // If all providers failed, return baseline fallback
+      if (!failoverResult.ok) {
+        const isKeyError = /api key|not configured/i.test(failoverResult.error || '');
+        if (isKeyError) {
+          // Return baseline without error status
+          return res.json({ status: 'success', data: { insights: buildBaseline(), model: null, provider: null, usage: null, fallback: true } });
+        }
+        return res.status(500).json({ status: "error", message: failoverResult.error });
       }
 
-      // API key was resolved successfully - proceed with LLM call
-      const SYSTEM = `You are a strict JSON generator. Output ONLY JSON matching the schema. No commentary.`;
-      const messages = [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: `${prompt}\n\nSchema:\n${JSON.stringify(schema)}\n\nContext:\n${context.join("\n")}` },
-      ];
-      const defaultInsightsModel = pickModel({ capability: "brain_read_only" });
-      const model = body.model || defaultInsightsModel;
-      const temperature = typeof body.temperature === "number" ? body.temperature : 0.2;
-
-      const result = await generateChatCompletion({
-        provider,
-        model,
-        messages,
-        temperature,
-        apiKey,
-      });
-
-      if (result.status === "error") {
-        const http = /api key|not configured/i.test(result.error || '') ? 501 : 500;
-        return res.status(http).json({ status: "error", message: result.error });
-      }
+      // Parse LLM response
       let insights = null;
-      try { insights = JSON.parse(result.content || "null"); } catch { insights = null; }
+      try { insights = JSON.parse(failoverResult.result.content || "null"); } catch { insights = null; }
       if (!insights) {
         // fallback minimal object
         insights = {
@@ -1286,9 +1428,9 @@ export default function createMCPRoutes(_pgPool) {
         status: "success",
         data: {
           insights,
-          model: result.raw?.model || model,
-          provider,
-          usage: result.raw?.usage || null,
+          model: failoverResult.model,
+          provider: failoverResult.provider,
+          usage: failoverResult.usage,
         },
       });
     } catch (error) {

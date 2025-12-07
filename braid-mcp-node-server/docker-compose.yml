@@ -11,6 +11,7 @@ services:
     environment:
       NODE_ENV: production
       MCP_ROLE: server
+      MCP_NODE_ID: "braid-mcp-server"
       # Connect via aishanet to backend and redis containers
       CRM_BACKEND_URL: http://aishacrm-backend:3001
       REDIS_URL: redis://aishacrm-redis-memory:6379
@@ -35,7 +36,7 @@ services:
     environment:
       NODE_ENV: production
       MCP_ROLE: node
-      MCP_NODE_ID: "1"
+      MCP_NODE_ID: "braid-mcp-1"
       MCP_SERVER_URL: http://braid-mcp-server:8000
       CRM_BACKEND_URL: http://aishacrm-backend:3001
       REDIS_URL: redis://aishacrm-redis-memory:6379
@@ -60,7 +61,7 @@ services:
     environment:
       NODE_ENV: production
       MCP_ROLE: node
-      MCP_NODE_ID: "2"
+      MCP_NODE_ID: "braid-mcp-2"
       MCP_SERVER_URL: http://braid-mcp-server:8000
       CRM_BACKEND_URL: http://aishacrm-backend:3001
       REDIS_URL: redis://aishacrm-redis-memory:6379

@@ -1,3 +1,4 @@
+import { logDev } from "@/utils/devLogger";
 import React, { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom"; // Import useNavigate
 import { createPageUrl } from "@/utils";
@@ -156,7 +157,7 @@ function isAdminOrSuperAdmin(user) {
 function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
   if (!user) return false;
 
-  console.log("[hasPageAccess] Called with:", {
+  logDev("[hasPageAccess] Called with:", {
     pageName,
     userEmail: user.email,
     userRole: user.role,
@@ -218,7 +219,7 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
 
   if (user.navigation_permissions && typeof user.navigation_permissions === 'object') {
     if (pageName === 'Dashboard') {
-      console.log('[hasPageAccess] User navigation_permissions:', {
+      logDev('[hasPageAccess] User navigation_permissions:', {
         userEmail: user.email,
         role: user.role,
         permissions: user.navigation_permissions,
@@ -228,7 +229,7 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     const hasCustomPermission = Object.prototype.hasOwnProperty.call(user.navigation_permissions, pageName);
     if (hasCustomPermission) {
       const explicit = user.navigation_permissions[pageName];
-      console.log(`[hasPageAccess] Explicit permission for ${pageName}:`, explicit);
+      logDev(`[hasPageAccess] Explicit permission for ${pageName}:`, explicit);
       if (explicit === false) return false;
       if (explicit === true) return true;
     }
@@ -585,14 +586,14 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         // No UI selection - check user's assigned tenant_id
         if (user?.tenant_id) {
           // Super Admin or Admin has an assigned tenant - default to it
-          console.log(
+          logDev(
             "[Layout] Admin defaulting to assigned tenant:",
             user.tenant_id,
           );
           nextTenantId = user.tenant_id;
         } else if (superAdmin) {
           // Super Admin with NO assigned tenant = global access to ALL tenants
-          console.log(
+          logDev(
             "[Layout] SuperAdmin global access - viewing ALL tenants",
           );
           return null; // null = "all tenants" for superadmins without tenant assignment
@@ -609,7 +610,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       ? nextTenantId
       : null;
     if (validTenantId) {
-      console.log("[Layout] Filtering data for tenant:", validTenantId);
+      logDev("[Layout] Filtering data for tenant:", validTenantId);
     }
     return validTenantId;
   }, [user, selectedTenantId]);
@@ -681,7 +682,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     // 2. No tenant is currently selected in context
     // 3. User is not a global super admin (tenant_id=null for global access)
     if (user?.tenant_id && selectedTenantId === null && setSelectedTenantId) {
-      console.log("[Layout] Auto-selecting tenant from user profile:", user.tenant_id);
+      logDev("[Layout] Auto-selecting tenant from user profile:", user.tenant_id);
       setSelectedTenantId(user.tenant_id);
     }
   }, [user?.tenant_id, selectedTenantId, setSelectedTenantId]);
@@ -1066,7 +1067,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     const loadCurrentTenant = async () => {
       // ALWAYS log effect entry in dev
       if (import.meta.env.DEV) {
-        console.log("[Layout] loadCurrentTenant EFFECT RUNNING:", {
+        logDev("[Layout] loadCurrentTenant EFFECT RUNNING:", {
           user: !!user,
           effectiveTenantId,
           selectedTenantId,
@@ -1089,7 +1090,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         const tenantIdToFetch = effectiveTenantId;
 
         if (import.meta.env.DEV) {
-          console.log("[Layout] loadCurrentTenant FETCHING:", {
+          logDev("[Layout] loadCurrentTenant FETCHING:", {
             effectiveTenantId: tenantIdToFetch,
             selectedTenantId,
             lastRequest: lastTenantRequestIdRef.current,
@@ -1128,7 +1129,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         // Dedupe by id to prevent redundant Tenant.get calls
         if (lastTenantRequestIdRef.current === tenantIdToFetch) {
           if (import.meta.env.DEV) {
-            console.log(
+            logDev(
               "[Layout] loadCurrentTenant SKIPPED (dedupe):",
               tenantIdToFetch,
             );
@@ -1608,7 +1609,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   // Debug: log branding in dev
   React.useEffect(() => {
     if (import.meta.env.DEV) {
-      console.log("[Layout] Branding:", {
+      logDev("[Layout] Branding:", {
         companyName,
         logoUrl,
         user: user?.email,
@@ -2232,7 +2233,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               const password = e.target.password.value;
 
               try {
-                console.log("[Login] Attempting Supabase auth login:", email);
+                logDev("[Login] Attempting Supabase auth login:", email);
                 const { error } = await supabase.auth.signInWithPassword({
                   email,
                   password,
@@ -2240,7 +2241,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 if (error) {
                   throw error;
                 }
-                console.log("[Login] Supabase auth successful, calling backend login...");
+                logDev("[Login] Supabase auth successful, calling backend login...");
                 
                 // Call backend /api/auth/login to get JWT cookies
                 // Use runtime env (window._env_) with fallback to build-time env
@@ -2259,7 +2260,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                 const loginData = await loginResponse.json();
                 const tenant_id = loginData.data?.user?.tenant_id;
                 
-                console.log("[Login] Login response data:", { 
+                logDev("[Login] Login response data:", { 
                   tenant_id, 
                   hasUser: !!loginData.data?.user,
                   userKeys: Object.keys(loginData.data?.user || {})
@@ -2275,7 +2276,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                       body: JSON.stringify({ tenant_id })
                     });
                     const cacheResult = await cacheResponse.json();
-                    console.log("[Login] Dashboard cache cleared:", cacheResult);
+                    logDev("[Login] Dashboard cache cleared:", cacheResult);
                   } catch (cacheErr) {
                     console.warn("[Login] Failed to clear cache (non-critical):", cacheErr);
                   }
@@ -2283,7 +2284,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                   console.warn("[Login] No tenant_id found in login response, skipping cache clear");
                 }
                 
-                console.log("[Login] Backend login successful, reloading...");
+                logDev("[Login] Backend login successful, reloading...");
                 window.location.reload();
               } catch (error) {
                 console.error("[Login] Login failed:", error);
@@ -2399,7 +2400,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         <PasswordChangeModal
           user={user}
           onPasswordChanged={() => {
-            console.log(
+            logDev(
               "[Password Change] Password changed successfully, reloading...",
             );
             window.location.reload(); // Reload to refresh user data
