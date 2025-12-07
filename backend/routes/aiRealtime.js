@@ -1,5 +1,6 @@
 import express from 'express';
 import { BRAID_SYSTEM_PROMPT, generateToolSchemas } from '../lib/braidIntegration-v2.js';
+import { resolveLLMApiKey } from '../lib/aiEngine/index.js';
 
 const REALTIME_URL = 'https://api.openai.com/v1/realtime/client_secrets';
 const DEFAULT_REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-12-17';
@@ -141,12 +142,6 @@ export default function createAiRealtimeRoutes(pgPool) {
       user_agent: userAgent,
     };
     try {
-      const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) {
-        console.error('[AI][Realtime] OPENAI_API_KEY missing while minting realtime token');
-        return res.status(500).json({ status: 'error', message: 'Realtime voice is not configured' });
-      }
-
       if (!req.user?.id) {
         return res.status(401).json({ status: 'error', message: 'Authentication required' });
       }
@@ -154,6 +149,18 @@ export default function createAiRealtimeRoutes(pgPool) {
       const tenantIdFromQuery = normalizeTenantId(req.query?.tenant_id);
       const tenantIdFromUser = normalizeTenantId(req.user?.tenant_id);
       const tenantId = tenantIdFromQuery || tenantIdFromUser || null;
+
+      // Use centralized key resolver with tenant awareness
+      const apiKey = await resolveLLMApiKey({
+        headerKey: req.headers['x-openai-key'],
+        userKey: req.user?.system_openai_settings?.openai_api_key,
+        tenantSlugOrId: tenantId,
+      });
+      if (!apiKey) {
+        console.error('[AI][Realtime] No API key available for minting realtime token');
+        return res.status(500).json({ status: 'error', message: 'Realtime voice is not configured' });
+      }
+
       const moduleEnabled = await isRealtimeModuleEnabled(tenantId);
       if (!moduleEnabled) {
         console.warn('[AI][Realtime] Token request blocked by module settings', {

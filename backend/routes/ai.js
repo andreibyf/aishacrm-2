@@ -12,15 +12,15 @@ import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 import { runTask } from '../lib/aiBrain.js';
 import createAiRealtimeRoutes from './aiRealtime.js';
 import { routeChat } from '../flows/index.js';
+import { resolveLLMApiKey, pickModel, getTenantIdFromRequest } from '../lib/aiEngine/index.js';
 
 export default function createAIRoutes(pgPool) {
   const router = express.Router();
   router.use(createAiRealtimeRoutes(pgPool));
-  const DEFAULT_CHAT_MODEL = process.env.DEFAULT_OPENAI_MODEL || 'gpt-4o';
+  const DEFAULT_CHAT_MODEL = pickModel({ capability: 'chat_tools' });
   const DEFAULT_STT_MODEL = process.env.OPENAI_STT_MODEL || 'whisper-1';
   const MAX_STT_AUDIO_BYTES = parseInt(process.env.MAX_STT_AUDIO_BYTES || '6000000', 10);
   const MAX_TOOL_ITERATIONS = 3;
-  const tenantIntegrationKeyCache = new Map();
   const supa = getSupabaseClient();
 
   const sttUpload = multer({
@@ -205,14 +205,13 @@ export default function createAIRoutes(pgPool) {
         return res.status(400).json({ status: 'error', message: 'Audio exceeds maximum allowed size' });
       }
 
-      const tenantIdentifier =
-        req.body?.tenant_id || req.query?.tenant_id || req.headers['x-tenant-id'] || req.user?.tenant_id || null;
+      const tenantIdentifier = getTenantIdFromRequest(req) || req.body?.tenant_id;
 
-      const apiKey = await resolveTenantOpenAiKey({
+      const apiKey = await resolveLLMApiKey({
         explicitKey: req.body?.openai_api_key,
         headerKey: req.get('x-openai-key'),
         userKey: req.user?.openai_api_key,
-        tenantSlug: tenantIdentifier,
+        tenantSlugOrId: tenantIdentifier,
       });
 
       if (!apiKey) {
@@ -329,96 +328,7 @@ export default function createAIRoutes(pgPool) {
     });
   };
 
-  const resolveTenantOpenAiKey = async ({ explicitKey, headerKey, userKey, tenantSlug }) => {
-    if (explicitKey) return explicitKey;
-    if (headerKey) return headerKey;
-
-    if (tenantSlug) {
-      if (tenantIntegrationKeyCache.has(tenantSlug)) {
-        const cached = tenantIntegrationKeyCache.get(tenantSlug);
-        if (cached) {
-          return cached;
-        }
-      }
-
-      try {
-        const { data, error } = await supa
-          .from('tenant_integrations')
-          .select('api_credentials')
-          .eq('tenant_id', tenantSlug)
-          .eq('is_active', true)
-          .in('integration_type', ['openai_llm'])
-          .order('updated_at', { ascending: false, nullsFirst: false })
-          .order('created_at', { ascending: false })
-          .limit(1);
-        if (error) throw error;
-        if (data?.length) {
-          const rawCreds = data[0].api_credentials;
-          const creds = typeof rawCreds === 'object' ? rawCreds : JSON.parse(rawCreds || '{}');
-          const tenantKey = creds?.api_key || creds?.apiKey || null;
-          tenantIntegrationKeyCache.set(tenantSlug, tenantKey || null);
-          if (tenantKey) return tenantKey;
-        } else {
-          tenantIntegrationKeyCache.set(tenantSlug, null);
-        }
-      } catch (error) {
-        console.warn('[AI Routes] Failed to resolve tenant OpenAI key:', error.message || error);
-      }
-    }
-
-    if (userKey) return userKey;
-
-    // Fallback to system settings table
-    try {
-      const { data, error } = await supa
-        .from('system_settings')
-        .select('settings')
-        .not('settings', 'is', null)
-        .limit(1);
-      if (error) throw error;
-
-      if (data?.length) {
-        const settings = data[0].settings;
-        const systemOpenAI = typeof settings === 'object' 
-          ? settings.system_openai_settings 
-          : JSON.parse(settings || '{}').system_openai_settings;
-        
-        if (systemOpenAI?.enabled && systemOpenAI?.openai_api_key) {
-          return systemOpenAI.openai_api_key;
-        }
-      }
-    } catch (error) {
-      console.warn('[AI Routes] Failed to resolve system settings:', error.message || error);
-    }
-
-    // Fallback to admin/superadmin user settings (legacy)
-    try {
-      const { data, error } = await supa
-        .from('users')
-        .select('system_openai_settings, role')
-        .in('role', ['admin', 'superadmin'])
-        .not('system_openai_settings', 'is', null)
-        .order('role', { ascending: true })
-        .order('updated_at', { ascending: false, nullsFirst: false })
-        .limit(1);
-      if (error) throw error;
-      if (data?.length) {
-        const systemSettings = data[0].system_openai_settings;
-        const systemKey = typeof systemSettings === 'object' 
-          ? systemSettings.openai_api_key 
-          : JSON.parse(systemSettings || '{}').openai_api_key;
-        if (systemKey) return systemKey;
-      }
-    } catch (error) {
-      console.warn('[AI Routes] Failed to resolve user system OpenAI settings:', error.message || error);
-    }
-
-    if (process.env.OPENAI_API_KEY) {
-      return process.env.OPENAI_API_KEY;
-    }
-
-    return null;
-  };
+  // API key resolution now handled by centralized lib/aiEngine/keyResolver.js
 
   // Note: Tool execution is handled by Braid SDK via executeBraidTool()
 
@@ -469,11 +379,11 @@ export default function createAIRoutes(pgPool) {
       const tenantSlug = tenantRecord?.tenant_id || tenantIdentifier || null;
       const conversationMetadata = parseMetadata(conversation?.metadata);
 
-      const apiKey = await resolveTenantOpenAiKey({
+      const apiKey = await resolveLLMApiKey({
         explicitKey: requestDescriptor.bodyApiKey,
         headerKey: requestDescriptor.headerApiKey,
         userKey: requestDescriptor.userApiKey,
-        tenantSlug,
+        tenantSlugOrId: tenantSlug,
       });
 
       if (!apiKey) {
@@ -1695,11 +1605,11 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
         }
       }
 
-      const apiKey = await resolveTenantOpenAiKey({
+      const apiKey = await resolveLLMApiKey({
         explicitKey: req.body?.api_key,
         headerKey: req.headers['x-openai-key'],
         userKey: req.user?.system_openai_settings?.openai_api_key,
-        tenantSlug: tenantRecord?.tenant_id || tenantIdentifier || null,
+        tenantSlugOrId: tenantRecord?.tenant_id || tenantIdentifier || null,
       });
 
       const client = getOpenAIClient(apiKey || process.env.OPENAI_API_KEY);

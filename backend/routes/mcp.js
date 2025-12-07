@@ -7,59 +7,13 @@ import express from "express";
 import fetch from "node-fetch";
 import { getSupabaseClient } from "../lib/supabase-db.js";
 import { createChatCompletion } from "../lib/aiProvider.js";
+import { resolveLLMApiKey } from "../lib/aiEngine/index.js";
 
 export default function createMCPRoutes(_pgPool) {
   const router = express.Router();
   const supa = getSupabaseClient();
 
-  // Minimal OpenAI API key resolution for LLM MCP tools
-  const resolveOpenAIKey = async ({ explicitKey, tenantId }) => {
-    if (explicitKey) return explicitKey;
-    // Try tenant integration first (openai_llm)
-    if (tenantId) {
-      try {
-        const { data: ti, error } = await supa
-          .from("tenant_integrations")
-          .select("api_credentials, integration_type")
-          .eq("tenant_id", tenantId)
-          .eq("is_active", true)
-          .in("integration_type", ["openai_llm"])
-          .order("updated_at", { ascending: false, nullsFirst: false })
-          .order("created_at", { ascending: false })
-          .limit(1);
-        if (error) throw error;
-        if (ti?.length) {
-          const creds = ti[0].api_credentials || {};
-          const k = creds.api_key || creds.apiKey || null;
-          if (k) return k;
-        }
-      } catch (e) {
-        // non-fatal
-        void e;
-      }
-    }
-    // Fallback to system settings table
-    try {
-      const { data, error } = await supa
-        .from("system_settings")
-        .select("settings")
-        .not("settings", "is", null)
-        .limit(1);
-      if (error) throw error;
-      if (data?.length) {
-        const settings = data[0].settings;
-        const systemOpenAI = typeof settings === "object"
-          ? settings.system_openai_settings
-          : JSON.parse(settings || "{}").system_openai_settings;
-        if (systemOpenAI?.enabled && systemOpenAI?.openai_api_key) {
-          return systemOpenAI.openai_api_key;
-        }
-      }
-    } catch (e) {
-      void e;
-    }
-    return null;
-  };
+  // API key resolution now handled by centralized lib/aiEngine/keyResolver.js
 
   // GET /api/mcp/servers - List available MCP servers
   router.get("/servers", async (req, res) => {
@@ -943,8 +897,8 @@ export default function createMCPRoutes(_pgPool) {
           tenant_id: tenantIdParam,
         } = parameters || {};
 
-        // Resolve key: explicit > tenant integration > system settings
-        const apiKey = await resolveOpenAIKey({ explicitKey: api_key, tenantId: tenantIdParam });
+        // Resolve key using centralized aiEngine key resolver
+        const apiKey = await resolveLLMApiKey({ explicitKey: api_key, tenantSlugOrId: tenantIdParam });
         if (!apiKey) {
           return res.status(501).json({ status: "error", message: "OpenAI API key not configured" });
         }
@@ -1191,8 +1145,8 @@ export default function createMCPRoutes(_pgPool) {
         `News: ${(searchResults || []).map(r => `${r.title}: ${r.snippet || ''}`).join(" | ").slice(0, 1500)}`,
       ];
 
-      // Generate JSON via LLM MCP tool (internally call our facade directly)
-      const apiKey = await resolveOpenAIKey({ explicitKey: body.api_key || null, tenantId });
+      // Generate JSON via LLM MCP tool using centralized key resolver
+      const apiKey = await resolveLLMApiKey({ explicitKey: body.api_key || null, tenantSlugOrId: tenantId });
       if (!apiKey) {
         // Fallback: return a baseline insights object without LLM
         const strip = (s) => String(s || '').replace(/<[^>]+>/g, '').trim();
