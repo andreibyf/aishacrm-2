@@ -7,8 +7,9 @@ import { AlertTriangle } from 'lucide-react';
  */
 export default function EnvironmentBanner() {
   // Determine environment from backend URL
-  const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || '';
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  // Use runtime window._env_ (injected by entrypoint) with fallback to build-time import.meta.env
+  const backendUrl = window._env_?.VITE_AISHACRM_BACKEND_URL || import.meta.env.VITE_AISHACRM_BACKEND_URL || '';
+  const supabaseUrl = window._env_?.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
   
   // Check if this is NOT production
   const isDev = backendUrl.includes('localhost') || backendUrl.includes('127.0.0.1');

@@ -2187,8 +2187,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             
             {/* Environment indicator on login page */}
             {(() => {
-              const backendUrl = import.meta.env.VITE_AISHACRM_BACKEND_URL || '';
-              const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+              // Use runtime window._env_ (injected by entrypoint) with fallback to build-time import.meta.env
+              const backendUrl = window._env_?.VITE_AISHACRM_BACKEND_URL || import.meta.env.VITE_AISHACRM_BACKEND_URL || '';
+              const supabaseUrl = window._env_?.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
               const isDev = backendUrl.includes('localhost') || backendUrl.includes('127.0.0.1');
               const isDevDb = supabaseUrl.includes('efzqxjpfewkrgpdootte');
               const isProdDb = supabaseUrl.includes('ehjlenywplgyiahgxkfj');
