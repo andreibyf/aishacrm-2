@@ -89,11 +89,18 @@ export async function authenticateRequest(req, _res, next) {
         let authUser = null;
         if (admin) {
           const { data: getUserData, error: getUserErr } = await admin.auth.getUser(bearer);
+          if (getUserErr) {
+            console.log('[Auth Debug] Supabase getUser error:', { path: req.path, error: getUserErr?.message || 'Unknown error' });
+          }
           if (!getUserErr) authUser = getUserData?.user || null;
         } else if (anon) {
           const { data: getUserData, error: getUserErr } = await anon.auth.getUser(bearer);
+          if (getUserErr) {
+            console.log('[Auth Debug] Supabase anon getUser error:', { path: req.path, error: getUserErr?.message || 'Unknown error' });
+          }
           if (!getUserErr) authUser = getUserData?.user || null;
         } else {
+          console.log('[Auth Debug] No Supabase client available, falling back to JWT decode');
           // Last resort: decode token claims (unverified) for email hint
           try {
             const decoded = jwt.decode(bearer) || {};
