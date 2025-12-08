@@ -138,6 +138,7 @@ services:
     build:
       context: .
       args:
+        DOPPLER_TOKEN: ${DOPPLER_TOKEN}  # Pass Doppler token for build-time secret access
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
         VITE_AISHACRM_BACKEND_URL: ${VITE_AISHACRM_BACKEND_URL:-http://localhost:4001}

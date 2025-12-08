@@ -7,7 +7,11 @@ RUN wget -q -t3 'https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.ke
     apk add doppler
 
 WORKDIR /app
-# Accept build arguments for environment variables
+# Accept Doppler token as build arg for accessing secrets during build
+ARG DOPPLER_TOKEN
+ENV DOPPLER_TOKEN=$DOPPLER_TOKEN
+
+# Accept build arguments for environment variables (fallback if Doppler unavailable)
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
 ARG VITE_AISHACRM_BACKEND_URL
