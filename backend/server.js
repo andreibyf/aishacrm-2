@@ -28,7 +28,7 @@ dotenv.config(); // Fallback to .env if .env.local doesn't exist
 const app = express();
 // Behind proxies, trust X-Forwarded-* to get real client IPs
 app.set('trust proxy', 1);
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.BACKEND_PORT || process.env.PORT || 3001;
 
 // Initialize Database
 const { pgPool, dbConnectionType, ipv4FirstApplied: _ipv4FirstApplied } = await initDatabase(app);

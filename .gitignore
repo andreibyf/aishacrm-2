@@ -28,6 +28,9 @@ dist-ssr
 .env.local
 .env.production
 .env.*.local
+.env.docker
+.doppler-token
+*.backup
 backend/.env
 
 # Test artifacts (Playwright reports, coverage, etc.)

@@ -84,23 +84,34 @@ services:
       redis-cache:
         condition: service_healthy
     ports:
-      - "4001:3001"
-    env_file:
-      - ./backend/.env
+      - "4001:3001"  # Host:Container - prod port 4001 maps to dev port 3001
+    # REMOVED: env_file - now using Doppler
     environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - NODE_ENV=development
       - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
-      - PORT=3001
+      # PORT=3001 set by Doppler (container internal port)
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4000}
       - PGSSLMODE=require
       - REDIS_URL=redis://redis-memory:6379
       - REDIS_CACHE_URL=redis://redis-cache:6379
+      # BACKEND_PORT=3001 set by Doppler (container internal port)
       - SYSTEM_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
       - TENANT_RESOLVE_CACHE_TTL_MS=${TENANT_RESOLVE_CACHE_TTL_MS:-300000}
       - BRAID_MCP_URL=http://mcp:8000
       - MCP_NODE_HEALTH_URL=http://mcp:8000/health
       - AI_TRIGGERS_WORKER_ENABLED=${AI_TRIGGERS_WORKER_ENABLED:-false}
       - MCP_NODE_ID=aishacrm-backend
+    entrypoint: >
+      sh -c "
+      if [ -z \"$$DOPPLER_TOKEN\" ]; then
+        echo 'ERROR: DOPPLER_TOKEN not set - falling back to node server.js';
+        exec node server.js;
+      else
+        echo 'Starting with Doppler...';
+        exec doppler run --token $$DOPPLER_TOKEN -- node server.js;
+      fi
+      "
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -151,6 +162,29 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    networks:
+      - aishanet
+
+  # Nginx Reverse Proxy - Routes /api/* to backend, everything else to frontend
+  proxy:
+    build:
+      context: ./nginx-proxy
+      dockerfile: Dockerfile
+    container_name: aishacrm-proxy
+    restart: unless-stopped
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"  # Dev proxy on 8080 to avoid conflict with other services
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/nginx-health || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
     networks:
       - aishanet
 

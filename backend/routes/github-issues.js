@@ -30,10 +30,10 @@ async function getRedisClient() {
 }
 
 // GitHub Configuration (token fallback + normalization)
-const RAW_GITHUB_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_PAT || process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
+const RAW_GITHUB_TOKEN = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || process.env.GITHUB_PAT || process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
 const GITHUB_TOKEN = (RAW_GITHUB_TOKEN || '').trim();
-const GITHUB_REPO_OWNER = process.env.GITHUB_REPO_OWNER || 'andreibyf';
-const GITHUB_REPO_NAME = process.env.GITHUB_REPO_NAME || 'aishacrm-2';
+const GITHUB_REPO_OWNER = process.env.REPO_OWNER || process.env.GITHUB_REPO_OWNER || 'andreibyf';
+const GITHUB_REPO_NAME = process.env.REPO_NAME || process.env.GITHUB_REPO_NAME || 'aishacrm-2';
 const GITHUB_API_BASE = 'https://api.github.com';
 
 // Environment / build metadata

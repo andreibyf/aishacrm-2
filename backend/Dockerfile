@@ -1,6 +1,11 @@
 # Backend Dockerfile - Multi-stage build for production
 FROM node:22-alpine AS builder
 
+# Install Doppler CLI
+RUN wget -q -t3 'https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.key' -O /etc/apk/keys/cli@doppler-8004D9FF50437357.rsa.pub && \
+    echo 'https://packages.doppler.com/public/cli/alpine/any-version/main' | tee -a /etc/apk/repositories && \
+    apk add doppler
+
 WORKDIR /app
 
 # Note: Build context is the repo root (set in docker-compose). Use explicit paths.
@@ -21,6 +26,11 @@ RUN cd backend && npm install --omit=dev ../braid-llm-kit
 
 # Production stage
 FROM node:22-alpine AS runner
+
+# Install Doppler CLI in production stage
+RUN wget -q -t3 'https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.key' -O /etc/apk/keys/cli@doppler-8004D9FF50437357.rsa.pub && \
+    echo 'https://packages.doppler.com/public/cli/alpine/any-version/main' | tee -a /etc/apk/repositories && \
+    apk add doppler
 
 # Build-time flags to control Chromium/Puppeteer footprint
 ARG USE_SYSTEM_CHROMIUM=false

@@ -74,6 +74,30 @@ initRateLimitBackoff();
   };
 })();
 
+// Suppress Chrome extension messaging errors (e.g., "Receiving end does not exist")
+// These are harmless and happen when extensions try to communicate with content scripts
+window.addEventListener('error', (event) => {
+  const msg = String(event.message || '');
+  if (msg.includes('Receiving end does not exist') || 
+      msg.includes('Could not establish connection') ||
+      msg.includes('Extension context invalidated')) {
+    // Suppress; this is normal extension messaging noise
+    event.preventDefault();
+    return false;
+  }
+});
+
+// Also suppress uncaught promise rejections from extensions
+window.addEventListener('unhandledrejection', (event) => {
+  const msg = String(event.reason?.message || event.reason || '');
+  if (msg.includes('Receiving end does not exist') || 
+      msg.includes('Could not establish connection') ||
+      msg.includes('Extension context invalidated')) {
+    // Suppress; this is normal extension messaging noise
+    event.preventDefault();
+  }
+});
+
 // Add loading indicator
 if (import.meta.env.DEV) {
   console.log('[App] Starting Ai-SHA CRM...');

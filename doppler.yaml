@@ -1,0 +1,5 @@
+# Doppler Configuration
+# This file is safe to commit to Git (contains no secrets)
+setup:
+  project: aishacrm
+  config: dev

@@ -26,7 +26,7 @@ window._env_ = {
 };
 EOF
 
-: "${PORT:=3000}"
+: "${FRONTEND_PORT:=3000}"
 
 # Start static server
-exec sh -c "serve -s dist -l ${PORT}"
+exec sh -c "serve -s dist -l ${FRONTEND_PORT}"

@@ -173,7 +173,7 @@ export default function createMCPRoutes(_pgPool) {
       const servers = [];
 
       // GitHub MCP server presence is inferred via env token. This is a lightweight proxy/health integration.
-      const githubToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN ||
+      const githubToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN ||
         null;
       if (githubToken) {
         // Attempt a fast health check against GitHub API
@@ -278,7 +278,7 @@ export default function createMCPRoutes(_pgPool) {
       const { server_id, tool_name, parameters } = req.body || {};
 
       if (server_id === "github") {
-        const githubToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN ||
+        const githubToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN ||
           null;
         if (!githubToken) {
           return res.status(400).json({
@@ -1131,7 +1131,7 @@ export default function createMCPRoutes(_pgPool) {
   // GET /api/mcp/github/health - explicit health endpoint for GitHub MCP
   router.get("/github/health", async (req, res) => {
     try {
-      const githubToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN ||
+      const githubToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN ||
         null;
       if (!githubToken) {
         return res.json({

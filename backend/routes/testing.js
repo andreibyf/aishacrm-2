@@ -64,13 +64,13 @@ export default function createTestingRoutes(_pgPool) {
   //   backend_url?: 'https://public-backend.example.com',  // Optional: override for public/Tailscale URLs
   //   frontend_url?: 'https://public-frontend.example.com' // Optional: override for public/Tailscale URLs
   // }
-  router.post('/run-playwright', async (req, res) => {
+  router.post('/trigger-e2e', async (req, res) => {
     try {
       const {
-        GITHUB_TOKEN,
-        GITHUB_REPO_OWNER = process.env.GITHUB_REPOSITORY_OWNER || 'andreibyf',
-        GITHUB_REPO_NAME = process.env.GITHUB_REPOSITORY_NAME || 'aishacrm-2',
-        GITHUB_WORKFLOW_FILE = process.env.GITHUB_WORKFLOW_FILE || 'e2e.yml',
+        GITHUB_TOKEN = process.env.GH_TOKEN,
+        GITHUB_REPO_OWNER = process.env.REPO_OWNER || process.env.GITHUB_REPOSITORY_OWNER || 'andreibyf',
+        GITHUB_REPO_NAME = process.env.REPO_NAME || process.env.GITHUB_REPOSITORY_NAME || 'aishacrm-2',
+        GITHUB_WORKFLOW_FILE = process.env.WORKFLOW_FILE || process.env.GITHUB_WORKFLOW_FILE || 'e2e.yml',
       } = process.env;
 
       if (!GITHUB_TOKEN) {
