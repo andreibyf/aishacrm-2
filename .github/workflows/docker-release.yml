@@ -126,6 +126,14 @@ jobs:
             cd /opt/aishacrm
             echo "Deploying version: $VERSION_TAG"
             
+            # === FULL CLEANUP: Remove orphaned containers and broken references ===
+            echo "Cleaning up orphaned containers and broken Docker state..."
+            docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
+            docker container prune -f 2>/dev/null || true
+            # Remove any containers with broken dependencies
+            docker ps -aq --filter "status=exited" | xargs -r docker rm -f 2>/dev/null || true
+            docker ps -aq --filter "status=dead" | xargs -r docker rm -f 2>/dev/null || true
+            
             # Ensure aishanet network exists
             docker network inspect aishanet >/dev/null 2>&1 || docker network create aishanet
             
