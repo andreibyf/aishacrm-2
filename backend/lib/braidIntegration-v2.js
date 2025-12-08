@@ -5,6 +5,7 @@
 
 import path from 'path';
 import { fileURLToPath } from 'url';
+import jwt from 'jsonwebtoken';
 import { executeBraid, loadToolSchema, createBackendDeps, CRM_POLICIES } from '../../braid-llm-kit/sdk/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -442,7 +443,14 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
   };
   // CRITICAL: Use tenantRecord.id (UUID) not tenant_id (slug) for API calls
   const tenantUuid = tenantRecord?.id || tenantRecord?.tenant_id || null;
-  const deps = createBackendDeps('http://localhost:3001', tenantUuid, userId);
+  
+  // Generate internal service JWT for server-to-server API calls
+  const internalToken = jwt.sign(
+    { sub: userId, tenant_id: tenantUuid, internal: true },
+    process.env.JWT_SECRET,
+    { expiresIn: '5m' }
+  );
+  const deps = createBackendDeps('http://localhost:3001', tenantUuid, userId, internalToken);
 
   // Normalize arguments into a single object for Braid
   const normalizedArgs = normalizeToolArgs(toolName, args, tenantRecord);

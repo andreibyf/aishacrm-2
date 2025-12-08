@@ -34,9 +34,18 @@ export { transpileToJS } from '../tools/braid-transpile.js';
  * @param {string} baseUrl - Backend API base URL
  * @param {string} tenantId - Tenant identifier
  * @param {string} userId - User identifier (for audit)
+ * @param {string} authToken - Optional: Bearer token for internal API authentication
  * @returns {BraidDependencies}
  */
-export function createBackendDeps(baseUrl, tenantId, userId = null) {
+export function createBackendDeps(baseUrl, tenantId, userId = null, authToken = null) {
+  // Build auth headers - include Authorization if token provided
+  const buildAuthHeaders = () => ({
+    'Content-Type': 'application/json',
+    'x-tenant-id': tenantId,
+    ...(userId ? { 'x-user-id': userId } : {}),
+    ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+  });
+
   return {
     http: {
       async get(url, options = {}) {
@@ -46,11 +55,7 @@ export function createBackendDeps(baseUrl, tenantId, userId = null) {
         const fullUrl = `${baseUrl}${url}?${params}`;
         const response = await fetch(fullUrl, {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-tenant-id': tenantId,
-            ...(userId ? { 'x-user-id': userId } : {})
-          }
+          headers: buildAuthHeaders()
         });
         
         if (!response.ok) {
@@ -74,11 +79,7 @@ export function createBackendDeps(baseUrl, tenantId, userId = null) {
         
         const response = await fetch(`${baseUrl}${url}`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-tenant-id': tenantId,
-            ...(userId ? { 'x-user-id': userId } : {})
-          },
+          headers: buildAuthHeaders(),
           body: JSON.stringify(body)
         });
         
@@ -103,11 +104,7 @@ export function createBackendDeps(baseUrl, tenantId, userId = null) {
         const fullUrl = params.toString() ? `${baseUrl}${url}?${params}` : `${baseUrl}${url}`;
         const response = await fetch(fullUrl, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-tenant-id': tenantId,
-            ...(userId ? { 'x-user-id': userId } : {})
-          },
+          headers: buildAuthHeaders(),
           body: JSON.stringify(body)
         });
         
@@ -131,11 +128,7 @@ export function createBackendDeps(baseUrl, tenantId, userId = null) {
         const fullUrl = params.toString() ? `${baseUrl}${url}?${params}` : `${baseUrl}${url}`;
         const response = await fetch(fullUrl, {
           method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-tenant-id': tenantId,
-            ...(userId ? { 'x-user-id': userId } : {})
-          }
+          headers: buildAuthHeaders()
         });
         
         if (!response.ok) {
