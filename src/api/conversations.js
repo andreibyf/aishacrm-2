@@ -4,7 +4,6 @@
  */
 
 import { BACKEND_URL } from '@/api/entities';
-import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
 // Helper to read tenant ID consistently (new key first, legacy fallback)
 function resolveTenantId() {
@@ -21,34 +20,13 @@ function resolveTenantId() {
 
 /**
  * Get authorization headers for API calls.
- * Mirrors the auth pattern from entities.js for consistency.
- * @returns {Promise<Object>} Headers object with Authorization if available
+ * Now relies on cookie-based JWT auth (aisha_access cookie).
+ * @returns {Promise<Object>} Headers object without bearer tokens
  */
 async function getAuthHeaders() {
-  const headers = {};
-  
-  try {
-    // Prefer explicit Supabase session token
-    if (isSupabaseConfigured()) {
-      const { data: { session } } = await supabase.auth.getSession();
-      const accessToken = session?.access_token;
-      if (accessToken) {
-        headers.Authorization = `Bearer ${accessToken}`;
-      }
-    }
-    
-    // Fallback: token persisted in localStorage
-    if (!headers.Authorization && typeof window !== 'undefined') {
-      const stored = localStorage.getItem('sb-access-token');
-      if (stored) {
-        headers.Authorization = `Bearer ${stored}`;
-      }
-    }
-  } catch (err) {
-    console.warn('[Conversations API] Auth header error:', err?.message);
-  }
-  
-  return headers;
+  // Do NOT add bearer tokens. Backend uses cookie-based JWT auth.
+  // credentials: 'include' in fetch options sends cookies automatically.
+  return {};
 }
 
 /**

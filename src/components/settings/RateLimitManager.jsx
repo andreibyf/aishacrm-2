@@ -22,7 +22,7 @@ export default function RateLimitManager() {
       
       // Fetch current security status
       const statusResp = await fetch(`${BACKEND_URL}/api/security/status`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('sb-access-token')}` }
+        credentials: 'include'
       });
       
       if (!statusResp.ok) throw new Error('Failed to load security status');
@@ -31,7 +31,7 @@ export default function RateLimitManager() {
       
       // Fetch statistics
       const statsResp = await fetch(`${BACKEND_URL}/api/security/statistics`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('sb-access-token')}` }
+        credentials: 'include'
       });
       
       if (statsResp.ok) {
@@ -67,9 +67,9 @@ export default function RateLimitManager() {
       setClearingIP(ipAddress);
       const resp = await fetch(`${BACKEND_URL}/api/security/unblock-ip`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('sb-access-token')}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ ip: ipAddress })
       });
@@ -97,9 +97,9 @@ export default function RateLimitManager() {
     try {
       const resp = await fetch(`${BACKEND_URL}/api/security/clear-tracking`, {
         method: 'DELETE',
+        credentials: 'include',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('sb-access-token')}`
+          'Content-Type': 'application/json'
         }
       });
 

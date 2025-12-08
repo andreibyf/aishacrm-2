@@ -125,7 +125,9 @@ function RecentActivities(props) {
         return isNaN(dt.getTime()) ? null : dt;
       };
       
-      const mutableActivities = (recentActivities || []).map(a => ({ ...a }));
+      const mutableActivities = Array.isArray(recentActivities)
+        ? recentActivities.map(a => ({ ...a }))
+        : [];
 
       if (!flipAttemptedRef.current) {
         const flipCandidates = mutableActivities.filter(a => a.status === "scheduled" && toDueDate(a) && toDueDate(a) < now);

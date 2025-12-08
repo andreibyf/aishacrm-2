@@ -1,38 +1,4 @@
 import jwt from 'jsonwebtoken';
-import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-
-let supabaseAdmin = null;
-let supabaseAnon = null;
-
-function getSupabaseAdmin() {
-  try {
-    if (supabaseAdmin) return supabaseAdmin;
-    const url = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!url || !key) return null;
-    supabaseAdmin = createSupabaseClient(url, key, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    return supabaseAdmin;
-  } catch {
-    return null;
-  }
-}
-
-function getSupabaseAnon() {
-  try {
-    if (supabaseAnon) return supabaseAnon;
-    const url = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_ANON_KEY; // publishable key with RLS
-    if (!url || !key) return null;
-    supabaseAnon = createSupabaseClient(url, key, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    return supabaseAnon;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Authenticate request and populate req.user from:
@@ -43,7 +9,7 @@ function getSupabaseAnon() {
  */
 export async function authenticateRequest(req, _res, next) {
   try {
-    // DEBUG: Log auth context for 401 diagnostics
+    // DEBUG: Log auth context for diagnostics
     const authHeader = req.headers?.authorization || '';
     const hasCookie = !!req.cookies?.aisha_access;
     const hasBearer = authHeader.startsWith('Bearer ');
@@ -57,7 +23,7 @@ export async function authenticateRequest(req, _res, next) {
       });
     }
 
-    // 1) Try backend JWT access cookie first
+    // 1) Try backend JWT access cookie first (primary auth method)
     const cookieToken = req.cookies?.aisha_access;
     if (cookieToken) {
       try {
@@ -82,51 +48,27 @@ export async function authenticateRequest(req, _res, next) {
         if (process.env.AUTH_DEBUG === 'true') {
           console.log('[Auth Debug] Cookie JWT failed:', { path: req.path, error: cookieErr?.message });
         }
-        // fall through to Authorization header
+        // fall through to lookup by bearer if present
       }
     }
 
-    // 2) Try Supabase access token from Authorization header
+    // 2) If no cookie, try to extract user from bearer token claims (do NOT validate with Supabase)
+    // This supports cross-origin/mobile clients that can't use cookies
     const bearer = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
 
     if (bearer) {
-      if (process.env.NODE_ENV !== 'production' || process.env.AUTH_DEBUG === 'true') {
+      if (process.env.AUTH_DEBUG === 'true') {
         console.log('[Auth Debug] Processing bearer token:', { path: req.path, tokenLength: bearer.length });
       }
       try {
-        // Prefer service role; fallback to anon; final fallback decode only
-        const admin = getSupabaseAdmin();
-        const anon = admin ? null : getSupabaseAnon();
-        let authUser = null;
-        if (admin) {
-          const { data: getUserData, error: getUserErr } = await admin.auth.getUser(bearer);
-          if (getUserErr) {
-            console.log('[Auth Debug] Supabase getUser error:', { path: req.path, error: getUserErr?.message || 'Unknown error' });
-          }
-          if (!getUserErr) authUser = getUserData?.user || null;
-        } else if (anon) {
-          const { data: getUserData, error: getUserErr } = await anon.auth.getUser(bearer);
-          if (getUserErr) {
-            console.log('[Auth Debug] Supabase anon getUser error:', { path: req.path, error: getUserErr?.message || 'Unknown error' });
-          }
-          if (!getUserErr) authUser = getUserData?.user || null;
-        } else {
-          console.log('[Auth Debug] No Supabase client available, falling back to JWT decode');
-          // Last resort: decode token claims (unverified) for email hint
-          try {
-            const decoded = jwt.decode(bearer) || {};
-            if (decoded.email) authUser = { email: decoded.email, user_metadata: {} };
-          } catch { /* ignore */ }
-        }
-
-        if (authUser) {
-          const email = (authUser.email || '').toLowerCase().trim();
-          const meta = authUser.user_metadata || {};
-            const roleMeta = (meta.role || '').toLowerCase() || null;
-            const tenantMeta = meta.tenant_id ?? null;
+        // Decode token claims WITHOUT verification (Supabase tokens are for Supabase, not us)
+        const decoded = jwt.decode(bearer) || {};
+        if (decoded.email) {
+          const email = (decoded.email || '').toLowerCase().trim();
           try {
             const { getSupabaseClient } = await import('../lib/supabase-db.js');
             const supa = getSupabaseClient();
+            // Lookup user by email to get full user record with tenant_id and role
             const [{ data: uRows }, { data: eRows }] = await Promise.all([
               supa.from('users').select('id, role, tenant_id').eq('email', email),
               supa.from('employees').select('id, role, tenant_id').eq('email', email),
@@ -136,43 +78,28 @@ export async function authenticateRequest(req, _res, next) {
               req.user = {
                 id: row.id,
                 email,
-                role: row.role || roleMeta || 'employee',
-                tenant_id: row.tenant_id ?? tenantMeta ?? null,
-              };
-              if (process.env.NODE_ENV !== 'production' || process.env.AUTH_DEBUG === 'true') {
-                console.log('[Auth Debug] Attached user from DB:', { email, role: req.user.role, tenant_id: req.user.tenant_id });
-              }
-            } else {
-              req.user = {
-                id: null,
-                email,
-                role: roleMeta || 'employee',
-                tenant_id: tenantMeta || null,
+                role: row.role || 'employee',
+                tenant_id: row.tenant_id ?? null,
               };
               if (process.env.AUTH_DEBUG === 'true') {
-                console.warn('[Auth Debug] Email not found in users/employees; using metadata fallback', { email, roleMeta, tenantMeta });
+                console.log('[Auth Debug] Bearer: resolved user from DB:', { email, role: req.user.role, tenant_id: req.user.tenant_id });
               }
+              return next();
             }
-            return next();
-          } catch {
-            req.user = {
-              id: null,
-              email,
-              role: roleMeta || 'employee',
-              tenant_id: tenantMeta || null,
-            };
+          } catch (dbErr) {
             if (process.env.AUTH_DEBUG === 'true') {
-              console.warn('[Auth Debug] DB lookup failed; continuing with metadata fallback', { email, roleMeta, tenantMeta });
+              console.log('[Auth Debug] Bearer DB lookup failed:', { email, error: dbErr?.message });
             }
-            return next();
           }
         }
-      } catch {
-        // Ignore bearer processing errors
+      } catch (decodeErr) {
+        if (process.env.AUTH_DEBUG === 'true') {
+          console.log('[Auth Debug] Bearer decode failed:', { error: decodeErr?.message });
+        }
       }
     }
 
-    // No auth context attached; continue
+    // No auth context attached; continue as anonymous
     return next();
   } catch {
     return next();

@@ -263,50 +263,8 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     headers: {
       "Content-Type": "application/json",
     },
+    credentials: 'include', // Use cookies for auth, not bearer tokens
   };
-
-  // Attach auth token (Supabase) if available to avoid 401 on protected routes (e.g. modulesettings)
-  try {
-    // Prefer explicit Supabase session token
-    const supabaseConfigured = isSupabaseConfigured();
-    logDev("[callBackendAPI] Auth check", { 
-      entityName, 
-      supabaseConfigured,
-      url: url.substring(0, 80)
-    });
-    
-    if (supabaseConfigured) {
-      const { data: { session } } = await supabase.auth.getSession();
-      const accessToken = session?.access_token;
-      logDev("[callBackendAPI] Supabase session", { 
-        hasSession: !!session, 
-        hasToken: !!accessToken,
-        tokenPreview: accessToken ? accessToken.substring(0, 20) + '...' : null
-      });
-      if (accessToken) {
-        options.headers.Authorization = `Bearer ${accessToken}`;
-      }
-    }
-    // Fallback: token persisted in localStorage (RateLimitManager pattern)
-    if (!options.headers.Authorization && typeof window !== 'undefined') {
-      const stored = localStorage.getItem('sb-access-token');
-      logDev("[callBackendAPI] Fallback localStorage token", { hasStored: !!stored });
-      if (stored) {
-        options.headers.Authorization = `Bearer ${stored}`;
-      }
-    }
-    
-    logDev("[callBackendAPI] Final auth header", { 
-      hasAuth: !!options.headers.Authorization,
-      entityName 
-    });
-  } catch (authErr) {
-    // Silent: absence of token will lead to graceful 401 handling upstream
-    console.warn("[callBackendAPI] Auth attachment error:", authErr?.message);
-  }
-
-  // Include credentials (cookies) for same-origin or allowed CORS scenarios
-  options.credentials = 'include';
 
   if (method === "GET") {
     if (id) {
