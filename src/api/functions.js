@@ -44,26 +44,29 @@ const createFunctionProxy = (functionName) => {
   // Provide local fallbacks for functions used by Settings checks and CRUD operations
   // so the UI works in standalone mode without backend/cloud-functions running.
   return async (...args) => {
-    // Unified handler for chat: always call backend /api/ai/chat so ChatInterface works
+    // Unified handler for chat: always call backend /api/ai/chat so ChatInterface uses the tools pipeline
     if (functionName === 'processChatCommand') {
       try {
         const BACKEND_URL = getBackendUrl();
         const opts = args[0] || {};
-        // Unified tenant ID resolution: explicit opts.tenantId > selected_tenant_id (new) > tenant_id (legacy) > ''
-        let tenantId = opts.tenantId || '';
-        let tenantSource = opts.tenantId ? 'user.tenant_id' : '';
+
+        // Prefer explicit tenantId (from caller/user context), then selected_tenant_id, then legacy tenant_id
+        let tenantId = opts.tenantId || opts.tenant_id || opts.userTenantId || '';
+        let tenantSource = tenantId ? 'explicit' : '';
+
         if (!tenantId && typeof localStorage !== 'undefined') {
           tenantId = localStorage.getItem('selected_tenant_id') || '';
           tenantSource = tenantId ? 'selected_tenant_id' : '';
           if (!tenantId) {
-            // Legacy fallback if older key still present
             tenantId = localStorage.getItem('tenant_id') || '';
             tenantSource = tenantId ? 'tenant_id (legacy)' : 'none';
           }
         }
+
         if (import.meta.env.DEV) {
-          logDev(`[processChatCommand] tenantId=${tenantId} (source: ${tenantSource})`);
+          logDev(`[processChatCommand] tenantId=${tenantId || 'none'} (source: ${tenantSource || 'none'})`);
         }
+
         const messages = Array.isArray(opts.messages)
           ? opts.messages
           : [{ role: 'user', content: String(opts.message || '').trim() }].filter(m => m.content);
@@ -75,8 +78,9 @@ const createFunctionProxy = (functionName) => {
         };
 
         const headers = { 'Content-Type': 'application/json' };
-        if (tenantId) headers['x-tenant-id'] = tenantId;
-        else if (import.meta.env.DEV) {
+        if (tenantId) {
+          headers['x-tenant-id'] = tenantId;
+        } else if (import.meta.env.DEV) {
           console.warn('[processChatCommand] Missing tenantId (superadmin global view or not selected). Header omitted.');
         }
 

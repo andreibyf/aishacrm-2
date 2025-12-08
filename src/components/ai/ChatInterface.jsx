@@ -48,7 +48,10 @@ export default function ChatInterface({ user }) {
         .filter(m => m.role === 'user' || m.role === 'assistant')
         .map(m => ({ role: m.role, content: m.content }));
 
-      const response = await processChatCommand({ messages: conversationHistory });
+      const response = await processChatCommand({
+        messages: conversationHistory,
+        tenantId: user?.tenant_id || user?.tenant?.id,
+      });
       
       if (response.status === 200) {
         const data = response.data;
