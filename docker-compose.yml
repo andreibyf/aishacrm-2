@@ -88,6 +88,8 @@ services:
     # REMOVED: env_file - now using Doppler
     environment:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=aishacrm
+      - DOPPLER_CONFIG=dev
       - NODE_ENV=development
       - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
       # PORT=3001 set by Doppler (container internal port)
@@ -138,7 +140,7 @@ services:
     build:
       context: .
       args:
-        DOPPLER_TOKEN: ${DOPPLER_TOKEN}  # Pass Doppler token for build-time secret access
+        DOPPLER_TOKEN: ${DOPPLER_TOKEN}
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
         VITE_AISHACRM_BACKEND_URL: ${VITE_AISHACRM_BACKEND_URL:-http://localhost:4001}
@@ -163,29 +165,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
-    networks:
-      - aishanet
-
-  # Nginx Reverse Proxy - Routes /api/* to backend, everything else to frontend
-  proxy:
-    build:
-      context: ./nginx-proxy
-      dockerfile: Dockerfile
-    container_name: aishacrm-proxy
-    restart: unless-stopped
-    depends_on:
-      frontend:
-        condition: service_healthy
-      backend:
-        condition: service_healthy
-    ports:
-      - "8080:80"  # Dev proxy on 8080 to avoid conflict with other services
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/nginx-health || exit 1"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
     networks:
       - aishanet
 

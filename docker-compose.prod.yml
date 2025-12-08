@@ -74,27 +74,7 @@ services:
   # Container name: braid-mcp-server (or aishacrm-mcp if using legacy setup)
   # Backend connects via BRAID_MCP_URL environment variable
 
-  # Nginx Reverse Proxy - Main entry point
-  # Routes /api/* to backend, everything else to frontend
-  proxy:
-    image: ghcr.io/andreibyf/aishacrm-2-proxy:latest
-    container_name: aishacrm-proxy
-    restart: unless-stopped
-    depends_on:
-      frontend:
-        condition: service_healthy
-      backend:
-        condition: service_healthy
-    ports:
-      - "4000:80"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/nginx-health || exit 1"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
-
-  # Frontend (internal only - accessed via proxy)
+  # Frontend
   frontend:
     image: ghcr.io/andreibyf/aishacrm-2-frontend:latest
     container_name: aishacrm-frontend
@@ -102,9 +82,8 @@ services:
     depends_on:
       backend:
         condition: service_started
-    # No external ports - accessed via proxy
-    expose:
-      - "3000"
+    ports:
+      - "4000:3000"  # External port 4000 maps to internal 3000
     env_file:
       - .env.from-doppler
     healthcheck:

@@ -23,10 +23,6 @@ jobs:
             context: .
             dockerfile: backend/Dockerfile
             image: ghcr.io/${{ github.repository }}-backend
-          - service: proxy
-            context: ./nginx-proxy
-            dockerfile: nginx-proxy/Dockerfile
-            image: ghcr.io/${{ github.repository }}-proxy
           - service: mcp
             context: ./braid-mcp-node-server
             dockerfile: braid-mcp-node-server/Dockerfile
@@ -188,7 +184,39 @@ jobs:
               fi
             fi
             
-            # Update MCP .env with GitHub token if provided
+            # Update MCP .env with critical runtime variables
+            # These must be set for MCP server to function properly
+            
+            # Environment
+            grep -q "^NODE_ENV=" .env || echo "NODE_ENV=production" >> .env
+            grep -q "^PORT=" .env || echo "PORT=8000" >> .env
+            
+            # Database (read from main .env)
+            if [ -f /opt/aishacrm/.env ]; then
+              SUPABASE_URL=$(grep "^SUPABASE_URL=" /opt/aishacrm/.env | cut -d'=' -f2-)
+              SUPABASE_KEY=$(grep "^SUPABASE_SERVICE_ROLE_KEY=" /opt/aishacrm/.env | cut -d'=' -f2-)
+              [ -n "$SUPABASE_URL" ] && sed -i "s|^SUPABASE_URL=.*|SUPABASE_URL=$SUPABASE_URL|" .env || echo "SUPABASE_URL=$SUPABASE_URL" >> .env
+              [ -n "$SUPABASE_KEY" ] && sed -i "s|^SUPABASE_SERVICE_ROLE_KEY=.*|SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_KEY|" .env || echo "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_KEY" >> .env
+            fi
+            grep -q "^USE_SUPABASE_PROD=" .env || echo "USE_SUPABASE_PROD=true" >> .env
+            
+            # Redis
+            grep -q "^REDIS_URL=" .env || echo "REDIS_URL=redis://aishacrm-redis-memory:6379" >> .env
+            
+            # OpenAI (read from main .env)
+            if [ -f /opt/aishacrm/.env ]; then
+              OPENAI_KEY=$(grep "^OPENAI_API_KEY=" /opt/aishacrm/.env | cut -d'=' -f2-)
+              [ -n "$OPENAI_KEY" ] && sed -i "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=$OPENAI_KEY|" .env || echo "OPENAI_API_KEY=$OPENAI_KEY" >> .env
+            fi
+            grep -q "^DEFAULT_OPENAI_MODEL=" .env || echo "DEFAULT_OPENAI_MODEL=gpt-4o" >> .env
+            
+            # CRM Backend
+            grep -q "^CRM_BACKEND_URL=" .env || echo "CRM_BACKEND_URL=http://aishacrm-backend:3001" >> .env
+            
+            # Tenant Context
+            grep -q "^DEFAULT_TENANT_ID=" .env || echo "DEFAULT_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46" >> .env
+            
+            # GitHub Token (from workflow secret)
             if [ -n "$MCP_GITHUB_TOKEN" ]; then
               if grep -q "^GITHUB_TOKEN=" .env 2>/dev/null; then
                 sed -i "s/^GITHUB_TOKEN=.*/GITHUB_TOKEN=$MCP_GITHUB_TOKEN/" .env
@@ -196,6 +224,11 @@ jobs:
                 echo "GITHUB_TOKEN=$MCP_GITHUB_TOKEN" >> .env
               fi
             fi
+            
+            # Optional: Direct Supabase access
+            grep -q "^USE_DIRECT_SUPABASE_ACCESS=" .env || echo "USE_DIRECT_SUPABASE_ACCESS=false" >> .env
+            
+            echo "MCP .env configuration updated"
             
             # Check if docker-compose.prod.yml exists
             if [ ! -f docker-compose.prod.yml ]; then

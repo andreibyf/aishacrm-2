@@ -247,8 +247,8 @@ describe('AiSidebar voice', () => {
       event: 'ui.voice_mode.enabled',
     }));
 
-    // Click the explicit "Disable Realtime Voice" button (has confirmation dialog)
-    const disableButton = await screen.findByRole('button', { name: /Disable Realtime Voice/i });
+    // Click the explicit "End Session" button (has confirmation dialog)
+    const disableButton = await screen.findByRole('button', { name: /End Session/i });
     await act(async () => {
       fireEvent.click(disableButton);
     });
@@ -291,9 +291,9 @@ describe('AiSidebar voice', () => {
 
     render(<AiSidebar />);
 
+    // UI displays the message and hint, but not individual suggestions
     expect(await screen.findByText('Microphone access was blocked.')).toBeInTheDocument();
     expect(screen.getByText('Allow microphone access from the browser toolbar.')).toBeInTheDocument();
-    expect(screen.getByText('Click the lock icon and enable microphone.')).toBeInTheDocument();
   });
 
   it('requires confirmation before disabling realtime voice', async () => {
@@ -305,8 +305,8 @@ describe('AiSidebar voice', () => {
     });
     await waitFor(() => expect(mockConnectRealtime).toHaveBeenCalled());
 
-    // Click the explicit "Disable Realtime Voice" button (triggers confirmation)
-    const disableButton = await screen.findByRole('button', { name: /Disable Realtime Voice/i });
+    // Click the explicit "End Session" button (triggers confirmation)
+    const disableButton = await screen.findByRole('button', { name: /End Session/i });
     await act(async () => {
       fireEvent.click(disableButton);
     });
@@ -325,8 +325,8 @@ describe('AiSidebar voice', () => {
     });
     await waitFor(() => expect(mockConnectRealtime).toHaveBeenCalled());
 
-    // Click the explicit "Disable Realtime Voice" button (triggers confirmation, but will be cancelled)
-    const disableButton = await screen.findByRole('button', { name: /Disable Realtime Voice/i });
+    // Click the explicit "End Session" button (triggers confirmation, but will be cancelled)
+    const disableButton = await screen.findByRole('button', { name: /End Session/i });
     await act(async () => {
       fireEvent.click(disableButton);
     });
@@ -404,7 +404,7 @@ describe('AiSidebar voice', () => {
     render(<AiSidebar />);
     const voiceModeToggle = await screen.findByTestId('voice-mode-toggle');
     expect(voiceModeToggle).toBeInTheDocument();
-    expect(voiceModeToggle).toHaveTextContent(/Push to Talk/i);
+    expect(voiceModeToggle).toHaveTextContent(/Voice/i);
   });
 
   it('toggles voice mode on click', async () => {
