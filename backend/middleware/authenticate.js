@@ -69,8 +69,19 @@ export async function authenticateRequest(req, _res, next) {
           role: payload.role,
           tenant_id: payload.tenant_id || null,
         };
+        if (process.env.AUTH_DEBUG === 'true') {
+          console.log('[Auth Debug] Cookie JWT verified:', { 
+            path: req.path, 
+            userId: req.user.id, 
+            email: req.user.email,
+            hasId: !!req.user.id 
+          });
+        }
         return next();
-      } catch {
+      } catch (cookieErr) {
+        if (process.env.AUTH_DEBUG === 'true') {
+          console.log('[Auth Debug] Cookie JWT failed:', { path: req.path, error: cookieErr?.message });
+        }
         // fall through to Authorization header
       }
     }
