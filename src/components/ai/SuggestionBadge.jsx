@@ -24,6 +24,21 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { getBackendUrl } from "@/api/backendUrl";
+import { supabase } from "@/lib/supabase";
+
+// Helper to get auth headers for authenticated API requests
+async function getAuthHeaders() {
+  const headers = { 'Content-Type': 'application/json' };
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+  } catch (e) {
+    console.warn('Failed to get auth session:', e);
+  }
+  return headers;
+}
 
 // Trigger icons for compact display
 const TRIGGER_ICONS = {
@@ -97,12 +112,12 @@ export default function SuggestionBadge({ tenantId, onViewAll }) {
     try {
       setIsLoading(true);
       
+      const headers = await getAuthHeaders();
       const response = await fetch(
         `${backendUrl}/api/ai/suggestions?tenant_id=${tenantId}&status=pending&limit=5`,
         {
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers,
+          credentials: 'include',
         }
       );
 
@@ -125,18 +140,21 @@ export default function SuggestionBadge({ tenantId, onViewAll }) {
   const handleApprove = useCallback(async (suggestionId) => {
     try {
       setIsProcessing(true);
+      const headers = await getAuthHeaders();
 
       // First approve
       await fetch(`${backendUrl}/api/ai/suggestions/${suggestionId}/approve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
+        credentials: 'include',
         body: JSON.stringify({ tenant_id: tenantId }),
       });
 
       // Then apply
       const applyResponse = await fetch(`${backendUrl}/api/ai/suggestions/${suggestionId}/apply`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
+        credentials: 'include',
         body: JSON.stringify({ tenant_id: tenantId }),
       });
 
@@ -161,10 +179,12 @@ export default function SuggestionBadge({ tenantId, onViewAll }) {
   const handleReject = useCallback(async (suggestionId) => {
     try {
       setIsProcessing(true);
+      const headers = await getAuthHeaders();
 
       const response = await fetch(`${backendUrl}/api/ai/suggestions/${suggestionId}/reject`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
+        credentials: 'include',
         body: JSON.stringify({ tenant_id: tenantId, reason: 'Quick rejection from notification' }),
       });
 
@@ -188,13 +208,15 @@ export default function SuggestionBadge({ tenantId, onViewAll }) {
     
     try {
       setIsProcessing(true);
+      const headers = await getAuthHeaders();
       
       // Reject all suggestions in parallel
       await Promise.all(
         suggestions.map(s => 
           fetch(`${backendUrl}/api/ai/suggestions/${s.id}/reject`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
+            credentials: 'include',
             body: JSON.stringify({ tenant_id: tenantId, reason: 'Bulk dismissal from notification panel' }),
           })
         )

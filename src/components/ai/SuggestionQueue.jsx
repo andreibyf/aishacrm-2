@@ -45,6 +45,21 @@ import {
 } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import { getBackendUrl } from "@/api/backendUrl";
+import { supabase } from "@/lib/supabase";
+
+// Helper to get auth headers for authenticated API requests
+async function getAuthHeaders() {
+  const headers = { 'Content-Type': 'application/json' };
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+  } catch (e) {
+    console.warn('Failed to get auth session:', e);
+  }
+  return headers;
+}
 
 // Trigger type icons and labels
 const TRIGGER_CONFIG = {
@@ -296,15 +311,15 @@ export default function SuggestionQueue({ tenantId }) {
       setError(null);
 
       const url = new URL(`${backendUrl}/api/ai/suggestions`);
+      url.searchParams.set('tenant_id', tenantId);
       if (filter !== 'all') {
         url.searchParams.set('trigger_type', filter);
       }
 
+      const headers = await getAuthHeaders();
       const response = await fetch(url.toString(), {
-        headers: {
-          'Content-Type': 'application/json',
-          'x-tenant-id': tenantId,
-        },
+        headers,
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -330,13 +345,13 @@ export default function SuggestionQueue({ tenantId }) {
   const handleApprove = useCallback(async (suggestionId) => {
     try {
       setIsProcessing(true);
+      const headers = await getAuthHeaders();
 
       const response = await fetch(`${backendUrl}/api/ai/suggestions/${suggestionId}/approve`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-tenant-id': tenantId,
-        },
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ tenant_id: tenantId }),
       });
 
       if (!response.ok) {
@@ -364,14 +379,13 @@ export default function SuggestionQueue({ tenantId }) {
   const handleReject = useCallback(async (suggestionId) => {
     try {
       setIsProcessing(true);
+      const headers = await getAuthHeaders();
 
       const response = await fetch(`${backendUrl}/api/ai/suggestions/${suggestionId}/reject`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-tenant-id': tenantId,
-        },
-        body: JSON.stringify({ reason: 'User rejected' }),
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ tenant_id: tenantId, reason: 'User rejected' }),
       });
 
       if (!response.ok) {
