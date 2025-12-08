@@ -197,6 +197,11 @@ jobs:
               exit 1
             fi
             
+            # Clean up any orphaned/conflicting MCP containers before starting
+            echo "Cleaning up orphaned MCP containers..."
+            docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
+            docker rm -f braid-mcp-1 braid-mcp-2 braid-mcp-node-server 2>/dev/null || true
+            
             # Start MCP services using production compose (uses GHCR images)
             echo "Starting MCP containers..."
             docker compose -f docker-compose.prod.yml up -d --force-recreate
