@@ -64,7 +64,7 @@ export async function authenticateRequest(req, _res, next) {
         const secret = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'change-me-access';
         const payload = jwt.verify(cookieToken, secret);
         req.user = {
-          id: payload.user_id || payload.id || null,
+          id: payload.sub || payload.user_id || payload.id || null,
           email: payload.email,
           role: payload.role,
           tenant_id: payload.tenant_id || null,
