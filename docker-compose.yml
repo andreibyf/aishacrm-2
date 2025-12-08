@@ -181,7 +181,7 @@ services:
     ports:
       - "8080:80"  # Dev proxy on 8080 to avoid conflict with other services
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/nginx-health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/nginx-health || exit 1"]
       interval: 30s
       timeout: 3s
       retries: 3
