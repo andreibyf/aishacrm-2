@@ -19,10 +19,30 @@ fallbackFunctions.js   (60+ route files)
 
 ### Key Architectural Decisions
 - **Automatic Failover:** `src/api/fallbackFunctions.js` switches from Base44 cloud → local backend if unhealthy (5s timeout, 30s cache)
-- **UUID-First Multi-Tenancy:** Always use `id` (UUID) for foreign keys and RLS, NOT `tenant_id` (text slug)
+- **UUID-First Multi-Tenancy:** Always use `tenant_id` (UUID) for foreign keys and RLS, referencing `tenant(id)`. Legacy `tenant_id_text` is deprecated.
 - **Dual Redis:** Memory (6379) for ephemeral/sessions, Cache (6380) for persistent/aggregations
 - **Braid SDK:** 27+ AI tools in `braid-llm-kit/` with MCP server integration
 - **Multi-Provider AI Engine:** `backend/lib/aiEngine/` with automatic failover (OpenAI → Anthropic → Groq)
+
+### Tenant UUID Migration (CRITICAL)
+
+**Schema overview:**
+- `tenant` table: `id` (UUID PK), `tenant_id` (TEXT unique slug for legacy/human-readable)
+- Domain tables (`accounts`, `contacts`, `leads`, etc.): `tenant_id` (UUID FK → `tenant(id)`)
+- `users` table: `tenant_uuid` (UUID FK → `tenant(id)`), legacy `tenant_id` (TEXT) still present
+
+**Rules for new code:**
+1. **Always use `tenant_id` (UUID)** for queries, inserts, joins, RLS
+2. **Never use `tenant_id_text`** - it's deprecated and read-only
+3. **RLS policies** must use `tenant_uuid` from users table: `SELECT tenant_uuid FROM users WHERE id = auth.uid()`
+4. **FKs reference `tenant(id)`** not `tenants` (table is singular)
+5. **Index `tenant_id`** on any new table for RLS performance
+
+**Migration rules:**
+- Do NOT drop columns until confirmed cutover
+- Add/keep indexes on `tenant_id` used by RLS and joins
+- Create policies using `tenant_id` (UUID) and auth context
+- Avoid DROP/ALTER of extensions; only `CREATE EXTENSION IF NOT EXISTS` in schema `extensions`
 
 ### API Route Versioning (V1 vs V2)
 Routes have two versions - **prefer V2 for new development:**
@@ -104,11 +124,21 @@ router.use(validateTenantAccess);
 
 ### Database (UUID Critical!)
 ```sql
--- CORRECT: Use UUID for foreign keys
-SELECT * FROM contacts WHERE account_id = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+-- CORRECT: Use UUID tenant_id for all queries
+SELECT * FROM accounts WHERE tenant_id = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 
--- WRONG: Never filter by text tenant_id
-SELECT * FROM accounts WHERE tenant_id = 'local-tenant-001';  -- Error!
+-- CORRECT: Join through tenant table
+SELECT a.* FROM accounts a
+JOIN tenant t ON a.tenant_id = t.id
+WHERE t.tenant_id = 'my-tenant-slug';  -- tenant.tenant_id is the TEXT slug
+
+-- WRONG: Never use deprecated tenant_id_text
+SELECT * FROM accounts WHERE tenant_id_text = 'local-tenant-001';  -- Deprecated!
+
+-- RLS Policy pattern (uses tenant_uuid from users table)
+CREATE POLICY example_policy ON my_table
+  FOR SELECT TO authenticated
+  USING (tenant_id IN (SELECT tenant_uuid FROM users WHERE id = auth.uid()));
 ```
 
 ## Essential Commands

@@ -59,6 +59,7 @@ import StatusHelper from "../components/shared/StatusHelper";
 import { loadUsersSafely } from "../components/shared/userLoader";
 import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 import { useUser } from "@/components/shared/useUser.js";
+import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 
 const stageColors = {
   prospecting: "bg-blue-900/20 text-blue-300 border-blue-700",
@@ -70,6 +71,7 @@ const stageColors = {
 };
 
 export default function OpportunitiesPage() {
+  const { plural: opportunitiesLabel } = useEntityLabel('opportunities');
   const [opportunities, setOpportunities] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [contacts, setContacts] = useState([]);
@@ -1032,10 +1034,10 @@ export default function OpportunitiesPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold text-slate-100">
-              Opportunities
+              {opportunitiesLabel}
             </h1>
             <p className="text-slate-400 mt-1">
-              Track and manage your sales opportunities and pipeline.
+              Track and manage your sales {opportunitiesLabel.toLowerCase()} and pipeline.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

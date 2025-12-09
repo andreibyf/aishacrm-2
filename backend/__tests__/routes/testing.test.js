@@ -1,6 +1,6 @@
 /**
  * Unit tests for testing routes
- * Tests /api/testing endpoints including ping, suites, run-playwright, and workflow-status
+ * Tests /api/testing endpoints including ping, suites, trigger-e2e, and workflow-status
  */
 
 import { describe, it, before, after, mock } from 'node:test';
@@ -81,7 +81,7 @@ describe('Testing Routes', () => {
     });
   });
 
-  describe('POST /api/testing/run-playwright', () => {
+  describe('POST /api/testing/trigger-e2e', () => {
     it('should dispatch workflow with valid suite', async () => {
       // Mock fetch for GitHub API
       const originalFetch = globalThis.fetch;
@@ -96,7 +96,7 @@ describe('Testing Routes', () => {
         return originalFetch(url, options);
       });
 
-      const res = await makeRequest('POST', '/api/testing/run-playwright', {
+      const res = await makeRequest('POST', '/api/testing/trigger-e2e', {
         suite: 'metrics',
         ref: 'main',
       });
@@ -129,7 +129,7 @@ describe('Testing Routes', () => {
         return originalFetch(url, options);
       });
 
-      const res = await makeRequest('POST', '/api/testing/run-playwright', {
+      const res = await makeRequest('POST', '/api/testing/trigger-e2e', {
         suite: 'metrics',
       });
       

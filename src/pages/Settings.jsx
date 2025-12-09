@@ -28,6 +28,7 @@ import {
   ExternalLink, // Added for External Tools
   BookOpen, // Added for API Documentation
   Brain, // Added for LLM Activity Monitor
+  Tags, // Added for Entity Labels
 
   // Icons for components not in outline's tabs array but preserved:
   Globe, // for TimezoneSettings (Regional Settings)
@@ -74,6 +75,7 @@ const TenantIntegrationSettings = lazy(() => import("../components/settings/Tena
 
 // System Configuration - lazy loaded
 const ModuleManager = lazy(() => import("../components/shared/ModuleManager"));
+const EntityLabelsManager = lazy(() => import("../components/settings/EntityLabelsManager"));
 const BillingSettings = lazy(() => import("../components/settings/BillingSettings"));
 const CronJobManager = lazy(() => import("../components/settings/CronJobManager"));
 const SystemAnnouncements = lazy(() => import("../components/settings/SystemAnnouncements"));
@@ -174,6 +176,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
       // System Configuration
       { id: 'modules', label: 'Module Settings', icon: LayoutGrid, color: 'slate', roles: ['superadmin'] },
+      { id: 'entity-labels', label: 'Entity Labels', icon: Tags, color: 'indigo', roles: ['superadmin'] },
       { id: 'cron', label: 'Cron Jobs', icon: Clock, color: 'yellow', roles: ['superadmin'] },
       { id: 'security', label: 'Auth & Access', icon: Lock, color: 'purple', roles: ['superadmin'] },
       { id: 'apikeys', label: 'API Keys', icon: Key, color: 'green', roles: ['superadmin'] },
@@ -437,6 +440,12 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                   </CardContent>
                 </Card>
               )}
+
+                {activeTab === 'entity-labels' && isSuperadmin && (
+                  <SettingsLoader>
+                    <EntityLabelsManager />
+                  </SettingsLoader>
+                )}
 
               {activeTab === 'cron' && isAdmin && (
                 <>

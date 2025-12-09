@@ -58,6 +58,7 @@ import {
 import BulkActionsMenu from "../components/leads/BulkActionsMenu";
 import StatusHelper from "../components/shared/StatusHelper";
 import { loadUsersSafely } from "../components/shared/userLoader";
+import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 
 // Helper function for delays
@@ -65,6 +66,7 @@ const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
 export default function LeadsPage() {
   const { user } = useUser();
+  const { plural: leadsLabel, singular: leadLabel } = useEntityLabel('leads');
   const [leads, setLeads] = useState([]);
   const [users, setUsers] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -1104,9 +1106,9 @@ export default function LeadsPage() {
 
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-100">Leads</h1>
+            <h1 className="text-3xl font-bold text-slate-100">{leadsLabel}</h1>
             <p className="text-slate-400 mt-1">
-              Track and manage your sales leads and prospects.
+              Track and manage your sales {leadsLabel.toLowerCase()} and prospects.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

@@ -187,8 +187,48 @@ export function enforceEmployeeDataScope(req, res, next) {
   next();
 }
 
+/**
+ * Middleware to require superadmin role (more restrictive than requireAdminRole)
+ * Only superadmins can access protected endpoints (e.g., entity labels, global settings)
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+export function requireSuperAdminRole(req, res, next) {
+  const { user } = req;
+  
+  // In local dev mode without auth, create a mock superadmin user
+  if (!user && process.env.NODE_ENV === 'development') {
+    req.user = {
+      id: 'local-dev-superadmin',
+      email: 'dev@localhost',
+      role: 'superadmin',
+      tenant_id: null
+    };
+    return next();
+  }
+  
+  if (!user) {
+    return res.status(401).json({ 
+      status: 'error', 
+      message: 'Authentication required' 
+    });
+  }
+
+  // Only superadmin can access these endpoints
+  if (user.role !== 'superadmin') {
+    return res.status(403).json({ 
+      status: 'error', 
+      message: 'Access denied. Only superadmins can perform this action.' 
+    });
+  }
+
+  next();
+}
+
 export default {
   validateTenantAccess,
   requireAdminRole,
+  requireSuperAdminRole,
   enforceEmployeeDataScope
 };

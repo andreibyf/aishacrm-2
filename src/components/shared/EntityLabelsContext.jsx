@@ -1,0 +1,158 @@
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { BACKEND_URL } from '@/api/entities';
+
+// Default entity labels - matches backend
+const DEFAULT_LABELS = {
+  leads: { plural: 'Leads', singular: 'Lead' },
+  contacts: { plural: 'Contacts', singular: 'Contact' },
+  accounts: { plural: 'Accounts', singular: 'Account' },
+  opportunities: { plural: 'Opportunities', singular: 'Opportunity' },
+  activities: { plural: 'Activities', singular: 'Activity' },
+  bizdev_sources: { plural: 'BizDev Sources', singular: 'BizDev Source' },
+};
+
+// Entity key to href mapping (for navigation)
+const ENTITY_KEY_TO_HREF = {
+  leads: 'Leads',
+  contacts: 'Contacts',
+  accounts: 'Accounts',
+  opportunities: 'Opportunities',
+  activities: 'Activities',
+  bizdev_sources: 'BizDevSources',
+};
+
+// Reverse mapping: href to entity key
+const HREF_TO_ENTITY_KEY = Object.fromEntries(
+  Object.entries(ENTITY_KEY_TO_HREF).map(([key, href]) => [href, key])
+);
+
+const EntityLabelsContext = createContext({
+  labels: DEFAULT_LABELS,
+  getLabel: () => '',
+  getLabelSingular: () => '',
+  getNavLabel: () => '',
+  loading: false,
+  refresh: () => {},
+});
+
+export function EntityLabelsProvider({ children, tenantId }) {
+  const [labels, setLabels] = useState(DEFAULT_LABELS);
+  const [loading, setLoading] = useState(false);
+  const [lastFetchedTenantId, setLastFetchedTenantId] = useState(null);
+
+  const fetchLabels = useCallback(async (tid) => {
+    if (!tid) {
+      setLabels(DEFAULT_LABELS);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await fetch(`${BACKEND_URL}/api/entity-labels/${tid}`, {
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === 'success' && data.data?.labels) {
+          setLabels(data.data.labels);
+        }
+      } else {
+        // Fallback to defaults on error
+        setLabels(DEFAULT_LABELS);
+      }
+    } catch (error) {
+      console.error('Error fetching entity labels:', error);
+      setLabels(DEFAULT_LABELS);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tenantId && tenantId !== lastFetchedTenantId) {
+      setLastFetchedTenantId(tenantId);
+      fetchLabels(tenantId);
+    }
+  }, [tenantId, lastFetchedTenantId, fetchLabels]);
+
+  /**
+   * Get the plural label for an entity
+   * @param {string} entityKey - e.g., 'leads', 'accounts'
+   * @returns {string} - e.g., 'Prospects' or 'Leads'
+   */
+  const getLabel = useCallback((entityKey) => {
+    const key = entityKey?.toLowerCase();
+    return labels[key]?.plural || DEFAULT_LABELS[key]?.plural || entityKey;
+  }, [labels]);
+
+  /**
+   * Get the singular label for an entity
+   * @param {string} entityKey - e.g., 'leads', 'accounts'
+   * @returns {string} - e.g., 'Prospect' or 'Lead'
+   */
+  const getLabelSingular = useCallback((entityKey) => {
+    const key = entityKey?.toLowerCase();
+    return labels[key]?.singular || DEFAULT_LABELS[key]?.singular || entityKey;
+  }, [labels]);
+
+  /**
+   * Get the label for a navigation href
+   * @param {string} href - e.g., 'Leads', 'BizDevSources'
+   * @returns {string} - custom label or original
+   */
+  const getNavLabel = useCallback((href) => {
+    const entityKey = HREF_TO_ENTITY_KEY[href];
+    if (entityKey) {
+      return getLabel(entityKey);
+    }
+    return null; // Return null if not a customizable entity
+  }, [getLabel]);
+
+  const refresh = useCallback(() => {
+    if (tenantId) {
+      fetchLabels(tenantId);
+    }
+  }, [tenantId, fetchLabels]);
+
+  const value = {
+    labels,
+    getLabel,
+    getLabelSingular,
+    getNavLabel,
+    loading,
+    refresh,
+  };
+
+  return (
+    <EntityLabelsContext.Provider value={value}>
+      {children}
+    </EntityLabelsContext.Provider>
+  );
+}
+
+/**
+ * Hook to access entity labels
+ */
+export function useEntityLabels() {
+  const context = useContext(EntityLabelsContext);
+  if (!context) {
+    throw new Error('useEntityLabels must be used within EntityLabelsProvider');
+  }
+  return context;
+}
+
+/**
+ * Hook to get a specific entity's label (convenience)
+ * @param {string} entityKey - e.g., 'leads'
+ * @returns {{ plural: string, singular: string }}
+ */
+export function useEntityLabel(entityKey) {
+  const { getLabel, getLabelSingular } = useEntityLabels();
+  return {
+    plural: getLabel(entityKey),
+    singular: getLabelSingular(entityKey),
+  };
+}
+
+export { DEFAULT_LABELS, ENTITY_KEY_TO_HREF, HREF_TO_ENTITY_KEY };

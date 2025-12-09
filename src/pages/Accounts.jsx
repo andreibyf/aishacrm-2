@@ -49,11 +49,13 @@ import {
 import StatusHelper from "../components/shared/StatusHelper";
 import { ComponentHelp } from "../components/shared/ComponentHelp";
 import { formatIndustry } from "@/utils/industryUtils";
+import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 
 // Helper to add delay between API calls
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function AccountsPage() {
+  const { plural: accountsLabel } = useEntityLabel('accounts');
   const [accounts, setAccounts] = useState([]);
   const [, setContacts] = useState([]);
   const [users, setUsers] = useState([]);
@@ -895,7 +897,7 @@ export default function AccountsPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-3xl font-bold text-slate-100">Accounts</h1>
+              <h1 className="text-3xl font-bold text-slate-100">{accountsLabel}</h1>
               <ComponentHelp 
                 title="Accounts Management Guide" 
                 description="Learn how to create, filter, and manage your accounts effectively."
@@ -903,7 +905,7 @@ export default function AccountsPage() {
               />
             </div>
             <p className="text-slate-400 mt-1">
-              Manage your company accounts and partnerships.
+              Manage your company {accountsLabel.toLowerCase()} and partnerships.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

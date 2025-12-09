@@ -5,7 +5,8 @@
 import assert from 'assert';
 
 const BASE_URL = process.env.TEST_BACKEND_URL || 'http://localhost:4001';
-const TEST_TENANT = `regression-tenant-${Date.now()}`;
+// Use valid tenant UUID (same as other tests)
+const TEST_TENANT = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 
 async function jsonFetch(path, options = {}) {
   const res = await fetch(`${BASE_URL}${path}`, {

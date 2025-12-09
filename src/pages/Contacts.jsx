@@ -55,8 +55,10 @@ import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 import { useUser } from "@/components/shared/useUser.js";
+import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 
 export default function ContactsPage() {
+  const { plural: contactsLabel } = useEntityLabel('contacts');
   const [contacts, setContacts] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [users, setUsers] = useState([]);
@@ -781,9 +783,9 @@ export default function ContactsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-100">Contacts</h1>
+          <h1 className="text-3xl font-bold text-slate-100">{contactsLabel}</h1>
           <p className="text-slate-400 mt-1">
-            Track and manage your sales contacts and prospects.
+            Track and manage your sales {contactsLabel.toLowerCase()} and prospects.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

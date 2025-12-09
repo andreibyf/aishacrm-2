@@ -21,6 +21,7 @@ import {
 } from "@dnd-kit/sortable";
 import { SortableNavItem } from "@/components/shared/SortableNavItem";
 import { usePrimaryNavOrder, useSecondaryNavOrder } from "@/hooks/useNavOrder";
+import { EntityLabelsProvider, useEntityLabels } from "@/components/shared/EntityLabelsContext";
 import {
   BarChart3,
   BookOpen, // NEW: Added for Documentation
@@ -516,6 +517,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     [tenantContext?.setSelectedTenantId],
   );
 
+  // Entity labels for custom navigation names
+  const { getNavLabel } = useEntityLabels();
+
   const navigate = useNavigate();
   const [globalDetailRecord, setGlobalDetailRecord] = useState(null);
   const { cachedRequest, clearCache } = useApiManager();
@@ -941,15 +945,26 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     return orderedNavItems
       .filter((item) =>
         hasPageAccess(user, item.href, selectedTenantId, moduleSettings)
-      );
-  }, [user, selectedTenantId, moduleSettings, orderedNavItems]);
+    )
+      .map((item) => {
+        // Apply custom entity labels if available
+        const customLabel = getNavLabel(item.href);
+        return customLabel ? { ...item, label: customLabel } : item;
+      });
+  }, [user, selectedTenantId, moduleSettings, orderedNavItems, getNavLabel]);
 
   const filteredSecondaryNavItems = React.useMemo(() => {
     if (!user) return [];
-    return orderedSecondaryItems.filter((item) =>
-      hasPageAccess(user, item.href, selectedTenantId, moduleSettings)
-    );
-  }, [user, selectedTenantId, moduleSettings, orderedSecondaryItems]);
+    return orderedSecondaryItems
+      .filter((item) =>
+        hasPageAccess(user, item.href, selectedTenantId, moduleSettings)
+    )
+      .map((item) => {
+        // Apply custom entity labels if available
+        const customLabel = getNavLabel(item.href);
+        return customLabel ? { ...item, label: customLabel } : item;
+      });
+  }, [user, selectedTenantId, moduleSettings, orderedSecondaryItems, getNavLabel]);
 
   React.useEffect(() => {
     const originalConsoleError = console.error;
@@ -3693,6 +3708,17 @@ const queryClient = new QueryClient({
   },
 });
 
+// Wrapper to inject tenantId into EntityLabelsProvider from TenantContext
+function EntityLabelsWrapper({ children }) {
+  const tenantContext = useTenant();
+  const tenantId = tenantContext?.selectedTenantId || null;
+  return (
+    <EntityLabelsProvider tenantId={tenantId}>
+      {children}
+    </EntityLabelsProvider>
+  );
+}
+
 export default function LayoutWrapper({ children, currentPageName }) {
   // Disable loading of ElevenLabs ConvAI script (brain widget)
   React.useEffect(() => {
@@ -3705,19 +3731,21 @@ export default function LayoutWrapper({ children, currentPageName }) {
       <QueryClientProvider client={queryClient}>
         <ApiOptimizerProvider>
           <TenantProvider>
-            <ApiProvider>
-              <TimezoneProvider>
-                <EmployeeScopeProvider>
-                  <LoggerProvider>
-                    <AiSidebarProvider>
-                      <Layout currentPageName={currentPageName}>
-                        {children}
-                      </Layout>
-                    </AiSidebarProvider>
-                  </LoggerProvider>
-                </EmployeeScopeProvider>
-              </TimezoneProvider>
-            </ApiProvider>
+            <EntityLabelsWrapper>
+              <ApiProvider>
+                <TimezoneProvider>
+                  <EmployeeScopeProvider>
+                    <LoggerProvider>
+                      <AiSidebarProvider>
+                        <Layout currentPageName={currentPageName}>
+                          {children}
+                        </Layout>
+                      </AiSidebarProvider>
+                    </LoggerProvider>
+                  </EmployeeScopeProvider>
+                </TimezoneProvider>
+              </ApiProvider>
+            </EntityLabelsWrapper>
           </TenantProvider>
         </ApiOptimizerProvider>
       </QueryClientProvider>

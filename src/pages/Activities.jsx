@@ -37,6 +37,7 @@ import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
 import { utcToLocal, getCurrentTimezoneOffset } from '../components/shared/timezoneUtils';
 import { useTimezone } from '../components/shared/TimezoneContext';
+import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 
 const statusColors = {
   scheduled: "bg-blue-900/20 text-blue-300 border-blue-700",
@@ -57,6 +58,7 @@ const typeColors = {
 };
 
 export default function ActivitiesPage() {
+  const { plural: activitiesLabel } = useEntityLabel('activities');
   const [activities, setActivities] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [contacts, setContacts] = useState([]);
@@ -730,8 +732,8 @@ export default function ActivitiesPage() {
 
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-100 mb-2">Activities</h1>
-            <p className="text-slate-400">Track and manage your team&apos;s activities and tasks</p>
+            <h1 className="text-3xl font-bold text-slate-100 mb-2">{activitiesLabel}</h1>
+            <p className="text-slate-400">Track and manage your team&apos;s {activitiesLabel.toLowerCase()} and tasks</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <RefreshButton onClick={handleRefresh} loading={loading} />

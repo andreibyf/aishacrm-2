@@ -38,8 +38,10 @@ import ArchiveIndexViewer from "../components/bizdev/ArchiveIndexViewer";
 import BulkDeleteDialog from "../components/bizdev/BulkDeleteDialog";
 import StatusHelper from "../components/shared/StatusHelper";
 import { useUser } from "../components/shared/useUser.js";
+import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 
 export default function BizDevSourcesPage() {
+  const { plural: bizdevLabel } = useEntityLabel('bizdev_sources');
   const [sources, setSources] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -442,9 +444,9 @@ export default function BizDevSourcesPage() {
             <Building2 className="w-7 h-7 text-blue-400" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-slate-100">BizDev Sources</h1>
+            <h1 className="text-3xl font-bold text-slate-100">{bizdevLabel}</h1>
             <p className="text-slate-400">
-              Manage business development leads and prospects
+              Manage business development {bizdevLabel.toLowerCase()} and prospects
               {sources.length > 0 && (
                 <span className="ml-2 text-slate-500">
                   • Showing {filteredSources.length.toLocaleString()} of {sources.length.toLocaleString()} total
