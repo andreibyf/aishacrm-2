@@ -50,6 +50,7 @@ COPY --from=builder /app/dist ./dist
 RUN rm -f /app/dist/env-config.js
 
 # Bake build version into image (will be picked up by entrypoint if env var not set)
+# Use the same ARG name that GitHub Actions passes via build-args
 ARG VITE_APP_BUILD_VERSION=dev-local
 RUN echo "${VITE_APP_BUILD_VERSION}" > /app/VERSION
 
