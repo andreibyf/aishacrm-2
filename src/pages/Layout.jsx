@@ -1,10 +1,26 @@
 import { logDev } from "@/utils/devLogger";
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom"; // Import useNavigate
 import { createPageUrl } from "@/utils";
 import PasswordChangeModal from "@/components/auth/PasswordChangeModal";
 import EnvironmentBanner from "@/components/shared/EnvironmentBanner";
 import { getBackendUrl } from "@/api/backendUrl";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { SortableNavItem } from "@/components/shared/SortableNavItem";
+import { usePrimaryNavOrder, useSecondaryNavOrder } from "@/hooks/useNavOrder";
 import {
   BarChart3,
   BookOpen, // NEW: Added for Documentation
@@ -18,6 +34,7 @@ import {
   DollarSign,
   FileText,
   FolderOpen,
+  GripVertical,
   LayoutDashboard,
   Loader2,
   LogOut,
@@ -25,6 +42,7 @@ import {
   Menu,
   Moon,
   Plug, // NEW: Added for Integrations
+  RotateCcw,
   Settings,
   Sun,
   Target, // Changed Leads icon to Target
@@ -866,22 +884,72 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   //   }
   // };
 
+  // Navigation order management with drag-and-drop
+  const [isDragMode, setIsDragMode] = useState(false);
+  const { orderedItems: orderedNavItems, setOrder: setNavOrder, resetOrder: resetNavOrder, hasCustomOrder: hasCustomNavOrder } = usePrimaryNavOrder(navItems);
+  const { orderedItems: orderedSecondaryItems, setOrder: setSecondaryOrder, resetOrder: resetSecondaryOrder, hasCustomOrder: hasCustomSecondaryOrder } = useSecondaryNavOrder(secondaryNavItems);
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Minimum drag distance before activation
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // Handle drag end for primary nav
+  const handleNavDragEnd = useCallback((event) => {
+    const { active, over } = event;
+    if (active.id !== over?.id) {
+      const oldIndex = orderedNavItems.findIndex((item) => item.href === active.id);
+      const newIndex = orderedNavItems.findIndex((item) => item.href === over?.id);
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newOrder = arrayMove(orderedNavItems, oldIndex, newIndex);
+        setNavOrder(newOrder);
+      }
+    }
+  }, [orderedNavItems, setNavOrder]);
+
+  // Handle drag end for secondary nav
+  const handleSecondaryDragEnd = useCallback((event) => {
+    const { active, over } = event;
+    if (active.id !== over?.id) {
+      const oldIndex = orderedSecondaryItems.findIndex((item) => item.href === active.id);
+      const newIndex = orderedSecondaryItems.findIndex((item) => item.href === over?.id);
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newOrder = arrayMove(orderedSecondaryItems, oldIndex, newIndex);
+        setSecondaryOrder(newOrder);
+      }
+    }
+  }, [orderedSecondaryItems, setSecondaryOrder]);
+
+  // Reset all nav order to default
+  const handleResetNavOrder = useCallback(() => {
+    resetNavOrder();
+    resetSecondaryOrder();
+    setIsDragMode(false);
+  }, [resetNavOrder, resetSecondaryOrder]);
+
   const filteredNavItems = React.useMemo(() => {
     if (!user) return [];
     // Filter out items with parentMenu if you want to implement a nested menu structure
     // For now, they are treated as top-level items for simplicity as per existing structure
-    return navItems
+    return orderedNavItems
       .filter((item) =>
         hasPageAccess(user, item.href, selectedTenantId, moduleSettings)
       );
-  }, [user, selectedTenantId, moduleSettings]);
+  }, [user, selectedTenantId, moduleSettings, orderedNavItems]);
 
   const filteredSecondaryNavItems = React.useMemo(() => {
     if (!user) return [];
-    return secondaryNavItems.filter((item) =>
+    return orderedSecondaryItems.filter((item) =>
       hasPageAccess(user, item.href, selectedTenantId, moduleSettings)
     );
-  }, [user, selectedTenantId, moduleSettings]);
+  }, [user, selectedTenantId, moduleSettings, orderedSecondaryItems]);
 
   React.useEffect(() => {
     const originalConsoleError = console.error;
@@ -2514,122 +2582,147 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         <Clock />
       </div>
 
-      <p className="px-4 text-xs text-slate-500 font-semibold uppercase tracking-wider">
-        Navigation
-      </p>
+      <div className="px-4 flex items-center justify-between">
+        <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
+          Navigation
+        </p>
+        <div className="flex items-center gap-1">
+          {(hasCustomNavOrder || hasCustomSecondaryOrder) && (
+            <button
+              type="button"
+              onClick={handleResetNavOrder}
+              className="p-1 text-slate-500 hover:text-slate-300 transition-colors"
+              title="Reset to default order"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsDragMode(!isDragMode)}
+            className={`p-1 transition-colors ${isDragMode ? 'text-blue-400' : 'text-slate-500 hover:text-slate-300'}`}
+            title={isDragMode ? "Exit reorder mode" : "Reorder navigation items"}
+          >
+            <GripVertical className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
       <nav
         className="flex-1 px-4 py-2 overflow-y-auto"
         data-testid="main-navigation"
       >
-        <ul className="space-y-1">
-          {filteredNavItems.map((item) => (
-            <li key={item.href}>
-              <Link
-                to={createPageUrl(item.href)}
-                data-testid={`nav-${item.href.toLowerCase()}`}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-base font-medium ${
-                  currentPageName === item.href
-                    ? "shadow-lg nav-active"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-300"
-                }`}
-                onClick={onNavClick}
-                style={currentPageName === item.href
-                  ? {
-                    backgroundColor: "var(--primary-color)",
-                    color: "var(--on-primary-text)",
-                  }
-                  : {}}
-              >
-                <item.icon
-                  className={`w-5 h-5 ${
-                    currentPageName === item.href ? "" : "text-slate-400"
-                  }`}
-                  style={currentPageName === item.href
-                    ? {
-                      color: "var(--on-primary-text)",
-                    }
-                    : {}}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleNavDragEnd}
+        >
+          <SortableContext
+            items={filteredNavItems.map(item => item.href)}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className="space-y-1">
+              {filteredNavItems.map((item) => (
+                <SortableNavItem
+                  key={item.href}
+                  item={item}
+                  isActive={currentPageName === item.href}
+                  createPageUrl={createPageUrl}
+                  onNavClick={onNavClick}
+                  isDragMode={isDragMode}
                 />
-                <span className="text-lg">{item.label}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       </nav>
 
       <div className="mt-auto p-4 border-t border-slate-800">
-        <ul className="space-y-1">
-          {filteredSecondaryNavItems.map((item) => (
-            <li key={item.href}>
-              <Link
-                to={createPageUrl(item.href)}
-                data-testid={`nav-${item.href.toLowerCase()}`}
-                className={`flex items-center ${
-                  item.isAvatar ? "justify-center" : "gap-3"
-                } px-3 py-2.5 rounded-lg transition-all text-base font-medium ${
-                  currentPageName === item.href
-                    ? (item.isAvatar
-                      ? "bg-transparent"
-                      : "shadow-lg nav-active")
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-300"
-                }`}
-                onClick={onNavClick}
-                style={currentPageName === item.href && !item.isAvatar
-                  ? {
-                    backgroundColor: "var(--primary-color)",
-                    color: "var(--on-primary-text)",
-                  }
-                  : {}}
-              >
-                {item.isAvatar
-                  ? (
-                    <div
-                      className="relative"
-                      style={{
-                        borderRadius: "50%",
-                        padding: "3px",
-                        background: currentPageName === item.href
-                          ? `linear-gradient(135deg, ${primaryColor}, ${accentColor})`
-                          : "transparent",
-                        boxShadow: currentPageName === item.href
-                          ? `0 0 15px ${primaryColor}, 0 0 30px ${accentColor}`
-                          : "none",
-                      }}
-                    >
-                      <img
-                        src={item.avatarUrl}
-                        alt="AI Assistant"
-                        style={{
-                          width: "0.75in",
-                          height: "0.75in",
-                          borderRadius: "50%",
-                        }}
-                        className={`object-cover sidebar-avatar-border ${
-                          currentPageName === item.href
-                            ? "opacity-100"
-                            : "opacity-90 hover:opacity-100"
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleSecondaryDragEnd}
+        >
+          <SortableContext
+            items={filteredSecondaryNavItems.map(item => item.href)}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className="space-y-1">
+              {filteredSecondaryNavItems.map((item) => (
+                <li key={item.href}>
+                  <div className="flex items-center">
+                    {isDragMode && !item.isAvatar && (
+                      <div className="p-1 mr-1 text-slate-500">
+                        <GripVertical className="w-4 h-4" />
+                      </div>
+                    )}
+                    <Link
+                      to={createPageUrl(item.href)}
+                      data-testid={`nav-${item.href.toLowerCase()}`}
+                      className={`flex-1 flex items-center ${item.isAvatar ? "justify-center" : "gap-3"
+                        } px-3 py-2.5 rounded-lg transition-all text-base font-medium ${currentPageName === item.href
+                          ? (item.isAvatar
+                            ? "bg-transparent"
+                            : "shadow-lg nav-active")
+                          : "text-slate-400 hover:bg-slate-800 hover:text-slate-300"
                         }`}
-                      />
-                    </div>
-                  )
-                  : (
-                    <item.icon
-                      className={`w-5 h-5 ${
-                        currentPageName === item.href ? "" : "text-slate-400"
-                      }`}
-                      style={currentPageName === item.href
+                      onClick={onNavClick}
+                      style={currentPageName === item.href && !item.isAvatar
                         ? {
+                          backgroundColor: "var(--primary-color)",
                           color: "var(--on-primary-text)",
                         }
                         : {}}
-                    />
-                  )}
+                    >
+                      {item.isAvatar
+                        ? (
+                          <div
+                            className="relative"
+                            style={{
+                              borderRadius: "50%",
+                              padding: "3px",
+                              background: currentPageName === item.href
+                                ? `linear-gradient(135deg, ${primaryColor}, ${accentColor})`
+                                : "transparent",
+                              boxShadow: currentPageName === item.href
+                                ? `0 0 15px ${primaryColor}, 0 0 30px ${accentColor}`
+                                : "none",
+                            }}
+                          >
+                            <img
+                              src={item.avatarUrl}
+                              alt="AI Assistant"
+                              style={{
+                                width: "0.75in",
+                                height: "0.75in",
+                                borderRadius: "50%",
+                              }}
+                              className={`object-cover sidebar-avatar-border ${currentPageName === item.href
+                                  ? "opacity-100"
+                                  : "opacity-90 hover:opacity-100"
+                                }`}
+                            />
+                          </div>
+                        )
+                        : (
+                          <item.icon
+                            className={`w-5 h-5 ${currentPageName === item.href ? "" : "text-slate-400"
+                              }`}
+                            style={currentPageName === item.href
+                              ? {
+                                color: "var(--on-primary-text)",
+                              }
+                              : {}}
+                          />
+                        )}
 
-                {!item.isAvatar && <span>{item.label}</span>}
-              </Link>
-            </li>
-          ))}
-        </ul>
+                      {!item.isAvatar && <span>{item.label}</span>}
+                    </Link>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       </div>
     </div>
   );
