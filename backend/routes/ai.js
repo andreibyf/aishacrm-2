@@ -1948,6 +1948,18 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       const duration = Date.now() - startTime;
       console.log(`[AI][Realtime] Tool ${tool_name} completed in ${duration}ms`);
 
+      // Log LLM activity for realtime tool execution
+      logLLMActivity({
+        tenantId: resolvedTenant?.uuid,
+        capability: 'realtime_tool',
+        provider: 'braid',
+        model: 'realtime-voice',
+        nodeId: `ai:realtime:${tool_name}`,
+        status: 'success',
+        durationMs: duration,
+        usage: null, // Tool execution doesn't have token usage
+      });
+
       // Unwrap Braid Result type: { tag: 'Ok', value: ... } -> value
       // Or { tag: 'Err', error: ... } -> error info
       let unwrappedResult = toolResult;
@@ -1999,7 +2011,21 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       });
 
     } catch (error) {
+      const duration = Date.now() - startTime;
       console.error('[AI][Realtime] Tool execution failed:', error);
+
+      // Log LLM activity for realtime tool error
+      logLLMActivity({
+        tenantId: req.body?.tenant_id,
+        capability: 'realtime_tool',
+        provider: 'braid',
+        model: 'realtime-voice',
+        nodeId: `ai:realtime:${req.body?.tool_name || 'unknown'}`,
+        status: 'error',
+        durationMs: duration,
+        error: error?.message || 'Tool execution failed',
+      });
+
       return res.status(500).json({
         status: 'error',
         message: error?.message || 'Tool execution failed',
