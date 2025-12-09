@@ -331,6 +331,8 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
   const speakingTimeoutRef = useRef(null);
   // PTT mode flag - when true, mic stays muted except when user holds PTT button
   const pttModeRef = useRef(false);
+  // Deduplication: track executed tool call IDs to prevent duplicates
+  const executedToolCallsRef = useRef(new Set());
 
   useEffect(() => {
     eventHandlerRef.current = onEvent || null;
@@ -761,6 +763,17 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
             }
 
             if (toolName) {
+              // Deduplication: Skip if this call_id was already executed
+              if (executedToolCallsRef.current.has(callId)) {
+                console.log(`[Realtime] Skipping duplicate tool call: ${toolName} (callId: ${callId})`);
+                logEvent('realtime.tool.duplicate_skipped', { toolName, callId });
+                return;
+              }
+              // Mark as executed before making the call
+              executedToolCallsRef.current.add(callId);
+              // Cleanup old call IDs after 60 seconds to prevent memory leak
+              setTimeout(() => executedToolCallsRef.current.delete(callId), 60000);
+
               console.log(`[Realtime] Tool call detected: ${toolName}`, { callId, toolArgs });
               logEvent('realtime.tool.call_detected', { toolName, callId });
 
