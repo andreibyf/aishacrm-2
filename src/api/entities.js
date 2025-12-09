@@ -45,8 +45,9 @@ const getRuntimeEnv = (key) => {
 // Fallback logic: if build-time env missing or points at localhost or a raw IP, prefer window.location.origin
 // because Cloudflare Tunnel terminates TLS and routes /api/*.
 const resolveBackendBase = () => {
-  if (import.meta.env.DEV) return '';
-  let raw = getRuntimeEnv('VITE_AISHACRM_BACKEND_URL') || 'http://localhost:3001';
+  // Always use explicit backend URL (no empty string for dev mode)
+  // The Vite dev server proxy only works with `npm run dev:vite`, not with production builds
+  let raw = getRuntimeEnv('VITE_AISHACRM_BACKEND_URL') || 'http://localhost:4001';
   try {
     if (typeof window !== 'undefined') {
       const origin = window.location.origin;
