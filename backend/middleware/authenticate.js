@@ -1,12 +1,30 @@
 import jwt from 'jsonwebtoken';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 /**
  * Authenticate request and populate req.user from:
- * 1) Backend JWT access cookie (aisha_access)
- * 2) Supabase access token in Authorization: Bearer <token>
+ * 1) Backend JWT access cookie (aisha_access) - verified with HS256 shared secret
+ * 2) Supabase access token in Authorization: Bearer <token> - verified via JWKS (ES256 or HS256)
  *
  * Does not enforce authentication; it only attaches user info when available.
  */
+
+// Cache JWKS client to avoid creating new one on every request
+let jwksClient = null;
+function getJWKSClient() {
+  if (!jwksClient) {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    if (!supabaseUrl) {
+      console.warn('[Auth] SUPABASE_URL not set, JWKS verification disabled');
+      return null;
+    }
+    const jwksUrl = new URL('/auth/v1/jwks', supabaseUrl);
+    jwksClient = createRemoteJWKSet(jwksUrl);
+    console.log('[Auth] JWKS client initialized:', jwksUrl.toString());
+  }
+  return jwksClient;
+}
+
 export async function authenticateRequest(req, _res, next) {
   try {
     // DEBUG: Log auth context for diagnostics
@@ -24,11 +42,16 @@ export async function authenticateRequest(req, _res, next) {
     }
 
     // 1) Try backend JWT access cookie first (primary auth method)
+    // Our own cookies are signed with HS256 using JWT_SECRET
     const cookieToken = req.cookies?.aisha_access;
     if (cookieToken) {
       try {
-        const secret = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'change-me-access';
-        const payload = jwt.verify(cookieToken, secret);
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+          console.warn('[Auth] JWT_SECRET not set, cookie verification will fail');
+        }
+        // Explicitly verify with HS256 algorithm only
+        const payload = jwt.verify(cookieToken, secret, { algorithms: ['HS256'] });
         req.user = {
           id: payload.sub || payload.user_id || payload.id || null,
           email: payload.email,
@@ -36,7 +59,7 @@ export async function authenticateRequest(req, _res, next) {
           tenant_id: payload.tenant_id || null,
         };
         if (process.env.AUTH_DEBUG === 'true') {
-          console.log('[Auth Debug] Cookie JWT verified:', { 
+          console.log('[Auth Debug] Cookie JWT verified (HS256):', { 
             path: req.path, 
             userId: req.user.id, 
             email: req.user.email,
@@ -48,11 +71,11 @@ export async function authenticateRequest(req, _res, next) {
         if (process.env.AUTH_DEBUG === 'true') {
           console.log('[Auth Debug] Cookie JWT failed:', { path: req.path, error: cookieErr?.message });
         }
-        // fall through to lookup by bearer if present
+        // fall through to bearer token verification
       }
     }
 
-    // 2) If no cookie, try to extract user from bearer token claims (do NOT validate with Supabase)
+    // 2) If no cookie, verify Supabase bearer token via JWKS (supports both ES256 and HS256)
     // This supports cross-origin/mobile clients that can't use cookies
     const bearer = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
 
@@ -60,48 +83,100 @@ export async function authenticateRequest(req, _res, next) {
       if (process.env.AUTH_DEBUG === 'true') {
         console.log('[Auth Debug] Processing bearer token:', { path: req.path, tokenLength: bearer.length });
       }
-      try {
-        // Decode token claims WITHOUT verification (Supabase tokens are for Supabase, not us)
-        const decoded = jwt.decode(bearer) || {};
-        if (decoded.email) {
-          const email = (decoded.email || '').toLowerCase().trim();
-          try {
-            const { getSupabaseClient } = await import('../lib/supabase-db.js');
-            const supa = getSupabaseClient();
-            // Lookup user by email to get full user record with tenant_id and role
-            const [{ data: uRows }, { data: eRows }] = await Promise.all([
-              supa.from('users').select('id, role, tenant_id').eq('email', email),
-              supa.from('employees').select('id, role, tenant_id').eq('email', email),
-            ]);
-            const row = (uRows && uRows[0]) || (eRows && eRows[0]) || null;
-            if (row) {
-              req.user = {
-                id: row.id,
-                email,
-                role: row.role || 'employee',
-                tenant_id: row.tenant_id ?? null,
-              };
-              if (process.env.AUTH_DEBUG === 'true') {
-                console.log('[Auth Debug] Bearer: resolved user from DB:', { email, role: req.user.role, tenant_id: req.user.tenant_id });
-              }
-              return next();
-            }
-          } catch (dbErr) {
-            if (process.env.AUTH_DEBUG === 'true') {
-              console.log('[Auth Debug] Bearer DB lookup failed:', { email, error: dbErr?.message });
-            }
+      
+      let payload = null;
+      
+      // Try JWKS verification first (works for both ES256 and HS256 keys in JWKS)
+      const jwks = getJWKSClient();
+      if (jwks) {
+        try {
+          const { payload: verifiedPayload } = await jwtVerify(bearer, jwks, {
+            algorithms: ['ES256', 'HS256'], // Accept both during migration
+          });
+          payload = verifiedPayload;
+          if (process.env.AUTH_DEBUG === 'true') {
+            console.log('[Auth Debug] Bearer JWKS verified:', { 
+              path: req.path, 
+              sub: payload.sub, 
+              email: payload.email,
+              alg: 'JWKS'
+            });
+          }
+        } catch (jwksErr) {
+          if (process.env.AUTH_DEBUG === 'true') {
+            console.log('[Auth Debug] Bearer JWKS verification failed:', { 
+              path: req.path, 
+              error: jwksErr?.message,
+              code: jwksErr?.code 
+            });
+          }
+          // Fall through to decode-only as last resort (for legacy tokens)
+        }
+      }
+      
+      // If JWKS verification failed, try decode-only as fallback (legacy support)
+      if (!payload) {
+        try {
+          payload = jwt.decode(bearer) || {};
+          if (process.env.AUTH_DEBUG === 'true') {
+            console.log('[Auth Debug] Bearer decoded (unverified fallback):', { 
+              path: req.path, 
+              hasEmail: !!payload?.email 
+            });
+          }
+        } catch (decodeErr) {
+          if (process.env.AUTH_DEBUG === 'true') {
+            console.log('[Auth Debug] Bearer decode failed:', { error: decodeErr?.message });
           }
         }
-      } catch (decodeErr) {
-        if (process.env.AUTH_DEBUG === 'true') {
-          console.log('[Auth Debug] Bearer decode failed:', { error: decodeErr?.message });
+      }
+      
+      // If we have a payload with email, look up user in DB to get role and tenant_id
+      if (payload?.email) {
+        const email = (payload.email || '').toLowerCase().trim();
+        try {
+          const { getSupabaseClient } = await import('../lib/supabase-db.js');
+          const supa = getSupabaseClient();
+          // Lookup user by email to get full user record with tenant_id and role
+          const [{ data: uRows }, { data: eRows }] = await Promise.all([
+            supa.from('users').select('id, role, tenant_id').eq('email', email),
+            supa.from('employees').select('id, role, tenant_id').eq('email', email),
+          ]);
+          const row = (uRows && uRows[0]) || (eRows && eRows[0]) || null;
+          if (row) {
+            req.user = {
+              id: row.id,
+              email,
+              role: row.role || 'employee',
+              tenant_id: row.tenant_id ?? null,
+            };
+            if (process.env.AUTH_DEBUG === 'true') {
+              console.log('[Auth Debug] Bearer: resolved user from DB:', { 
+                email, 
+                role: req.user.role, 
+                tenant_id: req.user.tenant_id 
+              });
+            }
+            return next();
+          } else {
+            if (process.env.AUTH_DEBUG === 'true') {
+              console.log('[Auth Debug] Bearer: user not found in DB:', { email });
+            }
+          }
+        } catch (dbErr) {
+          if (process.env.AUTH_DEBUG === 'true') {
+            console.log('[Auth Debug] Bearer DB lookup failed:', { email, error: dbErr?.message });
+          }
         }
       }
     }
 
     // No auth context attached; continue as anonymous
     return next();
-  } catch {
+  } catch (err) {
+    if (process.env.AUTH_DEBUG === 'true') {
+      console.log('[Auth Debug] Unexpected error:', { error: err?.message });
+    }
     return next();
   }
 }

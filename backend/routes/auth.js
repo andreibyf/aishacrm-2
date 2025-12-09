@@ -14,13 +14,21 @@ function getAnonSupabase() {
 }
 
 function signAccess(payload) {
-  const secret = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'change-me-access';
-  return jwt.sign(payload, secret, { expiresIn: '15m' });
+  // Use HS256 explicitly - must match verification in authenticate.js
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    console.warn('[Auth] JWT_SECRET not set, using insecure fallback');
+  }
+  return jwt.sign(payload, secret || 'change-me-access', { algorithm: 'HS256', expiresIn: '15m' });
 }
 
 function signRefresh(payload) {
-  const secret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'change-me-refresh';
-  return jwt.sign(payload, secret, { expiresIn: '7d' });
+  // Use HS256 explicitly for refresh tokens
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    console.warn('[Auth] JWT_SECRET not set for refresh, using insecure fallback');
+  }
+  return jwt.sign(payload, secret || 'change-me-refresh', { algorithm: 'HS256', expiresIn: '7d' });
 }
 
 function cookieOpts(maxAgeMs) {
