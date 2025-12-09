@@ -1,16 +1,17 @@
 #!/usr/bin/env sh
 set -e
 
-# Auto-detect version from Docker image label if VITE_APP_BUILD_VERSION not set
-if [ -z "$VITE_APP_BUILD_VERSION" ] || [ "$VITE_APP_BUILD_VERSION" = "dev-local" ]; then
-  # Try to extract version from image metadata (set during GitHub Actions build)
-  IMAGE_VERSION=$(cat /app/VERSION 2>/dev/null || echo "")
-  if [ -n "$IMAGE_VERSION" ]; then
-    VITE_APP_BUILD_VERSION="$IMAGE_VERSION"
-  else
-    VITE_APP_BUILD_VERSION="dev-local"
-  fi
+# CRITICAL: Always use version baked into Docker image (/app/VERSION) as source of truth
+# This file is written during build with the git tag, ensuring version matches deployed code
+# Do NOT trust VITE_APP_BUILD_VERSION env var which may be stale from .env file
+IMAGE_VERSION=$(cat /app/VERSION 2>/dev/null || echo "")
+if [ -n "$IMAGE_VERSION" ]; then
+  VITE_APP_BUILD_VERSION="$IMAGE_VERSION"
+else
+  # Fallback to env var only if VERSION file doesn't exist (shouldn't happen in production)
+  VITE_APP_BUILD_VERSION="${VITE_APP_BUILD_VERSION:-dev-local}"
 fi
+
 
 # Runtime environment variable injection
 cat > /app/dist/env-config.js << EOF
