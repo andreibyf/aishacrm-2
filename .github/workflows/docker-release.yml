@@ -141,12 +141,11 @@ jobs:
             docker tag ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-frontend:latest
             docker tag ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-backend:latest
             docker tag ghcr.io/andreibyf/aishacrm-2-mcp:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-mcp:latest
-            # Write version to .env for runtime injection
-            if grep -q "^VITE_APP_BUILD_VERSION=" .env 2>/dev/null; then
-              sed -i "s/^VITE_APP_BUILD_VERSION=.*/VITE_APP_BUILD_VERSION=$VERSION_TAG/" .env
-            else
-              echo "VITE_APP_BUILD_VERSION=$VERSION_TAG" >> .env
-            fi
+            
+            # Remove VITE_APP_BUILD_VERSION from .env so container uses baked-in /app/VERSION
+            # (Version is already baked into Docker image during build via Dockerfile)
+            sed -i '/^VITE_APP_BUILD_VERSION=/d' .env 2>/dev/null || true
+            
             # Ensure n8n URL is set for iframe embedding
             if ! grep -q "^VITE_N8N_URL=" .env 2>/dev/null; then
               echo "VITE_N8N_URL=http://147.189.173.237:5679" >> .env
