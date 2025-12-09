@@ -75,8 +75,11 @@ export async function authenticateRequest(req, _res, next) {
       }
     }
 
-    // 2) If no cookie, verify Supabase bearer token via JWKS (supports both ES256 and HS256)
-    // This supports cross-origin/mobile clients that can't use cookies
+    // 2) If no cookie, try bearer token verification
+    // Priority order:
+    // a) Internal service tokens (signed with JWT_SECRET, have 'internal: true')
+    // b) Supabase tokens (verified via JWKS)
+    // c) Legacy decode fallback + DB lookup
     const bearer = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
 
     if (bearer) {
@@ -86,35 +89,75 @@ export async function authenticateRequest(req, _res, next) {
       
       let payload = null;
       
-      // Try JWKS verification first (works for both ES256 and HS256 keys in JWKS)
-      const jwks = getJWKSClient();
-      if (jwks) {
+      // 2a) Try internal service token verification first (Braid/MCP server-to-server calls)
+      // These are signed with JWT_SECRET and have { sub, tenant_id, internal: true }
+      const jwtSecret = process.env.JWT_SECRET;
+      if (jwtSecret) {
         try {
-          const { payload: verifiedPayload } = await jwtVerify(bearer, jwks, {
-            algorithms: ['ES256', 'HS256'], // Accept both during migration
-          });
-          payload = verifiedPayload;
+          const internalPayload = jwt.verify(bearer, jwtSecret, { algorithms: ['HS256'] });
+          if (internalPayload.internal === true) {
+            // This is an internal service token - trust it directly
+            req.user = {
+              id: internalPayload.sub || null,
+              email: internalPayload.email || 'internal-service',
+              role: 'superadmin', // Internal service calls have full access
+              tenant_id: internalPayload.tenant_id || null,
+              internal: true
+            };
+            if (process.env.AUTH_DEBUG === 'true') {
+              console.log('[Auth Debug] Internal service token verified:', { 
+                path: req.path, 
+                userId: req.user.id, 
+                tenant_id: req.user.tenant_id 
+              });
+            }
+            return next();
+          }
+          // If not internal, it might be a regular cookie-style token sent as bearer
+          // (shouldn't happen, but handle gracefully)
+          payload = internalPayload;
+        } catch (internalErr) {
+          // Not a valid internal token, continue to JWKS
           if (process.env.AUTH_DEBUG === 'true') {
-            console.log('[Auth Debug] Bearer JWKS verified:', { 
+            console.log('[Auth Debug] Not an internal token, trying JWKS:', { 
               path: req.path, 
-              sub: payload.sub, 
-              email: payload.email,
-              alg: 'JWKS'
+              error: internalErr?.message?.substring(0, 50) 
             });
           }
-        } catch (jwksErr) {
-          if (process.env.AUTH_DEBUG === 'true') {
-            console.log('[Auth Debug] Bearer JWKS verification failed:', { 
-              path: req.path, 
-              error: jwksErr?.message,
-              code: jwksErr?.code 
-            });
-          }
-          // Fall through to decode-only as last resort (for legacy tokens)
         }
       }
       
-      // If JWKS verification failed, try decode-only as fallback (legacy support)
+      // 2b) Try JWKS verification (for Supabase tokens with ES256 or HS256)
+      if (!payload) {
+        const jwks = getJWKSClient();
+        if (jwks) {
+          try {
+            const { payload: verifiedPayload } = await jwtVerify(bearer, jwks, {
+              algorithms: ['ES256', 'HS256'], // Accept both during migration
+            });
+            payload = verifiedPayload;
+            if (process.env.AUTH_DEBUG === 'true') {
+              console.log('[Auth Debug] Bearer JWKS verified:', { 
+                path: req.path, 
+                sub: payload.sub, 
+                email: payload.email,
+                alg: 'JWKS'
+              });
+            }
+          } catch (jwksErr) {
+            if (process.env.AUTH_DEBUG === 'true') {
+              console.log('[Auth Debug] Bearer JWKS verification failed:', { 
+                path: req.path, 
+                error: jwksErr?.message,
+                code: jwksErr?.code 
+              });
+            }
+            // Fall through to decode-only as last resort
+          }
+        }
+      }
+      
+      // 2c) If JWKS verification failed, try decode-only as fallback (legacy support)
       if (!payload) {
         try {
           payload = jwt.decode(bearer) || {};
