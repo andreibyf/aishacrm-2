@@ -70,6 +70,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
+            DOPPLER_TOKEN=${{ secrets.DOPPLER_TOKEN }}
             VITE_APP_BUILD_VERSION=${{ github.ref_name }}
             VITE_CURRENT_BRANCH=${{ github.ref_name }}
             VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
