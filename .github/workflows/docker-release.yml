@@ -136,12 +136,10 @@ jobs:
             # Pull specific version tags
             docker pull ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG
             docker pull ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG
-            docker pull ghcr.io/andreibyf/aishacrm-2-proxy:$VERSION_TAG
             docker pull ghcr.io/andreibyf/aishacrm-2-mcp:$VERSION_TAG
             # Tag as latest locally
             docker tag ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-frontend:latest
             docker tag ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-backend:latest
-            docker tag ghcr.io/andreibyf/aishacrm-2-proxy:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-proxy:latest
             docker tag ghcr.io/andreibyf/aishacrm-2-mcp:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-mcp:latest
             # Write version to .env for runtime injection
             if grep -q "^VITE_APP_BUILD_VERSION=" .env 2>/dev/null; then
@@ -163,8 +161,8 @@ jobs:
             fi
             # Restart main services with version info (force recreate to detect :latest image changes)
             # NOTE: n8n is optional - use --profile workflows to include it
-            # Proxy is the main entry point, routing /api/* to backend and /* to frontend
-            docker compose -f docker-compose.prod.yml up -d --force-recreate proxy frontend backend
+            # Frontend and backend run directly on ports 4000 and 4001 (no proxy)
+            docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend
             
             # Deploy MCP server (separate compose file with 3 containers)
             echo "Deploying MCP server cluster (1 server + 2 nodes)..."
