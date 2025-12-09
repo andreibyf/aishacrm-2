@@ -7,6 +7,34 @@ import express from "express";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createAuditLog, getUserEmailFromRequest, getClientIP } from "../lib/auditLogger.js";
 
+/**
+ * Default modules that should be initialized for every new tenant.
+ * These match the modules defined in frontend's ModuleManager.jsx
+ * All modules are enabled by default.
+ */
+const DEFAULT_MODULES = [
+  "Dashboard",
+  "Contact Management",
+  "Account Management",
+  "Lead Management",
+  "Opportunities",
+  "Activity Tracking",
+  "Calendar",
+  "BizDev Sources",
+  "Cash Flow Management",
+  "Document Processing & Management",
+  "AI Campaigns",
+  "Analytics & Reports",
+  "Employee Management",
+  "Integrations",
+  "Payment Portal",
+  "Utilities",
+  "Client Onboarding",
+  "AI Agent",
+  "Realtime Voice",
+  "Workflows",
+];
+
 function getSupabaseAdmin() {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -67,6 +95,42 @@ async function generateUniqueTenantId(supabase, name) {
     if (counter > 1000) {
       throw new Error(`Unable to generate unique tenant_id for name: ${name}`);
     }
+  }
+}
+
+/**
+ * Initialize default module settings for a newly created tenant.
+ * This ensures every tenant has their own module settings rows,
+ * preventing cross-tenant pollution when toggling modules.
+ * 
+ * @param {object} supabase - Supabase admin client
+ * @param {string} tenantId - The UUID of the newly created tenant
+ * @returns {Promise<{success: boolean, count: number, error?: string}>}
+ */
+async function initializeModuleSettingsForTenant(supabase, tenantId) {
+  try {
+    const moduleRows = DEFAULT_MODULES.map(moduleName => ({
+      tenant_id: tenantId,
+      module_name: moduleName,
+      settings: {},
+      is_enabled: true,
+    }));
+
+    const { data, error } = await supabase
+      .from('modulesettings')
+      .insert(moduleRows)
+      .select();
+
+    if (error) {
+      console.error(`[Tenants] Failed to initialize module settings for tenant ${tenantId}:`, error.message);
+      return { success: false, count: 0, error: error.message };
+    }
+
+    console.log(`[Tenants] Initialized ${data?.length || 0} module settings for tenant ${tenantId}`);
+    return { success: true, count: data?.length || 0 };
+  } catch (err) {
+    console.error(`[Tenants] Error initializing module settings for tenant ${tenantId}:`, err.message);
+    return { success: false, count: 0, error: err.message };
   }
 }
 
@@ -319,6 +383,19 @@ export default function createTenantRoutes(_pgPool) {
           "[Tenants] Storage provisioning error:",
           provisionErr.message,
         );
+      }
+
+      // Initialize default module settings for the new tenant
+      // This ensures each tenant has their own module settings rows
+      // to prevent cross-tenant pollution when toggling modules
+      try {
+        const moduleResult = await initializeModuleSettingsForTenant(supabase, created.id);
+        if (!moduleResult.success) {
+          console.warn(`[Tenants] Module settings initialization warning: ${moduleResult.error}`);
+        }
+      } catch (moduleErr) {
+        console.warn('[Tenants] Module settings initialization error:', moduleErr.message);
+        // Non-fatal: tenant is created, settings can be initialized on first access
       }
 
       res.status(201).json({

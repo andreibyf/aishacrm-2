@@ -313,7 +313,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     }
 
     // Special-case entities that require tenant_id as query param for PUT
-    if ((entityName === 'Opportunity' || entityName === 'Note') && method === 'PUT' && tenantId !== undefined) {
+    if ((entityName === 'Opportunity' || entityName === 'Note' || entityName === 'ModuleSettings') && method === 'PUT' && tenantId !== undefined) {
       const delimiter = url.includes('?') ? '&' : '?';
       url += `${delimiter}tenant_id=${encodeURIComponent(tenantId)}`;
     }

@@ -384,6 +384,7 @@ async function handleSelectQuery(sql, params) {
 
 /**
  * Handle INSERT queries
+ * Supports ON CONFLICT DO UPDATE (upsert) via Supabase .upsert()
  */
 async function handleInsertQuery(sql, params) {
   const tableMatch = sql.match(/insert\s+into\s+([a-z_]+)\s*\(([^)]+)\)/i);
@@ -391,6 +392,18 @@ async function handleInsertQuery(sql, params) {
   
   const table = tableMatch[1];
   const columns = tableMatch[2].split(',').map(c => c.trim());
+  
+  // Check if this is an upsert (ON CONFLICT DO UPDATE)
+  const isUpsert = /on\s+conflict\s*\([^)]+\)\s*(do\s+update|do\s+nothing)/i.test(sql);
+  
+  // Extract conflict columns for upsert (e.g., "ON CONFLICT (tenant_id, module_name)")
+  let onConflictColumns = [];
+  if (isUpsert) {
+    const conflictMatch = sql.match(/on\s+conflict\s*\(([^)]+)\)/i);
+    if (conflictMatch) {
+      onConflictColumns = conflictMatch[1].split(',').map(c => c.trim());
+    }
+  }
   
   const data = {};
   columns.forEach((col, i) => {
@@ -414,12 +427,31 @@ async function handleInsertQuery(sql, params) {
       try { data.tags = JSON.parse(data.tags); } catch { /* keep as-is */ }
     }
   
-  // Perform insert with fallback for stale schema cache/renamed columns
+  // Perform insert or upsert based on ON CONFLICT presence
   let insertData = { ...data };
-  let { data: result, error } = await supabaseClient
-    .from(table)
-    .insert(insertData)
-    .select();
+  let result, error;
+  
+  if (isUpsert && onConflictColumns.length > 0) {
+    // Use Supabase upsert for ON CONFLICT DO UPDATE
+    // onConflict option specifies which columns to use for conflict detection
+    const upsertResult = await supabaseClient
+      .from(table)
+      .upsert(insertData, { 
+        onConflict: onConflictColumns.join(','),
+        ignoreDuplicates: false // DO UPDATE, not DO NOTHING
+      })
+      .select();
+    result = upsertResult.data;
+    error = upsertResult.error;
+  } else {
+    // Regular insert
+    const insertResult = await supabaseClient
+      .from(table)
+      .insert(insertData)
+      .select();
+    result = insertResult.data;
+    error = insertResult.error;
+  }
   
   if (error) {
     const msg = String(error.message || '');
@@ -433,20 +465,18 @@ async function handleInsertQuery(sql, params) {
           insertData.source = insertData.source_name;
         }
         delete insertData.source_name;
-        const retry = await supabaseClient
-          .from(table)
-          .insert(insertData)
-          .select();
+        const retry = isUpsert 
+          ? await supabaseClient.from(table).upsert(insertData, { onConflict: onConflictColumns.join(','), ignoreDuplicates: false }).select()
+          : await supabaseClient.from(table).insert(insertData).select();
         if (retry.error) throw retry.error;
         return { rows: retry.data || [], rowCount: retry.data?.length || 0 };
       }
       // Generic fallback: drop the missing column and retry once
       if (Object.prototype.hasOwnProperty.call(insertData, missingCol)) {
         delete insertData[missingCol];
-        const retry2 = await supabaseClient
-          .from(table)
-          .insert(insertData)
-          .select();
+        const retry2 = isUpsert
+          ? await supabaseClient.from(table).upsert(insertData, { onConflict: onConflictColumns.join(','), ignoreDuplicates: false }).select()
+          : await supabaseClient.from(table).insert(insertData).select();
         if (retry2.error) throw retry2.error;
         return { rows: retry2.data || [], rowCount: retry2.data?.length || 0 };
       }

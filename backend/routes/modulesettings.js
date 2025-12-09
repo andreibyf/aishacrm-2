@@ -234,16 +234,19 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { module_name, settings, is_enabled, tenant_id } = req.body;
-    
+    // Accept tenant_id from query params OR body (prefer query for security)
+    const tenant_id = req.query.tenant_id || req.body.tenant_id;
+    const { module_name, settings, is_enabled } = req.body;
+
+    // Tenant ID is required for tenant-scoped updates
+    if (!tenant_id) {
+      return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+    }
+
     const updates = [];
     const params = [];
     let paramIndex = 1;
-    
-    if (tenant_id !== undefined) {
-      params.push(tenant_id);
-      updates.push(`tenant_id = $${paramIndex++}`);
-    }
+
     if (module_name !== undefined) {
       params.push(module_name);
       updates.push(`module_name = $${paramIndex++}`);
@@ -256,21 +259,32 @@ router.put('/:id', async (req, res) => {
       params.push(is_enabled);
       updates.push(`is_enabled = $${paramIndex++}`);
     }
-    
+
     if (updates.length === 0) {
       return res.status(400).json({ status: 'error', message: 'No fields to update' });
     }
-    
+
     updates.push(`updated_at = now()`);
+
+    // CRITICAL: Filter by tenant_id FIRST, then id (tenant isolation)
+    params.push(tenant_id);
+    const tenantParamIndex = paramIndex++;
     params.push(id);
-    
-    const query = `UPDATE modulesettings SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+    const idParamIndex = paramIndex++;
+
+    const query = `UPDATE modulesettings SET ${updates.join(', ')} WHERE tenant_id = $${tenantParamIndex} AND id = $${idParamIndex} RETURNING *`;
     const result = await pool.query(query, params);
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ status: 'error', message: 'Module setting not found' });
     }
-    
+
+    // Safety check: verify returned row matches tenant
+    if (result.rows[0].tenant_id !== tenant_id) {
+      console.error('[ModuleSettings PUT] Mismatched tenant_id', { expected: tenant_id, got: result.rows[0].tenant_id });
+      return res.status(404).json({ status: 'error', message: 'Module setting not found' });
+    }
+
     res.json({ status: 'success', data: result.rows[0] });
   } catch (error) {
     console.error('Error updating module setting:', error);
@@ -309,12 +323,29 @@ router.put('/:id', async (req, res) => {
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const result = await pool.query('DELETE FROM modulesettings WHERE id = $1 RETURNING *', [id]);
-      
+      const { tenant_id } = req.query;
+
+      // Tenant ID is required for tenant-scoped deletes
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      // CRITICAL: Filter by tenant_id FIRST, then id (tenant isolation)
+      const result = await pool.query(
+        'DELETE FROM modulesettings WHERE tenant_id = $1 AND id = $2 RETURNING *',
+        [tenant_id, id]
+      );
+
       if (result.rows.length === 0) {
         return res.status(404).json({ status: 'error', message: 'Module setting not found' });
       }
-      
+
+      // Safety check: verify deleted row matched tenant
+      if (result.rows[0].tenant_id !== tenant_id) {
+        console.error('[ModuleSettings DELETE] Mismatched tenant_id', { expected: tenant_id, got: result.rows[0].tenant_id });
+        return res.status(404).json({ status: 'error', message: 'Module setting not found' });
+      }
+
       res.json({ status: 'success', data: result.rows[0] });
     } catch (error) {
       console.error('Error deleting module setting:', error);

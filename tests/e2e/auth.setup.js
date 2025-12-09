@@ -13,7 +13,8 @@ const SUPERADMIN_PASSWORD = process.env.SUPERADMIN_PASSWORD || '';
 const authDir = path.join('playwright', '.auth');
 const authFile = path.join(authDir, 'superadmin.json');
 
-setup.describe.configure({ mode: 'serial' });
+// NOTE: setup.describe.configure() removed - it's not needed for a single setup test
+// and causes errors in Playwright 1.56+
 
 async function waitForBackendReady(request, { timeout = 90_000 } = {}) {
   // Poll backend status until DB is ready (not an error)

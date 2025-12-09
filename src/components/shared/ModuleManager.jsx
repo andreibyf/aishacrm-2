@@ -311,19 +311,27 @@ export default function ModuleManager() {
   const { authCookiesReady } = useAuthCookiesReady();
   const { selectedTenantId } = useTenant();
 
+  // Determine effective tenant: prefer selectedTenantId (for superadmin switching), fall back to user.tenant_id
+  const effectiveTenantId = selectedTenantId || user?.tenant_id;
+
   const loadData = useCallback(async () => {
+    if (!effectiveTenantId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const currentUser = user;
-
       let currentModuleSettings = [];
       try {
-        currentModuleSettings = await ModuleSettings.list();
+        // CRITICAL: Filter by the effective tenant to ensure tenant isolation
+        currentModuleSettings = await ModuleSettings.list({ tenant_id: effectiveTenantId });
         // Normalize response shape to array
         if (!Array.isArray(currentModuleSettings)) {
           const rows = currentModuleSettings?.data?.modulesettings || currentModuleSettings?.data || [];
           currentModuleSettings = Array.isArray(rows) ? rows : [];
         }
+        // Double-filter to ensure only this tenant's settings are used
+        currentModuleSettings = currentModuleSettings.filter(s => s.tenant_id === effectiveTenantId);
         setModuleSettings(currentModuleSettings);
       } catch (error) {
         console.warn("Could not load module settings:", error);
@@ -331,23 +339,29 @@ export default function ModuleManager() {
         currentModuleSettings = [];
       }
 
-      // Initialize default settings for modules that don't exist
+      // Initialize default settings for modules that don't exist FOR THIS TENANT
       const existingModuleNames = currentModuleSettings.map((s) => s.module_name);
       const missingModules = defaultModules.filter((m) =>
         !existingModuleNames.includes(m.name)
       );
 
-      if (missingModules.length > 0 && currentUser) {
+      if (missingModules.length > 0 && effectiveTenantId) {
         try {
           const newModuleRecords = missingModules.map((module) => ({
-            tenant_id: currentUser.tenant_id,
+            tenant_id: effectiveTenantId, // Use effective tenant, not user.tenant_id
             module_name: module.name,
             is_enabled: true,
           }));
           await ModuleSettings.bulkCreate(newModuleRecords);
 
-          const updatedSettings = await ModuleSettings.list();
-          setModuleSettings(updatedSettings);
+          const updatedSettings = await ModuleSettings.list({ tenant_id: effectiveTenantId });
+          let updatedArray = updatedSettings;
+          if (!Array.isArray(updatedArray)) {
+            const rows = updatedSettings?.data?.modulesettings || updatedSettings?.data || [];
+            updatedArray = Array.isArray(rows) ? rows : [];
+          }
+          updatedArray = updatedArray.filter(s => s.tenant_id === effectiveTenantId);
+          setModuleSettings(updatedArray);
         } catch (error) {
           console.warn("Could not create default module settings:", error);
         }
@@ -357,25 +371,28 @@ export default function ModuleManager() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [effectiveTenantId]);
 
   useEffect(() => {
-    if (user && authCookiesReady) {
+    if (user && authCookiesReady && effectiveTenantId) {
       loadData();
     }
-  }, [user, authCookiesReady, loadData]);
+  }, [user, authCookiesReady, effectiveTenantId, loadData]);
 
   const toggleModule = async (moduleId, currentStatus) => {
-    if (!user) return;
+    if (!user || !effectiveTenantId) return;
 
     try {
       const module = defaultModules.find((m) => m.id === moduleId);
-      const setting = moduleSettings.find((s) => s.module_name === module?.name);
+      // CRITICAL: Find setting for the current effective tenant only
+      const setting = moduleSettings.find((s) => 
+        s.module_name === module?.name && s.tenant_id === effectiveTenantId
+      );
       const newStatus = !currentStatus;
 
       if (setting) {
         await ModuleSettings.update(setting.id, {
-          tenant_id: user.tenant_id,
+          tenant_id: effectiveTenantId, // Use effective tenant, not user.tenant_id
           is_enabled: newStatus,
         });
 
@@ -410,18 +427,21 @@ export default function ModuleManager() {
 
   const getModuleStatus = (moduleId) => {
     const module = defaultModules.find((m) => m.id === moduleId);
-    const setting = moduleSettings.find((s) => s.module_name === module?.name);
+    // CRITICAL: Find setting for the current effective tenant only
+    const setting = moduleSettings.find((s) => 
+      s.module_name === module?.name && s.tenant_id === effectiveTenantId
+    );
     return setting?.is_enabled ?? true;
   };
 
   // Admin-only: List currently disabled modules for the selected tenant
   const DisabledModulesPanel = () => {
     const isAdminLike = user?.role === 'admin' || user?.role === 'superadmin' || user?.is_superadmin === true;
-    const tenantId = selectedTenantId || user?.tenant_id || null;
-    if (!isAdminLike || !tenantId) return null;
+    // Use effectiveTenantId which is already calculated at component level
+    if (!isAdminLike || !effectiveTenantId) return null;
 
     const disabled = moduleSettings
-      .filter((s) => s.tenant_id === tenantId && s.is_enabled === false)
+      .filter((s) => s.tenant_id === effectiveTenantId && s.is_enabled === false)
       .map((s) => s.module_name);
 
     return (
