@@ -446,11 +446,20 @@ export default function createAuthRoutes(_pgPool) {
         }
       }
 
-      if (!token) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+      if (!token) {
+        console.log('[Auth.refresh] No refresh token found in cookies');
+        return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+      }
       const secret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'change-me-refresh';
       let decoded;
       try {
         decoded = jwt.verify(token, secret);
+        console.log('[Auth.refresh] JWT decoded successfully:', { 
+          sub: decoded?.sub, 
+          table: decoded?.table,
+          exp: decoded?.exp,
+          iat: decoded?.iat
+        });
       } catch (jwtErr) {
         console.log('[Auth.refresh] JWT verify failed:', { 
           error: jwtErr?.message || 'Unknown JWT error',
@@ -463,16 +472,26 @@ export default function createAuthRoutes(_pgPool) {
       // Optionally check token_version or user status in Supabase before issuing new access
       const supabase = getSupabaseClient();
       const { sub, table } = decoded || {};
-      if (!sub) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+      if (!sub) {
+        console.log('[Auth.refresh] No sub in decoded token');
+        return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+      }
 
       const tbl = table === 'employees' ? 'employees' : 'users';
-      const { data: rows } = await supabase
+      console.log('[Auth.refresh] Looking up user:', { sub, table: tbl });
+      const { data: rows, error: lookupErr } = await supabase
         .from(tbl)
         .select('id, email, role, tenant_id, status, metadata')
         .eq('id', sub)
         .limit(1);
+      if (lookupErr) {
+        console.log('[Auth.refresh] User lookup error:', lookupErr.message);
+      }
       const user = rows && rows[0];
-      if (!user) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+      if (!user) {
+        console.log('[Auth.refresh] User not found:', { sub, table: tbl, rowCount: rows?.length });
+        return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+      }
       const meta = user.metadata || {};
       const accountStatus = String(meta.account_status || user.status || '').toLowerCase();
       const isActiveFlag = meta.is_active !== false;
