@@ -14,12 +14,19 @@ let jwksClient = null;
 function getJWKSClient() {
   if (!jwksClient) {
     const supabaseUrl = process.env.SUPABASE_URL;
+    const apiKey = process.env.SUPABASE_ANON_KEY;
     if (!supabaseUrl) {
       console.warn('[Auth] SUPABASE_URL not set, JWKS verification disabled');
       return null;
     }
-    const jwksUrl = new URL('/auth/v1/jwks', supabaseUrl);
-    jwksClient = createRemoteJWKSet(jwksUrl);
+    if (!apiKey) {
+      console.warn('[Auth] SUPABASE_ANON_KEY not set, JWKS verification may fail');
+    }
+    // Correct JWKS URL per OpenID Connect discovery
+    const jwksUrl = new URL('/auth/v1/.well-known/jwks.json', supabaseUrl);
+    // Supabase requires API key header for JWKS endpoint
+    const headers = apiKey ? { apikey: apiKey } : {};
+    jwksClient = createRemoteJWKSet(jwksUrl, { headers });
     console.log('[Auth] JWKS client initialized:', jwksUrl.toString());
   }
   return jwksClient;
