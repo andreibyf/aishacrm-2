@@ -1,18 +1,7 @@
 # Frontend Dockerfile - Multi-stage build for production
 FROM node:22-alpine AS builder
 
-# Install Doppler CLI
-RUN wget -q -t3 'https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.key' -O /etc/apk/keys/cli@doppler-8004D9FF50437357.rsa.pub && \
-    echo 'https://packages.doppler.com/public/cli/alpine/any-version/main' | tee -a /etc/apk/repositories && \
-    apk add doppler
-
 WORKDIR /app
-
-# Accept Doppler token as build arg for accessing secrets during build
-ARG DOPPLER_TOKEN
-ENV DOPPLER_TOKEN=$DOPPLER_TOKEN
-ENV DOPPLER_PROJECT=aishacrm
-ENV DOPPLER_CONFIG=dev
 
 # Accept build arguments for environment variables
 ARG VITE_SUPABASE_URL
@@ -44,7 +33,7 @@ COPY . .
 
 # Build the app with increased memory limit
 ENV NODE_OPTIONS=--max-old-space-size=896
-RUN npm run build
+RUN npm run build:ci
 
 # Production stage - serve static files
 FROM node:22-alpine AS runner
