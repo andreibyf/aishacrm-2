@@ -27,7 +27,8 @@ async function deleteActivity(id) {
 
 before(async () => {
   if (!SHOULD_RUN) return;
-  const A = await createActivity({ assigned_to: 'alice', tags: ['x','y'], due_date: '2025-11-10', is_test_data: false });
+  // Always mark test activities as is_test_data: true so AI triggers worker ignores them
+  const A = await createActivity({ assigned_to: 'alice', tags: ['x','y'], due_date: '2025-11-10', is_test_data: true });
   assert.ok([200, 201].includes(A.status), `Expected 200 or 201, got ${A.status}`);
   createdIds.push(A.json?.data?.id || A.json?.data?.activity?.id || A.json?.data?.id);
   const B = await createActivity({ assigned_to: 'bob', tags: ['y','z'], due_date: '2025-11-15', is_test_data: true });

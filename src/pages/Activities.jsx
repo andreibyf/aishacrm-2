@@ -58,7 +58,7 @@ const typeColors = {
 };
 
 export default function ActivitiesPage() {
-  const { plural: activitiesLabel } = useEntityLabel('activities');
+  const { plural: activitiesLabel, singular: activityLabel } = useEntityLabel('activities');
   const [activities, setActivities] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [contacts, setContacts] = useState([]);
@@ -671,7 +671,7 @@ export default function ActivitiesPage() {
               setEditingActivity(null);
             }
           }}
-          title={editingActivity ? "Edit Activity" : "Add New Activity"}
+          title={editingActivity ? `Edit ${activityLabel}` : `Add New ${activityLabel}`}
           size="lg"
         >
           <ActivityForm
@@ -793,11 +793,11 @@ export default function ActivitiesPage() {
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Activity
+                  Add {activityLabel}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Create new activity</p>
+                <p>Create new {activityLabel.toLowerCase()}</p>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -975,11 +975,11 @@ export default function ActivitiesPage() {
         ) : activities.length === 0 ? (
           <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
             <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-slate-300 mb-2">No activities found</h3>
+            <h3 className="text-xl font-semibold text-slate-300 mb-2">No {activitiesLabel.toLowerCase()} found</h3>
             <p className="text-slate-500 mb-6">
               {hasActiveFilters
                 ? "Try adjusting your filters or search term"
-                : "Get started by adding your first activity"}
+                : `Get started by adding your first ${activityLabel.toLowerCase()}`}
             </p>
             {!hasActiveFilters && (
               <Button
@@ -987,7 +987,7 @@ export default function ActivitiesPage() {
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Add Your First Activity
+                Add Your First {activityLabel}
               </Button>
             )}
           </div>
@@ -1103,7 +1103,7 @@ export default function ActivitiesPage() {
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Edit activity</p>
+                                <p>Edit {activityLabel.toLowerCase()}</p>
                               </TooltipContent>
                             </Tooltip>
                             <Tooltip>

@@ -36,6 +36,7 @@ import {
   FileText,
   FolderOpen,
   GripVertical,
+  HardHat, // NEW: Added for Construction Projects
   LayoutDashboard,
   Loader2,
   LogOut,
@@ -121,7 +122,7 @@ const navItems = [
   { href: "Opportunities", icon: TrendingUp, label: "Opportunities" }, // Changed icon to TrendingUp
   { href: "Activities", icon: CheckSquare, label: "Activities" },
   { href: "Calendar", icon: Calendar, label: "Calendar" },
-  { href: "ConstructionProjects", icon: Building2, label: "Construction Projects" }, // Construction staffing module
+  { href: "ConstructionProjects", icon: HardHat, label: "Construction Projects" }, // Construction staffing module
   { href: "BizDevSources", icon: Database, label: "BizDev Sources" },
   { href: "CashFlow", icon: DollarSign, label: "Cash Flow" },
   { href: "DocumentProcessing", icon: FileText, label: "Document Processing" },

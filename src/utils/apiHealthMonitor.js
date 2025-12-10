@@ -1,9 +1,11 @@
 /**
  * API Health Monitor & Auto-Fixer
  * Detects missing backend endpoints and attempts to self-correct
+ * Automatically creates GitHub issues for critical/high severity errors in production
  */
 
 import { toast } from 'sonner';
+import { createHealthIssue, generateAPIFixSuggestion } from './githubIssueCreator';
 
 class ApiHealthMonitor {
   constructor() {
@@ -24,6 +26,10 @@ class ApiHealthMonitor {
     this.fixAttempts = new Map(); // Track fix attempts
     this.maxAutoFixAttempts = 1; // Only try once per session
     this.reportingEnabled = true;
+    this.issuesCreated = new Set(); // Track issues already created to avoid duplicates
+    // Auto-create GitHub issues for critical errors in production
+    this.autoCreateIssues = typeof window !== 'undefined' && 
+      (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1');
   }
 
   /**
@@ -156,6 +162,13 @@ class ApiHealthMonitor {
             description: errorInfo.description,
             duration: 5000
           });
+        }
+        
+        // Automatically create GitHub issue for critical/high severity errors in production
+        if (this.autoCreateIssues && 
+            (errorInfo.severity === 'critical' || errorInfo.severity === 'high') &&
+            !this.issuesCreated.has(key)) {
+          this._createGitHubIssueAsync(endpoint, context, errorInfo);
         }
       }
     } else {
@@ -332,6 +345,7 @@ Pluralization Rule:
     this.timeoutErrors.clear();
     this.networkErrors.clear();
     this.fixAttempts.clear();
+    this.issuesCreated.clear();
   }
 
   /**
@@ -339,6 +353,58 @@ Pluralization Rule:
    */
   setReportingEnabled(enabled) {
     this.reportingEnabled = enabled;
+  }
+
+  /**
+   * Asynchronously create a GitHub issue for critical errors
+   * Runs in background to not block the UI
+   */
+  async _createGitHubIssueAsync(endpoint, context, errorInfo) {
+    // Mark as created immediately to prevent duplicates
+    this.issuesCreated.add(endpoint);
+    
+    try {
+      const suggestedFix = generateAPIFixSuggestion({
+        endpoint,
+        errorInfo,
+        context
+      });
+      
+      const result = await createHealthIssue({
+        type: 'api',
+        title: `[AUTO] ${errorInfo.type} Error: ${endpoint}`,
+        description: `The API endpoint \`${endpoint}\` encountered a ${errorInfo.severity} error.\n\n**Error Type:** ${errorInfo.title}\n**Description:** ${errorInfo.description}\n**Context:** ${context?.error || context?.message || 'No additional context'}\n\nThis issue was automatically created by the API Health Monitor.`,
+        context: {
+          endpoint,
+          errorType: errorInfo.type,
+          errorMessage: context?.error || context?.message,
+          statusCode: context?.statusCode,
+          timestamp: new Date().toISOString(),
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+          url: typeof window !== 'undefined' ? window.location.href : 'unknown'
+        },
+        suggestedFix,
+        severity: errorInfo.severity,
+        component: 'backend',
+        assignCopilot: true
+      });
+      
+      if (result.success) {
+        console.info(`[API Health Monitor] Auto-created GitHub issue #${result.issue.number} for ${endpoint}`);
+        toast.info(`GitHub issue #${result.issue.number} auto-created`, {
+          description: `Tracking error: ${endpoint}`,
+          action: {
+            label: 'View',
+            onClick: () => window.open(result.issue.url, '_blank')
+          },
+          duration: 8000
+        });
+      }
+    } catch (error) {
+      console.error('[API Health Monitor] Failed to auto-create GitHub issue:', error);
+      // Remove from set so it can be retried later
+      this.issuesCreated.delete(endpoint);
+    }
   }
 }
 

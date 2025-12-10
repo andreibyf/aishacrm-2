@@ -56,16 +56,29 @@ const TRIGGER_ICONS = {
  */
 function CompactSuggestionItem({ suggestion, onApprove, onReject, isProcessing }) {
   const icon = TRIGGER_ICONS[suggestion.trigger_type] || '💡';
-  const name = suggestion.record_name || `${suggestion.record_type}`;
+  
+  // Extract meaningful name from trigger_context or record_name
+  const triggerContext = suggestion.trigger_context || {};
+  const name = suggestion.record_name || 
+               triggerContext.subject || 
+               triggerContext.name || 
+               triggerContext.deal_name ||
+               triggerContext.company ||
+               `${suggestion.record_type || 'Item'} #${(suggestion.record_id || '').slice(0, 8)}`;
+  
+  // Build more informative description
   const reasoning = suggestion.reasoning || '';
+  const daysInfo = triggerContext.days_overdue ? `${triggerContext.days_overdue} days overdue` : 
+                   triggerContext.days_stagnant ? `${triggerContext.days_stagnant} days stagnant` :
+                   triggerContext.days_to_close ? `${triggerContext.days_to_close} days to close` : '';
 
   return (
     <div className="flex items-start gap-2 p-2 hover:bg-muted rounded-md transition-colors overflow-hidden">
       <span className="text-lg flex-shrink-0">{icon}</span>
       <div className="flex-1 min-w-0 overflow-hidden">
-        <p className="text-sm font-medium truncate">{name}</p>
-        <p className="text-xs text-muted-foreground line-clamp-2">
-          {reasoning.length > 80 ? `${reasoning.slice(0, 80)}...` : reasoning}
+        <p className="text-sm font-medium truncate" title={name}>{name}</p>
+        <p className="text-xs text-muted-foreground line-clamp-2" title={reasoning}>
+          {daysInfo ? `${daysInfo} - ` : ''}{reasoning.length > 60 ? `${reasoning.slice(0, 60)}...` : reasoning}
         </p>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
@@ -262,7 +275,7 @@ export default function SuggestionBadge({ tenantId, onViewAll }) {
           <Lightbulb className="h-5 w-5" />
           {pendingCount > 0 && (
             <Badge 
-              className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-primary"
+              className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-red-500 hover:bg-red-600 text-white border-0"
               variant="default"
             >
               {pendingCount > 9 ? '9+' : pendingCount}

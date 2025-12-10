@@ -58,7 +58,7 @@ import { useUser } from "@/components/shared/useUser.js";
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 
 export default function ContactsPage() {
-  const { plural: contactsLabel } = useEntityLabel('contacts');
+  const { plural: contactsLabel, singular: contactLabel } = useEntityLabel('contacts');
   const [contacts, setContacts] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [users, setUsers] = useState([]);
@@ -844,7 +844,7 @@ export default function ContactsPage() {
             variant="accent"
           >
             <Plus className="w-4 h-4 mr-2" />
-            Add Contact
+            Add {contactLabel}
           </Button>
         </div>
       </div>
@@ -1299,12 +1299,12 @@ export default function ContactsPage() {
           <div className="bg-slate-800 border border-slate-700 rounded-lg p-12 text-center">
             <AlertCircle className="w-16 h-16 text-slate-600 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-slate-300 mb-2">
-              No contacts found
+              No {contactsLabel.toLowerCase()} found
             </h3>
             <p className="text-slate-500 mb-6">
               {searchTerm || statusFilter !== "all" || selectedTags.length > 0
                 ? "Try adjusting your filters"
-                : "Get started by creating your first contact"}
+                : `Get started by creating your first ${contactLabel.toLowerCase()}`}
             </p>
             {!searchTerm && statusFilter === "all" &&
               selectedTags.length === 0 &&
@@ -1322,7 +1322,7 @@ export default function ContactsPage() {
                   variant="accent"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Your First Contact
+                  Add Your First {contactLabel}
                 </Button>
               )}
           </div>
@@ -1333,7 +1333,7 @@ export default function ContactsPage() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800 border-slate-700 text-slate-200">
           <DialogHeader>
             <DialogTitle className="text-slate-100">
-              {editingContact ? "Edit Contact" : "Create New Contact"}
+              {editingContact ? `Edit ${contactLabel}` : `Create New ${contactLabel}`}
             </DialogTitle>
           </DialogHeader>
           <ContactForm

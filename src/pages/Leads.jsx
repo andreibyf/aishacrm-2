@@ -1041,7 +1041,7 @@ export default function LeadsPage() {
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-800 border-slate-700 text-slate-200">
             <DialogHeader>
               <DialogTitle className="text-slate-100">
-                {editingLead ? "Edit Lead" : "Add New Lead"}
+                {editingLead ? `Edit ${leadLabel}` : `Add New ${leadLabel}`}
               </DialogTitle>
             </DialogHeader>
             <LeadForm
@@ -1210,11 +1210,11 @@ export default function LeadsPage() {
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Lead
+                  Add {leadLabel}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Create new lead</p>
+                <p>Create new {leadLabel.toLowerCase()}</p>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -1429,12 +1429,12 @@ export default function LeadsPage() {
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
               <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-slate-300 mb-2">
-                No leads found
+                No {leadsLabel.toLowerCase()} found
               </h3>
               <p className="text-slate-500 mb-6">
                 {hasActiveFilters
                   ? "Try adjusting your filters or search term"
-                  : "Get started by adding your first lead"}
+                  : `Get started by adding your first ${leadLabel.toLowerCase()}`}
               </p>
               {!hasActiveFilters && (
                 <Button
@@ -1442,7 +1442,7 @@ export default function LeadsPage() {
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Your First Lead
+                  Add Your First {leadLabel}
                 </Button>
               )}
             </div>
@@ -1629,7 +1629,7 @@ export default function LeadsPage() {
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p>Edit lead</p>
+                                    <p>Edit {leadLabel.toLowerCase()}</p>
                                   </TooltipContent>
                                 </Tooltip>
                                 {lead.status !== "converted" && (

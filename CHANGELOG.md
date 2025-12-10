@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.36] - 2025-12-10
+
+### Added
+- **Dynamic Entity Labels in UI:** Page titles, buttons, and empty states now reflect custom entity labels set in Navigation settings
+  - Activities, Leads, Contacts, Accounts, Opportunities, and BizDevSources pages updated
+  - Example: If "Leads" is renamed to "Prospects" in settings, buttons show "Add Prospect" instead of "Add Lead"
+  - Dialog titles, tooltips, and empty state messages all use the dynamic labels
+
+- **Automatic GitHub Issue Creation for Critical API Errors:** Production environments now auto-create GitHub issues when critical/high severity API errors occur
+  - New `_createGitHubIssueAsync` method in apiHealthMonitor
+  - Prevents duplicate issues with `issuesCreated` tracking set
+  - Includes endpoint, error type, context, and suggested fix in issue body
+  - Shows toast notification with link to created issue
+
+### Fixed
+- **AI Suggestions Test Data Contamination:** Fixed unit tests creating AI suggestions for test activities
+  - All 4 detection functions (leads, opportunities, activities, hot opportunities) now filter out `is_test_data: true` records
+  - Test file `activities.filters.test.js` now correctly marks all test activities as `is_test_data: true`
+  - AI suggestion rejection cooldown increased from 24 hours to 7 days
+
+- **AI Suggestions Badge Visibility & Information:**
+  - Badge changed from theme primary color to explicit bright red (`bg-red-500`) for better visibility
+  - Suggestions now display the actual record name (activity subject, lead name, deal name) instead of generic "activity"
+  - Shows days info prominently (e.g., "22 days overdue - Activity is overdue...")
+
+- **Construction Projects Module Bugs:**
+  - Fixed `SelectItem` with empty string value causing React warning (now uses `__none__` sentinel value)
+  - Fixed `leads.name` column reference (leads table has `first_name`, `last_name`, `company` - not `name`)
+  - Form state initialization now uses `__none__` for optional foreign key fields
+  - `toNullable` helper converts `__none__` back to `null` before API calls
+
+- **Module Manager Toggle 500 Error:** Fixed when toggling modules that don't have an existing setting record
+  - Now creates a new modulesettings record if none exists for tenant + module
+  - Migration 098 adds unique constraint on `(tenant_id, module_name)` for proper upsert support
+
+- **Construction Projects Icon:** Changed from generic Building2 to HardHat icon in navigation
+
+### Changed
+- **AI Suggestions Cooldown:** Increased from 24 hours to 7 days to reduce notification fatigue
+
+---
+
 ## [2.2.35] - 2025-12-10
 
 ### Added

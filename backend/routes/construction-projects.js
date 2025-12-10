@@ -57,7 +57,7 @@ export default function createConstructionProjectsRoutes(_pgPool) {
           `
           *,
           account:accounts!account_id(id, name),
-          lead:leads!lead_id(id, name),
+          lead:leads!lead_id(id, first_name, last_name, company),
           project_manager:contacts!project_manager_contact_id(id, first_name, last_name, email),
           supervisor:contacts!supervisor_contact_id(id, first_name, last_name, email),
           assignments:construction_assignments(count)
@@ -116,7 +116,7 @@ export default function createConstructionProjectsRoutes(_pgPool) {
           `
           *,
           account:accounts!account_id(id, name, metadata),
-          lead:leads!lead_id(id, name),
+          lead:leads!lead_id(id, first_name, last_name, company),
           project_manager:contacts!project_manager_contact_id(id, first_name, last_name, email, phone),
           supervisor:contacts!supervisor_contact_id(id, first_name, last_name, email, phone),
           assignments:construction_assignments(

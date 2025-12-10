@@ -232,12 +232,14 @@ async function detectStagnantLeads(tenantUuid) {
   
   try {
     // Step 1: Get candidate leads (simple query)
+    // Exclude test data records
     const { data: leads, error } = await supabase
       .from('leads')
-      .select('id, first_name, last_name, status, updated_at, created_at')
+      .select('id, first_name, last_name, status, updated_at, created_at, is_test_data')
       .eq('tenant_id', tenantUuid)
       .not('status', 'in', '(converted,closed,disqualified)')
       .lt('updated_at', stagnantDate.toISOString())
+      .or('is_test_data.is.null,is_test_data.eq.false')
       .order('updated_at', { ascending: true })
       .limit(50);
 
@@ -284,12 +286,14 @@ async function detectDealDecay(tenantUuid) {
   
   try {
     // Step 1: Get candidate opportunities (simple query)
+    // Exclude test data records
     const { data: opportunities, error } = await supabase
       .from('opportunities')
-      .select('id, name, stage, amount, close_date, updated_at, created_at')
+      .select('id, name, stage, amount, close_date, updated_at, created_at, is_test_data')
       .eq('tenant_id', tenantUuid)
       .not('stage', 'in', '(closed_won,closed_lost)')
       .lt('updated_at', decayDate.toISOString())
+      .or('is_test_data.is.null,is_test_data.eq.false')
       .order('amount', { ascending: false })
       .limit(50);
 
@@ -336,11 +340,13 @@ async function detectOverdueActivities(tenantUuid) {
   try {
     // Step 1: Get activities with overdue due_date (direct column, not metadata)
     // Filter incomplete activities in JS since status column may not exist
+    // Exclude test data records
     const { data: activities, error } = await supabase
       .from('activities')
-      .select('id, subject, type, due_date, metadata, related_to')
+      .select('id, subject, type, due_date, metadata, related_to, is_test_data')
       .eq('tenant_id', tenantUuid)
       .lt('due_date', today)
+      .or('is_test_data.is.null,is_test_data.eq.false')
       .limit(100);
 
     if (error) {
@@ -397,14 +403,16 @@ async function detectHotOpportunities(tenantUuid) {
   
   try {
     // Step 1: Get candidate opportunities (simple query)
+    // Exclude test data records
     const { data: opportunities, error } = await supabase
       .from('opportunities')
-      .select('id, name, stage, amount, probability, close_date')
+      .select('id, name, stage, amount, probability, close_date, is_test_data')
       .eq('tenant_id', tenantUuid)
       .not('stage', 'in', '(closed_won,closed_lost)')
       .gte('probability', 70)
       .gte('close_date', today)
       .lte('close_date', futureDateStr)
+      .or('is_test_data.is.null,is_test_data.eq.false')
       .order('amount', { ascending: false })
       .limit(20);
 
@@ -449,10 +457,10 @@ async function createSuggestionIfNew(tenantUuid, triggerData) {
 
   try {
     // Check if there's already a pending OR recently rejected suggestion for this trigger+record
-    // Cooldown: Don't recreate suggestions rejected within the last 24 hours
-    const cooldownHours = 24;
+    // Cooldown: Don't recreate suggestions rejected within the last 7 days
+    const cooldownDays = 7;
     const cooldownDate = new Date();
-    cooldownDate.setHours(cooldownDate.getHours() - cooldownHours);
+    cooldownDate.setDate(cooldownDate.getDate() - cooldownDays);
     
     const { data: existing, error: checkError } = await supabase
       .from('ai_suggestions')

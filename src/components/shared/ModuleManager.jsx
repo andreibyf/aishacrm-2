@@ -405,34 +405,47 @@ export default function ModuleManager() {
       const newStatus = !currentStatus;
 
       if (setting) {
+        // Update existing setting
         await ModuleSettings.update(setting.id, {
-          tenant_id: effectiveTenantId, // Use effective tenant, not user.tenant_id
+          tenant_id: effectiveTenantId,
           is_enabled: newStatus,
         });
 
         // Update local state
         setModuleSettings((prev) =>
           prev.map((s) =>
-            s.module_name === module?.name ? { ...s, is_enabled: newStatus } : s
+            s.module_name === module?.name && s.tenant_id === effectiveTenantId 
+              ? { ...s, is_enabled: newStatus } 
+              : s
           )
         );
+      } else {
+        // Create new setting if none exists
+        const newSetting = await ModuleSettings.create({
+          tenant_id: effectiveTenantId,
+          module_name: module?.name,
+          is_enabled: newStatus,
+        });
 
-        // Dispatch event to notify Layout and other components
-        window.dispatchEvent(
-          new CustomEvent("module-settings-changed", {
-            detail: {
-              moduleId,
-              moduleName: module?.name || moduleId,
-              isActive: newStatus,
-              changedBy: user.email,
-            },
-          }),
-        );
-
-        toast.success(
-          `${module?.name || moduleId} ${newStatus ? "enabled" : "disabled"}`,
-        );
+        // Add to local state
+        setModuleSettings((prev) => [...prev, newSetting]);
       }
+
+      // Dispatch event to notify Layout and other components
+      window.dispatchEvent(
+        new CustomEvent("module-settings-changed", {
+          detail: {
+            moduleId,
+            moduleName: module?.name || moduleId,
+            isActive: newStatus,
+            changedBy: user.email,
+          },
+        }),
+      );
+
+      toast.success(
+        `${module?.name || moduleId} ${newStatus ? "enabled" : "disabled"}`,
+      );
     } catch (error) {
       console.error("Error toggling module:", error);
       toast.error("Failed to update module setting");

@@ -41,7 +41,7 @@ import { useUser } from "../components/shared/useUser.js";
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 
 export default function BizDevSourcesPage() {
-  const { plural: bizdevLabel } = useEntityLabel('bizdev_sources');
+  const { plural: bizdevLabel, singular: bizdevSourceLabel } = useEntityLabel('bizdev_sources');
   const [sources, setSources] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -480,7 +480,7 @@ export default function BizDevSourcesPage() {
           />
           <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
             <Plus className="w-4 h-4 mr-2" />
-            Add Source
+            Add {bizdevSourceLabel}
           </Button>
         </div>
       </div>
@@ -718,17 +718,17 @@ export default function BizDevSourcesPage() {
             <div className="text-center py-12">
               <Building2 className="w-16 h-16 text-slate-600 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-slate-300 mb-2">
-                No BizDev sources found
+                No {bizdevLabel.toLowerCase()} found
               </h3>
               <p className="text-slate-400 mb-4">
                 {sources.length === 0
-                  ? "Get started by adding your first business development source."
+                  ? `Get started by adding your first ${bizdevSourceLabel.toLowerCase()}.`
                   : "Try adjusting your filters or search term."}
               </p>
               {sources.length === 0 && (
                 <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
                   <Plus className="w-4 h-4 mr-2" />
-                  Add First Source
+                  Add First {bizdevSourceLabel}
                 </Button>
               )}
             </div>

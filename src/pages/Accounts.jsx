@@ -55,7 +55,7 @@ import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function AccountsPage() {
-  const { plural: accountsLabel } = useEntityLabel('accounts');
+  const { plural: accountsLabel, singular: accountLabel } = useEntityLabel('accounts');
   const [accounts, setAccounts] = useState([]);
   const [, setContacts] = useState([]);
   const [users, setUsers] = useState([]);
@@ -840,7 +840,7 @@ export default function AccountsPage() {
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-800 border-slate-700 text-slate-200">
             <DialogHeader>
               <DialogTitle className="text-slate-100">
-                {editingAccount ? "Edit Account" : "Add New Account"}
+                {editingAccount ? `Edit ${accountLabel}` : `Add New ${accountLabel}`}
               </DialogTitle>
             </DialogHeader>
             <AccountForm
@@ -970,11 +970,11 @@ export default function AccountsPage() {
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Account
+                  Add {accountLabel}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Create new account</p>
+                <p>Create new {accountLabel.toLowerCase()}</p>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -1149,12 +1149,12 @@ export default function AccountsPage() {
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
               <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-slate-300 mb-2">
-                No accounts found
+                No {accountsLabel.toLowerCase()} found
               </h3>
               <p className="text-slate-500 mb-6">
                 {hasActiveFilters
                   ? "Try adjusting your filters or search term"
-                  : "Get started by adding your first account"}
+                  : `Get started by adding your first ${accountLabel.toLowerCase()}`}
               </p>
               {!hasActiveFilters && (
                 <Button
@@ -1162,7 +1162,7 @@ export default function AccountsPage() {
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Your First Account
+                  Add Your First {accountLabel}
                 </Button>
               )}
             </div>
@@ -1307,7 +1307,7 @@ export default function AccountsPage() {
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>Edit account</p>
+                                  <p>Edit {accountLabel.toLowerCase()}</p>
                                 </TooltipContent>
                               </Tooltip>
                               <Tooltip>

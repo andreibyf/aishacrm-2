@@ -210,12 +210,12 @@ export default function ConstructionProjects() {
     setEditingProject(null);
     setProjectForm({
       project_name: "",
-      account_id: "",
-      lead_id: "",
+      account_id: "__none__",
+      lead_id: "__none__",
       site_name: "",
       site_address: "",
-      project_manager_contact_id: "",
-      supervisor_contact_id: "",
+      project_manager_contact_id: "__none__",
+      supervisor_contact_id: "__none__",
       start_date: "",
       end_date: "",
       project_value: "",
@@ -230,12 +230,12 @@ export default function ConstructionProjects() {
     setEditingProject(project);
     setProjectForm({
       project_name: project.project_name || "",
-      account_id: project.account_id || "",
-      lead_id: project.lead_id || "",
+      account_id: project.account_id || "__none__",
+      lead_id: project.lead_id || "__none__",
       site_name: project.site_name || "",
       site_address: project.site_address || "",
-      project_manager_contact_id: project.project_manager_contact_id || "",
-      supervisor_contact_id: project.supervisor_contact_id || "",
+      project_manager_contact_id: project.project_manager_contact_id || "__none__",
+      supervisor_contact_id: project.supervisor_contact_id || "__none__",
       start_date: project.start_date || "",
       end_date: project.end_date || "",
       project_value: project.project_value || "",
@@ -252,15 +252,18 @@ export default function ConstructionProjects() {
       return;
     }
 
+    // Helper to convert __none__ sentinel value to null
+    const toNullable = (v) => (!v || v === "__none__" ? null : v);
+
     try {
       const payload = {
         ...projectForm,
         tenant_id: effectiveTenantId,
         project_value: projectForm.project_value ? parseFloat(projectForm.project_value) : null,
-        account_id: projectForm.account_id || null,
-        lead_id: projectForm.lead_id || null,
-        project_manager_contact_id: projectForm.project_manager_contact_id || null,
-        supervisor_contact_id: projectForm.supervisor_contact_id || null,
+        account_id: toNullable(projectForm.account_id),
+        lead_id: toNullable(projectForm.lead_id),
+        project_manager_contact_id: toNullable(projectForm.project_manager_contact_id),
+        supervisor_contact_id: toNullable(projectForm.supervisor_contact_id),
       };
 
       if (editingProject) {
@@ -1007,7 +1010,7 @@ export default function ConstructionProjects() {
                     <SelectValue placeholder="Select client company..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="__none__">None</SelectItem>
                     {accounts.map((account) => (
                       <SelectItem key={account.id} value={account.id}>
                         {account.name}
@@ -1027,10 +1030,10 @@ export default function ConstructionProjects() {
                     <SelectValue placeholder="Link to original lead..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="__none__">None</SelectItem>
                     {leads.map((lead) => (
                       <SelectItem key={lead.id} value={lead.id}>
-                        {lead.name}
+                        {lead.first_name} {lead.last_name} {lead.company ? `(${lead.company})` : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1089,7 +1092,7 @@ export default function ConstructionProjects() {
                     <SelectValue placeholder="Select project manager..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="__none__">None</SelectItem>
                     {contacts.map((contact) => (
                       <SelectItem key={contact.id} value={contact.id}>
                         {getContactName(contact)}
@@ -1111,7 +1114,7 @@ export default function ConstructionProjects() {
                     <SelectValue placeholder="Select supervisor..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="__none__">None</SelectItem>
                     {contacts.map((contact) => (
                       <SelectItem key={contact.id} value={contact.id}>
                         {getContactName(contact)}

@@ -71,7 +71,7 @@ const stageColors = {
 };
 
 export default function OpportunitiesPage() {
-  const { plural: opportunitiesLabel } = useEntityLabel('opportunities');
+  const { plural: opportunitiesLabel, singular: opportunityLabel } = useEntityLabel('opportunities');
   const [opportunities, setOpportunities] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [contacts, setContacts] = useState([]);
@@ -968,8 +968,8 @@ export default function OpportunitiesPage() {
             }
           }}
           title={editingOpportunity
-            ? "Edit Opportunity"
-            : "Add New Opportunity"}
+            ? `Edit ${opportunityLabel}`
+            : `Add New ${opportunityLabel}`}
           size="lg"
         >
           <OpportunityForm
@@ -1119,11 +1119,11 @@ export default function OpportunitiesPage() {
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Opportunity
+                  Add {opportunityLabel}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Create new opportunity</p>
+                <p>Create new {opportunityLabel.toLowerCase()}</p>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -1320,12 +1320,12 @@ export default function OpportunitiesPage() {
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
               <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-slate-300 mb-2">
-                No opportunities found
+                No {opportunitiesLabel.toLowerCase()} found
               </h3>
               <p className="text-slate-500 mb-6">
                 {hasActiveFilters
                   ? "Try adjusting your filters or search term"
-                  : "Get started by adding your first opportunity"}
+                  : `Get started by adding your first ${opportunityLabel.toLowerCase()}`}
               </p>
               {!hasActiveFilters && (
                 <Button
@@ -1333,7 +1333,7 @@ export default function OpportunitiesPage() {
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Your First Opportunity
+                  Add Your First {opportunityLabel}
                 </Button>
               )}
             </div>
@@ -1542,7 +1542,7 @@ export default function OpportunitiesPage() {
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>Edit opportunity</p>
+                                  <p>Edit {opportunityLabel.toLowerCase()}</p>
                                 </TooltipContent>
                               </Tooltip>
                               <Tooltip>
