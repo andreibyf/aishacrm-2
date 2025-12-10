@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Save, RotateCcw, Tags, Building2, Users, Target, TrendingUp, CheckSquare, Database } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tenant, BACKEND_URL } from '@/api/entities';
+import { useTenant } from '@/components/shared/tenantContext';
+import { useEntityLabels } from '@/components/shared/EntityLabelsContext';
 
 // Default labels - must match backend
 const DEFAULT_LABELS = {
@@ -41,13 +43,19 @@ const ENTITY_DESCRIPTIONS = {
 };
 
 export default function EntityLabelsManager() {
+  const tenantContext = useTenant();
+  const globalTenantId = tenantContext?.selectedTenantId || null;
+  const { refresh: refreshGlobalLabels } = useEntityLabels();
+
   const [tenants, setTenants] = useState([]);
-  const [selectedTenantId, setSelectedTenantId] = useState('');
   const [labels, setLabels] = useState({ ...DEFAULT_LABELS });
   const [customized, setCustomized] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [tenantsLoading, setTenantsLoading] = useState(true);
+
+  // Use global tenant ID from context
+  const selectedTenantId = globalTenantId;
 
   // Load tenants on mount
   useEffect(() => {
@@ -55,10 +63,6 @@ export default function EntityLabelsManager() {
       try {
         const response = await Tenant.list();
         setTenants(response || []);
-        // Only auto-select first tenant if none selected yet
-        if (response?.length > 0) {
-          setSelectedTenantId(prev => prev || response[0].id);
-        }
       } catch (error) {
         console.error('Error loading tenants:', error);
         toast.error('Failed to load tenants');
@@ -76,13 +80,19 @@ export default function EntityLabelsManager() {
       
       try {
         setLoading(true);
-        const response = await fetch(`${BACKEND_URL}/api/entity-labels/${selectedTenantId}`, {
+        // Add cache-busting timestamp to prevent 304 responses
+        const cacheBuster = Date.now();
+        const response = await fetch(`${BACKEND_URL}/api/entity-labels/${selectedTenantId}?_t=${cacheBuster}`, {
           credentials: 'include',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
         });
         
         if (response.ok) {
           const data = await response.json();
           if (data.status === 'success') {
+            console.log('[EntityLabelsManager] Loaded labels for tenant:', selectedTenantId, data.data.labels);
             setLabels(data.data.labels);
             setCustomized(data.data.customized || []);
           }
@@ -119,6 +129,9 @@ export default function EntityLabelsManager() {
 
     try {
       setSaving(true);
+      console.log('[EntityLabelsManager] Saving labels for tenant:', selectedTenantId);
+      console.log('[EntityLabelsManager] Selected tenant name:', tenants.find(t => t.id === selectedTenantId)?.name);
+      console.log('[EntityLabelsManager] Labels being saved:', labels);
       const response = await fetch(`${BACKEND_URL}/api/entity-labels/${selectedTenantId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -131,6 +144,8 @@ export default function EntityLabelsManager() {
         if (data.status === 'success') {
           setLabels(data.data.labels);
           setCustomized(data.data.customized || []);
+          // Refresh global context so nav and other components update
+          refreshGlobalLabels();
           toast.success('Entity labels saved successfully');
         }
       } else {
@@ -162,6 +177,8 @@ export default function EntityLabelsManager() {
       if (response.ok) {
         setLabels({ ...DEFAULT_LABELS });
         setCustomized([]);
+        // Refresh global context so nav and other components update
+        refreshGlobalLabels();
         toast.success('Labels reset to defaults');
       } else {
         throw new Error('Failed to reset');
@@ -189,35 +206,25 @@ export default function EntityLabelsManager() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Tenant Selector */}
+        {/* Tenant Info */}
         <div className="flex items-center gap-4">
           <div className="flex-1">
-            <Label htmlFor="tenant-select">Select Tenant</Label>
-            <Select
-              value={selectedTenantId}
-              onValueChange={setSelectedTenantId}
-              disabled={tenantsLoading}
-            >
-              <SelectTrigger id="tenant-select" className="mt-1">
-                <SelectValue placeholder={tenantsLoading ? 'Loading...' : 'Select a tenant'} />
-              </SelectTrigger>
-              <SelectContent>
-                {tenants.map(tenant => (
-                  <SelectItem key={tenant.id} value={tenant.id}>
-                    <div className="flex items-center gap-2">
-                      <Building2 className="w-4 h-4 text-muted-foreground" />
-                      {tenant.name}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Managing Tenant</Label>
+            <div className="mt-1 flex items-center gap-2 p-2 border rounded-md bg-muted/50">
+              <Building2 className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium">
+                {selectedTenant?.name || 'No tenant selected'}
+              </span>
+              {customized.length > 0 && (
+                <Badge variant="outline" className="ml-auto">
+                  {customized.length} customized
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Switch tenants using the selector in the top navigation bar
+            </p>
           </div>
-          {selectedTenant && (
-            <Badge variant="outline" className="mt-6">
-              {customized.length} customized
-            </Badge>
-          )}
         </div>
 
         {/* Labels Table */}

@@ -36,6 +36,7 @@ const EntityLabelsContext = createContext({
 });
 
 export function EntityLabelsProvider({ children, tenantId }) {
+  console.log('[EntityLabelsContext] Provider rendered with tenantId:', tenantId);
   const [labels, setLabels] = useState(DEFAULT_LABELS);
   const [loading, setLoading] = useState(false);
   const [lastFetchedTenantId, setLastFetchedTenantId] = useState(null);
@@ -50,16 +51,23 @@ export function EntityLabelsProvider({ children, tenantId }) {
     try {
       setLoading(true);
       console.log('[EntityLabelsContext] Fetching labels for tenant:', tid);
-      const response = await fetch(`${BACKEND_URL}/api/entity-labels/${tid}`, {
+      // Add cache-busting timestamp to prevent 304 responses
+      const cacheBuster = Date.now();
+      const response = await fetch(`${BACKEND_URL}/api/entity-labels/${tid}?_t=${cacheBuster}`, {
         credentials: 'include',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
       });
 
       if (response.ok) {
         const data = await response.json();
+        console.log('[EntityLabelsContext] RAW API response for tenant', tid, ':', JSON.stringify(data, null, 2));
         if (data.status === 'success' && data.data?.labels) {
-          console.log('[EntityLabelsContext] Received labels:', data.data.labels);
+          console.log('[EntityLabelsContext] Setting labels for', tid, ':', JSON.stringify(data.data.labels));
           console.log('[EntityLabelsContext] Customized entities:', data.data.customized);
-          setLabels(data.data.labels);
+          // Force a new object reference to ensure React detects the change
+          setLabels({ ...data.data.labels });
         }
       } else {
         // Fallback to defaults on error

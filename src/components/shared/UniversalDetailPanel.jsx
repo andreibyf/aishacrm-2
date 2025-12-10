@@ -210,6 +210,30 @@ export default function UniversalDetailPanel({
       } else {
         await Note.create(noteData);
         toast.success("Note added successfully");
+        
+        // If this is an Activity with a related record, also create a note on the related record
+        if (entityType === 'activity' && entity.related_to && entity.related_id) {
+          try {
+            const relatedNoteData = {
+              related_type: entity.related_to, // e.g., 'contact', 'account', 'lead', 'opportunity'
+              related_id: entity.related_id,
+              title: newNoteTitle || `Note from Activity: ${entity.subject || 'Activity'}`,
+              content: newNoteContent,
+              tenant_id: effectiveTenantId,
+              created_by: user?.email,
+              metadata: { 
+                type: newNoteType,
+                source_activity_id: entity.id,
+                source_activity_subject: entity.subject
+              }
+            };
+            await Note.create(relatedNoteData);
+            toast.success(`Note also added to related ${entity.related_to}`);
+          } catch (relatedNoteError) {
+            console.error("Failed to create note on related record:", relatedNoteError);
+            // Don't block - the primary note was saved successfully
+          }
+        }
       }
 
       // If type is NOT general, also create an Activity
@@ -441,8 +465,9 @@ export default function UniversalDetailPanel({
       });
     }
 
-    // Standard fields to show in details
+    // Standard fields to show in details - comprehensive list for all entity types
     const standardFields = [
+      // Common fields
       { key: 'status', label: 'Status' },
       { key: 'stage', label: 'Stage' },
       { key: 'source', label: 'Source' },
@@ -450,31 +475,65 @@ export default function UniversalDetailPanel({
       { key: 'priority', label: 'Priority' },
       { key: 'type', label: 'Type' },
       { key: 'industry', label: 'Industry' },
-      { key: 'amount', label: 'Amount' },
-      { key: 'probability', label: 'Probability' },
-      { key: 'close_date', label: 'Close Date' },
-      { key: 'due_date', label: 'Due Date' },
-      { key: 'created_date', label: 'Created' },
-      // assignedUserName from displayData should be handled by displayData loop
+
+      // Account-specific fields
+      { key: 'website', label: 'Website', isLink: true },
+      { key: 'annual_revenue', label: 'Annual Revenue', isCurrency: true },
+      { key: 'employee_count', label: 'Employees' },
+
+      // Contact/Lead-specific fields
+      { key: 'company', label: 'Company' },
+      { key: 'job_title', label: 'Job Title' },
+      { key: 'department', label: 'Department' },
+      { key: 'linkedin_url', label: 'LinkedIn', isLink: true },
+      { key: 'score', label: 'Lead Score' },
+
+      // Opportunity-specific fields
+      { key: 'amount', label: 'Amount', isCurrency: true },
+      { key: 'probability', label: 'Probability', isPercent: true },
+      { key: 'expected_revenue', label: 'Expected Revenue', isCurrency: true },
+      { key: 'close_date', label: 'Close Date', isDate: true },
+      { key: 'next_step', label: 'Next Step' },
+
+      // Activity-specific fields
+      { key: 'due_date', label: 'Due Date', isDate: true },
+      { key: 'start_date', label: 'Start Date', isDate: true },
+      { key: 'end_date', label: 'End Date', isDate: true },
+      { key: 'completed_date', label: 'Completed', isDate: true },
+      { key: 'location', label: 'Location' },
+      { key: 'duration', label: 'Duration' },
+
+      // Common metadata
+      { key: 'created_date', label: 'Created', isDate: true },
+      { key: 'updated_date', label: 'Last Updated', isDate: true },
+      { key: 'unique_id', label: 'Reference ID' },
     ];
 
-    standardFields.forEach(({ key, label }) => {
+    standardFields.forEach(({ key, label, isLink, isCurrency, isPercent, isDate }) => {
       // Check if the entity has the key and its value is not null/undefined
       // Also, ensure displayData doesn't already provide a custom field for this label
-      if (entity[key] !== undefined && entity[key] !== null && !Object.keys(displayData).includes(label)) {
+      if (entity[key] !== undefined && entity[key] !== null && entity[key] !== '' && !Object.keys(displayData).includes(label)) {
         let value = entity[key];
         
-        // Format specific fields
-        if (key === 'amount' && typeof value === 'number') {
-          value = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
-        } else if ((key === 'probability' || key === 'score') && typeof value === 'number') {
+        // Format specific fields based on metadata
+        if (isCurrency && (typeof value === 'number' || !isNaN(parseFloat(value)))) {
+          const numValue = typeof value === 'number' ? value : parseFloat(value);
+          value = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(numValue);
+        } else if (isPercent && (typeof value === 'number' || !isNaN(parseFloat(value)))) {
           value = `${value}%`;
-        } else if (key.includes('date')) {
+        } else if (isDate) {
           try {
-            value = format(new Date(value), 'MMM d, yyyy'); // Using date-fns for consistent formatting
+            value = format(new Date(value), 'MMM d, yyyy');
           } catch {
-            value = String(value); // Fallback if date is invalid
+            value = String(value);
           }
+        } else if (isLink && typeof value === 'string') {
+          const href = value.startsWith('http') ? value : `https://${value}`;
+          value = (
+            <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 hover:underline">
+              {value}
+            </a>
+          );
         } else if (['status', 'stage', 'priority', 'type'].includes(key)) {
           value = (
             <Badge className={getStatusColor(value)}>
@@ -482,7 +541,7 @@ export default function UniversalDetailPanel({
             </Badge>
           );
         } else if (typeof value === 'string') {
-          value = String(value).replace(/_/g, ' '); // Replace underscores for general strings
+          value = String(value).replace(/_/g, ' ');
         }
 
         detailFields.push(
@@ -611,6 +670,21 @@ export default function UniversalDetailPanel({
                     {tag}
                   </Badge>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Description Section */}
+          {entity.description && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <h3 className="text-sm font-semibold text-slate-400 uppercase">
+                  Description
+                </h3>
+                <span className="text-xs text-slate-500 italic">— What is this about?</span>
+              </div>
+              <div className="text-sm text-slate-300 bg-slate-800 rounded-lg p-4 border border-slate-700 whitespace-pre-wrap">
+                {entity.description}
               </div>
             </div>
           )}
@@ -795,7 +869,10 @@ export default function UniversalDetailPanel({
           {/* Notes & Activity Section - Replaced old NotesSection with new implementation */}
           {showNotes && (
             <div>
-              <h3 className="text-sm font-semibold text-slate-400 uppercase mb-4">Notes & Activity</h3>
+              <div className="flex items-center gap-2 mb-4">
+                <h3 className="text-sm font-semibold text-slate-400 uppercase">Notes & Activity</h3>
+                <span className="text-xs text-slate-500 italic">— What happened?</span>
+              </div>
               
               {/* Add Note Form */}
               <div className="space-y-3 mb-4 p-4 border border-slate-700 rounded-lg bg-slate-800">

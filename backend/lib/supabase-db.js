@@ -156,7 +156,8 @@ async function handleSelectQuery(sql, params) {
   // Robust clause extractor tolerant of newlines/extra whitespace
   // startPattern and endPatterns are regex source strings (without flags)
   const extractClause = (source, startPattern, endPatterns = []) => {
-    const end = endPatterns.length ? '(?:' + endPatterns.join('|') + ')' : '$';
+    // Always include $ (end of string) as fallback end pattern
+    const end = endPatterns.length ? '(?:' + endPatterns.join('|') + '|$)' : '$';
     const re = new RegExp(startPattern + '([\\s\\S]*?)' + end, 'i');
     const m = source.match(re);
     return m ? m[1].trim() : null;
@@ -190,7 +191,8 @@ async function handleSelectQuery(sql, params) {
       let m;
       
       // 1) EQUALITY (highest priority - check exact match first)
-      m = cond.match(/([a-z_]+)\s*=\s*\$(\d+)/i);
+      // Handle both $n and $n::type (e.g., $1::uuid)
+      m = cond.match(/([a-z_]+)\s*=\s*\$(\d+)(?:::[a-z]+)?/i);
       if (m) {
         const col = m[1];
         const idx = parseInt(m[2], 10) - 1;

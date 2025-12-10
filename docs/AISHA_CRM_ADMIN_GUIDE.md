@@ -44,6 +44,7 @@
 - [6.3 Integration Settings](#63-integration-settings)
 - [6.4 Module Configuration](#64-module-configuration)
 - [6.5 Custom Fields](#65-custom-fields)
+- [6.6 Entity Label Customization](#66-entity-label-customization)
 
 ### Chapter 7: Performance Monitoring
 - [7.1 System Health Dashboard](#71-system-health-dashboard)
@@ -1234,6 +1235,39 @@ Invoke-RestMethod -Uri "http://localhost:4001/api/tenants/tenant-uuid" `
   -ContentType "application/json" `
   -Body $settings
 ```
+
+### Entity Label Customization
+
+Administrators can rename navigation items (entities) for each tenant. This allows customizing terminology to match business vocabulary (e.g., "Accounts" → "Clients").
+
+#### Accessing Entity Labels
+
+1. Navigate to **Settings → Entity Labels**
+2. Select the entity you want to rename (Accounts, Contacts, Leads, Opportunities, Activities)
+3. Enter the custom **Plural** and **Singular** labels
+4. Click **Save**
+
+#### Per-Tenant Isolation
+
+Each tenant has independent entity labels stored in the `entity_labels` table:
+
+```sql
+-- Example: Rename "Accounts" to "Clients" for a specific tenant
+INSERT INTO entity_labels (tenant_id, entity_key, custom_label, custom_label_singular)
+VALUES ('a11dfb63-4b18-4eb8-872e-747af2e37c46', 'accounts', 'Clients', 'Client');
+```
+
+> **Important:** Entity labels are isolated per tenant. Changes to one tenant's labels do not affect other tenants.
+
+#### AI Integration
+
+Custom labels are automatically injected into AI prompts, so the AI Assistant recognizes custom terminology:
+
+- User renames "Accounts" → "Clients"
+- User asks: "Show me all my clients"
+- AI automatically maps "clients" → accounts → responds using "clients" terminology
+
+See `docs/ENTITY_LABEL_AI_INTEGRATION.md` for technical implementation details.
 
 ---
 

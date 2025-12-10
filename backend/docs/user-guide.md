@@ -145,9 +145,13 @@ Use the CSV import for adding a large number of contacts at once.
 
 ### The Contact Detail Page
 This page gives you a 360-degree view of a contact.
--   **Details Panel**: Shows all the field information for the contact.
+-   **Details Panel**: Shows all the field information for the contact including name, phone, email, company, job title, status, and more. Fields without values show "Not set" placeholders.
+-   **Description Section**: Static context about the record — "What is this about?" Use this for background information, requirements, or notes that don't change frequently.
+-   **Notes & Activity Section**: A running log of updates — "What happened?" Add timestamped notes for calls, meetings, follow-ups, and status changes.
 -   **Timeline/Activity Feed**: A chronological history of every interaction, including calls, emails, notes, and meetings.
 -   **Related Lists**: Tabs or sections showing related records, such as their Account, Opportunities they are involved in, and support cases.
+
+> **Tip:** Click the eye icon (View) to see all available information without entering Edit mode. All fields are displayed with smart formatting (currency, dates, clickable URLs, status badges).
 
 ### Finding and Filtering Contacts
 -   **Global Search**: Use the search bar at the top for a quick lookup.
@@ -266,9 +270,93 @@ Your sales forecast is typically calculated as:
 
 <div class="page-break"></div>
 
+## Chapter 8: Tracking Your Work with Activities
+
+Activities are the building blocks of your daily workflow. They help you track every interaction with customers and ensure nothing falls through the cracks.
+
+### What is an Activity?
+
+An activity represents any action or task related to your work:
+-   **Tasks**: To-dos that need to be completed
+-   **Calls**: Phone conversations with contacts or leads
+-   **Meetings**: Scheduled appointments or demos
+-   **Emails**: Important email communications to log
+-   **Follow-ups**: Scheduled touchpoints with prospects
+
+### Creating an Activity
+
+1.  Navigate to **Activities** and click **"+ Add Activity"**
+2.  Select the **Type** (Task, Call, Meeting, Email, etc.)
+3.  Fill in the required fields:
+    -   **Subject**: Brief description of the activity
+    -   **Due Date & Time**: When this should happen
+    -   **Priority**: Normal, High, or Low
+4.  **Link to a Record**: Associate the activity with a Contact, Account, Lead, or Opportunity
+5.  Add **Description** for context — "What is this about?"
+6.  Click **Save**
+
+### The Activity Detail View
+
+Click the eye icon on any activity to see the full detail panel. The view shows all available fields:
+
+| Field | Description |
+|-------|-------------|
+| **Subject** | Title of the activity |
+| **Status** | Scheduled, In Progress, Completed, Cancelled |
+| **Type** | Task, Call, Meeting, Email, etc. |
+| **Due Date & Time** | When the activity should occur (with timezone) |
+| **Assigned To** | Who is responsible for this activity |
+| **Related To** | Linked Contact, Account, Lead, or Opportunity |
+| **Priority** | Normal, High, or Low |
+| **Location** | Where the activity takes place (for meetings) |
+| **Duration** | How long the activity lasted |
+| **Description** | Context — "What is this about?" |
+| **Outcome** | Result after completion — "What happened?" |
+
+### Understanding Description vs. Notes
+
+These two fields serve different purposes:
+
+| | Description | Notes |
+|---|---|---|
+| **Purpose** | Static context set when creating/editing | Running log of updates over time |
+| **When Set** | At creation or during edit | Added incrementally throughout the lifecycle |
+| **Content** | Background info, requirements, scope | "Called - left voicemail", "Sent proposal" |
+
+> **Example:**  
+> **Description:** "Follow up on Q4 renewal. Client mentioned budget concerns."  
+> **Notes:**  
+> - Dec 9, 2:30pm — "Left voicemail, will try again tomorrow"  
+> - Dec 10, 10:00am — "Connected - reviewing with CFO"
+
+### Cross-Linked Notes
+
+When you add a note to an Activity that has a related record:
+1.  The note is saved on the Activity
+2.  **A copy is automatically created on the related Contact/Account/Lead/Opportunity**
+3.  Both records stay in sync without manual duplication
+
+This means when you view the Contact, you'll see all notes from related Activities.
+
+### Managing Your Activities
+
+-   **List View**: See all activities with filters for status, date range, and assigned user
+-   **Calendar View**: Visualize activities on a calendar
+-   **Overdue Alerts**: Activities past their due date are highlighted
+-   **Bulk Actions**: Complete or reschedule multiple activities at once
+
+### Best Practices
+
+-   **Log Everything**: Document every customer interaction immediately
+-   **Use Outcomes**: After completing an activity, record what happened
+-   **Set Follow-ups**: Never end an activity without scheduling the next action
+-   **Keep It Current**: Update status as activities progress
+
+<div class="page-break"></div>
+
 # Part 3: AI-Powered Features
 
-## Chapter 8: Unleashing the AI Assistant
+## Chapter 9: Unleashing the AI Assistant
 
 Aisha's AI Assistant is like having a personal data analyst available 24/7. Use it to save time and get quick answers without navigating through multiple screens.
 
@@ -362,7 +450,7 @@ AiSHA understands natural language and recognizes keywords associated with diffe
 
 <div class="page-break"></div>
 
-## Chapter 9: Scaling Outreach with AI Campaigns
+## Chapter 10: Scaling Outreach with AI Campaigns
 
 AI Campaigns allow you to automate and personalize your outreach to a large audience, whether through email or phone calls.
 

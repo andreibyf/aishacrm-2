@@ -95,7 +95,7 @@ export default function createEntityLabelsRoutes(pool) {
       const result = await pool.query(
         `SELECT entity_key, custom_label, custom_label_singular 
          FROM entity_labels 
-         WHERE tenant_id = $1`,
+         WHERE tenant_id = $1::uuid`,
         [tenantUUID]
       );
 
@@ -202,7 +202,7 @@ export default function createEntityLabelsRoutes(pool) {
             singular === DEFAULT_LABELS[entityKey].singular) {
           upsertPromises.push(
             pool.query(
-              `DELETE FROM entity_labels WHERE tenant_id = $1 AND entity_key = $2`,
+              `DELETE FROM entity_labels WHERE tenant_id = $1::uuid AND entity_key = $2`,
               [tenantUUID, entityKey]
             )
           );
@@ -211,7 +211,7 @@ export default function createEntityLabelsRoutes(pool) {
           upsertPromises.push(
             pool.query(
               `INSERT INTO entity_labels (tenant_id, entity_key, custom_label, custom_label_singular, updated_at)
-               VALUES ($1, $2, $3, $4, NOW())
+               VALUES ($1::uuid, $2, $3, $4, NOW())
                ON CONFLICT (tenant_id, entity_key) 
                DO UPDATE SET 
                  custom_label = EXCLUDED.custom_label,
@@ -229,7 +229,7 @@ export default function createEntityLabelsRoutes(pool) {
       const result = await pool.query(
         `SELECT entity_key, custom_label, custom_label_singular 
          FROM entity_labels 
-         WHERE tenant_id = $1`,
+         WHERE tenant_id = $1::uuid`,
         [tenantUUID]
       );
 
@@ -279,7 +279,7 @@ export default function createEntityLabelsRoutes(pool) {
       }
 
       await pool.query(
-        `DELETE FROM entity_labels WHERE tenant_id = $1`,
+        `DELETE FROM entity_labels WHERE tenant_id = $1::uuid`,
         [tenantUUID]
       );
 

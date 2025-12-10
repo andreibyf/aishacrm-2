@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.33] - 2025-12-09
+
+### Added
+- **Enhanced View Panels:** All entity view panels now show comprehensive field information
+  - Account, Contact, Lead, Opportunity views display all available fields without requiring Edit
+  - Activity views unified to use UniversalDetailPanel for consistent styling
+  - Fields with no value show helpful placeholder text (e.g., "Not set", "Unassigned")
+  - Smart field formatting: currency, percentages, dates, clickable URLs, status badges
+
+- **Description & Notes Contextual Hints:** Added clarifying hints to help users understand field purposes
+  - Description: "— What is this about?" (static context for the record)
+  - Notes & Activity: "— What happened?" (running log of updates)
+
+- **Cross-Linked Notes for Activities:** When adding a note to an Activity with a related record
+  - Note is automatically created on both the Activity AND the related Contact/Account/Lead/Opportunity
+  - Related note includes metadata linking back to source activity
+  - Keeps all records in sync without manual duplication
+
+- **Activity View Panel Improvements:**
+  - Now uses UniversalDetailPanel for consistent styling with other entities
+  - Shows all fields: Due Date, Assigned To, Related To, Priority, Location, Duration, Description, Outcome
+  - Includes Notes & Activity section with full note management
+
+### Fixed
+- **Entity Labels Per-Tenant Isolation:** Fixed critical bug where changing entity labels affected all tenants
+  - Root cause: Supabase SQL adapter regex failed when SQL lacked ORDER BY/LIMIT/OFFSET clauses
+  - Fixed `extractClause` regex in `supabase-db.js` to include `$` as fallback end pattern
+  - EntityLabelsManager now uses global TenantContext correctly
+
+---
+
 ## [Unreleased] - 2025-12-06
 
 ### Added
