@@ -82,9 +82,15 @@ export default function createBizDevSourceRoutes(pgPool) {
 
       if (error) throw error;
 
+      // Map 'source' column to 'source_name' for frontend compatibility
+      const mappedData = (data || []).map(row => ({
+        ...row,
+        source_name: row.source || row.source_name
+      }));
+
       res.json({
         status: 'success',
-        data: { bizdevsources: data || [] }
+        data: { bizdevsources: mappedData }
       });
     } catch (error) {
       console.error('Error fetching bizdev sources:', error);
@@ -153,9 +159,10 @@ export default function createBizDevSourceRoutes(pgPool) {
         return res.status(404).json({ status: 'error', message: 'BizDev source not found' });
       }
 
+      // Map 'source' column to 'source_name' for frontend compatibility
       res.json({
         status: 'success',
-        data
+        data: { ...data, source_name: data.source || data.source_name }
       });
     } catch (error) {
       console.error('Error fetching bizdev source:', error);
@@ -229,7 +236,8 @@ export default function createBizDevSourceRoutes(pgPool) {
     try {
       const {
         tenant_id: incomingTenantId,
-        source_name,
+        source_name,  // Frontend may send this
+        source,       // Production DB uses this column name
         source_type,
         source_url,
         contact_person,
@@ -246,21 +254,24 @@ export default function createBizDevSourceRoutes(pgPool) {
         is_test_data
       } = req.body;
 
-      if (!incomingTenantId || !source_name) {
+      // Accept either 'source' or 'source_name' from frontend
+      const sourceValue = source || source_name;
+
+      if (!incomingTenantId || !sourceValue) {
         return res.status(400).json({
           status: 'error',
-          message: 'tenant_id and source_name are required'
+          message: 'tenant_id and source (or source_name) are required'
         });
       }
 
       const tenant_id = incomingTenantId;
 
-      // Use Supabase client instead of pgPool to avoid schema constraint issues
+      // Use Supabase client - production DB column is 'source' not 'source_name'
       const { data, error } = await supabase
         .from('bizdev_sources')
         .insert({
           tenant_id,
-          source_name,
+          source: sourceValue,
           source_type,
           source_url,
           contact_person,
@@ -281,9 +292,10 @@ export default function createBizDevSourceRoutes(pgPool) {
 
       if (error) throw error;
 
+      // Return with source_name for frontend compatibility
       res.status(201).json({
         status: 'success',
-        data
+        data: { ...data, source_name: data.source }
       });
     } catch (error) {
       console.error('Error creating bizdev source:', error);
@@ -366,7 +378,8 @@ export default function createBizDevSourceRoutes(pgPool) {
       const { id } = req.params;
       let { tenant_id } = req.query || {};
       const {
-        source_name,
+        source_name,  // Frontend may send this
+        source,       // Production DB uses this column name
         source_type,
         source_url,
         contact_person,
@@ -402,68 +415,65 @@ export default function createBizDevSourceRoutes(pgPool) {
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 
-      // Accept UUID or slug; normalize to slug for legacy columns
+      // Accept either 'source' or 'source_name' from frontend
+      const sourceValue = source || source_name;
 
-      const result = await pgPool.query(
-        `UPDATE bizdev_sources SET
-          source_name = COALESCE($1, source_name),
-          source_type = COALESCE($2, source_type),
-          source_url = COALESCE($3, source_url),
-          contact_person = COALESCE($4, contact_person),
-          contact_email = COALESCE($5, contact_email),
-          contact_phone = COALESCE($6, contact_phone),
-          status = COALESCE($7, status),
-          priority = COALESCE($8, priority),
-          leads_generated = COALESCE($9, leads_generated),
-          opportunities_created = COALESCE($10, opportunities_created),
-          revenue_generated = COALESCE($11, revenue_generated),
-          notes = COALESCE($12, notes),
-          tags = COALESCE($13, tags),
-          metadata = COALESCE($14, metadata),
-          is_test_data = COALESCE($15, is_test_data),
-          company_name = COALESCE($16, company_name),
-          dba_name = COALESCE($17, dba_name),
-          industry = COALESCE($18, industry),
-          website = COALESCE($19, website),
-          email = COALESCE($20, email),
-          phone_number = COALESCE($21, phone_number),
-          address_line_1 = COALESCE($22, address_line_1),
-          address_line_2 = COALESCE($23, address_line_2),
-          city = COALESCE($24, city),
-          state_province = COALESCE($25, state_province),
-          postal_code = COALESCE($26, postal_code),
-          country = COALESCE($27, country),
-          batch_id = COALESCE($28, batch_id),
-          industry_license = COALESCE($29, industry_license),
-          license_status = COALESCE($30, license_status),
-          license_expiry_date = COALESCE($31, license_expiry_date),
-          updated_at = now()
-        WHERE tenant_id = $32 AND id = $33
-        RETURNING *`,
-        [
-          source_name, source_type, source_url, contact_person,
-          contact_email, contact_phone, status, priority,
-          leads_generated, opportunities_created, revenue_generated,
-          notes, tags ? JSON.stringify(tags) : null,
-          metadata ? JSON.stringify(metadata) : null,
-          is_test_data,
-          company_name, dba_name, industry, website, email, phone_number,
-          address_line_1, address_line_2, city, state_province, postal_code, country,
-          batch_id, industry_license, license_status, license_expiry_date,
-          tenant_id, id
-        ]
-      );
+      // Build update object with only defined values
+      const updateObj = {};
+      if (sourceValue !== undefined) updateObj.source = sourceValue;
+      if (source_type !== undefined) updateObj.source_type = source_type;
+      if (source_url !== undefined) updateObj.source_url = source_url;
+      if (contact_person !== undefined) updateObj.contact_person = contact_person;
+      if (contact_email !== undefined) updateObj.contact_email = contact_email;
+      if (contact_phone !== undefined) updateObj.contact_phone = contact_phone;
+      if (status !== undefined) updateObj.status = status;
+      if (priority !== undefined) updateObj.priority = priority;
+      if (leads_generated !== undefined) updateObj.leads_generated = leads_generated;
+      if (opportunities_created !== undefined) updateObj.opportunities_created = opportunities_created;
+      if (revenue_generated !== undefined) updateObj.revenue_generated = revenue_generated;
+      if (notes !== undefined) updateObj.notes = notes;
+      if (tags !== undefined) updateObj.tags = tags;
+      if (metadata !== undefined) updateObj.metadata = metadata;
+      if (is_test_data !== undefined) updateObj.is_test_data = is_test_data;
+      if (company_name !== undefined) updateObj.company_name = company_name;
+      if (dba_name !== undefined) updateObj.dba_name = dba_name;
+      if (industry !== undefined) updateObj.industry = industry;
+      if (website !== undefined) updateObj.website = website;
+      if (email !== undefined) updateObj.email = email;
+      if (phone_number !== undefined) updateObj.phone_number = phone_number;
+      if (address_line_1 !== undefined) updateObj.address_line_1 = address_line_1;
+      if (address_line_2 !== undefined) updateObj.address_line_2 = address_line_2;
+      if (city !== undefined) updateObj.city = city;
+      if (state_province !== undefined) updateObj.state_province = state_province;
+      if (postal_code !== undefined) updateObj.postal_code = postal_code;
+      if (country !== undefined) updateObj.country = country;
+      if (batch_id !== undefined) updateObj.batch_id = batch_id;
+      if (industry_license !== undefined) updateObj.industry_license = industry_license;
+      if (license_status !== undefined) updateObj.license_status = license_status;
+      if (license_expiry_date !== undefined) updateObj.license_expiry_date = license_expiry_date;
+      updateObj.updated_at = new Date().toISOString();
 
-      if (result.rows.length === 0) {
+      const { data, error } = await supabase
+        .from('bizdev_sources')
+        .update(updateObj)
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (!data) {
         return res.status(404).json({
           status: 'error',
           message: 'BizDev source not found'
         });
       }
 
+      // Map 'source' column to 'source_name' for frontend compatibility
       res.json({
         status: 'success',
-        data: result.rows[0]
+        data: { ...data, source_name: data.source || data.source_name }
       });
     } catch (error) {
       console.error('Error updating bizdev source:', error);
@@ -509,14 +519,17 @@ export default function createBizDevSourceRoutes(pgPool) {
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 
-      // Accept UUID or slug; normalize to slug for legacy columns
-      
-      const result = await pgPool.query(
-        'DELETE FROM bizdev_sources WHERE tenant_id = $1 AND id = $2 RETURNING *',
-        [tenant_id, id]
-      );
+      const { data, error } = await supabase
+        .from('bizdev_sources')
+        .delete()
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .select()
+        .single();
 
-      if (result.rows.length === 0) {
+      if (error) throw error;
+
+      if (!data) {
         return res.status(404).json({
           status: 'error',
           message: 'BizDev source not found'
@@ -526,7 +539,7 @@ export default function createBizDevSourceRoutes(pgPool) {
       res.json({
         status: 'success',
         message: 'BizDev source deleted',
-        data: result.rows[0]
+        data: { ...data, source_name: data.source || data.source_name }
       });
     } catch (error) {
       console.error('Error deleting bizdev source:', error);
