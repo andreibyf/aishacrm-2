@@ -1,5 +1,5 @@
 import express from 'express';
-import { requireSuperAdminRole } from '../middleware/validateTenant.js';
+import { requireAdminRole } from '../middleware/validateTenant.js';
 
 // UUID format regex pattern
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -122,13 +122,13 @@ export default function createEntityLabelsRoutes(pool) {
     }
   });
 
-  // PUT /api/entity-labels/:tenant_id - Update entity labels for a tenant (superadmin only)
+  // PUT /api/entity-labels/:tenant_id - Update entity labels for a tenant (admin only)
   /**
    * @openapi
    * /api/entity-labels/{tenant_id}:
    *   put:
    *     summary: Update entity labels for a tenant
-   *     description: Sets custom entity labels for a tenant. Superadmin only.
+   *     description: Sets custom entity labels for a tenant. Admin and superadmin only.
    *     tags: [entitylabels]
    *     parameters:
    *       - in: path
@@ -157,7 +157,7 @@ export default function createEntityLabelsRoutes(pool) {
    *       200:
    *         description: Labels updated successfully
    */
-  router.put('/:tenant_id', requireSuperAdminRole, async (req, res) => {
+  router.put('/:tenant_id', requireAdminRole, async (req, res) => {
     try {
       const { tenant_id } = req.params;
       const { labels } = req.body;
@@ -255,16 +255,16 @@ export default function createEntityLabelsRoutes(pool) {
     }
   });
 
-  // DELETE /api/entity-labels/:tenant_id - Reset all labels to defaults (superadmin only)
+  // DELETE /api/entity-labels/:tenant_id - Reset all labels to defaults (admin only)
   /**
    * @openapi
    * /api/entity-labels/{tenant_id}:
    *   delete:
    *     summary: Reset entity labels to defaults
-   *     description: Removes all custom labels for a tenant, reverting to defaults. Superadmin only.
+   *     description: Removes all custom labels for a tenant, reverting to defaults. Admin and superadmin only.
    *     tags: [entitylabels]
    */
-  router.delete('/:tenant_id', requireSuperAdminRole, async (req, res) => {
+  router.delete('/:tenant_id', requireAdminRole, async (req, res) => {
     try {
       const { tenant_id } = req.params;
 
