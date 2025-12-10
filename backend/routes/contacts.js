@@ -383,6 +383,8 @@ export default function createContactRoutes(_pgPool) {
         zip,
         country,
         tags,
+        assigned_to,
+        assigned_to_name,
         ...otherFields
       } = req.body || {};
 
@@ -439,6 +441,8 @@ export default function createContactRoutes(_pgPool) {
       if (account_id !== undefined) {
         contactPayload.account_id = account_id || null;
       }
+      if (assigned_to !== undefined) contactPayload.assigned_to = assigned_to || null;
+      if (assigned_to_name !== undefined) contactPayload.assigned_to_name = assigned_to_name || null;
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
@@ -580,6 +584,8 @@ export default function createContactRoutes(_pgPool) {
         zip,
         country,
         tags,
+        assigned_to,
+        assigned_to_name,
         ...otherFields
       } = req.body || {};
 
@@ -632,6 +638,8 @@ export default function createContactRoutes(_pgPool) {
       assignStringField(payload, 'zip', zip);
       assignStringField(payload, 'country', country);
       assignTagsField(payload, tags);
+      if (assigned_to !== undefined) payload.assigned_to = assigned_to || null;
+      if (assigned_to_name !== undefined) payload.assigned_to_name = assigned_to_name || null;
       if (account_id !== undefined) payload.account_id = account_id || null;
       if (status !== undefined) {
         if (status === null) {

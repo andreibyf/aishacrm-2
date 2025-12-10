@@ -6,6 +6,13 @@
 
 import { Account, Employee, Contact, Lead, Opportunity } from "@/api/entities";
 
+// Helper to check if a string is a valid UUID
+const isValidUUID = (str) => {
+  if (!str || typeof str !== 'string') return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+};
+
 export class DenormalizationHelper {
   
   /**
@@ -34,16 +41,18 @@ export class DenormalizationHelper {
     // Enrich assigned employee information
     if (contactData.assigned_to) {
       try {
-        const employees = await Employee.filter({
-          tenant_id: tenantId,
-          $or: [
-            { email: contactData.assigned_to },
-            { user_email: contactData.assigned_to }
-          ]
-        });
-        if (employees && employees.length > 0) {
-          const emp = employees[0];
-          enriched.assigned_to_name = `${emp.first_name} ${emp.last_name}`;
+        // assigned_to should be a UUID (employee.id)
+        // Skip enrichment if it's an email (legacy data) - just clear the invalid value
+        if (isValidUUID(contactData.assigned_to)) {
+          const employee = await Employee.get(contactData.assigned_to);
+          if (employee) {
+            enriched.assigned_to_name = `${employee.first_name} ${employee.last_name}`;
+          }
+        } else {
+          // Legacy email data - clear it since it's invalid
+          console.warn("assigned_to contains non-UUID value (legacy data), clearing:", contactData.assigned_to);
+          enriched.assigned_to = null;
+          enriched.assigned_to_name = null;
         }
       } catch (error) {
         console.warn("Could not enrich employee data:", error);
@@ -79,16 +88,10 @@ export class DenormalizationHelper {
     // Enrich assigned employee information
     if (leadData.assigned_to) {
       try {
-        const employees = await Employee.filter({
-          tenant_id: tenantId,
-          $or: [
-            { email: leadData.assigned_to },
-            { user_email: leadData.assigned_to }
-          ]
-        });
-        if (employees && employees.length > 0) {
-          const emp = employees[0];
-          enriched.assigned_to_name = `${emp.first_name} ${emp.last_name}`;
+        // assigned_to is now a UUID (employee.id)
+        const employee = await Employee.get(leadData.assigned_to);
+        if (employee) {
+          enriched.assigned_to_name = `${employee.first_name} ${employee.last_name}`;
         }
       } catch (error) {
         console.warn("Could not enrich employee data:", error);
@@ -165,16 +168,10 @@ export class DenormalizationHelper {
     // Enrich assigned employee information
     if (oppData.assigned_to) {
       try {
-        const employees = await Employee.filter({
-          tenant_id: tenantId,
-          $or: [
-            { email: oppData.assigned_to },
-            { user_email: oppData.assigned_to }
-          ]
-        });
-        if (employees && employees.length > 0) {
-          const emp = employees[0];
-          enriched.assigned_to_name = `${emp.first_name} ${emp.last_name}`;
+        // assigned_to is now a UUID (employee.id)
+        const employee = await Employee.get(oppData.assigned_to);
+        if (employee) {
+          enriched.assigned_to_name = `${employee.first_name} ${employee.last_name}`;
         }
       } catch (error) {
         console.warn("Could not enrich employee data:", error);
@@ -196,16 +193,10 @@ export class DenormalizationHelper {
     // Enrich assigned employee information
     if (activityData.assigned_to) {
       try {
-        const employees = await Employee.filter({
-          tenant_id: tenantId,
-          $or: [
-            { email: activityData.assigned_to },
-            { user_email: activityData.assigned_to }
-          ]
-        });
-        if (employees && employees.length > 0) {
-          const emp = employees[0];
-          enriched.assigned_to_name = `${emp.first_name} ${emp.last_name}`;
+        // assigned_to is now a UUID (employee.id)
+        const employee = await Employee.get(activityData.assigned_to);
+        if (employee) {
+          enriched.assigned_to_name = `${employee.first_name} ${employee.last_name}`;
         }
       } catch (error) {
         console.warn("Could not enrich employee data:", error);

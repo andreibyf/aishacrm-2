@@ -57,7 +57,8 @@ export default function EmployeeScopeFilter({ user, selectedTenantId }) {
         const employeeList = await Employee.list({ tenant_id: effectiveTenantId });
         const crmEmployees = (employeeList || []).filter((emp) => {
           const isActive = emp.is_active !== false && emp.status !== "inactive";
-          return isActive && emp.has_crm_access === true && emp.user_email;
+          const hasEmail = emp.email || emp.user_email;
+          return isActive && emp.has_crm_access === true && hasEmail;
         });
         setEmployees(crmEmployees);
       } catch (error) {
@@ -84,10 +85,8 @@ export default function EmployeeScopeFilter({ user, selectedTenantId }) {
     );
   }
 
-  // If no employees found, hide the filter to avoid noisy banner
-  if (employees.length === 0) {
-    return null;
-  }
+  // Always show the filter for admins - "Unassigned" and "All Records" are always valid categories
+  // even if there are no employees with CRM access
 
   return (
     <div className="flex items-center gap-2">
@@ -110,7 +109,7 @@ export default function EmployeeScopeFilter({ user, selectedTenantId }) {
           {employees.map((emp) => (
             <SelectItem
               key={emp.id}
-              value={emp.user_email}
+              value={emp.id}
               className="hover:bg-slate-700"
             >
               {emp.first_name} {emp.last_name}

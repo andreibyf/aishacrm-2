@@ -333,10 +333,11 @@ export default function LeadForm({
       }
 
       // CRITICAL: Enforce assignment fallback for employees
-      if (!isManager) {
-        submissionData.assigned_to = user.email;
-      } else if (!submissionData.assigned_to || submissionData.assigned_to === 'unassigned') {
-        submissionData.assigned_to = submissionData.assigned_to === 'unassigned' ? null : (submissionData.assigned_to || user.email);
+      // Note: assigned_to is now a UUID (employee.id), not email
+      // For non-managers, we cannot auto-assign by email - they must select from dropdown
+      // For managers, if 'unassigned' is selected, set to null
+      if (submissionData.assigned_to === 'unassigned') {
+        submissionData.assigned_to = null;
       }
 
       if (!lead) { // This is a new lead creation

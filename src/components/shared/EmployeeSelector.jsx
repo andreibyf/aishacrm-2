@@ -76,7 +76,7 @@ export default function EmployeeSelector({
         {sortedEmployees.map((employee) => (
           <SelectItem 
             key={employee.id} 
-            value={employee.email || employee.user_email} 
+            value={employee.id} 
             className="text-slate-200 hover:bg-slate-700"
           >
             {employee.first_name} {employee.last_name}

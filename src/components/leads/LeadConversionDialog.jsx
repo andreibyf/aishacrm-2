@@ -73,7 +73,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
           state: lead.state || null,
           zip: lead.zip || null,
           country: lead.country || null,
-          assigned_to: lead.assigned_to || currentUser.email,
+          assigned_to: lead.assigned_to || null,
         };
 
         // Backend will auto-generate unique_id if not provided
@@ -127,7 +127,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
             ai_action: "follow_up",
             last_contacted: new Date().toISOString().split('T')[0],
             next_action: "Initial contact as converted lead",
-            assigned_to: lead.assigned_to || currentUser.email,
+            assigned_to: lead.assigned_to || null,
           }
         },
         () => Contact.create({
@@ -152,7 +152,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
           ai_action: "follow_up",
           last_contacted: new Date().toISOString().split('T')[0],
           next_action: "Initial contact as converted lead",
-          assigned_to: lead.assigned_to || currentUser.email,
+          assigned_to: lead.assigned_to || null,
         })
       );
 
@@ -173,7 +173,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
               amount: parseFloat(opportunityAmount) || 0,
               probability: 25,
               lead_source: lead.source || "other",
-              assigned_to: lead.assigned_to || currentUser.email,
+              assigned_to: lead.assigned_to || null,
               close_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
               type: "new_business",
             }
@@ -187,7 +187,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
             amount: parseFloat(opportunityAmount) || 0,
             probability: 25,
             lead_source: lead.source || "other",
-            assigned_to: lead.assigned_to || currentUser.email,
+            assigned_to: lead.assigned_to || null,
             close_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             type: "new_business",
           })

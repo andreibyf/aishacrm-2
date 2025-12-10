@@ -472,6 +472,8 @@ export default function createLeadRoutes(_pgPool) {
         country,
         unique_id,
         tags,
+        assigned_to,
+        assigned_to_name,
         ...otherFields
       } = req.body;
 
@@ -535,6 +537,8 @@ export default function createLeadRoutes(_pgPool) {
       if (typeof is_test_data === 'boolean') {
         leadPayload.is_test_data = is_test_data;
       }
+      if (assigned_to !== undefined) leadPayload.assigned_to = assigned_to || null;
+      if (assigned_to_name !== undefined) leadPayload.assigned_to_name = assigned_to_name || null;
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
@@ -683,6 +687,8 @@ export default function createLeadRoutes(_pgPool) {
         country,
         unique_id,
         tags,
+        assigned_to,
+        assigned_to_name,
         ...otherFields
       } = req.body;
 
@@ -751,6 +757,8 @@ export default function createLeadRoutes(_pgPool) {
       assignBooleanField(payload, 'do_not_text', do_not_text);
       assignTagsField(payload, tags);
       if (typeof is_test_data === 'boolean') payload.is_test_data = is_test_data;
+      if (assigned_to !== undefined) payload.assigned_to = assigned_to || null;
+      if (assigned_to_name !== undefined) payload.assigned_to_name = assigned_to_name || null;
 
       const { data, error } = await supabase
         .from('leads')

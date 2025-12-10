@@ -81,6 +81,27 @@ docker logs aishacrm-backend -f       # Debug backend
 - ❌ Using `localhost` between containers (use service names)
 - ❌ Suggesting `npm run dev` without Docker context
 
+## 🔐 Doppler (Secrets Management)
+
+**All environment variables are managed through Doppler** - never use `.env` files directly.
+
+```bash
+# Run any command with secrets injected
+doppler run -- node script.js
+doppler run -- npm test
+
+# View available secrets
+doppler run -- printenv | grep SUPABASE
+
+# Key env var names
+SUPABASE_URL              # Supabase project URL
+SUPABASE_SERVICE_ROLE_KEY # Service role key (not SUPABASE_SERVICE_KEY)
+SUPABASE_ANON_KEY         # Anonymous/publishable key
+DATABASE_URL              # Direct PostgreSQL connection string
+```
+
+**Important:** Docker containers get secrets via `docker-compose.yml` environment mapping, not Doppler directly.
+
 ## Production Deployment
 
 **FULLY AUTOMATED - never suggest `git pull` on production:**

@@ -533,6 +533,8 @@ export default function createOpportunityRoutes(_pgPool) {
         lead_source,
         type: opportunityType,
         tags,
+        assigned_to,
+        assigned_to_name,
         ...otherFields
       } = req.body || {};
       
@@ -573,6 +575,8 @@ export default function createOpportunityRoutes(_pgPool) {
       opportunityPayload.probability = parsedProbability !== null ? parsedProbability : 0;
       assignStringField(opportunityPayload, 'close_date', close_date);
       assignTagsField(opportunityPayload, tags);
+      if (assigned_to !== undefined) opportunityPayload.assigned_to = assigned_to || null;
+      if (assigned_to_name !== undefined) opportunityPayload.assigned_to_name = assigned_to_name || null;
 
       const { data, error } = await supabase
         .from('opportunities')
@@ -616,6 +620,8 @@ export default function createOpportunityRoutes(_pgPool) {
         lead_source,
         type: opportunityType,
         tags,
+        assigned_to,
+        assigned_to_name,
         ...otherFields
       } = req.body || {};
       let requestedTenantId = req.body?.tenant_id || req.query?.tenant_id || null;
@@ -666,6 +672,8 @@ export default function createOpportunityRoutes(_pgPool) {
       }
       assignStringField(payload, 'close_date', close_date);
       assignTagsField(payload, tags);
+      if (assigned_to !== undefined) payload.assigned_to = assigned_to || null;
+      if (assigned_to_name !== undefined) payload.assigned_to_name = assigned_to_name || null;
 
       const { data, error } = await supabase
         .from('opportunities')

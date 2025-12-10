@@ -133,10 +133,10 @@ export default function OpportunityForm({
         lead_id: opportunity.lead_id || "",
       });
     } else if (currentUser) {
-      // Set defaults for new opportunity
+      // Set defaults for new opportunity - don't default assigned_to, user must select
       setFormData(prev => ({
         ...prev,
-        assigned_to: currentUser.email
+        assigned_to: ""
       }));
     }
   }, [opportunity, currentUser]);

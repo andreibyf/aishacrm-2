@@ -80,7 +80,7 @@ export default function ContactForm({
     job_title: contact?.job_title || "",
     department: contact?.department || "",
     account_id: contact?.account_id || "",
-    assigned_to: contact?.assigned_to || user?.email || "",
+    assigned_to: contact?.assigned_to || "",
     lead_source: contact?.lead_source || "website",
     status: contact?.status || "prospect",
     address_1: contact?.address_1 || "",
@@ -228,7 +228,7 @@ export default function ContactForm({
           zip: contact.zip || "",
           country: contact.country || "United States",
           tags: contact.tags || [],
-          assigned_to: contact.assigned_to || user?.email || "",
+          assigned_to: contact.assigned_to || "",
           is_test_data: contact.is_test_data || false,
         });
         logDev('[ContactForm] Form data loaded for existing contact');
@@ -253,7 +253,7 @@ export default function ContactForm({
           job_title: "",
           department: "",
           account_id: accountId || "",
-          assigned_to: user?.email || "",
+          assigned_to: "",
           lead_source: "website",
           status: "prospect",
           address_1: "",

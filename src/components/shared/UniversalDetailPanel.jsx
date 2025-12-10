@@ -256,7 +256,7 @@ export default function UniversalDetailPanel({
           related_id: entity.id,
           related_name: entityName, // Denormalized entity name for display
           related_email: entityEmail, // Denormalized entity email for display
-          assigned_to: entity.assigned_to || user?.email, // Use entity's assigned_to or current user
+          assigned_to: entity.assigned_to || null, // Use entity's assigned_to (UUID) or null
           due_date: new Date().toISOString().split('T')[0] // Always set due_date so activity shows on calendar
         };
 

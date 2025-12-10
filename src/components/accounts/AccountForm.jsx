@@ -121,13 +121,14 @@ export default function AccountForm({
           country: account.country || "United States",
           description: account.description || "",
           tags: Array.isArray(account.tags) ? account.tags : [],
-          assigned_to: account.assigned_to || currentUser.email,
+          assigned_to: account.assigned_to || "",
           is_test_data: account.is_test_data || false
         });
       } else {
+        // For new accounts, don't default assigned_to - user must select from dropdown
         setFormData(prev => ({
           ...prev,
-          assigned_to: currentUser.email
+          assigned_to: ""
         }));
       }
     } catch (error) {
