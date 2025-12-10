@@ -121,6 +121,7 @@ const navItems = [
   { href: "Opportunities", icon: TrendingUp, label: "Opportunities" }, // Changed icon to TrendingUp
   { href: "Activities", icon: CheckSquare, label: "Activities" },
   { href: "Calendar", icon: Calendar, label: "Calendar" },
+  { href: "ConstructionProjects", icon: Building2, label: "Construction Projects" }, // Construction staffing module
   { href: "BizDevSources", icon: Database, label: "BizDev Sources" },
   { href: "CashFlow", icon: DollarSign, label: "Cash Flow" },
   { href: "DocumentProcessing", icon: FileText, label: "Document Processing" },
@@ -221,6 +222,7 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     Utilities: 'Utilities',
     ClientOnboarding: 'Client Onboarding',
     Workflows: 'Workflows',
+    ConstructionProjects: 'Construction Projects',
     DuplicateContacts: null,
     DuplicateAccounts: null,
     DuplicateLeads: null,
@@ -346,6 +348,7 @@ function getDefaultNavigationPermissions(role) {
       UnitTests: true,
       ClientOnboarding: true,
       ClientRequirements: true, // NEW
+      ConstructionProjects: true, // Construction staffing module
       DuplicateContacts: true,
       DuplicateAccounts: true,
       DuplicateLeads: true,
@@ -377,6 +380,7 @@ function getDefaultNavigationPermissions(role) {
       UnitTests: false,
       ClientOnboarding: true,
       ClientRequirements: false,
+      ConstructionProjects: true, // Construction staffing module
       DuplicateContacts: true,
       DuplicateAccounts: true,
       DuplicateLeads: true,
@@ -393,6 +397,7 @@ function getDefaultNavigationPermissions(role) {
       Agent: true,
       ClientOnboarding: false,
       ClientRequirements: false,
+      ConstructionProjects: true, // Construction staffing module - workers need access
     },
   };
 

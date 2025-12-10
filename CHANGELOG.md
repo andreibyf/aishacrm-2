@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.35] - 2025-12-10
+
+### Added
+- **Construction Projects Module:** New toggleable module for staffing companies supplying workers to construction clients
+  - **Database:** Migration 097 adds `construction_projects` and `construction_assignments` tables with full RLS
+  - **Backend API:** `/api/construction/projects` and `/api/construction/assignments` endpoints with full CRUD
+  - **Frontend Page:** `ConstructionProjects.jsx` with project list, detail panels, and assignment management
+  - **Module Manager:** Can be enabled/disabled per tenant via Settings → Module Manager
+  - **Features:**
+    - Track construction projects with site info, dates, project value, and status
+    - Link projects to client Accounts and original Leads
+    - Assign Project Manager and Supervisor contacts
+    - Manage worker assignments with roles (Laborer, Carpenter, Electrician, etc.)
+    - Track pay rates vs bill rates for margin visibility
+    - Assignment status tracking (Pending, Active, Completed, Cancelled)
+  - **Navigation:** Hard hat icon, accessible to all roles when module is enabled
+
+---
+
 ## [2.2.34] - 2025-12-09
 
 ### Fixed

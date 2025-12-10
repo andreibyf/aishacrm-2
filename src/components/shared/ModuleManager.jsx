@@ -302,6 +302,20 @@ const defaultModules = [
       "External Integrations",
     ],
   },
+  {
+    id: "construction_projects",
+    name: "Construction Projects",
+    description: "Track construction projects and worker assignments for staffing companies",
+    icon: Building2,
+    features: [
+      "Project Management",
+      "Worker Assignments",
+      "Site & Client Tracking",
+      "Pay/Bill Rate Management",
+      "Role-Based Assignments",
+      "Lead to Project Conversion",
+    ],
+  },
 ];
 
 export default function ModuleManager() {
