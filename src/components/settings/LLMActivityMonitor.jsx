@@ -59,7 +59,15 @@ function formatDuration(ms) {
 function formatTimestamp(iso) {
   if (!iso) return "-";
   const d = new Date(iso);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const today = new Date();
+  const isToday = d.toDateString() === today.toDateString();
+  
+  // Show date if not today, otherwise just time
+  if (isToday) {
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+  return d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + 
+    d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 function formatTokens(usage) {
@@ -382,7 +390,7 @@ export default function LLMActivityMonitor() {
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
               <tr>
-                <th className="px-3 py-2 text-left font-medium">Time</th>
+                <th className="px-3 py-2 text-left font-medium">Date/Time</th>
                 <th className="px-3 py-2 text-left font-medium">Status</th>
                 <th className="px-3 py-2 text-left font-medium">Provider</th>
                 <th className="px-3 py-2 text-left font-medium">Model</th>

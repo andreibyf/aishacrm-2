@@ -3605,9 +3605,6 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             </Tooltip>
           </TooltipProvider>
 
-          {/* NEW: Clear prior chat button */}
-          <ClearChatButton />
-
           <div className="flex flex-1 items-center justify-end gap-3 lg:gap-4">
             <div className="flex max-w-[520px] items-center justify-center gap-2 rounded-2xl border border-white/10 bg-slate-900/70 px-2.5 py-1 shadow-inner shadow-slate-950/30">
               <AiAssistantLauncher

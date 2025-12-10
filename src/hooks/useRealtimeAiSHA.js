@@ -5,6 +5,8 @@ import { supabase } from '@/lib/supabase.js';
 
 const REALTIME_CALL_URL = 'https://api.openai.com/v1/realtime/calls';
 const MAX_MESSAGE_LOG = 25;
+// Limit tool iterations per response cycle to prevent infinite loops
+const MAX_TOOL_ITERATIONS = 5;
 
 const ERROR_LIBRARY = {
   mic_denied: {
@@ -333,6 +335,8 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
   const pttModeRef = useRef(false);
   // Deduplication: track executed tool call IDs to prevent duplicates
   const executedToolCallsRef = useRef(new Set());
+  // Track tool iterations per response cycle to prevent infinite loops
+  const toolIterationCountRef = useRef(0);
 
   useEffect(() => {
     eventHandlerRef.current = onEvent || null;
@@ -463,6 +467,13 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
           eventType === 'output_audio_buffer.speech_stopped' ||
           eventType === 'input_audio_buffer.speech_started') {
         setAISpeaking(false);
+      }
+      
+      // Reset tool iteration counter on new user turn
+      if (eventType === 'input_audio_buffer.speech_started' ||
+          eventType === 'conversation.item.input_audio_transcription.completed') {
+        toolIterationCountRef.current = 0;
+        console.log('[Realtime] Reset tool iteration counter (new user turn)');
       }
     }
 
@@ -777,6 +788,36 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
               console.log(`[Realtime] Tool call detected: ${toolName}`, { callId, toolArgs });
               logEvent('realtime.tool.call_detected', { toolName, callId });
 
+              // Increment tool iteration counter
+              toolIterationCountRef.current += 1;
+              const currentIteration = toolIterationCountRef.current;
+
+              // Check if we've exceeded the tool iteration limit
+              if (currentIteration > MAX_TOOL_ITERATIONS) {
+                console.warn(`[Realtime] Tool iteration limit exceeded (${currentIteration}/${MAX_TOOL_ITERATIONS}), skipping tool: ${toolName}`);
+                logEvent('realtime.tool.iteration_limit_exceeded', { toolName, callId, iteration: currentIteration });
+
+                // Send a "limit reached" response back to the model instead of executing the tool
+                const limitPayload = {
+                  type: 'conversation.item.create',
+                  item: {
+                    type: 'function_call_output',
+                    call_id: callId,
+                    output: JSON.stringify({ 
+                      error: 'Tool call limit reached for this request. Please summarize the information you have gathered so far.',
+                      limit: MAX_TOOL_ITERATIONS,
+                      iteration: currentIteration
+                    }),
+                  },
+                };
+
+                if (channel.readyState === 'open') {
+                  channel.send(JSON.stringify(limitPayload));
+                  channel.send(JSON.stringify({ type: 'response.create' }));
+                }
+                return;
+              }
+
               try {
                 // Execute the tool via backend API
                 const result = await executeRealtimeTool(toolName, toolArgs, callId);
@@ -794,8 +835,8 @@ export function useRealtimeAiSHA({ onEvent, telemetryContext } = {}) {
 
                 if (channel.readyState === 'open') {
                   channel.send(JSON.stringify(outputPayload));
-                  console.log(`[Realtime] Sent tool result for ${toolName}`);
-                  logEvent('realtime.tool.result_sent', { toolName, callId, success: true });
+                  console.log(`[Realtime] Sent tool result for ${toolName} (iteration ${currentIteration}/${MAX_TOOL_ITERATIONS})`);
+                  logEvent('realtime.tool.result_sent', { toolName, callId, success: true, iteration: currentIteration });
 
                   // Request the model to continue generating a response
                   const continuePayload = { type: 'response.create' };
