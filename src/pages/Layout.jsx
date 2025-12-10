@@ -890,10 +890,10 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   //   }
   // };
 
-  // Navigation order management with drag-and-drop
+  // Navigation order management with drag-and-drop (tenant-scoped)
   const [isDragMode, setIsDragMode] = useState(false);
-  const { orderedItems: orderedNavItems, setOrder: setNavOrder, resetOrder: resetNavOrder, hasCustomOrder: hasCustomNavOrder } = usePrimaryNavOrder(navItems);
-  const { orderedItems: orderedSecondaryItems, setOrder: setSecondaryOrder, resetOrder: resetSecondaryOrder, hasCustomOrder: hasCustomSecondaryOrder } = useSecondaryNavOrder(secondaryNavItems);
+  const { orderedItems: orderedNavItems, setOrder: setNavOrder, resetOrder: resetNavOrder, hasCustomOrder: hasCustomNavOrder } = usePrimaryNavOrder(navItems, effectiveTenantId);
+  const { orderedItems: orderedSecondaryItems, setOrder: setSecondaryOrder, resetOrder: resetSecondaryOrder, hasCustomOrder: hasCustomSecondaryOrder } = useSecondaryNavOrder(secondaryNavItems, effectiveTenantId);
 
   // DnD sensors
   const sensors = useSensors(

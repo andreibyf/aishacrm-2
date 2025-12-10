@@ -1,16 +1,34 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
-const NAV_ORDER_KEY = "aisha_crm_nav_order";
-const SECONDARY_NAV_ORDER_KEY = "aisha_crm_secondary_nav_order";
+const NAV_ORDER_KEY_PREFIX = "aisha_crm_nav_order";
+const SECONDARY_NAV_ORDER_KEY_PREFIX = "aisha_crm_secondary_nav_order";
+
+/**
+ * Build a tenant-scoped storage key
+ * @param {string} prefix - The key prefix
+ * @param {string|null} tenantId - The tenant ID (UUID or null)
+ * @returns {string} The full storage key
+ */
+function buildStorageKey(prefix, tenantId) {
+  if (tenantId) {
+    return `${prefix}_${tenantId}`;
+  }
+  return prefix; // Fallback for global/no-tenant context
+}
 
 /**
  * Hook to manage navigation item order with localStorage persistence
+ * Per-tenant isolation: each tenant has its own navigation order.
  * 
  * @param {Array} defaultItems - The default navigation items array
- * @param {string} storageKey - localStorage key for this nav section
+ * @param {string} storageKeyPrefix - localStorage key prefix for this nav section
+ * @param {string|null} tenantId - The current tenant ID for scoping
  * @returns {Object} { orderedItems, setOrder, resetOrder }
  */
-export function useNavOrder(defaultItems, storageKey = NAV_ORDER_KEY) {
+export function useNavOrder(defaultItems, storageKeyPrefix = NAV_ORDER_KEY_PREFIX, tenantId = null) {
+  // Build the full storage key with tenant scope
+  const storageKey = buildStorageKey(storageKeyPrefix, tenantId);
+  
   const [order, setOrderState] = useState(() => {
     try {
       const saved = localStorage.getItem(storageKey);
@@ -22,6 +40,21 @@ export function useNavOrder(defaultItems, storageKey = NAV_ORDER_KEY) {
     }
     return null;
   });
+
+  // Re-read from localStorage when tenant changes
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        setOrderState(JSON.parse(saved));
+      } else {
+        setOrderState(null);
+      }
+    } catch (e) {
+      console.error("[useNavOrder] Failed to parse saved order on tenant change:", e);
+      setOrderState(null);
+    }
+  }, [storageKey]);
 
   // Apply order to items - returns items sorted by saved order
   const orderedItems = useCallback(() => {
@@ -85,17 +118,21 @@ export function useNavOrder(defaultItems, storageKey = NAV_ORDER_KEY) {
 }
 
 /**
- * Primary navigation order hook
+ * Primary navigation order hook (tenant-scoped)
+ * @param {Array} defaultItems - Default navigation items
+ * @param {string|null} tenantId - Current tenant ID for isolation
  */
-export function usePrimaryNavOrder(defaultItems) {
-  return useNavOrder(defaultItems, NAV_ORDER_KEY);
+export function usePrimaryNavOrder(defaultItems, tenantId = null) {
+  return useNavOrder(defaultItems, NAV_ORDER_KEY_PREFIX, tenantId);
 }
 
 /**
- * Secondary navigation order hook
+ * Secondary navigation order hook (tenant-scoped)
+ * @param {Array} defaultItems - Default navigation items
+ * @param {string|null} tenantId - Current tenant ID for isolation
  */
-export function useSecondaryNavOrder(defaultItems) {
-  return useNavOrder(defaultItems, SECONDARY_NAV_ORDER_KEY);
+export function useSecondaryNavOrder(defaultItems, tenantId = null) {
+  return useNavOrder(defaultItems, SECONDARY_NAV_ORDER_KEY_PREFIX, tenantId);
 }
 
 export default useNavOrder;

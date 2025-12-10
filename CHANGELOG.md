@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.34] - 2025-12-09
+
+### Fixed
+- **Navigation Order Per-Tenant Isolation:** Fixed bug where dragging navigation items to reorder affected all tenants
+  - Root cause: localStorage keys for navigation order were global (`aisha_crm_nav_order`)
+  - Fix: Keys now include tenant ID (`aisha_crm_nav_order_${tenantId}`) for per-tenant isolation
+  - Each tenant now has independent navigation item ordering
+  - Switching tenants correctly shows that tenant's custom navigation order
+
+---
+
 ## [2.2.33] - 2025-12-09
 
 ### Added
