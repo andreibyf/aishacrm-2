@@ -71,33 +71,39 @@ function RecentActivities(props) {
   const backgroundScheduledRef = useRef(false);
 
   const fetchActivities = useCallback(async (forceFull = false) => {
-        // Wait for user to be loaded before fetching data
-        if (userLoading || !authCookiesReady) {
-          return;
-        }
+    // Use prefetched data immediately without waiting for auth
+    // (Dashboard already handles auth before passing prefetched data)
+    if (!forceFull && Array.isArray(props?.prefetchedActivities) && props.prefetchedActivities.length > 0) {
+      const pref = props.prefetchedActivities;
+      setActivities(pref.map(a => ({ ...a })));
+      setLastUpdated(Date.now());
+      setLoading(false);
+      if (!backgroundScheduledRef.current) {
+        backgroundScheduledRef.current = true;
+        setTimeout(() => {
+          // Single background refresh to hydrate with full data
+          fetchActivities(true);
+        }, 300);
+      }
+      return;
+    }
+
+    // Wait for user to be loaded before fetching data (for non-prefetch path)
+    if (userLoading || !authCookiesReady) {
+      return;
+    }
 
     setLoading(true);
     try {
-      if (!forceFull && Array.isArray(props?.prefetchedActivities)) {
-        const pref = props.prefetchedActivities || [];
-        setActivities(pref.map(a => ({ ...a })));
-        setLastUpdated(Date.now());
-        setLoading(false);
-        if (!backgroundScheduledRef.current) {
-          backgroundScheduledRef.current = true;
-          setTimeout(() => {
-            // Single background refresh to hydrate with full data
-            fetchActivities(true);
-          }, 300);
-        }
-        return;
-      }
-
       // Guard: Don't fetch if no tenant_id is present
+      // When forceFull (background refresh), just return silently to preserve prefetched data
       if (!memoTenantFilter?.tenant_id) {
-        setActivities([]);
-        setLastUpdated(Date.now());
-        setLoading(false);
+        if (!forceFull) {
+          // Only clear activities on initial load, not background refresh
+          setActivities([]);
+          setLastUpdated(Date.now());
+          setLoading(false);
+        }
         return;
       }
 
@@ -171,7 +177,8 @@ function RecentActivities(props) {
     }
     
     const filtered = (activities || []).filter(a => {
-      const matches = a.assigned_to === selectedEmail;
+      // Include activities assigned to the selected employee OR unassigned activities
+      const matches = a.assigned_to === selectedEmail || !a.assigned_to;
       return matches;
     });
     
