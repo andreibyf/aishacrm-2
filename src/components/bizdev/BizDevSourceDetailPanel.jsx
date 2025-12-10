@@ -291,9 +291,9 @@ export default function BizDevSourceDetailPanel({
   return (
     <div className="fixed inset-y-0 right-0 w-full md:w-2/3 lg:w-1/2 bg-slate-800 shadow-2xl z-50 overflow-y-auto border-l border-slate-700">
       <CardHeader className="border-b border-slate-700 sticky top-0 bg-slate-800 z-10">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`w-12 h-12 rounded-lg ${hasActivity ? 'bg-green-900/30 border-green-700/50' : 'bg-blue-900/30 border-blue-700/50'} border flex items-center justify-center relative`}>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 flex-1">
+            <div className={`w-12 h-12 rounded-lg ${hasActivity ? 'bg-green-900/30 border-green-700/50' : 'bg-blue-900/30 border-blue-700/50'} border flex items-center justify-center relative flex-shrink-0`}>
               <Building2 className={`w-6 h-6 ${hasActivity ? 'text-green-400' : 'text-blue-400'}`} />
               {hasActivity && (
                 <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-800 flex items-center justify-center">
@@ -301,7 +301,7 @@ export default function BizDevSourceDetailPanel({
                 </div>
               )}
             </div>
-            <div>
+            <div className="flex-1">
               <CardTitle className="text-slate-100 text-xl">{displayName}</CardTitle>
               {currentSource.dba_name && currentSource.dba_name !== displayName && (
                 <p className="text-sm text-slate-400 mt-0.5">
@@ -315,11 +315,20 @@ export default function BizDevSourceDetailPanel({
               )}
             </div>
           </div>
+
+          {/* Notes preview in header - large empty space */}
+          {currentSource.notes && (
+            <div className="flex-1 bg-slate-700/50 border border-slate-600 rounded-lg p-3 min-h-[80px] flex flex-col">
+              <p className="text-xs text-slate-400 font-semibold mb-2">Notes</p>
+              <p className="text-sm text-slate-300 line-clamp-3 flex-1">{currentSource.notes}</p>
+            </div>
+          )}
+
           <Button
             variant="ghost"
             size="icon"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-300 hover:bg-slate-700"
+            className="text-slate-400 hover:text-slate-300 hover:bg-slate-700 flex-shrink-0"
           >
             <X className="w-5 h-5" />
           </Button>
