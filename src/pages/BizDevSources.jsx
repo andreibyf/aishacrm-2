@@ -743,6 +743,7 @@ export default function BizDevSourcesPage() {
                   onSelect={handleSelectSource}
                   onEdit={handleEdit}
                   onDelete={handleDeleteSingle}
+                  onUpdate={handleUpdate}
                 />
               ))}
             </div>
