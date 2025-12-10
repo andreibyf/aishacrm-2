@@ -1,49 +1,10 @@
-import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { User as UserIcon, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { cleanupUserData } from "@/api/functions";
+import { User as UserIcon, Loader2 } from "lucide-react";
 import { useUser } from "@/components/shared/useUser.js";
 
 export default function UserInfo() {
-  const { user: currentUser, loading, refetch } = useUser();
-  const [cleaning, setCleaning] = useState(false);
-  
-  // Helper to refresh user context after cleanup
-  const loadCurrentUser = async () => {
-    try {
-      await refetch();
-    } catch (error) {
-      console.error("Error refetching user:", error);
-    }
-  };
-
-  const handleCleanupUserData = async () => {
-    if (!confirm("This will reset your custom branding and permission settings to fix display issues. Your role will NOT be changed. Continue?")) {
-      return;
-    }
-
-    setCleaning(true);
-    try {
-      const response = await cleanupUserData();
-      const result = response.data;
-
-      if (result.status === 'success') {
-        alert("User data cleaned successfully! User context refreshed.");
-        await loadCurrentUser();
-      } else {
-        alert("Error cleaning user data: " + result.message);
-      }
-    } catch (error) {
-      console.error("Error calling cleanup function:", error);
-      const errorMessage = error.response?.data?.message || error.message || "An unknown error occurred.";
-      alert("Error cleaning user data: " + errorMessage);
-    } finally {
-      setCleaning(false);
-    }
-  };
+  const { user: currentUser, loading } = useUser();
 
   if (loading) {
     return (
@@ -80,40 +41,6 @@ export default function UserInfo() {
               {currentUser?.role === 'power-user' ? 'Power User' : currentUser?.role || 'user'}
             </Badge>
           </div>
-          
-          {currentUser?.role === 'admin' &&
-          <Alert variant="default" className="bg-green-900/30 border-green-700/50">
-                <ShieldCheck className="h-4 w-4 text-green-400" />
-                <AlertDescription className="text-emerald-600 text-sm [&_p]:leading-relaxed">
-                    <strong>You are the App Owner.</strong> Your Admin role is protected and gives you full control over the CRM. You can assign Power-User and User roles to your team members.
-                </AlertDescription>
-            </Alert>
-          }
-        </CardContent>
-      </Card>
-
-      <Card className="bg-slate-800 border-slate-700">
-        <CardHeader>
-            <CardTitle className="text-slate-100">Data Maintenance</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Alert className="bg-blue-900/30 border-blue-700/50">
-            <RefreshCw className="h-4 w-4 text-blue-400" />
-            <AlertDescription className="text-blue-300">
-              <div className="flex justify-between items-center">
-                <span className="text-blue-600">Fix display issues or errors in the base44 dashboard by cleaning your user data:</span>
-                <Button
-                  onClick={handleCleanupUserData}
-                  size="sm"
-                  disabled={cleaning}
-                  className="bg-blue-600 hover:bg-blue-700 whitespace-nowrap">
-
-                  {cleaning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                  {cleaning ? 'Cleaning...' : 'Clean My Data'}
-                </Button>
-              </div>
-            </AlertDescription>
-          </Alert>
         </CardContent>
       </Card>
     </div>);

@@ -1,8 +1,10 @@
 
-import { useState, useEffect, useCallback, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BACKEND_URL } from '@/api/entities';
 import {
   Cog, // Renamed from Settings to avoid conflict
@@ -29,6 +31,9 @@ import {
   BookOpen, // Added for API Documentation
   Brain, // Added for LLM Activity Monitor
   Tags, // Added for Entity Labels
+  Search,
+  ArrowLeft,
+  ChevronRight,
 
   // Icons for components not in outline's tabs array but preserved:
   Globe, // for TimezoneSettings (Regional Settings)
@@ -76,7 +81,6 @@ const TenantIntegrationSettings = lazy(() => import("../components/settings/Tena
 // System Configuration - lazy loaded
 const ModuleManager = lazy(() => import("../components/shared/ModuleManager"));
 const EntityLabelsManager = lazy(() => import("../components/settings/EntityLabelsManager"));
-const TenantNavigationDefaults = lazy(() => import("../components/settings/TenantNavigationDefaults"));
 const BillingSettings = lazy(() => import("../components/settings/BillingSettings"));
 const CronJobManager = lazy(() => import("../components/settings/CronJobManager"));
 const SystemAnnouncements = lazy(() => import("../components/settings/SystemAnnouncements"));
@@ -101,8 +105,10 @@ const LLMActivityMonitor = lazy(() => import("../components/settings/LLMActivity
 export default function SettingsPage() { // Renamed from Settings to SettingsPage as per outline
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState(null); // null = show menu, string = show specific setting
   const [selectedTenantId, setSelectedTenantId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState(null);
   
   const loadUser = useCallback(async () => {
     try {
@@ -127,11 +133,135 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get("tab");
-    if (tab) {
+    if (tab && tab !== 'menu') {
       setActiveTab(tab);
     }
   }, []);
 
+  // Compute role flags (safe even if currentUser is null)
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+  const isManager = currentUser?.role === 'manager';
+  const isSuperadmin = currentUser?.role === 'superadmin';
+
+  // Categories for grouping settings cards
+  const CATEGORIES = {
+    account: { label: 'Account', color: 'blue', icon: User },
+    team: { label: 'Team', color: 'green', icon: Users },
+    clients: { label: 'Clients', color: 'indigo', icon: Building2 },
+    integrations: { label: 'Integrations', color: 'orange', icon: Plug },
+    system: { label: 'System', color: 'slate', icon: LayoutGrid },
+    data: { label: 'Data', color: 'cyan', icon: Database },
+    monitoring: { label: 'Monitoring', color: 'emerald', icon: Activity },
+    security: { label: 'Security', color: 'purple', icon: Shield },
+    testing: { label: 'Testing', color: 'blue', icon: TestTube2 },
+  };
+
+  // Define all settings items with categories
+  const settingsItems = useMemo(() => {
+    const items = [
+      // Account - everyone
+      { id: 'profile', label: 'My Profile', description: 'Update your profile details and preferences', icon: User, category: 'account', roles: ['any'] },
+      { id: 'branding', label: 'Branding', description: 'Customize visual identity and themes', icon: Palette, category: 'account', roles: ['any'] },
+      { id: 'regional', label: 'Regional', description: 'Timezone and date format settings', icon: Globe, category: 'account', roles: ['any'] },
+      { id: 'billing', label: 'Billing', description: 'Subscription plan and payment settings', icon: CreditCard, category: 'account', roles: ['any'] },
+    ];
+
+    // Tenant Admin items
+    if (isAdmin && !isSuperadmin) {
+      items.push(
+        { id: 'users', label: 'User Management', description: 'Invite and manage team members', icon: Users, category: 'team', roles: ['admin'] },
+        { id: 'entity-labels', label: 'Entity Labels', description: 'Customize terminology for your organization', icon: Tags, category: 'system', roles: ['admin'] },
+      );
+    }
+
+    // Manager items
+    if (isManager && !isAdmin) {
+      items.push(
+        { id: 'data-consistency', label: 'Data Consistency', description: 'Check and fix data integrity issues', icon: Database, category: 'data', roles: ['manager'] },
+      );
+    }
+
+    // Superadmin items
+    if (isSuperadmin) {
+      items.push(
+        // Team
+        { id: 'users', label: 'User Management', description: 'Invite and manage all users', icon: Users, category: 'team', roles: ['superadmin'] },
+        
+        // Clients
+        { id: 'tenants', label: 'Client Management', description: 'Manage client tenants and configurations', icon: Building2, category: 'clients', roles: ['superadmin'] },
+        { id: 'offboarding', label: 'Client Offboarding', description: 'Permanently remove client data', icon: Trash2, category: 'clients', roles: ['superadmin'] },
+
+        // Integrations
+        { id: 'global-integrations', label: 'Global Integrations', description: 'Configure system-wide integrations', icon: Plug, category: 'integrations', roles: ['superadmin'] },
+        { id: 'tenant-integrations', label: 'Tenant Integrations', description: 'Per-tenant integration settings', icon: Puzzle, category: 'integrations', roles: ['superadmin'] },
+        { id: 'api-docs', label: 'API Documentation', description: 'API reference and examples', icon: BookOpen, category: 'integrations', roles: ['superadmin'] },
+        { id: 'external-tools', label: 'External Tools', description: 'Links to third-party dashboards', icon: ExternalLink, category: 'integrations', roles: ['superadmin'] },
+
+        // System
+        { id: 'modules', label: 'Module Settings', description: 'Enable or disable CRM modules', icon: LayoutGrid, category: 'system', roles: ['superadmin'] },
+        { id: 'entity-labels', label: 'Entity Labels', description: 'Customize terminology per tenant', icon: Tags, category: 'system', roles: ['superadmin'] },
+        { id: 'cron', label: 'Cron Jobs', description: 'Scheduled background tasks', icon: Clock, category: 'system', roles: ['superadmin'] },
+        { id: 'announcements', label: 'Announcements', description: 'System-wide notifications', icon: Megaphone, category: 'system', roles: ['superadmin'] },
+
+        // Security
+        { id: 'security', label: 'Auth & Access', description: 'Authentication and access policies', icon: Lock, category: 'security', roles: ['superadmin'] },
+        { id: 'apikeys', label: 'API Keys', description: 'Manage API authentication keys', icon: Key, category: 'security', roles: ['superadmin'] },
+        { id: 'rate-limits', label: 'Rate Limits', description: 'Configure API rate limiting', icon: Lock, category: 'security', roles: ['superadmin'] },
+        { id: 'security-monitor', label: 'Intrusion Detection', description: 'Monitor for security threats', icon: Shield, category: 'security', roles: ['superadmin'] },
+
+        // Data
+        { id: 'data-consistency', label: 'Data Consistency', description: 'Check and fix data integrity', icon: Database, category: 'data', roles: ['superadmin'] },
+        { id: 'test-data', label: 'Test Data', description: 'Manage test data and cleanup', icon: Bug, category: 'data', roles: ['superadmin'] },
+
+        // Monitoring
+        { id: 'performance', label: 'Performance', description: 'System performance metrics', icon: Activity, category: 'monitoring', roles: ['superadmin'] },
+        { id: 'cache-monitor', label: 'Cache Monitor', description: 'Tenant cache statistics', icon: Database, category: 'monitoring', roles: ['superadmin'] },
+        { id: 'llm-monitor', label: 'LLM Monitor', description: 'AI model usage and costs', icon: Brain, category: 'monitoring', roles: ['superadmin'] },
+        { id: 'sync-health', label: 'Sync Health', description: 'Data synchronization status', icon: RefreshCw, category: 'monitoring', roles: ['superadmin'] },
+        { id: 'mcp-monitor', label: 'MCP Monitor', description: 'MCP server connections', icon: Server, category: 'monitoring', roles: ['superadmin'] },
+        { id: 'system-health', label: 'System Health', description: 'Overall system status', icon: Activity, category: 'monitoring', roles: ['superadmin'] },
+        { id: 'system-logs', label: 'System Logs', description: 'Application logs and errors', icon: FileText, category: 'monitoring', roles: ['superadmin'] },
+        { id: 'api-health', label: 'API Health', description: 'Backend endpoint status', icon: Activity, category: 'monitoring', roles: ['superadmin'] },
+
+        // Testing
+        { id: 'unit-tests', label: 'Unit Tests', description: 'Run and view test results', icon: TestTube2, category: 'testing', roles: ['superadmin'] },
+        { id: 'qa-console', label: 'QA Console', description: 'Quality assurance tools', icon: TestTube2, category: 'testing', roles: ['superadmin'] },
+      );
+    }
+
+    return items;
+  }, [isAdmin, isManager, isSuperadmin]);
+
+  // Get available categories based on current items
+  const availableCategories = useMemo(() => {
+    const cats = new Set(settingsItems.map(item => item.category));
+    return Object.entries(CATEGORIES).filter(([key]) => cats.has(key));
+  }, [settingsItems]);
+
+  // Filter items based on search and category
+  const filteredItems = useMemo(() => {
+    return settingsItems.filter(item => {
+      const matchesSearch = !searchTerm || 
+        item.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.description.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = !selectedCategory || item.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+  }, [settingsItems, searchTerm, selectedCategory]);
+
+  // Group filtered items by category
+  const groupedItems = useMemo(() => {
+    const groups = {};
+    filteredItems.forEach(item => {
+      if (!groups[item.category]) {
+        groups[item.category] = [];
+      }
+      groups[item.category].push(item);
+    });
+    return groups;
+  }, [filteredItems]);
+
+  // Loading check - AFTER all hooks are defined
   if (loading) {
     return (
       <div className="min-h-screen bg-background p-4 lg:p-8">
@@ -143,125 +273,74 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
     );
   }
 
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
-  const isManager = currentUser?.role === 'manager';
-  const isSuperadmin = currentUser?.role === 'superadmin';
-
-  // Define all tabs based on the outline, preserving existing components by creating new tabs where necessary
-  const tabsConfig = [
-    // Basic user settings - everyone gets these
-    { id: 'profile', label: 'My Profile', icon: User, color: 'blue', roles: ['any'] },
-    { id: 'branding', label: 'Branding', icon: Palette, color: 'blue', roles: ['any'] },
-    { id: 'regional', label: 'Regional', icon: Globe, color: 'blue', roles: ['any'] },
-    { id: 'billing', label: 'Billing', icon: CreditCard, color: 'blue', roles: ['any'] },
-
-    // Tenant Admin tabs (limited access - user management + customization)
-    ...(isAdmin && !isSuperadmin ? [
-      { id: 'users', label: 'User Management', icon: Users, color: 'green', roles: ['admin'] },
-      { id: 'entity-labels', label: 'Entity Labels', icon: Tags, color: 'indigo', roles: ['admin'] },
-      { id: 'nav-defaults', label: 'Nav Defaults', icon: LayoutGrid, color: 'slate', roles: ['admin'] },
-    ] : []),
-
-    // Manager accessible tabs (no admin features)
-    ...(isManager && !isAdmin ? [
-      { id: 'data-consistency', label: 'Data Consistency', icon: Database, color: 'cyan', roles: ['manager'] },
-    ] : []),
-
-    // Superadmin-only tabs (full system access)
-    ...(isSuperadmin ? [
-      { id: 'users', label: 'User Management', icon: Users, color: 'green', roles: ['superadmin'] },
-      { id: 'tenants', label: 'Client Management', icon: Building2, color: 'indigo', roles: ['superadmin'] },
-
-      // Integrations
-      { id: 'global-integrations', label: 'Global Integrations', icon: Plug, color: 'orange', roles: ['superadmin'] },
-      { id: 'tenant-integrations', label: 'Tenant Integrations', icon: Puzzle, color: 'orange', roles: ['superadmin'] },
-      { id: 'api-docs', label: 'API Documentation', icon: BookOpen, color: 'blue', roles: ['superadmin'] },
-
-      // System Configuration
-      { id: 'modules', label: 'Module Settings', icon: LayoutGrid, color: 'slate', roles: ['superadmin'] },
-      { id: 'entity-labels', label: 'Entity Labels', icon: Tags, color: 'indigo', roles: ['superadmin'] },
-      { id: 'cron', label: 'Cron Jobs', icon: Clock, color: 'yellow', roles: ['superadmin'] },
-      { id: 'security', label: 'Auth & Access', icon: Lock, color: 'purple', roles: ['superadmin'] },
-      { id: 'apikeys', label: 'API Keys', icon: Key, color: 'green', roles: ['superadmin'] },
-      { id: 'announcements', label: 'Announcements', icon: Megaphone, color: 'slate', roles: ['superadmin'] },
-
-      // Data Management
-      { id: 'data-consistency', label: 'Data Consistency', icon: Database, color: 'cyan', roles: ['superadmin'] },
-      { id: 'test-data', label: 'Test Data', icon: Bug, color: 'cyan', roles: ['superadmin'] },
-
-      // Monitoring & Health
-      { id: 'performance', label: 'Performance', icon: Activity, color: 'emerald', roles: ['superadmin'] },
-      { id: 'cache-monitor', label: 'Cache Monitor', icon: Database, color: 'emerald', roles: ['superadmin'] },
-      { id: 'llm-monitor', label: 'LLM Monitor', icon: Brain, color: 'purple', roles: ['superadmin'] },
-      { id: 'sync-health', label: 'Sync Health', icon: RefreshCw, color: 'emerald', roles: ['superadmin'] },
-      { id: 'mcp-monitor', label: 'MCP Monitor', icon: Server, color: 'emerald', roles: ['superadmin'] },
-      { id: 'security-monitor', label: 'Intrusion Detection', icon: Shield, color: 'red', roles: ['superadmin'] },
-      { id: 'rate-limits', label: 'Rate Limits', icon: Lock, color: 'orange', roles: ['superadmin'] },
-      { id: 'system-health', label: 'System Health', icon: Activity, color: 'emerald', roles: ['superadmin'] },
-      { id: 'system-logs', label: 'System Logs', icon: FileText, color: 'slate', roles: ['superadmin'] },
-
-      // Testing & Diagnostics
-      { id: 'unit-tests', label: 'Unit Tests', icon: TestTube2, color: 'blue', roles: ['superadmin'] },
-      { id: 'qa-console', label: 'QA Console', icon: TestTube2, color: 'blue', roles: ['superadmin'] },
-      { id: 'external-tools', label: 'External Tools', icon: ExternalLink, color: 'orange', roles: ['superadmin'] },
-      { id: 'api-health', label: 'API Health', icon: Activity, color: 'red', roles: ['superadmin'] },
-
-      // Client Management
-      { id: 'offboarding', label: 'Client Offboarding', icon: Trash2, color: 'red', roles: ['superadmin'] },
-    ] : []),
-  ];
-
-  const getTabColorClass = (color) => {
-    switch (color) {
-      case 'blue': return 'data-[state=active]:bg-blue-600';
-      case 'purple': return 'data-[state=active]:bg-purple-600';
-      case 'green': return 'data-[state=active]:bg-green-600';
-      case 'indigo': return 'data-[state=active]:bg-indigo-600';
-      case 'orange': return 'data-[state=active]:bg-orange-600';
-      case 'slate': return 'data-[state=active]:bg-slate-600';
-      case 'cyan': return 'data-[state=active]:bg-cyan-600';
-      case 'emerald': return 'data-[state=active]:bg-emerald-600';
-      case 'red': return 'data-[state=active]:bg-red-600';
-      case 'yellow': return 'data-[state=active]:bg-yellow-600';
-      default: return 'data-[state=active]:bg-gray-600';
-    }
+  const getColorClasses = (color) => {
+    const colors = {
+      blue: 'bg-blue-500/10 border-blue-500/30 hover:border-blue-500/50 text-blue-400',
+      purple: 'bg-purple-500/10 border-purple-500/30 hover:border-purple-500/50 text-purple-400',
+      green: 'bg-green-500/10 border-green-500/30 hover:border-green-500/50 text-green-400',
+      indigo: 'bg-indigo-500/10 border-indigo-500/30 hover:border-indigo-500/50 text-indigo-400',
+      orange: 'bg-orange-500/10 border-orange-500/30 hover:border-orange-500/50 text-orange-400',
+      slate: 'bg-slate-500/10 border-slate-500/30 hover:border-slate-500/50 text-slate-400',
+      cyan: 'bg-cyan-500/10 border-cyan-500/30 hover:border-cyan-500/50 text-cyan-400',
+      emerald: 'bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/50 text-emerald-400',
+      red: 'bg-red-500/10 border-red-500/30 hover:border-red-500/50 text-red-400',
+      yellow: 'bg-yellow-500/10 border-yellow-500/30 hover:border-yellow-500/50 text-yellow-400',
+    };
+    return colors[color] || colors.slate;
   };
 
+  const getCategoryBadgeClasses = (color, isSelected) => {
+    const baseClasses = 'cursor-pointer transition-all';
+    if (isSelected) {
+      const selectedColors = {
+        blue: 'bg-blue-600 text-white hover:bg-blue-700',
+        purple: 'bg-purple-600 text-white hover:bg-purple-700',
+        green: 'bg-green-600 text-white hover:bg-green-700',
+        indigo: 'bg-indigo-600 text-white hover:bg-indigo-700',
+        orange: 'bg-orange-600 text-white hover:bg-orange-700',
+        slate: 'bg-slate-600 text-white hover:bg-slate-700',
+        cyan: 'bg-cyan-600 text-white hover:bg-cyan-700',
+        emerald: 'bg-emerald-600 text-white hover:bg-emerald-700',
+        red: 'bg-red-600 text-white hover:bg-red-700',
+      };
+      return `${baseClasses} ${selectedColors[color] || selectedColors.slate}`;
+    }
+    return `${baseClasses} bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground`;
+  };
 
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-6 p-4 lg:p-8">
-          <h1 className="text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-3">
-            <div className="w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center rounded-full bg-card border border-border">
-              <Cog className="w-5 h-5 lg:w-7 h-7 text-muted-foreground" />
+  // If a setting is selected, show its content
+  if (activeTab && activeTab !== 'menu') {
+    const activeItem = settingsItems.find(item => item.id === activeTab);
+    
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="max-w-7xl mx-auto p-4 lg:p-8">
+          {/* Back button and header */}
+          <div className="mb-6">
+            <Button
+              variant="ghost"
+              onClick={() => setActiveTab(null)}
+              className="mb-4 text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Settings
+            </Button>
+            <div className="flex items-center gap-3">
+              {activeItem && (
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getColorClasses(CATEGORIES[activeItem.category]?.color)}`}>
+                  <activeItem.icon className="w-5 h-5" />
+                </div>
+              )}
+              <div>
+                <h1 className="text-2xl font-bold text-foreground">{activeItem?.label || 'Settings'}</h1>
+                <p className="text-muted-foreground text-sm">{activeItem?.description}</p>
+              </div>
             </div>
-            Settings & Administration
-          </h1>
-          <p className="text-muted-foreground mt-1 text-sm lg:text-base">
-            Configure your account, manage users, monitor system health, and optimize performance.
-          </p>
-        </div>
+          </div>
 
-        <div className="p-4 sm:p-6 lg:p-8 pt-0">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-6">
-            {/* TabsList now dynamically generated */}
-            <TabsList className="bg-card border border-border p-1 rounded-lg grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-1 h-auto overflow-x-auto">
-              {tabsConfig.map((tab) => (
-                <TabsTrigger
-                  key={tab.id}
-                  value={tab.id}
-                  className={`rounded-md px-3 py-2 ${getTabColorClass(tab.color)} data-[state=active]:text-white font-medium transition-colors flex items-center justify-center gap-2`}
-                >
-                  <tab.icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{tab.label}</span>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-
-            {/* TabsContent is now flat, conditional rendering within a single div */}
-            <SettingsLoader>
-            <div className="space-y-6 m-0">
+          {/* Settings Content */}
+          <SettingsLoader>
+            <div className="space-y-6">
               {/* User & Profile */}
               {activeTab === 'profile' && (
                 <Card>
@@ -448,25 +527,6 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                   <SettingsLoader>
                     <EntityLabelsManager isTenantAdmin={!isSuperadmin} />
                   </SettingsLoader>
-                )}
-
-                {activeTab === 'nav-defaults' && isAdmin && !isSuperadmin && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <LayoutGrid className="w-5 h-5 text-slate-400" />
-                        Default Navigation Permissions
-                      </CardTitle>
-                      <CardDescription>
-                        Set default page access for new users you invite. Individual users can be customized when inviting.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <SettingsLoader>
-                        <TenantNavigationDefaults />
-                      </SettingsLoader>
-                    </CardContent>
-                  </Card>
                 )}
 
               {activeTab === 'cron' && isAdmin && (
@@ -818,9 +878,112 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                 </Card>
               )}
             </div>
-            </SettingsLoader>
-          </Tabs>
+          </SettingsLoader>
         </div>
+      </div>
+    );
+  }
+
+  // Card Menu View - show when no setting is selected
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="max-w-7xl mx-auto p-4 lg:p-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-3">
+            <div className="w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center rounded-full bg-card border border-border">
+              <Cog className="w-5 h-5 lg:w-7 lg:h-7 text-muted-foreground" />
+            </div>
+            Settings & Administration
+          </h1>
+          <p className="text-muted-foreground mt-2 text-sm lg:text-base">
+            Configure your account, manage users, monitor system health, and optimize performance.
+          </p>
+        </div>
+
+        {/* Search and Category Filters */}
+        <div className="mb-6 space-y-4">
+          {/* Search */}
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search settings..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 bg-card border-border"
+            />
+          </div>
+
+          {/* Category Filters */}
+          <div className="flex flex-wrap gap-2">
+            <Badge
+              variant="outline"
+              className={getCategoryBadgeClasses('slate', selectedCategory === null)}
+              onClick={() => setSelectedCategory(null)}
+            >
+              All
+            </Badge>
+            {availableCategories.map(([key, cat]) => (
+              <Badge
+                key={key}
+                variant="outline"
+                className={getCategoryBadgeClasses(cat.color, selectedCategory === key)}
+                onClick={() => setSelectedCategory(selectedCategory === key ? null : key)}
+              >
+                <cat.icon className="w-3 h-3 mr-1" />
+                {cat.label}
+              </Badge>
+            ))}
+          </div>
+        </div>
+
+        {/* Settings Cards Grid */}
+        <div className="space-y-8">
+          {Object.entries(groupedItems).map(([categoryKey, items]) => {
+            const category = CATEGORIES[categoryKey];
+            return (
+              <div key={categoryKey}>
+                <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+                  <category.icon className={`w-5 h-5 text-${category.color}-400`} />
+                  {category.label}
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {items.map((item) => (
+                    <Card
+                      key={item.id}
+                      className={`cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg border-2 ${getColorClasses(CATEGORIES[item.category]?.color)}`}
+                      onClick={() => setActiveTab(item.id)}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-3 flex-1">
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${getColorClasses(CATEGORIES[item.category]?.color)}`}>
+                              <item.icon className="w-5 h-5" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-medium text-foreground truncate">{item.label}</h3>
+                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{item.description}</p>
+                            </div>
+                          </div>
+                          <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0 ml-2" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* No results */}
+        {filteredItems.length === 0 && (
+          <div className="text-center py-12">
+            <Search className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-foreground">No settings found</h3>
+            <p className="text-muted-foreground mt-1">Try adjusting your search or filter criteria</p>
+          </div>
+        )}
       </div>
     </div>
   );

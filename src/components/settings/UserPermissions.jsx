@@ -56,6 +56,7 @@ export default function UserPermissions({ userEmail, onClose }) {
     DocumentProcessing: false,
     DocumentManagement: false,
     PaymentPortal: false,
+    ConstructionProjects: false,
     Utilities: false
   });
 

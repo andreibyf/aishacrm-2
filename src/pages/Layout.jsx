@@ -241,6 +241,10 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     if (moduleSetting && moduleSetting.is_enabled === false) return false;
   }
 
+  // Settings page is always accessible to authenticated users (for profile settings)
+  // Admin tabs within Settings are controlled by the Settings page itself
+  if (pageName === 'Settings') return true;
+
   if (user.navigation_permissions && typeof user.navigation_permissions === 'object') {
     if (pageName === 'Dashboard') {
       logDev('[hasPageAccess] User navigation_permissions:', {
@@ -259,10 +263,9 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     }
   }
 
-  if (pageName === 'Settings' && (user.role === 'superadmin' || user.role === 'admin')) return true;
-    if ((user.role === 'admin' || user.role === 'superadmin') && (
+  if ((user.role === 'admin' || user.role === 'superadmin') && (
       pageName === 'Documentation' || pageName === 'AuditLog' || pageName === 'Tenants' || pageName === 'Agent' ||
-      pageName === 'UnitTests' || pageName === 'ClientRequirements')) return true;
+    pageName === 'UnitTests' || pageName === 'ClientRequirements' || pageName === 'ConstructionProjects')) return true;
   if ((user.role === 'superadmin' || user.role === 'admin') && !selectedTenantId) return true;
 
   const defaultPermissions = getDefaultNavigationPermissions(user.role);
@@ -318,6 +321,7 @@ function getDefaultNavigationPermissions(role) {
       UnitTests: true,
       ClientOnboarding: true,
       ClientRequirements: true, // NEW
+      ConstructionProjects: true, // Construction staffing module
       DuplicateContacts: true,
       DuplicateAccounts: true,
       DuplicateLeads: true,
@@ -396,6 +400,7 @@ function getDefaultNavigationPermissions(role) {
       Calendar: true,
       Documentation: true,
       Agent: true,
+      Settings: true, // All users need access to their profile settings
       ClientOnboarding: false,
       ClientRequirements: false,
       ConstructionProjects: true, // Construction staffing module - workers need access
@@ -407,7 +412,7 @@ function getDefaultNavigationPermissions(role) {
 
   // Explicitly ensure 'Settings', 'Documentation', 'Agent' are accessible for all roles if CRM access is true
   // (CRM access check is done in hasPageAccess first)
-  rolePermissions.Settings = rolePermissions.Settings || true;
+  rolePermissions.Settings = true; // Always allow Settings for profile access
   rolePermissions.Documentation = rolePermissions.Documentation || true;
   rolePermissions.Agent = rolePermissions.Agent || true;
   rolePermissions.ClientRequirements = rolePermissions.ClientRequirements ||

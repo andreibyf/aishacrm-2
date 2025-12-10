@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Trash2, ShieldCheck, Edit, Search, RefreshCw, Plus, X, Copy, Mail } from "lucide-react";
 // Reserved for future use: Users, AlertTriangle
 import { User as _UserEntity } from "@/api/entities";
-import { User } from "@/api/entities";
+import { User, ModuleSettings } from "@/api/entities";
 import { Tenant } from "@/api/entities";
 import { Employee } from "@/api/entities";
 import { toast } from "sonner";
@@ -28,34 +28,49 @@ import { getBackendUrl } from "@/api/backendUrl";
 // Backend API URL
 const BACKEND_URL = getBackendUrl();
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Lock } from "lucide-react";
 
-const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
+const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSettings = [] }) => {
+// moduleName: matches modulesettings table module_name for disabling when module is off
     const navigationPages = [
-        { key: 'Dashboard', label: 'Dashboard' },
-        { key: 'Contacts', label: 'Contacts' },
-        { key: 'Accounts', label: 'Accounts' },
-        { key: 'Leads', label: 'Leads' },
-        { key: 'Opportunities', label: 'Opportunities' },
-        { key: 'Activities', label: 'Activities' },
-        { key: 'Calendar', label: 'Calendar' },
-        { key: 'BizDevSources', label: 'BizDev Sources' },
-        { key: 'CashFlow', label: 'Cash Flow' },
-        { key: 'DocumentProcessing', label: 'Document Processing' },
-        { key: 'DocumentManagement', label: 'Document Management' },
-        { key: 'AICampaigns', label: 'AI Campaigns' },
-        { key: 'Employees', label: 'Employees' },
-        { key: 'Reports', label: 'Reports' },
-        { key: 'Integrations', label: 'Integrations' },
-        { key: 'Documentation', label: 'Documentation' },
-        { key: 'Settings', label: 'Settings' },
-        { key: 'Agent', label: 'AI Agent (Avatar)' },
-        { key: 'PaymentPortal', label: 'Payment Portal' },
-        { key: 'Utilities', label: 'Utilities' },
-        { key: 'ClientOnboarding', label: 'Client Onboarding' },
-        { key: 'WorkflowGuide', label: 'Workflow Guide' },
-        { key: 'ClientRequirements', label: 'Client Requirements' },
-        { key: 'Workflows', label: 'Workflows (Experimental)' },
+        { key: 'Dashboard', label: 'Dashboard', moduleName: 'Dashboard' },
+        { key: 'Contacts', label: 'Contacts', moduleName: 'Contact Management' },
+        { key: 'Accounts', label: 'Accounts', moduleName: 'Account Management' },
+        { key: 'Leads', label: 'Leads', moduleName: 'Lead Management' },
+        { key: 'Opportunities', label: 'Opportunities', moduleName: 'Opportunities' },
+        { key: 'Activities', label: 'Activities', moduleName: 'Activity Tracking' },
+        { key: 'Calendar', label: 'Calendar', moduleName: 'Calendar' },
+        { key: 'BizDevSources', label: 'BizDev Sources', moduleName: 'BizDev Sources' },
+        { key: 'CashFlow', label: 'Cash Flow', moduleName: 'Cash Flow Management' },
+        { key: 'DocumentProcessing', label: 'Document Processing', moduleName: 'Document Processing & Management' },
+        { key: 'DocumentManagement', label: 'Document Management', moduleName: 'Document Processing & Management' },
+        { key: 'AICampaigns', label: 'AI Campaigns', moduleName: 'AI Campaigns' },
+        { key: 'Employees', label: 'Employees', moduleName: 'Employee Management' },
+        { key: 'Reports', label: 'Reports', moduleName: 'Analytics & Reports' },
+        { key: 'Integrations', label: 'Integrations', moduleName: 'Integrations' },
+        { key: 'Documentation', label: 'Documentation', moduleName: null },
+        { key: 'Settings', label: 'Settings', moduleName: null },
+        { key: 'Agent', label: 'AI Agent (Avatar)', moduleName: 'AI Agent' },
+        { key: 'PaymentPortal', label: 'Payment Portal', moduleName: 'Payment Portal' },
+        { key: 'ConstructionProjects', label: 'Construction Projects', moduleName: 'Construction Projects' },
+        { key: 'Utilities', label: 'Utilities', moduleName: 'Utilities' },
+        { key: 'ClientOnboarding', label: 'Client Onboarding', moduleName: 'Client Onboarding' },
+        { key: 'WorkflowGuide', label: 'Workflow Guide', moduleName: null },
+        { key: 'ClientRequirements', label: 'Client Requirements', moduleName: null },
+        { key: 'Workflows', label: 'Workflows (Experimental)', moduleName: 'Workflows' },
     ];
+
+    // Build a set of disabled module names from module settings
+    const disabledModules = useMemo(() => {
+        const disabled = new Set();
+        moduleSettings.forEach((ms) => {
+            if (ms.is_enabled === false) {
+                disabled.add(ms.module_name);
+            }
+        });
+        return disabled;
+    }, [moduleSettings]);
 
     const initNavPerms = () => {
         const existing = user?.navigation_permissions || {};
@@ -472,16 +487,36 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
                     <div className="mt-2">
                         <Label className="mb-2 block text-slate-200">Navigation Permissions</Label>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto rounded-md border border-slate-600 p-2 bg-slate-800/40">
-                            {navigationPages.map((p) => (
-                                <div key={p.key} className="flex items-center justify-between px-2 py-1 rounded-md bg-slate-700/40 border border-slate-600">
-                                    <span className="text-sm text-slate-200">{p.label}</span>
-                                    <Switch
-                                        checked={!!formData.navigation_permissions?.[p.key]}
-                                        onCheckedChange={(v) => toggleNav(p.key, v)}
-                                        disabled={!canEditPermissions}
-                                    />
-                                </div>
-                            ))}
+                            {navigationPages.map((p) => {
+                                const isModuleDisabled = p.moduleName && disabledModules.has(p.moduleName);
+                                return (
+                                    <TooltipProvider key={p.key}>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <div className={`flex items-center justify-between px-2 py-1 rounded-md border ${isModuleDisabled
+                                                        ? 'bg-slate-800/60 border-slate-700 opacity-50'
+                                                        : 'bg-slate-700/40 border-slate-600'
+                                                    }`}>
+                                                    <span className={`text-sm flex items-center gap-1.5 ${isModuleDisabled ? 'text-slate-400' : 'text-slate-200'}`}>
+                                                        {p.label}
+                                                        {isModuleDisabled && <Lock className="w-3 h-3" />}
+                                                    </span>
+                                                    <Switch
+                                                        checked={isModuleDisabled ? false : !!formData.navigation_permissions?.[p.key]}
+                                                        onCheckedChange={(v) => toggleNav(p.key, v)}
+                                                        disabled={!canEditPermissions || isModuleDisabled}
+                                                    />
+                                                </div>
+                                            </TooltipTrigger>
+                                            {isModuleDisabled && (
+                                                <TooltipContent>
+                                                    <p>Module disabled for this tenant</p>
+                                                </TooltipContent>
+                                            )}
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                );
+                            })}
                         </div>
                         {!canEditPermissions && (
                             <p className="text-xs text-slate-500 mt-1">
@@ -507,6 +542,7 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
 export default function EnhancedUserManagement() {
     const [users, setUsers] = useState([]);
     const [allTenants, setAllTenants] = useState([]);
+    const [moduleSettings, setModuleSettings] = useState([]);
     const [loading, setLoading] = useState(true);
     const [editingUser, setEditingUser] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -534,13 +570,16 @@ export default function EnhancedUserManagement() {
                 ? { tenant_id: null } // null = get ALL users across all tenants
                 : { tenant_id: currentUser.tenant_id }; // Filter by admin's tenant
             
-            const [usersData, tenantsData] = await Promise.all([
+            const [usersData, tenantsData, moduleData] = await Promise.all([
                 User.list(userFilter),
-                currentUser.role === 'superadmin' ? Tenant.list() : Promise.resolve([])
+                currentUser.role === 'superadmin' ? Tenant.list() : Promise.resolve([]),
+                // Load module settings for the current tenant (to disable nav perms for disabled modules)
+                currentUser.tenant_id ? ModuleSettings.filter({ tenant_id: currentUser.tenant_id }) : Promise.resolve([])
             ]);
             
             setUsers(usersData);
             setAllTenants(tenantsData);
+            setModuleSettings(moduleData || []);
         } catch (error) {
             console.error("Failed to load data:", error);
             toast.error("Failed to load user and tenant data.");
@@ -988,6 +1027,7 @@ export default function EnhancedUserManagement() {
                     user={editingUser}
                     tenants={allTenants}
                     currentUser={currentUser}
+                    moduleSettings={moduleSettings}
                     onSave={handleSaveUser}
                     onCancel={() => setEditingUser(null)}
                 />
