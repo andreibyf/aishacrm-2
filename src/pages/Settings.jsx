@@ -76,6 +76,7 @@ const TenantIntegrationSettings = lazy(() => import("../components/settings/Tena
 // System Configuration - lazy loaded
 const ModuleManager = lazy(() => import("../components/shared/ModuleManager"));
 const EntityLabelsManager = lazy(() => import("../components/settings/EntityLabelsManager"));
+const TenantNavigationDefaults = lazy(() => import("../components/settings/TenantNavigationDefaults"));
 const BillingSettings = lazy(() => import("../components/settings/BillingSettings"));
 const CronJobManager = lazy(() => import("../components/settings/CronJobManager"));
 const SystemAnnouncements = lazy(() => import("../components/settings/SystemAnnouncements"));
@@ -154,9 +155,11 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
     { id: 'regional', label: 'Regional', icon: Globe, color: 'blue', roles: ['any'] },
     { id: 'billing', label: 'Billing', icon: CreditCard, color: 'blue', roles: ['any'] },
 
-    // Tenant Admin tabs (limited access - only user management)
+    // Tenant Admin tabs (limited access - user management + customization)
     ...(isAdmin && !isSuperadmin ? [
       { id: 'users', label: 'User Management', icon: Users, color: 'green', roles: ['admin'] },
+      { id: 'entity-labels', label: 'Entity Labels', icon: Tags, color: 'indigo', roles: ['admin'] },
+      { id: 'nav-defaults', label: 'Nav Defaults', icon: LayoutGrid, color: 'slate', roles: ['admin'] },
     ] : []),
 
     // Manager accessible tabs (no admin features)
@@ -441,10 +444,29 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                 </Card>
               )}
 
-                {activeTab === 'entity-labels' && isSuperadmin && (
+                {activeTab === 'entity-labels' && isAdmin && (
                   <SettingsLoader>
-                    <EntityLabelsManager />
+                    <EntityLabelsManager isTenantAdmin={!isSuperadmin} />
                   </SettingsLoader>
+                )}
+
+                {activeTab === 'nav-defaults' && isAdmin && !isSuperadmin && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <LayoutGrid className="w-5 h-5 text-slate-400" />
+                        Default Navigation Permissions
+                      </CardTitle>
+                      <CardDescription>
+                        Set default page access for new users you invite. Individual users can be customized when inviting.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <SettingsLoader>
+                        <TenantNavigationDefaults />
+                      </SettingsLoader>
+                    </CardContent>
+                  </Card>
                 )}
 
               {activeTab === 'cron' && isAdmin && (

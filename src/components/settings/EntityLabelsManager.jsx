@@ -42,7 +42,7 @@ const ENTITY_DESCRIPTIONS = {
   bizdev_sources: 'Sources of business development leads',
 };
 
-export default function EntityLabelsManager() {
+export default function EntityLabelsManager({ isTenantAdmin = false }) {
   const tenantContext = useTenant();
   const globalTenantId = tenantContext?.selectedTenantId || null;
   const { refresh: refreshGlobalLabels } = useEntityLabels();
@@ -54,7 +54,7 @@ export default function EntityLabelsManager() {
   const [saving, setSaving] = useState(false);
   const [tenantsLoading, setTenantsLoading] = useState(true);
 
-  // Use global tenant ID from context
+  // For tenant admins, always use their tenant from context
   const selectedTenantId = globalTenantId;
 
   // Load tenants on mount
@@ -198,34 +198,38 @@ export default function EntityLabelsManager() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Tags className="w-5 h-5" />
-          Entity Labels
+          {isTenantAdmin ? 'Customize Entity Names' : 'Entity Labels'}
         </CardTitle>
         <CardDescription>
-          Customize the display names of core CRM entities for each tenant.
-          Changes appear in navigation, page titles, and form labels.
+          {isTenantAdmin 
+            ? 'Rename CRM entities to match your business terminology. For example, rename "Leads" to "Prospects" or "Accounts" to "Clients".'
+            : 'Customize the display names of core CRM entities for each tenant. Changes appear in navigation, page titles, and form labels.'
+          }
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Tenant Info */}
-        <div className="flex items-center gap-4">
-          <div className="flex-1">
-            <Label>Managing Tenant</Label>
-            <div className="mt-1 flex items-center gap-2 p-2 border rounded-md bg-muted/50">
-              <Building2 className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm font-medium">
-                {selectedTenant?.name || 'No tenant selected'}
-              </span>
-              {customized.length > 0 && (
-                <Badge variant="outline" className="ml-auto">
-                  {customized.length} customized
-                </Badge>
-              )}
+        {/* Tenant Info - only show for superadmin */}
+        {!isTenantAdmin && (
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <Label>Managing Tenant</Label>
+              <div className="mt-1 flex items-center gap-2 p-2 border rounded-md bg-muted/50">
+                <Building2 className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-medium">
+                  {selectedTenant?.name || 'No tenant selected'}
+                </span>
+                {customized.length > 0 && (
+                  <Badge variant="outline" className="ml-auto">
+                    {customized.length} customized
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Switch tenants using the selector in the top navigation bar
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Switch tenants using the selector in the top navigation bar
-            </p>
           </div>
-        </div>
+        )}
 
         {/* Labels Table */}
         {loading ? (

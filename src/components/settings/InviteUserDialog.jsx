@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -26,9 +26,38 @@ import {
   validateUserPermissions,
 } from "@/utils/permissions";
 import { getBackendUrl } from "@/api/backendUrl";
+import { Tenant } from "@/api/entities";
 
 // Backend API URL
 const BACKEND_URL = getBackendUrl();
+
+// Default navigation permissions (fallback)
+const DEFAULT_NAV_PERMISSIONS = {
+  Dashboard: true,
+  Contacts: true,
+  Accounts: true,
+  Leads: true,
+  Opportunities: true,
+  Activities: true,
+  Calendar: true,
+  BizDevSources: false,
+  CashFlow: false,
+  DocumentProcessing: false,
+  DocumentManagement: false,
+  AICampaigns: false,
+  Employees: false,
+  Reports: false,
+  Integrations: false,
+  Documentation: true,
+  Settings: true,
+  Agent: true,
+  PaymentPortal: false,
+  Utilities: false,
+  Workflows: false,
+  ClientOnboarding: false,
+  WorkflowGuide: false,
+  ClientRequirements: false,
+};
 
 export default function InviteUserDialog(
   { open, onOpenChange, onSuccess, tenants, currentUser },
@@ -47,34 +76,43 @@ export default function InviteUserDialog(
     can_use_softphone: false,
     access_level: "read_write",
     phone: "",
-    navigation_permissions: {
-      Dashboard: true,
-      Contacts: true,
-      Accounts: true,
-      Leads: true,
-      Opportunities: true,
-      Activities: true,
-      Calendar: true,
-      BizDevSources: false,
-      CashFlow: false,
-      DocumentProcessing: false,
-      DocumentManagement: false,
-      AICampaigns: false,
-      Employees: false,
-      Reports: false,
-      Integrations: false,
-      Documentation: true,
-      Settings: true,
-      Agent: true,
-      PaymentPortal: false,
-      Utilities: false,
-      Workflows: false,
-      ClientOnboarding: false,
-      WorkflowGuide: false,
-      ClientRequirements: false,
-    },
+    navigation_permissions: { ...DEFAULT_NAV_PERMISSIONS },
   });
   const [submitting, setSubmitting] = useState(false);
+  const [tenantDefaults, setTenantDefaults] = useState(null);
+
+  // Load tenant navigation defaults when tenant_id changes
+  const loadTenantDefaults = useCallback(async (tenantId) => {
+    if (!tenantId) {
+      setTenantDefaults(null);
+      return;
+    }
+
+    try {
+      const tenant = await Tenant.get(tenantId);
+      const defaults = tenant?.settings?.default_navigation_permissions;
+      if (defaults && typeof defaults === 'object') {
+        setTenantDefaults(defaults);
+        // Apply tenant defaults to form
+        setFormData(prev => ({
+          ...prev,
+          navigation_permissions: { ...DEFAULT_NAV_PERMISSIONS, ...defaults },
+        }));
+      } else {
+        setTenantDefaults(null);
+      }
+    } catch (error) {
+      console.error('Error loading tenant defaults:', error);
+      setTenantDefaults(null);
+    }
+  }, []);
+
+  // Load defaults when dialog opens or tenant changes
+  useEffect(() => {
+    if (open && formData.tenant_id) {
+      loadTenantDefaults(formData.tenant_id);
+    }
+  }, [open, formData.tenant_id, loadTenantDefaults]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -164,29 +202,14 @@ export default function InviteUserDialog(
       email: "",
       full_name: "",
       role: "employee",
-      tenant_id: "",
+      tenant_id: currentUser?.tenant_id || "",
       crm_access: true, // Reset CRM access to default
       can_use_softphone: false,
       access_level: "read_write",
       phone: "",
-      navigation_permissions: {
-        Dashboard: true,
-        Contacts: true,
-        Accounts: true,
-        Leads: true,
-        Opportunities: true,
-        Activities: true,
-        Calendar: true,
-        BizDevSources: false,
-        CashFlow: false,
-        Employees: false,
-        Reports: false,
-        Settings: true,
-        Integrations: false,
-        AICampaigns: false,
-        Agent: true,
-        Documentation: true,
-      },
+      navigation_permissions: tenantDefaults 
+        ? { ...DEFAULT_NAV_PERMISSIONS, ...tenantDefaults }
+        : { ...DEFAULT_NAV_PERMISSIONS },
     });
     onOpenChange(false);
   };
@@ -398,9 +421,16 @@ export default function InviteUserDialog(
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-slate-200 font-semibold">
-                Navigation Permissions (Advanced)
-              </Label>
+              <div>
+                <Label className="text-slate-200 font-semibold">
+                  Navigation Permissions
+                </Label>
+                {tenantDefaults && (
+                  <span className="ml-2 text-xs text-blue-400">
+                    (using tenant defaults)
+                  </span>
+                )}
+              </div>
               <Button
                 type="button"
                 variant="outline"
@@ -423,7 +453,7 @@ export default function InviteUserDialog(
               </Button>
             </div>
             <p className="text-sm text-slate-400">
-              Granular control over which pages this user can access
+              Control which pages this user can access. {tenantDefaults ? 'Pre-filled from your tenant\'s default settings.' : 'Customize as needed.'}
             </p>
 
             <div className="grid grid-cols-2 gap-3 p-3 bg-slate-700 border border-slate-600 rounded-lg max-h-60 overflow-y-auto">
