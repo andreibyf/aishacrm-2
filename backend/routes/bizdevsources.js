@@ -255,27 +255,35 @@ export default function createBizDevSourceRoutes(pgPool) {
 
       const tenant_id = incomingTenantId;
 
-      const result = await pgPool.query(
-        `INSERT INTO bizdev_sources (
-          tenant_id, source_name, source_type, source_url,
-          contact_person, contact_email, contact_phone,
-          status, priority, leads_generated, opportunities_created,
-          revenue_generated, notes, tags, metadata, is_test_data
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-        RETURNING *`,
-        [
-          tenant_id, source_name, source_type, source_url,
-          contact_person, contact_email, contact_phone,
-          status || 'active', priority || 'medium', leads_generated || 0,
-          opportunities_created || 0, revenue_generated || 0,
-          notes, JSON.stringify(tags || []), JSON.stringify(metadata || {}),
-          is_test_data || false
-        ]
-      );
+      // Use Supabase client instead of pgPool to avoid schema constraint issues
+      const { data, error } = await supabase
+        .from('bizdev_sources')
+        .insert({
+          tenant_id,
+          source_name,
+          source_type,
+          source_url,
+          contact_person,
+          contact_email,
+          contact_phone,
+          status: status || 'active',
+          priority: priority || 'medium',
+          leads_generated: leads_generated || 0,
+          opportunities_created: opportunities_created || 0,
+          revenue_generated: revenue_generated || 0,
+          notes,
+          tags: tags || [],
+          metadata: metadata || {},
+          is_test_data: is_test_data || false
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
 
       res.status(201).json({
         status: 'success',
-        data: result.rows[0]
+        data
       });
     } catch (error) {
       console.error('Error creating bizdev source:', error);
