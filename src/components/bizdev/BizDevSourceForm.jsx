@@ -17,7 +17,7 @@ import { toast } from "sonner";
 
 // Unified form contract: supports legacy `source` prop and new `initialData` prop
 // Parent should pass `onSubmit(result)` after persistence. This form now handles create/update directly.
-export default function BizDevSourceForm({ source: legacySource, initialData, onSubmit, onCancel }) {
+export default function BizDevSourceForm({ source: legacySource, initialData, onSubmit, onCancel, sourceFieldLabel = 'Source' }) {
   const source = initialData || legacySource || null;
   const { ensureTenantId, isSubmitting, normalizeError } = useEntityForm();
   const [formData, setFormData] = useState({
@@ -171,7 +171,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="source_name" className="text-slate-300">
-                Source <span className="text-red-400">*</span>
+                {sourceFieldLabel} <span className="text-red-400">*</span>
               </Label>
               <Input
                 id="source_name"
