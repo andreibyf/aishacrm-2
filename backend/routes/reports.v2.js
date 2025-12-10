@@ -529,7 +529,7 @@ export default function createReportsV2Router(_pgPool) {
         // Recent activities
         (async () => {
           try {
-            let q = supabase.from('activities').select('id,type,subject,status,created_at').order('created_at', { ascending: false }).limit(10);
+            let q = supabase.from('activities').select('id,type,subject,status,created_at,created_date,assigned_to').order('created_at', { ascending: false }).limit(10);
             if (tenant_id) q = q.eq('tenant_id', tenant_id);
             if (!includeTestData) {
               try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ void 0; }

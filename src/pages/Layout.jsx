@@ -198,6 +198,8 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
   ]);
   if (user.crm_access === false) return pagesAllowedWithoutCRM.has(pageName);
 
+  // Module names must match EXACTLY what's stored in modulesettings table
+  // See ModuleManager.jsx defaultModules for the canonical names
   const moduleMapping = {
     Dashboard: 'Dashboard',
     Contacts: 'Contact Management',
@@ -206,12 +208,12 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     Opportunities: 'Opportunities',
     Activities: 'Activity Tracking',
     Calendar: 'Calendar',
-    BizDevSources: 'Business Development',
-    CashFlow: 'Cash Flow',
-    DocumentProcessing: 'Document Processing',
-    DocumentManagement: 'Document Processing',
-    Employees: 'Employees',
-    Reports: 'Reports',
+    BizDevSources: 'BizDev Sources',
+    CashFlow: 'Cash Flow Management',
+    DocumentProcessing: 'Document Processing & Management',
+    DocumentManagement: 'Document Processing & Management',
+    Employees: 'Employee Management',
+    Reports: 'Analytics & Reports',
     Integrations: 'Integrations',
     PaymentPortal: 'Payment Portal',
     AICampaigns: 'AI Campaigns',

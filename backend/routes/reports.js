@@ -316,7 +316,7 @@ export default function createReportRoutes(_pgPool) {
       // Recent small lists (narrow columns, limited)
       const recentActivitiesP = (async () => {
         try {
-          let q = supabase.from('activities').select('id,type,subject,created_at').order('created_at', { ascending: false }).limit(10);
+          let q = supabase.from('activities').select('id,type,subject,status,created_at,created_date,assigned_to').order('created_at', { ascending: false }).limit(10);
           if (tenant_id) q = q.eq('tenant_id', tenant_id);
           if (!includeTestData) {
             try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }

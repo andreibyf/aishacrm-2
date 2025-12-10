@@ -64,8 +64,8 @@ export default function createSystemLogRoutes(_pgPool) {
         ...otherFields
       } = req.body;
 
-      // Default to 'system' tenant for null/undefined tenant_id (superadmins, system logs)
-      const effectiveTenantId = tenant_id || "system";
+      // Default to null for system-level logs (tenant_id is UUID, can't use 'system' string)
+      const effectiveTenantId = tenant_id || null;
 
       // Merge metadata with unknown fields and extra fields that don't exist as columns
       const combinedMetadata = {
@@ -137,7 +137,8 @@ export default function createSystemLogRoutes(_pgPool) {
           ...otherFields
         } = e || {};
 
-        const effectiveTenantId = tenant_id || 'system';
+        // Use null for system-level logs (tenant_id is UUID, can't use 'system' string)
+        const effectiveTenantId = tenant_id || null;
         const combinedMetadata = { ...(metadata || {}), ...otherFields };
         if (user_email) combinedMetadata.user_email = user_email;
         if (user_agent) combinedMetadata.user_agent = user_agent;
