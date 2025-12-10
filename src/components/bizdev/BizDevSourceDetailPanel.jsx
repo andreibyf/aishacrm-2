@@ -21,7 +21,12 @@ import {
   Target,
   Users,
   CheckCircle,
-  Info
+  Info,
+  Tag,
+  Hash,
+  Clock,
+  Briefcase,
+  User,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -271,17 +276,41 @@ export default function BizDevSourceDetailPanel({
     }
   };
 
+  // Get display name - prioritize company name
+  const displayName = currentSource.company_name || currentSource.dba_name || 'Unnamed Company';
+  const sourceName = currentSource.source || currentSource.source_name;
+  const phone = currentSource.phone_number || currentSource.contact_phone;
+  const email = currentSource.email || currentSource.contact_email;
+  
+  // Check if acted upon
+  const hasActivity = currentSource.leads_generated > 0 || 
+                      currentSource.opportunities_created > 0 || 
+                      (currentSource.lead_ids && currentSource.lead_ids.length > 0) ||
+                      linkedOpportunities.length > 0;
+
   return (
     <div className="fixed inset-y-0 right-0 w-full md:w-2/3 lg:w-1/2 bg-slate-800 shadow-2xl z-50 overflow-y-auto border-l border-slate-700">
       <CardHeader className="border-b border-slate-700 sticky top-0 bg-slate-800 z-10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Building2 className="w-6 h-6 text-blue-400" />
+            <div className={`w-12 h-12 rounded-lg ${hasActivity ? 'bg-green-900/30 border-green-700/50' : 'bg-blue-900/30 border-blue-700/50'} border flex items-center justify-center relative`}>
+              <Building2 className={`w-6 h-6 ${hasActivity ? 'text-green-400' : 'text-blue-400'}`} />
+              {hasActivity && (
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-800 flex items-center justify-center">
+                  <CheckCircle className="w-3 h-3 text-white" />
+                </div>
+              )}
+            </div>
             <div>
-              <CardTitle className="text-slate-100">{currentSource.company_name}</CardTitle>
-              {currentSource.dba_name && (
-                <p className="text-sm text-slate-400 mt-1">
+              <CardTitle className="text-slate-100 text-xl">{displayName}</CardTitle>
+              {currentSource.dba_name && currentSource.dba_name !== displayName && (
+                <p className="text-sm text-slate-400 mt-0.5">
                   DBA: {currentSource.dba_name}
+                </p>
+              )}
+              {sourceName && (
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Source: {sourceName}
                 </p>
               )}
             </div>
@@ -300,19 +329,33 @@ export default function BizDevSourceDetailPanel({
           <Badge className={`${getStatusColor(currentSource.status)} font-semibold`}>
             {currentSource.status}
           </Badge>
-          {currentSource.license_status && (
+          {hasActivity && (
+            <Badge className="bg-green-100 text-green-800 border-green-300 font-semibold">
+              <CheckCircle className="w-3 h-3 mr-1" />
+              Contacted
+            </Badge>
+          )}
+          {currentSource.priority && currentSource.priority !== 'medium' && (
+            <Badge className={currentSource.priority === 'high' 
+              ? 'bg-red-100 text-red-800 border-red-300' 
+              : 'bg-slate-100 text-slate-800 border-slate-300'}>
+              {currentSource.priority.charAt(0).toUpperCase() + currentSource.priority.slice(1)} Priority
+            </Badge>
+          )}
+          {currentSource.license_status && currentSource.license_status !== "Not Required" && (
             <Badge className={`${getLicenseStatusColor(currentSource.license_status)} font-semibold`}>
               License: {currentSource.license_status}
             </Badge>
           )}
           {currentSource.batch_id && (
             <Badge variant="outline" className="border-slate-600 text-slate-300">
+              <Hash className="w-3 h-3 mr-1" />
               Batch: {currentSource.batch_id}
             </Badge>
           )}
-          {currentSource.source && (
+          {currentSource.source_type && (
             <Badge variant="outline" className="border-slate-600 text-slate-300">
-              Source: {currentSource.source}
+              {currentSource.source_type}
             </Badge>
           )}
         </div>
@@ -411,6 +454,84 @@ export default function BizDevSourceDetailPanel({
       </CardHeader>
 
       <div className="p-6 space-y-6">
+        {/* Quick Contact Info - At the top for easy reference */}
+        {(phone || email || currentSource.contact_person || (currentSource.city || currentSource.state_province)) && (
+          <Card className="bg-blue-900/20 border-blue-700/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-slate-200 text-sm flex items-center gap-2">
+                <User className="w-4 h-4 text-blue-400" />
+                Quick Contact
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {currentSource.contact_person && (
+                <div className="flex items-center gap-3 text-sm">
+                  <User className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="text-slate-300">{currentSource.contact_person}</span>
+                </div>
+              )}
+              {phone && (
+                <div className="flex items-center gap-3 text-sm">
+                  <Phone className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <a href={`tel:${phone}`} className="text-blue-400 hover:underline">
+                    {phone}
+                  </a>
+                </div>
+              )}
+              {email && (
+                <div className="flex items-center gap-3 text-sm">
+                  <Mail className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <a href={`mailto:${email}`} className="text-blue-400 hover:underline truncate">
+                    {email}
+                  </a>
+                </div>
+              )}
+              {(currentSource.city || currentSource.state_province) && (
+                <div className="flex items-center gap-3 text-sm">
+                  <MapPin className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="text-slate-300">
+                    {currentSource.city}{currentSource.city && currentSource.state_province ? ', ' : ''}{currentSource.state_province}
+                  </span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Activity Summary */}
+        {(currentSource.leads_generated > 0 || currentSource.opportunities_created > 0 || currentSource.revenue_generated > 0) && (
+          <Card className="bg-slate-700/50 border-slate-600">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-slate-200 text-sm flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-green-400" />
+                Performance
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4">
+                {currentSource.leads_generated > 0 && (
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-slate-100">{currentSource.leads_generated}</div>
+                    <div className="text-xs text-slate-400 mt-1">Leads Generated</div>
+                  </div>
+                )}
+                {currentSource.opportunities_created > 0 && (
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-slate-100">{currentSource.opportunities_created}</div>
+                    <div className="text-xs text-slate-400 mt-1">Opportunities</div>
+                  </div>
+                )}
+                {currentSource.revenue_generated > 0 && (
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-400">${parseFloat(currentSource.revenue_generated).toLocaleString()}</div>
+                    <div className="text-xs text-slate-400 mt-1">Revenue</div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Security Info */}
         <div className="flex items-center gap-2 text-xs text-slate-400">
           <Badge variant="outline" className="text-xs border-slate-600 text-slate-300">
@@ -660,6 +781,64 @@ export default function BizDevSourceDetailPanel({
           </CardContent>
         </Card>
 
+        {/* Source & Batch Details */}
+        {(sourceName || currentSource.batch_id || currentSource.source_type || currentSource.priority) && (
+          <Card className="bg-slate-700/50 border-slate-600">
+            <CardHeader>
+              <CardTitle className="text-slate-200 text-sm flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-purple-400" />
+                Source & Campaign Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {sourceName && (
+                <div className="flex items-start gap-3">
+                  <Tag className="w-4 h-4 text-slate-400 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-slate-400">Source Name</p>
+                    <p className="text-sm text-slate-200">{sourceName}</p>
+                  </div>
+                </div>
+              )}
+              
+              {currentSource.source_type && (
+                <div className="flex items-start gap-3">
+                  <Tag className="w-4 h-4 text-slate-400 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-slate-400">Source Type</p>
+                    <p className="text-sm text-slate-200">{currentSource.source_type}</p>
+                  </div>
+                </div>
+              )}
+
+              {currentSource.batch_id && (
+                <div className="flex items-start gap-3">
+                  <Hash className="w-4 h-4 text-slate-400 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-slate-400">Batch ID</p>
+                    <p className="text-sm text-slate-200 font-mono">{currentSource.batch_id}</p>
+                  </div>
+                </div>
+              )}
+
+              {currentSource.priority && (
+                <div className="flex items-start gap-3">
+                  <TrendingUp className="w-4 h-4 text-slate-400 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-slate-400">Priority</p>
+                    <p className={`text-sm font-semibold ${
+                      currentSource.priority === 'high' ? 'text-red-400' :
+                      currentSource.priority === 'medium' ? 'text-yellow-400' : 'text-slate-300'
+                    }`}>
+                      {currentSource.priority.charAt(0).toUpperCase() + currentSource.priority.slice(1)}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Notes Section */}
         {currentSource.notes && (
           <Card className="bg-slate-700/50 border-slate-600">
@@ -672,26 +851,59 @@ export default function BizDevSourceDetailPanel({
           </Card>
         )}
 
-        {/* Metadata */}
+        {/* Tags Section */}
+        {currentSource.tags && Array.isArray(currentSource.tags) && currentSource.tags.length > 0 && (
+          <Card className="bg-slate-700/50 border-slate-600">
+            <CardHeader>
+              <CardTitle className="text-slate-200 text-sm flex items-center gap-2">
+                <Tag className="w-4 h-4 text-blue-400" />
+                Tags
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {currentSource.tags.map((tag, idx) => (
+                  <Badge key={idx} variant="outline" className="bg-slate-700 text-slate-300 border-slate-600">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Record Details */}
         <Card className="bg-slate-700/50 border-slate-600">
           <CardHeader>
-            <CardTitle className="text-slate-200 text-sm">Record Metadata</CardTitle>
+            <CardTitle className="text-slate-200 text-sm flex items-center gap-2">
+              <Clock className="w-4 h-4 text-slate-400" />
+              Record Details
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-xs text-slate-400">
-            <div className="flex justify-between">
-              <span>Created:</span>
-              <span>{currentSource.created_date ? format(new Date(currentSource.created_date), 'MMM d, yyyy h:mm a') : 'N/A'}</span>
+          <CardContent className="space-y-3">
+            <div>
+              <p className="text-xs text-slate-400 mb-1">Created</p>
+              <p className="text-sm text-slate-300">
+                {currentSource.created_date ? format(new Date(currentSource.created_date), 'MMM d, yyyy h:mm a') : 'N/A'}
+              </p>
             </div>
-            <div className="flex justify-between">
-              <span>Updated:</span>
-              <span>{currentSource.updated_date ? format(new Date(currentSource.updated_date), 'MMM d, yyyy h:mm a') : 'N/A'}</span>
+            <div>
+              <p className="text-xs text-slate-400 mb-1">Updated</p>
+              <p className="text-sm text-slate-300">
+                {currentSource.updated_date ? format(new Date(currentSource.updated_date), 'MMM d, yyyy h:mm a') : 'N/A'}
+              </p>
             </div>
             {currentSource.archived_at && (
-              <div className="flex justify-between">
-                <span>Archived:</span>
-                <span>{format(new Date(currentSource.archived_at), 'MMM d, yyyy h:mm a')}</span>
+              <div>
+                <p className="text-xs text-slate-400 mb-1">Archived</p>
+                <p className="text-sm text-slate-300">
+                  {format(new Date(currentSource.archived_at), 'MMM d, yyyy h:mm a')}
+                </p>
               </div>
             )}
+            <div className="pt-2 border-t border-slate-600">
+              <p className="text-xs text-slate-500 font-mono">{currentSource.id}</p>
+            </div>
           </CardContent>
         </Card>
       </div>

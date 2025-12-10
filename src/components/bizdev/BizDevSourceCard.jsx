@@ -10,6 +10,9 @@ import {
   ExternalLink,
   Pencil,
   Trash2,
+  Eye,
+  CheckCircle2,
+  Users,
 } from "lucide-react";
 
 export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, isSelected, onSelect }) {
@@ -65,6 +68,23 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
     }
   };
 
+  // Check if this source has been "acted upon" (has opportunities, leads, or activities linked)
+  const hasActivity = source.leads_generated > 0 || 
+                      source.opportunities_created > 0 || 
+                      (source.lead_ids && source.lead_ids.length > 0);
+  
+  // Get display name - prioritize company name
+  const displayName = source.company_name || source.dba_name || 'Unnamed Company';
+  const sourceName = source.source || source.source_name;
+  
+  // Get contact info
+  const phone = source.phone_number || source.contact_phone;
+  const email = source.email || source.contact_email;
+  const contactPerson = source.contact_person;
+  
+  // Get address
+  const addressShort = [source.city, source.state_province].filter(Boolean).join(', ');
+
   return (
     <Card
       className={`hover:shadow-lg transition-all duration-200 cursor-pointer ${
@@ -94,25 +114,71 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
 
           <div className="flex-1 space-y-1">
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-900/30 border border-blue-700/50 flex items-center justify-center flex-shrink-0">
-                <Building2 className="w-5 h-5 text-blue-400" />
+              <div className={`w-10 h-10 rounded-lg ${hasActivity ? 'bg-green-900/30 border-green-700/50' : 'bg-blue-900/30 border-blue-700/50'} border flex items-center justify-center flex-shrink-0 relative`}>
+                <Building2 className={`w-5 h-5 ${hasActivity ? 'text-green-400' : 'text-blue-400'}`} />
+                {hasActivity && (
+                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border border-slate-800" title="Has activity" />
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className={`text-lg font-semibold ${isPromoted ? 'text-slate-400 line-through' : 'text-slate-100'}`}>
-                  {source.company_name || source.source || source.source_name || 'Unnamed Source'}
+                  {displayName}
                   {isPromoted && source.account_name && (
                     <span className="ml-2 text-sm font-normal text-blue-400">→ {source.account_name}</span>
                   )}
                 </h3>
-                {source.dba_name && (
+                {source.dba_name && source.dba_name !== displayName && (
                   <p className="text-sm text-slate-400">DBA: {source.dba_name}</p>
                 )}
-                {source.contact_person && (
-                  <p className="text-sm text-slate-400">{source.contact_person}</p>
+                {/* Contact person inline with company */}
+                {contactPerson && (
+                  <p className="text-sm text-slate-300 flex items-center gap-1">
+                    <Users className="w-3 h-3 text-slate-400" />
+                    {contactPerson}
+                  </p>
                 )}
               </div>
             </div>
+            
+            {/* Key Contact Info Row - Phone, Email, Address */}
+            <div className="flex flex-wrap items-center gap-3 ml-12 text-sm">
+              {phone && (
+                <a 
+                  href={`tel:${phone}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1 text-slate-300 hover:text-blue-400 transition-colors"
+                >
+                  <Phone className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{phone}</span>
+                </a>
+              )}
+              {email && (
+                <a 
+                  href={`mailto:${email}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1 text-slate-300 hover:text-blue-400 transition-colors truncate max-w-[200px]"
+                >
+                  <Mail className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="truncate">{email}</span>
+                </a>
+              )}
+              {addressShort && (
+                <span className="flex items-center gap-1 text-slate-400">
+                  <MapPin className="w-3.5 h-3.5" />
+                  <span>{addressShort}</span>
+                </span>
+              )}
+            </div>
+
+            {/* Badges Row */}
             <div className="flex items-center gap-2 flex-wrap ml-12">
+              {/* Activity indicators */}
+              {hasActivity && (
+                <Badge variant="outline" className="bg-green-900/30 text-green-400 border-green-700 text-xs">
+                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                  Contacted
+                </Badge>
+              )}
               {source.priority && source.priority !== 'medium' && (
                 <Badge variant="outline" className={
                   source.priority === 'high' 
@@ -122,29 +188,32 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
                   {source.priority.charAt(0).toUpperCase() + source.priority.slice(1)} Priority
                 </Badge>
               )}
-              {source.source_type && (
-                <Badge variant="outline" className="bg-slate-700 text-slate-400 border-slate-600">
-                  {source.source_type}
-                </Badge>
-              )}
               {source.license_status && source.license_status !== "Not Required" && (
                 <Badge variant="outline" className={getLicenseStatusColor(source.license_status)}>
                   {source.license_status}
                 </Badge>
               )}
-              {source.batch_id && (
-                <span className="flex items-center gap-1 text-sm text-slate-400">
-                  Batch: <span className="text-slate-300">{source.batch_id}</span>
-                </span>
-              )}
               {source.industry && (
-                <span className="flex items-center gap-1 text-sm text-slate-400">
-                  Industry: <span className="text-slate-300">{source.industry}</span>
-                </span>
+                <Badge variant="outline" className="bg-slate-700/50 text-slate-400 border-slate-600 text-xs">
+                  {source.industry}
+                </Badge>
               )}
             </div>
           </div>
           <div className="flex items-center gap-1">
+            {/* Eye icon for view */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onClick) onClick(source);
+              }}
+              className="text-slate-400 hover:text-blue-400 hover:bg-slate-700"
+              title="View details"
+            >
+              <Eye className="w-4 h-4" />
+            </Button>
             {onEdit && (
               <Button
                 variant="ghost"
@@ -175,54 +244,23 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
         </div>
       </CardHeader>
 
-      <CardContent className="flex-grow space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          {(source.email || source.contact_email) && (
-            <div className="flex items-center gap-2 text-slate-300">
-              <Mail className="w-4 h-4 text-slate-400 flex-shrink-0" />
-              <a 
-                href={`mailto:${source.email || source.contact_email}`} 
-                className="hover:text-blue-400 transition-colors truncate"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {source.email || source.contact_email}
-              </a>
-            </div>
-          )}
-          {(source.phone_number || source.contact_phone) && (
-            <div className="flex items-center gap-2 text-slate-300">
-              <Phone className="w-4 h-4 text-slate-400 flex-shrink-0" />
-              <a 
-                href={`tel:${source.phone_number || source.contact_phone}`} 
-                className="hover:text-blue-400 transition-colors"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {source.phone_number || source.contact_phone}
-              </a>
-            </div>
-          )}
-          {(source.city && source.state_province) && (
-            <div className="flex items-center gap-2 text-slate-300">
-              <MapPin className="w-4 h-4 text-slate-400 flex-shrink-0" />
-              <span className="truncate">{source.city}, {source.state_province}</span>
-            </div>
-          )}
-          {(source.website || source.source_url) && (
-            <div className="flex items-center gap-2 text-slate-300">
-              <Globe className="w-4 h-4 text-slate-400 flex-shrink-0" />
-              <a
-                href={source.website || source.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-blue-400 transition-colors truncate flex items-center gap-1"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {(source.website || source.source_url).replace(/^https?:\/\/(www\.)?/, "")}
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-          )}
-        </div>
+      <CardContent className="flex-grow space-y-4 pt-2">
+        {/* Website if available */}
+        {(source.website || source.source_url) && (
+          <div className="flex items-center gap-2 text-slate-300 text-sm">
+            <Globe className="w-4 h-4 text-slate-400 flex-shrink-0" />
+            <a
+              href={source.website || source.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-blue-400 transition-colors truncate flex items-center gap-1"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {(source.website || source.source_url).replace(/^https?:\/\/(www\.)?/, "")}
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+        )}
 
         {/* Performance Metrics Section */}
         {(source.leads_generated > 0 || source.opportunities_created > 0 || source.revenue_generated > 0) && (
@@ -273,11 +311,18 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
         )}
 
         <div className="flex justify-between items-center pt-2 border-t border-slate-700">
-          <Badge variant="outline" className={statusColorClass}>
-            {source.status || 'active'}
-          </Badge>
-          {(source.source || source.source_type) && (
-            <span className="text-xs text-slate-500">{source.source || source.source_type}</span>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className={statusColorClass}>
+              {source.status || 'Active'}
+            </Badge>
+            {source.batch_id && (
+              <span className="text-xs text-slate-500">Batch: {source.batch_id}</span>
+            )}
+          </div>
+          {sourceName && (
+            <span className="text-xs text-slate-500 truncate max-w-[150px]" title={sourceName}>
+              Source: {sourceName}
+            </span>
           )}
         </div>
       </CardContent>
