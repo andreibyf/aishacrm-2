@@ -15,6 +15,7 @@ import createAiRealtimeRoutes from './aiRealtime.js';
 import { routeChat } from '../flows/index.js';
 import { resolveLLMApiKey, pickModel, getTenantIdFromRequest, selectLLMConfigForTenant } from '../lib/aiEngine/index.js';
 import { logLLMActivity } from '../lib/aiEngine/activityLogger.js';
+import { enhanceSystemPromptWithLabels, fetchEntityLabels, updateToolSchemasWithLabels } from '../lib/entityLabelInjector.js';
 
 /**
  * Create provider-specific OpenAI-compatible client for tool calling.
@@ -474,7 +475,7 @@ export default function createAIRoutes(pgPool) {
 
       const tenantName = conversationMetadata?.tenant_name || tenantRecord?.name || tenantSlug || 'CRM Tenant';
       const userContext = userName ? `\n\n**CURRENT USER:**\n- Name: ${userName}\n- Email: ${userEmail}\n- When creating activities or assigning tasks, use this user's name ("${userName}") unless explicitly asked to assign to someone else.` : '';
-      const systemPrompt = `${buildSystemPrompt({ tenantName })}
+      const baseSystemPrompt = `${buildSystemPrompt({ tenantName })}
 
 ${BRAID_SYSTEM_PROMPT}${userContext}
 
@@ -484,6 +485,9 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
 - When asked about revenue, accounts, leads, or any CRM metrics, fetch the data first
 - Only reference data returned by the tools to guarantee tenant isolation
 - When creating activities without a specified assignee, assign them to the current user (${userName || 'yourself'})`;
+
+      // Inject entity label awareness for custom terminology
+      const systemPrompt = await enhanceSystemPromptWithLabels(baseSystemPrompt, pgPool, tenantIdentifier);
 
       const messages = [
         { role: 'system', content: systemPrompt },
@@ -500,7 +504,10 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       const rawTemperature = requestDescriptor.temperatureOverride ?? conversationMetadata?.temperature ?? 0.2;
       const temperature = Math.min(Math.max(Number(rawTemperature) || 0.2, 0), 2);
 
-      const tools = await generateToolSchemas();
+      // Generate tools and update descriptions with custom entity labels
+      const baseTools = await generateToolSchemas();
+      const entityLabels = await fetchEntityLabels(pgPool, tenantIdentifier);
+      const tools = updateToolSchemasWithLabels(baseTools, entityLabels);
       if (!tools || tools.length === 0) {
         console.warn('[AI] No Braid tools loaded; falling back to minimal snapshot tool definition');
         // Fallback legacy single tool to avoid hallucinations
@@ -1692,14 +1699,20 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       }
 
       const tenantName = tenantRecord?.name || tenantRecord?.tenant_id || 'CRM Tenant';
-      const systemPrompt = `${buildSystemPrompt({ tenantName })}\n\n${BRAID_SYSTEM_PROMPT}\n\n- ALWAYS call fetch_tenant_snapshot before answering tenant data questions.\n- NEVER hallucinate records; only reference tool data.\n`;
+      const baseSystemPrompt = `${buildSystemPrompt({ tenantName })}\n\n${BRAID_SYSTEM_PROMPT}\n\n- ALWAYS call fetch_tenant_snapshot before answering tenant data questions.\n- NEVER hallucinate records; only reference tool data.\n`;
+      
+      // Inject entity label awareness for custom terminology
+      const systemPrompt = await enhanceSystemPromptWithLabels(baseSystemPrompt, pgPool, tenantIdentifier);
 
       const convoMessages = [
         { role: 'system', content: systemPrompt },
         ...messages.filter(m => m && m.role && m.content)
       ];
 
-      const tools = await generateToolSchemas();
+      // Generate tools and update descriptions with custom entity labels
+      const baseTools = await generateToolSchemas();
+      const entityLabels = await fetchEntityLabels(pgPool, tenantIdentifier);
+      const tools = updateToolSchemasWithLabels(baseTools, entityLabels);
       if (!tools || tools.length === 0) {
         tools.push({
           type: 'function',

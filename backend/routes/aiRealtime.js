@@ -1,6 +1,7 @@
 import express from 'express';
 import { BRAID_SYSTEM_PROMPT, generateToolSchemas } from '../lib/braidIntegration-v2.js';
 import { resolveLLMApiKey } from '../lib/aiEngine/index.js';
+import { fetchEntityLabels, generateEntityLabelPrompt, updateToolSchemasWithLabels } from '../lib/entityLabelInjector.js';
 
 const REALTIME_URL = 'https://api.openai.com/v1/realtime/client_secrets';
 const DEFAULT_REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-12-17';
@@ -179,11 +180,16 @@ export default function createAiRealtimeRoutes(pgPool) {
         });
       }
 
+      // Fetch entity labels and inject into instructions
+      const entityLabels = await fetchEntityLabels(pgPool, tenantId);
+      const labelPrompt = generateEntityLabelPrompt(entityLabels);
+      const enhancedInstructions = DEFAULT_REALTIME_INSTRUCTIONS + labelPrompt;
+
       const sessionPayload = {
         session: {
           type: 'realtime',
           model: DEFAULT_REALTIME_MODEL,
-          instructions: DEFAULT_REALTIME_INSTRUCTIONS,
+          instructions: enhancedInstructions,
           audio: {
             output: {
               voice: DEFAULT_REALTIME_VOICE,
@@ -199,16 +205,18 @@ export default function createAiRealtimeRoutes(pgPool) {
         const safeTools = filterRealtimeTools(allTools || []);
         console.log(`[AI][Realtime] After filtering: ${safeTools.length} safe tools`);
         if (safeTools.length > 0) {
+          // Update tool descriptions with entity labels
+          const labeledTools = updateToolSchemasWithLabels(safeTools, entityLabels);
           // Convert to OpenAI Realtime format (function calling)
-          sessionPayload.session.tools = safeTools.map(tool => ({
+          sessionPayload.session.tools = labeledTools.map(tool => ({
             type: 'function',
             name: tool.function?.name || tool.name,
             description: tool.function?.description || tool.description || '',
             parameters: tool.function?.parameters || tool.parameters || { type: 'object', properties: {} }
           }));
           sessionPayload.session.tool_choice = 'auto';
-          console.log(`[AI][Realtime] Added ${safeTools.length} tools to session payload`);
-          console.log(`[AI][Realtime] Tool names:`, safeTools.slice(0, 5).map(t => t.function?.name || t.name));
+          console.log(`[AI][Realtime] Added ${labeledTools.length} tools with entity labels to session payload`);
+          console.log(`[AI][Realtime] Tool names:`, labeledTools.slice(0, 5).map(t => t.function?.name || t.name));
         }
       } catch (toolError) {
         console.warn('[AI][Realtime] Failed to generate tool schemas, proceeding without tools:', toolError?.message);
