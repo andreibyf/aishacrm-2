@@ -42,12 +42,14 @@ export function EntityLabelsProvider({ children, tenantId }) {
 
   const fetchLabels = useCallback(async (tid) => {
     if (!tid) {
+      console.log('[EntityLabelsContext] No tenant ID, using defaults');
       setLabels(DEFAULT_LABELS);
       return;
     }
 
     try {
       setLoading(true);
+      console.log('[EntityLabelsContext] Fetching labels for tenant:', tid);
       const response = await fetch(`${BACKEND_URL}/api/entity-labels/${tid}`, {
         credentials: 'include',
       });
@@ -55,14 +57,17 @@ export function EntityLabelsProvider({ children, tenantId }) {
       if (response.ok) {
         const data = await response.json();
         if (data.status === 'success' && data.data?.labels) {
+          console.log('[EntityLabelsContext] Received labels:', data.data.labels);
+          console.log('[EntityLabelsContext] Customized entities:', data.data.customized);
           setLabels(data.data.labels);
         }
       } else {
         // Fallback to defaults on error
+        console.warn('[EntityLabelsContext] Failed to fetch labels, using defaults');
         setLabels(DEFAULT_LABELS);
       }
     } catch (error) {
-      console.error('Error fetching entity labels:', error);
+      console.error('[EntityLabelsContext] Error fetching entity labels:', error);
       setLabels(DEFAULT_LABELS);
     } finally {
       setLoading(false);
@@ -71,8 +76,14 @@ export function EntityLabelsProvider({ children, tenantId }) {
 
   useEffect(() => {
     if (tenantId && tenantId !== lastFetchedTenantId) {
+      console.log('[EntityLabelsContext] Tenant changed, fetching labels for:', tenantId);
       setLastFetchedTenantId(tenantId);
       fetchLabels(tenantId);
+    } else if (!tenantId && lastFetchedTenantId) {
+      // Tenant cleared, reset to defaults
+      console.log('[EntityLabelsContext] Tenant cleared, resetting to defaults');
+      setLabels(DEFAULT_LABELS);
+      setLastFetchedTenantId(null);
     }
   }, [tenantId, lastFetchedTenantId, fetchLabels]);
 
