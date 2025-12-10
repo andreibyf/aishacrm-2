@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.37] - 2025-06-19
+
+### Fixed
+- **Employee Assignment (assigned_to) Field Migration:** Fixed critical bug where assigning employees to entities failed
+  - `assigned_to` column migrated from TEXT (email) to UUID (employee.id) in migration 081
+  - Backend routes (contacts, leads, opportunities) now properly handle `assigned_to` and `assigned_to_name` fields
+  - `EmployeeSelector` component returns `employee.id` instead of email
+  - `DenormalizationHelper` lookups changed from email filter to UUID-based `Employee.get(id)`
+  - Removed all `user.email` defaults from entity forms (ContactForm, LeadForm, AccountForm, OpportunityForm, LeadConversionDialog)
+
+- **Employee Scope Filter Not Showing Employees:** Fixed filter dropdown showing empty when employees exist
+  - Changed field check from `user_email` to `email || user_email` for proper field detection
+
+### Added
+- **Doppler Documentation:** Added secrets management documentation to `copilot-instructions.md`
+  - Documented `doppler run -- command` pattern for running commands with secrets
+  - Listed key environment variable names (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, etc.)
+
+- **Data Cleanup Scripts:** Added utility scripts for clearing entity data
+  - `backend/clear-all-data.js` - Clears all customer data from activities, opportunities, contacts, leads, accounts
+  - `backend/cleanup-assigned-to.js` - Utility for auditing assigned_to field values
+
+---
+
 ## [2.2.36] - 2025-12-10
 
 ### Added
