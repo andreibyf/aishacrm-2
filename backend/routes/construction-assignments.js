@@ -56,7 +56,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
           `
           *,
           project:construction_projects!project_id(id, project_name, site_name, status),
-          worker:contacts!contact_id(id, first_name, last_name, email, phone, worker_role)
+          worker:workers!worker_id(id, first_name, last_name, email, phone, primary_skill, worker_type)
         `,
           { count: "exact" }
         )
@@ -69,7 +69,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         q = q.eq("project_id", project_id);
       }
       if (contact_id && isValidUUID(contact_id)) {
-        q = q.eq("contact_id", contact_id);
+        q = q.eq("worker_id", contact_id); // Note: query param still named contact_id for backwards compat
       }
       if (status) {
         q = q.eq("status", status);
@@ -152,7 +152,8 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
       const {
         tenant_id,
         project_id,
-        contact_id,
+        worker_id,
+        contact_id, // Backwards compatibility
         role,
         start_date,
         end_date,
@@ -165,6 +166,9 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         created_by,
       } = req.body;
 
+      // Use worker_id if provided, fall back to contact_id for backwards compatibility
+      const workerId = worker_id || contact_id;
+
       // Validate required fields
       if (!tenant_id || !isValidUUID(tenant_id)) {
         return res.status(400).json({ status: "error", message: "Valid tenant_id is required" });
@@ -172,8 +176,8 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
       if (!project_id || !isValidUUID(project_id)) {
         return res.status(400).json({ status: "error", message: "Valid project_id is required" });
       }
-      if (!contact_id || !isValidUUID(contact_id)) {
-        return res.status(400).json({ status: "error", message: "Valid contact_id (worker) is required" });
+      if (!workerId || !isValidUUID(workerId)) {
+        return res.status(400).json({ status: "error", message: "Valid worker_id is required" });
       }
       if (!role || !role.trim()) {
         return res.status(400).json({ status: "error", message: "role is required" });
@@ -185,7 +189,7 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
       const payload = {
         tenant_id,
         project_id,
-        contact_id,
+        worker_id: workerId,
         role: role.trim(),
         start_date: toDate(start_date),
         end_date: toDate(end_date),

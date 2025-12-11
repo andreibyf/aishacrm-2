@@ -316,6 +316,20 @@ const defaultModules = [
       "Lead to Project Conversion",
     ],
   },
+  {
+    id: "workers",
+    name: "Workers",
+    description: "Manage contractors, temp labor, and subcontractors for construction staffing",
+    icon: Users,
+    features: [
+      "Worker Management",
+      "Contractor Management",
+      "Temp Labor Tracking",
+      "Skills Tracking",
+      "Certifications",
+      "Project Assignments",
+    ],
+  },
 ];
 
 export default function ModuleManager() {

@@ -234,6 +234,7 @@ import createSupabaseProxyRoutes from "./routes/supabaseProxy.js";
 import createSuggestionsRoutes from "./routes/suggestions.js";
 import createConstructionProjectsRoutes from "./routes/construction-projects.js";
 import createConstructionAssignmentsRoutes from "./routes/construction-assignments.js";
+import createWorkersRoutes from "./routes/workers.js";
 import { createDeprecationMiddleware } from "./middleware/deprecation.js";
 
 // Apply v1 deprecation headers middleware (before routes)
@@ -319,6 +320,8 @@ console.log("✓ Mounting /api/construction/projects routes");
 app.use("/api/construction/projects", createConstructionProjectsRoutes(measuredPgPool));
 console.log("✓ Mounting /api/construction/assignments routes");
 app.use("/api/construction/assignments", createConstructionAssignmentsRoutes(measuredPgPool));
+console.log("✓ Mounting /api/workers routes");
+app.use("/api/workers", createWorkersRoutes(measuredPgPool));
 // Memory routes use Redis/Valkey; DB pool not required
 app.use("/api/memory", createMemoryRoutes());
 // Auth routes (cookie-based login/refresh/logout)

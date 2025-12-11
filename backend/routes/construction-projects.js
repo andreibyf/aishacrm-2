@@ -60,7 +60,18 @@ export default function createConstructionProjectsRoutes(_pgPool) {
           lead:leads!lead_id(id, first_name, last_name, company),
           project_manager:contacts!project_manager_contact_id(id, first_name, last_name, email),
           supervisor:contacts!supervisor_contact_id(id, first_name, last_name, email),
-          assignments:construction_assignments(count)
+          assignments:construction_assignments(
+            id,
+            worker_id,
+            role,
+            start_date,
+            end_date,
+            pay_rate,
+            bill_rate,
+            rate_type,
+            status,
+            worker:workers(id, first_name, last_name, worker_type, primary_skill)
+          )
         `,
           { count: "exact" }
         )
@@ -120,8 +131,8 @@ export default function createConstructionProjectsRoutes(_pgPool) {
           project_manager:contacts!project_manager_contact_id(id, first_name, last_name, email, phone),
           supervisor:contacts!supervisor_contact_id(id, first_name, last_name, email, phone),
           assignments:construction_assignments(
-            id, contact_id, role, start_date, end_date, pay_rate, bill_rate, rate_type, status, notes,
-            worker:contacts!contact_id(id, first_name, last_name, email, phone, worker_role)
+            id, worker_id, role, start_date, end_date, pay_rate, bill_rate, rate_type, status, notes,
+            worker:workers!worker_id(id, first_name, last_name, email, phone, worker_type, primary_skill)
           )
         `
         )

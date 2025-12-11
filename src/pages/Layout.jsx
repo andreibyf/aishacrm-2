@@ -123,6 +123,7 @@ const navItems = [
   { href: "Activities", icon: CheckSquare, label: "Activities" },
   { href: "Calendar", icon: Calendar, label: "Calendar" },
   { href: "ConstructionProjects", icon: HardHat, label: "Construction Projects" }, // Construction staffing module
+  { href: "Workers", icon: Users, label: "Workers" }, // Contractors/temp labor management
   { href: "BizDevSources", icon: Database, label: "BizDev Sources" },
   { href: "CashFlow", icon: DollarSign, label: "Cash Flow" },
   { href: "DocumentProcessing", icon: FileText, label: "Document Processing" },
@@ -224,6 +225,7 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     ClientOnboarding: 'Client Onboarding',
     Workflows: 'Workflows',
     ConstructionProjects: 'Construction Projects',
+    Workers: 'Workers',
     DuplicateContacts: null,
     DuplicateAccounts: null,
     DuplicateLeads: null,
@@ -322,6 +324,7 @@ function getDefaultNavigationPermissions(role) {
       ClientOnboarding: true,
       ClientRequirements: true, // NEW
       ConstructionProjects: true, // Construction staffing module
+      Workers: true, // Worker/contractor management
       DuplicateContacts: true,
       DuplicateAccounts: true,
       DuplicateLeads: true,
@@ -354,6 +357,7 @@ function getDefaultNavigationPermissions(role) {
       ClientOnboarding: true,
       ClientRequirements: true, // NEW
       ConstructionProjects: true, // Construction staffing module
+      Workers: true, // Worker/contractor management
       DuplicateContacts: true,
       DuplicateAccounts: true,
       DuplicateLeads: true,
@@ -386,6 +390,7 @@ function getDefaultNavigationPermissions(role) {
       ClientOnboarding: true,
       ClientRequirements: false,
       ConstructionProjects: true, // Construction staffing module
+      Workers: true, // Worker/contractor management
       DuplicateContacts: true,
       DuplicateAccounts: true,
       DuplicateLeads: true,
@@ -404,6 +409,7 @@ function getDefaultNavigationPermissions(role) {
       ClientOnboarding: false,
       ClientRequirements: false,
       ConstructionProjects: true, // Construction staffing module - workers need access
+      Workers: true, // Worker/contractor management - workers need access
     },
   };
 

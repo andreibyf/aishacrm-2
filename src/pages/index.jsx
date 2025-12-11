@@ -40,6 +40,7 @@ const PAGES = {
     SystemLogs: lazy(() => import('./SystemLogs')),
     Workflows: lazy(() => import('./Workflows')),
     ConstructionProjects: lazy(() => import('./ConstructionProjects')),
+    Workers: lazy(() => import('./Workers')),
 };
 
 function _getCurrentPage(url) {
@@ -105,6 +106,7 @@ function PagesContent() {
                             <Route path="/SystemLogs" element={<PAGES.SystemLogs />} />
                             <Route path="/Workflows" element={<PAGES.Workflows />} />
                             <Route path="/ConstructionProjects" element={<PAGES.ConstructionProjects />} />
+                            <Route path="/Workers" element={<PAGES.Workers />} />
                         </Routes>
                     </Layout>
                 } />

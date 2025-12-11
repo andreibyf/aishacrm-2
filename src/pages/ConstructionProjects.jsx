@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { ConstructionProject, ConstructionAssignment, Account, Contact, Lead } from "@/api/entities";
+import { ConstructionProject, ConstructionAssignment, Account, Contact, Lead, Worker } from "@/api/entities";
 import { useTenant } from "@/components/shared/tenantContext";
 import { useUser } from "@/components/shared/useUser";
 import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
@@ -118,6 +118,7 @@ export default function ConstructionProjects() {
   const [projects, setProjects] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [contacts, setContacts] = useState([]);
+  const [workers, setWorkers] = useState([]);
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -150,7 +151,7 @@ export default function ConstructionProjects() {
 
   // Form state for assignment
   const [assignmentForm, setAssignmentForm] = useState({
-    contact_id: "",
+    worker_id: "",
     role: "",
     start_date: "",
     end_date: "",
@@ -167,17 +168,19 @@ export default function ConstructionProjects() {
 
     setLoading(true);
     try {
-      const [projectsData, accountsData, contactsData, leadsData] = await Promise.all([
+      const [projectsData, accountsData, contactsData, leadsData, workersData] = await Promise.all([
         ConstructionProject.list({ tenant_id: effectiveTenantId }),
         Account.list({ tenant_id: effectiveTenantId }),
         Contact.list({ tenant_id: effectiveTenantId }),
         Lead.list({ tenant_id: effectiveTenantId }),
+        Worker.list({ tenant_id: effectiveTenantId }),
       ]);
 
       setProjects(Array.isArray(projectsData) ? projectsData : []);
       setAccounts(Array.isArray(accountsData) ? accountsData : accountsData?.data || []);
       setContacts(Array.isArray(contactsData) ? contactsData : contactsData?.data || []);
       setLeads(Array.isArray(leadsData) ? leadsData : leadsData?.data || []);
+      setWorkers(Array.isArray(workersData) ? workersData : workersData?.data || []);
     } catch (err) {
       console.error("[ConstructionProjects] Load error:", err);
       toast.error("Failed to load data");
@@ -312,7 +315,7 @@ export default function ConstructionProjects() {
   const handleAddAssignment = () => {
     setEditingAssignment(null);
     setAssignmentForm({
-      contact_id: "",
+      worker_id: "",
       role: "",
       start_date: "",
       end_date: "",
@@ -328,7 +331,7 @@ export default function ConstructionProjects() {
   const handleEditAssignment = (assignment) => {
     setEditingAssignment(assignment);
     setAssignmentForm({
-      contact_id: assignment.contact_id || "",
+      worker_id: assignment.worker_id || "",
       role: assignment.role || "",
       start_date: assignment.start_date || "",
       end_date: assignment.end_date || "",
@@ -342,7 +345,7 @@ export default function ConstructionProjects() {
   };
 
   const handleSaveAssignment = async () => {
-    if (!assignmentForm.contact_id) {
+    if (!assignmentForm.worker_id) {
       toast.error("Please select a worker");
       return;
     }
@@ -670,40 +673,55 @@ export default function ConstructionProjects() {
               <div>
                 <Label>Worker *</Label>
                 <Select
-                  value={assignmentForm.contact_id}
-                  onValueChange={(v) => setAssignmentForm({ ...assignmentForm, contact_id: v })}
+                  value={assignmentForm.worker_id}
+                  onValueChange={(v) => {
+                    if (v === "__create_new__") {
+                      // Open workers page in new tab
+                      window.open('/Workers', '_blank');
+                      toast.info("Create the worker, then come back and refresh this dialog");
+                    } else {
+                      setAssignmentForm({ ...assignmentForm, worker_id: v });
+                    }
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a worker..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {contacts.map((contact) => (
-                      <SelectItem key={contact.id} value={contact.id}>
-                        {getContactName(contact)}
-                        {contact.worker_role && ` (${contact.worker_role})`}
+                    <SelectItem value="__create_new__" className="text-blue-600 font-medium">
+                      <Plus className="h-4 w-4 inline mr-2" />
+                      Create New Worker
+                    </SelectItem>
+                    {workers.length > 0 && <SelectItem value="__divider__" disabled>────────────────</SelectItem>}
+                    {workers.map((worker) => (
+                      <SelectItem key={worker.id} value={worker.id}>
+                        {worker.first_name} {worker.last_name}
+                        {worker.primary_skill && ` (${worker.primary_skill})`}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Worker not in list? Create new worker contact above.
+                </p>
               </div>
 
               <div>
                 <Label>Role *</Label>
-                <Select
+                <Input
+                  placeholder="Enter role (e.g., Laborer, Electrician, Carpenter)..."
                   value={assignmentForm.role}
-                  onValueChange={(v) => setAssignmentForm({ ...assignmentForm, role: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select or type a role..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {commonRoles.map((role) => (
-                      <SelectItem key={role} value={role}>
-                        {role}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(e) => setAssignmentForm({ ...assignmentForm, role: e.target.value })}
+                  list="role-suggestions"
+                />
+                <datalist id="role-suggestions">
+                  {commonRoles.map((role) => (
+                    <option key={role} value={role} />
+                  ))}
+                </datalist>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Common roles available as suggestions
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

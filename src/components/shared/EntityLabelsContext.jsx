@@ -9,6 +9,7 @@ const DEFAULT_LABELS = {
   opportunities: { plural: 'Opportunities', singular: 'Opportunity' },
   activities: { plural: 'Activities', singular: 'Activity' },
   bizdev_sources: { plural: 'BizDev Sources', singular: 'BizDev Source' },
+  workers: { plural: 'Workers', singular: 'Worker' },
 };
 
 // Entity key to href mapping (for navigation)
@@ -19,6 +20,7 @@ const ENTITY_KEY_TO_HREF = {
   opportunities: 'Opportunities',
   activities: 'Activities',
   bizdev_sources: 'BizDevSources',
+  workers: 'Workers',
 };
 
 // Reverse mapping: href to entity key
