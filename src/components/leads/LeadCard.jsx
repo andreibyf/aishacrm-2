@@ -18,7 +18,7 @@ const statusColors = {
   lost: 'bg-red-900/20 text-red-300 border-red-700'
 };
 
-export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClick, isSelected, onSelect, onConvert, user }) {
+export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDetails, onClick, isSelected, onSelect, onConvert, user }) {
   const isConverted = lead.status === 'converted';
   
   return (
@@ -54,11 +54,16 @@ export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClic
                     {lead.job_title}
                   </p>
                 )}
-                {lead.company && (
-                  <p className="text-sm text-slate-400 flex items-center gap-1 mt-1">
-                    <Building2 className="w-3 h-3" />
-                    {lead.company}
-                  </p>
+                {(accountName || lead.company) && (
+                  <div className="text-sm text-slate-400 mt-1">
+                    <p className="flex items-center gap-1">
+                      <Building2 className="w-3 h-3" />
+                      {accountName || lead.company}
+                    </p>
+                    {accountName && lead.company && lead.company !== accountName && (
+                      <p className="text-xs text-slate-500 ml-4">Company: {lead.company}</p>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

@@ -151,7 +151,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
     <form onSubmit={handleSubmit} className="p-6 space-y-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl font-bold text-slate-100">
-          {source?.id ? "Edit BizDev Source" : "Add BizDev Source"}
+          {source?.id ? `Edit ${sourceFieldLabel}` : `Add ${sourceFieldLabel}`}
         </h2>
         <Button
           type="button"

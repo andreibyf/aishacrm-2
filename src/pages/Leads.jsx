@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import {
   AlertCircle,
+  Building2,
   Edit,
   Eye,
   Grid,
@@ -540,9 +541,22 @@ export default function LeadsPage() {
     }, {});
   }, [employees]);
 
-  const handleSave = async (result) => {
-    console.log("[Leads.handleSave] Received result from LeadForm:", result);
+  const accountsMap = useMemo(() => {
+    return accounts.reduce((acc, account) => {
+      if (account?.id) {
+        acc[account.id] = account.name || account.company || '';
+      }
+      return acc;
+    }, {});
+  }, [accounts]);
 
+  const getAssociatedAccountName = useCallback((leadRecord) => {
+    if (!leadRecord) return '';
+    const accountId = leadRecord.account_id || leadRecord.metadata?.account_id;
+    return accountsMap[accountId] || leadRecord.account_name || '';
+  }, [accountsMap]);
+
+  const handleSave = async (result) => {
     try {
       // Close form and clear editing state
       setIsFormOpen(false);
@@ -555,7 +569,6 @@ export default function LeadsPage() {
       clearCache("Lead");
 
       // Reload leads and stats
-      console.log("[Leads.handleSave] Reloading data...");
       await Promise.all([
         loadLeads(1, pageSize), // Always load page 1 to show the lead
         loadTotalStats(),
@@ -1102,6 +1115,7 @@ export default function LeadsPage() {
             handleConvert(lead);
           }}
           user={user}
+          associatedAccountName={getAssociatedAccountName(detailLead)}
         />
 
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -1546,9 +1560,26 @@ export default function LeadsPage() {
                               </div>
                             </td>
                             <td className="px-4 py-3 text-sm text-slate-300">
-                              {lead.company || (
-                                <span className="text-slate-500">—</span>
-                              )}
+                              {(() => {
+                                const associatedAccountName = getAssociatedAccountName(lead);
+                                const companyLabel = associatedAccountName || lead.company;
+
+                                if (!companyLabel) {
+                                  return <span className="text-slate-500">—</span>;
+                                }
+
+                                return (
+                                  <div className="space-y-1">
+                                    <span className="font-medium text-slate-200 flex items-center gap-2">
+                                      <Building2 className="w-3 h-3 text-slate-500" />
+                                      {companyLabel}
+                                    </span>
+                                    {associatedAccountName && lead.company && lead.company !== associatedAccountName && (
+                                      <span className="text-xs text-slate-500">Company: {lead.company}</span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </td>
                             <td
                               className="px-4 py-3 text-sm text-slate-300"
@@ -1701,6 +1732,7 @@ export default function LeadsPage() {
                     <LeadCard
                       key={lead.id}
                       lead={lead}
+                      accountName={getAssociatedAccountName(lead)}
                       onEdit={(l) => {
                         setEditingLead(l);
                         setIsFormOpen(true);

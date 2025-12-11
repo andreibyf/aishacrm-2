@@ -129,6 +129,7 @@ export function EntityLabelsProvider({ children, tenantId }) {
   }, [getLabel]);
 
   const refresh = useCallback(() => {
+    console.log('[EntityLabelsContext] refresh() called, tenantId:', tenantId);
     if (tenantId) {
       fetchLabels(tenantId);
     }

@@ -32,6 +32,7 @@ export function useNavOrder(defaultItems, storageKeyPrefix = NAV_ORDER_KEY_PREFI
   const [order, setOrderState] = useState(() => {
     try {
       const saved = localStorage.getItem(storageKey);
+      console.log("[useNavOrder] Initial mount - storageKey:", storageKey, "tenant:", tenantId, "saved:", saved ? "YES" : "NO");
       if (saved) {
         return JSON.parse(saved);
       }
@@ -43,11 +44,16 @@ export function useNavOrder(defaultItems, storageKeyPrefix = NAV_ORDER_KEY_PREFI
 
   // Re-read from localStorage when tenant changes
   useEffect(() => {
+    console.log("[useNavOrder] useEffect triggered - storageKey changed to:", storageKey, "tenant:", tenantId);
     try {
       const saved = localStorage.getItem(storageKey);
+      console.log("[useNavOrder] Read from storage - key:", storageKey, "found:", saved ? "YES" : "NO", "value:", saved);
       if (saved) {
-        setOrderState(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        console.log("[useNavOrder] Setting order to:", parsed);
+        setOrderState(parsed);
       } else {
+        console.log("[useNavOrder] No saved order found, setting to null");
         setOrderState(null);
       }
     } catch (e) {
@@ -58,7 +64,9 @@ export function useNavOrder(defaultItems, storageKeyPrefix = NAV_ORDER_KEY_PREFI
 
   // Apply order to items - returns items sorted by saved order
   const orderedItems = useCallback(() => {
+    console.log("[useNavOrder] Calculating orderedItems - current order:", order, "defaultItems count:", defaultItems.length);
     if (!order || !Array.isArray(order)) {
+      console.log("[useNavOrder] No custom order, returning default items");
       return defaultItems;
     }
 
@@ -83,6 +91,7 @@ export function useNavOrder(defaultItems, storageKeyPrefix = NAV_ORDER_KEY_PREFI
       }
     }
     
+    console.log("[useNavOrder] Returning ordered items:", ordered.length, "items");
     return ordered;
   }, [defaultItems, order]);
 
@@ -92,6 +101,7 @@ export function useNavOrder(defaultItems, storageKeyPrefix = NAV_ORDER_KEY_PREFI
       const orderArray = Array.isArray(newOrder) 
         ? newOrder.map(item => typeof item === 'string' ? item : item.href)
         : newOrder;
+      console.log("[useNavOrder] Saving order - key:", storageKey, "order:", orderArray);
       localStorage.setItem(storageKey, JSON.stringify(orderArray));
       setOrderState(orderArray);
     } catch (e) {

@@ -906,6 +906,11 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   const { orderedItems: orderedNavItems, setOrder: setNavOrder, resetOrder: resetNavOrder, hasCustomOrder: hasCustomNavOrder } = usePrimaryNavOrder(navItems, effectiveTenantId);
   const { orderedItems: orderedSecondaryItems, setOrder: setSecondaryOrder, resetOrder: resetSecondaryOrder, hasCustomOrder: hasCustomSecondaryOrder } = useSecondaryNavOrder(secondaryNavItems, effectiveTenantId);
 
+  // Debug navigation order persistence
+  React.useEffect(() => {
+    console.log("[Layout] effectiveTenantId changed:", effectiveTenantId, "user:", user?.email);
+  }, [effectiveTenantId, user?.email]);
+
   // DnD sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -1918,10 +1923,15 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         localStorage.setItem('DISABLE_MOCK_USER', 'true');
 
         // Remove any chat/agent-related keys by prefix
+        // PRESERVE: Navigation order preferences across logout (aisha_crm_nav_order_*)
         const toRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
           if (!k) continue;
+          // Skip navigation order keys - preserve user preferences
+          if (k.startsWith("aisha_crm_nav_order") || k.startsWith("aisha_crm_secondary_nav_order")) {
+            continue;
+          }
           if (
             k.startsWith("chat_") ||
             k.startsWith("agent_") ||

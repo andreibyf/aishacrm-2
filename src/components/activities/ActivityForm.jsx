@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Activity } from '@/api/entities';
 import { Contact, Account, Lead, Opportunity } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
+import { useEntityLabel } from '@/components/shared/EntityLabelsContext';
 import { Note } from "@/api/entities"; // NEW: Import Note entity
 import { useTimezone } from '../shared/TimezoneContext';
 import { localToUtc, utcToLocal, getCurrentTimezoneOffset } from '../shared/timezoneUtils';
@@ -33,6 +34,7 @@ const timeOptions = generateTimeOptions();
 
 export default function ActivityForm({ activity, relatedTo, relatedId, onSave, onCancel, tenantId, user: propsUser }) {
   const { selectedTimezone } = useTimezone();
+  const { singular: activityLabel } = useEntityLabel('activities');
   const offsetMinutes = getCurrentTimezoneOffset(selectedTimezone);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [contacts, setContacts] = useState([]);
@@ -559,7 +561,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
         <form onSubmit={handleSubmit} className="space-y-6" data-testid="activity-form">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="type" className="text-slate-200">Activity Type *</Label>
+              <Label htmlFor="type" className="text-slate-200">{activityLabel} Type *</Label>
               <Select value={formData.type} onValueChange={(value) => handleChange('type', value)}>
                 <SelectTrigger className="mt-1 bg-slate-700 border-slate-600 text-slate-200" data-testid="activity-type-select">
                   <SelectValue placeholder="Select type..." />

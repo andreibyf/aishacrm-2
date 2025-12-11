@@ -156,7 +156,7 @@ export default function LeadForm({
             do_not_call: lead.do_not_call || false, // Populate DNC from lead
             do_not_text: lead.do_not_text || false, // Populate DNT from lead
             company: lead.company || "",
-            account_id: lead.account_id || "",
+            account_id: lead.account_id || lead.metadata?.account_id || "",
             job_title: lead.job_title || "",
             source: lead.source || "website",
             status: lead.status || "new",

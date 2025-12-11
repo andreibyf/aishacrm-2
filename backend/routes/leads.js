@@ -474,6 +474,7 @@ export default function createLeadRoutes(_pgPool) {
         tags,
         assigned_to,
         assigned_to_name,
+        account_id,
         ...otherFields
       } = req.body;
 
@@ -502,6 +503,7 @@ export default function createLeadRoutes(_pgPool) {
       const metadataExtras = {};
       if (title !== undefined && title !== null) metadataExtras.title = title;
       if (description !== undefined && description !== null) metadataExtras.description = description;
+      if (account_id !== undefined) metadataExtras.account_id = account_id;
       const combinedMetadata = sanitizeMetadataPayload(metadata, otherFields, metadataExtras);
 
       const nowIso = new Date().toISOString();
@@ -689,6 +691,7 @@ export default function createLeadRoutes(_pgPool) {
         tags,
         assigned_to,
         assigned_to_name,
+        account_id,
         ...otherFields
       } = req.body;
 
@@ -724,6 +727,7 @@ export default function createLeadRoutes(_pgPool) {
       const metadataExtras = {};
       if (title !== undefined) metadataExtras.title = title;
       if (description !== undefined) metadataExtras.description = description;
+      if (account_id !== undefined) metadataExtras.account_id = account_id;
       const updatedMetadata = sanitizeMetadataPayload(current?.metadata, metadata, otherFields, metadataExtras);
 
       const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };

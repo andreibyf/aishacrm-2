@@ -21,7 +21,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { BizDevSource } from "@/api/entities";
 
-export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, isSelected, onSelect, onUpdate }) {
+export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, isSelected, onSelect, onUpdate, tenantId }) {
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesText, setNotesText] = useState(source.notes || "");
   const [savingNotes, setSavingNotes] = useState(false);
@@ -30,7 +30,14 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
   const handleSaveNotes = async () => {
     try {
       setSavingNotes(true);
-      await BizDevSource.update(source.id, { notes: notesText });
+      const updateTenantId = source.tenant_id || tenantId;
+      if (!updateTenantId) {
+        throw new Error('tenant_id is required');
+      }
+      await BizDevSource.update(source.id, { 
+        notes: notesText,
+        tenant_id: updateTenantId
+      });
       toast.success('Notes saved');
       setEditingNotes(false);
       // Call onUpdate to reflect changes in parent
@@ -139,6 +146,7 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
             </div>
           )}
 
+          {/* Left side - Company info */}
           <div className="flex-1 space-y-1">
             <div className="flex items-start gap-3">
               <div className={`w-10 h-10 rounded-lg ${hasActivity ? 'bg-green-900/30 border-green-700/50' : 'bg-blue-900/30 border-blue-700/50'} border flex items-center justify-center flex-shrink-0 relative`}>
@@ -227,6 +235,73 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
               )}
             </div>
           </div>
+
+          {/* Right side - Notes area */}
+          <div className="flex-1 bg-slate-700/30 border border-slate-600 rounded-lg p-3 min-h-[100px] flex flex-col">
+            {editingNotes ? (
+              <div className="space-y-2 flex-1 flex flex-col">
+                <Textarea
+                  value={notesText}
+                  onChange={(e) => setNotesText(e.target.value)}
+                  placeholder="Add notes..."
+                  className="text-xs bg-slate-700 border-slate-600 text-slate-100 flex-1 resize-none"
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSaveNotes();
+                    }}
+                    disabled={savingNotes}
+                    className="bg-blue-600 hover:bg-blue-700 h-7 text-xs"
+                  >
+                    <Save className="w-3 h-3 mr-1" />
+                    Save
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingNotes(false);
+                      setNotesText(source.notes || "");
+                    }}
+                    className="border-slate-600 text-slate-400 hover:bg-slate-700 h-7 text-xs"
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {source.notes ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingNotes(true);
+                    }}
+                    className="w-full h-full text-left flex flex-col hover:bg-slate-700/50 p-1 rounded transition-colors"
+                  >
+                    <div className="text-xs text-slate-400 mb-1 font-semibold">Notes</div>
+                    <div className="text-sm text-slate-300 line-clamp-3 flex-1">{source.notes}</div>
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingNotes(true);
+                    }}
+                    className="w-full h-full text-left flex items-center justify-center text-xs text-slate-500 hover:text-slate-400 hover:bg-slate-700/50 rounded transition-colors"
+                  >
+                    + Add notes
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+
           <div className="flex items-center gap-1">
             {/* Eye icon for view */}
             <Button
@@ -335,74 +410,6 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
               Linked to Account: {linkedAccount.name}
             </Badge>
           </div>
-        )}
-
-        {/* Notes Section */}
-        {editingNotes ? (
-          <div className="space-y-2 pt-2 border-t border-slate-700">
-            <div className="text-xs text-slate-400 font-semibold">Notes</div>
-            <Textarea
-              value={notesText}
-              onChange={(e) => setNotesText(e.target.value)}
-              placeholder="Add notes about this source..."
-              className="text-sm bg-slate-700 border-slate-600 text-slate-100 min-h-[60px] resize-none"
-              onClick={(e) => e.stopPropagation()}
-            />
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSaveNotes();
-                }}
-                disabled={savingNotes}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                <Save className="w-3 h-3 mr-1" />
-                {savingNotes ? 'Saving...' : 'Save'}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditingNotes(false);
-                  setNotesText(source.notes || "");
-                }}
-                className="border-slate-600 text-slate-400 hover:bg-slate-700"
-              >
-                <X className="w-3 h-3" />
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <>
-            {source.notes && (
-              <div className="pt-2 border-t border-slate-700">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditingNotes(true);
-                  }}
-                  className="w-full text-left text-sm text-slate-300 hover:text-slate-100 hover:bg-slate-700/50 p-2 rounded transition-colors"
-                >
-                  <div className="text-xs text-slate-400 mb-1">Notes</div>
-                  <div className="text-sm line-clamp-2">{source.notes}</div>
-                </button>
-              </div>
-            )}
-            {!source.notes && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditingNotes(true);
-                }}
-                className="w-full text-left pt-2 border-t border-slate-700 text-xs text-slate-500 hover:text-slate-400 p-2 rounded transition-colors"
-              >
-                + Add notes
-              </button>
-            )}
-          </>
         )}
 
         <div className="flex justify-between items-center pt-2 border-t border-slate-700">

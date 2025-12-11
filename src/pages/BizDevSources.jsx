@@ -738,6 +738,7 @@ export default function BizDevSourcesPage() {
                 <BizDevSourceCard
                   key={source.id}
                   source={source}
+                  tenantId={user?.tenant_id || selectedTenantId}
                   onClick={handleViewDetails}
                   isSelected={selectedSources.includes(source.id)}
                   onSelect={handleSelectSource}
