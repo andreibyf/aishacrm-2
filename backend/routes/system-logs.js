@@ -64,8 +64,12 @@ export default function createSystemLogRoutes(_pgPool) {
         ...otherFields
       } = req.body;
 
-      // Default to null for system-level logs (tenant_id is UUID, can't use 'system' string)
-      const effectiveTenantId = tenant_id || null;
+      // For tenant admins, use their tenant_id; for superadmins, allow null
+      // This ensures RLS policies work correctly for non-superadmin users
+      let effectiveTenantId = tenant_id || null;
+      if (!effectiveTenantId && req.tenant?.id) {
+        effectiveTenantId = req.tenant.id; // Use authenticated user's tenant
+      }
 
       // Merge metadata with unknown fields and extra fields that don't exist as columns
       const combinedMetadata = {
@@ -137,8 +141,12 @@ export default function createSystemLogRoutes(_pgPool) {
           ...otherFields
         } = e || {};
 
-        // Use null for system-level logs (tenant_id is UUID, can't use 'system' string)
-        const effectiveTenantId = tenant_id || null;
+        // For tenant admins, use their tenant_id; for superadmins, allow null
+        let effectiveTenantId = tenant_id || null;
+        if (!effectiveTenantId && req.tenant?.id) {
+          effectiveTenantId = req.tenant.id; // Use authenticated user's tenant
+        }
+        
         const combinedMetadata = { ...(metadata || {}), ...otherFields };
         if (user_email) combinedMetadata.user_email = user_email;
         if (user_agent) combinedMetadata.user_agent = user_agent;

@@ -446,7 +446,7 @@ async function writeHeartbeat() {
       `INSERT INTO system_logs (tenant_id, level, message, source, metadata, created_at)
        VALUES ($1, $2, $3, $4, $5, NOW())`,
       [
-        "system",
+        null,  // NULL for system-level logs (not tenant-specific)
         "INFO",
         "Heartbeat",
         "Backend Server",
@@ -478,7 +478,7 @@ async function logRecoveryIfGap() {
   try {
     const result = await pgPool.query(
       `SELECT created_at FROM system_logs
-       WHERE tenant_id = 'system' AND source = 'Backend Server' AND message = 'Heartbeat'
+       WHERE tenant_id IS NULL AND source = 'Backend Server' AND message = 'Heartbeat'
        ORDER BY created_at DESC LIMIT 1`,
     );
     if (result.rows.length > 0) {
