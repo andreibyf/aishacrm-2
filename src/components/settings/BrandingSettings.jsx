@@ -54,7 +54,7 @@ export default function BrandingSettings() {
   const [footerLogoUrl, setFooterLogoUrl] = React.useState(""); // Global footer logo
   const [footerLegalHtml, setFooterLegalHtml] = React.useState("");
 
-  const canEdit = !!me && (me.role === "admin" || me.role === "superadmin");
+  const canEdit = !!me && me.role === "superadmin";
 
   // NEW: Fetch current user for permissions from global context
   React.useEffect(() => {
@@ -527,7 +527,7 @@ export default function BrandingSettings() {
             Ai‑SHA Global Footer (Logo & Legal)
           </CardTitle>
           <CardDescription className="text-slate-400">
-            This controls the footer for ALL tenants and users. Only admins can
+            This controls the footer for ALL tenants and users. Only superadmin can
             edit.
           </CardDescription>
         </CardHeader>
