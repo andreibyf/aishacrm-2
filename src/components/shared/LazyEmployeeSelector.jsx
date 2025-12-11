@@ -41,20 +41,17 @@ export default function LazyEmployeeSelector({
     }
   }, [user, selectedTenantId]);
 
-  // Create a map of email -> full name for display
+  // Create a map of id -> full name for display
   const employeeMap = useMemo(() => {
     const map = {};
     employees.forEach(emp => {
-      if (emp.email || emp.user_email) {
-        const email = emp.email || emp.user_email;
-        const fullName = `${emp.first_name} ${emp.last_name}`.trim();
-        map[email] = fullName;
-      }
+      const fullName = `${emp.first_name} ${emp.last_name}`.trim();
+      map[emp.id] = fullName;
     });
     return map;
   }, [employees]);
 
-  // Get display value - show name instead of email
+  // Get display value - show name instead of id
   const getDisplayValue = () => {
     if (!value || value === 'all') return includeAll ? 'All Employees' : placeholder;
     if (value === 'unassigned') return 'Unassigned';
@@ -80,15 +77,12 @@ export default function LazyEmployeeSelector({
           </SelectItem>
         )}
         {employees.map((employee) => {
-          const email = employee.email || employee.user_email;
           const fullName = `${employee.first_name} ${employee.last_name}`.trim();
-          
-          if (!email) return null;
           
           return (
             <SelectItem 
               key={employee.id} 
-              value={email}
+              value={employee.id}
               className="hover:bg-slate-700"
             >
               {fullName}

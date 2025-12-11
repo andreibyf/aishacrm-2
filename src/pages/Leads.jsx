@@ -534,8 +534,13 @@ export default function LeadsPage() {
 
   const employeesMap = useMemo(() => {
     return employees.reduce((acc, employee) => {
+      const fullName = `${employee.first_name} ${employee.last_name}`.trim();
+      // Map by both ID and email for backwards compatibility
+      if (employee.id) {
+        acc[employee.id] = fullName;
+      }
       if (employee.email) {
-        acc[employee.email] = `${employee.first_name} ${employee.last_name}`;
+        acc[employee.email] = fullName;
       }
       return acc;
     }, {});
