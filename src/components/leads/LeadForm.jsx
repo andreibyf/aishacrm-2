@@ -121,13 +121,13 @@ export default function LeadForm({
   const assignableEmployees = useMemo(() => {
     if (!employees || !user) return [];
 
-    // Managers can assign to anyone with CRM access
+    // Managers can assign to any active employee
     if (isManager) {
-      return employees.filter(e => e.user_email && e.has_crm_access);
+      return employees.filter(e => e.is_active !== false && e.status !== 'inactive');
     }
 
-    // Employees can only assign to themselves if they have CRM access
-    return employees.filter(e => e.user_email === user.email && e.has_crm_access);
+    // Employees can only assign to themselves
+    return employees.filter(e => e.id === user.employee_id || e.email === user.email);
   }, [employees, user, isManager]);
 
   const isSuperadmin = user?.role === 'superadmin';
@@ -644,8 +644,8 @@ export default function LeadForm({
                     <SelectContent className="bg-slate-800 border-slate-700">
                       <SelectItem value="unassigned" className="text-slate-200 hover:bg-slate-700">Unassigned</SelectItem>
                       {assignableEmployees.map((emp) => (
-                        <SelectItem key={emp.id} value={emp.user_email} className="text-slate-200 hover:bg-slate-700">
-                          {emp.first_name} {emp.last_name} ({emp.user_email})
+                        <SelectItem key={emp.id} value={emp.id} className="text-slate-200 hover:bg-slate-700">
+                          {emp.first_name} {emp.last_name}
                         </SelectItem>
                       ))}
                     </SelectContent>
