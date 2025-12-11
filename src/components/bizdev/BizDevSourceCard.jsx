@@ -237,7 +237,7 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
           </div>
 
           {/* Right side - Notes area */}
-          <div className="flex-1 bg-slate-700/30 border border-slate-600 rounded-lg p-3 min-h-[100px] flex flex-col">
+          <div className="flex-1 bg-slate-700/30 border border-slate-600 rounded-lg p-3 min-h-[120px] max-h-[180px] flex flex-col">
             {editingNotes ? (
               <div className="space-y-2 flex-1 flex flex-col">
                 <Textarea
@@ -282,10 +282,10 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
                       e.stopPropagation();
                       setEditingNotes(true);
                     }}
-                    className="w-full h-full text-left flex flex-col hover:bg-slate-700/50 p-1 rounded transition-colors"
+                    className="w-full h-full text-left flex flex-col hover:bg-slate-700/50 p-1 rounded transition-colors overflow-hidden"
                   >
-                    <div className="text-xs text-slate-400 mb-1 font-semibold">Notes</div>
-                    <div className="text-sm text-slate-300 line-clamp-3 flex-1">{source.notes}</div>
+                    <div className="text-xs text-slate-400 mb-1 font-semibold flex-shrink-0">Notes</div>
+                    <div className="text-sm text-slate-300 flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800">{source.notes}</div>
                   </button>
                 ) : (
                   <button
