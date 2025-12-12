@@ -312,6 +312,15 @@ Scope: **Fix Activities list filters so `Scheduled` only returns the expected sc
 
 ---
 
+# BUG-FE-CONTACT-ASSIGNED – Contacts Assigned To display and filter
+
+Phase: **Frontend Contacts**  
+Status: **Completed** (Dec 12, 2025)  
+Owner: **AiSHA Core**  
+Scope: **Fix 'Assigned To' column display in Contacts by indexing users/employees by ID. Fix 'Assigned To' filter by supporting ID/Email lookup. Fix 'Unassigned' filter by handling null values in backend and active filter packaging.**
+
+---
+
 ## 2. Architecture Overview
 
 ### 2.1 Backend

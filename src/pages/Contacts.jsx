@@ -125,9 +125,20 @@ export default function ContactsPage() {
     // Employee scope filtering from context
     if (selectedEmail && selectedEmail !== "all") {
       if (selectedEmail === "unassigned") {
-        filter.$or = [{ assigned_to: null }, { assigned_to: "" }];
+        // Only filter by null. Empty string might cause UUID syntax error on backend if column is UUID.
+        filter.$or = [{ assigned_to: null }];
       } else {
-        filter.assigned_to = selectedEmail;
+        // Robust filtering: Try to match by ID or Email to handle legacy/mixed data
+        // selectedEmail is likely the ID from the dropdown, but we verify
+        const emp = employees.find(e => e.id === selectedEmail || e.user_email === selectedEmail);
+        const targetId = emp ? emp.id : selectedEmail;
+        const targetEmail = emp ? emp.user_email : selectedEmail;
+
+        if (targetId && targetEmail && targetId !== targetEmail) {
+          filter.$or = [{ assigned_to: targetId }, { assigned_to: targetEmail }];
+        } else {
+          filter.assigned_to = selectedEmail;
+        }
       }
     } else if (
       user.employee_role === "employee" && user.role !== "admin" &&
@@ -143,7 +154,7 @@ export default function ContactsPage() {
     }
 
     return filter;
-  }, [user, selectedTenantId, showTestData, selectedEmail]);
+  }, [user, selectedTenantId, showTestData, selectedEmail, employees]);
 
   useEffect(() => {
     if (supportingDataLoaded.current || !user) return;
@@ -296,6 +307,26 @@ export default function ContactsPage() {
           ],
         };
         scopedFilter.filter = JSON.stringify(searchFilterObj);
+      }
+
+      // Ensure $or from scopedFilter (e.g. Unassigned) is properly stringified into 'filter' param for backend
+      if (scopedFilter.$or) {
+        let filterObj = {};
+        if (scopedFilter.filter) {
+          try {
+            filterObj = JSON.parse(scopedFilter.filter);
+          } catch (e) { /* ignore */ }
+        }
+
+        // Merge $or conditions
+        if (filterObj.$or) {
+          filterObj.$or = [...filterObj.$or, ...scopedFilter.$or];
+        } else {
+          filterObj.$or = scopedFilter.$or;
+        }
+
+        scopedFilter.filter = JSON.stringify(filterObj);
+        delete scopedFilter.$or;
       }
 
       if (!scopedFilter.tenant_id && user.role !== "superadmin") {
@@ -743,13 +774,19 @@ export default function ContactsPage() {
 
   const userMap = useMemo(() => {
     const map = new Map();
-    users.forEach((u) => map.set(u.email, u));
+    users.forEach((u) => {
+      map.set(u.email, u);
+      if (u.id) map.set(u.id, u); // Map by ID as well
+    });
     return map;
   }, [users]);
 
   const employeeMap = useMemo(() => {
     const map = new Map();
-    employees.forEach((emp) => map.set(emp.user_email, emp));
+    employees.forEach((emp) => {
+      map.set(emp.user_email, emp);
+      if (emp.id) map.set(emp.id, emp); // Map by ID as well
+    });
     return map;
   }, [employees]);
 

@@ -223,7 +223,7 @@ export default function createContactRoutes(_pgPool) {
   // GET /api/contacts - List contacts
   router.get('/', cacheList('contacts', 180), async (req, res) => {
     try {
-      let { tenant_id, status, account_id, filter } = req.query;
+      let { tenant_id, status, account_id, assigned_to, filter } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
@@ -250,8 +250,16 @@ export default function createContactRoutes(_pgPool) {
           // Build OR condition: match any of the $or criteria
           const orConditions = parsedFilter.$or.map(condition => {
             const [field, opObj] = Object.entries(condition)[0];
-            if (opObj && opObj.$icontains) {
+            if (opObj && typeof opObj === 'object' && opObj.$icontains) {
               return `${field}.ilike.%${opObj.$icontains}%`;
+            }
+            if (opObj === null) {
+              return `${field}.is.null`;
+            }
+            // Support direct equality for non-object values (strings, numbers, booleans)
+            // e.g. { assigned_to: "abc" } -> assigned_to.eq.abc
+            if (typeof opObj === 'string' || typeof opObj === 'number' || typeof opObj === 'boolean') {
+              return `${field}.eq.${opObj}`;
             }
             return null;
           }).filter(Boolean);
@@ -264,6 +272,7 @@ export default function createContactRoutes(_pgPool) {
       
       if (status) q = q.eq('status', status);
       if (account_id) q = q.eq('account_id', account_id);
+      if (assigned_to) q = q.eq('assigned_to', assigned_to);
       q = q.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
 
       const { data, error, count } = await q;
