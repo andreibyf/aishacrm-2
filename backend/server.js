@@ -583,6 +583,8 @@ async function ensureStorageBucketExists() {
 
 // Start listening
 server.listen(PORT, async () => {
+  const startTimestamp = new Date().toISOString();
+  console.log(`[startup] backend start | env=${process.env.NODE_ENV || 'unknown'} | port=${PORT} | started=${startTimestamp}`);
   console.log(`
   }   ║
 ║                                                           ║

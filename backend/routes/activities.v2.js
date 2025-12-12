@@ -63,16 +63,77 @@ export default function createActivityV2Routes(_pgPool) {
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
 
+      // Handle direct query parameters (compatibility with generic frontend filters)
+      const { type, status, related_id, assigned_to, is_test_data } = req.query;
+
+      if (type) q = q.eq('type', type);
+      // status handled below
+      if (related_id) q = q.eq('related_id', related_id);
+      if (assigned_to) q = q.eq('assigned_to', assigned_to);
+
+      // Handle is_test_data filter
+      if (is_test_data !== undefined) {
+        const flag = String(is_test_data).toLowerCase();
+        if (flag === 'false') {
+          // Exclude test data (false or null)
+          q = q.or('is_test_data.is.false,is_test_data.is.null');
+        } else if (flag === 'true') {
+          // Show only test data
+          q = q.eq('is_test_data', true);
+        }
+      }
+
+      // Special handling for legacy/simple 'overdue' status request
+      // This catches ?status=overdue properly in the backend query
+      // Special handling for status filtering to ensure mutual exclusivity with 'overdue'
+      // Overdue = (Scheduled OR In Progress) AND Due Date < Today
+      // Scheduled = Scheduled AND (Due Date >= Today OR Null)
+      // In Progress = In Progress AND (Due Date >= Today OR Null)
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      if (status === 'overdue') {
+        q = q.in('status', ['scheduled', 'in_progress'])
+          .lt('due_date', todayStr);
+      } else if (status === 'scheduled') {
+        q = q.eq('status', 'scheduled')
+          .or(`due_date.gte.${todayStr},due_date.is.null`);
+      } else if (status === 'in_progress') {
+        q = q.eq('status', 'in_progress')
+          .or(`due_date.gte.${todayStr},due_date.is.null`);
+      } else if (status) {
+        q = q.eq('status', status);
+      }
+
       if (filter) {
         let parsed = filter;
         if (typeof filter === 'string' && filter.startsWith('{')) {
           try {
             parsed = JSON.parse(filter);
+            console.log('[Activities V2] Parsed filter:', JSON.stringify(parsed, null, 2));
           } catch {
             // ignore
           }
         }
         if (parsed && typeof parsed === 'object') {
+          // Handle assigned_to filter from filter object
+          if (parsed.assigned_to !== undefined) {
+            console.log('[Activities V2] Applying assigned_to filter:', parsed.assigned_to);
+            q = q.eq('assigned_to', parsed.assigned_to);
+          }
+
+          // Handle $or for unassigned
+          if (parsed.$or && Array.isArray(parsed.$or)) {
+            const isUnassignedFilter = parsed.$or.some(cond =>
+              cond.assigned_to === null || cond.assigned_to === ''
+            );
+
+            if (isUnassignedFilter) {
+              console.log('[Activities V2] Applying unassigned filter');
+              q = q.or('assigned_to.is.null,assigned_to.eq.');
+            }
+          }
+
+          // Other filters
           if (parsed.status) q = q.eq('status', parsed.status);
           if (parsed.type) q = q.eq('type', parsed.type);
           if (parsed.related_id) q = q.eq('related_id', parsed.related_id);

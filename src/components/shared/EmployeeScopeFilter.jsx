@@ -13,7 +13,7 @@ import { useEmployeeScope } from "./EmployeeScopeContext";
 export default function EmployeeScopeFilter({ user, selectedTenantId }) {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { selectedEmployeeEmail, setSelectedEmployeeEmail } =
+  const { selectedEmployeeId, setSelectedEmployeeId } =
     useEmployeeScope();
 
   // Determine if user should see this filter
@@ -58,7 +58,7 @@ export default function EmployeeScopeFilter({ user, selectedTenantId }) {
         const crmEmployees = (employeeList || []).filter((emp) => {
           const isActive = emp.is_active !== false && emp.status !== "inactive";
           const hasEmail = emp.email || emp.user_email;
-          return isActive && emp.has_crm_access === true && hasEmail;
+          return isActive && hasEmail;
         });
         setEmployees(crmEmployees);
       } catch (error) {
@@ -92,9 +92,9 @@ export default function EmployeeScopeFilter({ user, selectedTenantId }) {
     <div className="flex items-center gap-2">
       <Users className="w-4 h-4 text-slate-400" />
       <Select
-        value={selectedEmployeeEmail || "all"}
+        value={selectedEmployeeId || "all"}
         onValueChange={(value) =>
-          setSelectedEmployeeEmail(value === "all" ? null : value)}
+          setSelectedEmployeeId(value === "all" ? null : value)}
       >
         <SelectTrigger className="w-[200px] bg-slate-800 border-slate-700 text-slate-200">
           <SelectValue placeholder="All Employees" />

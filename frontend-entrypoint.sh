@@ -12,6 +12,10 @@ else
   VITE_APP_BUILD_VERSION="${VITE_APP_BUILD_VERSION:-dev-local}"
 fi
 
+# Log startup metadata so docker logs show build + boot time
+START_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+echo "frontend start | build=${VITE_APP_BUILD_VERSION} | started=${START_TS}"
+
 
 # Runtime environment variable injection
 cat > /app/dist/env-config.js << EOF

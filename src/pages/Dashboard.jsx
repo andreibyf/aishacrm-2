@@ -255,7 +255,7 @@ export default function DashboardPage() {
         logger.info("Loading dashboard data", "Dashboard", {
           userId: user.email,
           selectedTenantId,
-          selectedEmployeeEmail: selectedEmail,
+          selectedEmployeeId: selectedEmail,
           showTestData,
         });
 
@@ -407,7 +407,7 @@ export default function DashboardPage() {
           stack: error.stack,
           userId: user?.email,
           selectedTenantId,
-          selectedEmployeeEmail: selectedEmail,
+          selectedEmployeeId: selectedEmail,
         });
         console.error("Failed to load dashboard stats:", error);
         toast.error("Failed to load dashboard data");

@@ -124,6 +124,7 @@ export default function OpportunitiesPage() {
 
   // Centralized tenant filter builder
   const getTenantFilter = useCallback(() => {
+    console.log('[Opportunities] getTenantFilter called with:', { selectedEmail, employeesCount: employees.length });
     if (!user) return {};
 
     let filter = {};
@@ -138,11 +139,13 @@ export default function OpportunitiesPage() {
       filter.tenant_id = user.tenant_id;
     }
 
-    // Employee scope
+    // Employee scope filtering from context
+    // Note: selectedEmail can contain either an email address or an employee ID
     if (selectedEmail && selectedEmail !== 'all') {
       if (selectedEmail === 'unassigned') {
         filter.$or = [{ assigned_to: null }, { assigned_to: '' }];
       } else {
+        // Use the selected value directly (works for both UUIDs and emails)
         filter.assigned_to = selectedEmail;
       }
     } else if (user.employee_role === 'employee' && user.role !== 'admin' && user.role !== 'superadmin') {
@@ -155,7 +158,7 @@ export default function OpportunitiesPage() {
     }
 
     return filter;
-  }, [user, selectedTenantId, selectedEmail, showTestData]);
+  }, [user, selectedTenantId, selectedEmail, showTestData, employees]);
 
   // Load supporting data (accounts, contacts, users, employees) ONCE - OPTIMIZED WITH CONCURRENT FETCHING
   useEffect(() => {
@@ -437,6 +440,13 @@ export default function OpportunitiesPage() {
     supportingDataReady,
   ]);
 
+  // Clear cache when employee filter changes to force fresh data
+  useEffect(() => {
+    if (selectedEmail !== null) {
+      clearCache("Opportunity");
+    }
+  }, [selectedEmail, clearCache]);
+
   const handlePageChange = useCallback((newPage) => {
     setCurrentPage(newPage);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -474,12 +484,28 @@ export default function OpportunitiesPage() {
   }, [users]);
 
   const employeesMap = useMemo(() => {
-    return employees.reduce((acc, employee) => {
+    const map = employees.reduce((acc, employee) => {
+      const fullName = `${employee.first_name} ${employee.last_name}`;
+      // Map by ID (new assignments)
+      if (employee.id) {
+        acc[employee.id] = fullName;
+      }
+      // Map by email (legacy assignments) for backwards compatibility
       if (employee.email) {
-        acc[employee.email] = `${employee.first_name} ${employee.last_name}`;
+        acc[employee.email] = fullName;
       }
       return acc;
     }, {});
+    
+    if (import.meta.env.DEV) {
+      logDev('[Opportunities] employeesMap built:', { 
+        employeeCount: employees.length, 
+        mappedKeys: Object.keys(map).length,
+        sampleKeys: Object.keys(map).slice(0, 3)
+      });
+    }
+    
+    return map;
   }, [employees]);
 
   const accountsMap = useMemo(() => {
@@ -1009,6 +1035,7 @@ export default function OpportunitiesPage() {
             accounts={accounts}
             contacts={contacts}
             users={users}
+            employees={employees}
             leads={leads}
             onClose={() => {
               setIsDetailOpen(false);
@@ -1385,8 +1412,13 @@ export default function OpportunitiesPage() {
                         contactName={contact
                           ? `${contact.first_name} ${contact.last_name}`
                           : ""}
-                        assignedUserName={employeesMap[opp.assigned_to] ||
-                          usersMap[opp.assigned_to]}
+                        assignedUserName={(() => {
+                          if (!opp.assigned_to) return undefined;
+                          return employeesMap[opp.assigned_to] || 
+                                 usersMap[opp.assigned_to] || 
+                                 opp.assigned_to_name || 
+                                 opp.assigned_to;
+                        })()}
                         onEdit={() => {
                           setEditingOpportunity(opp);
                           setIsFormOpen(true);
@@ -1518,11 +1550,54 @@ export default function OpportunitiesPage() {
                             className="text-center text-slate-300 cursor-pointer p-3"
                             onClick={() => handleViewDetails(opp)}
                           >
-                            {employeesMap[opp.assigned_to] ||
-                              usersMap[opp.assigned_to] ||
-                              opp.assigned_to_name || (
-                              <span className="text-slate-500">Unassigned</span>
-                            )}
+                            {(() => {
+                              // If no assigned_to, show Unassigned
+                              if (!opp.assigned_to) {
+                                return <span className="text-slate-500">Unassigned</span>;
+                              }
+                              
+                              // Try employee lookup first (by ID or email)
+                              const employeeName = employeesMap[opp.assigned_to];
+                              if (employeeName) {
+                                return employeeName;
+                              }
+                              
+                              // Try user lookup
+                              const userName = usersMap[opp.assigned_to];
+                              if (userName) {
+                                return userName;
+                              }
+                              
+                              // Try the opportunity's embedded name field
+                              if (opp.assigned_to_name) {
+                                return opp.assigned_to_name;
+                              }
+                              
+                              // If we have a value but no lookup match, show it for debugging
+                              // This helps identify missing employee records
+                              if (import.meta.env.DEV) {
+                                logDev('[Opportunities] Missing employee lookup:', {
+                                  opportunityId: opp.id,
+                                  opportunityName: opp.name,
+                                  assigned_to: opp.assigned_to,
+                                  employeesMapKeys: Object.keys(employeesMap).length,
+                                  usersMapKeys: Object.keys(usersMap).length
+                                });
+                              }
+                              
+                              // Show abbreviated ID/email as fallback
+                              const assignedValue = String(opp.assigned_to);
+                              if (assignedValue.includes('@')) {
+                                // It's an email - show it
+                                return <span className="text-amber-400 text-xs" title={assignedValue}>{assignedValue}</span>;
+                              } else if (assignedValue.length > 20) {
+                                // It's likely a UUID - show abbreviated
+                                return <span className="text-amber-400 text-xs" title={assignedValue}>{assignedValue.substring(0, 8)}...</span>;
+                              } else {
+                                // Short value - show it
+                                return <span className="text-amber-400 text-xs">{assignedValue}</span>;
+                              }
+                            })()}
                           </TableCell>
                           <TableCell className="p-3 text-center">
                             <div className="flex items-center justify-center gap-1">

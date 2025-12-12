@@ -5,14 +5,14 @@ import { User as UserEntity } from "@/api/entities";
 const EmployeeScopeContext = createContext(null);
 
 export const EmployeeScopeProvider = ({ children }) => {
-  const [selectedEmployeeEmail, setSelectedEmployeeEmail] = useState(null);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem("employee_scope_filter");
       if (saved && saved !== "null" && saved !== "undefined") {
-        setSelectedEmployeeEmail(saved);
+        setSelectedEmployeeId(saved);
       }
     } catch (error) {
       console.warn("Failed to load employee scope filter:", error);
@@ -35,11 +35,11 @@ export const EmployeeScopeProvider = ({ children }) => {
     };
   }, []);
 
-  const setEmployeeScope = (email) => {
-    setSelectedEmployeeEmail(email);
+  const setEmployeeScope = (id) => {
+    setSelectedEmployeeId(id);
     try {
-      if (email) {
-        localStorage.setItem("employee_scope_filter", email);
+      if (id) {
+        localStorage.setItem("employee_scope_filter", id);
       } else {
         localStorage.removeItem("employee_scope_filter");
       }
@@ -49,7 +49,7 @@ export const EmployeeScopeProvider = ({ children }) => {
   };
 
   const clearEmployeeScope = () => {
-    setSelectedEmployeeEmail(null);
+    setSelectedEmployeeId(null);
     try {
       localStorage.removeItem("employee_scope_filter");
     } catch (error) {
@@ -80,19 +80,19 @@ export const EmployeeScopeProvider = ({ children }) => {
     // If no user yet, return base filter
     if (!u) return { ...baseFilter };
 
-    // If a specific employee email was selected, scope to that
-    if (selectedEmployeeEmail && selectedEmployeeEmail !== "unassigned") {
+    // If a specific employee ID was selected, scope to that
+    if (selectedEmployeeId && selectedEmployeeId !== "unassigned") {
       return {
         ...baseFilter,
         $or: [
-          { created_by: selectedEmployeeEmail },
-          { assigned_to: selectedEmployeeEmail },
+          { created_by: selectedEmployeeId },
+          { assigned_to: selectedEmployeeId },
         ],
       };
     }
 
     // Unassigned selection: show items without an assignee
-    if (selectedEmployeeEmail === "unassigned") {
+    if (selectedEmployeeId === "unassigned") {
       return { ...baseFilter, assigned_to: null };
     }
 
@@ -113,10 +113,10 @@ export const EmployeeScopeProvider = ({ children }) => {
     <EmployeeScopeContext.Provider
       value={{
         // current value
-        selectedEmployeeEmail,
+        selectedEmployeeId,
         // backward-compat aliases
-        selectedEmail: selectedEmployeeEmail,
-        setSelectedEmployeeEmail: setEmployeeScope,
+        selectedEmail: selectedEmployeeId,
+        setSelectedEmployeeId: setEmployeeScope,
         // explicit API
         setEmployeeScope,
         clearEmployeeScope,
@@ -135,9 +135,9 @@ export const useEmployeeScope = () => {
   const context = useContext(EmployeeScopeContext);
   if (!context) {
     return {
-      selectedEmployeeEmail: null,
+      selectedEmployeeId: null,
       selectedEmail: null,
-      setSelectedEmployeeEmail: () => {},
+      setSelectedEmployeeId: () => {},
       setEmployeeScope: () => {},
       clearEmployeeScope: () => {},
       canViewAllRecords: () => false,

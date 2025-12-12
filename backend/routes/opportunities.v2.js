@@ -26,7 +26,9 @@ export default function createOpportunityV2Routes(_pgPool) {
   // GET /api/v2/opportunities - list opportunities (v2 shape, internal pilot)
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, filter } = req.query;
+      const { tenant_id, filter, stage, assigned_to, is_test_data, $or } = req.query;
+
+      console.log('[V2 Opportunities GET] Called with:', { tenant_id, filter, stage, assigned_to, is_test_data, $or });
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -41,28 +43,95 @@ export default function createOpportunityV2Routes(_pgPool) {
         .select('*', { count: 'exact' })
         .eq('tenant_id', tenant_id);
 
+      // Handle $or for unassigned filter (highest priority)
+      if ($or) {
+        try {
+          const orConditions = typeof $or === 'string' ? JSON.parse($or) : $or;
+          if (Array.isArray(orConditions)) {
+            const isUnassignedFilter = orConditions.some(cond => 
+              cond.assigned_to === null || cond.assigned_to === ''
+            );
+            if (isUnassignedFilter) {
+              console.log('[V2 Opportunities] Applying unassigned filter from $or query param');
+              q = q.or('assigned_to.is.null,assigned_to.eq.');
+            }
+          }
+        } catch (e) {
+          console.error('[V2 Opportunities] Failed to parse $or:', e);
+        }
+      }
+      // Handle direct assigned_to parameter (if not unassigned)
+      else if (assigned_to) {
+        console.log('[V2 Opportunities] Applying assigned_to filter from query param:', assigned_to);
+        q = q.eq('assigned_to', assigned_to);
+      }
+
+      // Handle stage filter
+      if (stage && stage !== 'all' && stage !== 'any' && stage !== '' && stage !== 'undefined') {
+        console.log('[V2 Opportunities] Applying stage filter from query param:', stage);
+        q = q.eq('stage', stage.toLowerCase());
+      }
+
+      // Handle is_test_data filter
+      if (is_test_data !== undefined) {
+        const flag = String(is_test_data).toLowerCase();
+        if (flag === 'false') {
+          console.log('[V2 Opportunities] Excluding test data from query param');
+          q = q.or('is_test_data.is.false,is_test_data.is.null');
+        } else if (flag === 'true') {
+          console.log('[V2 Opportunities] Including only test data from query param');
+          q = q.eq('is_test_data', true);
+        }
+      }
+
       // Basic filter passthrough (mirrors v1) for internal use
       if (filter) {
         let parsedFilter = filter;
         if (typeof filter === 'string' && filter.startsWith('{')) {
           try {
             parsedFilter = JSON.parse(filter);
+            console.log('[V2 Opportunities] Parsed filter:', JSON.stringify(parsedFilter, null, 2));
           } catch {
             // treat as literal
           }
         }
 
-        if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
-          const orConditions = parsedFilter.$or.map(condition => {
-            const [field, opObj] = Object.entries(condition)[0];
-            if (opObj && opObj.$icontains) {
-              return `${field}.ilike.%${opObj.$icontains}%`;
-            }
-            return null;
-          }).filter(Boolean);
+        // Handle assigned_to filter (supports UUID, null, or email)
+        if (typeof parsedFilter === 'object' && parsedFilter.assigned_to !== undefined) {
+          console.log('[V2 Opportunities] Applying assigned_to filter:', parsedFilter.assigned_to);
+          q = q.eq('assigned_to', parsedFilter.assigned_to);
+        }
 
-          if (orConditions.length > 0) {
-            q = q.or(orConditions.join(','));
+        // Handle is_test_data filter
+        if (typeof parsedFilter === 'object' && parsedFilter.is_test_data !== undefined) {
+          console.log('[V2 Opportunities] Applying is_test_data filter:', parsedFilter.is_test_data);
+          q = q.eq('is_test_data', parsedFilter.is_test_data);
+        }
+
+        // Handle $or for unassigned (null or empty)
+        if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
+          // Check if this is an "unassigned" filter
+          const isUnassignedFilter = parsedFilter.$or.some(cond => 
+            cond.assigned_to === null || cond.assigned_to === ''
+          );
+          
+          if (isUnassignedFilter) {
+            console.log('[V2 Opportunities] Applying unassigned filter');
+            // For unassigned, check for null or empty string
+            q = q.or('assigned_to.is.null,assigned_to.eq.');
+          } else {
+            // Handle other $or conditions (like search)
+            const orConditions = parsedFilter.$or.map(condition => {
+              const [field, opObj] = Object.entries(condition)[0];
+              if (opObj && opObj.$icontains) {
+                return `${field}.ilike.%${opObj.$icontains}%`;
+              }
+              return null;
+            }).filter(Boolean);
+
+            if (orConditions.length > 0) {
+              q = q.or(orConditions.join(','));
+            }
           }
         }
       }

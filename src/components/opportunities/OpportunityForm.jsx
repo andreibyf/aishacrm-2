@@ -425,7 +425,7 @@ export default function OpportunityForm({
               >
                 <SelectItem value="__unassigned__" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">Unassigned</SelectItem>
                 {employees.map(emp => (
-                  <SelectItem key={emp.id} value={emp.user_email || emp.email} className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">
+                  <SelectItem key={emp.id} value={emp.id} className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">
                     {emp.first_name} {emp.last_name}
                   </SelectItem>
                 ))}

@@ -189,6 +189,7 @@ export default function LeadsPage() {
 
   // New getTenantFilter function, moved here from tenantContext
   const getTenantFilter = useCallback(() => {
+    console.log('[Leads] getTenantFilter called with:', { selectedEmail, employeesCount: employees.length });
     if (!user) return {};
 
     let filter = {};
@@ -203,10 +204,12 @@ export default function LeadsPage() {
     }
 
     // Employee scope filtering from context
+    // Note: selectedEmail can contain either an email address or an employee ID
     if (selectedEmail && selectedEmail !== "all") {
       if (selectedEmail === "unassigned") {
         filter.$or = [{ assigned_to: null }, { assigned_to: "" }];
       } else {
+        // Use the selected value directly (works for both UUIDs and emails)
         filter.assigned_to = selectedEmail;
       }
     } else if (
@@ -223,7 +226,7 @@ export default function LeadsPage() {
     }
 
     return filter;
-  }, [user, selectedTenantId, showTestData, selectedEmail]);
+  }, [user, selectedTenantId, showTestData, selectedEmail, employees]);
 
   // Load supporting data (accounts, users, employees) ONCE with delays and error handling
   useEffect(() => {
@@ -491,6 +494,13 @@ export default function LeadsPage() {
     ageFilter,
     loadLeads,
   ]);
+
+  // Clear cache when employee filter changes to force fresh data
+  useEffect(() => {
+    if (selectedEmail !== null) {
+      clearCache("Lead");
+    }
+  }, [selectedEmail, clearCache]);
 
   // Handle page change
   const handlePageChange = useCallback((newPage) => {

@@ -382,26 +382,52 @@ export default function createLeadRoutes(_pgPool) {
         if (typeof filter === 'string' && filter.startsWith('{')) {
           try {
             parsedFilter = JSON.parse(filter);
+            console.log('[Leads] Parsed filter:', JSON.stringify(parsedFilter, null, 2));
           } catch {
             // treat as literal
           }
         }
+
+        // Handle assigned_to filter (supports UUID, null, or email)
+        if (typeof parsedFilter === 'object' && parsedFilter.assigned_to !== undefined) {
+          console.log('[Leads] Applying assigned_to filter:', parsedFilter.assigned_to);
+          q = q.eq('assigned_to', parsedFilter.assigned_to);
+        }
+
+        // Handle is_test_data filter from parsed filter object
+        if (typeof parsedFilter === 'object' && parsedFilter.is_test_data !== undefined) {
+          console.log('[Leads] Applying is_test_data filter:', parsedFilter.is_test_data);
+          q = q.eq('is_test_data', parsedFilter.is_test_data);
+        }
         
+        // Handle $or for unassigned or dynamic search
         if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
-          // Build OR condition: match any of the $or criteria
-          // Use Supabase's or() method for multiple OR conditions
-          const orConditions = parsedFilter.$or.map(condition => {
-            // Each condition is like { first_name: { $icontains: "search_term" } }
-            const [field, opObj] = Object.entries(condition)[0];
-            if (opObj && opObj.$icontains) {
-              return `${field}.ilike.%${opObj.$icontains}%`;
-            }
-            return null;
-          }).filter(Boolean);
+          // Check if this is an "unassigned" filter
+          const isUnassignedFilter = parsedFilter.$or.some(cond => 
+            cond.assigned_to === null || cond.assigned_to === ''
+          );
           
-          if (orConditions.length > 0) {
-            // Use Supabase or() to combine conditions with OR logic
-            q = q.or(orConditions.join(','));
+          if (isUnassignedFilter) {
+            console.log('[Leads] Applying unassigned filter');
+            // For unassigned, check for null or empty string
+            q = q.or('assigned_to.is.null,assigned_to.eq.');
+          } else {
+            // Handle other $or conditions (like search)
+            // Build OR condition: match any of the $or criteria
+            // Use Supabase's or() method for multiple OR conditions
+            const orConditions = parsedFilter.$or.map(condition => {
+              // Each condition is like { first_name: { $icontains: "search_term" } }
+              const [field, opObj] = Object.entries(condition)[0];
+              if (opObj && opObj.$icontains) {
+                return `${field}.ilike.%${opObj.$icontains}%`;
+              }
+              return null;
+            }).filter(Boolean);
+            
+            if (orConditions.length > 0) {
+              // Use Supabase or() to combine conditions with OR logic
+              q = q.or(orConditions.join(','));
+            }
           }
         }
       }

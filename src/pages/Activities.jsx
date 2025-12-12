@@ -108,7 +108,7 @@ export default function ActivitiesPage() {
   const initialLoadDone = useRef(false);
 
   // Build backend filter object from current UI state
-  const buildFilter = useCallback(() => {
+  const buildFilter = useCallback((overrides = {}) => {
     const filter = {};
     if (user) {
       if (user.role === 'superadmin' || user.role === 'admin') {
@@ -117,24 +117,42 @@ export default function ActivitiesPage() {
         filter.tenant_id = user.tenant_id;
       }
     }
-    if (statusFilter !== 'all' && statusFilter !== 'overdue') {
-      filter.status = statusFilter;
+
+    // Precompute date range (used for both normal and overdue paths)
+    const dateRangeFilter = {};
+    if (dateRange.start) dateRangeFilter.$gte = format(new Date(dateRange.start), 'yyyy-MM-dd');
+    if (dateRange.end) dateRangeFilter.$lte = format(new Date(dateRange.end), 'yyyy-MM-dd');
+    const hasDateRange = Object.keys(dateRangeFilter).length > 0;
+
+    const effectiveStatus = Object.prototype.hasOwnProperty.call(overrides, 'status') ? overrides.status : statusFilter;
+    const effectiveType = Object.prototype.hasOwnProperty.call(overrides, 'type') ? overrides.type : typeFilter;
+    const effectiveEmail = Object.prototype.hasOwnProperty.call(overrides, 'email') ? overrides.email : selectedEmail;
+
+    if (effectiveStatus !== 'all') {
+      filter.status = effectiveStatus;
     }
-    if (typeFilter !== 'all') {
-      filter.type = typeFilter;
+
+    if (effectiveType !== 'all') {
+      filter.type = effectiveType;
     }
-    if (selectedEmail) {
-      filter.assigned_to = selectedEmail;
+
+    if (effectiveEmail && effectiveEmail !== 'all') {
+      if (effectiveEmail === 'unassigned') {
+        filter.$or = [{ assigned_to: null }, { assigned_to: '' }];
+      } else {
+        filter.assigned_to = effectiveEmail;
+      }
     }
+
     if (!showTestData) {
       filter.is_test_data = { $ne: true };
     }
-    if (dateRange.start || dateRange.end) {
-      const dr = {};
-      if (dateRange.start) dr.$gte = format(new Date(dateRange.start), 'yyyy-MM-dd');
-      if (dateRange.end) dr.$lte = format(new Date(dateRange.end), 'yyyy-MM-dd');
-      filter.due_date = dr;
+
+    // Apply date range only when status is not overdue (overdue implies its own date logic)
+    if (hasDateRange && effectiveStatus !== 'overdue') {
+      filter.due_date = { ...(filter.due_date || {}), ...dateRangeFilter };
     }
+
     return filter;
   }, [user, selectedTenantId, statusFilter, typeFilter, selectedEmail, showTestData, dateRange.start, dateRange.end]);
 
@@ -175,12 +193,50 @@ export default function ActivitiesPage() {
     loadSupportingData();
   }, [user, selectedTenantId, cachedRequest]);
 
+  // Independent stats loader
+  const loadStats = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      // 1. Get Base Stats (All statuses)
+      // Use status='all' to get the breakdown of stored statuses
+      const baseFilter = { ...buildFilter({ status: 'all' }), include_stats: true, limit: 1 };
+
+      // 2. Get Overdue Count
+      // Specific query for overdue items
+      const overdueFilter = { ...buildFilter({ status: 'overdue' }), limit: 1 };
+
+      const [baseResult, overdueResult] = await Promise.all([
+        Activity.filter(baseFilter, '-due_date', 1, 0),
+        Activity.filter(overdueFilter, '-due_date', 1, 0)
+      ]);
+
+      const baseCounts = !Array.isArray(baseResult) ? (baseResult.counts || {}) : {};
+      const baseTotal = !Array.isArray(baseResult) && typeof baseResult.total === 'number' ? baseResult.total : 0;
+
+      const overdueCount = !Array.isArray(overdueResult) ? overdueResult.total : (overdueResult.length || 0);
+
+      const newStats = {
+        total: baseTotal,
+        scheduled: baseCounts.scheduled || 0,
+        in_progress: baseCounts.in_progress || 0,
+        overdue: overdueCount,
+        completed: baseCounts.completed || 0,
+        cancelled: baseCounts.cancelled || 0,
+      };
+
+      setTotalStats(newStats);
+    } catch (error) {
+      console.error("Failed to load stats:", error);
+    }
+  }, [user, buildFilter]);
+
   const loadActivities = useCallback(async (page = 1, size = 25) => {
     if (!user) return;
 
     setLoading(true);
     try {
-      let currentFilter = { ...buildFilter(), include_stats: true };
+      let currentFilter = { ...buildFilter(), include_stats: false }; // We load stats separately now
       
       // Guard: Don't load activities if no tenant_id for superadmin
       if ((user.role === 'superadmin' || user.role === 'admin') && !currentFilter.tenant_id) {
@@ -213,28 +269,49 @@ export default function ActivitiesPage() {
       const activitiesResult = await Activity.filter(currentFilter, '-due_date', size, skip);
       // activitiesResult may be array (legacy) or object with meta
       let items = Array.isArray(activitiesResult) ? activitiesResult : activitiesResult.activities;
-      const counts = !Array.isArray(activitiesResult) ? activitiesResult.counts : null;
       const totalCount = !Array.isArray(activitiesResult) && typeof activitiesResult.total === 'number'
         ? activitiesResult.total
         : (items?.length || 0);
 
       console.log('[Activities] Loaded:', items?.length, 'Total:', totalCount);
+      // Auto-mark overdue for display: scheduled/in_progress with past due_date or due_datetime
+      const nowLocal = new Date();
+      const normalizeDate = (d) => {
+        if (!d) return null;
+        try {
+          // Handle date-only strings (yyyy-MM-dd) and full ISO datetimes
+          const asDate = typeof d === 'string' ? new Date(d) : d;
+          return asDate;
+        } catch {
+          return null;
+        }
+      };
+
+      items = (items || []).map(a => {
+        const status = a.status;
+        const dueDate = normalizeDate(a.due_date);
+        const dueDateTime = normalizeDate(a.due_datetime);
+        const dueMoment = dueDateTime || dueDate;
+        const isPending = status === 'scheduled' || status === 'in_progress';
+        const isPastDue = dueMoment ? (dueMoment.getTime() < nowLocal.getTime()) : false;
+        if (isPending && isPastDue) {
+          return { ...a, status: 'overdue' };
+        }
+        return a;
+      });
+
+      // No need for client-side status filtering if the backend filter is correct!
+      // But we keep it as a safety net ONLY if we are NOT in 'overdue' mode (since backend returns scheduled items for overdue query)
+      // Actually, if we use the new complex query for overdue, the backend returns items that match the critera.
+      // We map them to 'overdue' status above (lines 260+).
+      // So they should appear correctly.
 
       setActivities(items || []);
       setTotalItems(totalCount);
-      if (counts) {
-        setTotalStats({
-          total: counts.total || totalCount,
-            scheduled: counts.scheduled || 0,
-            in_progress: counts.in_progress || 0,
-            overdue: counts.overdue || 0,
-            completed: counts.completed || 0,
-            cancelled: counts.cancelled || 0,
-        });
-      } else {
-        // Fallback minimal stats
-        setTotalStats(ts => ({ ...ts, total: totalCount }));
-      }
+
+      // Load stats independently to keep them stable
+      loadStats();
+
       setCurrentPage(page);
       initialLoadDone.current = true;
     } catch (error) {
@@ -245,13 +322,20 @@ export default function ActivitiesPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, searchTerm, selectedTags, buildFilter]);
+  }, [user, searchTerm, selectedTags, buildFilter, loadStats]);
 
   useEffect(() => {
     if (user) {
       loadActivities(currentPage, pageSize);
     }
   }, [user, currentPage, pageSize, loadActivities]);
+
+  // Clear cache when employee filter changes to force fresh data
+  useEffect(() => {
+    if (selectedEmail !== null) {
+      clearCache("Activity");
+    }
+  }, [selectedEmail, clearCache]);
 
   const handlePageChange = useCallback((newPage) => {
     setCurrentPage(newPage);
@@ -271,12 +355,28 @@ export default function ActivitiesPage() {
   }, [users]);
 
   const employeesMap = useMemo(() => {
-    return employees.reduce((acc, employee) => {
+    const map = employees.reduce((acc, employee) => {
+      const fullName = `${employee.first_name} ${employee.last_name}`;
+      // Map by ID (new assignments)
+      if (employee.id) {
+        acc[employee.id] = fullName;
+      }
+    // Map by email (legacy assignments) for backwards compatibility
       if (employee.email) {
-        acc[employee.email] = `${employee.first_name} ${employee.last_name}`;
+        acc[employee.email] = fullName;
       }
       return acc;
     }, {});
+
+    if (import.meta.env.DEV) {
+      console.log('[Activities] employeesMap built:', {
+        employeeCount: employees.length,
+        mappedKeys: Object.keys(map).length,
+        sampleKeys: Object.keys(map).slice(0, 3)
+      });
+    }
+
+    return map;
   }, [employees]);
 
   // Note: maps for accounts/contacts/leads/opportunities are not used directly here
@@ -710,7 +810,13 @@ export default function ActivitiesPage() {
             leads={leads}
             opportunities={opportunities}
             users={users}
-            assignedUserName={employeesMap[detailActivity.assigned_to] || usersMap[detailActivity.assigned_to] || detailActivity.assigned_to_name}
+            assignedUserName={(() => {
+              if (!detailActivity.assigned_to) return undefined;
+              return employeesMap[detailActivity.assigned_to] ||
+                usersMap[detailActivity.assigned_to] ||
+                detailActivity.assigned_to_name ||
+                detailActivity.assigned_to;
+            })()}
             relatedName={detailActivity.related_name}
             open={isDetailOpen}
             onOpenChange={() => {
@@ -999,7 +1105,13 @@ export default function ActivitiesPage() {
                   <ActivityCard
                     key={activity.id}
                     activity={activity}
-                    assignedUserName={employeesMap[activity.assigned_to] || usersMap[activity.assigned_to] || activity.assigned_to_name}
+                    assignedUserName={(() => {
+                      if (!activity.assigned_to) return undefined;
+                      return employeesMap[activity.assigned_to] ||
+                        usersMap[activity.assigned_to] ||
+                        activity.assigned_to_name ||
+                        activity.assigned_to;
+                    })()}
                     relatedName={activity.related_name}
                     onEdit={() => {
                       setEditingActivity(activity);
@@ -1082,7 +1194,54 @@ export default function ActivitiesPage() {
                           {getRelatedEntityLink(activity) || '—'}
                         </TableCell>
                         <TableCell className="text-slate-300 cursor-pointer p-3" onClick={() => handleViewDetails(activity)}>
-                          {employeesMap[activity.assigned_to] || usersMap[activity.assigned_to] || activity.assigned_to_name || <span className="text-slate-500">Unassigned</span>}
+                          {(() => {
+                            // If no assigned_to, show Unassigned
+                            if (!activity.assigned_to) {
+                              return <span className="text-slate-500">Unassigned</span>;
+                            }
+
+                            // Try employee lookup first (by ID or email)
+                            const employeeName = employeesMap[activity.assigned_to];
+                            if (employeeName) {
+                              return employeeName;
+                            }
+
+                            // Try user lookup
+                            const userName = usersMap[activity.assigned_to];
+                            if (userName) {
+                              return userName;
+                            }
+
+                            // Try the activity's embedded name field
+                            if (activity.assigned_to_name) {
+                              return activity.assigned_to_name;
+                            }
+
+                            // If we have a value but no lookup match, show it for debugging
+                            // This helps identify missing employee records
+                            if (import.meta.env.DEV) {
+                              console.log('[Activities] Missing employee lookup:', {
+                                activityId: activity.id,
+                                activitySubject: activity.subject,
+                                assigned_to: activity.assigned_to,
+                                employeesMapKeys: Object.keys(employeesMap).length,
+                                usersMapKeys: Object.keys(usersMap).length
+                              });
+                            }
+
+                            // Show abbreviated ID/email as fallback
+                            const assignedValue = String(activity.assigned_to);
+                            if (assignedValue.includes('@')) {
+                              // It's an email - show it
+                              return <span className="text-amber-400 text-xs" title={assignedValue}>{assignedValue}</span>;
+                            } else if (assignedValue.length > 20) {
+                              // It's likely a UUID - show abbreviated
+                              return <span className="text-amber-400 text-xs" title={assignedValue}>{assignedValue.substring(0, 8)}...</span>;
+                            } else {
+                              // Short value - show it
+                              return <span className="text-amber-400 text-xs">{assignedValue}</span>;
+                            }
+                          })()}
                         </TableCell>
                         <TableCell className="p-3">
                           <div className="flex items-center gap-1">

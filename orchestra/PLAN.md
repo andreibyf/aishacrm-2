@@ -276,7 +276,7 @@ Allowed:
 # PLAN – Realtime Voice Interaction (OpenAI Realtime WebRTC)
 
 Phase: **Realtime Voice / Streaming Assistant**  
-Status: **Active** (env key + feature flag verified Dec 1, 2025)  
+Status: **Completed** (Dec 12, 2025)  
 Owner: **AiSHA Core**  
 Scope: **Add continuous, hands-free voice conversation with AiSHA using OpenAI Realtime API, without breaking existing STT/TTS and text chat flows.**
 
@@ -300,6 +300,15 @@ Non-Goals (for this phase):
 - No autonomous write/apply mode.
 - No per-tenant custom voice yet (single default voice is fine).
 - No mobile app work; browser only.
+
+---
+
+# BUG-FE-ACT-STATUS-FILTER – Activities status filters (Scheduled/Overdue)
+
+Phase: **Frontend Activities Filters**  
+Status: **Completed** (Dec 12, 2025)  
+Owner: **AiSHA Core**  
+Scope: **Fix Activities list filters so `Scheduled` only returns the expected scheduled item(s) instead of all records, and `Overdue` returns the two expected items; ensure status-based filtering respects the status field.**
 
 ---
 
