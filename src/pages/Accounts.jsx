@@ -82,6 +82,7 @@ export default function AccountsPage() {
     customer: 0,
     prospect: 0,
     partner: 0,
+    competitor: 0,
     inactive: 0,
   });
 
@@ -122,12 +123,34 @@ export default function AccountsPage() {
       filter.tenant_id = user.tenant_id;
     }
 
+    const filterObj = {}; // For accumulating JSON filter properties
+
     // Employee scope filtering from context
     if (selectedEmail && selectedEmail !== "all") {
       if (selectedEmail === "unassigned") {
-        filter.$or = [{ assigned_to: null }, { assigned_to: "" }];
+        // Only filter by null
+        filterObj.$or = [{ assigned_to: null }];
       } else {
-        filter.assigned_to = selectedEmail;
+        // Robust filtering: Match by ID or Email
+        let emailToUse = selectedEmail;
+        // Check if selectedEmail looks like a UUID (it often is from LazyEmployeeSelector)
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedEmail);
+
+        if (isUuid && employees && employees.length > 0) {
+          const emp = employees.find(e => e.id === selectedEmail);
+          if (emp && emp.email) {
+            emailToUse = emp.email;
+            // Match either ID OR Email
+            filterObj.$or = [
+              { assigned_to: selectedEmail },
+              { assigned_to: emailToUse }
+            ];
+          } else {
+            filter.assigned_to = selectedEmail;
+          }
+        } else {
+          filter.assigned_to = selectedEmail;
+        }
       }
     } else if (
       user.employee_role === "employee" && user.role !== "admin" &&
@@ -139,11 +162,16 @@ export default function AccountsPage() {
 
     // Test data filtering
     if (!showTestData) {
-      filter.is_test_data = false; // Simple boolean, not complex operator
+      filter.is_test_data = false;
+    }
+
+    // Package the complex filterObj into the 'filter' parameter
+    if (Object.keys(filterObj).length > 0) {
+      filter.filter = JSON.stringify(filterObj);
     }
 
     return filter;
-  }, [user, selectedTenantId, showTestData, selectedEmail]);
+  }, [user, selectedTenantId, showTestData, selectedEmail, employees]);
 
   // User provided by global context
 
@@ -184,20 +212,24 @@ export default function AccountsPage() {
 
         await delay(300);
 
-        // Load users safely
+        // Load users safely (fetch up to 1000 to ensure lookups work)
         const usersData = await loadUsersSafely(
           user,
           selectedTenantId,
           cachedRequest,
+          1000
         );
+        if (import.meta.env.DEV) console.log(`[Accounts] Loaded ${usersData.length} users`);
         setUsers(usersData || []);
 
         await delay(300);
 
-        // Load employees
+        // Load employees (fetch up to 1000)
         const employeesData = await cachedRequest("Employee", "filter", {
           filter: baseTenantFilter,
-        }, () => Employee.filter(baseTenantFilter));
+          limit: 1000
+        }, () => Employee.filter(baseTenantFilter, 'created_at', 1000));
+        if (import.meta.env.DEV) console.log(`[Accounts] Loaded ${employeesData.length} employees`);
         setEmployees(employeesData || []);
 
         supportingDataLoaded.current = true; // Mark as loaded
@@ -269,6 +301,7 @@ export default function AccountsPage() {
         customer: allAccounts.filter((a) => a.type === "customer").length,
         prospect: allAccounts.filter((a) => a.type === "prospect").length,
         partner: allAccounts.filter((a) => a.type === "partner").length,
+        competitor: allAccounts.filter((a) => a.type === "competitor").length,
         inactive: allAccounts.filter((a) => a.type === "inactive").length || 0,
       };
 
@@ -420,14 +453,22 @@ export default function AccountsPage() {
   const usersMap = useMemo(() => {
     return users.reduce((acc, user) => {
       acc[user.email] = user.full_name || user.email;
+      if (user.id) acc[user.id] = user.full_name || user.email; // Index by ID
       return acc;
     }, {});
   }, [users]);
 
   const employeesMap = useMemo(() => {
     return employees.reduce((acc, employee) => {
+      const name = `${employee.first_name} ${employee.last_name}`;
       if (employee.email) {
-        acc[employee.email] = `${employee.first_name} ${employee.last_name}`;
+        acc[employee.email] = name;
+      }
+      if (employee.id) {
+        acc[employee.id] = name; // Index by ID
+      }
+      if (employee.user_id) {
+        acc[employee.user_id] = name;
       }
       return acc;
     }, {});
@@ -981,7 +1022,7 @@ export default function AccountsPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           {[
             {
               label: "Total Accounts",
@@ -1013,6 +1054,14 @@ export default function AccountsPage() {
               bgColor: "bg-purple-900/20",
               borderColor: "border-purple-700",
               tooltip: "account_partner",
+            },
+            {
+              label: "Competitors",
+              value: totalStats.competitor,
+              filter: "competitor",
+              bgColor: "bg-red-900/20",
+              borderColor: "border-red-700",
+              tooltip: "account_competitor",
             },
             {
               label: "Inactive",
@@ -1252,7 +1301,8 @@ export default function AccountsPage() {
                           </td>
                           <td className="px-4 py-3 text-sm text-slate-300">
                             {employeesMap[account.assigned_to] ||
-                              usersMap[account.assigned_to] || (
+                              usersMap[account.assigned_to] ||
+                              account.assigned_to || (
                               <span className="text-slate-500">Unassigned</span>
                             )}
                           </td>
@@ -1357,7 +1407,7 @@ export default function AccountsPage() {
                     key={account.id}
                     account={account}
                     assignedUserName={employeesMap[account.assigned_to] ||
-                      usersMap[account.assigned_to]}
+                      usersMap[account.assigned_to] || account.assigned_to}
                     onEdit={(a) => {
                       setEditingAccount(a);
                       setIsFormOpen(true);

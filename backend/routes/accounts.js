@@ -286,15 +286,61 @@ export default function createAccountRoutes(_pgPool) {
   // GET /api/accounts - List accounts (with caching)
   router.get("/", cacheList('accounts', 180), async (req, res) => {
     try {
-      let { tenant_id, type } = req.query;
+      let { tenant_id, type, assigned_to } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
+
+      const filter = req.query.filter ? JSON.parse(req.query.filter) : {};
+
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       let q = supabase.from('accounts').select('*', { count: 'exact' });
+
       if (tenant_id) q = q.eq('tenant_id', tenant_id);
       if (type) q = q.eq('type', type);
+      if (assigned_to) q = q.eq('assigned_to', assigned_to); // Direct param
+
+      // Support advanced filtering via 'filter' JSON param
+      if (filter.assigned_to) {
+        if (typeof filter.assigned_to === 'string') {
+          q = q.eq('assigned_to', filter.assigned_to);
+        }
+      }
+
+      if (typeof filter === 'object' && filter.$or && Array.isArray(filter.$or)) {
+        // Build OR condition: match any of the $or criteria
+        const orConditions = filter.$or.map(condition => {
+          const [field, opObj] = Object.entries(condition)[0];
+          if (opObj === null) {
+            return `${field}.is.null`;
+          }
+          if (opObj && typeof opObj === 'object' && opObj.$icontains) {
+            return `${field}.ilike.%${opObj.$icontains}%`;
+          }
+          // Support direct equality for non-object values
+          if (typeof opObj === 'string' || typeof opObj === 'number' || typeof opObj === 'boolean') {
+            return `${field}.eq.${opObj}`;
+          }
+          return null;
+        }).filter(Boolean);
+
+        if (orConditions.length > 0) {
+          q = q.or(orConditions.join(','));
+        }
+      }
+
+      // Handle is_test_data
+      // If explicit false/true, apply it. If undefined, show all (or assume standard view)
+      // Note: Contacts usually default to hiding test data unless toggled.
+      // Frontend sends explicitly.
+      if (filter.is_test_data === false) {
+        q = q.is('is_test_data', false); // PostgREST syntax for boolean is usually just is or eq
+        // .eq('is_test_data', false) also works
+      } else if (filter.is_test_data === true) {
+        q = q.is('is_test_data', true);
+      }
+
       q = q.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
 
       const { data, error, count } = await q;

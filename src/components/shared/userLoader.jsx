@@ -5,7 +5,7 @@ import { User } from "@/api/entities";
  * Only admins can list users - others get empty array
  * Handles network errors gracefully
  */
-export async function loadUsersSafely(user, selectedTenantId, cachedRequest) {
+export async function loadUsersSafely(user, selectedTenantId, cachedRequest, limit = 50) {
   if (!user) return [];
   
   // CRITICAL FIX: Only admins can list users. Don't even try for others.
@@ -15,7 +15,7 @@ export async function loadUsersSafely(user, selectedTenantId, cachedRequest) {
   }
   
   try {
-    return await cachedRequest('User', 'list', {}, () => User.list());
+    return await cachedRequest('User', 'list', { limit }, () => User.list({ limit }));
   } catch (error) {
     // Handle all errors gracefully - network errors, 403, 429, etc.
     const errorMessage = error?.message?.toLowerCase() || '';

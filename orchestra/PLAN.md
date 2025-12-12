@@ -321,6 +321,15 @@ Scope: **Fix 'Assigned To' column display in Contacts by indexing users/employee
 
 ---
 
+# BUG-FE-ACC-ASSIGNED – Accounts Assigned To display, filter, and layout
+
+Phase: **Frontend Accounts**
+Status: **Completed** (Dec 12, 2025)
+Owner: **AiSHA Core**
+Scope: **Fix 'Assigned To' column display/filter in Accounts (similar to Contacts), including Unassigned filter. Update Stat Cards layout to single row and add 'Competitors' card. Increase User/Employee fetch limit to 1000 to ensure correct name resolution.**
+
+---
+
 ## 2. Architecture Overview
 
 ### 2.1 Backend
