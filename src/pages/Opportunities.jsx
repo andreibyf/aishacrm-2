@@ -124,10 +124,11 @@ export default function OpportunitiesPage() {
 
   // Centralized tenant filter builder
   const getTenantFilter = useCallback(() => {
-    console.log('[Opportunities] getTenantFilter called with:', { selectedEmail, employeesCount: employees.length });
+    // console.log('[Opportunities] getTenantFilter called with:', { selectedEmail, employeesCount: employees.length });
     if (!user) return {};
 
     let filter = {};
+    const filterObj = {}; // For complex filters (like $or) for JSON packing
 
     // Tenant filtering
     if (user.role === 'superadmin' || user.role === 'admin') {
@@ -143,10 +144,29 @@ export default function OpportunitiesPage() {
     // Note: selectedEmail can contain either an email address or an employee ID
     if (selectedEmail && selectedEmail !== 'all') {
       if (selectedEmail === 'unassigned') {
-        filter.$or = [{ assigned_to: null }, { assigned_to: '' }];
+        // filter.$or = [{ assigned_to: null }, { assigned_to: '' }]; // removed old logic
+        filterObj.$or = [{ assigned_to: null }];
       } else {
-        // Use the selected value directly (works for both UUIDs and emails)
-        filter.assigned_to = selectedEmail;
+        // Robust filtering: Match by ID or Email
+        let emailToUse = selectedEmail;
+        // Check if selectedEmail looks like a UUID
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedEmail);
+
+        if (isUuid && employees && employees.length > 0) {
+          const emp = employees.find(e => e.id === selectedEmail);
+          if (emp && emp.email) {
+            emailToUse = emp.email;
+            // Match either ID OR Email
+            filterObj.$or = [
+              { assigned_to: selectedEmail },
+              { assigned_to: emailToUse }
+            ];
+          } else {
+            filter.assigned_to = selectedEmail;
+          }
+        } else {
+          filter.assigned_to = selectedEmail;
+        }
       }
     } else if (user.employee_role === 'employee' && user.role !== 'admin' && user.role !== 'superadmin') {
       filter.assigned_to = user.email;
@@ -155,6 +175,11 @@ export default function OpportunitiesPage() {
     // Test data filtering (only exclude when toggled off)
     if (!showTestData) {
       filter.is_test_data = false;
+    }
+
+    // Package the complex filterObj into the 'filter' parameter
+    if (Object.keys(filterObj).length > 0) {
+      filter.filter = JSON.stringify(filterObj);
     }
 
     return filter;
@@ -213,12 +238,12 @@ export default function OpportunitiesPage() {
             { filter: tenantFilter },
             () => Lead.filter(tenantFilter),
           ),
-          loadUsersSafely(user, selectedTenantId, cachedRequest),
+          loadUsersSafely(user, selectedTenantId, cachedRequest, 1000), // Updated with limit
           cachedRequest(
             "Employee",
             "filter",
-            { filter: tenantFilter },
-            () => Employee.filter(tenantFilter),
+            { filter: tenantFilter, limit: 1000 },
+            () => Employee.filter(tenantFilter, 'created_at', 1000),
           ),
         ]);
 
@@ -479,6 +504,7 @@ export default function OpportunitiesPage() {
   const usersMap = useMemo(() => {
     return users.reduce((acc, user) => {
       acc[user.email] = user.full_name || user.email;
+      if (user.id) acc[user.id] = user.full_name || user.email; // Index by ID
       return acc;
     }, {});
   }, [users]);

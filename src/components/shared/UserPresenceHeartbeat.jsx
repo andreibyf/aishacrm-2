@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { BACKEND_URL } from '@/api/entities';
 
 // Pings backend to update last_seen/live_status for current user
-const DEFAULT_INTERVAL = parseInt(import.meta.env.VITE_USER_HEARTBEAT_INTERVAL_MS || '60000', 10);
+const DEFAULT_INTERVAL = parseInt(import.meta.env.VITE_USER_HEARTBEAT_INTERVAL_MS || '180000', 10);
 
 export default function UserPresenceHeartbeat({ currentUser, intervalMs = DEFAULT_INTERVAL }) {
   const timerRef = useRef(null);

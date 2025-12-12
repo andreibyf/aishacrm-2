@@ -72,6 +72,7 @@ export default function LeadsPage() {
   const [users, setUsers] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  const [supportingDataReady, setSupportingDataReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -189,10 +190,11 @@ export default function LeadsPage() {
 
   // New getTenantFilter function, moved here from tenantContext
   const getTenantFilter = useCallback(() => {
-    console.log('[Leads] getTenantFilter called with:', { selectedEmail, employeesCount: employees.length });
+    // console.log('[Leads] getTenantFilter called with:', { selectedEmail, employeesCount: employees.length });
     if (!user) return {};
 
     let filter = {};
+    const filterObj = {}; // Object to hold complex filters (like $or) for JSON packing
 
     // Tenant filtering
     if (user.role === "superadmin" || user.role === "admin") {
@@ -207,10 +209,29 @@ export default function LeadsPage() {
     // Note: selectedEmail can contain either an email address or an employee ID
     if (selectedEmail && selectedEmail !== "all") {
       if (selectedEmail === "unassigned") {
-        filter.$or = [{ assigned_to: null }, { assigned_to: "" }];
+        // Only filter by null
+        filterObj.$or = [{ assigned_to: null }];
       } else {
-        // Use the selected value directly (works for both UUIDs and emails)
-        filter.assigned_to = selectedEmail;
+        // Robust filtering: Match by ID or Email
+        let emailToUse = selectedEmail;
+        // Check if selectedEmail looks like a UUID (it often is from LazyEmployeeSelector)
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedEmail);
+
+        if (isUuid && employees && employees.length > 0) {
+          const emp = employees.find(e => e.id === selectedEmail);
+          if (emp && emp.email) {
+            emailToUse = emp.email;
+            // Match either ID OR Email
+            filterObj.$or = [
+              { assigned_to: selectedEmail },
+              { assigned_to: emailToUse }
+            ];
+          } else {
+            filter.assigned_to = selectedEmail;
+          }
+        } else {
+          filter.assigned_to = selectedEmail;
+        }
       }
     } else if (
       user.employee_role === "employee" && user.role !== "admin" &&
@@ -223,6 +244,11 @@ export default function LeadsPage() {
     // Test data filtering
     if (!showTestData) {
       filter.is_test_data = false; // Simple boolean, not complex operator
+    }
+
+    // Package the complex filterObj into the 'filter' parameter
+    if (Object.keys(filterObj).length > 0) {
+      filter.filter = JSON.stringify(filterObj);
     }
 
     return filter;
@@ -266,6 +292,7 @@ export default function LeadsPage() {
           user,
           selectedTenantId,
           cachedRequest,
+          1000
         );
         setUsers(usersData || []);
 
@@ -274,12 +301,16 @@ export default function LeadsPage() {
         // Load employees
         const employeesData = await cachedRequest("Employee", "filter", {
           filter: baseTenantFilter,
-        }, () => Employee.filter(baseTenantFilter));
+          limit: 1000
+        }, () => Employee.filter(baseTenantFilter, 'created_at', 1000));
         setEmployees(employeesData || []);
 
         supportingDataLoaded.current = true; // Mark as loaded
+        setSupportingDataReady(true);
       } catch (error) {
         console.error("[Leads] Failed to load supporting data:", error);
+        // Even on error, allow leads to load
+        setSupportingDataReady(true);
       }
     };
 
@@ -477,22 +508,23 @@ export default function LeadsPage() {
     ageBuckets,
   ]); // Removed unused pageSize, showTestData deps
 
-  // Load leads when dependencies change
+  // Load leads when dependencies change and data is ready
   useEffect(() => {
-    if (user) {
+    if (supportingDataReady) {
       loadLeads(currentPage, pageSize);
     }
   }, [
     user,
-    selectedTenantId,
-    selectedEmail,
-    currentPage,
-    pageSize,
     searchTerm,
     statusFilter,
-    selectedTags,
     ageFilter,
+    selectedTags,
+    currentPage,
+    pageSize,
     loadLeads,
+    selectedEmail,
+    selectedTenantId,
+    supportingDataReady
   ]);
 
   // Clear cache when employee filter changes to force fresh data
@@ -538,6 +570,7 @@ export default function LeadsPage() {
   const usersMap = useMemo(() => {
     return users.reduce((acc, user) => {
       acc[user.email] = user.full_name || user.email;
+      if (user.id) acc[user.id] = user.full_name || user.email; // Index by ID
       return acc;
     }, {});
   }, [users]);

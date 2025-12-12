@@ -330,6 +330,19 @@ Scope: **Fix 'Assigned To' column display/filter in Accounts (similar to Contact
 
 ---
 
+# OPT-ENT-001 – Streamline Entity Operations & Performance
+
+Phase: **Optimization**  
+Status: **Completed** (Dec 12, 2025)  
+Owner: **AiSHA Core**  
+Scope: **Comprehensive performance and consistency updates for entity management.**
+- **Loading Stability**: Implemented `assignedToMap` and `supportingDataReady` gates in `Accounts`, `Leads`, and `Opportunities` to eliminate "UUID -> Email -> Name" flicker.
+- **Concurrent Loading**: Optimized data fetching to load supporting data (Users, Employees) in parallel.
+- **Heartbeat Optimization**: Reduced heartbeat frequency from 1m to 3m to lower server load.
+- **Backend Consistency**: Standardized filter packing and `$or` condition handling across Lead/Opportunity routes.
+
+---
+
 ## 2. Architecture Overview
 
 ### 2.1 Backend

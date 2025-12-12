@@ -60,6 +60,7 @@ export default function AccountsPage() {
   const [, setContacts] = useState([]);
   const [users, setUsers] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [supportingDataReady, setSupportingDataReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -186,7 +187,8 @@ export default function AccountsPage() {
         // since supporting data like employees/contacts are usually loaded for all within the tenant
         // for selection in other forms, not necessarily to be filtered by assigned_to.
         // We revert to basic tenant filter for supporting data for now.
-        const baseTenantFilter = {};
+        // Base tenant filter without employee scope for Account and Employee entities
+        let baseTenantFilter = {};
         if (user.role === "superadmin" || user.role === "admin") {
           if (selectedTenantId) {
             baseTenantFilter.tenant_id = selectedTenantId;
@@ -204,38 +206,51 @@ export default function AccountsPage() {
           return;
         }
 
-        // Load contacts
-        const contactsData = await cachedRequest("Contact", "filter", {
-          filter: baseTenantFilter,
-        }, () => Contact.filter(baseTenantFilter));
+        // PERFORMANCE OPTIMIZATION: Load all data concurrently
+        // This reduces the 'UUID -> Email -> Name' transition flicker
+        const [
+          accountsData,
+          contactsData,
+          usersData,
+          employeesData
+        ] = await Promise.all([
+          // Load accounts for lookups (e.g. parent accounts)
+          cachedRequest("Account", "filter", {
+            filter: baseTenantFilter,
+          }, () => Account.filter(baseTenantFilter)),
+
+          // Load contacts
+          cachedRequest("Contact", "filter", {
+            filter: baseTenantFilter,
+          }, () => Contact.filter(baseTenantFilter)),
+
+          // Load users safely (limit 1000)
+          loadUsersSafely(
+            user,
+            selectedTenantId,
+            cachedRequest,
+            1000
+          ),
+
+          // Load employees (limit 1000)
+          cachedRequest("Employee", "filter", {
+            filter: baseTenantFilter,
+            limit: 1000
+          }, () => Employee.filter(baseTenantFilter, 'created_at', 1000))
+        ]);
+
+        // Batch updates to reduce render cycles
+        setAccounts(accountsData || []);
         setContacts(contactsData || []);
-
-        await delay(300);
-
-        // Load users safely (fetch up to 1000 to ensure lookups work)
-        const usersData = await loadUsersSafely(
-          user,
-          selectedTenantId,
-          cachedRequest,
-          1000
-        );
-        if (import.meta.env.DEV) console.log(`[Accounts] Loaded ${usersData.length} users`);
         setUsers(usersData || []);
-
-        await delay(300);
-
-        // Load employees (fetch up to 1000)
-        const employeesData = await cachedRequest("Employee", "filter", {
-          filter: baseTenantFilter,
-          limit: 1000
-        }, () => Employee.filter(baseTenantFilter, 'created_at', 1000));
-        if (import.meta.env.DEV) console.log(`[Accounts] Loaded ${employeesData.length} employees`);
         setEmployees(employeesData || []);
 
         supportingDataLoaded.current = true; // Mark as loaded
+        setSupportingDataReady(true);
       } catch (error) {
         console.error("[Accounts] Failed to load supporting data:", error);
-        // Don't toast here - the page will still function
+        // Even on error, allow accounts to load (will just show UUIDs)
+        setSupportingDataReady(true);
       }
     };
 
@@ -398,10 +413,12 @@ export default function AccountsPage() {
     getTenantFilter,
   ]);
 
-  // Load accounts when dependencies change
+  // Load accounts when dependencies change and data is ready
   useEffect(() => {
-    loadAccounts();
-  }, [loadAccounts]);
+    if (supportingDataReady) {
+      loadAccounts();
+    }
+  }, [loadAccounts, supportingDataReady]);
 
   // Load stats once when user/tenant/scope changes
   useEffect(() => {
@@ -450,29 +467,27 @@ export default function AccountsPage() {
   }, [accounts]);
 
   // Create lookup maps for denormalized fields
-  const usersMap = useMemo(() => {
-    return users.reduce((acc, user) => {
-      acc[user.email] = user.full_name || user.email;
-      if (user.id) acc[user.id] = user.full_name || user.email; // Index by ID
-      return acc;
-    }, {});
-  }, [users]);
+  // Consolidate lookup maps into a single stable map to prevent flicker
+  const assignedToMap = useMemo(() => {
+    const map = {};
 
-  const employeesMap = useMemo(() => {
-    return employees.reduce((acc, employee) => {
+    // First pass: Users (often have full_name or email)
+    users.forEach((user) => {
+      const name = user.full_name || user.email;
+      if (user.email) map[user.email] = name;
+      if (user.id) map[user.id] = name;
+    });
+
+    // Second pass: Employees (Overwrite/Augment with authoritative names)
+    employees.forEach((employee) => {
       const name = `${employee.first_name} ${employee.last_name}`;
-      if (employee.email) {
-        acc[employee.email] = name;
-      }
-      if (employee.id) {
-        acc[employee.id] = name; // Index by ID
-      }
-      if (employee.user_id) {
-        acc[employee.user_id] = name;
-      }
-      return acc;
-    }, {});
-  }, [employees]);
+      if (employee.email) map[employee.email] = name;
+      if (employee.id) map[employee.id] = name;
+      if (employee.user_id) map[employee.user_id] = name;
+    });
+
+    return map;
+  }, [users, employees]);
 
   const handleSave = async () => {
     setIsFormOpen(false);
@@ -915,8 +930,7 @@ export default function AccountsPage() {
 
         <AccountDetailPanel
           account={detailAccount}
-          assignedUserName={employeesMap[detailAccount?.assigned_to] ||
-            usersMap[detailAccount?.assigned_to]}
+          assignedUserName={assignedToMap[detailAccount?.assigned_to] || detailAccount?.assigned_to}
           open={isDetailOpen}
           onOpenChange={() => {
             setIsDetailOpen(false);
@@ -1300,8 +1314,7 @@ export default function AccountsPage() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-sm text-slate-300">
-                            {employeesMap[account.assigned_to] ||
-                              usersMap[account.assigned_to] ||
+                            {assignedToMap[account.assigned_to] ||
                               account.assigned_to || (
                               <span className="text-slate-500">Unassigned</span>
                             )}
@@ -1406,8 +1419,7 @@ export default function AccountsPage() {
                   <AccountCard
                     key={account.id}
                     account={account}
-                    assignedUserName={employeesMap[account.assigned_to] ||
-                      usersMap[account.assigned_to] || account.assigned_to}
+                    assignedUserName={assignedToMap[account.assigned_to] || account.assigned_to}
                     onEdit={(a) => {
                       setEditingAccount(a);
                       setIsFormOpen(true);
