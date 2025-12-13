@@ -23,6 +23,151 @@ export default function createOpportunityV2Routes(_pgPool) {
     };
   };
 
+  // GET /api/v2/opportunities/stats - aggregate counts by stage (optimized)
+  router.get('/stats', async (req, res) => {
+    try {
+      const { tenant_id, stage, assigned_to, is_test_data } = req.query;
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+
+      // Build WHERE conditions matching the main query filters
+      let q = supabase
+        .from('opportunities')
+        .select('stage', { count: 'exact' })
+        .eq('tenant_id', tenant_id);
+
+      // Apply same filters as main query
+      if (assigned_to !== undefined) {
+        if (assigned_to === null || assigned_to === 'null' || assigned_to === '') {
+          q = q.is('assigned_to', null);
+        } else {
+          q = q.eq('assigned_to', assigned_to);
+        }
+      }
+
+      if (is_test_data !== undefined) {
+        const flag = String(is_test_data).toLowerCase();
+        if (flag === 'false') {
+          q = q.or('is_test_data.is.false,is_test_data.is.null');
+        } else if (flag === 'true') {
+          q = q.eq('is_test_data', true);
+        }
+      }
+
+      // Execute query to get all matching opportunities
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+
+      // Group by stage in JavaScript (Supabase client doesn't support GROUP BY directly)
+      const stats = {
+        total: data?.length || 0,
+        prospecting: 0,
+        qualification: 0,
+        proposal: 0,
+        negotiation: 0,
+        closed_won: 0,
+        closed_lost: 0,
+      };
+
+      if (data && Array.isArray(data)) {
+        data.forEach(opp => {
+          const stageKey = opp.stage;
+          if (stageKey && Object.prototype.hasOwnProperty.call(stats, stageKey)) {
+            stats[stageKey]++;
+          }
+        });
+      }
+
+      res.json({
+        status: 'success',
+        data: stats,
+      });
+    } catch (error) {
+      console.error('Error in v2 opportunities stats:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // GET /api/v2/opportunities/count - get total count (optimized)
+  router.get('/count', async (req, res) => {
+    try {
+      const { tenant_id, stage, assigned_to, is_test_data, filter } = req.query;
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+
+      let q = supabase
+        .from('opportunities')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenant_id);
+
+      // Apply same filters as main query
+      if (assigned_to !== undefined) {
+        if (assigned_to === null || assigned_to === 'null' || assigned_to === '') {
+          q = q.is('assigned_to', null);
+        } else {
+          q = q.eq('assigned_to', assigned_to);
+        }
+      }
+
+      if (stage && stage !== 'all' && stage !== 'any' && stage !== '' && stage !== 'undefined') {
+        q = q.eq('stage', stage.toLowerCase());
+      }
+
+      if (is_test_data !== undefined) {
+        const flag = String(is_test_data).toLowerCase();
+        if (flag === 'false') {
+          q = q.or('is_test_data.is.false,is_test_data.is.null');
+        } else if (flag === 'true') {
+          q = q.eq('is_test_data', true);
+        }
+      }
+
+      // Handle basic filter for search terms
+      if (filter) {
+        try {
+          const parsedFilter = typeof filter === 'string' && filter.startsWith('{') 
+            ? JSON.parse(filter) 
+            : filter;
+
+          if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
+            const orConditions = parsedFilter.$or.map(condition => {
+              const [field, opObj] = Object.entries(condition)[0];
+              if (opObj && opObj.$icontains) {
+                return `${field}.ilike.%${opObj.$icontains}%`;
+              }
+              return null;
+            }).filter(Boolean);
+
+            if (orConditions.length > 0) {
+              q = q.or(orConditions.join(','));
+            }
+          }
+        } catch (e) {
+          console.error('Error parsing filter in count:', e);
+        }
+      }
+
+      const { count, error } = await q;
+      if (error) throw new Error(error.message);
+
+      res.json({
+        status: 'success',
+        data: { count: count || 0 },
+      });
+    } catch (error) {
+      console.error('Error in v2 opportunities count:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // GET /api/v2/opportunities - list opportunities (v2 shape, internal pilot)
   router.get('/', async (req, res) => {
     try {
@@ -149,7 +294,22 @@ export default function createOpportunityV2Routes(_pgPool) {
         }
       }
 
-      q = q.order('created_date', { ascending: false })
+      // Keyset pagination support (if cursor provided, use it; otherwise fall back to offset)
+      const cursorUpdatedAt = req.query.cursor_updated_at;
+      const cursorId = req.query.cursor_id;
+
+      if (cursorUpdatedAt && cursorId) {
+        // Use keyset pagination for better performance
+        // WHERE (updated_at, id) < (cursor_updated_at, cursor_id)
+        // This matches the composite index order and avoids OFFSET scans
+        console.log('[V2 Opportunities] Using keyset pagination with cursor:', { cursorUpdatedAt, cursorId });
+        q = q.or(`updated_at.lt.${cursorUpdatedAt},and(updated_at.eq.${cursorUpdatedAt},id.lt.${cursorId})`);
+      }
+
+      // Sort by updated_at DESC, id DESC to match composite index (tenant_id, stage, updated_at DESC)
+      // This enables index-only scans and avoids sorts in query plan
+      q = q.order('updated_at', { ascending: false })
+        .order('id', { ascending: false })
         .range(offset, offset + limit - 1);
 
       const { data, error, count } = await q;

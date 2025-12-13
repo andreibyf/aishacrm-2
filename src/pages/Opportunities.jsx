@@ -113,6 +113,10 @@ export default function OpportunitiesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [totalItems, setTotalItems] = useState(0);
+  
+  // Keyset pagination cursors (for future backend optimization)
+  const [paginationCursors, setPaginationCursors] = useState({});
+  const [lastSeenRecord, setLastSeenRecord] = useState(null);
 
   const { cachedRequest, clearCache } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
@@ -289,41 +293,10 @@ export default function OpportunitiesPage() {
         effectiveFilter,
       );
 
-      // Get up to 10000 opportunities for stats calculation
-      const allOpportunities = await Opportunity.filter(
-        effectiveFilter,
-        "id",
-        10000,
-      );
+      // Use optimized /stats endpoint - server-side aggregation instead of fetching all records
+      const stats = await Opportunity.getStats(effectiveFilter);
 
-      logDev(
-        "[Opportunities] Loaded opportunities for stats:",
-        allOpportunities?.length,
-      );
-
-      const stats = {
-        total: allOpportunities?.length || 0,
-        prospecting: allOpportunities?.filter((o) =>
-          o.stage === "prospecting"
-        ).length || 0,
-        qualification: allOpportunities?.filter((o) =>
-          o.stage === "qualification"
-        ).length || 0,
-        proposal: allOpportunities?.filter((o) =>
-          o.stage === "proposal"
-        ).length || 0,
-        negotiation: allOpportunities?.filter((o) =>
-          o.stage === "negotiation"
-        ).length || 0,
-        closed_won: allOpportunities?.filter((o) =>
-          o.stage === "closed_won"
-        ).length || 0,
-        closed_lost: allOpportunities?.filter((o) =>
-          o.stage === "closed_lost"
-        ).length || 0,
-      };
-
-      logDev("[Opportunities] Calculated stats:", stats);
+      logDev("[Opportunities] Received stats from backend:", stats);
       setTotalStats(stats);
     } catch (error) {
       console.error("Failed to load total stats:", error);
@@ -397,18 +370,53 @@ export default function OpportunitiesPage() {
         skip,
         "filter:",
         effectiveFilter,
+        "cursor:",
+        paginationCursors[page - 1],
       );
 
+      // Build API query with keyset cursor if available
+      const apiFilter = { ...effectiveFilter };
+      
+      // Add cursor for keyset pagination if navigating forward
+      const cursor = paginationCursors[page - 1];
+      if (cursor && cursor.updated_at && cursor.id) {
+        apiFilter.cursor_updated_at = cursor.updated_at;
+        apiFilter.cursor_id = cursor.id;
+        logDev("[Opportunities] Using keyset cursor:", cursor);
+      }
+
+      // Sort by updated_at DESC, id DESC to match composite index (tenant_id, stage, updated_at DESC)
+      // This aligns with query optimization guidance for indexed scans
       const opportunitiesData = await Opportunity.filter(
-        effectiveFilter,
-        "-close_date",
+        apiFilter,
+        "-updated_at,-id",
         size,
         skip,
       );
 
-      // Get total count for pagination
-      const countQuery = await Opportunity.filter(effectiveFilter, "id", 10000);
-      const totalCount = countQuery?.length || 0;
+      // Track last record for keyset pagination
+      if (opportunitiesData && opportunitiesData.length > 0) {
+        const lastRecord = opportunitiesData[opportunitiesData.length - 1];
+        setLastSeenRecord({
+          updated_at: lastRecord.updated_at,
+          id: lastRecord.id,
+          page: page
+        });
+      }
+
+      // Use optimized count endpoint - server-side COUNT instead of fetching 10k records
+      const countFilter = { ...effectiveFilter };
+      if (searchTerm) {
+        // Convert search term to filter format for count endpoint
+        const searchRegex = { $regex: searchTerm, $options: "i" };
+        countFilter.$or = [
+          { name: searchRegex },
+          { account_name: searchRegex },
+          { contact_name: searchRegex },
+          { description: searchRegex },
+        ];
+      }
+      const totalCount = await Opportunity.getCount(countFilter);
 
       logDev(
         "[Opportunities] Loaded:",
@@ -458,9 +466,20 @@ export default function OpportunitiesPage() {
   }, [selectedEmail, clearCache]);
 
   const handlePageChange = useCallback((newPage) => {
+    // Store cursor for the page we're leaving
+    if (lastSeenRecord && lastSeenRecord.page === currentPage) {
+      setPaginationCursors(prev => ({
+        ...prev,
+        [currentPage]: {
+          updated_at: lastSeenRecord.updated_at,
+          id: lastSeenRecord.id
+        }
+      }));
+    }
+    
     setCurrentPage(newPage);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
+  }, [lastSeenRecord, currentPage]);
 
   const handlePageSizeChange = useCallback((newSize) => {
     setPageSize(newSize);
@@ -973,6 +992,8 @@ export default function OpportunitiesPage() {
     setStageFilter("all");
     setSelectedTags([]);
     setCurrentPage(1);
+    setPaginationCursors({});
+    setLastSeenRecord(null);
     handleClearSelection();
   };
 
