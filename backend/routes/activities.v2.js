@@ -2,6 +2,7 @@ import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildActivityAiContext } from '../lib/aiContextEnricher.js';
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 
 export default function createActivityV2Routes(_pgPool) {
   const router = express.Router();
@@ -44,7 +45,7 @@ export default function createActivityV2Routes(_pgPool) {
     };
   };
 
-  router.get('/', async (req, res) => {
+  router.get('/', cacheList('activities', 180), async (req, res) => {
     try {
       const { tenant_id, filter } = req.query;
       if (!tenant_id) {
@@ -343,7 +344,7 @@ export default function createActivityV2Routes(_pgPool) {
     }
   });
 
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', invalidateCache('activities'), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query || {};

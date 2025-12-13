@@ -1,3 +1,40 @@
+# AISHA CRM - Web Details
+
+## Current Goal
+
+**Status:** Pending
+Type: Enhancement
+Title: Leverage Supabase Edge function to display lead details on a web page.
+
+Description:
+Create a Supabase Edge function that retrieves lead details from the database and displays them on a web page. The page should already be styled for clarity and ease of use by Supabase, allowing users to view lead information without accessing the main CRM interface.
+
+Add a minimal helper to retrieve the current Supabase session access_token and a small utility to call the Edge Function mint-lead-link with that token. I’m using Vite + supabase-js and CRUD already works. Create:
+
+1. src/lib/session.ts exporting getAccessToken() using supabase.auth.getSession().
+2. src/lib/callMintLeadLink.ts exporting callMintLeadLink(id: string) that calls https://efzqxjpfewkrgpdootte.functions.supabase.co/mint-lead-link?id= with Authorization: Bearer , handles 401 by refreshing the session once, and throws with response text on failure.
+3. A simple React component src/components/MintLeadLinkButton.tsx that calls callMintLeadLink, shows loading/error/result, and is easy to drop into a page.
+
+Use TypeScript, no external deps, keep code concise.
+
+Do NOT:
+
+- Redesign entity models or API shapes.
+- Add new business logic unrelated to field parity.
+- Refactor unrelated modules (auth, realtime, AI orchestration, n8n, etc.).
+
+Allowed"
+- Adding new link to lead page using a globe icon button that opens the minted link in a new tab. 
+- Add minimal helper functions as described above.
+- Add minimal UI component for minting and displaying the lead link.
+- Add necessary error handling and loading states.
+- Ensure all new code is covered by unit tests.
+- Ensure tenant isolation and security best practices are followed.
+- Ensure the minted link respects lead visibility permissions.
+- Follow existing coding conventions and patterns in the codebase.
+- Keep changes minimal and surgical.
+- Ensure the new feature works seamlessly with existing lead management functionality.
+
 # AiSHA CRM – Backend Field Parity Bugfix Plan
 
 ## Current Goal

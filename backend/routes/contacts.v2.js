@@ -12,6 +12,7 @@ import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildContactAiContext } from '../lib/aiContextEnricher.js';
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 
 export default function createContactV2Routes(_pgPool) {
   const router = express.Router();
@@ -90,7 +91,7 @@ export default function createContactV2Routes(_pgPool) {
    *       200:
    *         description: Contacts list with flattened metadata
    */
-  router.get('/', async (req, res) => {
+  router.get('/', cacheList('contacts', 180), async (req, res) => {
     try {
       const { tenant_id, status, account_id, filter } = req.query;
       if (!tenant_id) {
@@ -191,7 +192,7 @@ export default function createContactV2Routes(_pgPool) {
    *       201:
    *         description: Contact created
    */
-  router.post('/', async (req, res) => {
+  router.post('/', invalidateCache('contacts'), async (req, res) => {
     try {
       const { tenant_id, metadata, tags, ...payload } = req.body || {};
       if (!tenant_id) {
@@ -313,7 +314,7 @@ export default function createContactV2Routes(_pgPool) {
    *       404:
    *         description: Contact not found
    */
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', invalidateCache('contacts'), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id, metadata, tags, ...payload } = req.body || {};
@@ -392,7 +393,7 @@ export default function createContactV2Routes(_pgPool) {
    *       404:
    *         description: Contact not found
    */
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', invalidateCache('contacts'), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query || {};

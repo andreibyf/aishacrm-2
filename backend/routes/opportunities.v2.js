@@ -2,6 +2,7 @@ import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildOpportunityAiContext } from '../lib/opportunityAiContext.js';
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 
 // NOTE: v2 opportunities router for Phase 4.2 internal pilot.
 // This implementation is dev-focused and gated by FEATURE_OPPORTUNITIES_V2.
@@ -24,7 +25,7 @@ export default function createOpportunityV2Routes(_pgPool) {
   };
 
   // GET /api/v2/opportunities/stats - aggregate counts by stage (optimized)
-  router.get('/stats', async (req, res) => {
+  router.get('/stats', cacheList('opportunities', 300), async (req, res) => {
     try {
       const { tenant_id, stage, assigned_to, is_test_data } = req.query;
 
@@ -93,7 +94,7 @@ export default function createOpportunityV2Routes(_pgPool) {
   });
 
   // GET /api/v2/opportunities/count - get total count (optimized)
-  router.get('/count', async (req, res) => {
+  router.get('/count', cacheList('opportunities', 600), async (req, res) => {
     try {
       const { tenant_id, stage, assigned_to, is_test_data, filter } = req.query;
 
@@ -169,7 +170,7 @@ export default function createOpportunityV2Routes(_pgPool) {
   });
 
   // GET /api/v2/opportunities - list opportunities (v2 shape, internal pilot)
-  router.get('/', async (req, res) => {
+  router.get('/', cacheList('opportunities', 180), async (req, res) => {
     try {
       const { tenant_id, filter, stage, assigned_to, is_test_data, $or } = req.query;
 
@@ -333,7 +334,7 @@ export default function createOpportunityV2Routes(_pgPool) {
   });
 
   // POST /api/v2/opportunities - create opportunity with AI context hook (internal pilot)
-  router.post('/', async (req, res) => {
+  router.post('/', invalidateCache('opportunities'), async (req, res) => {
     try {
       const { tenant_id, metadata, lead_source, ...payload } = req.body || {};
 
@@ -418,7 +419,7 @@ export default function createOpportunityV2Routes(_pgPool) {
   });
 
   // PUT /api/v2/opportunities/:id - shallow update (v2 shape)
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', invalidateCache('opportunities'), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id, metadata, lead_source, ...payload } = req.body || {};
@@ -464,7 +465,7 @@ export default function createOpportunityV2Routes(_pgPool) {
   });
 
   // DELETE /api/v2/opportunities/:id - delete opportunity
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', invalidateCache('opportunities'), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query || {};

@@ -12,6 +12,7 @@ import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildAccountAiContext } from '../lib/aiContextEnricher.js';
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 
 export default function createAccountV2Routes(_pgPool) {
   const router = express.Router();
@@ -192,7 +193,7 @@ export default function createAccountV2Routes(_pgPool) {
    *       201:
    *         description: Account created
    */
-  router.post('/', async (req, res) => {
+  router.post('/', invalidateCache('accounts'), async (req, res) => {
     try {
       const body = req.body;
       const tenant_id = body.tenant_id || req.query.tenant_id;

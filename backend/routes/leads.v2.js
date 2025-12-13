@@ -7,6 +7,7 @@
 import express from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildLeadAiContext } from '../lib/aiContextEnricher.js';
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 
 export default function createLeadsV2Routes() {
   const router = express.Router();
@@ -53,7 +54,7 @@ export default function createLeadsV2Routes() {
    *       200:
    *         description: Leads list with flattened metadata
    */
-  router.get('/', async (req, res) => {
+  router.get('/', cacheList('leads', 180), async (req, res) => {
     try {
       const { tenant_id, status, source, account_id, filter, assigned_to, is_test_data } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
@@ -447,7 +448,7 @@ export default function createLeadsV2Routes() {
    *       404:
    *         description: Lead not found
    */
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', invalidateCache('leads'), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query;
