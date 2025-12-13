@@ -89,7 +89,7 @@ import { getOrCreateUserApiKey } from "@/api/functions";
 import { createAuditLog } from "@/api/functions";
 import { MCPManager } from "../components/shared/MCPClient";
 import GlobalDetailViewer from "../components/shared/GlobalDetailViewer";
-import { getMyTenantBranding } from "@/api/functions";
+import { getTenantBrandingFast } from "@/api/entities";
 import EmployeeScopeFilter from "../components/shared/EmployeeScopeFilter";
 import { EmployeeScopeProvider } from "../components/shared/EmployeeScopeContext";
 import FooterBrand from "../components/shared/FooterBrand";
@@ -1379,7 +1379,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
     (async () => {
       try {
-        const res = await getMyTenantBranding();
+        const res = await getTenantBrandingFast();
         if (res?.status === 200 && res?.data?.tenant) {
           const t = res.data.tenant;
           setCurrentTenantData(t);
