@@ -934,7 +934,7 @@ export default function ConstructionProjects() {
                       <TableCell>
                         <Badge variant="outline">
                           <Users className="h-3 w-3 mr-1" />
-                          {project.assignments?.[0]?.count || 0}
+                          {project.assignments?.length || 0}
                         </Badge>
                       </TableCell>
                       <TableCell>

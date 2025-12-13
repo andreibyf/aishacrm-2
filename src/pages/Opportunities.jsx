@@ -128,7 +128,6 @@ export default function OpportunitiesPage() {
     if (!user) return {};
 
     let filter = {};
-    const filterObj = {}; // For complex filters (like $or) for JSON packing
 
     // Tenant filtering
     if (user.role === 'superadmin' || user.role === 'admin') {
@@ -144,29 +143,12 @@ export default function OpportunitiesPage() {
     // Note: selectedEmail can contain either an email address or an employee ID
     if (selectedEmail && selectedEmail !== 'all') {
       if (selectedEmail === 'unassigned') {
-        // filter.$or = [{ assigned_to: null }, { assigned_to: '' }]; // removed old logic
-        filterObj.$or = [{ assigned_to: null }];
+        // Opportunities.assigned_to is a UUID column; empty string causes backend UUID parse errors
+        // Filter only for NULL to represent unassigned
+        filter.$or = [{ assigned_to: null }];
       } else {
-        // Robust filtering: Match by ID or Email
-        let emailToUse = selectedEmail;
-        // Check if selectedEmail looks like a UUID
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedEmail);
-
-        if (isUuid && employees && employees.length > 0) {
-          const emp = employees.find(e => e.id === selectedEmail);
-          if (emp && emp.email) {
-            emailToUse = emp.email;
-            // Match either ID OR Email
-            filterObj.$or = [
-              { assigned_to: selectedEmail },
-              { assigned_to: emailToUse }
-            ];
-          } else {
-            filter.assigned_to = selectedEmail;
-          }
-        } else {
-          filter.assigned_to = selectedEmail;
-        }
+        // Use the selected value directly (works for both UUIDs and emails)
+        filter.assigned_to = selectedEmail;
       }
     } else if (user.employee_role === 'employee' && user.role !== 'admin' && user.role !== 'superadmin') {
       filter.assigned_to = user.email;
@@ -177,13 +159,8 @@ export default function OpportunitiesPage() {
       filter.is_test_data = false;
     }
 
-    // Package the complex filterObj into the 'filter' parameter
-    if (Object.keys(filterObj).length > 0) {
-      filter.filter = JSON.stringify(filterObj);
-    }
-
     return filter;
-  }, [user, selectedTenantId, selectedEmail, showTestData, employees]);
+  }, [user, selectedTenantId, selectedEmail, showTestData]);
 
   // Load supporting data (accounts, contacts, users, employees) ONCE - OPTIMIZED WITH CONCURRENT FETCHING
   useEffect(() => {
@@ -381,18 +358,26 @@ export default function OpportunitiesPage() {
         effectiveFilter = { ...effectiveFilter, stage: stageFilter };
       }
 
-      // Apply search term filter
+      // Apply search term filter while preserving existing $or filters (e.g., unassigned)
       if (searchTerm) {
         const searchRegex = { $regex: searchTerm, $options: "i" };
-        effectiveFilter = {
-          ...effectiveFilter,
-          $or: [
-            { name: searchRegex },
-            { account_name: searchRegex },
-            { contact_name: searchRegex },
-            { description: searchRegex },
-          ],
-        };
+        const searchConditions = [
+          { name: searchRegex },
+          { account_name: searchRegex },
+          { contact_name: searchRegex },
+          { description: searchRegex },
+        ];
+
+        // If $or already exists (e.g., from unassigned filter), combine via $and
+        if (effectiveFilter.$or) {
+          effectiveFilter = {
+            ...effectiveFilter,
+            $and: [...(effectiveFilter.$and || []), { $or: effectiveFilter.$or }, { $or: searchConditions }],
+          };
+          delete effectiveFilter.$or;
+        } else {
+          effectiveFilter = { ...effectiveFilter, $or: searchConditions };
+        }
       }
 
       // Apply tag filter
@@ -612,15 +597,26 @@ export default function OpportunitiesPage() {
 
         if (searchTerm) {
           const searchRegex = { $regex: searchTerm, $options: "i" };
-          effectiveFilter = {
-            ...effectiveFilter,
-            $or: [
-              { name: searchRegex },
-              { account_name: searchRegex },
-              { contact_name: searchRegex },
-              { description: searchRegex },
-            ],
-          };
+          const searchConditions = [
+            { name: searchRegex },
+            { account_name: searchRegex },
+            { contact_name: searchRegex },
+            { description: searchRegex },
+          ];
+
+          // If $or already exists (e.g., from unassigned filter), combine via $and
+          if (effectiveFilter.$or) {
+            effectiveFilter = {
+              ...effectiveFilter,
+              $and: [...(effectiveFilter.$and || []), { $or: effectiveFilter.$or }, { $or: searchConditions }],
+            };
+            delete effectiveFilter.$or;
+          } else {
+            effectiveFilter = {
+              ...effectiveFilter,
+              $or: searchConditions,
+            };
+          }
         }
 
         if (selectedTags.length > 0) {
@@ -715,15 +711,26 @@ export default function OpportunitiesPage() {
 
         if (searchTerm) {
           const searchRegex = { $regex: searchTerm, $options: "i" };
-          effectiveFilter = {
-            ...effectiveFilter,
-            $or: [
-              { name: searchRegex },
-              { account_name: searchRegex },
-              { contact_name: searchRegex },
-              { description: searchRegex },
-            ],
-          };
+          const searchConditions = [
+            { name: searchRegex },
+            { account_name: searchRegex },
+            { contact_name: searchRegex },
+            { description: searchRegex },
+          ];
+
+          // If $or already exists (e.g., from unassigned filter), combine via $and
+          if (effectiveFilter.$or) {
+            effectiveFilter = {
+              ...effectiveFilter,
+              $and: [...(effectiveFilter.$and || []), { $or: effectiveFilter.$or }, { $or: searchConditions }],
+            };
+            delete effectiveFilter.$or;
+          } else {
+            effectiveFilter = {
+              ...effectiveFilter,
+              $or: searchConditions,
+            };
+          }
         }
 
         if (selectedTags.length > 0) {
@@ -816,15 +823,26 @@ export default function OpportunitiesPage() {
 
         if (searchTerm) {
           const searchRegex = { $regex: searchTerm, $options: "i" };
-          effectiveFilter = {
-            ...effectiveFilter,
-            $or: [
-              { name: searchRegex },
-              { account_name: searchRegex },
-              { contact_name: searchRegex },
-              { description: searchRegex },
-            ],
-          };
+          const searchConditions = [
+            { name: searchRegex },
+            { account_name: searchRegex },
+            { contact_name: searchRegex },
+            { description: searchRegex },
+          ];
+
+          // If $or already exists (e.g., from unassigned filter), combine via $and
+          if (effectiveFilter.$or) {
+            effectiveFilter = {
+              ...effectiveFilter,
+              $and: [...(effectiveFilter.$and || []), { $or: effectiveFilter.$or }, { $or: searchConditions }],
+            };
+            delete effectiveFilter.$or;
+          } else {
+            effectiveFilter = {
+              ...effectiveFilter,
+              $or: searchConditions,
+            };
+          }
         }
 
         if (selectedTags.length > 0) {

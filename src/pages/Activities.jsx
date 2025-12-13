@@ -248,14 +248,25 @@ export default function ActivitiesPage() {
       
       if (searchTerm) {
         const searchRegex = { $regex: searchTerm, $options: 'i' };
-        currentFilter = {
-          ...currentFilter,
-          $or: [
-            { subject: searchRegex },
-            { description: searchRegex },
-            { related_name: searchRegex }
-          ]
-        };
+        const searchConditions = [
+          { subject: searchRegex },
+          { description: searchRegex },
+          { related_name: searchRegex }
+        ];
+
+        // If $or already exists (e.g., from unassigned filter), combine via $and
+        if (currentFilter.$or) {
+          currentFilter = {
+            ...currentFilter,
+            $and: [...(currentFilter.$and || []), { $or: currentFilter.$or }, { $or: searchConditions }],
+          };
+          delete currentFilter.$or;
+        } else {
+          currentFilter = {
+            ...currentFilter,
+            $or: searchConditions
+          };
+        }
       }
 
       if (selectedTags.length > 0) {
@@ -299,6 +310,15 @@ export default function ActivitiesPage() {
         }
         return a;
       });
+
+      // Client-side safety filter for employee scope (handles unassigned reliably)
+      if (selectedEmail && selectedEmail !== 'all') {
+        if (selectedEmail === 'unassigned') {
+          items = (items || []).filter(a => !a.assigned_to);
+        } else {
+          items = (items || []).filter(a => a.assigned_to === selectedEmail);
+        }
+      }
 
       // No need for client-side status filtering if the backend filter is correct!
       // But we keep it as a safety net ONLY if we are NOT in 'overdue' mode (since backend returns scheduled items for overdue query)

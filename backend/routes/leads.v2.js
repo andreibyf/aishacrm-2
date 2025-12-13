@@ -55,9 +55,11 @@ export default function createLeadsV2Routes() {
    */
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, status, source, account_id } = req.query;
+      const { tenant_id, status, source, account_id, filter, assigned_to, is_test_data } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
+
+      console.log('[V2 Leads GET] Called with:', { tenant_id, filter, status, assigned_to, is_test_data });
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -67,13 +69,79 @@ export default function createLeadsV2Routes() {
       let query = supabase
         .from('leads')
         .select('*', { count: 'exact' })
-        .eq('tenant_id', tenant_id)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
+        .eq('tenant_id', tenant_id);
 
+      // Handle filter parameter with $or support
+      if (filter) {
+        let parsedFilter = filter;
+        if (typeof filter === 'string' && filter.startsWith('{')) {
+          try {
+            parsedFilter = JSON.parse(filter);
+            console.log('[V2 Leads] Parsed filter:', JSON.stringify(parsedFilter, null, 2));
+          } catch {
+            // treat as literal
+          }
+        }
+
+        // Handle $or for assigned_to filtering
+        if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
+          // Check if this is an "unassigned" filter
+          const isUnassignedFilter = parsedFilter.$or.some(cond =>
+            cond.assigned_to === null || cond.assigned_to === ''
+          );
+
+          if (isUnassignedFilter) {
+            console.log('[V2 Leads] Applying unassigned filter');
+            // For unassigned, check for null or empty string
+            query = query.or('assigned_to.is.null,assigned_to.eq.');
+          } else {
+            // Check if this is an assigned_to filter (UUID or email matching)
+            const assignedToConditions = parsedFilter.$or.filter(cond =>
+              cond.assigned_to !== undefined && cond.assigned_to !== null && cond.assigned_to !== ''
+            );
+
+            if (assignedToConditions.length > 0) {
+              // Build OR condition for assigned_to matching
+              console.log('[V2 Leads] Applying assigned_to $or filter:', assignedToConditions);
+              const orParts = assignedToConditions.map(cond =>
+                `assigned_to.eq.${cond.assigned_to}`
+              );
+              query = query.or(orParts.join(','));
+            }
+          }
+        }
+
+        // Handle is_test_data filter from parsed filter
+        if (typeof parsedFilter === 'object' && parsedFilter.is_test_data !== undefined) {
+          console.log('[V2 Leads] Applying is_test_data filter:', parsedFilter.is_test_data);
+          if (parsedFilter.is_test_data === false) {
+            query = query.or('is_test_data.is.false,is_test_data.is.null');
+          } else {
+            query = query.eq('is_test_data', parsedFilter.is_test_data);
+          }
+        }
+      }
+
+      // Handle direct query parameters (fallback if no filter param)
       if (status) query = query.eq('status', status);
       if (source) query = query.eq('source', source);
       if (account_id) query = query.eq('account_id', account_id);
+      if (assigned_to && !filter) query = query.eq('assigned_to', assigned_to);
+
+      // Handle is_test_data from query param
+      if (is_test_data !== undefined && !filter) {
+        const flag = String(is_test_data).toLowerCase();
+        if (flag === 'false') {
+          console.log('[V2 Leads] Excluding test data from query param');
+          query = query.or('is_test_data.is.false,is_test_data.is.null');
+        } else if (flag === 'true') {
+          console.log('[V2 Leads] Including only test data from query param');
+          query = query.eq('is_test_data', true);
+        }
+      }
+
+      query = query.order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
 
       const { data, error, count } = await query;
       if (error) throw new Error(error.message);

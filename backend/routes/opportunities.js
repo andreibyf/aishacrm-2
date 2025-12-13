@@ -326,7 +326,7 @@ export default function createOpportunityRoutes(_pgPool) {
   // GET /api/opportunities - List opportunities with filtering
   router.get('/', async (req, res) => {
     try {
-      let { tenant_id, filter, stage, assigned_to } = req.query;
+      let { tenant_id, filter, stage } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
@@ -344,27 +344,12 @@ export default function createOpportunityRoutes(_pgPool) {
         .select('*', { count: 'exact' })
         .eq('tenant_id', tenant_id);
 
-      // Handle assigned_to as direct query parameter (primary way frontend sends filter)
-      if (assigned_to !== undefined && assigned_to !== '' && assigned_to !== 'all') {
-        q = q.eq('assigned_to', assigned_to);
-      }
-
       // Stage filter (ignore 'all', 'any', '', 'undefined' as they mean no filter)
       if (stage && stage !== 'all' && stage !== 'any' && stage !== '' && stage !== 'undefined') {
         q = q.eq('stage', stage.toLowerCase());
       }
 
-      // Handle is_test_data as direct query parameter
-      if (req.query.is_test_data !== undefined) {
-        const flag = String(req.query.is_test_data).toLowerCase();
-        if (flag === 'false') {
-          q = q.or('is_test_data.is.false,is_test_data.is.null');
-        } else if (flag === 'true') {
-          q = q.eq('is_test_data', true);
-        }
-      }
-
-      // Handle filter for assigned_to and dynamic search (fallback/legacy)
+      // Handle filter for assigned_to and dynamic search
       if (filter) {
         let parsedFilter = filter;
         if (typeof filter === 'string' && filter.startsWith('{')) {
@@ -375,20 +360,20 @@ export default function createOpportunityRoutes(_pgPool) {
           }
         }
         
-        // Handle assigned_to filter from filter object (only if not already set via direct param)
-        if (typeof parsedFilter === 'object' && parsedFilter.assigned_to !== undefined && assigned_to === undefined) {
+        // Handle assigned_to filter (supports UUID, null, or email)
+        if (typeof parsedFilter === 'object' && parsedFilter.assigned_to !== undefined) {
           q = q.eq('assigned_to', parsedFilter.assigned_to);
         }
 
-        // Handle is_test_data filter from filter object
-        if (typeof parsedFilter === 'object' && parsedFilter.is_test_data !== undefined && req.query.is_test_data === undefined) {
+        // Handle is_test_data filter
+        if (typeof parsedFilter === 'object' && parsedFilter.is_test_data !== undefined) {
           q = q.eq('is_test_data', parsedFilter.is_test_data);
         }
 
         // Handle $or for unassigned or dynamic search
         if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
           // Check if this is an "unassigned" filter
-          const isUnassignedFilter = parsedFilter.$or.some(cond =>
+          const isUnassignedFilter = parsedFilter.$or.some(cond => 
             cond.assigned_to === null || cond.assigned_to === ''
           );
 
@@ -396,7 +381,7 @@ export default function createOpportunityRoutes(_pgPool) {
             // For unassigned, check for null or empty string
             q = q.or('assigned_to.is.null,assigned_to.eq.');
           } else {
-          // Handle other $or conditions (like search)
+            // Handle other $or conditions (like search)
             const orConditions = parsedFilter.$or.map(condition => {
               const [field, opObj] = Object.entries(condition)[0];
               if (opObj && opObj.$icontains) {
