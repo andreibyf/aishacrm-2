@@ -49,21 +49,28 @@ export default function createOpportunityV2Routes(_pgPool) {
           const orConditions = typeof $or === 'string' ? JSON.parse($or) : $or;
           if (Array.isArray(orConditions)) {
             const isUnassignedFilter = orConditions.some(cond => 
-              cond.assigned_to === null || cond.assigned_to === ''
+              cond.assigned_to === null
             );
             if (isUnassignedFilter) {
               console.log('[V2 Opportunities] Applying unassigned filter from $or query param');
-              q = q.or('assigned_to.is.null,assigned_to.eq.');
+              // Only match NULL; empty string is invalid for UUID columns
+              q = q.is('assigned_to', null);
             }
           }
         } catch (e) {
           console.error('[V2 Opportunities] Failed to parse $or:', e);
         }
       }
-      // Handle direct assigned_to parameter (if not unassigned)
-      else if (assigned_to) {
-        console.log('[V2 Opportunities] Applying assigned_to filter from query param:', assigned_to);
-        q = q.eq('assigned_to', assigned_to);
+      // Handle direct assigned_to parameter
+      else if (assigned_to !== undefined) {
+        // Treat explicit null or empty string as unassigned
+        if (assigned_to === null || assigned_to === 'null' || assigned_to === '') {
+          console.log('[V2 Opportunities] Applying unassigned filter from assigned_to query param');
+          q = q.is('assigned_to', null);
+        } else {
+          console.log('[V2 Opportunities] Applying assigned_to filter from query param:', assigned_to);
+          q = q.eq('assigned_to', assigned_to);
+        }
       }
 
       // Handle stage filter
@@ -98,8 +105,14 @@ export default function createOpportunityV2Routes(_pgPool) {
 
         // Handle assigned_to filter (supports UUID, null, or email)
         if (typeof parsedFilter === 'object' && parsedFilter.assigned_to !== undefined) {
-          console.log('[V2 Opportunities] Applying assigned_to filter:', parsedFilter.assigned_to);
-          q = q.eq('assigned_to', parsedFilter.assigned_to);
+          const at = parsedFilter.assigned_to;
+          if (at === null || at === '' || at === 'null') {
+            console.log('[V2 Opportunities] Applying unassigned filter via parsed filter');
+            q = q.is('assigned_to', null);
+          } else {
+            console.log('[V2 Opportunities] Applying assigned_to filter:', at);
+            q = q.eq('assigned_to', at);
+          }
         }
 
         // Handle is_test_data filter
@@ -108,17 +121,17 @@ export default function createOpportunityV2Routes(_pgPool) {
           q = q.eq('is_test_data', parsedFilter.is_test_data);
         }
 
-        // Handle $or for unassigned (null or empty)
+        // Handle $or for unassigned (null)
         if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
           // Check if this is an "unassigned" filter
           const isUnassignedFilter = parsedFilter.$or.some(cond => 
-            cond.assigned_to === null || cond.assigned_to === ''
+            cond.assigned_to === null
           );
           
           if (isUnassignedFilter) {
             console.log('[V2 Opportunities] Applying unassigned filter');
-            // For unassigned, check for null or empty string
-            q = q.or('assigned_to.is.null,assigned_to.eq.');
+            // For unassigned, only match NULL (empty string is invalid for UUID)
+            q = q.is('assigned_to', null);
           } else {
             // Handle other $or conditions (like search)
             const orConditions = parsedFilter.$or.map(condition => {
