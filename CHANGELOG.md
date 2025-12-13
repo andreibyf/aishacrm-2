@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.5] - 2025-12-13
+
+### Fixed
+- **UUID Validation for System Tenant ID:** Fixed `invalid input syntax for type uuid: "system"` errors after Supabase UUID migration
+  - Applied `sanitizeUuidInput()` to convert 'system' literal to NULL for UUID columns
+  - Updated `logBackendEvent` in server.js to handle system-level logging with UUID tenant_id column
+  - Updated system-logs.js routes (POST and bulk insert endpoints) with UUID validation
+  - Uses existing `backend/lib/uuidValidator.js` utility for consistent sanitization
+  - Supports optional `SYSTEM_TENANT_ID` environment variable for valid UUID override
+  - Eliminates backend startup/shutdown logging errors caused by Supabase best-practice UUID migration
+
+---
+
+## [2.3.4] - 2025-12-13
+
+### Fixed
+- **Opportunities Unassigned Filter UUID Error:** Fixed `invalid input syntax for type uuid: ""` in Opportunities v2 backend route
+  - Sanitized `assigned_to` filter to use NULL instead of empty string for unassigned opportunities
+  - Updated frontend Opportunities.jsx to preserve $or filters via $and merging
+  - Prevents UUID parsing errors when filtering by unassigned opportunities
+
+---
+
 ## [2.2.37] - 2025-06-19
 
 ### Fixed
@@ -34,25 +57,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.2.36] - 2025-12-10
 
 ### Added
-- **Dynamic Entity Labels in UI:** Page titles, buttons, and empty states now reflect custom entity labels set in Navigation settings
   - Activities, Leads, Contacts, Accounts, Opportunities, and BizDevSources pages updated
   - Example: If "Leads" is renamed to "Prospects" in settings, buttons show "Add Prospect" instead of "Add Lead"
   - Dialog titles, tooltips, and empty state messages all use the dynamic labels
 
 - **Automatic GitHub Issue Creation for Critical API Errors:** Production environments now auto-create GitHub issues when critical/high severity API errors occur
   - New `_createGitHubIssueAsync` method in apiHealthMonitor
-  - Prevents duplicate issues with `issuesCreated` tracking set
   - Includes endpoint, error type, context, and suggested fix in issue body
   - Shows toast notification with link to created issue
 
 ### Fixed
-- **AI Suggestions Test Data Contamination:** Fixed unit tests creating AI suggestions for test activities
   - All 4 detection functions (leads, opportunities, activities, hot opportunities) now filter out `is_test_data: true` records
   - Test file `activities.filters.test.js` now correctly marks all test activities as `is_test_data: true`
   - AI suggestion rejection cooldown increased from 24 hours to 7 days
 
 - **AI Suggestions Badge Visibility & Information:**
-  - Badge changed from theme primary color to explicit bright red (`bg-red-500`) for better visibility
   - Suggestions now display the actual record name (activity subject, lead name, deal name) instead of generic "activity"
   - Shows days info prominently (e.g., "22 days overdue - Activity is overdue...")
 
