@@ -17,7 +17,7 @@ import TopAccounts from "../components/dashboard/TopAccounts";
 import RecentActivities from "../components/dashboard/RecentActivities";
 import LeadAgeReport from "../components/dashboard/LeadAgeReport";
 import { Loader2 } from "lucide-react";
-import { getDashboardBundle as getDashBundle } from "@/api/functions";
+import { getDashboardBundleFast } from "@/api/dashboard";
 import WidgetPickerModal from "../components/dashboard/WidgetPickerModal";
 import { toast } from "sonner";
 import { useUser } from "@/components/shared/useUser.js";
@@ -259,14 +259,14 @@ export default function DashboardPage() {
           showTestData,
         });
 
-        // Fast path: fetch compact dashboard bundle first (cached ~60s on server)
+        // Fast path: fetch compact dashboard bundle first (local backend with Redis cache)
         let bundle = null;
         try {
           const bundleResp = await cachedRequest(
             "Dashboard",
             "bundle",
             { tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData },
-            () => getDashBundle({ tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData })
+            () => getDashboardBundleFast({ tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData })
           );
           // Unwrap common shapes: either { data: {...} } or raw {...}
           bundle = bundleResp?.data || bundleResp;
