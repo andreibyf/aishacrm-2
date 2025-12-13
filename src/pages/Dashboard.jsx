@@ -537,7 +537,7 @@ export default function DashboardPage() {
                       <LazyWidgetLoader
                         key={widget.id}
                         component={widget.component}
-                        delay={(index + 1) * 500}
+                        delay={0}
                         user={user}
                         tenantFilter={stableTenantFilter}
                         showTestData={showTestData}
