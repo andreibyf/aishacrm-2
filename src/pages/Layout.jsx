@@ -90,6 +90,8 @@ import { createAuditLog } from "@/api/functions";
 import { MCPManager } from "../components/shared/MCPClient";
 import GlobalDetailViewer from "../components/shared/GlobalDetailViewer";
 import { getTenantBrandingFast } from "@/api/entities";
+import { getDashboardBundleFast } from "@/api/dashboard";
+import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
 import EmployeeScopeFilter from "../components/shared/EmployeeScopeFilter";
 import { EmployeeScopeProvider } from "../components/shared/EmployeeScopeContext";
 import FooterBrand from "../components/shared/FooterBrand";
@@ -515,6 +517,8 @@ let globalTenantCleanupDone = false;
 function Layout({ children, currentPageName }) { // Renamed from AppLayout to Layout
   // Source user from global UserContext to avoid duplicate fetches/logs
   const { user, loading: userLoading, reloadUser } = useUser();
+  // Ensure we know when auth cookies are available for backend calls
+  const { authCookiesReady } = useAuthCookiesReady();
   const [userError, setUserError] = React.useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
   const [selectedTenant, setSelectedTenant] = React.useState(null);
@@ -1066,6 +1070,39 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     // initial load
     refetchUser();
   }, [refetchUser]);
+
+  // Warm backend dashboard cache after auth cookies and user/tenant ready
+  React.useEffect(() => {
+    const warmCache = async () => {
+      try {
+        const tenantId = user?.tenant_id || null;
+        await getDashboardBundleFast({ tenant_id: tenantId, include_test_data: true });
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          console.debug('[WarmCache] skipped:', err?.message || err);
+        }
+      }
+    };
+    if (authCookiesReady && user) {
+      warmCache();
+    }
+  }, [authCookiesReady, user]);
+
+  // Also warm cache when tenant selection changes (for admins/superadmins)
+  React.useEffect(() => {
+    const warmOnTenantChange = async () => {
+      try {
+        const nextTenantId = selectedTenantId || user?.tenant_id || null;
+        if (!authCookiesReady || !nextTenantId) return;
+        await getDashboardBundleFast({ tenant_id: nextTenantId, include_test_data: true });
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          console.debug('[WarmCache] tenant-change skipped:', err?.message || err);
+        }
+      }
+    };
+    warmOnTenantChange();
+  }, [authCookiesReady, selectedTenantId]);
 
   // Refresh user when profile data changes in-app (Employee/User updates)
   React.useEffect(() => {

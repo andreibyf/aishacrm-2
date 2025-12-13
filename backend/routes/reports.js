@@ -266,7 +266,14 @@ export default function createReportRoutes(_pgPool) {
       const now = Date.now();
       const cached = bundleCache.get(cacheKey);
       if (!bustCache && cached && cached.expiresAt > now) {
+        const ttlMs = cached.expiresAt - now;
+        console.log(`[dashboard-bundle] Cache HIT key=${cacheKey} ttl=${ttlMs}ms`);
         return res.json({ status: 'success', data: cached.data, cached: true });
+      }
+      if (cached) {
+        console.log(`[dashboard-bundle] Cache EXPIRED key=${cacheKey} expiredBy=${now - cached.expiresAt}ms (recompute)`);
+      } else {
+        console.log(`[dashboard-bundle] Cache MISS key=${cacheKey} (compute)`);
       }
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');

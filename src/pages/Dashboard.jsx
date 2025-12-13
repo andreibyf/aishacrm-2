@@ -480,14 +480,21 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-900 p-4 sm:p-6">
-      {loading
-        ? (
-          <div className="flex items-center justify-center min-h-[400px]">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
-            <span className="ml-3 text-slate-400">Loading dashboard...</span>
+      {loading && (
+        <div className="space-y-6 animate-pulse">
+          <div className="h-6 w-48 bg-slate-800 rounded" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="h-24 bg-slate-800 rounded" />
+            <div className="h-24 bg-slate-800 rounded" />
+            <div className="h-24 bg-slate-800 rounded" />
           </div>
-        )
-        : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="h-64 bg-slate-800 rounded" />
+            <div className="h-64 bg-slate-800 rounded" />
+          </div>
+        </div>
+      )}
+      {!loading && (
           <div className="space-y-6">
             <DashboardHeader
               user={user}
@@ -554,7 +561,7 @@ export default function DashboardPage() {
                 )}
             </div>
           </div>
-        )}
+      )}
     </div>
   );
 }
