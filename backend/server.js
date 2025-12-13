@@ -20,6 +20,9 @@ import workflowQueue from "./services/workflowQueue.js";
 import { startCampaignWorker } from "./lib/campaignWorker.js";
 import { startAiTriggersWorker } from "./lib/aiTriggersWorker.js";
 
+// Import UUID validation
+import { sanitizeUuidInput } from "./lib/uuidValidator.js";
+
 // Load environment variables
 // Try .env.local first (for local development), then fall back to .env
 dotenv.config({ path: ".env.local" });
@@ -359,6 +362,10 @@ async function logBackendEvent(level, message, metadata = {}) {
   if (!pgPool) return; // Skip if no database
 
   try {
+    // Sanitize tenant_id: 'system' → NULL for UUID columns
+    // If SYSTEM_TENANT_ID env is set to a valid UUID, use it; otherwise NULL
+    const tenantId = sanitizeUuidInput(process.env.SYSTEM_TENANT_ID || 'system');
+
     const query = `
       INSERT INTO system_logs (
         tenant_id, level, message, source, metadata, created_at
@@ -368,7 +375,7 @@ async function logBackendEvent(level, message, metadata = {}) {
     `;
 
     await pgPool.query(query, [
-      "system", // Special tenant_id for system events
+      tenantId, // NULL or valid UUID (if SYSTEM_TENANT_ID env is set)
       level,
       message,
       "Backend Server",

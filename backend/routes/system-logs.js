@@ -1,4 +1,5 @@
 import express from "express";
+import { sanitizeUuidInput } from "../lib/uuidValidator.js";
 
 export default function createSystemLogRoutes(_pgPool) {
   const router = express.Router();
@@ -70,6 +71,9 @@ export default function createSystemLogRoutes(_pgPool) {
       if (!effectiveTenantId && req.tenant?.id) {
         effectiveTenantId = req.tenant.id; // Use authenticated user's tenant
       }
+      
+      // Sanitize to handle 'system' alias → NULL for UUID columns
+      effectiveTenantId = sanitizeUuidInput(effectiveTenantId);
 
       // Merge metadata with unknown fields and extra fields that don't exist as columns
       const combinedMetadata = {
@@ -146,6 +150,9 @@ export default function createSystemLogRoutes(_pgPool) {
         if (!effectiveTenantId && req.tenant?.id) {
           effectiveTenantId = req.tenant.id; // Use authenticated user's tenant
         }
+        
+        // Sanitize to handle 'system' alias → NULL for UUID columns
+        effectiveTenantId = sanitizeUuidInput(effectiveTenantId);
         
         const combinedMetadata = { ...(metadata || {}), ...otherFields };
         if (user_email) combinedMetadata.user_email = user_email;
