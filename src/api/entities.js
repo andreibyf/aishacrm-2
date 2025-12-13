@@ -160,13 +160,23 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   // Diagnostic logging for key entities during tests
   const isOpportunity = entityName === 'Opportunity';
   const isActivity = entityName === 'Activity';
-  const isDebugEntity = isOpportunity || isActivity || entityName === 'Employee' || entityName === 'Account' || entityName === 'Contact';
-  // Opportunities and Activities always use v2 API paths; no feature flag opt-in
+  const isAccount = entityName === 'Account';
+  const isContact = entityName === 'Contact';
+  const isLead = entityName === 'Lead';
+  const isDebugEntity = isOpportunity || isActivity || entityName === 'Employee' || isAccount || isContact;
+  
+  // Use V2 API paths for all core CRM entities (better performance + AI support)
   const entityPath = isOpportunity
     ? 'v2/opportunities'
     : isActivity
       ? 'v2/activities'
-      : pluralize(entityName);
+      : isAccount
+        ? 'v2/accounts'
+        : isContact
+          ? 'v2/contacts'
+          : isLead
+            ? 'v2/leads'
+            : pluralize(entityName);
   let url = `${BACKEND_URL}/api/${entityPath}`;
 
   // Determine tenant_id preference order:
