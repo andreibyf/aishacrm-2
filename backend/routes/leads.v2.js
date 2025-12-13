@@ -124,7 +124,24 @@ export default function createLeadsV2Routes() {
       }
 
       // Handle direct query parameters (fallback if no filter param)
-      if (status) query = query.eq('status', status);
+      if (status && status !== 'all' && status !== 'any' && status !== '' && status !== 'undefined') {
+        let parsedStatus = status;
+        if (typeof status === 'string' && status.startsWith('{')) {
+          try {
+            parsedStatus = JSON.parse(status);
+          } catch {
+            // treat as literal
+          }
+        }
+        // Handle $nin (not-in) operator for status filtering
+        if (typeof parsedStatus === 'object' && parsedStatus.$nin) {
+          console.log('[V2 Leads] Applying status $nin from query param:', parsedStatus.$nin);
+          // Use NOT IN with Supabase
+          query = query.not('status', 'in', `(${parsedStatus.$nin.join(',')})`);
+        } else {
+          query = query.eq('status', status);
+        }
+      }
       if (source) query = query.eq('source', source);
       if (account_id) query = query.eq('account_id', account_id);
       if (assigned_to && !filter) query = query.eq('assigned_to', assigned_to);
