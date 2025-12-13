@@ -13,6 +13,7 @@ import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/va
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildAccountAiContext } from '../lib/aiContextEnricher.js';
 import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
+import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 
 export default function createAccountV2Routes(_pgPool) {
   const router = express.Router();
@@ -107,7 +108,7 @@ export default function createAccountV2Routes(_pgPool) {
    */
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, type, industry, search } = req.query;
+      const { tenant_id, type, industry, search, filter, assigned_to } = req.query;
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
@@ -126,6 +127,64 @@ export default function createAccountV2Routes(_pgPool) {
       if (type) query = query.eq('type', type);
       if (industry) query = query.eq('industry', industry);
       if (search) query = query.ilike('name', `%${search}%`);
+
+      // Handle complex filter param (JSON string)
+      if (filter) {
+        let parsed = filter;
+        if (typeof filter === 'string' && filter.startsWith('{')) {
+          try {
+            parsed = JSON.parse(filter);
+          } catch {
+            // ignore parse errors
+          }
+        }
+        if (parsed && typeof parsed === 'object') {
+          // is_test_data handling
+          if (parsed.is_test_data !== undefined) {
+            if (parsed.is_test_data === false) {
+              query = query.or('is_test_data.is.false,is_test_data.is.null');
+            } else {
+              query = query.eq('is_test_data', parsed.is_test_data);
+            }
+          }
+
+          // assigned_to via $or including NULL
+          if (parsed.$or && Array.isArray(parsed.$or)) {
+            const normalizedOr = parsed.$or.filter(c => c && typeof c === 'object');
+            const hasUnassigned = normalizedOr.some(c => c.assigned_to === null);
+            const assignedVals = normalizedOr
+              .map(c => c.assigned_to)
+              .filter(v => v !== undefined && v !== null && String(v).trim() !== '');
+
+            if (hasUnassigned && assignedVals.length === 0) {
+              query = query.is('assigned_to', null);
+            } else if (assignedVals.length > 0) {
+              const orParts = assignedVals.map(v => `assigned_to.eq.${v}`);
+              query = query.or(orParts.join(','));
+            }
+
+            // Preserve any ilike search conditions in $or
+            const searchOrs = normalizedOr
+              .map(condition => {
+                const [field, opObj] = Object.entries(condition)[0] || [];
+                if (opObj && opObj.$icontains) {
+                  return `${field}.ilike.%${opObj.$icontains}%`;
+                }
+                return null;
+              })
+              .filter(Boolean);
+            if (searchOrs.length > 0) {
+              query = query.or(searchOrs.join(','));
+            }
+          }
+        }
+      }
+
+      // Direct assigned_to param (sanitized)
+      const safeAssignedTo = sanitizeUuidInput(assigned_to);
+      if (safeAssignedTo !== undefined && safeAssignedTo !== null) {
+        query = query.eq('assigned_to', safeAssignedTo);
+      }
 
       const { data, error, count } = await query;
 

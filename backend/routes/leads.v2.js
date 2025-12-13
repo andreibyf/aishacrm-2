@@ -6,6 +6,7 @@
 
 import express from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 import { buildLeadAiContext } from '../lib/aiContextEnricher.js';
 import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 
@@ -86,29 +87,22 @@ export default function createLeadsV2Routes() {
 
         // Handle $or for assigned_to filtering
         if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
-          // Check if this is an "unassigned" filter
-          const isUnassignedFilter = parsedFilter.$or.some(cond =>
-            cond.assigned_to === null || cond.assigned_to === ''
-          );
+          // Normalize conditions to avoid empty strings or undefineds
+          const normalizedOr = parsedFilter.$or.filter(cond => cond && typeof cond === 'object');
 
-          if (isUnassignedFilter) {
-            console.log('[V2 Leads] Applying unassigned filter');
-            // For unassigned, check for null or empty string
-            query = query.or('assigned_to.is.null,assigned_to.eq.');
-          } else {
-            // Check if this is an assigned_to filter (UUID or email matching)
-            const assignedToConditions = parsedFilter.$or.filter(cond =>
-              cond.assigned_to !== undefined && cond.assigned_to !== null && cond.assigned_to !== ''
-            );
+          // Detect unassigned explicitly and apply a safe null check
+          const hasUnassigned = normalizedOr.some(cond => cond.assigned_to === null);
+          const nonEmptyAssignedTo = normalizedOr
+            .map(cond => cond.assigned_to)
+            .filter(val => val !== undefined && val !== null && String(val).trim() !== '');
 
-            if (assignedToConditions.length > 0) {
-              // Build OR condition for assigned_to matching
-              console.log('[V2 Leads] Applying assigned_to $or filter:', assignedToConditions);
-              const orParts = assignedToConditions.map(cond =>
-                `assigned_to.eq.${cond.assigned_to}`
-              );
-              query = query.or(orParts.join(','));
-            }
+          if (hasUnassigned && nonEmptyAssignedTo.length === 0) {
+            console.log('[V2 Leads] Applying unassigned-only filter');
+            query = query.is('assigned_to', null);
+          } else if (nonEmptyAssignedTo.length > 0) {
+            console.log('[V2 Leads] Applying assigned_to $or filter:', nonEmptyAssignedTo);
+            const orParts = nonEmptyAssignedTo.map(val => `assigned_to.eq.${val}`);
+            query = query.or(orParts.join(','));
           }
         }
 
@@ -143,8 +137,15 @@ export default function createLeadsV2Routes() {
         }
       }
       if (source) query = query.eq('source', source);
-      if (account_id) query = query.eq('account_id', account_id);
-      if (assigned_to && !filter) query = query.eq('assigned_to', assigned_to);
+      // Sanitize potential UUID query params to avoid "invalid input syntax for type uuid" errors
+      const safeAccountId = sanitizeUuidInput(account_id);
+      if (safeAccountId !== undefined && safeAccountId !== null) {
+        query = query.eq('account_id', safeAccountId);
+      }
+      const safeAssignedTo = sanitizeUuidInput(assigned_to);
+      if (!filter && safeAssignedTo !== undefined && safeAssignedTo !== null) {
+        query = query.eq('assigned_to', safeAssignedTo);
+      }
 
       // Handle is_test_data from query param
       if (is_test_data !== undefined && !filter) {

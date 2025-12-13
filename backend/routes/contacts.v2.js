@@ -13,6 +13,7 @@ import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/va
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildContactAiContext } from '../lib/aiContextEnricher.js';
 import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
+import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 
 export default function createContactV2Routes(_pgPool) {
   const router = express.Router();
@@ -93,7 +94,7 @@ export default function createContactV2Routes(_pgPool) {
    */
   router.get('/', cacheList('contacts', 180), async (req, res) => {
     try {
-      const { tenant_id, status, account_id, filter } = req.query;
+      const { tenant_id, status, account_id, filter, assigned_to } = req.query;
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
@@ -122,19 +123,42 @@ export default function createContactV2Routes(_pgPool) {
         if (parsed && typeof parsed === 'object') {
           if (parsed.status) q = q.eq('status', parsed.status);
           if (parsed.account_id) q = q.eq('account_id', parsed.account_id);
+          // Handle is_test_data flag
+          if (parsed.is_test_data !== undefined) {
+            if (parsed.is_test_data === false) {
+              q = q.or('is_test_data.is.false,is_test_data.is.null');
+            } else {
+              q = q.eq('is_test_data', parsed.is_test_data);
+            }
+          }
           
-          // Handle $or for search
+          // Handle $or for assigned_to (including NULL)
           if (parsed.$or && Array.isArray(parsed.$or)) {
-            const orConditions = parsed.$or.map(condition => {
-              const [field, opObj] = Object.entries(condition)[0];
-              if (opObj && opObj.$icontains) {
-                return `${field}.ilike.%${opObj.$icontains}%`;
-              }
-              return null;
-            }).filter(Boolean);
-            
-            if (orConditions.length > 0) {
-              q = q.or(orConditions.join(','));
+            const normalizedOr = parsed.$or.filter(c => c && typeof c === 'object');
+            const hasUnassigned = normalizedOr.some(c => c.assigned_to === null);
+            const assignedVals = normalizedOr
+              .map(c => c.assigned_to)
+              .filter(v => v !== undefined && v !== null && String(v).trim() !== '');
+
+            if (hasUnassigned && assignedVals.length === 0) {
+              q = q.is('assigned_to', null);
+            } else if (assignedVals.length > 0) {
+              const orParts = assignedVals.map(v => `assigned_to.eq.${v}`);
+              q = q.or(orParts.join(','));
+            }
+
+            // Preserve any ilike search conditions alongside assigned_to
+            const searchOrs = normalizedOr
+              .map(condition => {
+                const [field, opObj] = Object.entries(condition)[0] || [];
+                if (opObj && opObj.$icontains) {
+                  return `${field}.ilike.%${opObj.$icontains}%`;
+                }
+                return null;
+              })
+              .filter(Boolean);
+            if (searchOrs.length > 0) {
+              q = q.or(searchOrs.join(','));
             }
           }
         }
@@ -142,7 +166,10 @@ export default function createContactV2Routes(_pgPool) {
 
       // Apply direct query params
       if (status) q = q.eq('status', status);
-      if (account_id) q = q.eq('account_id', account_id);
+      const safeAccountId = sanitizeUuidInput(account_id);
+      if (safeAccountId !== undefined && safeAccountId !== null) q = q.eq('account_id', safeAccountId);
+      const safeAssignedTo = sanitizeUuidInput(assigned_to);
+      if (safeAssignedTo !== undefined && safeAssignedTo !== null) q = q.eq('assigned_to', safeAssignedTo);
 
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);

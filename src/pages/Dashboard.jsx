@@ -156,7 +156,8 @@ export default function DashboardPage() {
     // Employee scope filtering from context
     if (selectedEmail && selectedEmail !== "all") {
       if (selectedEmail === "unassigned") {
-        filter.$or = [{ assigned_to: null }, { assigned_to: "" }];
+        // Unassigned should strictly check for NULL UUID
+        filter.$or = [{ assigned_to: null }];
       } else {
         filter.assigned_to = selectedEmail;
       }
@@ -207,7 +208,8 @@ export default function DashboardPage() {
         // Employee scope filtering from context
         if (selectedEmail && selectedEmail !== "all") {
           if (selectedEmail === "unassigned") {
-            tenantFilter.$or = [{ assigned_to: null }, { assigned_to: "" }];
+            // Unassigned should strictly check for NULL UUID
+            tenantFilter.$or = [{ assigned_to: null }];
           } else {
             tenantFilter.assigned_to = selectedEmail;
           }

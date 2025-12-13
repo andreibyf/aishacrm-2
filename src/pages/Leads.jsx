@@ -57,6 +57,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import BulkActionsMenu from "../components/leads/BulkActionsMenu";
+import { Globe } from "lucide-react";
+import { mintLeadLink } from "@/api/edgeFunctions";
 import StatusHelper from "../components/shared/StatusHelper";
 import { loadUsersSafely } from "../components/shared/userLoader";
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
@@ -1689,6 +1691,30 @@ export default function LeadsPage() {
                                   </TooltipTrigger>
                                   <TooltipContent>
                                     <p>View details</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        try {
+                                          const link = await mintLeadLink({ id: lead.id });
+                                          window.open(link, "_blank", "noopener,noreferrer");
+                                        } catch (err) {
+                                          toast.error("Unable to open web profile");
+                                          if (import.meta.env.DEV) console.warn('[Leads] mintLeadLink failed', err);
+                                        }
+                                      }}
+                                      className="h-8 w-8 text-slate-400 hover:text-blue-400"
+                                    >
+                                      <Globe className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Open web profile</p>
                                   </TooltipContent>
                                 </Tooltip>
                                 <Tooltip>

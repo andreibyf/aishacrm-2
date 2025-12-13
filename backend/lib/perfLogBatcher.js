@@ -3,6 +3,7 @@
  * Reduces per-request overhead by buffering log records and inserting in batches.
  */
 import { getSupabaseClient } from './supabase-db.js';
+import { sanitizeUuidInput } from './uuidValidator.js';
 
 let queue = [];
 let flushing = false;
@@ -14,8 +15,18 @@ const FLUSH_INTERVAL_MS = parseInt(process.env.PERF_LOG_FLUSH_MS || '2000', 10);
 const BATCH_MAX = parseInt(process.env.PERF_LOG_BATCH_MAX || '25', 10);
 
 function safeTenantId(raw) {
-  if (!raw || raw === 'unknown') return 'system';
-  return raw;
+  // Performance logs should not insert non-UUID values; map system/unknown/empty to null
+  return sanitizeUuidInput(raw, { systemAliases: ['system', 'unknown', 'anonymous'] });
+}
+
+function sanitizeRecord(rec) {
+  const r = { ...rec };
+  r.tenant_id = safeTenantId(rec?.tenant_id);
+  if (r.tenantId && !r.tenant_id) {
+    r.tenant_id = safeTenantId(r.tenantId);
+    delete r.tenantId;
+  }
+  return r;
 }
 
 export function initializePerformanceLogBatcher(pgPool) {
@@ -48,15 +59,16 @@ export function enqueuePerformanceLog(record) {
 async function directInsert(rec) {
   try {
     const supabase = getSupabaseClient();
-    const { error } = await supabase.from('performance_logs').insert(rec);
+    const { error } = await supabase.from('performance_logs').insert(sanitizeRecord(rec));
     if (error) throw error;
   } catch (e) {
     if (pgFallback) {
       try {
+        const s = sanitizeRecord(rec);
         await pgFallback.query(
           `INSERT INTO performance_logs (tenant_id, method, endpoint, status_code, duration_ms, response_time_ms, db_query_time_ms, user_email, ip_address, user_agent, error_message, error_stack)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-          [rec.tenant_id, rec.method, rec.endpoint, rec.status_code, rec.duration_ms, rec.response_time_ms, rec.db_query_time_ms, rec.user_email, rec.ip_address, rec.user_agent, rec.error_message, rec.error_stack]
+          [s.tenant_id, s.method, s.endpoint, s.status_code, s.duration_ms, s.response_time_ms, s.db_query_time_ms, s.user_email, s.ip_address, s.user_agent, s.error_message, s.error_stack]
         );
       } catch (fallbackErr) {
         console.error('[PerfLogBatcher] Direct fallback insert failed:', fallbackErr.message);
@@ -75,7 +87,8 @@ export async function flush() {
   try {
     const supabase = getSupabaseClient();
     // Bulk insert
-    const { error } = await supabase.from('performance_logs').insert(batch);
+    const sanitizedBatch = batch.map(sanitizeRecord);
+    const { error } = await supabase.from('performance_logs').insert(sanitizedBatch);
     if (error) throw error;
     if (process.env.NODE_ENV !== 'production') {
       console.log(`[PerfLogBatcher] Flushed ${batch.length} performance logs`);
@@ -86,11 +99,12 @@ export async function flush() {
     // Fallback: attempt sequential pg inserts if available
     if (pgFallback) {
       for (const rec of batch) {
+        const s = sanitizeRecord(rec);
         try {
           await pgFallback.query(
             `INSERT INTO performance_logs (tenant_id, method, endpoint, status_code, duration_ms, response_time_ms, db_query_time_ms, user_email, ip_address, user_agent, error_message, error_stack)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-            [rec.tenant_id, rec.method, rec.endpoint, rec.status_code, rec.duration_ms, rec.response_time_ms, rec.db_query_time_ms, rec.user_email, rec.ip_address, rec.user_agent, rec.error_message, rec.error_stack]
+            [s.tenant_id, s.method, s.endpoint, s.status_code, s.duration_ms, s.response_time_ms, s.db_query_time_ms, s.user_email, s.ip_address, s.user_agent, s.error_message, s.error_stack]
           );
         } catch (fallbackErr) {
           console.error('[PerfLogBatcher] Fallback pgPool insert failed:', fallbackErr.message);
