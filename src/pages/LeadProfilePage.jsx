@@ -1,13 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import { useProfileFormIntegration } from "@/hooks/useProfileFormIntegration";
-import ActivityForm from "@/components/activities/ActivityForm";
-import OpportunityForm from "@/components/opportunities/OpportunityForm";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { X } from "lucide-react";
 
 function getRuntimeEnv(key) {
   if (typeof window !== "undefined" && window._env_) return window._env_[key];
@@ -53,40 +46,6 @@ export default function LeadProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [profile, setProfile] = useState(null);
-  
-  // Modal states for forms - MUST be at top level
-  const [showActivityForm, setShowActivityForm] = useState(false);
-  const [showOpportunityForm, setShowOpportunityForm] = useState(false);
-  const [showNoteForm, setShowNoteForm] = useState(false);
-  const [newNote, setNewNote] = useState('');
-  
-  // Integration with forms - MUST be at top level before any conditional logic
-  const profileForHook = profile || {};
-  const { getActivityFormData, getOpportunityFormData, getNoteFormData } = useProfileFormIntegration(profileForHook, 'lead');
-  
-  const handleAddNote = async () => {
-    if (!newNote.trim() || !profile) return;
-    try {
-      const noteFormData = getNoteFormData();
-      console.log('Adding note:', { ...noteFormData, content: newNote });
-      setNewNote('');
-      setShowNoteForm(false);
-    } catch (error) {
-      console.error('Failed to add note:', error);
-    }
-  };
-
-  const handleActivitySave = (activityData) => {
-    const prepopulated = getActivityFormData();
-    console.log('Activity saved:', { ...prepopulated, ...activityData });
-    setShowActivityForm(false);
-  };
-
-  const handleOpportunitySave = (opportunityData) => {
-    const prepopulated = getOpportunityFormData();
-    console.log('Opportunity saved:', { ...prepopulated, ...opportunityData });
-    setShowOpportunityForm(false);
-  };
 
   const tenantId = useMemo(() => {
     return (
@@ -306,11 +265,10 @@ export default function LeadProfilePage() {
         <p className="text-gray-400 text-sm mb-2">{lead.job_title}</p>
         <p className="text-gray-500 text-xs font-semibold uppercase tracking-widest mb-6">{companyName}</p>
         <nav className="border-t border-gray-700 pt-4">
-          <a href="#overview" className="text-white block py-3 text-sm font-medium border-l-3 border-indigo-600 pl-3 -ml-3">Overview</a>
-          <a href="#notes" className="text-gray-400 block py-3 text-sm hover:text-white">Notes</a>
-          <a href="#activities" className="text-gray-400 block py-3 text-sm hover:text-white">Activities</a>
-          <a href="#opportunities" className="text-gray-400 block py-3 text-sm hover:text-white">Opportunities</a>
-          <a href="#contact" className="text-gray-400 block py-3 text-sm hover:text-white">Contact</a>
+          <a href="#overview" className="text-white block py-3 text-sm font-medium">Overview</a>
+          <Link to={`/leads/${leadId}/notes/new`} className="text-gray-400 block py-3 text-sm hover:text-white">+ Notes</Link>
+          <Link to={`/leads/${leadId}/activities/new`} className="text-gray-400 block py-3 text-sm hover:text-white">+ Activities</Link>
+          <Link to={`/leads/${leadId}/opportunities/new`} className="text-gray-400 block py-3 text-sm hover:text-white">+ Opportunities</Link>
         </nav>
       </aside>
 
@@ -377,9 +335,9 @@ export default function LeadProfilePage() {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-gray-900">📝 Notes</h3>
-              <button onClick={() => setShowNoteForm(true)} className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700">
+              <Link to={`/leads/${leadId}/notes/new`} className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700">
                 + Add Note
-              </button>
+              </Link>
             </div>
             {lead.notes && lead.notes.length > 0 ? (
               <div className="space-y-3">
@@ -449,85 +407,9 @@ export default function LeadProfilePage() {
         </div>
       </main>
 
-      {/* Modals for Forms */}
 
-      {/* Note Form Modal */}
-      {showNoteForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-gray-900">Add Note</h2>
-              <button onClick={() => setShowNoteForm(false)} className="text-gray-500 hover:text-gray-700">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">Title</label>
-                <Input 
-                  type="text" 
-                  placeholder="Note title"
-                  value={newNote.split('\n')[0]}
-                  onChange={(e) => setNewNote(e.target.value.split('\n')[0] + '\n' + newNote.split('\n').slice(1).join('\n'))}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">Content</label>
-                <Textarea 
-                  placeholder={getNoteFormData().content}
-                  value={newNote}
-                  onChange={(e) => setNewNote(e.target.value)}
-                  rows={6}
-                />
-              </div>
-              <div className="flex justify-end gap-3">
-                <Button variant="outline" onClick={() => setShowNoteForm(false)}>Cancel</Button>
-                <Button onClick={handleAddNote} className="bg-indigo-600 hover:bg-indigo-700">Save Note</Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Activity Form Modal */}
-      {showActivityForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 my-8 p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-gray-900">Add Activity</h2>
-              <button onClick={() => setShowActivityForm(false)} className="text-gray-500 hover:text-gray-700">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <ActivityForm 
-              relatedTo="lead"
-              relatedId={lead.person_id}
-              onSave={handleActivitySave}
-              onCancel={() => setShowActivityForm(false)}
-              tenantId={lead.tenant_id}
-            />
-          </div>
-        </div>
-      )}
 
-      {/* Opportunity Form Modal */}
-      {showOpportunityForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 my-8 p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-gray-900">Add Opportunity</h2>
-              <button onClick={() => setShowOpportunityForm(false)} className="text-gray-500 hover:text-gray-700">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <OpportunityForm 
-              initialData={getOpportunityFormData()}
-              onSubmit={handleOpportunitySave}
-              onCancel={() => setShowOpportunityForm(false)}
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -160,6 +160,247 @@ export async function markActivitiesOverdue(pgPool, jobMetadata = {}) {
 }
 
 /**
+ * Warm dashboard bundle cache for all tenants (runs at night)
+ * Pre-populates redis-cache with dashboard bundles so first requests are instant
+ */
+export async function warmDashboardBundleCache(_pgPool, jobMetadata = {}) {
+  const cacheManager = global.cacheManager;
+  
+  if (!cacheManager || !cacheManager.client) {
+    return {
+      success: false,
+      error: 'Cache manager not available'
+    };
+  }
+
+  try {
+    const { getSupabaseClient } = await import('../lib/supabase-db.js');
+    const supabase = getSupabaseClient();
+
+    // Fetch all tenants to warm cache
+    const { data: tenants, error: tenantsError } = await supabase
+      .from('tenant')
+      .select('id')
+      .eq('is_active', true);
+
+    if (tenantsError || !tenants) {
+      return {
+        success: false,
+        error: `Failed to fetch tenants: ${tenantsError?.message}`
+      };
+    }
+
+    console.log(`[warmDashboardBundleCache] Found ${tenants.length} active tenants`);
+
+    let warmedCount = 0;
+    let errorCount = 0;
+    const startTime = Date.now();
+
+    // Warm cache for each tenant with test data and without
+    for (const tenant of tenants) {
+      for (const includeTestData of [true, false]) {
+        try {
+          const cacheKey = `dashboard:bundle:${tenant.id}:include=${includeTestData ? 'true' : 'false'}`;
+          
+          // Check if already cached
+          const cached = await cacheManager.get(cacheKey);
+          if (cached) {
+            console.log(`[warmDashboardBundleCache] Cache already warm: ${cacheKey}`);
+            continue;
+          }
+
+          // Call backend's getDashboardBundle logic inline (for performance)
+          // This avoids an HTTP round-trip and directly computes the bundle
+          const commonOpts = { includeTestData, countMode: 'planned', confirmSmallCounts: false };
+          
+          // Helper: count rows safely
+          const safeCountFn = async (table, tenantId, opts) => {
+            const allowedTables = ['contacts', 'accounts', 'leads', 'opportunities', 'activities'];
+            if (!allowedTables.includes(table)) return 0;
+
+            try {
+              let q = supabase.from(table).select('*', { count: opts.countMode, head: true });
+              if (tenantId) q = q.eq('tenant_id', tenantId);
+              if (!opts.includeTestData) {
+                try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+              }
+              const { count } = await q;
+              return count ?? 0;
+            } catch {
+              return 0;
+            }
+          };
+
+          // Fetch all dashboard data (mirrors reports.js logic)
+          const since = new Date();
+          since.setDate(since.getDate() - 30);
+          const sinceISO = since.toISOString();
+
+          const [
+            totalContacts,
+            totalAccounts,
+            totalLeads,
+            totalOpportunities,
+            openLeads,
+            wonOpportunities,
+            openOpportunities,
+            newLeads,
+            activitiesLast30,
+            recentActivities,
+            recentLeads,
+            recentOpportunities
+          ] = await Promise.all([
+            safeCountFn('contacts', tenant.id, commonOpts),
+            safeCountFn('accounts', tenant.id, commonOpts),
+            safeCountFn('leads', tenant.id, commonOpts),
+            safeCountFn('opportunities', tenant.id, commonOpts),
+            (async () => {
+              try {
+                let q = supabase.from('leads').select('*', { count: 'exact', head: true }).not('status', 'in', '("converted","lost")');
+                if (tenant.id) q = q.eq('tenant_id', tenant.id);
+                if (!includeTestData) {
+                  try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+                }
+                const { count } = await q;
+                return count ?? 0;
+              } catch { return 0; }
+            })(),
+            (async () => {
+              try {
+                let q = supabase.from('opportunities').select('*', { count: 'exact', head: true }).in('stage', ['won', 'closed_won']);
+                if (tenant.id) q = q.eq('tenant_id', tenant.id);
+                if (!includeTestData) {
+                  try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+                }
+                const { count } = await q;
+                return count ?? 0;
+              } catch { return 0; }
+            })(),
+            (async () => {
+              try {
+                let q = supabase.from('opportunities').select('*', { count: 'exact', head: true }).not('stage', 'in', '("won","closed_won","lost","closed_lost")');
+                if (tenant.id) q = q.eq('tenant_id', tenant.id);
+                if (!includeTestData) {
+                  try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+                }
+                const { count } = await q;
+                return count ?? 0;
+              } catch { return 0; }
+            })(),
+            (async () => {
+              try {
+                let q = supabase.from('leads').select('*', { count: 'exact', head: true }).gte('created_date', sinceISO);
+                if (tenant.id) q = q.eq('tenant_id', tenant.id);
+                if (!includeTestData) {
+                  try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+                }
+                const { count } = await q;
+                return count ?? 0;
+              } catch { return 0; }
+            })(),
+            (async () => {
+              try {
+                let q = supabase.from('activities').select('*', { count: 'exact', head: true }).gte('created_date', sinceISO);
+                if (tenant.id) q = q.eq('tenant_id', tenant.id);
+                if (!includeTestData) {
+                  try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+                }
+                const { count } = await q;
+                return count ?? 0;
+              } catch { return 0; }
+            })(),
+            (async () => {
+              try {
+                let q = supabase.from('activities').select('id,type,subject,status,created_at,created_date,assigned_to').order('created_at', { ascending: false }).limit(10);
+                if (tenant.id) q = q.eq('tenant_id', tenant.id);
+                if (!includeTestData) {
+                  try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+                }
+                const { data } = await q;
+                return Array.isArray(data) ? data : [];
+              } catch { return []; }
+            })(),
+            (async () => {
+              try {
+                let q = supabase.from('leads').select('id,first_name,last_name,company,created_date,status').order('created_date', { ascending: false }).limit(5);
+                if (tenant.id) q = q.eq('tenant_id', tenant.id);
+                if (!includeTestData) {
+                  try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+                }
+                const { data } = await q;
+                return Array.isArray(data) ? data : [];
+              } catch { return []; }
+            })(),
+            (async () => {
+              try {
+                let q = supabase.from('opportunities').select('id,name,amount,stage,updated_at').order('updated_at', { ascending: false }).limit(5);
+                if (tenant.id) q = q.eq('tenant_id', tenant.id);
+                if (!includeTestData) {
+                  try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+                }
+                const { data } = await q;
+                return Array.isArray(data) ? data : [];
+              } catch { return []; }
+            })()
+          ]);
+
+          const bundle = {
+            stats: {
+              totalContacts,
+              totalAccounts,
+              totalLeads,
+              totalOpportunities,
+              openLeads,
+              wonOpportunities,
+              openOpportunities,
+              newLeadsLast30Days: newLeads,
+              activitiesLast30Days: activitiesLast30,
+            },
+            lists: {
+              recentActivities,
+              recentLeads,
+              recentOpportunities,
+            },
+            meta: {
+              tenant_id: tenant.id,
+              generated_at: new Date().toISOString(),
+              ttl_seconds: 300,
+              warmed_at: new Date().toISOString()
+            },
+          };
+
+          // Store in redis cache
+          await cacheManager.set(cacheKey, bundle, 300); // 5-minute TTL
+          warmedCount++;
+          console.log(`[warmDashboardBundleCache] Warmed: ${cacheKey}`);
+        } catch (err) {
+          errorCount++;
+          console.error(`[warmDashboardBundleCache] Error warming cache for tenant ${tenant.id}:`, err.message);
+        }
+      }
+    }
+
+    const elapsed = Date.now() - startTime;
+    return {
+      success: true,
+      message: `Dashboard bundle cache warming complete: ${warmedCount} bundles warmed in ${elapsed}ms`,
+      details: {
+        total_bundles_warmed: warmedCount,
+        total_tenants: tenants.length,
+        errors: errorCount,
+        elapsed_ms: elapsed
+      }
+    };
+  } catch (error) {
+    console.error('Error in warmDashboardBundleCache:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+/**
  * Sync denormalized fields (placeholder)
  */
 export async function syncDenormalizedFields(_pgPool, _jobMetadata = {}) {
@@ -180,11 +421,13 @@ export const jobExecutors = {
   cleanOldActivities,
   syncDenormalizedFields,
   markActivitiesOverdue,
+  warmDashboardBundleCache,
   // Legacy snake_case aliases for backward compatibility
   mark_users_offline: markUsersOffline,
   clean_old_activities: cleanOldActivities,
   sync_denormalized_fields: syncDenormalizedFields,
-  mark_activities_overdue: markActivitiesOverdue
+  mark_activities_overdue: markActivitiesOverdue,
+  warm_dashboard_bundle_cache: warmDashboardBundleCache
 };
 
 /**

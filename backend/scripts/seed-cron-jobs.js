@@ -45,6 +45,16 @@ const defaultJobs = [
     }
   },
   {
+    name: 'Warm Dashboard Bundle Cache',
+    schedule: 'cron:0 0 * * *',  // Every day at midnight UTC
+    function_name: 'warmDashboardBundleCache',  // Match the executor function name
+    is_active: true,
+    metadata: {
+      description: 'Pre-populates redis-cache with dashboard bundles for all tenants to ensure fast first loads',
+      run_time: 'midnight_utc'
+    }
+  },
+  {
     name: 'Sync Denormalized Fields',
     schedule: 'hourly',
     function_name: 'syncDenormalizedFields',  // Match the executor function name

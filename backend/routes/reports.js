@@ -113,44 +113,58 @@ async function safeRecentActivities(_pgPool, tenantId, limit = 10) {
 
 export default function createReportRoutes(_pgPool) {
   const router = express.Router();
-  // In-memory per-tenant cache for dashboard bundle
-  // Shape: Map<key, { data, expiresAt }>
-  const bundleCache = new Map();
-  const BUNDLE_TTL_MS = 60 * 1000; // 60 seconds
+  // Redis cache for dashboard bundle (distributed, persistent)
+  // Get cacheManager from global scope (initialized in server.js)
+  const getCacheManager = () => global.cacheManager;
+  const BUNDLE_TTL_SECONDS = 300; // 5 minutes (redis-cache TTL)
 
-  // POST /api/reports/clear-cache - Clear dashboard bundle cache (admin only)
+  // POST /api/reports/clear-cache - Clear dashboard bundle cache (admin only, uses redis)
   router.post('/clear-cache', async (req, res) => {
     try {
       const { tenant_id } = req.body;
+      const cacheManager = getCacheManager();
       
-      console.log('[Reports] clear-cache called:', { tenant_id, cacheSize: bundleCache.size, keys: Array.from(bundleCache.keys()) });
+      if (!cacheManager || !cacheManager.client) {
+        return res.json({
+          status: 'warning',
+          message: 'Cache manager not available',
+          data: { cleared: false }
+        });
+      }
+      
+      console.log('[Reports] clear-cache called via redis:', { tenant_id });
       
       if (tenant_id) {
-        // Clear specific tenant cache: delete any keys that match the tenant or its variants
-        const keys = Array.from(bundleCache.keys());
+        // Clear specific tenant cache: delete dashboard bundle keys for this tenant
+        const pattern = `dashboard:bundle:${tenant_id}:*`;
         let deletedCount = 0;
-        for (const key of keys) {
-          if (key === tenant_id || key.startsWith(`${tenant_id}::`)) {
-            if (bundleCache.delete(key)) deletedCount++;
+        try {
+          const keys = await cacheManager.client.keys(pattern);
+          if (keys && keys.length > 0) {
+            deletedCount = await cacheManager.client.del(keys);
           }
+        } catch (err) {
+          console.warn('[Reports] Error clearing redis keys:', err);
         }
-        // Also clear any GLOBAL variants
-        for (const key of keys) {
-          if (key === 'GLOBAL' || key.startsWith('GLOBAL::')) {
-            if (bundleCache.delete(key)) deletedCount++;
-          }
-        }
-        console.log('[Reports] Deleted cache entries:', { tenant_id, deletedCount });
+        console.log('[Reports] Deleted redis cache entries:', { tenant_id, deletedCount });
       } else {
-        // Clear all cache
-        bundleCache.clear();
-        console.log('[Reports] Cleared all cache');
+        // Clear all dashboard bundle cache (global pattern)
+        let deletedCount = 0;
+        try {
+          const keys = await cacheManager.client.keys('dashboard:bundle:*');
+          if (keys && keys.length > 0) {
+            deletedCount = await cacheManager.client.del(keys);
+          }
+        } catch (err) {
+          console.warn('[Reports] Error clearing all redis keys:', err);
+        }
+        console.log('[Reports] Cleared all dashboard bundle cache');
       }
       
       res.json({
         status: 'success',
         message: `Cache cleared${tenant_id ? ' for tenant ' + tenant_id : ' (all tenants)'}`,
-        data: { cleared: true, remaining: bundleCache.size }
+        data: { cleared: true }
       });
     } catch (error) {
       console.error('[Reports] clear-cache error:', error);
@@ -258,23 +272,26 @@ export default function createReportRoutes(_pgPool) {
       const { tenant_id } = req.query;
       
       // Note: tenant_id can be null/undefined for superadmin global view (aggregates all tenants)
-      // Use explicit cache key to differentiate: null tenant = "SUPERADMIN_GLOBAL"
+      // Use redis cache for distributed, persistent caching
       const includeTestData = (req.query.include_test_data ?? 'true') !== 'false';
       const effectiveTenantKey = tenant_id || 'SUPERADMIN_GLOBAL';
       const bustCache = req.query.bust_cache === 'true'; // Allow cache bypass for testing
-      const cacheKey = `${effectiveTenantKey}::include=${includeTestData ? 'true' : 'false'}`;
-      const now = Date.now();
-      const cached = bundleCache.get(cacheKey);
-      if (!bustCache && cached && cached.expiresAt > now) {
-        const ttlMs = cached.expiresAt - now;
-        console.log(`[dashboard-bundle] Cache HIT key=${cacheKey} ttl=${ttlMs}ms`);
-        return res.json({ status: 'success', data: cached.data, cached: true });
+      const cacheKey = `dashboard:bundle:${effectiveTenantKey}:include=${includeTestData ? 'true' : 'false'}`;
+      
+      // Try redis cache first (distributed across instances)
+      const cacheManager = getCacheManager();
+      if (!bustCache && cacheManager && cacheManager.client) {
+        try {
+          const cached = await cacheManager.get(cacheKey);
+          if (cached) {
+            console.log(`[dashboard-bundle] Cache HIT key=${cacheKey} (redis)`);
+            return res.json({ status: 'success', data: cached, cached: true });
+          }
+        } catch (err) {
+          console.warn(`[dashboard-bundle] Redis cache read error: ${err.message}`);
+        }
       }
-      if (cached) {
-        console.log(`[dashboard-bundle] Cache EXPIRED key=${cacheKey} expiredBy=${now - cached.expiresAt}ms (recompute)`);
-      } else {
-        console.log(`[dashboard-bundle] Cache MISS key=${cacheKey} (compute)`);
-      }
+      console.log(`[dashboard-bundle] Cache MISS key=${cacheKey} (compute from db)`);
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
@@ -407,7 +424,14 @@ export default function createReportRoutes(_pgPool) {
         },
       };
 
-      bundleCache.set(cacheKey, { data: bundle, expiresAt: now + BUNDLE_TTL_MS });
+      // Store in redis cache (5-minute TTL, shared across instances)
+      if (cacheManager && cacheManager.client) {
+        try {
+          await cacheManager.set(cacheKey, bundle, BUNDLE_TTL_SECONDS);
+        } catch (err) {
+          console.warn(`[dashboard-bundle] Redis cache write error: ${err.message}`);
+        }
+      }
       res.json({ status: 'success', data: bundle, cached: false });
     } catch (error) {
       res.status(500).json({
