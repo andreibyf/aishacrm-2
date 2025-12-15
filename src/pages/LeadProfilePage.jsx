@@ -358,9 +358,9 @@ export default function LeadProfilePage() {
           <div id="activities" className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-gray-900">⚡ Activities</h3>
-              <button onClick={() => setShowActivityForm(true)} className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700">
+              <Link to={`/leads/${leadId}/activities/new`} className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700">
                 + Add Activity
-              </button>
+              </Link>
             </div>
             {lead.activities && lead.activities.length > 0 ? (
               <div className="space-y-4">
@@ -388,9 +388,9 @@ export default function LeadProfilePage() {
           <div id="opportunities" className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-gray-900">🎯 Opportunities</h3>
-              <button onClick={() => setShowOpportunityForm(true)} className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700">
+              <Link to={`/leads/${leadId}/opportunities/new`} className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700">
                 + Add Opportunity
-              </button>
+              </Link>
             </div>
             {lead.opportunity_stage && lead.opportunity_stage.length > 0 ? (
               <div className="flex flex-wrap gap-2">
