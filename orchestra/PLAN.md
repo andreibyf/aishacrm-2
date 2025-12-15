@@ -2102,6 +2102,252 @@ Steps:
 
 ---
 
+## Active Optimization Wave – Redis Cache + Performance
+
+### PERF-REDIS-001 – Cache Detail Endpoints (GET by ID)
+
+**Status:** Not started  
+**Priority:** 🔴 **HIGH** (Quick win, measurable performance gain)  
+**Area:** Backend – API Caching
+
+**Goal:**  
+Add HTTP caching middleware to detail/GET-by-ID endpoints (leads, contacts, accounts, opportunities, activities) so repeated views of the same record are served from redis-cache instead of hitting Supabase repeatedly.
+
+**Problem:**
+- Only list endpoints (`GET /api/leads`) are cached (3-min TTL)
+- Detail endpoints (`GET /api/leads/:id`) hit Supabase every time, even if user views same lead twice
+- Detail panels slide in frequently, causing redundant queries
+
+**Solution:**
+- Add `cacheDetail('leads', 300)` middleware to detail routes (5-min TTL, longer than lists)
+- Apply to: Leads, Contacts, Accounts, Opportunities, Activities
+- Invalidate on POST/PUT/DELETE (existing `invalidateCache()` already handles this)
+
+**Files to modify:**
+- `backend/routes/leads.js` – Add cache to `GET /:id`
+- `backend/routes/contacts.v2.js` – Add cache to `GET /:id`
+- `backend/routes/accounts.v2.js` – Add cache to `GET /:id`
+- `backend/routes/opportunities.v2.js` – Add cache to `GET /:id`
+- `backend/routes/activities.js` – Add cache to `GET /:id`
+- `backend/lib/cacheMiddleware.js` – Add `cacheDetail()` helper (similar to `cacheList()`)
+
+**Acceptance:**
+- Repeated `GET /leads/:id` calls within 5 minutes return cached results
+- Response time drops 80-90% for detail views
+- Tests confirm cache invalidation on mutations
+
+**Effort:** 30 mins
+
+---
+
+### PERF-REDIS-002 – Add Cache-Control HTTP Headers
+
+**Status:** Not started  
+**Priority:** 🟡 **MEDIUM-HIGH** (Browser + CDN caching benefit)  
+**Area:** Backend – HTTP Response Headers
+
+**Goal:**  
+Add proper `Cache-Control` headers to API responses so browsers and edge CDNs can cache GET responses, reducing backend load further.
+
+**Problem:**
+- Redis caches at server level, but browser/CDN don't cache (missing headers)
+- Each user request regenerates response even if identical to previous user
+
+**Solution:**
+- Add `Cache-Control: public, max-age=180` for list endpoints
+- Add `Cache-Control: public, max-age=300` for detail endpoints
+- Add `Cache-Control: private, max-age=600` for user-specific data (settings, profile)
+- Add `Vary: Accept-Encoding` to allow gzip compression caching
+
+**Files to modify:**
+- `backend/lib/cacheMiddleware.js` – Set headers in `cacheList()` and new `cacheDetail()` functions
+- Or add as separate middleware: `backend/lib/httpCacheHeaders.js`
+
+**Acceptance:**
+- Response headers include `Cache-Control: public, max-age=X`
+- Browser DevTools Network tab shows cached responses (status 304)
+- Performance audit shows improved caching score
+
+**Effort:** 15 mins
+
+---
+
+### PERF-REDIS-003 – Optimize Activities Count Cache (Event-driven instead of TTL)
+
+**Status:** Not started  
+**Priority:** 🟡 **MEDIUM** (Small performance/freshness improvement)  
+**Area:** Backend – Activities Stats Caching
+
+**Goal:**  
+Activities count cache (currently 30s TTL) is too aggressive for a frequently-mutating dataset. Make it smarter by invalidating only the specific count cache key when an activity changes, instead of invalidating entire module.
+
+**Problem:**
+- Activities are created/deleted frequently (e.g., "Call completed", "Email sent")
+- 30s TTL means stale counts for activities
+- If TTL is reduced to 15s, redis is hit more often (defeats purpose)
+
+**Current approach:** Activities mutations call `cacheManager.invalidateTenant(tenantId, 'activities')` which clears ALL activity cache
+
+**Better approach:**
+- When activity is created/updated/deleted, invalidate ONLY the counts key: `tenant:${tenantId}:activities:counts`
+- Keep list pagination cache for 180s (not touched by mutations)
+
+**Files to modify:**
+- `backend/routes/activities.js` – Refine invalidation to target count key vs full module
+- `backend/lib/cacheMiddleware.js` – Add `invalidateCacheByKey()` helper for granular invalidation
+
+**Acceptance:**
+- Activity mutations only invalidate `activities:counts`, not full list cache
+- Stats refresh in <5s after mutation (vs 30s TTL wait)
+- List pagination unaffected and remains cached for 3 mins
+
+**Effort:** 20 mins
+
+---
+
+### PERF-REDIS-004 – Add Cache Statistics Endpoint
+
+**Status:** Not started  
+**Priority:** 🟢 **LOW-MEDIUM** (Observability, debugging)  
+**Area:** Backend – Admin API
+
+**Goal:**  
+Create a debug endpoint (`GET /api/admin/cache-stats`) to monitor redis-cache performance: hit rate, memory usage, key count, and top-hit keys.
+
+**Problem:**
+- No visibility into cache effectiveness
+- Can't tell if optimizations working or if keys being invalidated too often
+- Admin/devops can't troubleshoot performance issues
+
+**Solution:**
+- New endpoint: `GET /api/admin/cache-stats` (requires admin auth)
+- Returns:
+  ```json
+  {
+    "connected": true,
+    "memory_used_mb": 45.2,
+    "key_count": 1234,
+    "stats": {
+      "total_connections": 450,
+      "total_commands": 98450
+    },
+    "sample_keys": ["tenant:uuid:leads:list:...", "tenant:uuid:accounts:detail:..."]
+  }
+  ```
+
+**Files to modify:**
+- `backend/routes/admin.js` – Add new stats endpoint
+- Or `backend/lib/cacheManager.js` – Expose `getStats()` method (already exists, just wire it up)
+
+**Acceptance:**
+- Endpoint returns cache health metrics
+- Can identify which tenants/modules consume most cache
+- Helps validate performance improvements
+
+**Effort:** 20 mins
+
+---
+
+### PERF-REDIS-005 – Clean Up Unused CacheManager Class
+
+**Status:** Not started  
+**Priority:** 🟢 **LOW** (Technical debt, ~5 mins)  
+**Area:** Backend – Code Cleanup
+
+**Problem:**
+- `backend/lib/cacheManager.js` has fancy `getOrFetch()` and `invalidateTenant()` methods
+- None of it is actually used; only `cacheMiddleware.js` is active
+- Dead code creates confusion
+
+**Solution:**
+- Either consolidate `cacheManager.js` into `cacheMiddleware.js` (move reusable functions)
+- Or remove it entirely and keep only the middleware pattern (simpler)
+
+**Files to modify/delete:**
+- `backend/lib/cacheManager.js` – Review, consolidate or remove
+- Update any imports if consolidating
+
+**Acceptance:**
+- No unused cache classes in codebase
+- Clear single pattern for caching (middleware-based)
+
+**Effort:** 5 mins
+
+---
+
+### PERF-REDIS-006 – Document Caching Strategy
+
+**Status:** Not started  
+**Priority:** 🟢 **LOW** (Documentation)  
+**Area:** Backend – Documentation
+
+**Goal:**  
+Create `docs/CACHE_STRATEGY.md` documenting:
+- Which endpoints are cached and for how long
+- Invalidation strategy per entity
+- How to test cache effectiveness
+- When to adjust TTLs
+
+**Files to create:**
+- `docs/CACHE_STRATEGY.md`
+
+**Acceptance:**
+- New dev can quickly understand cache architecture
+- TTL decisions are documented and defensible
+- Includes examples and troubleshooting
+
+**Effort:** 20 mins
+
+---
+
+## Recommended Execution Order for Tomorrow
+
+1. **PERF-REDIS-001** (30 mins) – Cache detail endpoints → biggest performance gain
+2. **PERF-REDIS-002** (15 mins) – HTTP cache headers → browser/CDN benefit
+3. **PERF-REDIS-003** (20 mins) – Granular activity count invalidation → freshness improvement
+4. **PERF-REDIS-004** (20 mins) – Cache stats endpoint → observability
+5. **PERF-REDIS-005** (5 mins) – Clean up unused CacheManager → technical debt
+6. **PERF-REDIS-006** (20 mins) – Document strategy → knowledge base
+
+**Total time: ~2 hours for full optimization wave**
+
+---
+
+## Backlog – Low Priority / Deferred
+
+### UI-PANELS-001 – Detail Panel Width Override (50% Slide-In)
+
+**Status:** Not started  
+**Priority:** Low  
+**Area:** Frontend – UI Components / Styling
+
+**Context:**  
+User requested detail panels (Leads, Contacts, Activities, Accounts) slide in at 50% screen width instead of full width. Attempted fix via Tailwind classes and inline styles did not visually apply. Root cause appears to be Radix UI SheetContent variant constraints (`sm:max-w-sm`) or internal style override behavior.
+
+**Scope:**
+- Component: `src/components/shared/UniversalDetailPanel.jsx` (lines 573-577)
+- Affects: All entity detail panels (shared wrapper)
+- Issue: CSS specificity / Radix UI override not responding to `className="!w-1/2 !max-w-none"` or `style={{ width: '50%' }}`
+
+**Attempted Approaches:**
+1. Basic Tailwind width override (`sm:w-1/2`)
+2. Tailwind with !important flags (`!w-1/2 !max-w-none`)
+3. Inline style attribute (`style={{ width: '50%' }}`)
+- All three builds deployed successfully; visual width remained unchanged
+
+**Next Steps (if revisited):**
+- Inspect browser DevTools computed styles to confirm what CSS is actually applied
+- Check if Radix UI SheetPrimitive internally overrides inline styles
+- Consider wrapping SheetContent in a container with enforced width, or modifying `sheet.jsx` sheetVariants directly (last resort)
+- Explore Radix UI documentation for width configuration props beyond className
+
+**Notes:**
+- This is cosmetic/UX polish, not a functional bug
+- Defer until higher-priority issues resolved
+- Document in case similar CSS override issues arise elsewhere
+
+---
+
 ## Backlog – Future Cleanup Tasks
 
 ### DEPRECATE-001 – Remove Legacy AI Agent Module

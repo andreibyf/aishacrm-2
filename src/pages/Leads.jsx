@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { Lead } from "@/api/entities";
 import { Account } from "@/api/entities";
 // User entity no longer needed here; user comes from context
@@ -6,9 +6,9 @@ import { useUser } from "@/components/shared/useUser.js";
 import { Employee } from "@/api/entities";
 import { useApiManager } from "../components/shared/ApiManager";
 import LeadCard from "../components/leads/LeadCard";
-import LeadForm from "../components/leads/LeadForm";
-import LeadDetailPanel from "../components/leads/LeadDetailPanel";
-import LeadConversionDialog from "../components/leads/LeadConversionDialog";
+const LeadForm = lazy(() => import("../components/leads/LeadForm"));
+const LeadDetailPanel = lazy(() => import("../components/leads/LeadDetailPanel"));
+const LeadConversionDialog = lazy(() => import("../components/leads/LeadConversionDialog"));
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -41,7 +41,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import CsvExportButton from "../components/shared/CsvExportButton";
-import CsvImportDialog from "../components/shared/CsvImportDialog";
+const CsvImportDialog = lazy(() => import("../components/shared/CsvImportDialog"));
 import { useTenant } from "../components/shared/tenantContext";
 import Pagination from "../components/shared/Pagination";
 import { toast } from "sonner";
@@ -281,30 +281,25 @@ export default function LeadsPage() {
           return;
         }
 
-        // Load accounts
-        const accountsData = await cachedRequest("Account", "filter", {
-          filter: baseTenantFilter,
-        }, () => Account.filter(baseTenantFilter));
+        // Load all supporting data in parallel (instead of sequential) for faster load time
+        const [accountsData, usersData, employeesData] = await Promise.all([
+          cachedRequest("Account", "filter", {
+            filter: baseTenantFilter,
+          }, () => Account.filter(baseTenantFilter)),
+          loadUsersSafely(
+            user,
+            selectedTenantId,
+            cachedRequest,
+            1000
+          ),
+          cachedRequest("Employee", "filter", {
+            filter: baseTenantFilter,
+            limit: 1000
+          }, () => Employee.filter(baseTenantFilter, 'created_at', 1000))
+        ]);
+
         setAccounts(accountsData || []);
-
-        await delay(300);
-
-        // Load users safely
-        const usersData = await loadUsersSafely(
-          user,
-          selectedTenantId,
-          cachedRequest,
-          1000
-        );
         setUsers(usersData || []);
-
-        await delay(300);
-
-        // Load employees
-        const employeesData = await cachedRequest("Employee", "filter", {
-          filter: baseTenantFilter,
-          limit: 1000
-        }, () => Employee.filter(baseTenantFilter, 'created_at', 1000));
         setEmployees(employeesData || []);
 
         supportingDataLoaded.current = true; // Mark as loaded
@@ -1107,66 +1102,74 @@ export default function LeadsPage() {
                 {editingLead ? `Edit ${leadLabel}` : `Add New ${leadLabel}`}
               </DialogTitle>
             </DialogHeader>
-            <LeadForm
-              lead={editingLead}
-              onSave={handleSave}
-              onCancel={() => {
-                setIsFormOpen(false);
-                setEditingLead(null);
-              }}
-              user={user}
-              employees={employees}
-              isManager={isManager}
-            />
+            <Suspense fallback={<div className="p-4"><Loader2 className="w-4 h-4 animate-spin" /></div>}>
+              <LeadForm
+                lead={editingLead}
+                onSave={handleSave}
+                onCancel={() => {
+                  setIsFormOpen(false);
+                  setEditingLead(null);
+                }}
+                user={user}
+                employees={employees}
+                isManager={isManager}
+              />
+            </Suspense>
           </DialogContent>
         </Dialog>
 
-        <CsvImportDialog
-          open={isImportOpen}
-          onOpenChange={setIsImportOpen}
-          schema={Lead.schema ? Lead.schema() : null}
-          onSuccess={async () => {
-            clearCache("Lead");
-            await Promise.all([
-              loadLeads(1, pageSize),
-              loadTotalStats(),
-            ]);
-          }}
-        />
+        <Suspense fallback={null}>
+          <CsvImportDialog
+            open={isImportOpen}
+            onOpenChange={setIsImportOpen}
+            schema={Lead.schema ? Lead.schema() : null}
+            onSuccess={async () => {
+              clearCache("Lead");
+              await Promise.all([
+                loadLeads(1, pageSize),
+                loadTotalStats(),
+              ]);
+            }}
+          />
+        </Suspense>
 
-        <LeadConversionDialog
-          lead={convertingLead}
-          accounts={accounts}
-          open={isConversionDialogOpen}
-          onClose={() => setIsConversionDialogOpen(false)}
-          onConvert={handleConversionSuccess}
-        />
+        <Suspense fallback={null}>
+          <LeadConversionDialog
+            lead={convertingLead}
+            accounts={accounts}
+            open={isConversionDialogOpen}
+            onClose={() => setIsConversionDialogOpen(false)}
+            onConvert={handleConversionSuccess}
+          />
+        </Suspense>
 
-        <LeadDetailPanel
-          lead={detailLead}
-          assignedUserName={employeesMap[detailLead?.assigned_to] ||
-            usersMap[detailLead?.assigned_to] || detailLead?.assigned_to_name}
-          open={isDetailOpen}
-          onOpenChange={() => {
-            setIsDetailOpen(false);
-            setDetailLead(null);
-          }}
-          onEdit={(lead) => {
-            setEditingLead(lead);
-            setIsFormOpen(true);
-            setIsDetailOpen(false);
-          }}
-          onDelete={async (id) => {
-            await handleDelete(id);
-            setIsDetailOpen(false);
-          }}
-          onConvert={(lead) => {
-            setIsDetailOpen(false);
-            handleConvert(lead);
-          }}
-          user={user}
-          associatedAccountName={getAssociatedAccountName(detailLead)}
-        />
+        <Suspense fallback={null}>
+          <LeadDetailPanel
+            lead={detailLead}
+            assignedUserName={employeesMap[detailLead?.assigned_to] ||
+              usersMap[detailLead?.assigned_to] || detailLead?.assigned_to_name}
+            open={isDetailOpen}
+            onOpenChange={() => {
+              setIsDetailOpen(false);
+              setDetailLead(null);
+            }}
+            onEdit={(lead) => {
+              setEditingLead(lead);
+              setIsFormOpen(true);
+              setIsDetailOpen(false);
+            }}
+            onDelete={async (id) => {
+              await handleDelete(id);
+              setIsDetailOpen(false);
+            }}
+            onConvert={(lead) => {
+              setIsDetailOpen(false);
+              handleConvert(lead);
+            }}
+            user={user}
+            associatedAccountName={getAssociatedAccountName(detailLead)}
+          />
+        </Suspense>
 
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
@@ -1700,8 +1703,12 @@ export default function LeadsPage() {
                                       size="icon"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        // Navigate to internal Lead Profile page which calls person-profile
-                                        handleViewDetails(lead);
+                                        try {
+                                          const href = `/leads/${lead.id}`;
+                                          window.open(href, '_blank', 'noopener,noreferrer');
+                                        } catch (err) {
+                                          console.error('Failed to open lead:', err);
+                                        }
                                       }}
                                       className="h-8 w-8 text-slate-400 hover:text-blue-400"
                                     >
@@ -1712,23 +1719,6 @@ export default function LeadsPage() {
                                     <p>Open web profile</p>
                                   </TooltipContent>
                                 </Tooltip>
-                                {/* Text fallback/link for clarity */}
-                                <Button
-                                  variant="link"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    try {
-                                      const href = `/leads/${lead.id}`;
-                                      window.open(href, '_blank', 'noopener,noreferrer');
-                                    } catch (err) {
-                                      console.error('Failed to open lead:', err);
-                                    }
-                                  }}
-                                  className="text-blue-400 hover:text-blue-300 px-1"
-                                >
-                                  Open in new tab
-                                </Button>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button
