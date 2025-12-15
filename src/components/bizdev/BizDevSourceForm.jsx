@@ -11,15 +11,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { X } from "lucide-react";
-import { Lead, BizDevSource } from "@/api/entities";
+import { Lead, BizDevSource, Tenant } from "@/api/entities";
 import { useEntityForm } from "@/hooks/useEntityForm";
+import { useTenant } from "@/components/shared/tenantContext";
 import { toast } from "sonner";
 
-// Unified form contract: supports legacy `source` prop and new `initialData` prop
-// Parent should pass `onSubmit(result)` after persistence. This form now handles create/update directly.
+/**
+ * BizDevSourceForm - Adaptive B2B/B2C Form
+ * 
+ * Renders conditional fields based on tenant's business_model setting.
+ * - B2B: Company-centric (company_name required, contact optional)
+ * - B2C: Person-centric (contact_person required, company optional)
+ * - Hybrid: All fields available
+ */
 export default function BizDevSourceForm({ source: legacySource, initialData, onSubmit, onCancel, sourceFieldLabel = 'Source' }) {
   const source = initialData || legacySource || null;
   const { ensureTenantId, isSubmitting, normalizeError } = useEntityForm();
+  const { selectedTenantId } = useTenant();
+  
+  // Tenant-level business model setting
+  const [businessModel, setBusinessModel] = useState("b2b"); // 'b2b' | 'b2c' | 'hybrid'
+  const [tenantLoading, setTenantLoading] = useState(true);
   const [formData, setFormData] = useState({
     source_name: "",
     batch_id: "",
@@ -44,6 +56,30 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
   });
 
   const [leads, setLeads] = useState([]);
+
+  // Load tenant business model to determine form layout
+  useEffect(() => {
+    let cancelled = false;
+    const loadTenantModel = async () => {
+      try {
+        const tenantId = selectedTenantId || await ensureTenantId();
+        if (!tenantId) {
+          setTenantLoading(false);
+          return;
+        }
+        const tenantData = await Tenant.get(tenantId);
+        if (!cancelled && tenantData) {
+          setBusinessModel(tenantData.business_model || "b2b");
+        }
+        if (!cancelled) setTenantLoading(false);
+      } catch (err) {
+        console.error('[BizDevSourceForm] Failed to load tenant model:', err);
+        if (!cancelled) setTenantLoading(false);
+      }
+    };
+    loadTenantModel();
+    return () => { cancelled = true; };
+  }, [selectedTenantId, ensureTenantId]);
 
   // Load leads using resolved tenant_id (standardized tenant resolution)
   useEffect(() => {
@@ -75,6 +111,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
         dba_name: source.dba_name || "",
         industry: source.industry || "",
         website: source.website || "",
+        contact_person: source.contact_person || "",
         email: source.email || "",
         phone_number: source.phone_number || "",
         address_line_1: source.address_line_1 || "",
@@ -93,6 +130,20 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
     }
   }, [source]);
 
+  // Determine required fields based on business model
+  const getRequiredFields = () => {
+    const required = ['source_name']; // Always required
+    if (businessModel === 'b2b' || businessModel === 'hybrid') {
+      required.push('company_name');
+    }
+    if (businessModel === 'b2c') {
+      required.push('contact_person', 'email');
+    } else if (businessModel === 'hybrid') {
+      required.push('email'); // For hybrid, at least one contact method required
+    }
+    return required;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!onSubmit || typeof onSubmit !== 'function') {
@@ -100,9 +151,15 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
       toast.error('Form error: submit handler missing');
       return;
     }
-    if (!formData.source_name) {
-      toast.error('Source name is required');
-      return;
+    
+    // Validate required fields based on business model
+    const requiredFields = getRequiredFields();
+    for (const field of requiredFields) {
+      if (!formData[field]) {
+        const fieldLabel = field.replace(/_/g, ' ').charAt(0).toUpperCase() + field.slice(1);
+        toast.error(`${fieldLabel} is required`);
+        return;
+      }
     }
 
     try {
@@ -150,9 +207,16 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
   return (
     <form onSubmit={handleSubmit} className="p-6 space-y-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-slate-100">
-          {source?.id ? `Edit ${sourceFieldLabel}` : `Add ${sourceFieldLabel}`}
-        </h2>
+        <div className="flex flex-col">
+          <h2 className="text-2xl font-bold text-slate-100">
+            {source?.id ? `Edit ${sourceFieldLabel}` : `Add ${sourceFieldLabel}`}
+          </h2>
+          {!tenantLoading && (
+            <p className="text-sm text-slate-400 mt-1">
+              Client Type: {businessModel?.toUpperCase()} • {businessModel === 'b2b' ? 'Company-focused' : businessModel === 'b2c' ? 'Person-focused' : 'Both Company and Person'}
+            </p>
+          )}
+        </div>
         <Button
           type="button"
           variant="ghost"
@@ -197,93 +261,141 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
           </div>
         </div>
 
-        {/* Company Information */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-slate-200">Company Information</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="company_name" className="text-slate-300">
-                Company Name <span className="text-red-400">*</span>
-              </Label>
-              <Input
-                id="company_name"
-                value={formData.company_name}
-                onChange={(e) => handleChange("company_name", e.target.value)}
-                placeholder="Company legal name"
-                required
-                className="bg-slate-700 border-slate-600 text-slate-100"
-              />
-            </div>
-            <div>
-              <Label htmlFor="dba_name" className="text-slate-300">
-                DBA Name
-              </Label>
-              <Input
-                id="dba_name"
-                value={formData.dba_name}
-                onChange={(e) => handleChange("dba_name", e.target.value)}
-                placeholder="Doing Business As"
-                className="bg-slate-700 border-slate-600 text-slate-100"
-              />
-            </div>
-            <div>
-              <Label htmlFor="industry" className="text-slate-300">
-                Industry
-              </Label>
-              <Input
-                id="industry"
-                value={formData.industry}
-                onChange={(e) => handleChange("industry", e.target.value)}
-                placeholder="e.g., Construction"
-                className="bg-slate-700 border-slate-600 text-slate-100"
-              />
-            </div>
-            <div>
-              <Label htmlFor="website" className="text-slate-300">
-                Website
-              </Label>
-              <Input
-                id="website"
-                type="url"
-                value={formData.website}
-                onChange={(e) => handleChange("website", e.target.value)}
-                placeholder="https://example.com"
-                className="bg-slate-700 border-slate-600 text-slate-100"
-              />
+        {/* Company Information - Show for B2B and Hybrid */}
+        {(businessModel === 'b2b' || businessModel === 'hybrid') && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-slate-200">Company Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="company_name" className="text-slate-300">
+                  Company Name <span className="text-red-400">*</span>
+                </Label>
+                <Input
+                  id="company_name"
+                  value={formData.company_name}
+                  onChange={(e) => handleChange("company_name", e.target.value)}
+                  placeholder="Company legal name"
+                  required
+                  className="bg-slate-700 border-slate-600 text-slate-100"
+                />
+              </div>
+              <div>
+                <Label htmlFor="dba_name" className="text-slate-300">
+                  DBA Name
+                </Label>
+                <Input
+                  id="dba_name"
+                  value={formData.dba_name}
+                  onChange={(e) => handleChange("dba_name", e.target.value)}
+                  placeholder="Doing Business As"
+                  className="bg-slate-700 border-slate-600 text-slate-100"
+                />
+              </div>
+              <div>
+                <Label htmlFor="industry" className="text-slate-300">
+                  Industry
+                </Label>
+                <Input
+                  id="industry"
+                  value={formData.industry}
+                  onChange={(e) => handleChange("industry", e.target.value)}
+                  placeholder="e.g., Construction"
+                  className="bg-slate-700 border-slate-600 text-slate-100"
+                />
+              </div>
+              <div>
+                <Label htmlFor="website" className="text-slate-300">
+                  Website
+                </Label>
+                <Input
+                  id="website"
+                  type="url"
+                  value={formData.website}
+                  onChange={(e) => handleChange("website", e.target.value)}
+                  placeholder="https://example.com"
+                  className="bg-slate-700 border-slate-600 text-slate-100"
+                />
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Contact Information */}
+        {/* Contact Information - Adaptive for B2B/B2C */}
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-slate-200">Contact Information</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="email" className="text-slate-300">
-                Email
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => handleChange("email", e.target.value)}
-                placeholder="contact@company.com"
-                className="bg-slate-700 border-slate-600 text-slate-100"
-              />
+          <h3 className="text-lg font-semibold text-slate-200">
+            {businessModel === 'b2c' ? 'Primary Contact' : businessModel === 'hybrid' ? 'Contact Information' : 'Company Contact'}
+          </h3>
+          {businessModel === 'b2c' || businessModel === 'hybrid' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="contact_person" className="text-slate-300">
+                  {businessModel === 'b2c' ? 'Person Name' : 'Contact Person'} {businessModel === 'b2c' && <span className="text-red-400">*</span>}
+                </Label>
+                <Input
+                  id="contact_person"
+                  value={formData.contact_person}
+                  onChange={(e) => handleChange("contact_person", e.target.value)}
+                  placeholder={businessModel === 'b2c' ? 'John Doe' : 'Contact name'}
+                  required={businessModel === 'b2c'}
+                  className="bg-slate-700 border-slate-600 text-slate-100"
+                />
+              </div>
+              <div>
+                <Label htmlFor="email" className="text-slate-300">
+                  Email {businessModel === 'b2c' && <span className="text-red-400">*</span>}
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => handleChange("email", e.target.value)}
+                  placeholder={businessModel === 'b2c' ? 'john@example.com' : 'contact@company.com'}
+                  required={businessModel === 'b2c'}
+                  className="bg-slate-700 border-slate-600 text-slate-100"
+                />
+              </div>
+              <div>
+                <Label htmlFor="phone_number" className="text-slate-300">
+                  Phone Number
+                </Label>
+                <Input
+                  id="phone_number"
+                  value={formData.phone_number}
+                  onChange={(e) => handleChange("phone_number", e.target.value)}
+                  placeholder="(555) 123-4567"
+                  className="bg-slate-700 border-slate-600 text-slate-100"
+                />
+              </div>
             </div>
-            <div>
-              <Label htmlFor="phone_number" className="text-slate-300">
-                Phone Number
-              </Label>
-              <Input
-                id="phone_number"
-                value={formData.phone_number}
-                onChange={(e) => handleChange("phone_number", e.target.value)}
-                placeholder="(555) 123-4567"
-                className="bg-slate-700 border-slate-600 text-slate-100"
-              />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="email" className="text-slate-300">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => handleChange("email", e.target.value)}
+                  placeholder="contact@company.com"
+                  className="bg-slate-700 border-slate-600 text-slate-100"
+                />
+              </div>
+              <div>
+                <Label htmlFor="phone_number" className="text-slate-300">
+                  Phone Number
+                </Label>
+                <Input
+                  id="phone_number"
+                  value={formData.phone_number}
+                  onChange={(e) => handleChange("phone_number", e.target.value)}
+                  placeholder="(555) 123-4567"
+                  className="bg-slate-700 border-slate-600 text-slate-100"
+                />
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Address Information */}
