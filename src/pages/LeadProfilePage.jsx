@@ -266,9 +266,9 @@ export default function LeadProfilePage() {
         <p className="text-gray-500 text-xs font-semibold uppercase tracking-widest mb-6">{companyName}</p>
         <nav className="border-t border-gray-700 pt-4">
           <a href="#overview" className="text-white block py-3 text-sm font-medium">Overview</a>
-          <Link to={`/leads/${leadId}/notes/new`} className="text-gray-400 block py-3 text-sm hover:text-white">+ Notes</Link>
-          <Link to={`/leads/${leadId}/activities/new`} className="text-gray-400 block py-3 text-sm hover:text-white">+ Activities</Link>
-          <Link to={`/leads/${leadId}/opportunities/new`} className="text-gray-400 block py-3 text-sm hover:text-white">+ Opportunities</Link>
+          <button className="text-gray-400 block py-3 text-sm hover:text-white w-full text-left">+ Notes</button>
+          <button className="text-gray-400 block py-3 text-sm hover:text-white w-full text-left">+ Activities</button>
+          <button className="text-gray-400 block py-3 text-sm hover:text-white w-full text-left">+ Opportunities</button>
         </nav>
       </aside>
 
@@ -333,11 +333,8 @@ export default function LeadProfilePage() {
 
           {/* Notes */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
-            <div className="flex justify-between items-center mb-4">
+            <div className="mb-4">
               <h3 className="text-lg font-bold text-gray-900">📝 Notes</h3>
-              <Link to={`/leads/${leadId}/notes/new`} className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700">
-                + Add Note
-              </Link>
             </div>
             {lead.notes && lead.notes.length > 0 ? (
               <div className="space-y-3">
@@ -356,11 +353,8 @@ export default function LeadProfilePage() {
 
           {/* Activities */}
           <div id="activities" className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
-            <div className="flex justify-between items-center mb-4">
+            <div className="mb-4">
               <h3 className="text-lg font-bold text-gray-900">⚡ Activities</h3>
-              <Link to={`/leads/${leadId}/activities/new`} className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700">
-                + Add Activity
-              </Link>
             </div>
             {lead.activities && lead.activities.length > 0 ? (
               <div className="space-y-4">
@@ -386,11 +380,8 @@ export default function LeadProfilePage() {
 
           {/* Opportunities */}
           <div id="opportunities" className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
-            <div className="flex justify-between items-center mb-4">
+            <div className="mb-4">
               <h3 className="text-lg font-bold text-gray-900">🎯 Opportunities</h3>
-              <Link to={`/leads/${leadId}/opportunities/new`} className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700">
-                + Add Opportunity
-              </Link>
             </div>
             {lead.opportunity_stage && lead.opportunity_stage.length > 0 ? (
               <div className="flex flex-wrap gap-2">

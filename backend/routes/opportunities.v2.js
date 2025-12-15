@@ -2,7 +2,7 @@ import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildOpportunityAiContext } from '../lib/opportunityAiContext.js';
-import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
+import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 
 // NOTE: v2 opportunities router for Phase 4.2 internal pilot.
 // This implementation is dev-focused and gated by FEATURE_OPPORTUNITIES_V2.
@@ -377,7 +377,7 @@ export default function createOpportunityV2Routes(_pgPool) {
   });
 
   // GET /api/v2/opportunities/:id - fetch single opportunity (v2 shape)
-  router.get('/:id', async (req, res) => {
+  router.get('/:id', cacheDetail('opportunities', 300), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query || {};

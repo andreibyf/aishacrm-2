@@ -12,7 +12,7 @@ import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildContactAiContext } from '../lib/aiContextEnricher.js';
-import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
+import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 
 export default function createContactV2Routes(_pgPool) {
@@ -277,7 +277,7 @@ export default function createContactV2Routes(_pgPool) {
    *       404:
    *         description: Contact not found
    */
-  router.get('/:id', async (req, res) => {
+  router.get('/:id', cacheDetail('contacts', 300), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query || {};

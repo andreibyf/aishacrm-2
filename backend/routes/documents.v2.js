@@ -11,6 +11,7 @@
 import express from 'express';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 
 export default function createDocumentV2Routes(_pgPool) {
   const router = express.Router();
@@ -279,7 +280,7 @@ export default function createDocumentV2Routes(_pgPool) {
    *       200:
    *         description: List of documents with AI enrichment
    */
-  router.get('/', async (req, res) => {
+  router.get('/', cacheList('documents', 180), async (req, res) => {
     try {
       const { tenant_id, related_type, related_id } = req.query;
 
@@ -339,7 +340,7 @@ export default function createDocumentV2Routes(_pgPool) {
    *     summary: Get document with full AI context
    *     tags: [documents-v2]
    */
-  router.get('/:id', async (req, res) => {
+  router.get('/:id', cacheDetail('documents', 300), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query;

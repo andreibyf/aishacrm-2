@@ -12,7 +12,7 @@ import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildAccountAiContext } from '../lib/aiContextEnricher.js';
-import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
+import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 
 export default function createAccountV2Routes(_pgPool) {
@@ -106,7 +106,7 @@ export default function createAccountV2Routes(_pgPool) {
    *       200:
    *         description: List of accounts
    */
-  router.get('/', async (req, res) => {
+  router.get('/', cacheList('accounts', 180), async (req, res) => {
     try {
       const { tenant_id, type, industry, search, filter, assigned_to } = req.query;
       if (!tenant_id) {
@@ -373,7 +373,7 @@ export default function createAccountV2Routes(_pgPool) {
    *       404:
    *         description: Account not found
    */
-  router.get('/:id', async (req, res) => {
+  router.get('/:id', cacheDetail('accounts', 300), async (req, res) => {
     try {
       const { tenant_id } = req.query;
       const { id } = req.params;

@@ -11,6 +11,7 @@
 
 import express from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 
 const ENABLE_AI_ENRICHMENT = process.env.AI_ENRICHMENT_ENABLED !== 'false';
 const SLOW_THRESHOLD_MS = parseInt(process.env.AI_CONTEXT_SLOW_THRESHOLD_MS || '500', 10);
@@ -488,7 +489,7 @@ export default function createWorkflowV2Routes(_pgPool) {
    *       200:
    *         description: Workflows list with AI context
    */
-  router.get('/', async (req, res) => {
+  router.get('/', cacheList('workflows', 180), async (req, res) => {
     try {
       const { tenant_id, is_active, limit = 50, offset = 0 } = req.query;
       const supabase = getSupabaseClient();
@@ -583,7 +584,7 @@ export default function createWorkflowV2Routes(_pgPool) {
    *       404:
    *         description: Workflow not found
    */
-  router.get('/:id', async (req, res) => {
+  router.get('/:id', cacheDetail('workflows', 300), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query;

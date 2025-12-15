@@ -2,7 +2,7 @@ import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildActivityAiContext } from '../lib/aiContextEnricher.js';
-import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
+import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 
 export default function createActivityV2Routes(_pgPool) {
   const router = express.Router();
@@ -248,7 +248,7 @@ export default function createActivityV2Routes(_pgPool) {
     }
   });
 
-  router.get('/:id', async (req, res) => {
+  router.get('/:id', cacheDetail('activities', 300), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query || {};

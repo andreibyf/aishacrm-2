@@ -8,7 +8,7 @@ import express from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 import { buildLeadAiContext } from '../lib/aiContextEnricher.js';
-import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
+import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 
 export default function createLeadsV2Routes() {
   const router = express.Router();
@@ -329,7 +329,7 @@ export default function createLeadsV2Routes() {
    *       404:
    *         description: Lead not found
    */
-  router.get('/:id', async (req, res) => {
+  router.get('/:id', cacheDetail('leads', 300), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query;

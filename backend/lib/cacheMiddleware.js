@@ -17,7 +17,8 @@ export function cacheList(module, ttl = 180) {
       return next();
     }
 
-    const tenantId = req.user?.tenant_id;
+    // Get tenant_id from req.user (if validateTenant middleware was applied) or query params
+    const tenantId = req.user?.tenant_id || req.query?.tenant_id;
     if (!tenantId) {
       return next();
     }
@@ -54,6 +55,62 @@ export function cacheList(module, ttl = 180) {
       next();
     } catch (error) {
       console.error('[Cache] Middleware error:', error);
+      next();
+    }
+  };
+}
+
+/**
+ * Cache middleware for detail endpoints
+ * @param {string} module - Module name (accounts, leads, contacts, etc.)
+ * @param {number} ttl - Cache TTL in seconds (optional, default 300s for detail views)
+ */
+export function cacheDetail(module, ttl = 300) {
+  return async (req, res, next) => {
+    // Only cache GET requests
+    if (req.method !== 'GET') {
+      return next();
+    }
+
+    // Get tenant_id from req.user (if validateTenant middleware was applied) or query params
+    const tenantId = req.user?.tenant_id || req.query?.tenant_id;
+    if (!tenantId) {
+      return next();
+    }
+
+    // Generate cache key from resource ID and query params
+    const operation = 'detail';
+    const params = {
+      id: req.params.id,
+      query: req.query,
+      path: req.path
+    };
+
+    try {
+      const key = cacheManager.generateKey(module, tenantId, operation, params);
+      const cached = await cacheManager.get(key);
+
+      if (cached !== null) {
+        console.log(`[Cache] Hit: ${module} detail ${req.params.id} for tenant ${tenantId}`);
+        return res.status(200).json(cached);
+      }
+
+      // Store original json method
+      const originalJson = res.json.bind(res);
+
+      // Override json method to cache response
+      res.json = function(data) {
+        if (res.statusCode === 200) {
+          cacheManager.set(key, data, ttl).catch(err => {
+            console.error('[Cache] Failed to cache detail response:', err);
+          });
+        }
+        return originalJson(data);
+      };
+
+      next();
+    } catch (error) {
+      console.error('[Cache] Detail middleware error:', error);
       next();
     }
   };
@@ -117,6 +174,7 @@ export async function getCacheStats() {
 
 export default {
   cacheList,
+  cacheDetail,
   invalidateCache,
   invalidateTenantCache,
   getCacheStats
