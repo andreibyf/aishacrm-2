@@ -304,150 +304,143 @@ export default function LeadProfilePage() {
   const name = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Lead";
   const companyName = lead.account_name || "—";
 
+  function ActivityBadge({ status }) {
+    const s = (status || "unknown").toLowerCase();
+    if (s.includes("overdue")) return <span className="inline-block px-2 py-1 text-xs font-bold text-white bg-red-600 rounded">Overdue</span>;
+    if (s.includes("completed")) return <span className="inline-block px-2 py-1 text-xs font-bold text-white bg-green-600 rounded">Completed</span>;
+    if (s.includes("scheduled")) return <span className="inline-block px-2 py-1 text-xs font-bold text-white bg-blue-600 rounded">Scheduled</span>;
+    return <span className="inline-block px-2 py-1 text-xs font-bold text-gray-700 bg-gray-200 rounded">Normal</span>;
+  }
+
   return (
-    <div className="min-h-screen bg-white">
-      <div className="mx-auto max-w-5xl px-4 py-12">
-        {/* Header */}
-        <div className="border-b border-zinc-200 pb-6">
-          <div className="flex items-baseline gap-3">
-            <h1 className="text-4xl font-bold text-zinc-900">{name}</h1>
-            <StatusPill status={lead.status} />
-          </div>
-          <p className="mt-2 text-lg text-zinc-600">{lead.job_title} at {companyName}</p>
-          <div className="mt-2 flex gap-4 text-sm text-zinc-600">
-            <span>Last activity: {formatDate(lead.last_activity_at)}</span>
-            {lead.assigned_to_name && (
-              <span>• Assigned to: <span className="font-semibold text-zinc-900">{lead.assigned_to_name}</span></span>
-            )}
-          </div>
-        </div>
+    <div className="flex min-h-screen bg-gray-100">
+      {/* Sidebar */}
+      <aside className="fixed top-0 left-0 bottom-0 w-64 bg-gray-900 text-white p-6 overflow-y-auto">
+        <h1 className="text-2xl font-bold mb-1">{name}</h1>
+        <p className="text-gray-400 text-sm mb-2">{lead.job_title}</p>
+        <p className="text-gray-500 text-xs font-semibold uppercase tracking-widest mb-6">{companyName}</p>
+        <nav className="border-t border-gray-700 pt-4">
+          <a href="#overview" className="text-white block py-3 text-sm font-medium border-l-3 border-indigo-600 pl-3 -ml-3">Overview</a>
+          <a href="#notes" className="text-gray-400 block py-3 text-sm hover:text-white">Notes</a>
+          <a href="#activities" className="text-gray-400 block py-3 text-sm hover:text-white">Activities</a>
+          <a href="#opportunities" className="text-gray-400 block py-3 text-sm hover:text-white">Opportunities</a>
+          <a href="#contact" className="text-gray-400 block py-3 text-sm hover:text-white">Contact</a>
+        </nav>
+      </aside>
 
-        {/* Contact Info */}
-        <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2">
-          <div>
-            <h3 className="text-sm font-semibold text-zinc-900 uppercase tracking-wide">Contact Information</h3>
-            <dl className="mt-4 space-y-4">
-              {lead.email && (
-                <div>
-                  <dt className="text-sm text-zinc-600">Email</dt>
-                  <dd className="mt-1 text-base text-zinc-900">
-                    <a href={`mailto:${lead.email}`} className="text-blue-600 hover:underline">{lead.email}</a>
-                  </dd>
-                </div>
-              )}
-              {lead.phone && (
-                <div>
-                  <dt className="text-sm text-zinc-600">Phone</dt>
-                  <dd className="mt-1 text-base text-zinc-900">
-                    <a href={`tel:${lead.phone}`} className="text-blue-600 hover:underline">{lead.phone}</a>
-                  </dd>
-                </div>
-              )}
-            </dl>
-          </div>
+      {/* Main Content */}
+      <main className="ml-64 flex-1 p-8">
+        <div className="max-w-4xl">
+          <h2 className="text-3xl font-bold text-gray-900 mb-8">Profile</h2>
 
-          <div>
-            <h3 className="text-sm font-semibold text-zinc-900 uppercase tracking-wide">Key Dates</h3>
-            <dl className="mt-4 space-y-4">
+          {/* AI Summary */}
+          {lead.ai_summary && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-5 mb-6">
+              <h3 className="text-lg font-bold text-indigo-900 mb-2">📊 AI Summary</h3>
+              <p className="text-indigo-800 text-sm leading-relaxed">{lead.ai_summary}</p>
+            </div>
+          )}
+
+          {/* Contact Information */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">📧 Contact Information</h3>
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <dt className="text-sm text-zinc-600">Last Activity</dt>
-                <dd className="mt-1 text-base text-zinc-900">{formatDate(lead.last_activity_at)}</dd>
+                <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Email</div>
+                <div className="text-sm text-gray-900">
+                  {lead.email ? <a href={`mailto:${lead.email}`} className="text-indigo-600 hover:underline">{lead.email}</a> : "—"}
+                </div>
               </div>
               <div>
-                <dt className="text-sm text-zinc-600">Last Updated</dt>
-                <dd className="mt-1 text-base text-zinc-900">{formatDate(lead.updated_at)}</dd>
+                <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Phone</div>
+                <div className="text-sm text-gray-900">
+                  {lead.phone ? <a href={`tel:${lead.phone}`} className="text-indigo-600 hover:underline">{lead.phone}</a> : "—"}
+                </div>
               </div>
-            </dl>
+            </div>
           </div>
+
+          {/* Timeline */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">📅 Timeline</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Last Activity</span>
+                <span className="font-semibold text-gray-900">{formatDate(lead.last_activity_at)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Last Updated</span>
+                <span className="font-semibold text-gray-900">{formatDate(lead.updated_at)}</span>
+              </div>
+              {lead.assigned_to_name && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Assigned To</span>
+                  <span className="font-semibold text-gray-900">{lead.assigned_to_name}</span>
+                </div>
+              )}
+              {lead.status && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Status</span>
+                  <span className="font-semibold text-gray-900"><StatusPill status={lead.status} /></span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Notes */}
+          {lead.notes && lead.notes.length > 0 && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">📝 Notes</h3>
+              <div className="space-y-3">
+                {lead.notes.map((note) => (
+                  <div key={note.id} className="pb-3 border-b border-gray-200 last:border-b-0">
+                    <h4 className="font-semibold text-gray-900">{note.title}</h4>
+                    <p className="text-sm text-gray-700 mt-1">{note.content}</p>
+                    <p className="text-xs text-gray-500 mt-2">{formatDate(note.updated_at)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Activities */}
+          {lead.activities && lead.activities.length > 0 && (
+            <div id="activities" className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">⚡ Activities</h3>
+              <div className="space-y-4">
+                {lead.activities.map((activity) => (
+                  <div key={activity.id} className="pb-4 border-b border-gray-200 last:border-b-0">
+                    <div className="flex items-start justify-between mb-2">
+                      <h4 className="font-semibold text-gray-900">{activity.subject}</h4>
+                      <ActivityBadge status={activity.status} />
+                    </div>
+                    <p className="text-sm text-gray-700 mb-2">{activity.body}</p>
+                    <div className="text-xs text-gray-600 space-y-1">
+                      <p>Type: <span className="font-medium">{activity.type}</span> | Priority: <span className="font-medium">{activity.priority || "Normal"}</span></p>
+                      {activity.due_date && <p>Due: <span className="font-medium">{formatDate(activity.due_date)}</span></p>}
+                      {activity.assigned_to_name && <p>Assigned to: <span className="font-medium">{activity.assigned_to_name}</span></p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Opportunities */}
+          {lead.opportunity_stage && lead.opportunity_stage.length > 0 && (
+            <div id="opportunities" className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">🎯 Opportunities</h3>
+              <div className="flex flex-wrap gap-2">
+                {lead.opportunity_stage.map((stage, idx) => (
+                  <span key={idx} className="px-3 py-1 bg-gray-200 text-gray-800 text-sm font-medium rounded-full">
+                    {stage}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-
-        {/* AI Summary */}
-        {lead.ai_summary && (
-          <div className="mt-8 border-t border-zinc-200 pt-6">
-            <h3 className="text-sm font-semibold text-zinc-900 uppercase tracking-wide">AI Summary</h3>
-            <div className="mt-4 rounded-lg bg-blue-50 p-4 text-base text-zinc-900">
-              {lead.ai_summary}
-            </div>
-          </div>
-        )}
-
-        {/* Notes */}
-        {lead.notes && lead.notes.length > 0 && (
-          <div className="mt-8 border-t border-zinc-200 pt-6">
-            <h3 className="text-sm font-semibold text-zinc-900 uppercase tracking-wide">Notes ({lead.notes.length})</h3>
-            <div className="mt-4 space-y-4">
-              {lead.notes.map((note) => (
-                <div key={note.id} className="rounded-lg border border-zinc-200 p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h4 className="font-semibold text-zinc-900">{note.title}</h4>
-                      <p className="mt-1 text-sm text-zinc-700">{note.content}</p>
-                    </div>
-                    <span className="ml-4 flex-shrink-0 text-xs text-zinc-500">{formatDate(note.updated_at)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Activities */}
-        {lead.activities && lead.activities.length > 0 && (
-          <div className="mt-8 border-t border-zinc-200 pt-6">
-            <h3 className="text-sm font-semibold text-zinc-900 uppercase tracking-wide">Activities ({lead.activities.length})</h3>
-            <div className="mt-4 space-y-4">
-              {lead.activities.map((activity) => (
-                <div key={activity.id} className="rounded-lg border border-zinc-200 p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-zinc-900">{activity.subject}</h4>
-                      <p className="mt-1 text-sm text-zinc-700">{activity.body}</p>
-                      <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-zinc-600 md:grid-cols-3">
-                        <div>
-                          <span className="text-zinc-500">Type:</span> <span className="font-medium">{activity.type}</span>
-                        </div>
-                        <div>
-                          <span className="text-zinc-500">Status:</span> <span className="font-medium">{activity.status}</span>
-                        </div>
-                        {activity.priority && (
-                          <div>
-                            <span className="text-zinc-500">Priority:</span> <span className="font-medium">{activity.priority}</span>
-                          </div>
-                        )}
-                        {activity.due_date && (
-                          <div>
-                            <span className="text-zinc-500">Due:</span> <span className="font-medium">{formatDate(activity.due_date)}</span>
-                          </div>
-                        )}
-                        {activity.assigned_to_name && (
-                          <div>
-                            <span className="text-zinc-500">Assigned to:</span> <span className="font-medium">{activity.assigned_to_name}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <span className="ml-4 flex-shrink-0 text-xs text-zinc-500">{formatDate(activity.updated_at)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Opportunities */}
-        {lead.opportunity_stage && lead.opportunity_stage.length > 0 && (
-          <div className="mt-8 border-t border-zinc-200 pt-6">
-            <h3 className="text-sm font-semibold text-zinc-900 uppercase tracking-wide">Opportunities ({lead.opportunity_stage.length})</h3>
-            <div className="mt-4 space-y-2">
-              {lead.opportunity_stage.map((stage, idx) => (
-                <div key={idx} className="inline-block rounded-full bg-zinc-100 px-3 py-1 text-sm font-medium text-zinc-800">
-                  {stage}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      </main>
     </div>
   );
 }
