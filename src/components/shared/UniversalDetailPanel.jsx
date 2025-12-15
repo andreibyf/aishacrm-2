@@ -572,7 +572,8 @@ export default function UniversalDetailPanel({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent 
         side="right" 
-        className="w-full sm:max-w-2xl bg-slate-900 text-slate-100 border-l border-slate-700 overflow-y-auto"
+        className="!w-1/2 !max-w-none bg-slate-900 text-slate-100 border-l border-slate-700 overflow-y-auto"
+        style={{ width: '50%' }}
       >
         <SheetHeader className="border-b border-slate-700 pb-4">
           <div className="flex items-start justify-between">
