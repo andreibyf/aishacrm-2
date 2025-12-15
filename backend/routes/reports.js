@@ -114,15 +114,14 @@ async function safeRecentActivities(_pgPool, tenantId, limit = 10) {
 export default function createReportRoutes(_pgPool) {
   const router = express.Router();
   // Redis cache for dashboard bundle (distributed, persistent)
-  // Get cacheManager from global scope (initialized in server.js)
-  const getCacheManager = () => global.cacheManager;
+  // Get cacheManager from app.locals (initialized in startup/initServices.js)
   const BUNDLE_TTL_SECONDS = 300; // 5 minutes (redis-cache TTL)
 
   // POST /api/reports/clear-cache - Clear dashboard bundle cache (admin only, uses redis)
   router.post('/clear-cache', async (req, res) => {
     try {
       const { tenant_id } = req.body;
-      const cacheManager = getCacheManager();
+      const cacheManager = req.app?.locals?.cacheManager;
       
       if (!cacheManager || !cacheManager.client) {
         return res.json({
@@ -279,7 +278,7 @@ export default function createReportRoutes(_pgPool) {
       const cacheKey = `dashboard:bundle:${effectiveTenantKey}:include=${includeTestData ? 'true' : 'false'}`;
       
       // Try redis cache first (distributed across instances)
-      const cacheManager = getCacheManager();
+      const cacheManager = req.app?.locals?.cacheManager;
       if (!bustCache && cacheManager && cacheManager.client) {
         try {
           const cached = await cacheManager.get(cacheKey);
@@ -420,7 +419,7 @@ export default function createReportRoutes(_pgPool) {
         meta: {
           tenant_id: tenant_id || null,
           generated_at: new Date().toISOString(),
-          ttl_seconds: Math.round(BUNDLE_TTL_MS / 1000),
+          ttl_seconds: BUNDLE_TTL_SECONDS,
         },
       };
 
