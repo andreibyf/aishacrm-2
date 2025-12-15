@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.6] - 2025-12-14
+
+### Added
+- **AI Profile Summary Feature:** Implemented AI-powered executive summaries for lead/contact profiles
+  - New endpoint: `POST /api/ai/summarize-person-profile` with 24-hour intelligent caching
+  - Prevents excessive LLM API calls by checking cache on both frontend and backend
+  - Stores summaries in `public.person_profile` table (column: `ai_summary`) for persistence
+  - 24-hour cache validation via `updated_at` timestamp
+  - Graceful fallback to basic summary if AI generation fails
+  - Integrates with multi-provider LLM engine (OpenAI → Anthropic → Groq failover)
+  - Includes profile context: name, company, position, contact info, activity, opportunities, notes
+
+- **Standalone Lead Profile Page:** New standalone page displaying comprehensive lead profiles
+  - Route: `GET /leads/:leadId?tenant_id=<tenantId>` (public, no Layout wrapper)
+  - Professional report-style layout with sections for contact info, key dates, AI summary, notes, activities, opportunities
+  - Fetches profile data from Supabase Edge Function with proper authentication
+  - Resolves employee UUIDs to human-readable names via database lookups
+  - Includes cached AI-generated summary for each profile
+
+### Fixed
+- **AI Summary Route Implementation:** Corrected aiSummary.js module imports and exports
+  - Fixed incorrect import of non-existent `supabaseClient.js` → now uses `getSupabaseClient()` from `supabase-db.js`
+  - Fixed incorrect import of non-existent `callLLMWithFailover()` → now properly uses `generateChatCompletion()`, `resolveLLMApiKey()`, `selectLLMConfigForTenant()` from AI engine
+  - Fixed router mounting in server.js (removed incorrect function call syntax)
+  - All AI engine tests pass ✅ (routes, triggers, campaigns)
+
+### Updated
+- **Documentation:** Added comprehensive AI architecture and profile feature documentation
+  - Updated CLAUDE.md with AI Engine Architecture section
+  - Added AI Profile Summaries section to CLAUDE.md (standalone page features and API integration)
+  - Updated backend/README.md with AI Profile Summaries endpoint documentation
+
+---
+
 ## [2.3.5] - 2025-12-13
 
 ### Fixed

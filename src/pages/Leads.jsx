@@ -58,7 +58,7 @@ import {
 } from "@/components/ui/tooltip";
 import BulkActionsMenu from "../components/leads/BulkActionsMenu";
 import { Globe } from "lucide-react";
-import { mintLeadLink } from "@/api/edgeFunctions";
+// Switch to internal profile page; stop using mintLeadLink
 import StatusHelper from "../components/shared/StatusHelper";
 import { loadUsersSafely } from "../components/shared/userLoader";
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
@@ -1698,15 +1698,10 @@ export default function LeadsPage() {
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      onClick={async (e) => {
+                                      onClick={(e) => {
                                         e.stopPropagation();
-                                        try {
-                                          const link = await mintLeadLink({ id: lead.id });
-                                          window.open(link, "_blank", "noopener,noreferrer");
-                                        } catch (err) {
-                                          toast.error("Unable to open web profile");
-                                          if (import.meta.env.DEV) console.warn('[Leads] mintLeadLink failed', err);
-                                        }
+                                        // Navigate to internal Lead Profile page which calls person-profile
+                                        handleViewDetails(lead);
                                       }}
                                       className="h-8 w-8 text-slate-400 hover:text-blue-400"
                                     >
@@ -1717,6 +1712,23 @@ export default function LeadsPage() {
                                     <p>Open web profile</p>
                                   </TooltipContent>
                                 </Tooltip>
+                                {/* Text fallback/link for clarity */}
+                                <Button
+                                  variant="link"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    try {
+                                      const href = `/leads/${lead.id}`;
+                                      window.open(href, '_blank', 'noopener,noreferrer');
+                                    } catch (err) {
+                                      console.error('Failed to open lead:', err);
+                                    }
+                                  }}
+                                  className="text-blue-400 hover:text-blue-300 px-1"
+                                >
+                                  Open in new tab
+                                </Button>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button

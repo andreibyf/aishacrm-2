@@ -3,10 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Mail, Phone, Building2, Edit, Trash2, MoreHorizontal, Eye, UserCheck, TrendingUp } from "lucide-react";
+import { Mail, Phone, Building2, Edit, Trash2, MoreHorizontal, Eye, UserCheck, TrendingUp, Globe } from "lucide-react";
 import { motion } from "framer-motion";
 import PhoneDisplay from "../shared/PhoneDisplay";
 import StatusHelper from "../shared/StatusHelper";
+// Minted link deprecated for globe/Profile; use internal view instead
 
 // Matching the stat card colors - semi-transparent backgrounds
 const statusColors = {
@@ -200,6 +201,23 @@ export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDe
             >
               <Eye className="w-3 h-3 mr-1" />
               View
+            </Button>
+            {/* Web Profile actions: globe + text (navigate to internal Lead Profile page) */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => { e.stopPropagation(); onViewDetails(lead); }}
+              className="text-slate-400 hover:text-blue-400"
+            >
+              <Globe className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="link"
+              size="sm"
+              onClick={(e) => { e.stopPropagation(); onViewDetails(lead); }}
+              className="text-blue-400 hover:text-blue-300 px-1"
+            >
+              Profile
             </Button>
           </div>
           <Button

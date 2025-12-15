@@ -86,6 +86,80 @@ export async function cleanOldActivities(pgPool, jobMetadata = {}) {
 }
 
 /**
+ * Mark activities as overdue when due_date has passed
+ * Updates activities with status 'scheduled' or 'in_progress' to 'overdue'
+ * if their due_date is before today
+ */
+export async function markActivitiesOverdue(pgPool, jobMetadata = {}) {
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+
+  try {
+    // Try to use supabase client from metadata if pgPool is not available
+    if (!pgPool && jobMetadata.supabase) {
+      const supabase = jobMetadata.supabase;
+
+      const { data, error } = await supabase
+        .from('activities')
+        .update({
+          status: 'overdue',
+          updated_at: new Date().toISOString()
+        })
+        .in('status', ['scheduled', 'in_progress'])
+        .not('due_date', 'is', null)
+        .lt('due_date', today)
+        .select('id, subject, due_date, status');
+
+      if (error) throw error;
+
+      return {
+        success: true,
+        message: `Marked ${data?.length || 0} activities as overdue`,
+        details: {
+          updated_count: data?.length || 0,
+          today: today,
+          activities: (data || []).slice(0, 10)
+        }
+      };
+    }
+
+    // Fallback to pgPool if available
+    if (pgPool) {
+      const result = await pgPool.query(
+        `UPDATE activities
+         SET status = 'overdue',
+             updated_at = NOW()
+         WHERE status IN ('scheduled', 'in_progress')
+           AND due_date IS NOT NULL
+           AND due_date < $1
+         RETURNING id, subject, due_date, status`,
+        [today]
+      );
+
+      return {
+        success: true,
+        message: `Marked ${result.rowCount} activities as overdue`,
+        details: {
+          updated_count: result.rowCount,
+          today: today,
+          activities: result.rows.slice(0, 10)
+        }
+      };
+    }
+
+    return {
+      success: false,
+      error: 'No database connection available (pgPool or supabase)'
+    };
+  } catch (error) {
+    console.error('Error in markActivitiesOverdue:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+/**
  * Sync denormalized fields (placeholder)
  */
 export async function syncDenormalizedFields(_pgPool, _jobMetadata = {}) {
@@ -105,10 +179,12 @@ export const jobExecutors = {
   markUsersOffline,
   cleanOldActivities,
   syncDenormalizedFields,
+  markActivitiesOverdue,
   // Legacy snake_case aliases for backward compatibility
   mark_users_offline: markUsersOffline,
   clean_old_activities: cleanOldActivities,
-  sync_denormalized_fields: syncDenormalizedFields
+  sync_denormalized_fields: syncDenormalizedFields,
+  mark_activities_overdue: markActivitiesOverdue
 };
 
 /**

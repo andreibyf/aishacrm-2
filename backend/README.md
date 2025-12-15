@@ -189,6 +189,51 @@ MODEL_CHAT_TOOLS__TENANT_FASTCO=llama-3.3-70b-versatile
 
 **Note:** If only provider is set (no model override), the system automatically selects appropriate models for that provider using `getProviderDefaultModel()`.
 
+### AI Profile Summaries
+
+Automatic generation of AI-powered executive summaries for lead/contact profiles with built-in 24-hour caching to prevent excessive API calls.
+
+**Endpoint:**
+- `POST /api/ai/summarize-person-profile` - Generate or retrieve cached AI summary
+
+**Request Body:**
+```json
+{
+  "person_id": "uuid",
+  "person_type": "lead|contact",
+  "profile_data": {
+    "first_name": "...",
+    "last_name": "...",
+    "job_title": "...",
+    "account_name": "...",
+    "status": "...",
+    "email": "...",
+    "phone": "...",
+    "last_activity_at": "ISO-8601",
+    "open_opportunity_count": 0,
+    "opportunity_stage": ["Stage1", "Stage2"],
+    "notes": [{"title": "...", "content": "..."}, ...],
+    "activities": [{"status": "...", "subject": "..."}, ...]
+  },
+  "tenant_id": "uuid"
+}
+```
+
+**Features:**
+- **Automatic Caching:** Returns cached summary if fresher than 24 hours
+- **Smart Generation:** Only calls AI engine on cache miss or stale data
+- **Multi-Provider:** Uses AI engine failover (OpenAI → Anthropic → Groq)
+- **Database Persistence:** Stores summaries in `public.ai_person_profile` table
+
+**Response:**
+```json
+{
+  "ai_summary": "Executive summary text (2-3 sentences)..."
+}
+```
+
+**Implementation:** `backend/routes/aiSummary.js`
+
 ## 🔧 Configuration
 
 ### Database Setup

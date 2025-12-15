@@ -26,6 +26,15 @@ const defaultJobs = [
     }
   },
   {
+    name: 'Mark Activities Overdue',
+    schedule: 'hourly',
+    function_name: 'markActivitiesOverdue',  // Match the executor function name
+    is_active: true,
+    metadata: {
+      description: 'Updates status to overdue for activities past their due date'
+    }
+  },
+  {
     name: 'Clean Old Activities',
     schedule: 'daily',
     function_name: 'cleanOldActivities',  // Match the executor function name

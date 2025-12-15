@@ -198,6 +198,8 @@ import createDocumentationRoutes from "./routes/documentation.js";
 import createCashflowRoutes from "./routes/cashflow.js";
 import createCronRoutes from "./routes/cron.js";
 import createMetricsRoutes from "./routes/metrics.js";
+import createEdgeFunctionRoutes from "./routes/edgeFunctions.js";
+import createAISummaryRoutes from "./routes/aiSummary.js";
 import createUtilsRoutes from "./routes/utils.js";
 import createBizDevRoutes from "./routes/bizdev.js";
 import createClientRoutes from "./routes/clients.js";
@@ -331,6 +333,11 @@ app.use("/api/memory", createMemoryRoutes());
 app.use("/api/auth", createAuthRoutes(measuredPgPool));
 // GitHub Issues routes for autonomous health monitoring
 app.use("/api/github-issues", createGitHubIssuesRoutes);
+// Proxy selected Supabase Edge Functions to avoid CORS issues in browsers
+app.use("/api/edge", createEdgeFunctionRoutes());
+
+// AI summary generation
+app.use("/api/ai", createAISummaryRoutes);
 // Supabase Auth proxy (CORS-controlled access to /auth/v1/user)
 app.use("/api/supabase-proxy", createSupabaseProxyRoutes());
 // AI Suggestions routes (Phase 3 Autonomous Operations)

@@ -149,7 +149,8 @@ Routes in `backend/routes/` mirror frontend domain structure:
 - `activities.js`, `notes.js`, `clients.js`
 
 **AI & Automation:**
-- `ai.js` - AI-powered features
+- `ai.js` - AI-powered features (chat, sentiment, summarization)
+- `aiSummary.js` - AI profile summaries with 24-hour caching
 - `aicampaigns.js` - AI campaign management
 - `workflows.js`, `workflowexecutions.js`
 
@@ -179,6 +180,59 @@ Routes in `backend/routes/` mirror frontend domain structure:
 - `mcp.js` - Model Context Protocol server
 - `webhooks.js`, `cron.js`
 
+### AI Engine Architecture
+
+The backend uses a **unified multi-provider AI engine** with automatic failover:
+
+**Location:** `backend/lib/aiEngine/`
+
+**Exports:**
+- `selectLLMConfigForTenant()` - Get configured provider/model for a tenant and capability
+- `resolveLLMApiKey()` - Resolve API key from tenant → user → system hierarchy
+- `generateChatCompletion()` - Call LLM with automatic failover (OpenAI → Anthropic → Groq)
+
+**Features:**
+- Multi-provider support: OpenAI (gpt-4o), Anthropic (claude-3-5-sonnet), Groq (llama-3.3-70b)
+- Automatic failover on API errors
+- Tenant-level override: Set `LLM_PROVIDER__TENANT_<id>=provider` to route specific tenants
+- Activity logging for monitoring and cost tracking
+
+**Usage Pattern:**
+```javascript
+const config = selectLLMConfigForTenant({ capability: 'chat_tools', tenantSlugOrId });
+const apiKey = await resolveLLMApiKey({ tenantSlugOrId, provider: config.provider });
+const result = await generateChatCompletion({ provider: config.provider, model: config.model, messages, apiKey });
+```
+
+### AI Profile Summaries (Person Profile Feature)
+
+**Endpoint:** `POST /api/ai/summarize-person-profile`
+
+**Features:**
+- Generates AI-powered executive summaries for lead/contact profiles
+- **24-hour caching** prevents excessive LLM calls and improves performance
+- Stores summaries in `public.ai_person_profile` table
+- Uses AI engine with automatic provider failover
+
+**Request Body:**
+```json
+{ "person_id": "uuid", "person_type": "lead|contact", "profile_data": {...}, "tenant_id": "uuid" }
+```
+
+**Caching Strategy:**
+- Frontend checks `ai_summary_updated_at` timestamp before calling backend
+- Backend queries database for existing summary before generating new one
+- Only regenerates if summary missing or older than 24 hours
+- Logs indicate cache hits vs. fresh generation
+
+**Context Included in Summary:**
+- Name, position, company, status
+- Contact info (email, phone)
+- Last activity date
+- Open opportunities and stages
+- Recent notes and activities
+- Assignment and relevant metadata
+
 ### Frontend Component Structure
 
 Components in `src/components/` organized by domain:
@@ -191,6 +245,35 @@ Components in `src/components/` organized by domain:
 - Use `ConfirmDialog` instead of `window.confirm()`
 - Wrap debug logs: `if (import.meta.env.DEV) console.log(...)`
 - Performance cache: `import { performanceCache } from '@/components/shared/PerformanceCache'`
+
+### Standalone Lead Profile Page
+
+**Component:** `src/pages/LeadProfilePage.jsx`
+
+**Route:** `GET /leads/:leadId?tenant_id=<tenantId>` (public, no Layout wrapper)
+
+**Features:**
+- Professional report-style layout (not CRM interface)
+- Fetches profile from Supabase Edge Function (`person-refresh`)
+- Resolves employee UUIDs to human-readable names via database lookups
+- Includes AI-generated executive summary with caching
+- Displays comprehensive profile sections:
+  - Header: Name, status, company, assigned employee
+  - Contact Info: Email, phone
+  - Key Dates: Created, last updated, last activity
+  - AI Summary: Auto-generated from profile context
+  - Notes: Recent notes with timestamps
+  - Activities: Recent activities with type, status, priority, due dates
+  - Opportunities: Related opportunities by stage
+
+**API Integrations:**
+- Supabase Edge Function: `GET /rest/v1/person-refresh?person_id=...` (with auth headers)
+- Backend AI endpoint: `POST /api/ai/summarize-person-profile` (generates + caches summary)
+
+**Authentication:**
+- Uses user JWT from `supabase.auth.getSession()`
+- Includes tenant_id in all API calls for RLS isolation
+- Headers: `Authorization: Bearer {userJWT}`, `apikey: {anonKey}`, `x-tenant-id: {tenantId}`
 
 ### Path Aliases
 

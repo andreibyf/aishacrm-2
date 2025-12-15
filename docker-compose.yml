@@ -74,6 +74,7 @@ services:
       context: .
       dockerfile: backend/Dockerfile
       args:
+        DOPPLER_TOKEN: ${DOPPLER_TOKEN}
         USE_SYSTEM_CHROMIUM: "true"
         PUPPETEER_SKIP_DOWNLOAD: "1"
     container_name: aishacrm-backend

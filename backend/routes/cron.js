@@ -332,6 +332,73 @@ export default function createCronRoutes(_pgPool) {
     }
   });
 
+  // POST /api/cron/jobs/:id/run - Force run a specific cron job immediately
+  router.post('/jobs/:id/run', async (req, res) => {
+    const startTime = Date.now();
+
+    try {
+      const { id } = req.params;
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+
+      // Fetch the job
+      const { data: job, error: fetchErr } = await supabase
+        .from('cron_job')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (fetchErr) throw new Error(fetchErr.message);
+      if (!job) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Cron job not found'
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+
+      // Execute the job
+      let executionResult = null;
+      if (job.function_name) {
+        executionResult = await executeJob(job.function_name, null, { ...job.metadata || {}, supabase });
+      }
+
+      // Update last_run and next_run
+      const nextRun = calculateNextRun(job.schedule, new Date());
+      await supabase
+        .from('cron_job')
+        .update({
+          last_run: nowIso,
+          next_run: nextRun?.toISOString(),
+          updated_at: nowIso
+        })
+        .eq('id', id);
+
+      res.json({
+        status: 'success',
+        message: `Job "${job.name}" executed`,
+        data: {
+          job: {
+            id: job.id,
+            name: job.name,
+            function_name: job.function_name
+          },
+          result: executionResult,
+          duration_ms: Date.now() - startTime
+        }
+      });
+    } catch (error) {
+      console.error('Error running cron job:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message,
+        duration_ms: Date.now() - startTime
+      });
+    }
+  });
+
   return router;
 }
 

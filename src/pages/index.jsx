@@ -6,6 +6,7 @@ import Layout from './Layout.jsx';
 
 const PAGES = {
     Dashboard: lazy(() => import('./Dashboard')),
+    LeadProfilePage: lazy(() => import('./LeadProfilePage')),
     Contacts: lazy(() => import('./Contacts')),
     Accounts: lazy(() => import('./Accounts')),
     Opportunities: lazy(() => import('./Opportunities')),
@@ -65,6 +66,9 @@ function PagesContent() {
             <Routes>
                 {/* Public route - password reset (no Layout wrapper) */}
                 <Route path="/auth/reset" element={<AuthResetPage />} />
+
+                {/* Public route - lead profile webpage (standalone, no Layout wrapper) */}
+                <Route path="/leads/:leadId" element={<PAGES.LeadProfilePage />} />
 
                 {/* All other routes wrapped in Layout (requires authentication) */}
                 <Route path="/*" element={
