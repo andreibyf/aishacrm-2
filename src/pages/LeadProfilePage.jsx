@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
-import { getSupabaseAccessToken } from "@/api/edgeFunctions";
 import { supabase } from "@/lib/supabase";
 
 function getRuntimeEnv(key) {
@@ -8,24 +7,11 @@ function getRuntimeEnv(key) {
   return import.meta.env[key];
 }
 
-function cx(...classes) {
-  return classes.filter(Boolean).join(" ");
-}
-
 function formatDate(dt) {
   if (!dt) return "—";
   const d = new Date(dt);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-function formatMoney(value) {
-  if (value == null) return "—";
-  try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(value);
-  } catch {
-    return String(value);
-  }
 }
 
 function StatusPill({ status }) {
@@ -42,50 +28,9 @@ function StatusPill({ status }) {
       : "bg-zinc-50 text-zinc-700 ring-zinc-200";
 
   return (
-    <span className={cx("inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1", cls)}>
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${cls}`}>
       {status || "Unknown"}
     </span>
-  );
-}
-
-function MetricCard({ label, value, sub }) {
-  return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-      <div className="text-sm text-zinc-600">{label}</div>
-      <div className="mt-1 text-2xl font-semibold text-zinc-900">{value}</div>
-      {sub ? <div className="mt-1 text-xs text-zinc-500">{sub}</div> : null}
-    </div>
-  );
-}
-
-function SectionCard({ title, right, children }) {
-  return (
-    <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4">
-        <div className="text-base font-semibold text-zinc-900">{title}</div>
-        {right}
-      </div>
-      <div className="p-5">{children}</div>
-    </div>
-  );
-}
-
-function FieldRow({ label, value }) {
-  return (
-    <div className="flex items-start justify-between gap-4 py-2">
-      <div className="text-sm text-zinc-500">{label}</div>
-      <div className="text-sm text-zinc-900 text-right">{value ?? "—"}</div>
-    </div>
-  );
-}
-
-function EmptyState({ title, detail, action }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 p-6 text-center">
-      <div className="text-sm font-semibold text-zinc-900">{title}</div>
-      {detail ? <div className="mt-1 text-sm text-zinc-600">{detail}</div> : null}
-      {action ? <div className="mt-4 flex justify-center">{action}</div> : null}
-    </div>
   );
 }
 
