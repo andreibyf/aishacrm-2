@@ -56,9 +56,11 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 import { useUser } from "@/components/shared/useUser.js";
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 
 export default function ContactsPage() {
   const { plural: contactsLabel, singular: contactLabel } = useEntityLabel('contacts');
+  const { getCardLabel, isCardVisible } = useStatusCardPreferences();
   const [contacts, setContacts] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [users, setUsers] = useState([]);
@@ -94,7 +96,7 @@ export default function ContactsPage() {
   const [pageSize, setPageSize] = useState(25);
   const [totalItems, setTotalItems] = useState(0);
 
-  const { cachedRequest, clearCache } = useApiManager();
+  const { cachedRequest, clearCacheByKey } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
   const logger = useLogger();
 
@@ -455,12 +457,26 @@ export default function ContactsPage() {
       tenantId: tenantIdentifier,
     });
     
-    // Just handle post-save actions
-    setIsFormOpen(false);
-    setEditingContact(null);
-    setCurrentPage(1); // Reset to page 1 to show the newly created contact
-    clearCache("Contact");
-    loadContacts();
+    try {
+      // Reset to page 1 to show the newly created contact
+      setCurrentPage(1);
+      
+      // Clear cache and reload BEFORE closing the dialog
+      clearCacheByKey("Contact");
+      await Promise.all([
+        loadContacts(),
+        loadTotalStats(),
+      ]);
+      
+      // Now close the dialog after data is fresh
+      setIsFormOpen(false);
+      setEditingContact(null);
+    } catch (error) {
+      console.error('[Contacts] Error in handleCreate:', error);
+      // Still close the dialog even on error
+      setIsFormOpen(false);
+      setEditingContact(null);
+    }
     loadTotalStats();
   };
 
@@ -475,7 +491,7 @@ export default function ContactsPage() {
     // Just handle post-save actions
     setIsFormOpen(false);
     setEditingContact(null);
-    clearCache("Contact");
+    clearCacheByKey("Contact");
     loadContacts();
     loadTotalStats();
   };
@@ -511,7 +527,7 @@ export default function ContactsPage() {
       // Small delay to let optimistic update settle
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      clearCache("Contact");
+      clearCacheByKey("Contact");
       loadContacts();
       loadTotalStats();
       logger.info("Contact deleted successfully", "ContactsPage", {
@@ -587,10 +603,20 @@ export default function ContactsPage() {
       });
     }
 
+    // Optimistically remove from UI immediately
+    const deletedIds = new Set(contactIds.slice(0, successCount));
+    setContacts((prev) => prev.filter((c) => !deletedIds.has(c.id)));
+    setTotalItems((t) => Math.max(0, (t || 0) - successCount));
     setSelectedContacts(new Set());
-    clearCache("Contact");
-    loadContacts();
-    loadTotalStats();
+    
+    // Refresh in background to ensure sync
+    setTimeout(async () => {
+      clearCacheByKey("Contact");
+      await Promise.all([
+        loadContacts(),
+        loadTotalStats(),
+      ]);
+    }, 500);
   };
 
   const handleBulkStatusChange = async (newStatus) => {
@@ -635,7 +661,7 @@ export default function ContactsPage() {
     }
 
     setSelectedContacts(new Set());
-    clearCache("Contact");
+    clearCacheByKey("Contact");
     loadContacts();
     loadTotalStats();
   };
@@ -692,9 +718,9 @@ export default function ContactsPage() {
       userId: user?.id || user?.email,
       tenantId: selectedTenantId,
     });
-    clearCache("Contact");
-    clearCache("Account");
-    clearCache("Employee");
+    clearCacheByKey("Contact");
+    clearCacheByKey("Account");
+    clearCacheByKey("Employee");
     loadContacts();
     loadTotalStats();
   };
@@ -902,7 +928,7 @@ export default function ContactsPage() {
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <p className="text-sm text-slate-400">Total Contacts</p>
+            <p className="text-sm text-slate-400">Total {contactsLabel}</p>
             <StatusHelper statusKey="total_all" />
           </div>
           <p className="text-2xl font-bold text-slate-100">
@@ -910,93 +936,101 @@ export default function ContactsPage() {
           </p>
         </div>
 
-        <div
-          onClick={() => {
-            setStatusFilter("active");
-            logger.debug("Status filter set to Active", "ContactsPage", {
-              userId: user?.id || user?.email,
-            });
-          }}
-          className={`bg-green-900/20 border-green-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
-            statusFilter === "active"
-              ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900"
-              : ""
-          }`}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-sm text-slate-400">Active</p>
-            <StatusHelper statusKey="contact_active" />
+        {isCardVisible('contact_active') && (
+          <div
+            onClick={() => {
+              setStatusFilter("active");
+              logger.debug("Status filter set to Active", "ContactsPage", {
+                userId: user?.id || user?.email,
+              });
+            }}
+            className={`bg-green-900/20 border-green-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+              statusFilter === "active"
+                ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900"
+                : ""
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm text-slate-400">{getCardLabel('contact_active') || 'Active'}</p>
+              <StatusHelper statusKey="contact_active" />
+            </div>
+            <p className="text-2xl font-bold text-slate-100">
+              {formatNumber(totalStats.active)}
+            </p>
           </div>
-          <p className="text-2xl font-bold text-slate-100">
-            {formatNumber(totalStats.active)}
-          </p>
-        </div>
+        )}
 
-        <div
-          onClick={() => {
-            setStatusFilter("prospect");
-            logger.debug("Status filter set to Prospect", "ContactsPage", {
-              userId: user?.id || user?.email,
-            });
-          }}
-          className={`bg-blue-900/20 border-blue-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
-            statusFilter === "prospect"
-              ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900"
-              : ""
-          }`}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-sm text-slate-400">Prospects</p>
-            <StatusHelper statusKey="contact_prospect" />
+        {isCardVisible('contact_prospect') && (
+          <div
+            onClick={() => {
+              setStatusFilter("prospect");
+              logger.debug("Status filter set to Prospect", "ContactsPage", {
+                userId: user?.id || user?.email,
+              });
+            }}
+            className={`bg-blue-900/20 border-blue-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+              statusFilter === "prospect"
+                ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900"
+                : ""
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm text-slate-400">{getCardLabel('contact_prospect') || 'Prospects'}</p>
+              <StatusHelper statusKey="contact_prospect" />
+            </div>
+            <p className="text-2xl font-bold text-slate-100">
+              {formatNumber(totalStats.prospect)}
+            </p>
           </div>
-          <p className="text-2xl font-bold text-slate-100">
-            {formatNumber(totalStats.prospect)}
-          </p>
-        </div>
+        )}
 
-        <div
-          onClick={() => {
-            setStatusFilter("customer");
-            logger.debug("Status filter set to Customer", "ContactsPage", {
-              userId: user?.id || user?.email,
-            });
-          }}
-          className={`bg-emerald-900/20 border-emerald-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
-            statusFilter === "customer"
-              ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900"
-              : ""
-          }`}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-sm text-slate-400">Customers</p>
-            <StatusHelper statusKey="contact_customer" />
+        {isCardVisible('contact_customer') && (
+          <div
+            onClick={() => {
+              setStatusFilter("customer");
+              logger.debug("Status filter set to Customer", "ContactsPage", {
+                userId: user?.id || user?.email,
+              });
+            }}
+            className={`bg-emerald-900/20 border-emerald-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+              statusFilter === "customer"
+                ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900"
+                : ""
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm text-slate-400">{getCardLabel('contact_customer') || 'Customers'}</p>
+              <StatusHelper statusKey="contact_customer" />
+            </div>
+            <p className="text-2xl font-bold text-slate-100">
+              {formatNumber(totalStats.customer)}
+            </p>
           </div>
-          <p className="text-2xl font-bold text-slate-100">
-            {formatNumber(totalStats.customer)}
-          </p>
-        </div>
+        )}
 
-        <div
-          onClick={() => {
-            setStatusFilter("inactive");
-            logger.debug("Status filter set to Inactive", "ContactsPage", {
-              userId: user?.id || user?.email,
-            });
-          }}
-          className={`bg-slate-900/20 border-slate-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
-            statusFilter === "inactive"
-              ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900"
-              : ""
-          }`}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-sm text-slate-400">Inactive</p>
-            <StatusHelper statusKey="contact_inactive" />
+        {isCardVisible('contact_inactive') && (
+          <div
+            onClick={() => {
+              setStatusFilter("inactive");
+              logger.debug("Status filter set to Inactive", "ContactsPage", {
+                userId: user?.id || user?.email,
+              });
+            }}
+            className={`bg-slate-900/20 border-slate-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+              statusFilter === "inactive"
+                ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900"
+                : ""
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm text-slate-400">{getCardLabel('contact_inactive') || 'Inactive'}</p>
+              <StatusHelper statusKey="contact_inactive" />
+            </div>
+            <p className="text-2xl font-bold text-slate-100">
+              {formatNumber(totalStats.inactive)}
+            </p>
           </div>
-          <p className="text-2xl font-bold text-slate-100">
-            {formatNumber(totalStats.inactive)}
-          </p>
-        </div>
+        )}
       </div>
 
       {/* Search and Tag Filter */}
@@ -1427,7 +1461,7 @@ export default function ContactsPage() {
         open={isImportOpen}
         onOpenChange={setIsImportOpen}
         onImportComplete={() => {
-          clearCache("Contact");
+          clearCacheByKey("Contact");
           loadContacts();
           loadTotalStats();
           logger.info(

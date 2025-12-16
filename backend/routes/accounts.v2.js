@@ -338,11 +338,23 @@ export default function createAccountV2Routes(_pgPool) {
       }
 
       const created = expandMetadata(data);
-      const aiContext = await buildAccountAiContext(created, { tenantId: tenant_id });
+      
+      // Build AI context asynchronously - don't wait for it
+      // This keeps the response fast (~200ms) instead of waiting for AI enrichment (~5+ seconds)
+      buildAccountAiContext(created, { tenantId: tenant_id })
+        .then(aiContext => {
+          if (aiContext) {
+            console.log('[accounts.v2] AI context built in background');
+          }
+        })
+        .catch(err => {
+          console.warn('[accounts.v2] Background AI context building failed:', err.message);
+        });
 
+      // Return immediately with created account - AI context will be available on fetch
       return res.status(201).json({
         status: 'success',
-        data: { account: created, aiContext },
+        data: { account: created },
       });
     } catch (err) {
       console.error('[accounts.v2] Create exception:', err);

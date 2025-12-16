@@ -268,7 +268,11 @@ export default function createReportRoutes(_pgPool) {
   // GET /api/reports/dashboard-bundle - Get complete dashboard bundle
   router.get('/dashboard-bundle', async (req, res) => {
     try {
-      const { tenant_id } = req.query;
+      let { tenant_id } = req.query;
+      // Normalize: treat "null" string or empty/undefined as no tenant filter (superadmin global)
+      if (tenant_id === 'null' || tenant_id === '' || !tenant_id) {
+        tenant_id = undefined;
+      }
       
       // Note: tenant_id can be null/undefined for superadmin global view (aggregates all tenants)
       // Use redis cache for distributed, persistent caching
@@ -370,6 +374,19 @@ export default function createReportRoutes(_pgPool) {
           return Array.isArray(data) ? data : [];
         } catch { return []; }
       })();
+      
+      // Fetch ALL opportunities for pipeline value calculation
+      const allOppsP = (async () => {
+        try {
+          let q = supabase.from('opportunities').select('id,name,amount,stage,created_date');
+          if (tenant_id) q = q.eq('tenant_id', tenant_id);
+          if (!includeTestData) {
+            try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+          }
+          const { data } = await q;
+          return Array.isArray(data) ? data : [];
+        } catch { return []; }
+      })();
 
       const [
         totalContacts,
@@ -384,6 +401,7 @@ export default function createReportRoutes(_pgPool) {
         recentActivities,
         recentLeads,
         recentOpportunities,
+        allOpps,
       ] = await Promise.all([
         totalContactsP,
         totalAccountsP,
@@ -397,7 +415,23 @@ export default function createReportRoutes(_pgPool) {
         recentActivitiesP,
         recentLeadsP,
         recentOppsP,
+        allOppsP,
       ]);
+
+      // Calculate pipeline value from ALL opportunities
+      const pipelineValue = allOpps.reduce((sum, opp) => {
+        if (!['won', 'closed_won', 'lost', 'closed_lost'].includes(opp.stage)) {
+          return sum + (parseFloat(opp.amount) || 0);
+        }
+        return sum;
+      }, 0);
+
+      const wonValue = allOpps.reduce((sum, opp) => {
+        if (opp.stage === 'won' || opp.stage === 'closed_won') {
+          return sum + (parseFloat(opp.amount) || 0);
+        }
+        return sum;
+      }, 0);
 
       const bundle = {
         stats: {
@@ -410,6 +444,8 @@ export default function createReportRoutes(_pgPool) {
           openOpportunities,
           newLeadsLast30Days: newLeads,
           activitiesLast30Days: activitiesLast30,
+          pipelineValue,
+          wonValue,
         },
         lists: {
           recentActivities,

@@ -126,7 +126,7 @@ const navItems = [
   { href: "Calendar", icon: Calendar, label: "Calendar" },
   { href: "ConstructionProjects", icon: HardHat, label: "Construction Projects" }, // Construction staffing module
   { href: "Workers", icon: Users, label: "Workers" }, // Contractors/temp labor management
-  { href: "BizDevSources", icon: Database, label: "BizDev Sources" },
+  { href: "BizDevSources", icon: Database, label: "BizDev Sources" }, // Business development sources
   { href: "CashFlow", icon: DollarSign, label: "Cash Flow" },
   { href: "DocumentProcessing", icon: FileText, label: "Document Processing" },
   {

@@ -505,15 +505,15 @@ export default function createTenantRoutes(_pgPool) {
         accent_color: row.branding_settings?.accent_color ||
           row.metadata?.accent_color || null,
         settings: row.branding_settings || {}, // For backward compatibility
-        // Extract metadata fields to top-level for UI
-        country: row.metadata?.country || "",
-        major_city: row.metadata?.major_city || "",
-        industry: row.metadata?.industry || "other",
-        business_model: row.metadata?.business_model || "b2b",
-        geographic_focus: row.metadata?.geographic_focus || "north_america",
-        elevenlabs_agent_id: row.metadata?.elevenlabs_agent_id || "",
-        display_order: row.metadata?.display_order ?? 0,
-        domain: row.metadata?.domain || "",
+        // Use direct columns (migrated from metadata), fallback to metadata for older records
+        country: row.country || row.metadata?.country || "",
+        major_city: row.major_city || row.metadata?.major_city || "",
+        industry: row.industry || row.metadata?.industry || "other",
+        business_model: row.business_model || row.metadata?.business_model || "b2b",
+        geographic_focus: row.geographic_focus || row.metadata?.geographic_focus || "north_america",
+        elevenlabs_agent_id: row.elevenlabs_agent_id || row.metadata?.elevenlabs_agent_id || "",
+        display_order: row.display_order ?? row.metadata?.display_order ?? 0,
+        domain: row.domain || row.metadata?.domain || "",
       };
 
       res.json({
@@ -668,11 +668,45 @@ export default function createTenantRoutes(_pgPool) {
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       const updateObj = {};
-      // Reconstruct from updates/params since we built merged objects above
+
+      // Direct column updates
       if (name !== undefined) updateObj.name = name;
       if (status !== undefined) updateObj.status = status;
-      if (shouldUpdateMetadata) updateObj.metadata = params.find(p => typeof p === 'object' && (p.country !== undefined || p.display_order !== undefined || p.domain !== undefined || p.major_city !== undefined || p.industry !== undefined || p.business_model !== undefined || p.geographic_focus !== undefined) ) || params.find(p => p && p.logo_url === undefined);
-      if (settings !== undefined || hasBrandingFields) updateObj.branding_settings = params.find(p => p && (p.logo_url !== undefined || p.primary_color !== undefined || p.accent_color !== undefined) ) || params.find(p => p && p.branding_settings === undefined && p.country === undefined);
+      if (country !== undefined) updateObj.country = country;
+      if (major_city !== undefined) updateObj.major_city = major_city;
+      if (industry !== undefined) updateObj.industry = industry;
+      if (business_model !== undefined) updateObj.business_model = business_model;
+      if (geographic_focus !== undefined) updateObj.geographic_focus = geographic_focus;
+      if (elevenlabs_agent_id !== undefined) updateObj.elevenlabs_agent_id = elevenlabs_agent_id;
+      if (display_order !== undefined) updateObj.display_order = display_order;
+      if (domain !== undefined) updateObj.domain = domain;
+
+      // Handle metadata (for non-flattened fields)
+      if (metadata !== undefined) {
+        updateObj.metadata = metadata;
+      }
+
+      // Handle branding settings
+      if (settings !== undefined || hasBrandingFields) {
+        // Fetch existing tenant branding_settings to merge
+        const selBrand = supabase.from('tenant').select('branding_settings');
+        const { data: cur, error: brandErr } = isUUID
+          ? await selBrand.eq('id', id).single()
+          : await selBrand.eq('tenant_id', id).single();
+        if (brandErr && brandErr.code !== 'PGRST116') throw new Error(brandErr.message);
+        const existingBranding = cur?.branding_settings || {};
+
+        // Merge into branding_settings
+        const mergedBranding = {
+          ...existingBranding,
+          ...(settings?.branding_settings || branding_settings || {}),
+          ...(logo_url !== undefined ? { logo_url } : {}),
+          ...(primary_color !== undefined ? { primary_color } : {}),
+          ...(accent_color !== undefined ? { accent_color } : {}),
+        };
+        updateObj.branding_settings = mergedBranding;
+      }
+
       updateObj.updated_at = nowIso;
 
       const upd = supabase.from('tenant').update(updateObj).select();
@@ -696,15 +730,15 @@ export default function createTenantRoutes(_pgPool) {
         accent_color: row.branding_settings?.accent_color ||
           row.metadata?.accent_color || null,
         settings: row.branding_settings || {}, // For backward compatibility
-        // Extract metadata fields to top-level for UI
-        country: row.metadata?.country || "",
-        major_city: row.metadata?.major_city || "",
-        industry: row.metadata?.industry || "other",
-        business_model: row.metadata?.business_model || "b2b",
-        geographic_focus: row.metadata?.geographic_focus || "north_america",
-        elevenlabs_agent_id: row.metadata?.elevenlabs_agent_id || "",
-        display_order: row.metadata?.display_order ?? 0,
-        domain: row.metadata?.domain || "",
+        // Use direct columns (migrated from metadata), fallback to metadata for older records
+        country: row.country || row.metadata?.country || "",
+        major_city: row.major_city || row.metadata?.major_city || "",
+        industry: row.industry || row.metadata?.industry || "other",
+        business_model: row.business_model || row.metadata?.business_model || "b2b",
+        geographic_focus: row.geographic_focus || row.metadata?.geographic_focus || "north_america",
+        elevenlabs_agent_id: row.elevenlabs_agent_id || row.metadata?.elevenlabs_agent_id || "",
+        display_order: row.display_order ?? row.metadata?.display_order ?? 0,
+        domain: row.domain || row.metadata?.domain || "",
       };
 
       // Create audit log entry

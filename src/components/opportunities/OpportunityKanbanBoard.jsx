@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { DragDropContext, Droppable } from '@hello-pangea/dnd';
 import OpportunityKanbanCard from './OpportunityKanbanCard';
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,18 +9,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import OpportunityForm from './OpportunityForm';
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 import { toast } from "sonner";
 
 const stageConfig = {
-  prospecting: { title: 'Prospecting', color: "border-t-blue-500" },
-  qualification: { title: 'Qualification', color: "border-t-yellow-500" },
-  proposal: { title: 'Proposal', color: "border-t-orange-500" },
-  negotiation: { title: 'Negotiation', color: "border-t-purple-500" },
-  closed_won: { title: 'Closed Won', color: "border-t-emerald-500" },
-  closed_lost: { title: 'Closed Lost', color: "border-t-red-500" },
+  prospecting: { title: 'Prospecting', color: "border-t-blue-500", cardId: 'opportunity_prospecting' },
+  qualification: { title: 'Qualification', color: "border-t-yellow-500", cardId: 'opportunity_qualification' },
+  proposal: { title: 'Proposal', color: "border-t-orange-500", cardId: 'opportunity_proposal' },
+  negotiation: { title: 'Negotiation', color: "border-t-purple-500", cardId: 'opportunity_negotiation' },
+  closed_won: { title: 'Closed Won', color: "border-t-emerald-500", cardId: 'opportunity_won' },
+  closed_lost: { title: 'Closed Lost', color: "border-t-red-500", cardId: 'opportunity_lost' },
 };
-
-const stages = Object.keys(stageConfig);
 
 export default function OpportunityKanbanBoard({ opportunities, accounts, contacts, users, leads, onStageChange, onDelete, onView, onDataRefresh }) {
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -28,6 +27,20 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
   const [localOpportunities, setLocalOpportunities] = useState(opportunities);
   // Track ids with an in-flight stage update to prevent premature reversion from parent prop sync
   const [pendingStageIds, setPendingStageIds] = useState(new Set());
+  
+  // Get visibility preferences from status cards
+  const { isCardVisible, getCardLabel } = useStatusCardPreferences();
+  
+  // Filter stages based on visibility preferences
+  const visibleStages = useMemo(() => {
+    return Object.keys(stageConfig)
+      .filter(stage => isCardVisible(stageConfig[stage].cardId))
+      .map(stage => ({
+        id: stage,
+        title: getCardLabel(stageConfig[stage].cardId) || stageConfig[stage].title,
+        color: stageConfig[stage].color,
+      }));
+  }, [isCardVisible, getCardLabel]);
 
   // Sync local state with props unless an optimistic stage change is pending for specific ids.
   React.useEffect(() => {
@@ -208,19 +221,25 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
       </div>
       
       <DragDropContext onDragEnd={onDragEnd}>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 p-4">
-          {stages.map(stageId => {
-            const stageOpportunities = localOpportunities.filter(opp => opp.stage === stageId);
+        <div className={`grid gap-6 p-4 ${
+          visibleStages.length === 2 ? 'grid-cols-1 md:grid-cols-2' :
+          visibleStages.length === 3 ? 'grid-cols-1 md:grid-cols-3' :
+          visibleStages.length === 4 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4' :
+          visibleStages.length === 5 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5' :
+          'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6'
+        }`}>
+          {visibleStages.map(stage => {
+            const stageOpportunities = localOpportunities.filter(opp => opp.stage === stage.id);
             return (
-              <div key={stageId} className="flex flex-col h-full">
-                <Card className={`kanban-stage-card bg-slate-800 border border-t-4 border-l-slate-700 border-r-slate-700 border-b-slate-700 ${stageConfig[stageId].color} shadow-md mb-4 rounded-lg`}>
+              <div key={stage.id} className="flex flex-col h-full">
+                <Card className={`kanban-stage-card bg-slate-800 border border-t-4 border-l-slate-700 border-r-slate-700 border-b-slate-700 ${stage.color} shadow-md mb-4 rounded-lg`}>
                   <CardHeader className="py-3 px-4">
                     <CardTitle className="text-base font-semibold text-slate-100">
-                      {stageConfig[stageId].title} ({stageOpportunities.length})
+                      {stage.title} ({stageOpportunities.length})
                     </CardTitle>
                   </CardHeader>
                 </Card>
-                <Droppable droppableId={stageId}>
+                <Droppable droppableId={stage.id}>
                   {(provided, snapshot) => (
                     <div
                       {...provided.droppableProps}

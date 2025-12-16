@@ -18,6 +18,7 @@ import TagInput from "../shared/TagInput";
 import LazyAccountSelector from "../shared/LazyAccountSelector";
 import CreateAccountDialog from "../accounts/CreateAccountDialog";
 import { useApiManager } from "../shared/ApiManager";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 
 // Utility: Normalize date to yyyy-MM-dd format for HTML5 date inputs
 const formatDateForInput = (dateValue) => {
@@ -131,6 +132,29 @@ export default function LeadForm({
   }, [employees, user, isManager]);
 
   const isSuperadmin = user?.role === 'superadmin';
+  const { isCardVisible, getCardLabel } = useStatusCardPreferences();
+
+  // Filter lead status options based on card visibility and apply custom labels
+  // Keep hidden statuses if the current lead has them
+  const filteredStatusOptions = useMemo(() => {
+    const statusCardMap = {
+      'new': 'lead_new',
+      'contacted': 'lead_contacted',
+      'qualified': 'lead_qualified',
+      'unqualified': 'lead_rejected',
+      'converted': 'lead_converted',
+      'lost': 'lead_rejected',
+    };
+    
+    return statusOptions
+      .filter(option => 
+        isCardVisible(statusCardMap[option.value]) || formData.status === option.value
+      )
+      .map(option => ({
+        ...option,
+        label: getCardLabel(statusCardMap[option.value]) || option.label
+      }));
+  }, [isCardVisible, getCardLabel, formData.status]);
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -457,6 +481,33 @@ export default function LeadForm({
               </Alert>
             )}
 
+            {/* B2B leads: Show Account/Company first */}
+            {formData.lead_type === 'b2b' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="company" className="text-slate-200">Company</Label>
+                  <Input 
+                    id="company" 
+                    value={formData.company || ''}
+                    onChange={(e) => handleChange('company', e.target.value)} 
+                    className="mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500" 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="account_id" className="text-slate-200">Associated Account</Label>
+                  <LazyAccountSelector
+                    value={formData.account_id}
+                    onChange={(value) => handleChange('account_id', value)}
+                    onCreateNew={() => setShowCreateAccountDialog(true)}
+                    tenantFilter={getTenantFilter(user, selectedTenantId)}
+                    className="mt-1 bg-slate-700 border-slate-600 text-slate-200"
+                    contentClassName="bg-slate-800 border-slate-700"
+                    itemClassName="text-slate-200 hover:bg-slate-700"
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="first_name" className="text-slate-200">
@@ -554,29 +605,32 @@ export default function LeadForm({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="company" className="text-slate-200">Company</Label>
-                <Input 
-                  id="company" 
-                  value={formData.company || ''}
-                  onChange={(e) => handleChange('company', e.target.value)} 
-                  className="mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500" 
-                />
+            {/* B2C leads: Show Company/Account fields here */}
+            {formData.lead_type !== 'b2b' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="company" className="text-slate-200">Company</Label>
+                  <Input 
+                    id="company" 
+                    value={formData.company || ''}
+                    onChange={(e) => handleChange('company', e.target.value)} 
+                    className="mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500" 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="account_id" className="text-slate-200">Associated Account</Label>
+                  <LazyAccountSelector
+                    value={formData.account_id}
+                    onChange={(value) => handleChange('account_id', value)}
+                    onCreateNew={() => setShowCreateAccountDialog(true)}
+                    tenantFilter={getTenantFilter(user, selectedTenantId)} // Pass current tenant filter
+                    className="mt-1 bg-slate-700 border-slate-600 text-slate-200"
+                    contentClassName="bg-slate-800 border-slate-700"
+                    itemClassName="text-slate-200 hover:bg-slate-700"
+                  />
+                </div>
               </div>
-              <div>
-                <Label htmlFor="account_id" className="text-slate-200">Associated Account</Label>
-                <LazyAccountSelector
-                  value={formData.account_id}
-                  onChange={(value) => handleChange('account_id', value)}
-                  onCreateNew={() => setShowCreateAccountDialog(true)}
-                  tenantFilter={getTenantFilter(user, selectedTenantId)} // Pass current tenant filter
-                  className="mt-1 bg-slate-700 border-slate-600 text-slate-200"
-                  contentClassName="bg-slate-800 border-slate-700"
-                  itemClassName="text-slate-200 hover:bg-slate-700"
-                />
-              </div>
-            </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                <div>
@@ -613,7 +667,7 @@ export default function LeadForm({
                     <SelectValue placeholder="Select status..." />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-slate-700">
-                    {statusOptions.map((option) => (
+                    {filteredStatusOptions.map((option) => (
                       <SelectItem key={option.value} value={option.value} className="text-slate-200 hover:bg-slate-700">
                         {option.label}
                       </SelectItem>

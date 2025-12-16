@@ -30,12 +30,13 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { BizDevSource } from "@/api/entities";
+import { BizDevSource, Tenant } from "@/api/entities";
 import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
 import { Opportunity } from "@/api/entities";
 import { Activity } from "@/api/entities";
 import { Lead } from "@/api/entities";
+import { useTenant } from "@/components/shared/tenantContext";
 
 export default function BizDevSourceDetailPanel({ 
   bizDevSource, 
@@ -48,9 +49,16 @@ export default function BizDevSourceDetailPanel({
   const [promoting, setPromoting] = useState(false);
   const [showPromoteConfirm, setShowPromoteConfirm] = useState(false);
   const [linkedLeads, setLinkedLeads] = useState([]);
+  const [leadIdsArray, setLeadIdsArray] = useState([]);
   const [creatingOpportunity, setCreatingOpportunity] = useState(false);
   const [linkedOpportunities, setLinkedOpportunities] = useState([]);
   const [currentSource, setCurrentSource] = useState(bizDevSource);
+  const [businessModel, setBusinessModel] = useState("b2b"); // Default to B2B
+  const { selectedTenantId } = useTenant();
+
+  // Determine if we're in B2C mode (person-first display)
+  const isB2C = businessModel === 'b2c';
+  const isHybrid = businessModel === 'hybrid';
 
   // Update currentSource when bizDevSource prop changes
   useEffect(() => {
@@ -59,16 +67,53 @@ export default function BizDevSourceDetailPanel({
     }
   }, [bizDevSource]);
 
+  // Load tenant's business model
+  useEffect(() => {
+    const loadTenantModel = async () => {
+      try {
+        const tid = bizDevSource?.tenant_id || selectedTenantId;
+        if (!tid) return;
+        const tenantData = await Tenant.get(tid);
+        if (tenantData?.business_model) {
+          setBusinessModel(tenantData.business_model);
+        }
+      } catch (err) {
+        console.error('[BizDevSourceDetailPanel] Failed to load tenant model:', err);
+      }
+    };
+    loadTenantModel();
+  }, [bizDevSource?.tenant_id, selectedTenantId]);
+
   // Load linked data (leads and opportunities)
   useEffect(() => {
     const loadLinkedData = async () => {
       if (!currentSource?.id) return;
 
       try {
-        // Load linked leads
-        if (currentSource.lead_ids && currentSource.lead_ids.length > 0) {
+        // Parse lead_ids which may be stored as a JSON string in the DB
+        let parsedLeadIds = [];
+        if (currentSource.lead_ids) {
+          if (Array.isArray(currentSource.lead_ids)) {
+            parsedLeadIds = currentSource.lead_ids;
+          } else {
+            try {
+              parsedLeadIds = JSON.parse(currentSource.lead_ids);
+            } catch (e) {
+              // Fallback: treat as comma‑separated string
+              parsedLeadIds = String(currentSource.lead_ids)
+                .split(',')
+                .map(id => id.trim())
+                .filter(Boolean);
+            }
+          }
+        }
+        // sync state for UI checks
+        setLeadIdsArray(parsedLeadIds);
+
+        // Load linked leads using the parsed array
+        if (parsedLeadIds.length > 0) {
           const leads = await Lead.list();
-          const filtered = leads.filter(l => currentSource.lead_ids.includes(l.id));
+          const filtered = leads.filter(l => parsedLeadIds.includes(l.id));
           setLinkedLeads(filtered);
         } else {
           setLinkedLeads([]);
@@ -276,8 +321,18 @@ export default function BizDevSourceDetailPanel({
     }
   };
 
-  // Get display name - prioritize company name
-  const displayName = currentSource.company_name || currentSource.dba_name || 'Unnamed Company';
+  // Get display name - adapts based on business model
+  // B2C: Person-first display (contact_person takes priority)
+  // B2B: Company-first display (company_name takes priority)
+  const displayName = isB2C
+    ? (currentSource.contact_person || currentSource.company_name || currentSource.dba_name || 'Unnamed Contact')
+    : (currentSource.company_name || currentSource.dba_name || currentSource.contact_person || 'Unnamed Company');
+
+  // Secondary display info (shows the "other" entity type)
+  const secondaryName = isB2C
+    ? (currentSource.company_name || currentSource.dba_name) // Show company for B2C
+    : currentSource.contact_person; // Show contact for B2B
+
   const sourceName = currentSource.source || currentSource.source_name;
   const phone = currentSource.phone_number || currentSource.contact_phone;
   const email = currentSource.email || currentSource.contact_email;
@@ -293,8 +348,12 @@ export default function BizDevSourceDetailPanel({
       <CardHeader className="border-b border-slate-700 sticky top-0 bg-slate-800 z-10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`w-12 h-12 rounded-lg ${hasActivity ? 'bg-green-900/30 border-green-700/50' : 'bg-blue-900/30 border-blue-700/50'} border flex items-center justify-center relative`}>
-              <Building2 className={`w-6 h-6 ${hasActivity ? 'text-green-400' : 'text-blue-400'}`} />
+            <div className={`w-12 h-12 rounded-lg ${hasActivity ? 'bg-green-900/30 border-green-700/50' : isB2C ? 'bg-purple-900/30 border-purple-700/50' : 'bg-blue-900/30 border-blue-700/50'} border flex items-center justify-center relative`}>
+              {isB2C ? (
+                <User className={`w-6 h-6 ${hasActivity ? 'text-green-400' : 'text-purple-400'}`} />
+              ) : (
+                <Building2 className={`w-6 h-6 ${hasActivity ? 'text-green-400' : 'text-blue-400'}`} />
+              )}
               {hasActivity && (
                 <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-800 flex items-center justify-center">
                   <CheckCircle className="w-3 h-3 text-white" />
@@ -303,7 +362,24 @@ export default function BizDevSourceDetailPanel({
             </div>
             <div>
               <CardTitle className="text-slate-100 text-xl">{displayName}</CardTitle>
-              {currentSource.dba_name && currentSource.dba_name !== displayName && (
+              {/* Secondary name - show company for B2C or contact for B2B */}
+              {secondaryName && (
+                <p className="text-sm text-slate-300 mt-0.5 flex items-center gap-1">
+                  {isB2C ? (
+                    <>
+                      <Building2 className="w-3 h-3 text-slate-400" />
+                      {secondaryName}
+                    </>
+                  ) : (
+                    <>
+                      <User className="w-3 h-3 text-slate-400" />
+                      {secondaryName}
+                    </>
+                  )}
+                </p>
+              )}
+              {/* DBA name if different from display name and secondary name */}
+              {currentSource.dba_name && currentSource.dba_name !== displayName && currentSource.dba_name !== secondaryName && (
                 <p className="text-sm text-slate-400 mt-0.5">
                   DBA: {currentSource.dba_name}
                 </p>
@@ -383,14 +459,14 @@ export default function BizDevSourceDetailPanel({
             </Button>
           )}
 
-          {/* Promote to Account - Only show after business is won */}
+          {/* Promote to Lead - Only show when source is Active and not yet promoted */}
           {canPromote && (
             <Button
               variant="outline"
               onClick={() => setShowPromoteConfirm(true)}
               disabled={promoting}
               className="border-green-600 text-green-400 hover:bg-green-900/30"
-              title="Promote to Account after winning business"
+              title="Promote this source to a Lead"
             >
               {promoting ? (
                 <>
@@ -400,18 +476,18 @@ export default function BizDevSourceDetailPanel({
               ) : (
                 <>
                   <TrendingUp className="w-4 h-4 mr-2" />
-                  Promote to Account
+                    Promote to Lead
                 </>
               )}
             </Button>
           )}
           
-          {/* View Linked Account - Show if already promoted */}
-          {isPromoted && currentSource.account_id && (
-            <Link to={createPageUrl(`Accounts?id=${currentSource.account_id}`)}>
+          {/* View Linked Lead - Show if already promoted */}
+          {isPromoted && currentSource.metadata?.primary_lead_id && (
+            <Link to={createPageUrl(`Leads?id=${currentSource.metadata.primary_lead_id}`)}>
               <Button variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-700">
                 <ExternalLink className="w-4 h-4 mr-2" />
-                View Linked Account
+                View Linked Lead
               </Button>
             </Link>
           )}
@@ -442,12 +518,12 @@ export default function BizDevSourceDetailPanel({
 
         {/* Workflow Info - LIGHTENED BACKGROUND */}
         {/* Only show workflow hint if not archived, not promoted, and has linked leads */}
-        {!isArchived && !isPromoted && currentSource.lead_ids && currentSource.lead_ids.length > 0 && ( 
+        {!isArchived && !isPromoted && leadIdsArray && leadIdsArray.length > 0 && ( 
           <Alert className="mt-4 bg-blue-50 border-blue-200">
             <Info className="h-4 w-4 text-blue-700" />
             <AlertTitle className="text-blue-900 font-semibold">Workflow</AlertTitle>
             <AlertDescription className="text-blue-800">
-              Create an opportunity to start pursuing this prospect. Promote to Account after winning business.
+              Create an opportunity to start pursuing this prospect. Promote to Lead after winning business.
             </AlertDescription>
           </Alert>
         )}
@@ -548,11 +624,11 @@ export default function BizDevSourceDetailPanel({
         {showPromoteConfirm && canPromote && ( 
           <Alert className="bg-green-50 border-green-200">
             <AlertCircle className="h-4 w-4 text-green-700" />
-            <AlertTitle className="text-green-900 font-semibold">Promote to Account?</AlertTitle>
+            <AlertTitle className="text-green-900 font-semibold">Promote to Lead?</AlertTitle>
             <AlertDescription className="text-green-800">
               <p className="mb-3">
-                This will create a permanent Account record for <strong>{currentSource.company_name}</strong>. 
-                Use this when business is won and they become a customer.
+                This will create a Lead from <strong>{currentSource.company_name || currentSource.dba_name || currentSource.contact_person || currentSource.source || 'this prospect'}</strong>.
+                All available data will be carried forward to the Lead. Later, you can promote qualified leads to Accounts and Opportunities.
               </p>
               <div className="mt-3 flex gap-2">
                 <Button
@@ -593,13 +669,13 @@ export default function BizDevSourceDetailPanel({
             <AlertTitle className="text-blue-900 font-semibold">Already Promoted</AlertTitle>
             <AlertDescription className="text-blue-800">
               <p className="mt-1">
-                This source has been promoted to Account: <strong>{currentSource.account_name}</strong>
+                This source has been promoted to Lead: <strong>{currentSource.metadata?.primary_lead_id}</strong>
               </p>
-              {currentSource.account_id && (
-                <Link to={createPageUrl(`Accounts?id=${currentSource.account_id}`)}>
+              {currentSource.metadata?.primary_lead_id && (
+                <Link to={createPageUrl(`Leads?id=${currentSource.metadata.primary_lead_id}`)}>
                   <Button size="sm" variant="outline" className="mt-2 border-blue-300 text-blue-700 hover:bg-blue-50">
                     <ExternalLink className="w-4 h-4 mr-2" />
-                    View Account
+                    View Lead
                   </Button>
                 </Link>
               )}
@@ -671,17 +747,66 @@ export default function BizDevSourceDetailPanel({
           </Card>
         )}
 
-        {/* Company Information */}
+        {/* Primary Information - Adapts to B2B/B2C */}
         <Card className="bg-slate-700/50 border-slate-600">
           <CardHeader>
-            <CardTitle className="text-slate-200">Company Information</CardTitle>
+            <CardTitle className="text-slate-200 flex items-center gap-2">
+              {isB2C ? (
+                <>
+                  <User className="w-4 h-4 text-purple-400" />
+                  Contact Information
+                </>
+              ) : (
+                <>
+                  <Building2 className="w-4 h-4 text-blue-400" />
+                  Company Information
+                </>
+              )}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            {/* B2C: Show contact person first */}
+            {isB2C && currentSource.contact_person && (
+              <div className="flex items-start gap-3">
+                <User className="w-4 h-4 text-slate-400 mt-0.5" />
+                <div>
+                  <p className="text-xs text-slate-400">Contact Name</p>
+                  <p className="text-sm text-slate-200">{currentSource.contact_person}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Email and Phone - prioritized for B2C */}
+            {isB2C && currentSource.email && (
+              <div className="flex items-start gap-3">
+                <Mail className="w-4 h-4 text-slate-400 mt-0.5" />
+                <div>
+                  <p className="text-xs text-slate-400">Email</p>
+                  <a href={`mailto:${currentSource.email}`} className="text-sm text-blue-400 hover:underline">
+                    {currentSource.email}
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {isB2C && currentSource.phone_number && (
+              <div className="flex items-start gap-3">
+                <Phone className="w-4 h-4 text-slate-400 mt-0.5" />
+                <div>
+                  <p className="text-xs text-slate-400">Phone</p>
+                  <a href={`tel:${currentSource.phone_number}`} className="text-sm text-blue-400 hover:underline">
+                    {currentSource.phone_number}
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* Company fields - always shown for B2B, shown after contact for B2C if available */}
             {currentSource.company_name && (
               <div className="flex items-start gap-3">
                 <Building2 className="w-4 h-4 text-slate-400 mt-0.5" />
                 <div>
-                  <p className="text-xs text-slate-400">Company Name</p>
+                  <p className="text-xs text-slate-400">{isB2C ? 'Company (Optional)' : 'Company Name'}</p>
                   <p className="text-sm text-slate-200">{currentSource.company_name}</p>
                 </div>
               </div>
@@ -697,7 +822,8 @@ export default function BizDevSourceDetailPanel({
               </div>
             )}
             
-            {currentSource.industry && (
+            {/* Industry - only show for B2B or Hybrid */}
+            {!isB2C && currentSource.industry && (
               <div className="flex items-start gap-3">
                 <Building2 className="w-4 h-4 text-slate-400 mt-0.5" />
                 <div>
@@ -707,7 +833,8 @@ export default function BizDevSourceDetailPanel({
               </div>
             )}
             
-            {currentSource.website && (
+            {/* Website - only show for B2B or Hybrid */}
+            {!isB2C && currentSource.website && (
               <div className="flex items-start gap-3">
                 <Globe className="w-4 h-4 text-slate-400 mt-0.5" />
                 <div>
@@ -724,7 +851,8 @@ export default function BizDevSourceDetailPanel({
               </div>
             )}
             
-            {currentSource.email && (
+            {/* Email and Phone for B2B (after company fields) */}
+            {!isB2C && currentSource.email && (
               <div className="flex items-start gap-3">
                 <Mail className="w-4 h-4 text-slate-400 mt-0.5" />
                 <div>
@@ -736,7 +864,7 @@ export default function BizDevSourceDetailPanel({
               </div>
             )}
             
-            {currentSource.phone_number && (
+            {!isB2C && currentSource.phone_number && (
               <div className="flex items-start gap-3">
                 <Phone className="w-4 h-4 text-slate-400 mt-0.5" />
                 <div>
@@ -744,6 +872,17 @@ export default function BizDevSourceDetailPanel({
                   <a href={`tel:${currentSource.phone_number}`} className="text-sm text-blue-400 hover:underline">
                     {currentSource.phone_number}
                   </a>
+                </div>
+              </div>
+            )}
+
+            {/* Contact Person for B2B (shown after company info) */}
+            {!isB2C && currentSource.contact_person && (
+              <div className="flex items-start gap-3">
+                <User className="w-4 h-4 text-slate-400 mt-0.5" />
+                <div>
+                  <p className="text-xs text-slate-400">Contact Person</p>
+                  <p className="text-sm text-slate-200">{currentSource.contact_person}</p>
                 </div>
               </div>
             )}
@@ -764,7 +903,8 @@ export default function BizDevSourceDetailPanel({
               </div>
             )}
 
-            {currentSource.industry_license && (
+            {/* License info - typically B2B only */}
+            {!isB2C && currentSource.industry_license && (
               <div className="flex items-start gap-3">
                 <FileText className="w-4 h-4 text-slate-400 mt-0.5" />
                 <div>

@@ -16,16 +16,62 @@ import {
   Users,
   Save,
   X,
+  User,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { BizDevSource } from "@/api/entities";
+import { BizDevSource, Tenant } from "@/api/entities";
+import { useTenant } from "@/components/shared/tenantContext";
 
 export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, isSelected, onSelect, onUpdate, tenantId }) {
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesText, setNotesText] = useState(source.notes || "");
   const [savingNotes, setSavingNotes] = useState(false);
+  const [businessModel, setBusinessModel] = useState("b2b"); // Default to B2B for backward compatibility
   const isPromoted = source.status === 'Promoted' || source.status === 'converted';
+  const { selectedTenantId } = useTenant();
+  // New state to hold parsed lead IDs for UI checks
+  const [leadIdsArray, setLeadIdsArray] = useState([]);
+
+  // Load tenant's business model to determine display mode
+  useEffect(() => {
+    const loadTenantModel = async () => {
+      try {
+        const tid = source.tenant_id || tenantId || selectedTenantId;
+        if (!tid) return;
+        const tenantData = await Tenant.get(tid);
+        if (tenantData?.business_model) {
+          setBusinessModel(tenantData.business_model);
+        }
+      } catch (err) {
+        console.error('[BizDevSourceCard] Failed to load tenant model:', err);
+      }
+    };
+    loadTenantModel();
+  }, [source.tenant_id, tenantId, selectedTenantId]);
+
+  // Parse lead_ids which may be stored as JSON string or array
+  useEffect(() => {
+    let parsed = [];
+    if (source.lead_ids) {
+      if (Array.isArray(source.lead_ids)) {
+        parsed = source.lead_ids;
+      } else {
+        try {
+          parsed = JSON.parse(source.lead_ids);
+        } catch (e) {
+          parsed = String(source.lead_ids)
+            .split(',')
+            .map(id => id.trim())
+            .filter(Boolean);
+        }
+      }
+    }
+    setLeadIdsArray(parsed);
+  }, [source.lead_ids]);
+  // Determine if we're in B2C mode (person-first display)
+  const isB2C = businessModel === 'b2c';
+  const isHybrid = businessModel === 'hybrid';
   
   const handleSaveNotes = async () => {
     try {
@@ -105,10 +151,20 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
   // Check if this source has been "acted upon" (has opportunities, leads, or activities linked)
   const hasActivity = source.leads_generated > 0 || 
                       source.opportunities_created > 0 || 
-                      (source.lead_ids && source.lead_ids.length > 0);
-  
-  // Get display name - prioritize company name
-  const displayName = source.company_name || source.dba_name || 'Unnamed Company';
+    (leadIdsArray && leadIdsArray.length > 0);
+
+  // Get display name - adapts based on business model
+  // B2C: Person-first display (contact_person takes priority)
+  // B2B: Company-first display (company_name takes priority)
+  const displayName = isB2C
+    ? (source.contact_person || source.company_name || source.dba_name || 'Unnamed Contact')
+    : (source.company_name || source.dba_name || source.contact_person || 'Unnamed Company');
+
+  // Secondary display info (shows the "other" entity type)
+  const secondaryName = isB2C
+    ? (source.company_name || source.dba_name) // Show company for B2C
+    : source.contact_person; // Show contact for B2B
+
   const sourceName = source.source || source.source_name;
   
   // Get contact info
@@ -146,11 +202,15 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
             </div>
           )}
 
-          {/* Left side - Company info */}
+          {/* Left side - Entity info (adapts to B2B/B2C) */}
           <div className="flex-1 space-y-1">
             <div className="flex items-start gap-3">
-              <div className={`w-10 h-10 rounded-lg ${hasActivity ? 'bg-green-900/30 border-green-700/50' : 'bg-blue-900/30 border-blue-700/50'} border flex items-center justify-center flex-shrink-0 relative`}>
-                <Building2 className={`w-5 h-5 ${hasActivity ? 'text-green-400' : 'text-blue-400'}`} />
+              <div className={`w-10 h-10 rounded-lg ${hasActivity ? 'bg-green-900/30 border-green-700/50' : isB2C ? 'bg-purple-900/30 border-purple-700/50' : 'bg-blue-900/30 border-blue-700/50'} border flex items-center justify-center flex-shrink-0 relative`}>
+                {isB2C ? (
+                  <User className={`w-5 h-5 ${hasActivity ? 'text-green-400' : 'text-purple-400'}`} />
+                ) : (
+                  <Building2 className={`w-5 h-5 ${hasActivity ? 'text-green-400' : 'text-blue-400'}`} />
+                )}
                 {hasActivity && (
                   <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border border-slate-800" title="Has activity" />
                 )}
@@ -162,15 +222,25 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
                     <span className="ml-2 text-sm font-normal text-blue-400">→ {source.account_name}</span>
                   )}
                 </h3>
-                {source.dba_name && source.dba_name !== displayName && (
-                  <p className="text-sm text-slate-400">DBA: {source.dba_name}</p>
-                )}
-                {/* Contact person inline with company */}
-                {contactPerson && (
+                {/* Secondary name - show company for B2C or contact for B2B */}
+                {secondaryName && (
                   <p className="text-sm text-slate-300 flex items-center gap-1">
-                    <Users className="w-3 h-3 text-slate-400" />
-                    {contactPerson}
+                    {isB2C ? (
+                      <>
+                        <Building2 className="w-3 h-3 text-slate-400" />
+                        {secondaryName}
+                      </>
+                    ) : (
+                      <>
+                        <User className="w-3 h-3 text-slate-400" />
+                        {secondaryName}
+                      </>
+                    )}
                   </p>
+                )}
+                {/* DBA name if different from display name */}
+                {source.dba_name && source.dba_name !== displayName && source.dba_name !== secondaryName && (
+                  <p className="text-sm text-slate-400">DBA: {source.dba_name}</p>
                 )}
               </div>
             </div>
@@ -208,8 +278,8 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
             {/* Badges Row */}
             <div className="flex items-center gap-2 flex-wrap ml-12">
               {/* Activity indicators */}
-              {hasActivity && (
-                <Badge variant="outline" className="bg-green-900/30 text-green-400 border-green-700 text-xs">
+              {leadIdsArray && leadIdsArray.length > 0 && (
+                <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300 font-semibold">
                   <CheckCircle2 className="w-3 h-3 mr-1" />
                   Contacted
                 </Badge>

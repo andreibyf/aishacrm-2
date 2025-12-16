@@ -138,7 +138,7 @@ const defaultModules = [
     icon: Database,
     features: [
       "Bulk CSV Import",
-      "Promote to Account",
+      "Promote to Lead",
       "Archive to R2 Cloud",
       "Batch Management",
       "License Tracking",

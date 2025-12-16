@@ -16,8 +16,9 @@ import LeadSourceChart from "../components/dashboard/LeadSourceChart";
 import TopAccounts from "../components/dashboard/TopAccounts";
 import RecentActivities from "../components/dashboard/RecentActivities";
 import LeadAgeReport from "../components/dashboard/LeadAgeReport";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { getDashboardBundleFast } from "@/api/dashboard";
+import { getCachedDashboardData, cacheDashboardData } from "@/api/dashboardCache";
 import WidgetPickerModal from "../components/dashboard/WidgetPickerModal";
 import { toast } from "sonner";
 import { useUser } from "@/components/shared/useUser.js";
@@ -62,6 +63,8 @@ export default function DashboardPage() {
   const { user, reloadUser } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const [bundleLists, setBundleLists] = useState(null);
   const [stats, setStats] = useState({
     totalContacts: 0,
@@ -186,8 +189,12 @@ export default function DashboardPage() {
       return;
     }
 
-    const loadStats = async (attempt = 0) => {
-      setLoading(true);
+    const loadStats = async (attempt = 0, forceRefresh = false) => {
+      if (!forceRefresh) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
       try {
         // Inline tenant filter logic to avoid dependency issues
         let tenantFilter = {};
@@ -254,11 +261,67 @@ export default function DashboardPage() {
           return;
         }
 
+        // OPTIMIZATION: Try browser cache first (unless forcing refresh)
+        if (!forceRefresh) {
+          const cached = getCachedDashboardData(tenantFilter.tenant_id || null, !!showTestData);
+          if (cached?.data) {
+            logger.info("Dashboard loaded from browser cache", "Dashboard", {
+              userId: user.email,
+              cachedAge: Date.now() - cached.cachedAt,
+              isStale: cached.isStale,
+            });
+            // Show cached data immediately
+            const cachedStats = cached.data.stats || {};
+            setStats(prev => ({
+              ...prev,
+              totalContacts: Number(cachedStats.totalContacts || 0),
+              newLeads: Number(cachedStats.newLeadsLast30Days || 0),
+              activeOpportunities: Number(cachedStats.openOpportunities || 0),
+              pipelineValue: Number(cachedStats.pipelineValue || 0),
+              wonValue: Number(cachedStats.wonValue || 0),
+              activitiesLogged: Number(cachedStats.activitiesLast30Days || 0),
+            }));
+            setBundleLists(cached.data.lists);
+            setLastUpdated(cached.cachedAt);
+            setLoading(false);
+
+            // Fetch fresh data in background (don't block UI)
+            (async () => {
+              try {
+                const bundleResp = await cachedRequest(
+                  "Dashboard",
+                  "bundle",
+                  { tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData },
+                  () => getDashboardBundleFast({ tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData })
+                );
+                const bundle = bundleResp?.data || bundleResp;
+                if (bundle?.stats || bundle?.lists) {
+                  cacheDashboardData(tenantFilter.tenant_id || null, !!showTestData, bundle);
+                  setStats(prev => ({
+                    ...prev,
+                    ...bundle.stats,
+                    pipelineValue: Number(bundle.stats?.pipelineValue || 0),
+                    wonValue: Number(bundle.stats?.wonValue || 0),
+                  }));
+                  setBundleLists(bundle.lists);
+                  setLastUpdated(Date.now());
+                }
+              } catch (e) {
+                if (import.meta.env.DEV) {
+                  console.warn("[Dashboard] Background refresh error:", e?.message);
+                }
+              }
+            })();
+            return;
+          }
+        }
+
         logger.info("Loading dashboard data", "Dashboard", {
           userId: user.email,
           selectedTenantId,
           selectedEmployeeId: selectedEmail,
           showTestData,
+          forceRefresh,
         });
 
         // Fast path: fetch compact dashboard bundle first (local backend with Redis cache)
@@ -272,6 +335,11 @@ export default function DashboardPage() {
           );
           // Unwrap common shapes: either { data: {...} } or raw {...}
           bundle = bundleResp?.data || bundleResp;
+          
+          // Cache the data for next load
+          cacheDashboardData(tenantFilter.tenant_id || null, !!showTestData, bundle);
+          setLastUpdated(Date.now());
+          
           if (bundle?.lists) {
             setBundleLists(bundle.lists);
           }
@@ -280,8 +348,9 @@ export default function DashboardPage() {
               ...prev,
               totalContacts: Number(bundle.stats.totalContacts || 0),
               newLeads: Number(bundle.stats.newLeadsLast30Days || 0),
-              activeOpportunities: Number(bundle.stats.openOpportunities || 0), // keep UI snappy; refined below if needed
-              pipelineValue: Number(prev.pipelineValue || 0),
+              activeOpportunities: Number(bundle.stats.openOpportunities || 0),
+              pipelineValue: Number(bundle.stats.pipelineValue || 0),
+              wonValue: Number(bundle.stats.wonValue || 0),
               activitiesLogged: Number(bundle.stats.activitiesLast30Days || 0),
             }));
           }
@@ -370,13 +439,34 @@ export default function DashboardPage() {
           return createdDate >= thirtyDaysAgo;
         }) || [];
 
+        // Prefer bundle stats if available (they come from server calculation)
+        // Fall back to local calculation only if bundle stats are missing
+        let finalPipelineValue = 0;
+        let finalWonValue = 0;
+        
+        if (bundle?.stats) {
+          // Bundle has server-calculated values, use those
+          finalPipelineValue = Number(bundle.stats.pipelineValue || 0);
+          finalWonValue = Number(bundle.stats.wonValue || 0);
+          if (import.meta.env.DEV) {
+            console.log('[Dashboard] Using bundle stats:', { finalPipelineValue, finalWonValue, bundleStats: bundle.stats });
+          }
+        } else {
+          // No bundle or stats, calculate from loaded opportunities
+          finalPipelineValue = pipelineValue > 0 ? pipelineValue : 0;
+          finalWonValue = wonValue > 0 ? wonValue : 0;
+          if (import.meta.env.DEV) {
+            console.log('[Dashboard] Using calculated stats:', { finalPipelineValue, finalWonValue, pipelineValue, wonValue });
+          }
+        }
+
         const calculatedStats = {
           totalContacts: bundle?.stats ? Number(bundle.stats.totalContacts || 0) : (contacts?.length || 0),
           newLeads: bundle?.stats ? Number(bundle.stats.newLeadsLast30Days || 0) : newLeads.length,
           activeOpportunities: bundle?.stats ? Number(bundle.stats.openOpportunities || 0) : activeOpps.length,
           wonOpportunities: bundle?.stats ? Number(bundle.stats.wonOpportunities || 0) : wonOpps.length,
-          pipelineValue: pipelineValue,
-          wonValue: wonValue,
+          pipelineValue: finalPipelineValue,
+          wonValue: finalWonValue,
           activitiesLogged: bundle?.stats ? Number(bundle.stats.activitiesLast30Days || 0) : recentActivities.length,
           trends: {
             contacts: null,
@@ -415,6 +505,7 @@ export default function DashboardPage() {
         toast.error("Failed to load dashboard data");
       } finally {
         setLoading(false);
+        setRefreshing(false);
       }
     };
 
@@ -429,6 +520,66 @@ export default function DashboardPage() {
     logger,
   ]);
   // Removed getTenantFilter from dependencies - it's called inside the effect instead
+
+  // Refresh handler - forces fresh data fetch
+  const handleRefresh = useCallback(async () => {
+    if (!user || !authCookiesReady) return;
+    
+    // Re-trigger loadStats with forceRefresh flag
+    const tempSetLoading = setLoading;
+    const tempSetRefreshing = setRefreshing;
+    
+    // Call loadStats with forceRefresh = true
+    // This requires we wrap it in a way that the component's loadStats can be called
+    // For now, we'll trigger a full reload by clearing cache and reloading
+    const tenantFilter = {};
+    if (user.role === "superadmin") {
+      if (selectedTenantId) tenantFilter.tenant_id = selectedTenantId;
+    } else {
+      if (selectedTenantId) {
+        tenantFilter.tenant_id = selectedTenantId;
+      } else if (user.tenant_id) {
+        tenantFilter.tenant_id = user.tenant_id;
+      }
+    }
+    
+    tempSetRefreshing(true);
+    try {
+      const bundleResp = await cachedRequest(
+        "Dashboard",
+        "bundle",
+        { tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData, bust_cache: true },
+        () => getDashboardBundleFast({ tenant_id: tenantFilter.tenant_id || null, include_test_data: !!showTestData })
+      );
+      const bundle = bundleResp?.data || bundleResp;
+      
+      // Cache the fresh data
+      cacheDashboardData(tenantFilter.tenant_id || null, !!showTestData, bundle);
+      setCachedAt(Date.now());
+      setIsCached(false);
+      
+      if (bundle?.lists) setBundleLists(bundle.lists);
+      if (bundle?.stats) {
+        setStats(prev => ({
+          ...prev,
+          totalContacts: Number(bundle.stats.totalContacts || 0),
+          newLeads: Number(bundle.stats.newLeadsLast30Days || 0),
+          activeOpportunities: Number(bundle.stats.openOpportunities || 0),
+          pipelineValue: Number(bundle.stats.pipelineValue || 0),
+          wonValue: Number(bundle.stats.wonValue || 0),
+          activitiesLogged: Number(bundle.stats.activitiesLast30Days || 0),
+        }));
+      }
+      
+      setLastUpdated(Date.now());
+      toast.success("Dashboard refreshed");
+    } catch (e) {
+      toast.error("Failed to refresh dashboard");
+      console.error("[Dashboard] Refresh error:", e);
+    } finally {
+      tempSetRefreshing(false);
+    }
+  }, [user, authCookiesReady, selectedTenantId, showTestData, cachedRequest]);
 
   const handleSaveWidgetPreferences = async (newPreferences) => {
     try {
@@ -502,8 +653,11 @@ export default function DashboardPage() {
               user={user}
               selectedTenantId={selectedTenantId}
               onCustomizeClick={() => setIsPickerOpen(true)}
+              onRefresh={handleRefresh}
               showTestData={showTestData}
               onTestDataToggle={setShowTestData}
+              isRefreshing={refreshing}
+              cachedAt={lastUpdated}
             />
 
             <WidgetPickerModal

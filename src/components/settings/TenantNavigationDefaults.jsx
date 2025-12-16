@@ -34,6 +34,7 @@ const NAV_ITEMS = [
     { key: "Workflows", label: "Workflows", description: "Automation rules", default: false, moduleName: "Workflows" },
     { key: "PaymentPortal", label: "Payment Portal", description: "Payment processing", default: false, moduleName: "Payment Portal" },
     { key: "ConstructionProjects", label: "Construction Projects", description: "Project management", default: false, moduleName: "Construction Projects" },
+    { key: "Workers", label: "Workers", description: "Contractor & labor management", default: false, moduleName: "Workers" },
     { key: "Utilities", label: "Utilities", description: "Admin tools", default: false, moduleName: "Utilities" },
     { key: "Agent", label: "AI Agent", description: "AI assistant", default: true, moduleName: "AI Agent" },
     { key: "Documentation", label: "Documentation", description: "Help & guides", default: true, moduleName: null },

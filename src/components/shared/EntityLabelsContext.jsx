@@ -8,7 +8,7 @@ const DEFAULT_LABELS = {
   accounts: { plural: 'Accounts', singular: 'Account' },
   opportunities: { plural: 'Opportunities', singular: 'Opportunity' },
   activities: { plural: 'Activities', singular: 'Activity' },
-  bizdev_sources: { plural: 'BizDev Sources', singular: 'BizDev Source' },
+  bizdev_sources: { plural: 'Sources', singular: 'Source' },
   workers: { plural: 'Workers', singular: 'Worker' },
 };
 

@@ -229,7 +229,7 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
       </div>
 
       <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-        {/* Source Information */}
+        {/* Source Information - Always first */}
         <div className="space-y-4">
           <h3 className="text-lg font-semibold text-slate-200">Source Information</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -261,9 +261,57 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
           </div>
         </div>
 
-        {/* Company Information - Show for B2B and Hybrid */}
+        {/* B2C: Contact Person comes FIRST */}
+        {businessModel === 'b2c' && (
+          <div className="space-y-4 bg-blue-900/20 border border-blue-700/50 p-4 rounded-lg">
+            <h3 className="text-lg font-semibold text-slate-200">Primary Contact</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="contact_person" className="text-slate-300">
+                  Person Name <span className="text-red-400">*</span>
+                </Label>
+                <Input
+                  id="contact_person"
+                  value={formData.contact_person}
+                  onChange={(e) => handleChange("contact_person", e.target.value)}
+                  placeholder="John Doe"
+                  required
+                  className="bg-slate-700 border-slate-600 text-slate-100"
+                />
+              </div>
+              <div>
+                <Label htmlFor="email" className="text-slate-300">
+                  Email <span className="text-red-400">*</span>
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => handleChange("email", e.target.value)}
+                  placeholder="john@example.com"
+                  required
+                  className="bg-slate-700 border-slate-600 text-slate-100"
+                />
+              </div>
+              <div>
+                <Label htmlFor="phone_number" className="text-slate-300">
+                  Phone Number
+                </Label>
+                <Input
+                  id="phone_number"
+                  value={formData.phone_number}
+                  onChange={(e) => handleChange("phone_number", e.target.value)}
+                  placeholder="(555) 123-4567"
+                  className="bg-slate-700 border-slate-600 text-slate-100"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* B2B/Hybrid: Company Information - Show for B2B and Hybrid */}
         {(businessModel === 'b2b' || businessModel === 'hybrid') && (
-          <div className="space-y-4">
+          <div className="space-y-4 bg-amber-900/20 border border-amber-700/50 p-4 rounded-lg">
             <h3 className="text-lg font-semibold text-slate-200">Company Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -320,58 +368,28 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
           </div>
         )}
 
-        {/* Contact Information - Adaptive for B2B/B2C */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-slate-200">
-            {businessModel === 'b2c' ? 'Primary Contact' : businessModel === 'hybrid' ? 'Contact Information' : 'Company Contact'}
-          </h3>
-          {businessModel === 'b2c' || businessModel === 'hybrid' ? (
+        {/* B2B/Hybrid: Contact Information - Optional for B2B, shown after company */}
+        {(businessModel === 'b2b' || businessModel === 'hybrid') && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-slate-200">
+              {businessModel === 'hybrid' ? 'Contact Person' : 'Company Contact'}
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="contact_person" className="text-slate-300">
-                  {businessModel === 'b2c' ? 'Person Name' : 'Contact Person'} {businessModel === 'b2c' && <span className="text-red-400">*</span>}
+                  Contact Person {businessModel === 'b2b' && <span className="text-slate-500">(Optional)</span>}
                 </Label>
                 <Input
                   id="contact_person"
                   value={formData.contact_person}
                   onChange={(e) => handleChange("contact_person", e.target.value)}
-                  placeholder={businessModel === 'b2c' ? 'John Doe' : 'Contact name'}
-                  required={businessModel === 'b2c'}
+                  placeholder="Contact name"
                   className="bg-slate-700 border-slate-600 text-slate-100"
                 />
               </div>
               <div>
                 <Label htmlFor="email" className="text-slate-300">
-                  Email {businessModel === 'b2c' && <span className="text-red-400">*</span>}
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleChange("email", e.target.value)}
-                  placeholder={businessModel === 'b2c' ? 'john@example.com' : 'contact@company.com'}
-                  required={businessModel === 'b2c'}
-                  className="bg-slate-700 border-slate-600 text-slate-100"
-                />
-              </div>
-              <div>
-                <Label htmlFor="phone_number" className="text-slate-300">
-                  Phone Number
-                </Label>
-                <Input
-                  id="phone_number"
-                  value={formData.phone_number}
-                  onChange={(e) => handleChange("phone_number", e.target.value)}
-                  placeholder="(555) 123-4567"
-                  className="bg-slate-700 border-slate-600 text-slate-100"
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="email" className="text-slate-300">
-                  Email
+                  Email {businessModel === 'b2b' && <span className="text-slate-500">(Optional)</span>}
                 </Label>
                 <Input
                   id="email"
@@ -395,8 +413,8 @@ export default function BizDevSourceForm({ source: legacySource, initialData, on
                 />
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Address Information */}
         <div className="space-y-4">

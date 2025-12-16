@@ -172,11 +172,12 @@ export default function BizDevSourcesPage() {
   // Updated to unified form contract: form now persists record directly and passes result
   const handleFormSubmit = async (result) => {
     try {
-      // Optimistically update sources list if editing
+      // Optimistically update sources list (both creates and edits)
       if (result?.id) {
         setSources(prev => {
           const exists = prev.some(s => s.id === result.id);
-            return exists ? prev.map(s => s.id === result.id ? result : s) : [result, ...prev];
+          // For new creates, add to top of list; for edits, replace existing
+          return exists ? prev.map(s => s.id === result.id ? result : s) : [result, ...prev];
         });
       }
       toast.success(`BizDev source ${editingSource ? 'updated' : 'created'} successfully`);
@@ -185,7 +186,8 @@ export default function BizDevSourcesPage() {
     } finally {
       setShowForm(false);
       setEditingSource(null);
-      handleRefresh();
+      // Invalidate cache but don't wait for reload - UI already updated optimistically
+      clearCache();
     }
   };
 
@@ -234,7 +236,8 @@ export default function BizDevSourcesPage() {
   };
 
   const handlePromote = async (sourceToPromote) => {
-    if (!confirm(`Are you sure you want to promote "${sourceToPromote.company_name}" to an Account?`)) {
+    const sourceName = sourceToPromote?.company_name || sourceToPromote?.dba_name || sourceToPromote?.contact_person || sourceToPromote?.source || 'this source';
+    if (!confirm(`Are you sure you want to promote "${sourceName}" to a Lead?`)) {
       return null;
     }
 
@@ -261,11 +264,12 @@ export default function BizDevSourcesPage() {
           ? {
               ...s,
               status: 'Promoted',
-              account_id: result?.account?.id || s.account_id,
-              account_name: result?.account?.name || s.account_name,
               metadata: {
                 ...(s.metadata || {}),
-                ...(result?.account?.id ? { converted_to_account_id: result.account.id } : {}),
+                promoted_to_lead_id: result?.data?.lead?.id,
+                promoted_to_lead_type: result?.data?.lead_type,
+                promoted_account_id: result?.data?.account_id,
+                promoted_person_id: result?.data?.person_id,
               },
             }
           : s
@@ -274,17 +278,18 @@ export default function BizDevSourcesPage() {
         setSelectedSource(prev => prev ? {
           ...prev,
           status: 'Promoted',
-          account_id: result?.account?.id || prev.account_id,
-          account_name: result?.account?.name || prev.account_name,
           metadata: {
             ...(prev.metadata || {}),
-            ...(result?.account?.id ? { converted_to_account_id: result.account.id } : {}),
+            promoted_to_lead_id: result?.data?.lead?.id,
+            promoted_to_lead_type: result?.data?.lead_type,
+            promoted_account_id: result?.data?.account_id,
+            promoted_person_id: result?.data?.person_id,
           },
         } : prev);
       }
 
-      toast.success('BizDev source promoted to account', {
-        description: `Created account: ${result.account.name}`
+      toast.success('BizDev source promoted to lead', {
+        description: `Created lead from: ${sourceToPromote.company_name || sourceToPromote.contact_person || 'prospect'}`
       });
 
       // Sync with backend to ensure full consistency
@@ -295,7 +300,7 @@ export default function BizDevSourcesPage() {
       if (logError) {
         logError(handleApiError('BizDev Source Promotion', error));
       }
-      toast.error(`Failed to promote BizDev source to Account.`);
+      toast.error(`Failed to promote BizDev source to Lead.`);
       throw error;
     }
   };
@@ -334,11 +339,28 @@ export default function BizDevSourcesPage() {
   };
 
   const handleDeleteComplete = (result) => {
-    setSelectedSources([]);
-    handleRefresh();
+    // Remove deleted sources from local state optimistically
+    if (result && result.successful > 0) {
+      const deletedIds = sources
+        .filter(s => selectedSources.includes(s.id))
+        .slice(0, result.successful)
+        .map(s => s.id);
+      
+      setSources(prevSources => 
+        prevSources.filter(source => !deletedIds.includes(source.id))
+      );
+    }
 
-    if (result && result.deleted > 0) {
-      toast.success(`Deleted ${result.deleted} BizDev Source(s)`);
+    setSelectedSources([]);
+    
+    // Refresh in background to sync with backend
+    setTimeout(() => {
+      clearCache();
+      loadSources();
+    }, 500);
+
+    if (result && result.successful > 0) {
+      toast.success(`Deleted ${result.successful} BizDev Source(s)`);
     }
   };
 
@@ -369,6 +391,7 @@ export default function BizDevSourcesPage() {
     const matchesSearch = !searchTerm ||
       source.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       source.dba_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      source.contact_person?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       source.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       source.phone_number?.includes(searchTerm) ||
       source.city?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -496,7 +519,7 @@ export default function BizDevSourcesPage() {
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <p className="text-sm text-slate-400">Total Sources</p>
+                <p className="text-sm text-slate-400">Total {bizdevLabel}</p>
                 <StatusHelper statusKey="bizdev_total" />
               </div>
               <p className="text-2xl font-bold text-slate-100">{stats.total}</p>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,7 @@ import TagInput from "../shared/TagInput";
 import CreateAccountDialog from "../accounts/CreateAccountDialog";
 import LinkContactDialog from "../shared/LinkContactDialog";
 import { toast } from "sonner";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 
 export default function OpportunityForm({ 
   opportunity: opportunityProp, 
@@ -62,6 +63,36 @@ export default function OpportunityForm({
 
   const isB2C = currentTenant?.business_model === 'b2c';
   const isSuperadmin = currentUser?.role === 'superadmin';
+  const { isCardVisible, getCardLabel } = useStatusCardPreferences();
+
+  // Filter stage options based on card visibility and apply custom labels
+  // Keep hidden stages if the current opportunity has them
+  const filteredStageOptions = useMemo(() => {
+    const stageCardMap = {
+      'prospecting': 'opportunity_prospecting',
+      'qualification': 'opportunity_qualification',
+      'proposal': 'opportunity_proposal',
+      'negotiation': 'opportunity_negotiation',
+      'won': 'opportunity_won',
+      'lost': 'opportunity_lost',
+    };
+    
+    return [
+      { value: 'prospecting', label: 'Prospecting' },
+      { value: 'qualification', label: 'Qualification' },
+      { value: 'proposal', label: 'Proposal' },
+      { value: 'negotiation', label: 'Negotiation' },
+      { value: 'won', label: 'Won' },
+      { value: 'lost', label: 'Lost' }
+    ]
+      .filter(option => 
+        isCardVisible(stageCardMap[option.value]) || formData.stage === option.value
+      )
+      .map(option => ({
+        ...option,
+        label: getCardLabel(stageCardMap[option.value]) || option.label
+      }));
+  }, [isCardVisible, getCardLabel, formData.stage]);
 
   // Load current user and tenant
   useEffect(() => {
@@ -307,12 +338,11 @@ export default function OpportunityForm({
                   sideOffset={5}
                   style={{ zIndex: 2147483647 }}
                 >
-                  <SelectItem value="prospecting" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">Prospecting</SelectItem>
-                  <SelectItem value="qualification" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">Qualification</SelectItem>
-                  <SelectItem value="proposal" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">Proposal</SelectItem>
-                  <SelectItem value="negotiation" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">Negotiation</SelectItem>
-                  <SelectItem value="closed_won" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">Closed Won</SelectItem>
-                  <SelectItem value="closed_lost" className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">Closed Lost</SelectItem>
+                  {filteredStageOptions.map(option => (
+                    <SelectItem key={option.value} value={option.value} className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700">
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

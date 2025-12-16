@@ -81,6 +81,7 @@ const TenantIntegrationSettings = lazy(() => import("../components/settings/Tena
 // System Configuration - lazy loaded
 const ModuleManager = lazy(() => import("../components/shared/ModuleManager"));
 const EntityLabelsManager = lazy(() => import("../components/settings/EntityLabelsManager"));
+const StatusCardsManager = lazy(() => import("../components/settings/StatusCardsManager"));
 const BillingSettings = lazy(() => import("../components/settings/BillingSettings"));
 const CronJobManager = lazy(() => import("../components/settings/CronJobManager"));
 const SystemAnnouncements = lazy(() => import("../components/settings/SystemAnnouncements"));
@@ -200,6 +201,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
         // System
         { id: 'modules', label: 'Module Settings', description: 'Enable or disable CRM modules', icon: LayoutGrid, category: 'system', roles: ['superadmin'] },
         { id: 'entity-labels', label: 'Entity Labels', description: 'Customize terminology per tenant', icon: Tags, category: 'system', roles: ['superadmin'] },
+        { id: 'status-cards', label: 'Status Cards', description: 'Customize and manage status card visibility', icon: LayoutGrid, category: 'system', roles: ['superadmin'] },
         { id: 'cron', label: 'Cron Jobs', description: 'Scheduled background tasks', icon: Clock, category: 'system', roles: ['superadmin'] },
         { id: 'announcements', label: 'Announcements', description: 'System-wide notifications', icon: Megaphone, category: 'system', roles: ['superadmin'] },
 
@@ -528,6 +530,12 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                     <EntityLabelsManager isTenantAdmin={!isSuperadmin} />
                   </SettingsLoader>
                 )}
+
+              {activeTab === 'status-cards' && isAdmin && (
+                <SettingsLoader>
+                  <StatusCardsManager />
+                </SettingsLoader>
+              )}
 
               {activeTab === 'cron' && isAdmin && (
                 <>

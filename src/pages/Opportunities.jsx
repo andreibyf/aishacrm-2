@@ -37,6 +37,7 @@ import { toast } from "sonner";
 import TagFilter from "../components/shared/TagFilter";
 import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
 import RefreshButton from "../components/shared/RefreshButton";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -68,6 +69,16 @@ const stageColors = {
   negotiation: "bg-yellow-900/20 text-yellow-300 border-yellow-700",
   closed_won: "bg-emerald-900/20 text-emerald-300 border-emerald-700",
   closed_lost: "bg-red-900/20 text-red-300 border-red-700",
+};
+
+// Map stage IDs to their card IDs for custom label lookup
+const stageToCardId = {
+  prospecting: 'opportunity_prospecting',
+  qualification: 'opportunity_qualification',
+  proposal: 'opportunity_proposal',
+  negotiation: 'opportunity_negotiation',
+  closed_won: 'opportunity_won',
+  closed_lost: 'opportunity_lost',
 };
 
 export default function OpportunitiesPage() {
@@ -118,8 +129,9 @@ export default function OpportunitiesPage() {
   const [paginationCursors, setPaginationCursors] = useState({});
   const [lastSeenRecord, setLastSeenRecord] = useState(null);
 
-  const { cachedRequest, clearCache } = useApiManager();
+  const { cachedRequest, clearCacheByKey } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
+  const { isCardVisible, getCardLabel } = useStatusCardPreferences();
 
   // Ref to track if initial load is done
   const initialLoadDone = useRef(false);
@@ -461,9 +473,9 @@ export default function OpportunitiesPage() {
   // Clear cache when employee filter changes to force fresh data
   useEffect(() => {
     if (selectedEmail !== null) {
-      clearCache("Opportunity");
+      clearCacheByKey("Opportunity");
     }
-  }, [selectedEmail, clearCache]);
+  }, [selectedEmail, clearCacheByKey]);
 
   const handlePageChange = useCallback((newPage) => {
     // Store cursor for the page we're leaving
@@ -547,19 +559,29 @@ export default function OpportunitiesPage() {
 
   const handleSave = async () => {
     const wasCreating = !editingOpportunity;
-    setIsFormOpen(false);
-    setEditingOpportunity(null);
 
-    // Reset to page 1 for new opportunities to show them
-    if (wasCreating) {
-      setCurrentPage(1);
+    try {
+      // Reset to page 1 for new opportunities to show them
+      if (wasCreating) {
+        setCurrentPage(1);
+      }
+
+      // Clear cache and reload BEFORE closing the dialog
+      clearCacheByKey("Opportunity");
+      await Promise.all([
+        loadOpportunities(wasCreating ? 1 : currentPage, pageSize),
+        loadTotalStats(),
+      ]);
+      
+      // Now close the dialog after data is fresh
+      setIsFormOpen(false);
+      setEditingOpportunity(null);
+    } catch (error) {
+      console.error('[Opportunities] Error in handleSave:', error);
+      // Still close the dialog even on error
+      setIsFormOpen(false);
+      setEditingOpportunity(null);
     }
-
-    clearCache("Opportunity");
-    await Promise.all([
-      loadOpportunities(wasCreating ? 1 : currentPage, pageSize),
-      loadTotalStats(),
-    ]);
   };
 
   const handleDelete = async (id) => {
@@ -582,7 +604,7 @@ export default function OpportunitiesPage() {
       // Small delay to let optimistic update settle
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      clearCache("Opportunity");
+      clearCacheByKey("Opportunity");
       await Promise.all([
         loadOpportunities(currentPage, pageSize),
         loadTotalStats(),
@@ -659,13 +681,23 @@ export default function OpportunitiesPage() {
           // removed delay(1000); // Add delay between batches
         }
 
+        // Optimistically remove from UI immediately
+        const deletedIds = new Set(allOpportunitiesToDelete.map(o => o.id));
+        setOpportunities((prev) => prev.filter((o) => !deletedIds.has(o.id)));
+        setTotalItems((t) => Math.max(0, (t || 0) - deleteCount));
+
         setSelectedOpportunities(new Set());
         setSelectAllMode(false);
-        clearCache("Opportunity");
-        await Promise.all([
-          loadOpportunities(1, pageSize),
-          loadTotalStats(),
-        ]);
+        
+        // Refresh in background to ensure sync
+        setTimeout(async () => {
+          clearCacheByKey("Opportunity");
+          await Promise.all([
+            loadOpportunities(1, pageSize),
+            loadTotalStats(),
+          ]);
+        }, 500);
+        
         toast.success(`${deleteCount} opportunity/opportunities deleted`);
       } catch (error) {
         console.error("Failed to delete opportunities:", error);
@@ -691,12 +723,23 @@ export default function OpportunitiesPage() {
         await Promise.all(
           [...selectedOpportunities].map((id) => Opportunity.delete(id)),
         );
+        
+        // Optimistically remove from UI immediately
+        const deletedIds = new Set(selectedOpportunities);
+        setOpportunities((prev) => prev.filter((o) => !deletedIds.has(o.id)));
+        setTotalItems((t) => Math.max(0, (t || 0) - deletedIds.size));
+        
         setSelectedOpportunities(new Set());
-        clearCache("Opportunity");
-        await Promise.all([
-          loadOpportunities(currentPage, pageSize),
-          loadTotalStats(),
-        ]);
+        
+        // Refresh in background to ensure sync
+        setTimeout(async () => {
+          clearCacheByKey("Opportunity");
+          await Promise.all([
+            loadOpportunities(currentPage, pageSize),
+            loadTotalStats(),
+          ]);
+        }, 500);
+        
         toast.success(
           `${selectedOpportunities.size} opportunity/opportunities deleted`,
         );
@@ -777,7 +820,7 @@ export default function OpportunitiesPage() {
 
         setSelectedOpportunities(new Set());
         setSelectAllMode(false);
-        clearCache("Opportunity");
+        clearCacheByKey("Opportunity");
         await Promise.all([
           loadOpportunities(currentPage, pageSize),
           loadTotalStats(),
@@ -804,7 +847,7 @@ export default function OpportunitiesPage() {
 
         await Promise.all(promises);
         setSelectedOpportunities(new Set());
-        clearCache("Opportunity");
+        clearCacheByKey("Opportunity");
         await Promise.all([
           loadOpportunities(currentPage, pageSize),
           loadTotalStats(),
@@ -891,7 +934,7 @@ export default function OpportunitiesPage() {
 
         setSelectedOpportunities(new Set());
         setSelectAllMode(false);
-        clearCache("Opportunity");
+        clearCacheByKey("Opportunity");
         await Promise.all([
           loadOpportunities(currentPage, pageSize),
           loadTotalStats(),
@@ -914,7 +957,7 @@ export default function OpportunitiesPage() {
 
         await Promise.all(promises);
         setSelectedOpportunities(new Set());
-        clearCache("Opportunity");
+        clearCacheByKey("Opportunity");
         await Promise.all([
           loadOpportunities(currentPage, pageSize),
           loadTotalStats(),
@@ -967,12 +1010,12 @@ export default function OpportunitiesPage() {
   };
 
   const handleRefresh = async () => {
-    clearCache("Opportunity");
-    clearCache("Employee");
-    clearCache("Account");
-    clearCache("Contact");
-    clearCache("Lead");
-    clearCache("User"); // Added clearing User cache
+    clearCacheByKey("Opportunity");
+    clearCacheByKey("Employee");
+    clearCacheByKey("Account");
+    clearCacheByKey("Contact");
+    clearCacheByKey("Lead");
+    clearCacheByKey("User"); // Added clearing User cache
     supportingDataLoaded.current = false; // Force reload supporting data next time
     setSupportingDataReady(false);
     await Promise.all([
@@ -1015,7 +1058,7 @@ export default function OpportunitiesPage() {
       await Opportunity.update(opportunityId, updateData);
       logDev('[Opportunities] Stage update successful, clearing cache and reloading...');
       
-      clearCache("Opportunity");
+      clearCacheByKey("Opportunity");
       await Promise.all([
         loadOpportunities(currentPage, pageSize),
         loadTotalStats(),
@@ -1086,7 +1129,7 @@ export default function OpportunitiesPage() {
           onOpenChange={setIsImportOpen}
           schema={Opportunity.schema ? Opportunity.schema() : null}
           onSuccess={async () => {
-            clearCache("Opportunity");
+            clearCacheByKey("Opportunity");
             await Promise.all([
               loadOpportunities(1, pageSize),
               loadTotalStats(),
@@ -1225,7 +1268,7 @@ export default function OpportunitiesPage() {
         <div className="grid grid-cols-2 sm:grid-cols-7 gap-4">
           {[
             {
-              label: "Total Pipeline",
+              label: `Total ${opportunitiesLabel}`,
               value: totalStats.total,
               filter: "all",
               bgColor: "bg-slate-800",
@@ -1279,7 +1322,9 @@ export default function OpportunitiesPage() {
               borderColor: "border-red-700",
               tooltip: "opportunity_closed_lost",
             },
-          ].map((stat) => (
+          ]
+            .filter(stat => stat.tooltip === 'total_all' || isCardVisible(stat.tooltip))
+            .map((stat) => (
             <div
               key={stat.label}
               className={`${stat.bgColor} ${
@@ -1292,7 +1337,7 @@ export default function OpportunitiesPage() {
               onClick={() => handleStageFilterClick(stat.filter)}
             >
               <div className="flex items-center justify-between mb-1">
-                <p className="text-sm text-slate-400">{stat.label}</p>
+                <p className="text-sm text-slate-400">{getCardLabel(stat.tooltip) || stat.label}</p>
                 <StatusHelper statusKey={stat.tooltip} />
               </div>
               <p className="text-2xl font-bold text-slate-100">{stat.value}</p>
@@ -1447,7 +1492,7 @@ export default function OpportunitiesPage() {
                 onView={handleViewDetails}
                 onStageChange={handleStageChange}
                 onDataRefresh={async () => {
-                  clearCache("Opportunity");
+                  clearCacheByKey("Opportunity");
                   await Promise.all([
                     loadOpportunities(currentPage, pageSize),
                     loadTotalStats(),
@@ -1586,7 +1631,7 @@ export default function OpportunitiesPage() {
                               data-variant="status"
                               data-status={opp.stage}
                             >
-                              {opp.stage?.replace(/_/g, " ")}
+                              {getCardLabel(stageToCardId[opp.stage]) || opp.stage?.replace(/_/g, " ")}
                             </Badge>
                           </TableCell>
                           <TableCell

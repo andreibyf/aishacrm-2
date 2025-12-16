@@ -7,14 +7,21 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 // Mock toast to avoid console noise
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
+// Mock useTenant hook
+vi.mock('@/components/shared/tenantContext', () => ({
+  useTenant: () => ({ selectedTenantId: 'tenant-abc' })
+}));
+
 // Mock entities used by the panel (list-only; promote handled by parent callback now)
 const listLeadsMock = vi.fn();
 const listOppsMock = vi.fn();
+const getTenantMock = vi.fn().mockResolvedValue({ id: 'tenant-abc', business_model: 'b2b' });
 vi.mock('@/api/entities', () => ({
   BizDevSource: { promote: vi.fn() },
   Lead: { list: (...args) => listLeadsMock(...args) },
   Opportunity: { list: (...args) => listOppsMock(...args), create: vi.fn() },
   Activity: { create: vi.fn() },
+  Tenant: { get: (...args) => getTenantMock(...args) },
 }));
 
 // Wrap component with Router since it uses Link internally
@@ -29,7 +36,7 @@ describe('BizDevSourceDetailPanel - Promote Flow', () => {
     listOppsMock.mockResolvedValue([]);
   });
 
-  it('promotes an Active source to Account and updates status', async () => {
+  it('promotes an Active source to Lead and updates status', async () => {
     const source = {
       id: 'src-123',
       company_name: 'Acme Construction',
@@ -39,10 +46,10 @@ describe('BizDevSourceDetailPanel - Promote Flow', () => {
       phone_number: '555-1234',
     };
 
-  const promotedAccount = { id: 'acc-999', name: 'Acme Construction' };
+    const promotedLead = { id: 'lead-999', first_name: 'Acme', last_name: 'Construction' };
 
   const onUpdate = vi.fn();
-  const onPromote = vi.fn().mockResolvedValue({ account: promotedAccount });
+    const onPromote = vi.fn().mockResolvedValue({ lead: promotedLead });
     const onRefresh = vi.fn();
 
     renderWithRouter(
@@ -57,15 +64,15 @@ describe('BizDevSourceDetailPanel - Promote Flow', () => {
     );
 
     // Verify promotion button is visible
-    expect(screen.getByRole('button', { name: /Promote to Account/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Promote to Lead/i })).toBeInTheDocument();
 
     // Click promote button → shows confirmation
     await withAct(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Promote to Account/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Promote to Lead/i }));
     });
 
     // Confirm dialog appears
-    await waitFor(() => expect(screen.getByText(/Promote to Account\?/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Promote to Lead\?/i)).toBeInTheDocument());
 
     // Click confirm
     await withAct(async () => {
@@ -79,8 +86,7 @@ describe('BizDevSourceDetailPanel - Promote Flow', () => {
     expect(onUpdate).toHaveBeenCalled();
     const updatedSource = onUpdate.mock.calls[0][0];
     expect(updatedSource.status).toBe('Promoted');
-    expect(updatedSource.account_id).toBe('acc-999');
-    expect(updatedSource.account_name).toBe('Acme Construction');
+    expect(updatedSource.metadata.primary_lead_id).toBe('lead-999');
 
     // Panel delegates promotion to parent; ensure it was invoked (status update verified via onUpdate).
     expect(onPromote).toHaveBeenCalled();
@@ -113,14 +119,14 @@ describe('BizDevSourceDetailPanel - Promote Flow', () => {
     );
 
     // Promote button should NOT be visible (already promoted)
-    expect(screen.queryByRole('button', { name: /Promote to Account/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Promote to Lead/i })).not.toBeInTheDocument();
 
     // Should show 'Already Promoted' alert
     expect(screen.getByText(/Already Promoted/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Legacy Corp/).length).toBeGreaterThanOrEqual(2); // Header + alert
 
     // Should show 'View Account' button
-    expect(screen.getByRole('link', { name: /View Account/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /View Lead/i })).toBeInTheDocument();
   });
 
   it('shows error toast when promote API fails', async () => {
@@ -146,9 +152,9 @@ describe('BizDevSourceDetailPanel - Promote Flow', () => {
     );
 
     await withAct(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Promote to Account/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Promote to Lead/i }));
     });
-    await waitFor(() => expect(screen.getByText(/Promote to Account\?/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Promote to Lead\?/i)).toBeInTheDocument());
 
     await withAct(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Confirm Promotion/i }));
@@ -158,14 +164,13 @@ describe('BizDevSourceDetailPanel - Promote Flow', () => {
     expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/Network error|Failed to promote/i));
   });
 
-  it('displays linked account information when already promoted', async () => {
+  it('displays linked lead information when already promoted', async () => {
     const promotedSource = {
       id: 'src-promoted',
       company_name: 'Promoted Inc',
       status: 'Promoted',
       tenant_id: 'tenant-abc',
-      account_id: 'acc-promoted',
-      account_name: 'Promoted Inc',
+      metadata: { primary_lead_id: 'lead-promoted' },
     };
 
     renderWithRouter(
@@ -180,12 +185,12 @@ describe('BizDevSourceDetailPanel - Promote Flow', () => {
     );
 
     // No promote button
-    expect(screen.queryByRole('button', { name: /Promote to Account/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Promote to Lead/i })).not.toBeInTheDocument();
 
-    // 'View Linked Account' button visible in header actions
-    const viewAccountButton = screen.getByRole('link', { name: /View Linked Account/i });
-    expect(viewAccountButton).toBeInTheDocument();
-    expect(viewAccountButton).toHaveAttribute('href', expect.stringContaining('acc-promoted'));
+    // 'View Linked Lead' button visible in header actions
+    const viewLeadButton = screen.getByRole('link', { name: /View Linked Lead/i });
+    expect(viewLeadButton).toBeInTheDocument();
+    expect(viewLeadButton).toHaveAttribute('href', expect.stringContaining('lead-promoted'));
 
     // 'Already Promoted' alert visible
     expect(screen.getByText(/Already Promoted/i)).toBeInTheDocument();
@@ -213,7 +218,7 @@ describe('BizDevSourceDetailPanel - Promote Flow', () => {
     );
 
     // No promote button for archived
-    expect(screen.queryByRole('button', { name: /Promote to Account/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Promote to Lead/i })).not.toBeInTheDocument();
 
     // Edit/Archive buttons should also be hidden
     expect(screen.queryByRole('button', { name: /Edit/i })).not.toBeInTheDocument();

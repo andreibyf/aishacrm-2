@@ -6,6 +6,13 @@
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
+import {
+  extractPersonDataFromLead,
+  buildContactProvenanceMetadata,
+  determineConversionAction,
+  validateLeadConversion,
+  determineContactType
+} from '../utils/conversionHelpers.js';
 
 export default function createLeadRoutes(_pgPool) {
   const router = express.Router();
@@ -938,20 +945,39 @@ export default function createLeadRoutes(_pgPool) {
           accountId = newAccount.id;
         }
 
-        // Create contact from lead
+        // ========== v3.0.0 CONVERSION LOGIC ==========
+        // Validate lead can be converted
+        const validation = validateLeadConversion(lead);
+        if (!validation.valid) {
+          throw new Error(validation.error);
+        }
+
+        // Determine contact type (preserves B2B/B2C classification)
+        const contactType = determineContactType(lead.lead_type);
+
+        // Extract person data from lead
+        const personData = extractPersonDataFromLead(lead);
+
+        // Build comprehensive provenance metadata
+        const provenanceMetadata = buildContactProvenanceMetadata(lead);
+
+        // Determine conversion action
+        const conversionAction = determineConversionAction(lead.status);
+
+        // Create contact from lead (v3.0.0: preserves account_id, captures full provenance)
         const nowIso = new Date().toISOString();
         const { data: cont, error: contErr } = await supabase
           .from('contacts')
           .insert([{
             tenant_id,
-            account_id: accountId || null,
-            first_name: lead.first_name,
-            last_name: lead.last_name,
-            email: lead.email,
-            phone: lead.phone,
-            job_title: lead.job_title,
+            account_id: accountId || lead.account_id || null,  // Preserve v3.0.0 account relationship
+            first_name: personData.first_name,
+            last_name: personData.last_name,
+            email: personData.email,
+            phone: personData.phone,
+            job_title: personData.job_title,
             status: 'prospect',
-            metadata: { converted_from_lead_id: lead.id, source: lead.source || null },
+            metadata: provenanceMetadata,  // Full lifecycle provenance
             assigned_to: lead.assigned_to || performed_by || null,
             created_at: nowIso,
             updated_at: nowIso,
@@ -960,6 +986,13 @@ export default function createLeadRoutes(_pgPool) {
           .single();
         if (contErr) throw new Error(contErr.message);
         contact = cont;
+        
+        console.log('[Leads Convert v3.0.0] Contact created:', {
+          contact_id: contact.id,
+          account_id: accountId || lead.account_id,
+          lead_type: contactType,
+          has_provenance: !!provenanceMetadata.converted_from_lead_id
+        });
 
         // Optionally create Opportunity
         if (create_opportunity) {

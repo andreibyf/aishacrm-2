@@ -108,7 +108,7 @@ export default function TopAccounts({ tenantFilter, showTestData }) {
       <CardHeader>
         <CardTitle className="text-slate-100 flex items-center gap-2">
           <Building2 className="w-5 h-5 text-blue-400" />
-          Top Accounts by Won Deals
+          Top Customers by Won Deals
         </CardTitle>
       </CardHeader>
       <CardContent>

@@ -67,9 +67,12 @@ import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 // Helper function for delays
 const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
+
 export default function LeadsPage() {
   const { user } = useUser();
   const { plural: leadsLabel, singular: leadLabel } = useEntityLabel('leads');
+  const { getCardLabel, isCardVisible } = useStatusCardPreferences();
   const [leads, setLeads] = useState([]);
   const [users, setUsers] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -603,14 +606,10 @@ export default function LeadsPage() {
 
   const handleSave = async (result) => {
     try {
-      // Close form and clear editing state
-      setIsFormOpen(false);
-      setEditingLead(null);
-
       // Reset to page 1 to show the newly created/updated lead
       setCurrentPage(1);
 
-      // Clear cache
+      // Clear cache and reload BEFORE closing the dialog
       clearCache("Lead");
 
       // Reload leads and stats
@@ -618,6 +617,10 @@ export default function LeadsPage() {
         loadLeads(1, pageSize), // Always load page 1 to show the lead
         loadTotalStats(),
       ]);
+      
+      // Now close the dialog after data is fresh
+      setIsFormOpen(false);
+      setEditingLead(null);
       console.log("[Leads.handleSave] Data reloaded successfully");
     } catch (error) {
       console.error("[Leads.handleSave] Failed to reload data after save:", {
@@ -640,7 +643,11 @@ export default function LeadsPage() {
     if (!confirmed) return;
 
     try {
-      await Lead.delete(id);
+      const tenantId = getTenantFilter().tenant_id || user.tenant_id;
+      if (!tenantId) {
+        throw new Error('Cannot delete: tenant_id is not available');
+      }
+      await Lead.delete(id, { tenant_id: tenantId });
       // Optimistically update UI
       setLeads((prev) => prev.filter((l) => l.id !== id));
       setTotalItems((prev) => (prev > 0 ? prev - 1 : 0));
@@ -720,9 +727,13 @@ export default function LeadsPage() {
 
         // Delete in batches to avoid overwhelming the system
         const BATCH_SIZE = 50;
+        const tenantId = getTenantFilter().tenant_id || user.tenant_id;
+        if (!tenantId) {
+          throw new Error('Cannot delete: tenant_id is not available');
+        }
         for (let i = 0; i < allLeadsToDelete.length; i += BATCH_SIZE) {
           const batch = allLeadsToDelete.slice(i, i + BATCH_SIZE);
-          await Promise.all(batch.map((l) => Lead.delete(l.id)));
+          await Promise.all(batch.map((l) => Lead.delete(l.id, { tenant_id: tenantId })));
         }
 
         setSelectedLeads(new Set());
@@ -753,7 +764,11 @@ export default function LeadsPage() {
       if (!confirmed) return;
 
       try {
-        await Promise.all([...selectedLeads].map((id) => Lead.delete(id)));
+        const tenantId = getTenantFilter().tenant_id || user.tenant_id;
+        if (!tenantId) {
+          throw new Error('Cannot delete: tenant_id is not available');
+        }
+        await Promise.all([...selectedLeads].map((id) => Lead.delete(id, { tenant_id: tenantId })));
         setSelectedLeads(new Set());
         clearCache("Lead");
         await Promise.all([
@@ -1291,7 +1306,7 @@ export default function LeadsPage() {
         <div className="grid grid-cols-2 sm:grid-cols-7 gap-4">
           {[
             {
-              label: "Total Leads",
+              label: `Total ${leadsLabel}`,
               value: totalStats.total,
               filter: "all",
               bgColor: "bg-slate-800",
@@ -1345,7 +1360,9 @@ export default function LeadsPage() {
               borderColor: "border-red-700",
               tooltip: "lead_lost",
             },
-          ].map((stat) => (
+          ]
+            .filter(stat => isCardVisible(stat.tooltip))
+            .map((stat) => (
             <div
               key={stat.label}
               className={`${stat.bgColor} ${
@@ -1358,7 +1375,7 @@ export default function LeadsPage() {
               onClick={() => handleStatusFilterClick(stat.filter)}
             >
               <div className="flex items-center justify-between mb-1">
-                <p className="text-sm text-slate-400">{stat.label}</p>
+                <p className="text-sm text-slate-400">{getCardLabel(stat.tooltip) || stat.label}</p>
                 <StatusHelper statusKey={stat.tooltip} />
               </div>
               <p className="text-2xl font-bold text-slate-100">{stat.value}</p>

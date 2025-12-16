@@ -16,14 +16,22 @@ vi.mock('@/hooks/useEntityForm', () => ({
   })
 }));
 
+// Mock useTenant hook
+vi.mock('@/components/shared/tenantContext', () => ({
+  useTenant: () => ({ selectedTenantId: 'tenant-123' })
+}));
+
 // Mock entities used by the form
 const createMock = vi.fn();
 const updateMock = vi.fn();
 const filterLeadsMock = vi.fn();
+const getTenantMock = vi.fn().mockResolvedValue({ id: 'tenant-123', business_model: 'b2b' });
 vi.mock('@/api/entities', () => ({
   BizDevSource: { create: (...args) => createMock(...args), update: (...args) => updateMock(...args) },
   Lead: { filter: (...args) => filterLeadsMock(...args) },
+  Tenant: { get: (...args) => getTenantMock(...args) },
 }));
+
 
 async function fillBasicFields() {
   await withAct(async () => {

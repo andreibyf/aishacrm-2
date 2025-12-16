@@ -223,7 +223,7 @@ export default function AuditLogPage() {
                   <SelectItem value="all" className="text-slate-200 hover:bg-slate-700">All Entities</SelectItem>
                   <SelectItem value="Lead" className="text-slate-200 hover:bg-slate-700">Leads</SelectItem>
                   <SelectItem value="Contact" className="text-slate-200 hover:bg-slate-700">Contacts</SelectItem>
-                  <SelectItem value="Account" className="text-slate-200 hover:bg-slate-700">Accounts</SelectItem>
+                  <SelectItem value="Account" className="text-slate-200 hover:bg-slate-700">Customers</SelectItem>
                   <SelectItem value="Opportunity" className="text-slate-200 hover:bg-slate-700">Opportunities</SelectItem>
                   <SelectItem value="Activity" className="text-slate-200 hover:bg-slate-700">Activities</SelectItem>
                 </SelectContent>

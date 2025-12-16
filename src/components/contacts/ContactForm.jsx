@@ -24,6 +24,7 @@ import { checkDuplicateBeforeCreate } from "@/api/functions";
 import { useApiManager } from "../shared/ApiManager";
 import LazyEmployeeSelector from "../shared/LazyEmployeeSelector";
 import { DenormalizationHelper } from "../shared/DenormalizationHelper";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 
 // New imports for error logging
 import { useErrorLog, handleApiError } from '../shared/ErrorLogger'
@@ -112,8 +113,29 @@ export default function ContactForm({
 
   const { cachedRequest, clearCache } = useApiManager();
   const { logError } = useErrorLog();
+  const { isCardVisible, getCardLabel } = useStatusCardPreferences();
 
   const isSuperadmin = user?.role === 'superadmin';
+
+  // Filter status options based on card visibility and apply custom labels
+  // Keep hidden statuses if the current record has them
+  const filteredStatusOptions = useMemo(() => {
+    const statusCardMap = {
+      'prospect': 'contact_prospect',
+      'customer': 'contact_customer',
+      'active': 'contact_active',
+      'inactive': 'contact_inactive',
+    };
+    
+    return statusOptions
+      .filter(option => 
+        isCardVisible(statusCardMap[option.value]) || formData.status === option.value
+      )
+      .map(option => ({
+        ...option,
+        label: getCardLabel(statusCardMap[option.value]) || option.label
+      }));
+  }, [isCardVisible, getCardLabel, formData.status]);
 
   logDev('[ContactForm] Initial state set, isSuperadmin:', isSuperadmin);
   logDev('[ContactForm] Current user state:', user?.email, 'Loading:', userLoading);
@@ -867,7 +889,7 @@ export default function ContactForm({
                   <SelectValue placeholder="Select status..." />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700">
-                  {statusOptions.map(option => (
+                  {filteredStatusOptions.map(option => (
                     <SelectItem key={option.value} value={option.value} className="text-slate-200 hover:bg-slate-700">
                       {option.label}
                     </SelectItem>

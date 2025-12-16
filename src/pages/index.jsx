@@ -9,6 +9,7 @@ const PAGES = {
     LeadProfilePage: lazy(() => import('./LeadProfilePage')),
     Contacts: lazy(() => import('./Contacts')),
     Accounts: lazy(() => import('./Accounts')),
+    Customers: lazy(() => import('./Customers')),
     Opportunities: lazy(() => import('./Opportunities')),
     Activities: lazy(() => import('./Activities')),
     Settings: lazy(() => import('./Settings')),
@@ -32,6 +33,7 @@ const PAGES = {
     DuplicateContacts: lazy(() => import('./DuplicateContacts')),
     Utilities: lazy(() => import('./Utilities')),
     DuplicateAccounts: lazy(() => import('./DuplicateAccounts')),
+    DuplicateCustomers: lazy(() => import('./DuplicateAccounts')),
     DataQualityReport: lazy(() => import('./DataQualityReport')),
     DataDiagnostics: lazy(() => import('./DataDiagnostics')),
     UnitTests: lazy(() => import('./UnitTests')),
@@ -78,6 +80,7 @@ function PagesContent() {
                             <Route path="/Dashboard" element={<PAGES.Dashboard />} />
                             <Route path="/Contacts" element={<PAGES.Contacts />} />
                             <Route path="/Accounts" element={<PAGES.Accounts />} />
+                            <Route path="/Customers" element={<PAGES.Customers />} />
                             <Route path="/Opportunities" element={<PAGES.Opportunities />} />
                             <Route path="/Activities" element={<PAGES.Activities />} />
                             <Route path="/Settings" element={<PAGES.Settings />} />
@@ -101,6 +104,7 @@ function PagesContent() {
                             <Route path="/DuplicateContacts" element={<PAGES.DuplicateContacts />} />
                             <Route path="/Utilities" element={<PAGES.Utilities />} />
                             <Route path="/DuplicateAccounts" element={<PAGES.DuplicateAccounts />} />
+                            <Route path="/DuplicateCustomers" element={<PAGES.DuplicateCustomers />} />
                             <Route path="/DataQualityReport" element={<PAGES.DataQualityReport />} />
                             <Route path="/DataDiagnostics" element={<PAGES.DataDiagnostics />} />
                             <Route path="/UnitTests" element={<PAGES.UnitTests />} />

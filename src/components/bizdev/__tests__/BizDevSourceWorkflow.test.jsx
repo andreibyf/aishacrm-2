@@ -31,6 +31,9 @@ vi.mock('@/api/entities', () => ({
   Employee: {
     filter: vi.fn(),
   },
+  Tenant: {
+    get: vi.fn().mockResolvedValue({ id: 'test-tenant-123', business_model: 'b2b' }),
+  },
 }));
 
 // Mock useEntityForm to provide tenant id and disable submitting state

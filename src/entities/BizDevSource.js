@@ -39,11 +39,24 @@ export const BizDevSourceSchema = {
     "email": {
       "type": "string",
       "format": "email",
-      "description": "Company's general email address"
+      "description": "Primary email address (company email for B2B, personal email for B2C)"
     },
     "phone_number": {
       "type": "string",
-      "description": "Company's primary phone number"
+      "description": "Primary phone number (company phone for B2B, personal phone for B2C)"
+    },
+    "contact_person": {
+      "type": "string",
+      "description": "Contact person name (required for B2C, optional for B2B)"
+    },
+    "contact_email": {
+      "type": "string",
+      "format": "email",
+      "description": "Contact person's email address (alternative to primary email)"
+    },
+    "contact_phone": {
+      "type": "string",
+      "description": "Contact person's phone number (alternative to primary phone)"
     },
     "address_line_1": {
       "type": "string",
@@ -127,7 +140,6 @@ export const BizDevSourceSchema = {
   },
   "required": [
     "tenant_id",
-    "company_name",
     "source_name"
   ],
   "rls": {

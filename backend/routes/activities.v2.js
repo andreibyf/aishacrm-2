@@ -55,7 +55,9 @@ export default function createActivityV2Routes(_pgPool) {
       const supabase = getSupabaseClient();
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
-      const includeStats = req.query.include_stats === 'true' || req.query.include_stats === '1';
+      // OPTIMIZATION: Disable stats for list view - they cause double query (444ms).
+      // Stats should be fetched from dedicated /stats endpoint if needed (detail view only).
+      const includeStats = false; // req.query.include_stats === 'true' || req.query.include_stats === '1';
 
       let q = supabase
         .from('activities')

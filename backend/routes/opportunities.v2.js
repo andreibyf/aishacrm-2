@@ -344,9 +344,17 @@ export default function createOpportunityV2Routes(_pgPool) {
 
       const supabase = getSupabaseClient();
 
+      // Convert empty string date fields to null (PostgreSQL doesn't accept empty strings for date columns)
+      const cleanedPayload = { ...payload };
+      ['close_date', 'expected_close_date'].forEach(dateField => {
+        if (cleanedPayload[dateField] === '') {
+          cleanedPayload[dateField] = null;
+        }
+      });
+
       const insertPayload = {
         tenant_id,
-        ...payload,
+        ...cleanedPayload,
         ...(lead_source ? { lead_source } : {}),
         metadata: metadata && typeof metadata === 'object' ? metadata : undefined,
       };
@@ -430,8 +438,16 @@ export default function createOpportunityV2Routes(_pgPool) {
 
       const supabase = getSupabaseClient();
 
+      // Convert empty string date fields to null (PostgreSQL doesn't accept empty strings for date columns)
+      const cleanedPayload = { ...payload };
+      ['close_date', 'expected_close_date'].forEach(dateField => {
+        if (cleanedPayload[dateField] === '') {
+          cleanedPayload[dateField] = null;
+        }
+      });
+
       const updatePayload = {
-        ...payload,
+        ...cleanedPayload,
         ...(lead_source !== undefined ? { lead_source } : {}),
         ...(metadata && typeof metadata === 'object' ? { metadata } : {}),
         updated_at: new Date().toISOString(),

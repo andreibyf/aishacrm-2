@@ -15,7 +15,9 @@ import EmployeeSelector from "../shared/EmployeeSelector";
 import { Account } from "@/api/entities";
 import { useUser } from "@/components/shared/useUser.js";
 import { useEntityForm } from "@/hooks/useEntityForm";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 import { toast } from "sonner";
+import { useMemo } from "react";
 
 const industries = [
     { value: "aerospace_and_defense", label: "Aerospace & Defense" },
@@ -94,8 +96,30 @@ export default function AccountForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { user: currentUser, loading: userLoading } = useUser();
   const [loading, setLoading] = useState(true);
+  const { isCardVisible, getCardLabel } = useStatusCardPreferences();
 
   const isSuperadmin = currentUser?.role === 'superadmin';
+
+  // Filter account type options based on card visibility and apply custom labels
+  // Keep hidden types if the current account has them
+  const filteredTypeOptions = useMemo(() => {
+    const typeCardMap = {
+      'prospect': 'account_prospect',
+      'customer': 'account_customer',
+      'partner': 'account_partner',
+      'competitor': 'account_competitor',
+      'vendor': 'account_inactive', // Map vendor to the inactive card for now
+    };
+    
+    return typeOptions
+      .filter(option => 
+        isCardVisible(typeCardMap[option.value]) || formData.type === option.value
+      )
+      .map(option => ({
+        ...option,
+        label: getCardLabel(typeCardMap[option.value]) || option.label
+      }));
+  }, [isCardVisible, getCardLabel, formData.type]);
 
   useEffect(() => {
     // Wait for user to be available
@@ -191,21 +215,34 @@ export default function AccountForm({
       });
 
       // Call Account.create or Account.update directly
+      console.log('[AccountForm] Submitting payload:', payload);
       let result;
       if (account?.id) {
+        console.log('[AccountForm] Updating account...');
         result = await Account.update(account.id, payload);
       } else {
+        console.log('[AccountForm] Creating new account...');
         result = await Account.create(payload);
       }
 
+      console.log('[AccountForm] Save result:', result);
+
       // Defensive: verify onSubmit is still valid before calling
       if (onSubmit && typeof onSubmit === 'function') {
+        console.log('[AccountForm] Calling onSubmit...');
         await onSubmit(result);
+        console.log('[AccountForm] onSubmit completed');
       } else {
         console.error('[AccountForm] onSubmit became invalid after save');
       }
     } catch (error) {
       console.error("[AccountForm] Error submitting account:", error);
+      console.error("[AccountForm] Error details:", {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        stack: error.stack
+      });
       const errorMsg = normalizeError(error);
       toast.error(errorMsg);
     } finally {
@@ -255,7 +292,7 @@ export default function AccountForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-slate-800 border-slate-700">
-                {typeOptions.map(option => (
+                {filteredTypeOptions.map(option => (
                   <SelectItem key={option.value} value={option.value} className="text-slate-200 hover:bg-slate-700">
                     {option.label}
                   </SelectItem>

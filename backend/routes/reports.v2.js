@@ -457,12 +457,19 @@ export default function createReportsV2Router(_pgPool) {
    */
   router.get('/dashboard-bundle', async (req, res) => {
     try {
-      const { tenant_id } = req.query;
+      let { tenant_id } = req.query;
+      // Normalize: treat "null" string or empty/undefined as no tenant filter (superadmin global)
+      if (tenant_id === 'null' || tenant_id === '' || !tenant_id) {
+        tenant_id = undefined;
+      }
       const includeTestData = (req.query.include_test_data ?? 'true') !== 'false';
       const bustCache = req.query.bust_cache === 'true';
+      // OPTIMIZATION: Dashboard doesn't need AI enrichment on first load (adds 100-150ms)
+      // Can be fetched separately with ?include_ai=true if needed
+      const includeAi = req.query.include_ai === 'true';
       
       const effectiveTenantKey = tenant_id || 'SUPERADMIN_GLOBAL';
-      const cacheKey = `v2::${effectiveTenantKey}::include=${includeTestData ? 'true' : 'false'}`;
+      const cacheKey = `v2::${effectiveTenantKey}::include=${includeTestData ? 'true' : 'false'}::ai=${includeAi ? 'true' : 'false'}`;
       const now = Date.now();
       
       // Check cache
@@ -487,6 +494,7 @@ export default function createReportsV2Router(_pgPool) {
         openLeads,
         wonOpportunities,
         openOpportunities,
+        allOpportunitiesForPipeline,
         newLeadsLast30Days,
         activitiesLast30Days,
         recentActivities,
@@ -500,6 +508,18 @@ export default function createReportsV2Router(_pgPool) {
         safeCount(null, 'leads', tenant_id, (q) => q.not('status', 'in', '("converted","lost")'), commonOpts),
         safeCount(null, 'opportunities', tenant_id, (q) => q.in('stage', ['won', 'closed_won']), commonOpts),
         safeCount(null, 'opportunities', tenant_id, (q) => q.not('stage', 'in', '("won","closed_won","lost","closed_lost")'), commonOpts),
+        // Fetch ALL opportunities for pipeline calculation
+        (async () => {
+          try {
+            let q = supabase.from('opportunities').select('id,name,amount,stage,created_date');
+            if (tenant_id) q = q.eq('tenant_id', tenant_id);
+            if (!includeTestData) {
+              try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ void 0; }
+            }
+            const { data } = await q;
+            return Array.isArray(data) ? data : [];
+          } catch { return []; }
+        })(),
         // New leads last 30 days
         (async () => {
           try {
@@ -562,7 +582,51 @@ export default function createReportsV2Router(_pgPool) {
             return Array.isArray(data) ? data : [];
           } catch { return []; }
         })(),
+        // All opportunities for pipeline value calculation (needed for accurate metrics)
+        (async () => {
+          try {
+            let q = supabase.from('opportunities').select('amount,stage');
+            if (tenant_id) q = q.eq('tenant_id', tenant_id);
+            if (!includeTestData) {
+              try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ void 0; }
+            }
+            const { data } = await q;
+            return Array.isArray(data) ? data : [];
+          } catch { return []; }
+        })(),
       ]);
+
+      // Extract all opportunities data
+      const allOpportunities = allOpportunitiesForPipeline || [];
+
+      // Calculate pipeline value from ALL opportunities data
+      const pipelineValue = allOpportunities.reduce((sum, opp) => {
+        // Only include active opportunities (not won or closed_lost)
+        if (opp.stage !== 'won' && opp.stage !== 'closed_won' && opp.stage !== 'lost' && opp.stage !== 'closed_lost') {
+          const amount = parseFloat(opp.amount) || 0;
+          return sum + amount;
+        }
+        return sum;
+      }, 0);
+
+      const wonValue = allOpportunities.reduce((sum, opp) => {
+        // Only include won opportunities
+        if (opp.stage === 'won' || opp.stage === 'closed_won') {
+          const amount = parseFloat(opp.amount) || 0;
+          return sum + amount;
+        }
+        return sum;
+      }, 0);
+      
+      // Debug: log if we have opportunities but no pipeline value
+      if (allOpportunities.length > 0 && pipelineValue === 0) {
+        console.warn('[reports.v2] WARNING: Opportunities found but pipelineValue=0', {
+          tenantId: tenant_id,
+          opportunitiesCount: allOpportunities.length,
+          sample: allOpportunities.slice(0, 2),
+          stages: allOpportunities.map(o => ({ stage: o.stage, amount: o.amount, type: typeof o.amount })),
+        });
+      }
 
       const stats = {
         totalContacts,
@@ -574,10 +638,14 @@ export default function createReportsV2Router(_pgPool) {
         openOpportunities,
         newLeadsLast30Days,
         activitiesLast30Days,
+        pipelineValue,
+        wonValue,
       };
 
-      // Build AI context (runs additional queries for health analysis)
-      const aiContext = await buildDashboardAiContext(stats, tenant_id);
+      // Build AI context only if requested (adds 100-150ms processing time)
+      // This allows dashboard to load fast without AI enrichment,
+      // and fetch it separately if UI needs it later
+      const aiContext = includeAi ? await buildDashboardAiContext(stats, tenant_id) : null;
 
       const bundle = {
         stats,
@@ -592,6 +660,7 @@ export default function createReportsV2Router(_pgPool) {
           generated_at: new Date().toISOString(),
           ttl_seconds: Math.round(BUNDLE_TTL_MS / 1000),
           api_version: 'v2',
+          includeAi,
         },
       };
 

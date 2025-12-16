@@ -160,7 +160,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   // Diagnostic logging for key entities during tests
   const isOpportunity = entityName === 'Opportunity';
   const isActivity = entityName === 'Activity';
-  const isAccount = entityName === 'Account';
+  const isAccount = entityName === 'Account' || entityName === 'Customer';
   const isContact = entityName === 'Contact';
   const isLead = entityName === 'Lead';
   const isDebugEntity = isOpportunity || isActivity || entityName === 'Employee' || isAccount || isContact;
@@ -209,27 +209,35 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
 
   const mockUser = isLocalDevMode() ? createMockUser() : null;
 
-  // Resolve tenant_id with robust fallbacks and cache
+  // Entities that don't require tenant_id (logging, system operations)
+  const optionalTenantEntities = ['SystemLog', 'ImportLog', 'AuditLog'];
+  const requiresTenantId = !optionalTenantEntities.includes(entityName);
+
+  // Resolve tenant_id - MANDATORY FOR CRM DATA OPERATIONS
+  // Security-first: tenant_id is REQUIRED for all CRM data access (but optional for logging/system operations)
   const resolveTenantId = async () => {
-    // 1) Explicit in data (including null)
+    // 1) Explicit in data (required for database operations)
     if (data && Object.prototype.hasOwnProperty.call(data, 'tenant_id')) {
-      return data.tenant_id;
+      const explicit = data.tenant_id;
+      if (requiresTenantId && !explicit) {
+        throw new Error(`SECURITY: tenant_id is required for ${method} ${entityName}. Superadmins must select a tenant context.`);
+      }
+      return explicit;
     }
-    // 2) URL/localStorage selection
+    
+    // 2) URL/localStorage selection (user selected a tenant)
     const clientSelected = getSelectedTenantFromClient();
     if (clientSelected) return clientSelected;
-    // 3) Cached effective user tenant (set after first lookup)
+    
+    // 3) Cached effective user tenant
     try {
       if (typeof window !== 'undefined') {
         const cached = localStorage.getItem('effective_user_tenant_id');
-        if (cached !== null && cached !== undefined) {
-          // Allow empty string to represent null if previously cached incorrectly
-          return cached === '' ? null : cached;
-        }
+        if (cached && cached !== '') return cached;
       }
     } catch { /* noop */ }
 
-    // 4) Supabase-authenticated user profile lookup (production)
+    // 4) Supabase user profile lookup - get user's assigned tenant
     if (isSupabaseConfigured()) {
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -239,35 +247,42 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
             const json = await resp.json();
             const rawUsers = json.data?.users || json.data || json;
             const users = Array.isArray(rawUsers) ? rawUsers : [];
-            // Prefer record with non-null tenant_id for non-superadmin
             const exact = users.find(u => (u.email || '').toLowerCase() === user.email.toLowerCase());
-            const tenant = exact?.tenant_id ?? null;
+            const tenant = exact?.tenant_id;
+            
+            if (!tenant) {
+              throw new Error(`SECURITY: User ${user.email} has no tenant assigned. Database access requires tenant context.`);
+            }
+            
             try {
               if (typeof window !== 'undefined') {
-                localStorage.setItem('effective_user_tenant_id', tenant ?? '');
+                localStorage.setItem('effective_user_tenant_id', tenant);
               }
             } catch { /* noop */ }
             return tenant;
           }
         }
-      } catch {
-        // Ignore auth lookup errors and continue fallbacks
+      } catch (err) {
+        if (err.message.includes('SECURITY')) throw err;
+        // Ignore other auth lookup errors and continue
       }
     }
 
     // 5) Local dev mock user
     if (mockUser?.tenant_id) return mockUser.tenant_id;
-    // 6) Final fallback: null (no forced default)
-    return null;
+    
+    // 6) For optional-tenant entities (logging, system), allow null
+    if (!requiresTenantId) return null;
+    
+    // 7) NO FALLBACK - Enforce tenant requirement for CRM data
+    throw new Error(`SECURITY: No tenant_id available for ${method} ${entityName}. This database operation requires tenant context. Please select a tenant or ensure you are assigned to one.`);
   };
 
-  const defaultTenantId = await resolveTenantId();
-
-  // Use provided tenant_id from data, or fall back to default
-  // This allows explicit tenant_id values (including 'none') to be preserved
-  const tenantId = (data && Object.prototype.hasOwnProperty.call(data, 'tenant_id'))
-    ? data.tenant_id
-    : defaultTenantId;
+  const tenantId = await resolveTenantId();
+  
+  if (requiresTenantId && !tenantId) {
+    throw new Error(`SECURITY: tenant_id is mandatory. Operation ${method} ${entityName} cannot proceed without tenant context.`);
+  }
 
   const options = {
     method: method,
@@ -291,10 +306,8 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     } else {
       // GET list/filter - convert to query params
       const params = new URLSearchParams();
-      // Only include tenant_id if it's not explicitly null (null means "get all tenants")
-      if (tenantId !== null) {
-        params.append("tenant_id", tenantId);
-      }
+      // MANDATORY: Always include tenant_id for tenant isolation
+      params.append("tenant_id", tenantId);
 
       // Add filter parameters if provided
       if (data && Object.keys(data).length > 0) {
@@ -322,14 +335,8 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       options.body = JSON.stringify(bodyData);
     }
 
-    // Special-case entities that require tenant_id as query param for PUT
-    if ((entityName === 'Opportunity' || entityName === 'Note' || entityName === 'ModuleSettings') && method === 'PUT' && tenantId !== undefined) {
-      const delimiter = url.includes('?') ? '&' : '?';
-      url += `${delimiter}tenant_id=${encodeURIComponent(tenantId)}`;
-    }
-
-    // DELETE requests require tenant_id as query parameter for validation
-    if (method === 'DELETE' && tenantId !== undefined) {
+    // MANDATORY: All PUT/PATCH/DELETE requests include tenant_id as query parameter
+    if (method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
       const delimiter = url.includes('?') ? '&' : '?';
       url += `${delimiter}tenant_id=${encodeURIComponent(tenantId)}`;
     }
@@ -596,6 +603,9 @@ export const Contact = createEntity("Contact");
 
 // Account entity - use standard createEntity with tenant resolution
 export const Account = createEntity("Account");
+
+// Customer is a UI alias for Account - both use the same backend endpoint
+export const Customer = createEntity("Customer");
 
 export const Lead = createEntity("Lead");
 
@@ -1048,6 +1058,37 @@ export const BizDevSource = {
     // Import and return the full BizDevSource schema
     const { BizDevSourceSchema } = await import('../entities/BizDevSource.js');
     return BizDevSourceSchema;
+  },
+  /**
+   * Override create to handle response format properly
+   */
+  create: async (data) => {
+    try {
+      const tenant_id = data?.tenant_id || data?.tenantId;
+      if (!tenant_id) {
+        throw new Error('tenant_id is required for BizDevSource.create');
+      }
+      const url = `${BACKEND_URL}/api/bizdevsources`;
+      logDev('[BizDevSource.create] POST', { url, tenant_id });
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      logDev('[BizDevSource.create] Response', { status: response.status, ok: response.ok });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[BizDevSource.create] Error', errorData);
+        throw new Error(errorData.message || `Failed to create BizDevSource: ${response.status}`);
+      }
+      const result = await response.json();
+      logDev('[BizDevSource.create] Success', result);
+      return result.data || result;
+    } catch (err) {
+      console.error('[BizDevSource.create] Exception', err);
+      throw err;
+    }
   },
   /**
    * Override update to ensure tenant_id is passed via query string per backend route requirements.

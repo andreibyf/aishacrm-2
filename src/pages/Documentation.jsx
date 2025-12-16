@@ -535,7 +535,7 @@ Ai-SHA CRM is a comprehensive customer relationship management system designed t
 
 ## Key Features
 
-- **Contact & Account Management**: Centralized customer database
+- **Contact & Customer Management**: Centralized customer database
 - **Lead Management**: Track and nurture potential customers
 - **Sales Pipeline**: Visualize and manage your opportunities
 - **Activity Tracking**: Log calls, meetings, emails, and tasks
@@ -867,7 +867,7 @@ Think of BizDev Sources as a **staging area** for prospects:
 - Import company lists from directories
 - Store prospect information before qualification
 - Track license status and compliance
-- Promote to Accounts when business is won
+- Promote to Leads for qualification
 
 ## Workflow
 
@@ -892,10 +892,11 @@ BizDev Source → Create Lead → Qualify → Win Deal → Promote to Account
    - Create opportunities
    - Work deals through pipeline
 
-4. **Promote to Account**
-   - When deal is won, promote BizDev Source to Account
-   - Creates permanent Account record
-   - Preserves all linked leads and history
+4. **Promote to Lead**
+   - When ready to pursue, promote BizDev Source to Lead
+   - Creates Lead record with all data carried forward
+   - Preserves all linked history
+   - Lead can then be qualified and converted to Contact/Account
 
 ## Key Features
 

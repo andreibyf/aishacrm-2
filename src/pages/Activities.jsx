@@ -38,6 +38,7 @@ import { Link } from "react-router-dom";
 import { utcToLocal, getCurrentTimezoneOffset } from '../components/shared/timezoneUtils';
 import { useTimezone } from '../components/shared/TimezoneContext';
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 
 const statusColors = {
   scheduled: "bg-blue-900/20 text-blue-300 border-blue-700",
@@ -104,6 +105,7 @@ export default function ActivitiesPage() {
 
   const { cachedRequest, clearCache } = useApiManager();
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
+  const { isCardVisible, getCardLabel } = useStatusCardPreferences();
   
   const initialLoadDone = useRef(false);
 
@@ -427,11 +429,25 @@ export default function ActivitiesPage() {
       setCurrentPage(1);
     }
 
-    setIsFormOpen(false);
-    setEditingActivity(null);
-    clearCache('');
-    await loadActivities(1, pageSize);
-    toast.success(editingActivity ? "Activity updated successfully" : "Activity created successfully");
+    const wasEditing = !!editingActivity;
+    
+    try {
+      // Clear cache and reload BEFORE closing the dialog
+      clearCache('');
+      await loadActivities(1, pageSize);
+      
+      // Now close the dialog after data is fresh
+      setIsFormOpen(false);
+      setEditingActivity(null);
+      
+      toast.success(wasEditing ? "Activity updated successfully" : "Activity created successfully");
+    } catch (error) {
+      console.error('[Activities] Error in handleSave:', error);
+      // Still close the dialog even on error
+      setIsFormOpen(false);
+      setEditingActivity(null);
+      toast.error("Failed to refresh activity list");
+    }
   };
 
   const handleDelete = async (id) => {
@@ -492,10 +508,20 @@ export default function ActivitiesPage() {
           await Promise.all(batch.map(a => Activity.delete(a.id)));
         }
 
+        // Optimistically remove from UI immediately
+        const deletedIds = new Set(allActivities.map(a => a.id));
+        setActivities((prev) => prev.filter((a) => !deletedIds.has(a.id)));
+        setTotalItems((t) => Math.max(0, (t || 0) - deleteCount));
+
         setSelectedActivities(new Set());
         setSelectAllMode(false);
-        clearCache('');
-        await loadActivities(1, pageSize);
+        
+        // Refresh in background to ensure sync
+        setTimeout(() => {
+          clearCache('');
+          loadActivities(1, pageSize);
+        }, 500);
+        
         toast.success(`${deleteCount} activity/activities deleted`);
       } catch (error) {
         console.error("Failed to delete activities:", error);
@@ -511,9 +537,20 @@ export default function ActivitiesPage() {
 
       try {
         await Promise.all([...selectedActivities].map(id => Activity.delete(id)));
+        
+        // Optimistically remove from UI immediately
+        const deletedIds = new Set(selectedActivities);
+        setActivities((prev) => prev.filter((a) => !deletedIds.has(a.id)));
+        setTotalItems((t) => Math.max(0, (t || 0) - deletedIds.size));
+        
         setSelectedActivities(new Set());
-        clearCache('');
-        await loadActivities(currentPage, pageSize);
+        
+        // Refresh in background to ensure sync
+        setTimeout(() => {
+          clearCache('');
+          loadActivities(currentPage, pageSize);
+        }, 500);
+        
         toast.success(`${selectedActivities.size} activity/activities deleted`);
       } catch (error) {
         console.error("Failed to delete activities:", error);
@@ -932,7 +969,7 @@ export default function ActivitiesPage() {
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
           {[
             { 
-              label: 'Total Activities', 
+              label: `Total ${activitiesLabel}`, 
               value: totalStats.total, 
               filter: 'all', 
               bgColor: 'bg-slate-800',
@@ -978,7 +1015,9 @@ export default function ActivitiesPage() {
               borderColor: 'border-slate-700',
               tooltip: 'activity_cancelled'
             },
-          ].map((stat) => (
+          ]
+            .filter(stat => stat.tooltip === 'total_all' || isCardVisible(stat.tooltip))
+            .map((stat) => (
             <Tooltip key={stat.label}>
               <TooltipTrigger asChild>
                 <div
@@ -988,7 +1027,7 @@ export default function ActivitiesPage() {
                   onClick={() => handleStatusFilterClick(stat.filter)}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <p className="text-sm text-slate-400">{stat.label}</p>
+                    <p className="text-sm text-slate-400">{getCardLabel(stat.tooltip) || stat.label}</p>
                     <StatusHelper statusKey={stat.tooltip} />
                   </div>
                   <p className="text-2xl font-bold text-slate-100">{stat.value}</p>

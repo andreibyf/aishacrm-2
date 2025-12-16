@@ -50,12 +50,14 @@ import StatusHelper from "../components/shared/StatusHelper";
 import { ComponentHelp } from "../components/shared/ComponentHelp";
 import { formatIndustry } from "@/utils/industryUtils";
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 
 // Helper to add delay between API calls
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function AccountsPage() {
   const { plural: accountsLabel, singular: accountLabel } = useEntityLabel('accounts');
+  const { getCardLabel, isCardVisible } = useStatusCardPreferences();
   const [accounts, setAccounts] = useState([]);
   const [, setContacts] = useState([]);
   const [users, setUsers] = useState([]);
@@ -490,18 +492,32 @@ export default function AccountsPage() {
   }, [users, employees]);
 
   const handleSave = async () => {
-    setIsFormOpen(false);
-    setEditingAccount(null);
-    clearCacheByKey("Account");
-    await Promise.all([
-      loadAccounts(),
-      loadTotalStats(),
-    ]);
-    toast.success(
-      editingAccount
-        ? "Account updated successfully"
-        : "Account created successfully",
-    );
+    const wasEditing = !!editingAccount;
+    
+    try {
+      // Clear cache and reload BEFORE closing the dialog
+      clearCacheByKey("Account");
+      await Promise.all([
+        loadAccounts(),
+        loadTotalStats(),
+      ]);
+      
+      // Now close the dialog after data is fresh
+      setIsFormOpen(false);
+      setEditingAccount(null);
+      
+      toast.success(
+        wasEditing
+          ? "Account updated successfully"
+          : "Account created successfully",
+      );
+    } catch (error) {
+      console.error('[Accounts] Error in handleSave:', error);
+      toast.error("Failed to refresh account list");
+      // Still close the dialog even on error
+      setIsFormOpen(false);
+      setEditingAccount(null);
+    }
   };
 
   const handleDelete = async (id) => {
@@ -585,13 +601,23 @@ export default function AccountsPage() {
           await Promise.all(batch.map((a) => Account.delete(a.id)));
         }
 
+        // Optimistically remove from UI immediately
+        const deletedIds = new Set(allAccountsToDelete.map(a => a.id));
+        setAccounts((prev) => prev.filter((a) => !deletedIds.has(a.id)));
+        setTotalItems((t) => Math.max(0, (t || 0) - deleteCount));
+
         setSelectedAccounts(new Set());
         setSelectAllMode(false);
-        clearCacheByKey("Account");
-        await Promise.all([
-          loadAccounts(),
-          loadTotalStats(),
-        ]);
+        
+        // Refresh in background to ensure sync
+        setTimeout(async () => {
+          clearCacheByKey("Account");
+          await Promise.all([
+            loadAccounts(),
+            loadTotalStats(),
+          ]);
+        }, 500);
+        
         toast.success(`${deleteCount} account(s) deleted`);
       } catch (error) {
         console.error("Failed to delete accounts:", error);
@@ -1039,7 +1065,7 @@ export default function AccountsPage() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           {[
             {
-              label: "Total Accounts",
+              label: `Total ${accountsLabel}`,
               value: totalStats.total,
               filter: "all",
               bgColor: "bg-slate-800",
@@ -1085,7 +1111,7 @@ export default function AccountsPage() {
               borderColor: "border-gray-700",
               tooltip: "account_inactive",
             },
-          ].map((stat) => (
+          ].filter(stat => stat.tooltip === 'total_all' || isCardVisible(stat.tooltip)).map((stat) => (
             <div
               key={stat.label}
               className={`${stat.bgColor} ${
@@ -1098,7 +1124,7 @@ export default function AccountsPage() {
               onClick={() => handleTypeFilterClick(stat.filter)}
             >
               <div className="flex items-center justify-between mb-1">
-                <p className="text-sm text-slate-400">{stat.label}</p>
+                <p className="text-sm text-slate-400">{getCardLabel(stat.tooltip) || stat.label}</p>
                 <StatusHelper statusKey={stat.tooltip} />
               </div>
               <p className="text-2xl font-bold text-slate-100">{stat.value}</p>
