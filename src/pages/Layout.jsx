@@ -603,6 +603,21 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       document.body.classList.remove("theme-light", "theme-dark");
     };
   }, [theme]);
+
+  // DEV: Keyboard shortcut to clear cache (Ctrl+Shift+K or Cmd+Shift+K)
+  React.useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'K') {
+        e.preventDefault();
+        clearCache();
+        console.log('✅ API cache cleared (Ctrl+Shift+K)');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [clearCache]);
+
   // Ref to track if module settings have been loaded for the current user
   const moduleSettingsLoadedRef = useRef(false);
   // Ref to store the ID of the user for whom module settings were last loaded

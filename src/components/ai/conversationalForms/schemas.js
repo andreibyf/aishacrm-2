@@ -372,5 +372,120 @@ export const conversationalSchemas = {
       notes: normalizeText(answers.notes)
     }),
     previewFields: ['activity_type', 'subject', 'lead_name', 'account_name', 'due_date']
+  },
+  bizdevsource: {
+    id: 'bizdevsource',
+    label: 'New BizDev Source',
+    entity: 'bizdevsources',
+    steps: [
+      {
+        id: 'bizdev-company',
+        prompt: "What company did you find? This is the first step in the v3.0.0 workflow.",
+        required: true,
+        fields: [
+          { name: 'company_name', label: 'Company name', placeholder: 'e.g. Acme Construction LLC' },
+          { name: 'dba_name', label: 'DBA / Trade name (optional)', placeholder: 'e.g. Acme Builders' }
+        ],
+        validate: (answers) => ({
+          valid: requiredField(answers.company_name),
+          error: 'Company name is required.'
+        })
+      },
+      {
+        id: 'bizdev-source',
+        prompt: 'Where did this lead source come from?',
+        required: true,
+        fields: [
+          { name: 'source_name', label: 'Source name', placeholder: 'e.g. Construction Directory Q4 2025' },
+          {
+            name: 'source_type',
+            label: 'Source type',
+            type: 'select',
+            options: [
+              { value: 'directory', label: 'Directory' },
+              { value: 'referral', label: 'Referral' },
+              { value: 'trade_show', label: 'Trade Show' },
+              { value: 'web_scrape', label: 'Web Scrape' },
+              { value: 'purchased_list', label: 'Purchased List' },
+              { value: 'manual', label: 'Manual Entry' },
+              { value: 'other', label: 'Other' }
+            ]
+          }
+        ],
+        validate: (answers) => ({
+          valid: requiredField(answers.source_name),
+          error: 'Source name is required.'
+        })
+      },
+      {
+        id: 'bizdev-contact',
+        prompt: 'Add contact information for this company.',
+        required: false,
+        fields: [
+          { name: 'contact_person', label: 'Contact person', placeholder: 'e.g. John Smith' },
+          { name: 'email', label: 'Email', type: 'email', placeholder: 'info@acme.com' },
+          { name: 'phone_number', label: 'Phone', type: 'tel', placeholder: '+1 (555) 123-4567' }
+        ]
+      },
+      {
+        id: 'bizdev-details',
+        prompt: 'Additional details about the company.',
+        required: false,
+        fields: [
+          { name: 'industry', label: 'Industry', placeholder: 'e.g. Commercial Construction' },
+          { name: 'website', label: 'Website', placeholder: 'https://acme.com' },
+          {
+            name: 'priority',
+            label: 'Priority',
+            type: 'select',
+            options: [
+              { value: 'high', label: 'High' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'low', label: 'Low' }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'bizdev-address',
+        prompt: 'Company address (optional).',
+        required: false,
+        fields: [
+          { name: 'address_line_1', label: 'Address', placeholder: '123 Main St' },
+          { name: 'city', label: 'City', placeholder: 'Austin' },
+          { name: 'state_province', label: 'State', placeholder: 'TX' },
+          { name: 'postal_code', label: 'Zip', placeholder: '78701' }
+        ]
+      },
+      {
+        id: 'bizdev-notes',
+        prompt: 'Any notes about this prospect?',
+        required: false,
+        fields: [
+          { name: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Found via industry directory. Large commercial projects.' }
+        ]
+      }
+    ],
+    buildPayload: (answers, { tenantId, userId }) => ({
+      tenant_id: tenantId,
+      created_by: userId,
+      company_name: normalizeText(answers.company_name),
+      dba_name: normalizeText(answers.dba_name),
+      source_name: normalizeText(answers.source_name),
+      source_type: normalizeText(answers.source_type) || 'manual',
+      contact_person: normalizeText(answers.contact_person),
+      email: normalizeText(answers.email),
+      phone_number: normalizeText(answers.phone_number),
+      industry: normalizeText(answers.industry),
+      website: normalizeText(answers.website),
+      priority: normalizeText(answers.priority) || 'medium',
+      address_line_1: normalizeText(answers.address_line_1),
+      city: normalizeText(answers.city),
+      state_province: normalizeText(answers.state_province),
+      postal_code: normalizeText(answers.postal_code),
+      notes: normalizeText(answers.notes),
+      status: 'active'
+    }),
+    previewFields: ['company_name', 'source_name', 'contact_person', 'email', 'priority']
   }
 };

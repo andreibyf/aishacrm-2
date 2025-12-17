@@ -68,9 +68,18 @@ export default function BizDevSourcesPage() {
   const [bizdevSchema, setBizdevSchema] = useState(null);
 
   const { selectedTenantId } = useTenant();
-  const { cachedRequest, clearCache } = useApiManager();
+  const { cachedRequest, clearCache, clearCacheByKey } = useApiManager();
   const { logError } = useErrorLog();
   const loadingRef = useRef(false);
+
+  // DEBUG: Log what tenant ID we're getting
+  useEffect(() => {
+    console.log('🏢 BizDevSources tenant values:', {
+      selectedTenantId,
+      userTenantId: user?.tenant_id,
+      effectiveTenant: selectedTenantId || user?.tenant_id
+    });
+  }, [selectedTenantId, user?.tenant_id]);
 
   useEffect(() => {
     const loadSchema = async () => {
@@ -96,7 +105,9 @@ export default function BizDevSourcesPage() {
     setSelectedSources([]);
 
     try {
-      const filter = { tenant_id: user.tenant_id || selectedTenantId };
+      // Use selectedTenantId if explicitly set (for multi-tenant view), otherwise use user's primary tenant
+      const tenantId = selectedTenantId || user.tenant_id;
+      const filter = { tenant_id: tenantId };
       if (!filter.tenant_id) {
         setSources([]);
         setAccounts([]);
@@ -146,16 +157,40 @@ export default function BizDevSourcesPage() {
       setLoading(false);
       loadingRef.current = false;
     }
-  }, [user, selectedTenantId, cachedRequest, logError]);
+  }, [user, selectedTenantId, cachedRequest, logError, selectedTenantId]);
 
+  // Track current tenant to detect switches and clear cache
+  const prevTenantRef = useRef(null);
+  
   useEffect(() => {
+    // Use selectedTenantId first (dropdown override), then fall back to user's primary tenant
+    const currentTenant = selectedTenantId || user?.tenant_id;
+    if (!currentTenant) return;
+    
+    const tenantSwitched = prevTenantRef.current && prevTenantRef.current !== currentTenant;
+    
+    if (tenantSwitched) {
+      console.log('🔄 Tenant switched from', prevTenantRef.current, 'to', currentTenant);
+      // Tenant switched - clear cache and reload immediately
+      // Cache clear is synchronous, so no delay needed
+      clearCache();
+      prevTenantRef.current = currentTenant;
+      if (user) {
+        loadSources();
+      }
+      return;
+    }
+    
+    prevTenantRef.current = currentTenant;
+    
     if (user) {
       loadSources();
     }
-  }, [user, loadSources]);
+  }, [user, selectedTenantId, loadSources, clearCache]);
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     clearCache();
+    // Immediately reload - cache clear is synchronous
     loadSources();
   };
 
@@ -256,7 +291,9 @@ export default function BizDevSourcesPage() {
     });
 
     try {
+      console.log('[BizDevSources] About to call BizDevSource.promote with:', { id: sourceToPromote.id, tenantId });
       const result = await BizDevSource.promote(sourceToPromote.id, tenantId);
+      console.log('[BizDevSources] Promotion result:', result);
 
       // Optimistically update local state so stats reflect immediately
       setSources(prev => prev.map(s =>
@@ -266,10 +303,10 @@ export default function BizDevSourcesPage() {
               status: 'Promoted',
               metadata: {
                 ...(s.metadata || {}),
-                promoted_to_lead_id: result?.data?.lead?.id,
-                promoted_to_lead_type: result?.data?.lead_type,
-                promoted_account_id: result?.data?.account_id,
-                promoted_person_id: result?.data?.person_id,
+                promoted_to_lead_id: result?.lead?.id,
+                promoted_to_lead_type: result?.lead_type,
+                promoted_account_id: result?.account_id,
+                promoted_person_id: result?.person_id,
               },
             }
           : s
@@ -280,10 +317,10 @@ export default function BizDevSourcesPage() {
           status: 'Promoted',
           metadata: {
             ...(prev.metadata || {}),
-            promoted_to_lead_id: result?.data?.lead?.id,
-            promoted_to_lead_type: result?.data?.lead_type,
-            promoted_account_id: result?.data?.account_id,
-            promoted_person_id: result?.data?.person_id,
+            promoted_to_lead_id: result?.lead?.id,
+            promoted_to_lead_type: result?.lead_type,
+            promoted_account_id: result?.account_id,
+            promoted_person_id: result?.person_id,
           },
         } : prev);
       }
@@ -292,8 +329,9 @@ export default function BizDevSourcesPage() {
         description: `Created lead from: ${sourceToPromote.company_name || sourceToPromote.contact_person || 'prospect'}`
       });
 
-      // Sync with backend to ensure full consistency
-      handleRefresh();
+      // Clear only the BizDevSource cache to prevent stale data, but don't reload
+      // The optimistic update above already shows the correct state
+      clearCacheByKey('BizDevSource');
       setShowDetailPanel(false);
       return result;
     } catch (error) {

@@ -17,8 +17,8 @@ export function cacheList(module, ttl = 180) {
       return next();
     }
 
-    // Get tenant_id from req.user (if validateTenant middleware was applied) or query params
-    const tenantId = req.user?.tenant_id || req.query?.tenant_id;
+    // Get tenant_id from query params first (explicit override), then fall back to authenticated user's tenant
+    const tenantId = req.query?.tenant_id || req.user?.tenant_id;
     if (!tenantId) {
       return next();
     }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { AlertCircle, Building2, CheckSquare, Loader2, Send, Sparkles, Target, TrendingUp, Users, X, Mic, Volume2, Trash2, ClipboardList, BarChart3, ListTodo, Ear } from 'lucide-react';
+import { AlertCircle, Building2, CheckSquare, Loader2, Send, Sparkles, Target, TrendingUp, Users, X, Mic, Volume2, Trash2, ClipboardList, BarChart3, ListTodo, Ear, Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useAiSidebarState } from './useAiSidebarState.jsx';
@@ -14,7 +14,7 @@ import RealtimeIndicator from './RealtimeIndicator.jsx';
 import { trackRealtimeEvent, subscribeToRealtimeTelemetry, getRealtimeTelemetrySnapshot } from '@/utils/realtimeTelemetry.js';
 import ConversationalForm from '@/components/ai/ConversationalForm.jsx';
 import { listConversationalSchemas, getSchemaById } from '@/components/ai/conversationalForms';
-import { Account, Activity, Contact, Lead, Opportunity } from '@/api/entities';
+import { Account, Activity, Contact, Lead, Opportunity, BizDevSource } from '@/api/entities';
 import { toast } from 'sonner';
 import { useUser } from '@/components/shared/useUser.js';
 import { isLikelyVoiceGarble, sanitizeMessageText } from '@/lib/ambiguityResolver';
@@ -29,6 +29,7 @@ const QUICK_ACTIONS = [
 
 // Labels for Guided Creations - friendly display names
 const ENTITY_LABELS = {
+  bizdevsource: 'BizDev',
   lead: 'Lead',
   account: 'Account',
   contact: 'Contact',
@@ -38,6 +39,7 @@ const ENTITY_LABELS = {
 
 // Icons for Guided Creations - matches navigation sidebar
 const ENTITY_ICONS = {
+  bizdevsource: Briefcase,
   lead: Target,
   account: Building2,
   contact: Users,
@@ -82,6 +84,14 @@ const containsDestructiveVoiceCommand = (text) => {
 };
 
 const conversationalFormHandlers = {
+  bizdevsource: {
+    create: (payload) => BizDevSource.create(payload),
+    success: (record) => {
+      const company = record?.company_name || 'BizDev Source';
+      const priority = record?.priority ? ` (${record.priority} priority)` : '';
+      return `Created BizDev source: ${company}${priority} — ready for promotion to Lead`;
+    }
+  },
   lead: {
     create: (payload) => Lead.create(payload),
     success: (record) => {

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Contact, Account, Opportunity, Lead } from "@/api/entities";
 import { useUser } from '@/components/shared/useUser.js';
+import { useTenant } from '@/components/shared/tenantContext';
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,10 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
   const [opportunityName, setOpportunityName] = useState("");
   const [opportunityAmount, setOpportunityAmount] = useState("");
   const { user: currentUser } = useUser();
+  const { selectedTenantId } = useTenant();
+
+  // Use selectedTenantId from dropdown first, then fall back to user's primary tenant
+  const effectiveTenantId = selectedTenantId || currentUser?.tenant_id;
 
   const { cachedRequest } = useApiManager();
 
@@ -49,8 +54,8 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
   // User now provided by global context (useUser)
 
   const handleConvert = async () => {
-    if (!currentUser?.tenant_id) {
-      alert("Cannot convert lead: Your account is not configured with a tenant.");
+    if (!effectiveTenantId) {
+      alert("Cannot convert lead: No tenant selected. Please select a tenant first.");
       return;
     }
 
@@ -64,7 +69,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
 
         const newAccountData = {
           name: accountName,
-          tenant_id: currentUser.tenant_id,
+          tenant_id: effectiveTenantId,
           type: "prospect",
           phone: lead.phone || null,
           address_1: lead.address_1 || null,
@@ -106,7 +111,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
         'create',
         {
           data: {
-            tenant_id: currentUser.tenant_id,
+            tenant_id: effectiveTenantId,
             first_name: lead.first_name,
             last_name: lead.last_name,
             email: lead.email,
@@ -131,7 +136,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
           }
         },
         () => Contact.create({
-          tenant_id: currentUser.tenant_id,
+          tenant_id: effectiveTenantId,
           first_name: lead.first_name,
           last_name: lead.last_name,
           email: lead.email,
@@ -165,7 +170,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
           'create',
           {
             data: {
-              tenant_id: currentUser.tenant_id,
+              tenant_id: effectiveTenantId,
               name: opportunityName,
               account_id: accountId || null,
               contact_id: newContact.id,
@@ -179,7 +184,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
             }
           },
           () => Opportunity.create({
-            tenant_id: currentUser.tenant_id,
+            tenant_id: effectiveTenantId,
             name: opportunityName,
             account_id: accountId || null,
             contact_id: newContact.id,

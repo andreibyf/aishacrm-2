@@ -15,7 +15,8 @@ import createAiRealtimeRoutes from './aiRealtime.js';
 import { routeChat } from '../flows/index.js';
 import { resolveLLMApiKey, pickModel, getTenantIdFromRequest, selectLLMConfigForTenant } from '../lib/aiEngine/index.js';
 import { logLLMActivity } from '../lib/aiEngine/activityLogger.js';
-import { enhanceSystemPromptWithLabels, fetchEntityLabels, updateToolSchemasWithLabels } from '../lib/entityLabelInjector.js';
+import { enhanceSystemPromptWithLabels, enhanceSystemPromptWithFullContext, fetchEntityLabels, updateToolSchemasWithLabels } from '../lib/entityLabelInjector.js';
+import { buildTenantContextDictionary, generateContextDictionaryPrompt } from '../lib/tenantContextDictionary.js';
 
 /**
  * Create provider-specific OpenAI-compatible client for tool calling.
@@ -486,8 +487,8 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
 - Only reference data returned by the tools to guarantee tenant isolation
 - When creating activities without a specified assignee, assign them to the current user (${userName || 'yourself'})`;
 
-      // Inject entity label awareness for custom terminology
-      const systemPrompt = await enhanceSystemPromptWithLabels(baseSystemPrompt, pgPool, tenantIdentifier);
+      // Inject full tenant context dictionary (v3.0.0) - includes terminology, workflows, status cards
+      const systemPrompt = await enhanceSystemPromptWithFullContext(baseSystemPrompt, pgPool, tenantIdentifier);
 
       const messages = [
         { role: 'system', content: systemPrompt },
@@ -1701,8 +1702,8 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       const tenantName = tenantRecord?.name || tenantRecord?.tenant_id || 'CRM Tenant';
       const baseSystemPrompt = `${buildSystemPrompt({ tenantName })}\n\n${BRAID_SYSTEM_PROMPT}\n\n- ALWAYS call fetch_tenant_snapshot before answering tenant data questions.\n- NEVER hallucinate records; only reference tool data.\n`;
       
-      // Inject entity label awareness for custom terminology
-      const systemPrompt = await enhanceSystemPromptWithLabels(baseSystemPrompt, pgPool, tenantIdentifier);
+      // Inject full tenant context dictionary (v3.0.0) - includes terminology, workflows, status cards
+      const systemPrompt = await enhanceSystemPromptWithFullContext(baseSystemPrompt, pgPool, tenantIdentifier);
 
       const convoMessages = [
         { role: 'system', content: systemPrompt },
@@ -2043,6 +2044,69 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
         status: 'error',
         message: error?.message || 'Tool execution failed',
         call_id: req.body?.call_id
+      });
+    }
+  });
+
+  /**
+   * GET /api/ai/context-dictionary
+   * Returns the tenant context dictionary for AI session initialization.
+   * This provides AI with tenant-specific terminology, workflows, and configurations.
+   * 
+   * Query params:
+   * - tenant_id: Tenant UUID or slug (required)
+   * - format: 'json' (default) or 'prompt' (returns AI-ready system prompt injection)
+   * 
+   * @example GET /api/ai/context-dictionary?tenant_id=abc123&format=json
+   */
+  router.get('/context-dictionary', async (req, res) => {
+    const startedAt = Date.now();
+    try {
+      const { tenant_id, format = 'json' } = req.query;
+      
+      if (!tenant_id) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id query parameter is required'
+        });
+      }
+      
+      // Build the context dictionary
+      const dictionary = await buildTenantContextDictionary(pgPool, tenant_id);
+      
+      if (dictionary.error) {
+        return res.status(404).json({
+          status: 'error',
+          message: dictionary.error,
+          durationMs: Date.now() - startedAt
+        });
+      }
+      
+      // Return based on requested format
+      if (format === 'prompt') {
+        const promptInjection = generateContextDictionaryPrompt(dictionary);
+        return res.json({
+          status: 'success',
+          data: {
+            promptInjection,
+            dictionary
+          },
+          durationMs: Date.now() - startedAt
+        });
+      }
+      
+      res.json({
+        status: 'success',
+        data: dictionary,
+        durationMs: Date.now() - startedAt
+      });
+      
+    } catch (error) {
+      console.error('[AI Context Dictionary] Error:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message,
+        durationMs: Date.now() - startedAt
       });
     }
   });

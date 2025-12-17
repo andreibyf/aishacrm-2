@@ -2,6 +2,7 @@
 // number sanitation, and error normalization across entity forms.
 import { useState, useCallback } from 'react';
 import { useUser } from '@/components/shared/useUser.js';
+import { useTenant } from '@/components/shared/tenantContext';
 
 /**
  * useEntityForm
@@ -20,6 +21,7 @@ import { useUser } from '@/components/shared/useUser.js';
 export function useEntityForm(options = {}) {
   const { resolveTenant = 'auto' } = options;
   const { user } = useUser();
+  const { selectedTenantId } = useTenant();
 
   const [tenantId, setTenantId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -27,11 +29,11 @@ export function useEntityForm(options = {}) {
   const ensureTenantId = useCallback(async () => {
     if (resolveTenant !== 'auto') return null;
     if (tenantId) return tenantId;
-    // Use global user context instead of User.me()
-    const resolved = user?.tenant_id || null;
+    // Use selectedTenantId from context first (for multi-tenant dropdown), then fall back to user's primary tenant
+    const resolved = selectedTenantId || user?.tenant_id || null;
     if (resolved) setTenantId(resolved);
     return resolved;
-  }, [resolveTenant, tenantId, user]);
+  }, [resolveTenant, tenantId, user, selectedTenantId]);
 
   const normalizeError = useCallback((error) => {
     if (!error) return 'Unknown error occurred';

@@ -30,6 +30,7 @@ export const TOOL_REGISTRY = {
   // Lead Management
   create_lead: { file: 'leads.braid', function: 'createLead', policy: 'WRITE_OPERATIONS' },
   update_lead: { file: 'leads.braid', function: 'updateLead', policy: 'WRITE_OPERATIONS' },
+  qualify_lead: { file: 'leads.braid', function: 'qualifyLead', policy: 'WRITE_OPERATIONS' },
   convert_lead_to_account: { file: 'leads.braid', function: 'convertLeadToAccount', policy: 'WRITE_OPERATIONS' },
   list_leads: { file: 'leads.braid', function: 'listLeads', policy: 'READ_ONLY' },
   search_leads: { file: 'leads.braid', function: 'searchLeads', policy: 'READ_ONLY' },
@@ -87,7 +88,33 @@ export const TOOL_REGISTRY = {
   initiate_call: { file: 'telephony.braid', function: 'initiateCall', policy: 'WRITE_OPERATIONS' },
   call_contact: { file: 'telephony.braid', function: 'callContact', policy: 'WRITE_OPERATIONS' },
   check_calling_provider: { file: 'telephony.braid', function: 'checkCallingProvider', policy: 'READ_ONLY' },
-  get_calling_agents: { file: 'telephony.braid', function: 'getCallingAgents', policy: 'READ_ONLY' }
+  get_calling_agents: { file: 'telephony.braid', function: 'getCallingAgents', policy: 'READ_ONLY' },
+
+  // BizDev Sources (v3.0.0 workflow)
+  create_bizdev_source: { file: 'bizdev-sources.braid', function: 'createBizDevSource', policy: 'WRITE_OPERATIONS' },
+  update_bizdev_source: { file: 'bizdev-sources.braid', function: 'updateBizDevSource', policy: 'WRITE_OPERATIONS' },
+  get_bizdev_source_details: { file: 'bizdev-sources.braid', function: 'getBizDevSourceDetails', policy: 'READ_ONLY' },
+  list_bizdev_sources: { file: 'bizdev-sources.braid', function: 'listBizDevSources', policy: 'READ_ONLY' },
+  search_bizdev_sources: { file: 'bizdev-sources.braid', function: 'searchBizDevSources', policy: 'READ_ONLY' },
+  promote_bizdev_source_to_lead: { file: 'bizdev-sources.braid', function: 'promoteBizDevSourceToLead', policy: 'WRITE_OPERATIONS' },
+  delete_bizdev_source: { file: 'bizdev-sources.braid', function: 'deleteBizDevSource', policy: 'WRITE_OPERATIONS' },
+  archive_bizdev_sources: { file: 'bizdev-sources.braid', function: 'archiveBizDevSources', policy: 'WRITE_OPERATIONS' },
+
+  // v3.0.0 Lifecycle Orchestration (complete workflow tools)
+  advance_to_lead: { file: 'lifecycle.braid', function: 'advanceToLead', policy: 'WRITE_OPERATIONS' },
+  advance_to_qualified: { file: 'lifecycle.braid', function: 'advanceToQualified', policy: 'WRITE_OPERATIONS' },
+  advance_to_account: { file: 'lifecycle.braid', function: 'advanceToAccount', policy: 'WRITE_OPERATIONS' },
+  advance_opportunity_stage: { file: 'lifecycle.braid', function: 'advanceOpportunityStage', policy: 'WRITE_OPERATIONS' },
+  full_lifecycle_advance: { file: 'lifecycle.braid', function: 'fullLifecycleAdvance', policy: 'WRITE_OPERATIONS' },
+
+  // AI Suggestions (Phase 3 Autonomous Operations)
+  list_suggestions: { file: 'suggestions.braid', function: 'listSuggestions', policy: 'READ_ONLY' },
+  get_suggestion_details: { file: 'suggestions.braid', function: 'getSuggestionDetails', policy: 'READ_ONLY' },
+  get_suggestion_stats: { file: 'suggestions.braid', function: 'getSuggestionStats', policy: 'READ_ONLY' },
+  approve_suggestion: { file: 'suggestions.braid', function: 'approveSuggestion', policy: 'WRITE_OPERATIONS' },
+  reject_suggestion: { file: 'suggestions.braid', function: 'rejectSuggestion', policy: 'WRITE_OPERATIONS' },
+  apply_suggestion: { file: 'suggestions.braid', function: 'applySuggestion', policy: 'WRITE_OPERATIONS' },
+  trigger_suggestion_generation: { file: 'suggestions.braid', function: 'triggerSuggestionGeneration', policy: 'WRITE_OPERATIONS' }
 };
 
 /**
@@ -107,8 +134,9 @@ const TOOL_DESCRIPTIONS = {
 
   // Leads
   create_lead: 'Create a new Lead (potential prospect) record in the CRM.',
-  update_lead: 'Update an existing Lead record by its ID. Can modify name, email, company, status, source, phone, job_title, etc.',
-  convert_lead_to_account: 'Convert a qualified Lead into an Account. Creates the account and optionally a contact.',
+  update_lead: 'Update an existing Lead record by its ID. Can modify name, email, company, status, source, phone, job_title, etc. Use for status changes (new→contacted→qualified).',
+  qualify_lead: 'Mark a Lead as qualified. Updates status to "qualified" and prepares it for conversion. Use before convert_lead_to_account.',
+  convert_lead_to_account: 'v3.0.0 WORKFLOW: Convert a Lead to Contact + Account + Opportunity. This is the key transition that creates the full customer record. Options: create_account (bool), account_name (string), selected_account_id (UUID for existing account), create_opportunity (bool), opportunity_name, opportunity_amount. Returns contact, account, opportunity.',
   list_leads: 'List Leads in the CRM. FIRST ask user: "Would you like all leads, or filter by status (new, contacted, qualified, unqualified, converted)?" Pass status="all" for all leads. IMPORTANT: If more than 5 results, summarize the count and tell user to check the Leads page in the UI for the full list.',
   search_leads: 'Search for Leads by name, email, or company. ALWAYS use this first when user asks about a lead by name or wants lead details. Use get_lead_details only when you have the lead ID.',
   get_lead_details: 'Get the full details of a specific Lead by its UUID. Only use when you already have the lead_id from a previous search or list.',
@@ -158,7 +186,33 @@ const TOOL_DESCRIPTIONS = {
   initiate_call: 'Initiate an AI-powered outbound phone call to a phone number.',
   call_contact: 'Initiate an AI-powered outbound phone call to a Contact by their ID.',
   check_calling_provider: 'Check if a calling provider (CallFluent, Thoughtly) is configured and available.',
-  get_calling_agents: 'List available AI calling agents and their configurations.'
+  get_calling_agents: 'List available AI calling agents and their configurations.',
+
+  // BizDev Sources (v3.0.0 workflow)
+  create_bizdev_source: 'Create a new BizDev Source (business development lead source) for later promotion to a Lead. This is the first step in the v3.0.0 workflow.',
+  update_bizdev_source: 'Update an existing BizDev Source by its ID. Can modify source_name, company_name, contact_name, email, phone, priority, status.',
+  get_bizdev_source_details: 'Get the full details of a specific BizDev Source by its ID.',
+  list_bizdev_sources: 'List BizDev Sources with optional filtering by status (active, promoted, rejected) or priority.',
+  search_bizdev_sources: 'Search BizDev Sources by name, company, or contact information.',
+  promote_bizdev_source_to_lead: 'Promote a BizDev Source to a Lead. This is the key v3.0.0 workflow transition: BizDev Source → Lead. Creates a Lead with provenance tracking.',
+  delete_bizdev_source: 'Delete a BizDev Source by its ID.',
+  archive_bizdev_sources: 'Archive multiple BizDev Sources by their IDs (bulk operation).',
+
+  // v3.0.0 Lifecycle Orchestration (complete workflow tools)
+  advance_to_lead: 'v3.0.0 WORKFLOW STEP 1: Promote a BizDev Source to a Lead. Updates source status to "promoted", creates Lead with status "new". Returns lead_id for next step.',
+  advance_to_qualified: 'v3.0.0 WORKFLOW STEP 2: Mark a Lead as qualified. Updates Lead status from "new" to "qualified". Call this before conversion. Returns ready_for_conversion flag.',
+  advance_to_account: 'v3.0.0 WORKFLOW STEP 3: Convert a qualified Lead to Contact + Account + Opportunity. Creates Contact (prospect), optionally creates/links Account, optionally creates Opportunity (prospecting stage).',
+  advance_opportunity_stage: 'v3.0.0 WORKFLOW STEP 4: Move an Opportunity through sales stages (prospecting → qualification → proposal → negotiation → closed_won/closed_lost). Auto-calculates probability based on stage.',
+  full_lifecycle_advance: 'v3.0.0 COMPLETE WORKFLOW: Execute the full BizDev Source → Lead → Contact + Account + Opportunity lifecycle in a single call. Use for automation scenarios. Combines promote, qualify, and convert steps.',
+
+  // AI Suggestions (Phase 3 Autonomous Operations)
+  list_suggestions: 'List AI-generated suggestions by status (pending, approved, rejected, applied, expired, all). These are autonomous recommendations from AI triggers.',
+  get_suggestion_details: 'Get full details of a specific AI suggestion including reasoning, confidence score, and suggested action payload.',
+  get_suggestion_stats: 'Get statistics about AI suggestions: counts by status, priority, and record type. Useful for dashboard metrics.',
+  approve_suggestion: 'Approve a pending AI suggestion, marking it ready for application. Requires reviewer notes.',
+  reject_suggestion: 'Reject an AI suggestion with reason. Helps improve future suggestion quality through feedback.',
+  apply_suggestion: 'Execute an approved AI suggestion. This performs the suggested action (create, update, etc.) on the target record.',
+  trigger_suggestion_generation: 'Manually trigger AI suggestion generation for a specific trigger ID. Runs the trigger logic immediately.'
 };
 
 /**
@@ -495,6 +549,7 @@ const BRAID_PARAM_ORDER = {
   // Leads
   createLead: ['tenant', 'first_name', 'last_name', 'email', 'company', 'phone', 'source'],
   updateLead: ['tenant', 'lead_id', 'updates'],
+  qualifyLead: ['tenant', 'lead_id', 'notes'],
   convertLeadToAccount: ['tenant', 'lead_id', 'options'],
   listLeads: ['tenant', 'status', 'limit'],
   getLeadDetails: ['tenant', 'lead_id'],
@@ -538,7 +593,33 @@ const BRAID_PARAM_ORDER = {
   // Web Research
   searchWeb: ['query', 'limit'],
   fetchWebPage: ['url'],
-  lookupCompanyInfo: ['company_name']
+  lookupCompanyInfo: ['company_name'],
+
+  // BizDev Sources (v3.0.0 workflow)
+  createBizDevSource: ['tenant', 'source_name', 'source_type', 'company_name', 'contact_name', 'email', 'phone', 'priority'],
+  updateBizDevSource: ['tenant', 'source_id', 'updates'],
+  getBizDevSourceDetails: ['tenant', 'source_id'],
+  listBizDevSources: ['tenant', 'status', 'priority', 'limit'],
+  searchBizDevSources: ['tenant', 'query', 'source_type', 'limit'],
+  promoteBizDevSourceToLead: ['tenant', 'source_id', 'options'],
+  deleteBizDevSource: ['tenant', 'source_id'],
+  archiveBizDevSources: ['tenant', 'source_ids'],
+
+  // v3.0.0 Lifecycle Orchestration
+  advanceToLead: ['tenant', 'bizdev_source_id', 'notes'],
+  advanceToQualified: ['tenant', 'lead_id', 'qualification_notes'],
+  advanceToAccount: ['tenant', 'lead_id', 'create_account', 'account_name', 'selected_account_id', 'create_opportunity', 'opportunity_name', 'opportunity_amount'],
+  advanceOpportunityStage: ['tenant', 'opportunity_id', 'new_stage', 'notes'],
+  fullLifecycleAdvance: ['tenant', 'bizdev_source_id', 'qualification_notes', 'create_account', 'account_name', 'create_opportunity', 'opportunity_name', 'opportunity_amount'],
+
+  // AI Suggestions (Phase 3 Autonomous Operations)
+  listSuggestions: ['tenant', 'status', 'limit'],
+  getSuggestionDetails: ['tenant', 'suggestion_id'],
+  getSuggestionStats: ['tenant'],
+  approveSuggestion: ['tenant', 'suggestion_id', 'reviewer_notes'],
+  rejectSuggestion: ['tenant', 'suggestion_id', 'rejection_reason'],
+  applySuggestion: ['tenant', 'suggestion_id'],
+  triggerSuggestionGeneration: ['tenant', 'trigger_id']
 };
 
 /**

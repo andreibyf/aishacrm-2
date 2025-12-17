@@ -47,6 +47,29 @@ fn deleteLead(
   };
 }
 
+fn qualifyLead(
+  tenant: String,
+  lead_id: String,
+  notes: String
+) -> Result<Lead, CRMError> !net {
+  // v3.0.0 workflow: Mark lead as qualified (status transition)
+  // This prepares the lead for conversion to Contact + Account + Opportunity
+  let url = "/api/leads/" + lead_id;
+  let body = {
+    tenant_id: tenant,
+    status: "qualified",
+    qualification_notes: notes
+  };
+  
+  let response = http.put(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
 fn updateLead(
   tenant: String,
   lead_id: String,

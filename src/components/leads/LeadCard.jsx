@@ -47,24 +47,47 @@ export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDe
                 className="border-slate-600 data-[state=checked]:bg-blue-600"
               />
               <div className="flex-1">
-                <h3 className={`font-semibold text-lg text-slate-100 ${isConverted ? 'line-through' : ''}`}>
-                  {lead.first_name} {lead.last_name}
-                </h3>
+                {(() => {
+                  const isB2B = lead.lead_type === 'b2b' || lead.lead_type === 'B2B';
+                  const personName = `${lead.first_name || ''} ${lead.last_name || ''}`.trim();
+                  const companyName = accountName || lead.company;
+                  
+                  if (isB2B && companyName) {
+                    // B2B: Show company name prominently
+                    return (
+                      <>
+                        <h3 className={`font-semibold text-lg text-slate-100 ${isConverted ? 'line-through' : ''}`}>
+                          {companyName}
+                        </h3>
+                        {personName && (
+                          <p className="text-sm text-slate-300 mt-1">
+                            Contact: {personName}
+                          </p>
+                        )}
+                      </>
+                    );
+                  }
+                  // B2C: Show person name prominently
+                  return (
+                    <>
+                      <h3 className={`font-semibold text-lg text-slate-100 ${isConverted ? 'line-through' : ''}`}>
+                        {personName || '—'}
+                      </h3>
+                      {companyName && (
+                        <div className="text-sm text-slate-400 mt-1">
+                          <p className="flex items-center gap-1">
+                            <Building2 className="w-3 h-3" />
+                            {companyName}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
                 {lead.job_title && (
                   <p className="text-sm text-slate-300 mt-1" data-testid="lead-job-title">
                     {lead.job_title}
                   </p>
-                )}
-                {(accountName || lead.company) && (
-                  <div className="text-sm text-slate-400 mt-1">
-                    <p className="flex items-center gap-1">
-                      <Building2 className="w-3 h-3" />
-                      {accountName || lead.company}
-                    </p>
-                    {accountName && lead.company && lead.company !== accountName && (
-                      <p className="text-xs text-slate-500 ml-4">Company: {lead.company}</p>
-                    )}
-                  </div>
                 )}
               </div>
             </div>

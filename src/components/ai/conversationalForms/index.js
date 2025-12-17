@@ -1,6 +1,6 @@
 import { conversationalSchemas } from './schemas';
 
-const DEFAULT_SCHEMA_ORDER = ['lead', 'account', 'contact', 'opportunity', 'activity'];
+const DEFAULT_SCHEMA_ORDER = ['bizdevsource', 'lead', 'account', 'contact', 'opportunity', 'activity'];
 
 export const getSchemaById = (id) => conversationalSchemas[id] || null;
 

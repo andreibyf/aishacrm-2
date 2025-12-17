@@ -40,6 +40,7 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
         const tid = source.tenant_id || tenantId || selectedTenantId;
         if (!tid) return;
         const tenantData = await Tenant.get(tid);
+        console.log('[BizDevSourceCard] Tenant data loaded:', { tid, business_model: tenantData?.business_model });
         if (tenantData?.business_model) {
           setBusinessModel(tenantData.business_model);
         }

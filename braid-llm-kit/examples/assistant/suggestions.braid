@@ -1,0 +1,127 @@
+// AI Suggestions Braid Functions - Phase 3 Autonomous Operations
+// Provides AI access to the suggestion system for reviewing and acting on AI-generated recommendations
+
+import { Result, CRMError } from "../../spec/types.braid"
+
+fn listSuggestions(
+  tenant: String,
+  status: String,
+  limit: Number
+) -> Result<Array<Suggestion>, CRMError> !net {
+  // List AI-generated suggestions for review
+  // Status options: pending, approved, rejected, applied, expired, all
+  let url = "/api/ai/suggestions?tenant_id=" + tenant + "&status=" + status + "&limit=" + limit;
+  let response = http.get(url);
+  
+  return match response {
+    Ok{value} => Ok(value.data.suggestions),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getSuggestionDetails(
+  tenant: String,
+  suggestion_id: String
+) -> Result<Suggestion, CRMError> !net {
+  // Get full details of a specific suggestion including reasoning
+  let url = "/api/ai/suggestions/" + suggestion_id + "?tenant_id=" + tenant;
+  let response = http.get(url);
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getSuggestionStats(
+  tenant: String
+) -> Result<SuggestionStats, CRMError> !net {
+  // Get statistics about suggestions: counts by status, priority, record type
+  let url = "/api/ai/suggestions/stats?tenant_id=" + tenant;
+  let response = http.get(url);
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn approveSuggestion(
+  tenant: String,
+  suggestion_id: String,
+  reviewer_notes: String
+) -> Result<Suggestion, CRMError> !net {
+  // Approve a pending suggestion (marks it ready for application)
+  let url = "/api/ai/suggestions/" + suggestion_id + "/approve";
+  let body = {
+    tenant_id: tenant,
+    reviewer_notes: reviewer_notes
+  };
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "ApprovalError", code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn rejectSuggestion(
+  tenant: String,
+  suggestion_id: String,
+  rejection_reason: String
+) -> Result<Suggestion, CRMError> !net {
+  // Reject a suggestion with reason for feedback improvement
+  let url = "/api/ai/suggestions/" + suggestion_id + "/reject";
+  let body = {
+    tenant_id: tenant,
+    rejection_reason: rejection_reason
+  };
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "RejectionError", code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn applySuggestion(
+  tenant: String,
+  suggestion_id: String
+) -> Result<ApplyResult, CRMError> !net {
+  // Apply an approved suggestion - executes the suggested action
+  let url = "/api/ai/suggestions/" + suggestion_id + "/apply";
+  let body = {
+    tenant_id: tenant
+  };
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "ApplyError", code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn triggerSuggestionGeneration(
+  tenant: String,
+  trigger_id: String
+) -> Result<TriggerResult, CRMError> !net {
+  // Manually trigger suggestion generation for a specific trigger
+  let url = "/api/ai/suggestions/trigger";
+  let body = {
+    tenant_id: tenant,
+    trigger_id: trigger_id
+  };
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "TriggerError", code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

@@ -567,22 +567,23 @@ export default function createBizDevSourceRoutes(pgPool) {
         .delete()
         .eq('id', id)
         .eq('tenant_id', tenant_id)
-        .select()
-        .single();
+        .select();
 
       if (error) throw error;
 
-      if (!data) {
+      if (!data || data.length === 0) {
         return res.status(404).json({
           status: 'error',
           message: 'BizDev source not found'
         });
       }
 
+      const deletedData = data[0];
+
       res.json({
         status: 'success',
         message: 'BizDev source deleted',
-        data: { ...data, source_name: data.source || data.source_name }
+        data: { ...deletedData, source_name: deletedData.source || deletedData.source_name }
       });
     } catch (error) {
       console.error('Error deleting bizdev source:', error);
@@ -597,8 +598,8 @@ export default function createBizDevSourceRoutes(pgPool) {
    * @openapi
    * /api/bizdevsources/{id}/promote:
    *   post:
-   *     summary: Promote BizDev source to account
-   *     description: Converts a BizDev source into an account and optionally deletes the source.
+   *     summary: Promote BizDev source to Lead
+   *     description: Converts a BizDev source into a Lead (v3.0.0 workflow). Creates Account and optionally Person profile, then creates Lead with provenance metadata.
    *     tags: [bizdevsources]
    *     parameters:
    *       - in: path
@@ -676,8 +677,23 @@ export default function createBizDevSourceRoutes(pgPool) {
       });
 
       // ========== STEP 2: Determine lead_type and create Account ==========
+      // Fetch tenant's business_model to determine lead type (B2C/B2B)
+      let tenantBusinessModel = client_type;
+      try {
+        const tenantResult = await client.query(
+          'SELECT business_model FROM tenant WHERE id = $1',
+          [tenant_id]
+        );
+        if (tenantResult.rows.length > 0 && tenantResult.rows[0].business_model) {
+          tenantBusinessModel = tenantResult.rows[0].business_model;
+          console.log('[Promote] Tenant business_model:', tenantBusinessModel);
+        }
+      } catch (e) {
+        console.warn('[Promote] Failed to fetch tenant business_model, using default:', tenantBusinessModel);
+      }
+
       const hasCompanyData = !!(bizdevSource.company_name || bizdevSource.dba_name);
-      const leadType = determineLeadType(client_type, hasCompanyData);
+      const leadType = determineLeadType(tenantBusinessModel, hasCompanyData);
       
       let accountId;
       let personId = null;
@@ -722,10 +738,10 @@ export default function createBizDevSourceRoutes(pgPool) {
       }
 
       const leadInsertSql = leadType === 'b2c'
-        ? `INSERT INTO leads (tenant_id, account_id, person_id, lead_type, first_name, last_name, email, phone, source, address_1, address_2, city, state_province, postal_code, country, created_date, metadata)
+        ? `INSERT INTO leads (tenant_id, account_id, person_id, lead_type, first_name, last_name, email, phone, source, address_1, address_2, city, state, zip, country, created_date, metadata)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
            RETURNING *`
-        : `INSERT INTO leads (tenant_id, account_id, lead_type, first_name, last_name, email, phone, company, source, address_1, address_2, city, state_province, postal_code, country, created_date, metadata)
+        : `INSERT INTO leads (tenant_id, account_id, lead_type, first_name, last_name, email, phone, company, source, address_1, address_2, city, state, zip, country, created_date, metadata)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
            RETURNING *`;
 

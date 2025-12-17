@@ -1,4 +1,14 @@
 /**
+ * @deprecated LEGACY - ARCHIVED December 2024
+ * ============================================
+ * This test has been superseded by the v3.0.0 workflow tests:
+ * - tests/e2e/bizdev-workflow-e2e.spec.ts (BizDev → Lead → Contact workflow)
+ * - tests/e2e/sales-cycle-e2e.spec.ts (Full sales cycle with stages)
+ * 
+ * The new workflow starts from BizDev Sources (not direct Lead creation)
+ * and follows: BizDev Source → Lead → Contact → Account + Opportunity
+ * ============================================
+ * 
  * Complete End-to-End User Workflow Test (NOT tagged @smoke intentionally)
  * 
  * This test simulates a realistic user journey through the entire CRM system:

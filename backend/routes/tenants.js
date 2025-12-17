@@ -505,15 +505,15 @@ export default function createTenantRoutes(_pgPool) {
         accent_color: row.branding_settings?.accent_color ||
           row.metadata?.accent_color || null,
         settings: row.branding_settings || {}, // For backward compatibility
-        // Use direct columns (migrated from metadata), fallback to metadata for older records
-        country: row.country || row.metadata?.country || "",
-        major_city: row.major_city || row.metadata?.major_city || "",
-        industry: row.industry || row.metadata?.industry || "other",
-        business_model: row.business_model || row.metadata?.business_model || "b2b",
-        geographic_focus: row.geographic_focus || row.metadata?.geographic_focus || "north_america",
-        elevenlabs_agent_id: row.elevenlabs_agent_id || row.metadata?.elevenlabs_agent_id || "",
-        display_order: row.display_order ?? row.metadata?.display_order ?? 0,
-        domain: row.domain || row.metadata?.domain || "",
+        // Use direct columns (migrated from metadata JSONB)
+        country: row.country || "",
+        major_city: row.major_city || "",
+        industry: row.industry || "other",
+        business_model: row.business_model || "b2b",
+        geographic_focus: row.geographic_focus || "north_america",
+        elevenlabs_agent_id: row.elevenlabs_agent_id || "",
+        display_order: row.display_order ?? 0,
+        domain: row.domain || "",
       };
 
       res.json({
@@ -668,7 +668,7 @@ export default function createTenantRoutes(_pgPool) {
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       const updateObj = {};
-
+      
       // Direct column updates
       if (name !== undefined) updateObj.name = name;
       if (status !== undefined) updateObj.status = status;
@@ -680,12 +680,12 @@ export default function createTenantRoutes(_pgPool) {
       if (elevenlabs_agent_id !== undefined) updateObj.elevenlabs_agent_id = elevenlabs_agent_id;
       if (display_order !== undefined) updateObj.display_order = display_order;
       if (domain !== undefined) updateObj.domain = domain;
-
+      
       // Handle metadata (for non-flattened fields)
       if (metadata !== undefined) {
         updateObj.metadata = metadata;
       }
-
+      
       // Handle branding settings
       if (settings !== undefined || hasBrandingFields) {
         // Fetch existing tenant branding_settings to merge
@@ -706,7 +706,7 @@ export default function createTenantRoutes(_pgPool) {
         };
         updateObj.branding_settings = mergedBranding;
       }
-
+      
       updateObj.updated_at = nowIso;
 
       const upd = supabase.from('tenant').update(updateObj).select();
@@ -730,15 +730,15 @@ export default function createTenantRoutes(_pgPool) {
         accent_color: row.branding_settings?.accent_color ||
           row.metadata?.accent_color || null,
         settings: row.branding_settings || {}, // For backward compatibility
-        // Use direct columns (migrated from metadata), fallback to metadata for older records
-        country: row.country || row.metadata?.country || "",
-        major_city: row.major_city || row.metadata?.major_city || "",
-        industry: row.industry || row.metadata?.industry || "other",
-        business_model: row.business_model || row.metadata?.business_model || "b2b",
-        geographic_focus: row.geographic_focus || row.metadata?.geographic_focus || "north_america",
-        elevenlabs_agent_id: row.elevenlabs_agent_id || row.metadata?.elevenlabs_agent_id || "",
-        display_order: row.display_order ?? row.metadata?.display_order ?? 0,
-        domain: row.domain || row.metadata?.domain || "",
+        // Extract metadata fields to top-level for UI
+        country: row.metadata?.country || "",
+        major_city: row.metadata?.major_city || "",
+        industry: row.metadata?.industry || "other",
+        business_model: row.metadata?.business_model || "b2b",
+        geographic_focus: row.metadata?.geographic_focus || "north_america",
+        elevenlabs_agent_id: row.metadata?.elevenlabs_agent_id || "",
+        display_order: row.metadata?.display_order ?? 0,
+        domain: row.metadata?.domain || "",
       };
 
       // Create audit log entry

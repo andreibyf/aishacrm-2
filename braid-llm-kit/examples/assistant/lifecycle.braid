@@ -1,0 +1,199 @@
+// Executive Assistant Tools - v3.0.0 Lifecycle Orchestration
+// Combines BizDev → Lead → Contact + Account + Opportunity into single workflows
+
+import { Result, CRMError } from "../../spec/types.braid"
+
+fn advanceToLead(
+  tenant: String,
+  bizdev_source_id: String,
+  notes: String
+) -> Result<Object, CRMError> !net {
+  // v3.0.0 Workflow Step 1: BizDev Source → Lead
+  // Status: BizDev source "active" → "promoted", Lead created as "new"
+  let url = "/api/bizdevsources/" + bizdev_source_id + "/promote";
+  let body = {
+    tenant_id: tenant,
+    notes: notes
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok({
+      step: "promote",
+      source_status: "promoted",
+      lead_status: "new",
+      lead_id: value.data.lead.id,
+      lead_type: value.data.lead_type
+    }),
+    Err{error} => Err({ tag: "PromotionError", code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn advanceToQualified(
+  tenant: String,
+  lead_id: String,
+  qualification_notes: String
+) -> Result<Object, CRMError> !net {
+  // v3.0.0 Workflow Step 2: Lead "new" → "qualified"
+  // This step prepares the lead for conversion
+  let url = "/api/leads/" + lead_id;
+  let body = {
+    tenant_id: tenant,
+    status: "qualified",
+    qualification_notes: qualification_notes
+  };
+  
+  let response = http.put(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok({
+      step: "qualify",
+      lead_status: "qualified",
+      lead_id: lead_id,
+      ready_for_conversion: true
+    }),
+    Err{error} => Err({ tag: "QualificationError", code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn advanceToAccount(
+  tenant: String,
+  lead_id: String,
+  create_account: Boolean,
+  account_name: String,
+  selected_account_id: String,
+  create_opportunity: Boolean,
+  opportunity_name: String,
+  opportunity_amount: Number
+) -> Result<Object, CRMError> !net {
+  // v3.0.0 Workflow Step 3: Lead → Contact + Account + Opportunity
+  // Status: Lead "qualified" → "converted" (then deleted)
+  // Creates: Contact (prospect), Account, Opportunity (prospecting stage)
+  let url = "/api/leads/" + lead_id + "/convert";
+  let body = {
+    tenant_id: tenant,
+    create_account: create_account,
+    account_name: account_name,
+    selected_account_id: selected_account_id,
+    create_opportunity: create_opportunity,
+    opportunity_name: opportunity_name,
+    opportunity_amount: opportunity_amount
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok({
+      step: "convert",
+      contact_id: value.data.contact.id,
+      contact_status: "prospect",
+      account_id: value.data.account?.id,
+      opportunity_id: value.data.opportunity?.id,
+      opportunity_stage: "prospecting"
+    }),
+    Err{error} => Err({ tag: "ConversionError", code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn advanceOpportunityStage(
+  tenant: String,
+  opportunity_id: String,
+  new_stage: String,
+  notes: String
+) -> Result<Object, CRMError> !net {
+  // v3.0.0 Workflow Step 4: Progress opportunity through sales stages
+  // Stages: prospecting → qualification → proposal → negotiation → closed_won/closed_lost
+  let url = "/api/opportunities/" + opportunity_id;
+  
+  // Calculate probability based on stage
+  let probability = 10;
+  if new_stage == "qualification" { probability = 25; }
+  if new_stage == "proposal" { probability = 50; }
+  if new_stage == "negotiation" { probability = 75; }
+  if new_stage == "closed_won" { probability = 100; }
+  if new_stage == "closed_lost" { probability = 0; }
+  
+  let body = {
+    tenant_id: tenant,
+    stage: new_stage,
+    probability: probability,
+    stage_notes: notes
+  };
+  
+  let response = http.put(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok({
+      step: "stage_advance",
+      opportunity_id: opportunity_id,
+      stage: new_stage,
+      probability: probability
+    }),
+    Err{error} => Err({ tag: "StageUpdateError", code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn fullLifecycleAdvance(
+  tenant: String,
+  bizdev_source_id: String,
+  qualification_notes: String,
+  create_account: Boolean,
+  account_name: String,
+  create_opportunity: Boolean,
+  opportunity_name: String,
+  opportunity_amount: Number
+) -> Result<Object, CRMError> !net {
+  // v3.0.0 COMPLETE LIFECYCLE: BizDev Source → Lead → Qualified → Contact + Account + Opportunity
+  // This is the full workflow in one call for automation scenarios
+  
+  // Step 1: Promote BizDev Source to Lead
+  let promoteUrl = "/api/bizdevsources/" + bizdev_source_id + "/promote";
+  let promoteResponse = http.post(promoteUrl, { body: { tenant_id: tenant } });
+  
+  let leadId = "";
+  match promoteResponse {
+    Ok{value} => { leadId = value.data.lead.id; },
+    Err{error} => { return Err({ tag: "PromotionError", step: 1, code: error.status }); },
+    _ => { return Err({ tag: "NetworkError", step: 1, url: promoteUrl, code: 500 }); }
+  }
+  
+  // Step 2: Qualify the Lead
+  let qualifyUrl = "/api/leads/" + leadId;
+  let qualifyResponse = http.put(qualifyUrl, { body: { tenant_id: tenant, status: "qualified", qualification_notes: qualification_notes } });
+  
+  match qualifyResponse {
+    Err{error} => { return Err({ tag: "QualificationError", step: 2, code: error.status }); },
+    _ => {}
+  }
+  
+  // Step 3: Convert Lead to Contact + Account + Opportunity
+  let convertUrl = "/api/leads/" + leadId + "/convert";
+  let convertBody = {
+    tenant_id: tenant,
+    create_account: create_account,
+    account_name: account_name,
+    create_opportunity: create_opportunity,
+    opportunity_name: opportunity_name,
+    opportunity_amount: opportunity_amount
+  };
+  let convertResponse = http.post(convertUrl, { body: convertBody });
+  
+  return match convertResponse {
+    Ok{value} => Ok({
+      workflow: "complete",
+      steps_completed: 3,
+      source_id: bizdev_source_id,
+      lead_id: leadId,
+      contact_id: value.data.contact.id,
+      account_id: value.data.account?.id,
+      opportunity_id: value.data.opportunity?.id
+    }),
+    Err{error} => Err({ tag: "ConversionError", step: 3, code: error.status }),
+    _ => Err({ tag: "NetworkError", step: 3, url: convertUrl, code: 500 })
+  };
+}

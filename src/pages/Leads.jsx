@@ -653,14 +653,10 @@ export default function LeadsPage() {
       setTotalItems((prev) => (prev > 0 ? prev - 1 : 0));
       toast.success("Lead deleted successfully");
 
-      // Small delay to let optimistic update settle
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
+      // Clear cache and refresh in background - don't block UI
       clearCache("Lead");
-      await Promise.all([
-        loadLeads(currentPage, pageSize),
-        loadTotalStats(),
-      ]);
+      loadLeads(currentPage, pageSize);
+      loadTotalStats();
     } catch (error) {
       console.error("Failed to delete lead:", error);
       toast.error("Failed to delete lead");
@@ -1044,17 +1040,18 @@ export default function LeadsPage() {
       );
     }
     
+    toast.success("Lead converted successfully");
     setIsConversionDialogOpen(false);
     setConvertingLead(null);
     
-    // Refresh data from server
+    // Clear cache and refresh in background - don't block UI
     clearCache("Lead");
     clearCache("Contact");
     clearCache("Account");
-    await Promise.all([
-      loadLeads(currentPage, pageSize),
-      loadTotalStats(),
-    ]);
+    clearCache("Opportunity");
+    // Fire and forget - UI is already updated optimistically
+    loadLeads(currentPage, pageSize);
+    loadTotalStats();
   };
 
   const handleRefresh = async () => {
@@ -1598,9 +1595,29 @@ export default function LeadsPage() {
                               />
                             </td>
                             <td className="px-4 py-3 text-sm text-slate-300">
-                              <span className={isConverted ? 'line-through' : ''}>
-                                {lead.first_name} {lead.last_name}
-                              </span>
+                              {(() => {
+                                const isB2B = lead.lead_type === 'b2b' || lead.lead_type === 'B2B';
+                                const personName = `${lead.first_name || ''} ${lead.last_name || ''}`.trim();
+                                const companyName = lead.company;
+                                
+                                if (isB2B && companyName) {
+                                  // B2B: Show company name prominently, contact person below
+                                  return (
+                                    <div className={isConverted ? 'line-through' : ''}>
+                                      <span className="font-medium text-slate-200">{companyName}</span>
+                                      {personName && (
+                                        <div className="text-xs text-slate-400">{personName}</div>
+                                      )}
+                                    </div>
+                                  );
+                                }
+                                // B2C or no company: Show person name
+                                return (
+                                  <span className={isConverted ? 'line-through' : ''}>
+                                    {personName || <span className="text-slate-500">—</span>}
+                                  </span>
+                                );
+                              })()}
                             </td>
                             <td
                               className="px-4 py-3 text-sm text-slate-300"

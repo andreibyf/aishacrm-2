@@ -200,6 +200,40 @@ export async function enhanceSystemPromptWithLabels(basePrompt, pool, tenantIdOr
 }
 
 /**
+ * Generate enhanced system prompt with FULL tenant context dictionary.
+ * This is the v3.0.0 version that includes workflow definitions, status cards,
+ * module visibility, and business model context in addition to entity labels.
+ * 
+ * Use this for new AI sessions where complete tenant context is needed.
+ * 
+ * @param {string} basePrompt - Original system prompt
+ * @param {import('pg').Pool} pool - Database pool
+ * @param {string} tenantIdOrSlug - Tenant UUID or text slug
+ * @returns {Promise<string>} Enhanced system prompt with full context dictionary
+ */
+export async function enhanceSystemPromptWithFullContext(basePrompt, pool, tenantIdOrSlug) {
+  try {
+    // Dynamically import to avoid circular dependencies
+    const { buildTenantContextDictionary, generateContextDictionaryPrompt } = await import('./tenantContextDictionary.js');
+    
+    const dictionary = await buildTenantContextDictionary(pool, tenantIdOrSlug);
+    
+    if (dictionary.error) {
+      console.warn('[entityLabelInjector] Failed to build context dictionary:', dictionary.error);
+      // Fall back to labels-only enhancement
+      return await enhanceSystemPromptWithLabels(basePrompt, pool, tenantIdOrSlug);
+    }
+    
+    const contextPrompt = generateContextDictionaryPrompt(dictionary);
+    return basePrompt + contextPrompt;
+  } catch (err) {
+    console.error('[entityLabelInjector] Error enhancing with full context:', err.message);
+    // Fall back to labels-only enhancement
+    return await enhanceSystemPromptWithLabels(basePrompt, pool, tenantIdOrSlug);
+  }
+}
+
+/**
  * Update tool schemas with custom entity labels in descriptions
  * @param {Array} toolSchemas - Array of OpenAI tool schemas
  * @param {Object} labels - Entity labels object

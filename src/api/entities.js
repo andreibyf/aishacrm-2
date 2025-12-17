@@ -1124,10 +1124,10 @@ export const BizDevSource = {
     }
   },
   /**
-   * Promote a BizDev source to an Account
+   * Promote a BizDev source to a Lead (v3.0.0 workflow)
    * @param {string} id - BizDev source ID
    * @param {string} tenant_id - Tenant ID
-   * @returns {Promise<{account: Object, contact: Object|null, bizdev_source_id: string}>}
+   * @returns {Promise<{lead: Object, account: Object, bizdev_source_id: string, lead_type: string}>}
    */
   promote: async (id, tenant_id) => {
     try {

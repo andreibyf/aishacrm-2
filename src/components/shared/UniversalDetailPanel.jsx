@@ -355,8 +355,16 @@ export default function UniversalDetailPanel({
   const getTitle = () => {
     switch (entityType) {
       case 'contact':
-      case 'lead':
         return `${entity.first_name || ''} ${entity.last_name || ''}`.trim();
+      case 'lead': {
+        // B2B leads: Show company name prominently
+        const isB2B = entity.lead_type === 'b2b' || entity.lead_type === 'B2B';
+        const personName = `${entity.first_name || ''} ${entity.last_name || ''}`.trim();
+        if (isB2B && entity.company) {
+          return entity.company;
+        }
+        return personName || entity.company || 'Lead';
+      }
       case 'account':
         return entity.name;
       case 'opportunity':
@@ -366,6 +374,18 @@ export default function UniversalDetailPanel({
       default:
         return 'Details';
     }
+  };
+
+  // Get subtitle for B2B leads (contact person)
+  const getSubtitle = () => {
+    if (entityType === 'lead') {
+      const isB2B = entity.lead_type === 'b2b' || entity.lead_type === 'B2B';
+      const personName = `${entity.first_name || ''} ${entity.last_name || ''}`.trim();
+      if (isB2B && entity.company && personName) {
+        return `Contact: ${personName}`;
+      }
+    }
+    return null;
   };
 
   // Helper function for badge colors (example, adjust as needed)
@@ -583,10 +603,14 @@ export default function UniversalDetailPanel({
               </div>
               <div>
                 <SheetTitle className="text-2xl font-bold text-slate-100">{getTitle()}</SheetTitle>
+                {getSubtitle() && (
+                  <p className="text-sm text-slate-300 mt-1">{getSubtitle()}</p>
+                )}
                 {entity.job_title && (
                   <p className="text-sm text-slate-400 mt-1">{entity.job_title}</p>
                 )}
-                {entity.company && (
+                {/* For B2C leads or contacts, show company. For B2B leads, company is already in title */}
+                {entity.company && !(entityType === 'lead' && (entity.lead_type === 'b2b' || entity.lead_type === 'B2B')) && (
                   <p className="text-sm text-slate-400 mt-1">{entity.company}</p>
                 )}
                 {entity.unique_id && !entity.job_title && !entity.company && (
