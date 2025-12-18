@@ -44,6 +44,7 @@ const PAGES = {
     Workflows: lazy(() => import('./Workflows')),
     ConstructionProjects: lazy(() => import('./ConstructionProjects')),
     Workers: lazy(() => import('./Workers')),
+    FunnelDemo: lazy(() => import('./FunnelDemo')),
 };
 
 function _getCurrentPage(url) {
@@ -71,6 +72,9 @@ function PagesContent() {
 
                 {/* Public route - lead profile webpage (standalone, no Layout wrapper) */}
                 <Route path="/leads/:leadId" element={<PAGES.LeadProfilePage />} />
+
+                {/* Public route - funnel demo (standalone, no Layout wrapper) */}
+                <Route path="/funnel-demo" element={<PAGES.FunnelDemo />} />
 
                 {/* All other routes wrapped in Layout (requires authentication) */}
                 <Route path="/*" element={
@@ -115,6 +119,7 @@ function PagesContent() {
                             <Route path="/Workflows" element={<PAGES.Workflows />} />
                             <Route path="/ConstructionProjects" element={<PAGES.ConstructionProjects />} />
                             <Route path="/Workers" element={<PAGES.Workers />} />
+                            <Route path="/FunnelDemo" element={<PAGES.FunnelDemo />} />
                         </Routes>
                     </Layout>
                 } />

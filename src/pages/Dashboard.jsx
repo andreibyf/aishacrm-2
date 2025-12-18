@@ -16,6 +16,7 @@ import LeadSourceChart from "../components/dashboard/LeadSourceChart";
 import TopAccounts from "../components/dashboard/TopAccounts";
 import RecentActivities from "../components/dashboard/RecentActivities";
 import LeadAgeReport from "../components/dashboard/LeadAgeReport";
+import SalesFunnelWidget from "../components/dashboard/SalesFunnelWidget";
 import { Loader2, RefreshCw } from "lucide-react";
 import { getDashboardBundleFast } from "@/api/dashboard";
 import { getCachedDashboardData, cacheDashboardData } from "@/api/dashboardCache";
@@ -30,6 +31,12 @@ const ALL_WIDGETS = [
     id: "salesPipeline",
     name: "Sales Pipeline",
     component: SalesPipeline,
+    defaultVisibility: true,
+  },
+  {
+    id: "salesFunnel",
+    name: "Sales Funnel",
+    component: SalesFunnelWidget,
     defaultVisibility: true,
   },
   {
@@ -555,8 +562,6 @@ export default function DashboardPage() {
       
       // Cache the fresh data
       cacheDashboardData(tenantFilter.tenant_id || null, !!showTestData, bundle);
-      setCachedAt(Date.now());
-      setIsCached(false);
       
       if (bundle?.lists) setBundleLists(bundle.lists);
       if (bundle?.stats) {
