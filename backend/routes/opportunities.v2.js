@@ -186,7 +186,7 @@ export default function createOpportunityV2Routes(_pgPool) {
 
       let q = supabase
         .from('opportunities')
-        .select('*', { count: 'exact' })
+        .select('*, employee:employees!opportunities_assigned_to_fkey(id, first_name, last_name, email), account:accounts!opportunities_account_id_fkey(id, name), contact:contacts!opportunities_contact_id_fkey(id, first_name, last_name, email)', { count: 'exact' })
         .eq('tenant_id', tenant_id);
 
       // Handle $or for unassigned filter (highest priority)
@@ -316,7 +316,25 @@ export default function createOpportunityV2Routes(_pgPool) {
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);
 
-      const opportunities = (data || []).map(expandMetadata);
+      const opportunities = (data || []).map(opp => {
+        const expanded = expandMetadata(opp);
+        // Add denormalized names from FK joins
+        if (opp.employee) {
+          expanded.assigned_to_name = `${opp.employee.first_name || ''} ${opp.employee.last_name || ''}`.trim();
+          expanded.assigned_to_email = opp.employee.email;
+        }
+        if (opp.account) {
+          expanded.account_name = opp.account.name;
+        }
+        if (opp.contact) {
+          expanded.contact_name = `${opp.contact.first_name || ''} ${opp.contact.last_name || ''}`.trim();
+          expanded.contact_email = opp.contact.email;
+        }
+        delete expanded.employee;
+        delete expanded.account;
+        delete expanded.contact;
+        return expanded;
+      });
 
       res.json({
         status: 'success',

@@ -36,8 +36,8 @@ export function cacheList(module, ttl = 180) {
 
       if (cached !== null) {
         console.log(`[Cache] Hit: ${module} list for tenant ${tenantId}`);
-        // Set cache headers for browser caching
-        res.set('Cache-Control', `private, max-age=${ttl}`);
+        // Disable browser caching - use server-side Redis cache only
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
         return res.status(200).json(cached);
       }
 
@@ -47,8 +47,8 @@ export function cacheList(module, ttl = 180) {
       // Override json method to cache response
       res.json = function(data) {
         if (res.statusCode === 200) {
-          // Set cache headers for browser caching
-          res.set('Cache-Control', `private, max-age=${ttl}`);
+          // Disable browser caching - use server-side Redis cache only
+          res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
           cacheManager.set(key, data, ttl).catch(err => {
             console.error('[Cache] Failed to cache response:', err);
           });
@@ -96,8 +96,8 @@ export function cacheDetail(module, ttl = 300) {
 
       if (cached !== null) {
         console.log(`[Cache] Hit: ${module} detail ${req.params.id} for tenant ${tenantId}`);
-        // Set cache headers for browser caching
-        res.set('Cache-Control', `private, max-age=${ttl}`);
+        // Disable browser caching - use server-side Redis cache only
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
         return res.status(200).json(cached);
       }
 
@@ -107,8 +107,8 @@ export function cacheDetail(module, ttl = 300) {
       // Override json method to cache response
       res.json = function(data) {
         if (res.statusCode === 200) {
-          // Set cache headers for browser caching
-          res.set('Cache-Control', `private, max-age=${ttl}`);
+          // Disable browser caching - use server-side Redis cache only
+          res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
           cacheManager.set(key, data, ttl).catch(err => {
             console.error('[Cache] Failed to cache detail response:', err);
           });

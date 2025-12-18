@@ -115,7 +115,7 @@ export default function createReportRoutes(_pgPool) {
   const router = express.Router();
   // Redis cache for dashboard bundle (distributed, persistent)
   // Get cacheManager from app.locals (initialized in startup/initServices.js)
-  const BUNDLE_TTL_SECONDS = 300; // 5 minutes (redis-cache TTL)
+  const BUNDLE_TTL_SECONDS = 30; // 30 seconds - short TTL since RPC is fast (~150ms)
 
   // POST /api/reports/clear-cache - Clear dashboard bundle cache (admin only, uses redis)
   router.post('/clear-cache', async (req, res) => {
@@ -298,7 +298,159 @@ export default function createReportRoutes(_pgPool) {
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
-      // Counts (use exact counts for accuracy; cache mitigates performance impact)
+      // OPTIMIZATION: Try single RPC call that returns stats + lists (1 round-trip instead of 4)
+      let bundleData = null;
+      try {
+        const startTime = Date.now();
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_dashboard_bundle', { 
+          p_tenant_id: tenant_id,
+          p_include_test_data: includeTestData
+        });
+        const elapsed = Date.now() - startTime;
+        if (rpcError) {
+          console.warn(`[dashboard-bundle] Bundle RPC error (${elapsed}ms): ${rpcError.message}`);
+        } else if (rpcData) {
+          bundleData = rpcData;
+          console.log(`[dashboard-bundle] Single RPC success (${elapsed}ms) source=${bundleData?.meta?.source || 'unknown'}`);
+        }
+      } catch (rpcErr) {
+        console.warn(`[dashboard-bundle] Bundle RPC fallback: ${rpcErr.message}`);
+      }
+
+      // If single RPC worked, format and return
+      if (bundleData && bundleData.stats) {
+        const bundle = {
+          stats: {
+            totalContacts: bundleData.stats.total_contacts || 0,
+            totalAccounts: bundleData.stats.total_accounts || 0,
+            totalLeads: bundleData.stats.total_leads || 0,
+            totalOpportunities: bundleData.stats.total_opportunities || 0,
+            openLeads: bundleData.stats.open_leads || 0,
+            wonOpportunities: bundleData.stats.won_opportunities || 0,
+            openOpportunities: bundleData.stats.open_opportunities || 0,
+            newLeadsLast30Days: bundleData.stats.leads_last_30_days || 0,
+            activitiesLast30Days: bundleData.stats.activities_last_30_days || 0,
+            pipelineValue: parseFloat(bundleData.stats.pipeline_value) || 0,
+            wonValue: parseFloat(bundleData.stats.won_value) || 0,
+          },
+          lists: {
+            recentActivities: bundleData.lists?.recentActivities || [],
+            recentLeads: bundleData.lists?.recentLeads || [],
+            recentOpportunities: bundleData.lists?.recentOpportunities || [],
+          },
+          meta: {
+            tenant_id: tenant_id,
+            generated_at: new Date().toISOString(),
+            ttl_seconds: BUNDLE_TTL_SECONDS,
+            source: bundleData.meta?.source || 'rpc_bundle',
+          },
+        };
+
+        // Store in redis cache
+        if (cacheManager && cacheManager.client) {
+          try {
+            await cacheManager.set(cacheKey, bundle, BUNDLE_TTL_SECONDS);
+          } catch (err) {
+            console.warn(`[dashboard-bundle] Redis cache write error: ${err.message}`);
+          }
+        }
+        return res.json({ status: 'success', data: bundle, cached: false });
+      }
+
+      // FALLBACK 1: Try old MV stats-only RPC + separate list queries
+      let mvStats = null;
+      try {
+        const { data: mvData, error: mvError } = await supabase.rpc('get_dashboard_stats', { p_tenant_id: tenant_id });
+        if (mvError) {
+          console.warn(`[dashboard-bundle] MV stats RPC error: ${mvError.message}`);
+        } else if (mvData) {
+          mvStats = mvData;
+          console.log(`[dashboard-bundle] Using MV stats (fallback 1) for tenant ${tenant_id}`);
+        }
+      } catch (mvErr) {
+        console.warn(`[dashboard-bundle] MV stats fallback: ${mvErr.message}`);
+      }
+
+      // If MV stats available, fetch lists separately
+      if (mvStats) {
+        const recentActivitiesP = (async () => {
+          try {
+            let q = supabase.from('activities').select('id,type,subject,status,created_at,created_date,assigned_to').order('created_at', { ascending: false }).limit(10);
+            if (tenant_id) q = q.eq('tenant_id', tenant_id);
+            if (!includeTestData) {
+              try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+            }
+            const { data } = await q;
+            return Array.isArray(data) ? data : [];
+          } catch { return []; }
+        })();
+        const recentLeadsP = (async () => {
+          try {
+            let q = supabase.from('leads').select('id,first_name,last_name,company,created_date,status').order('created_date', { ascending: false }).limit(5);
+            if (tenant_id) q = q.eq('tenant_id', tenant_id);
+            if (!includeTestData) {
+              try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+            }
+            const { data } = await q;
+            return Array.isArray(data) ? data : [];
+          } catch { return []; }
+        })();
+        const recentOppsP = (async () => {
+          try {
+            let q = supabase.from('opportunities').select('id,name,amount,stage,updated_at').order('updated_at', { ascending: false }).limit(5);
+            if (tenant_id) q = q.eq('tenant_id', tenant_id);
+            if (!includeTestData) {
+              try { q = q.or('is_test_data.is.false,is_test_data.is.null'); } catch { /* ignore */ }
+            }
+            const { data } = await q;
+            return Array.isArray(data) ? data : [];
+          } catch { return []; }
+        })();
+
+        const [recentActivities, recentLeads, recentOpportunities] = await Promise.all([
+          recentActivitiesP, recentLeadsP, recentOppsP
+        ]);
+
+        const bundle = {
+          stats: {
+            totalContacts: mvStats.total_contacts || 0,
+            totalAccounts: mvStats.total_accounts || 0,
+            totalLeads: mvStats.total_leads || 0,
+            totalOpportunities: mvStats.total_opportunities || 0,
+            openLeads: mvStats.open_leads || 0,
+            wonOpportunities: mvStats.won_opportunities || 0,
+            openOpportunities: mvStats.open_opportunities || 0,
+            newLeadsLast30Days: mvStats.leads_last_30_days || 0,
+            activitiesLast30Days: mvStats.activities_last_30_days || 0,
+            pipelineValue: parseFloat(mvStats.pipeline_value) || 0,
+            wonValue: parseFloat(mvStats.won_value) || 0,
+          },
+          lists: {
+            recentActivities,
+            recentLeads,
+            recentOpportunities,
+          },
+          meta: {
+            tenant_id: tenant_id || null,
+            generated_at: new Date().toISOString(),
+            ttl_seconds: BUNDLE_TTL_SECONDS,
+            source: 'materialized_view',
+          },
+        };
+
+        // Store in redis cache
+        if (cacheManager && cacheManager.client) {
+          try {
+            await cacheManager.set(cacheKey, bundle, BUNDLE_TTL_SECONDS);
+          } catch (err) {
+            console.warn(`[dashboard-bundle] Redis cache write error: ${err.message}`);
+          }
+        }
+        return res.json({ status: 'success', data: bundle, cached: false });
+      }
+
+      // FALLBACK: Original individual count queries (if MV not available)
+      console.log(`[dashboard-bundle] Falling back to individual queries`);
       const commonOpts = { includeTestData, countMode: 'exact', confirmSmallCounts: false };
       const totalContactsP = safeCount(null, 'contacts', tenant_id, undefined, commonOpts);
       const totalAccountsP = safeCount(null, 'accounts', tenant_id, undefined, commonOpts);

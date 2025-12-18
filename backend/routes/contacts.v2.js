@@ -105,7 +105,7 @@ export default function createContactV2Routes(_pgPool) {
 
       let q = supabase
         .from('contacts')
-        .select('*', { count: 'exact' })
+        .select('*, employee:employees!contacts_assigned_to_fkey(id, first_name, last_name, email), account:accounts!contacts_account_id_fkey(id, name)', { count: 'exact' })
         .eq('tenant_id', tenant_id)
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
@@ -174,7 +174,20 @@ export default function createContactV2Routes(_pgPool) {
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);
 
-      const contacts = (data || []).map(expandMetadata);
+      const contacts = (data || []).map(contact => {
+        const expanded = expandMetadata(contact);
+        // Add denormalized names from FK joins
+        if (contact.employee) {
+          expanded.assigned_to_name = `${contact.employee.first_name || ''} ${contact.employee.last_name || ''}`.trim();
+          expanded.assigned_to_email = contact.employee.email;
+        }
+        if (contact.account) {
+          expanded.account_name = contact.account.name;
+        }
+        delete expanded.employee;
+        delete expanded.account;
+        return expanded;
+      });
 
       res.json({
         status: 'success',

@@ -61,7 +61,7 @@ export default function createActivityV2Routes(_pgPool) {
 
       let q = supabase
         .from('activities')
-        .select('*', { count: 'exact' })
+        .select('*, employee:employees!activities_assigned_to_fkey(id, first_name, last_name, email)', { count: 'exact' })
         .eq('tenant_id', tenant_id)
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
@@ -146,7 +146,16 @@ export default function createActivityV2Routes(_pgPool) {
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);
 
-      const activities = (data || []).map(expandMetadata);
+      const activities = (data || []).map(activity => {
+        const expanded = expandMetadata(activity);
+        // Add denormalized names from FK joins
+        if (activity.employee) {
+          expanded.assigned_to_name = `${activity.employee.first_name || ''} ${activity.employee.last_name || ''}`.trim();
+          expanded.assigned_to_email = activity.employee.email;
+        }
+        delete expanded.employee;
+        return expanded;
+      });
 
       // Compute counts if requested
       let counts = null;

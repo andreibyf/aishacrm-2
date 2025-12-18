@@ -8,7 +8,7 @@ import express from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 import { buildLeadAiContext } from '../lib/aiContextEnricher.js';
-import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
+import { cacheList, cacheDetail, invalidateCache, invalidateTenantCache } from '../lib/cacheMiddleware.js';
 
 export default function createLeadsV2Routes() {
   const router = express.Router();
@@ -25,6 +25,114 @@ export default function createLeadsV2Routes() {
       metadata,
     };
   };
+
+  /**
+   * @openapi
+   * /api/v2/leads/stats:
+   *   get:
+   *     summary: Get lead counts by status (fast aggregation)
+   *     tags: [leads-v2]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: is_test_data
+   *         schema: { type: boolean }
+   *         description: Filter by test data flag
+   *     responses:
+   *       200:
+   *         description: Lead stats by status
+   */
+  router.get('/stats', async (req, res) => {
+    try {
+      const { tenant_id, is_test_data } = req.query;
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const supabase = getSupabaseClient();
+      
+      // Build filter for test data
+      let testDataFilter = '';
+      if (is_test_data === 'false') {
+        testDataFilter = 'AND (is_test_data IS NULL OR is_test_data = false)';
+      }
+
+      // Use raw SQL for efficient GROUP BY aggregation
+      const { data, error } = await supabase.rpc('exec_sql', {
+        sql_query: `
+          SELECT 
+            COALESCE(status, 'unknown') as status,
+            COUNT(*)::int as count
+          FROM leads 
+          WHERE tenant_id = $1 ${testDataFilter}
+          GROUP BY status
+        `,
+        params: [tenant_id]
+      });
+
+      // If RPC not available, fall back to simple count queries
+      if (error && error.message?.includes('function')) {
+        // Fallback: Run parallel count queries
+        const statuses = ['new', 'contacted', 'qualified', 'unqualified', 'converted', 'lost'];
+        const countPromises = statuses.map(async (status) => {
+          let query = supabase
+            .from('leads')
+            .select('id', { count: 'exact', head: true })
+            .eq('tenant_id', tenant_id)
+            .eq('status', status);
+          
+          if (is_test_data === 'false') {
+            query = query.or('is_test_data.is.false,is_test_data.is.null');
+          }
+          
+          const { count } = await query;
+          return { status, count: count || 0 };
+        });
+
+        // Also get total
+        let totalQuery = supabase
+          .from('leads')
+          .select('id', { count: 'exact', head: true })
+          .eq('tenant_id', tenant_id);
+        
+        if (is_test_data === 'false') {
+          totalQuery = totalQuery.or('is_test_data.is.false,is_test_data.is.null');
+        }
+
+        const [totalResult, ...statusResults] = await Promise.all([
+          totalQuery,
+          ...countPromises
+        ]);
+
+        const stats = {
+          total: totalResult.count || 0,
+        };
+        statusResults.forEach(({ status, count }) => {
+          stats[status] = count;
+        });
+
+        return res.json({ status: 'success', data: stats });
+      }
+
+      if (error) throw new Error(error.message);
+
+      // Transform RPC result to stats object
+      const stats = { total: 0 };
+      (data || []).forEach(row => {
+        stats[row.status] = row.count;
+        stats.total += row.count;
+      });
+
+      res.json({ status: 'success', data: stats });
+    } catch (err) {
+      console.error('[Leads v2 GET /stats] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
 
   /**
    * @openapi
@@ -57,7 +165,7 @@ export default function createLeadsV2Routes() {
    */
   router.get('/', cacheList('leads', 180), async (req, res) => {
     try {
-      const { tenant_id, status, source, account_id, filter, assigned_to, is_test_data } = req.query;
+      const { tenant_id, status, source, filter, assigned_to, is_test_data } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
@@ -68,9 +176,12 @@ export default function createLeadsV2Routes() {
       }
 
       const supabase = getSupabaseClient();
+      
+      // Join with employees table to include assigned_to_name
+      // This eliminates the need for frontend to fetch employees separately
       let query = supabase
         .from('leads')
-        .select('*', { count: 'exact' })
+        .select('*, employee:employees(id, first_name, last_name, email)', { count: 'exact' })
         .eq('tenant_id', tenant_id);
 
       // Handle filter parameter with $or support
@@ -138,10 +249,6 @@ export default function createLeadsV2Routes() {
       }
       if (source) query = query.eq('source', source);
       // Sanitize potential UUID query params to avoid "invalid input syntax for type uuid" errors
-      const safeAccountId = sanitizeUuidInput(account_id);
-      if (safeAccountId !== undefined && safeAccountId !== null) {
-        query = query.eq('account_id', safeAccountId);
-      }
       const safeAssignedTo = sanitizeUuidInput(assigned_to);
       if (!filter && safeAssignedTo !== undefined && safeAssignedTo !== null) {
         query = query.eq('assigned_to', safeAssignedTo);
@@ -165,7 +272,18 @@ export default function createLeadsV2Routes() {
       const { data, error, count } = await query;
       if (error) throw new Error(error.message);
 
-      const leads = (data || []).map(expandMetadata);
+      // Transform leads: expand metadata and denormalize employee name
+      const leads = (data || []).map(lead => {
+        const expanded = expandMetadata(lead);
+        // Add assigned_to_name from joined employee data
+        if (lead.employee) {
+          expanded.assigned_to_name = `${lead.employee.first_name || ''} ${lead.employee.last_name || ''}`.trim();
+          expanded.assigned_to_email = lead.employee.email;
+        }
+        // Remove the nested employee object from response
+        delete expanded.employee;
+        return expanded;
+      });
 
       res.json({
         status: 'success',
@@ -236,7 +354,6 @@ export default function createLeadsV2Routes() {
         country,
         unique_id,
         tags,
-        account_id,
         is_test_data,
         metadata = {},
       } = req.body;
@@ -269,7 +386,6 @@ export default function createLeadsV2Routes() {
       if (company) payload.company = company;
       if (job_title) payload.job_title = job_title;
       if (source) payload.source = source;
-      if (account_id) payload.account_id = account_id;
       if (score !== undefined) payload.score = score;
       if (score_reason) payload.score_reason = score_reason;
       if (estimated_value !== undefined) payload.estimated_value = estimated_value;
@@ -293,6 +409,9 @@ export default function createLeadsV2Routes() {
         .single();
 
       if (error) throw new Error(error.message);
+
+      // Invalidate cache for leads list
+      await invalidateTenantCache(tenant_id, 'leads');
 
       const created = expandMetadata(data);
       const aiContext = await buildLeadAiContext(created, { tenantId: tenant_id });
@@ -407,9 +526,9 @@ export default function createLeadsV2Routes() {
       // Map allowed fields
       const allowedFields = [
         'first_name', 'last_name', 'email', 'phone', 'company', 'job_title',
-        'status', 'source', 'account_id', 'score', 'score_reason', 'estimated_value',
+        'status', 'source', 'score', 'score_reason', 'estimated_value',
         'do_not_call', 'do_not_text', 'address_1', 'address_2', 'city', 'state',
-        'zip', 'country', 'unique_id', 'tags', 'is_test_data', 'metadata',
+        'zip', 'country', 'unique_id', 'tags', 'is_test_data', 'metadata', 'assigned_to',
       ];
 
       allowedFields.forEach((field) => {
@@ -433,6 +552,9 @@ export default function createLeadsV2Routes() {
         }
         throw new Error(error.message);
       }
+
+      // Invalidate cache for leads list
+      await invalidateTenantCache(tenant_id, 'leads');
 
       res.json({
         status: 'success',
