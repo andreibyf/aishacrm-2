@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useState, createContext, useContext } from 'react';
-import { SystemLog } from '@/api/entities';
+import { enqueueSystemLog } from '@/utils/systemLogBatcher.js';
 import { useUser } from '@/components/shared/useUser.js';
 
 // Client-side error log storage
@@ -48,7 +48,9 @@ export function ErrorLogProvider({ children }) {
       // Map severity to log level: critical/error → ERROR, warning → WARNING
       const logLevel = errorEntry.severity === 'critical' || errorEntry.severity === 'error' ? 'ERROR' : 'WARNING';
       
-      SystemLog.create({
+      // Use batcher for system logs to reduce network overhead
+      // Note: ERROR level bypasses batching and flushes immediately
+      enqueueSystemLog({
         level: logLevel,
         message: `[${errorEntry.component}] ${errorEntry.message}`,
         source: errorEntry.component,

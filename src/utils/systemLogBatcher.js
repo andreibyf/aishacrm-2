@@ -28,14 +28,14 @@ function stopTimer() {
 async function flush(entries) {
   if (!entries.length) return;
   try {
-    await callBackendAPI('system-logs/bulk', 'POST', null, { entries });
+    await callBackendAPI('system-logs/bulk', 'POST', { entries });
     lastFlush = Date.now();
   } catch (e) {
     // On bulk failure, fallback to individual posts to avoid total data loss for ERROR level entries
     console.warn('[systemLogBatcher] Bulk flush failed, falling back to individual posts:', e.message);
     for (const entry of entries) {
       try {
-        await callBackendAPI('system-logs', 'POST', null, entry);
+        await callBackendAPI('system-logs', 'POST', entry);
       } catch (singleErr) {
         console.error('[systemLogBatcher] Single log fallback failed:', singleErr.message);
       }
