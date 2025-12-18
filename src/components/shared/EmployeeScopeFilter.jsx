@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import {
   Select,
   SelectContent,
@@ -7,14 +6,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Users } from "lucide-react";
-import { Employee } from "@/api/entities";
 import { useEmployeeScope } from "./EmployeeScopeContext";
 
 export default function EmployeeScopeFilter({ user, selectedTenantId }) {
-  const [employees, setEmployees] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const { selectedEmployeeId, setSelectedEmployeeId } =
-    useEmployeeScope();
+  const { 
+    selectedEmployeeId, 
+    setSelectedEmployeeId, 
+    employees, 
+    employeesLoading: loading 
+  } = useEmployeeScope();
 
   // Determine if user should see this filter
   const isManager = user?.employee_role === "manager";
@@ -24,52 +24,11 @@ export default function EmployeeScopeFilter({ user, selectedTenantId }) {
 
   const shouldShowFilter = isManager || isAdmin || hasAggregatedScope;
 
-  useEffect(() => {
-    const loadEmployees = async () => {
-      // Early exit conditions to reduce log noise & unnecessary fetches
-      if (!shouldShowFilter) {
-        setLoading(false);
-        return; // User doesn't have scope privileges
-      }
-      if (!user) {
-        setLoading(false);
-        return; // Wait until user context is available
-      }
-      // Admin viewing all tenants but no tenant selected yet — avoid global employee scan
-      if (isAdmin && !selectedTenantId && !user.tenant_id) {
-        setLoading(false);
-        return; // Prevent broad unfiltered Employee.list() query
-      }
-
-      try {
-        setLoading(true);
-        const effectiveTenantId = (isAdmin && selectedTenantId)
-          ? selectedTenantId
-          : user.tenant_id || null;
-
-        if (!effectiveTenantId) {
-          // Still no tenant to scope employees — abort silently
-          setEmployees([]);
-          setLoading(false);
-          return;
-        }
-
-        const employeeList = await Employee.list({ tenant_id: effectiveTenantId });
-        const crmEmployees = (employeeList || []).filter((emp) => {
-          const isActive = emp.is_active !== false && emp.status !== "inactive";
-          const hasEmail = emp.email || emp.user_email;
-          return isActive && hasEmail;
-        });
-        setEmployees(crmEmployees);
-      } catch (error) {
-        console.error("[EmployeeScopeFilter] Failed to load employees:", error);
-        setEmployees([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadEmployees();
-  }, [user, selectedTenantId, shouldShowFilter, isAdmin]);
+  // Filter to only CRM-eligible employees
+  const crmEmployees = (employees || []).filter((emp) => {
+    const hasEmail = emp.email || emp.user_email;
+    return hasEmail;
+  });
 
   // Don't render if user shouldn't see this filter
   if (!shouldShowFilter) {
@@ -106,7 +65,7 @@ export default function EmployeeScopeFilter({ user, selectedTenantId }) {
           <SelectItem value="unassigned" className="hover:bg-slate-700">
             Unassigned
           </SelectItem>
-          {employees.map((emp) => (
+          {crmEmployees.map((emp) => (
             <SelectItem
               key={emp.id}
               value={emp.id}

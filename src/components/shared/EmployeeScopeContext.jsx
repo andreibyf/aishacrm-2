@@ -1,12 +1,18 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useState } from "react";
-import { User as UserEntity } from "@/api/entities";
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import { Employee } from "@/api/entities";
+import { useTenant } from "./tenantContext";
+import { useUser } from "./useUser";
 
 const EmployeeScopeContext = createContext(null);
 
 export const EmployeeScopeProvider = ({ children }) => {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser(); // Use centralized user context
+  const [employees, setEmployees] = useState([]);
+  const [employeesLoading, setEmployeesLoading] = useState(false);
+  const employeesFetchedRef = useRef(null); // tracks tenant_id for which we fetched
+  const { selectedTenantId } = useTenant();
 
   useEffect(() => {
     try {
@@ -19,21 +25,39 @@ export const EmployeeScopeProvider = ({ children }) => {
     }
   }, []);
 
-  // Load current user once so helpers can evaluate scope rules
+  // Centralized employees fetch - only load once per tenant
+  // Using ref to track employees for the callback to avoid recreating on each employee change
+  const employeesRef = useRef([]);
+  employeesRef.current = employees;
+  
+  const loadEmployees = useCallback(async (tenantId, force = false) => {
+    if (!tenantId) return [];
+    // Skip if already fetched for this tenant (unless forced)
+    if (!force && employeesFetchedRef.current === tenantId && employeesRef.current.length > 0) {
+      return employeesRef.current;
+    }
+    setEmployeesLoading(true);
+    try {
+      const list = await Employee.list({ tenant_id: tenantId });
+      const activeEmployees = (list || []).filter(e => e.is_active !== false && e.status !== 'inactive');
+      setEmployees(activeEmployees);
+      employeesFetchedRef.current = tenantId;
+      return activeEmployees;
+    } catch (err) {
+      console.error('[EmployeeScopeContext] Failed to load employees:', err);
+      return [];
+    } finally {
+      setEmployeesLoading(false);
+    }
+  }, []); // No dependencies - uses refs for stable callback
+
+  // Auto-load employees when tenant changes
   useEffect(() => {
-    let canceled = false;
-    (async () => {
-      try {
-        const u = await UserEntity.me();
-        if (!canceled) setCurrentUser(u);
-      } catch {
-        if (!canceled) setCurrentUser(null);
-      }
-    })();
-    return () => {
-      canceled = true;
-    };
-  }, []);
+    const tenantId = selectedTenantId || currentUser?.tenant_id;
+    if (tenantId && employeesFetchedRef.current !== tenantId) {
+      loadEmployees(tenantId);
+    }
+  }, [selectedTenantId, currentUser?.tenant_id, loadEmployees]);
 
   const setEmployeeScope = (id) => {
     setSelectedEmployeeId(id);
@@ -124,6 +148,10 @@ export const EmployeeScopeProvider = ({ children }) => {
         canViewAllRecords,
         isEmployee,
         getFilter,
+        // centralized employees (avoid redundant fetches)
+        employees,
+        employeesLoading,
+        loadEmployees,
       }}
     >
       {children}
@@ -143,6 +171,9 @@ export const useEmployeeScope = () => {
       canViewAllRecords: () => false,
       isEmployee: () => false,
       getFilter: (f = {}) => ({ ...f }),
+      employees: [],
+      employeesLoading: false,
+      loadEmployees: async () => [],
     };
   }
   return context;

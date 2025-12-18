@@ -1,33 +1,12 @@
-import { useState, useEffect } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { User as UserIcon, Users } from "lucide-react";
-import { Employee } from "@/api/entities";
 import { useUser } from '@/components/shared/useUser.js';
+import { useEmployeeScope } from '@/components/shared/EmployeeScopeContext';
 import { Label } from "@/components/ui/label";
 
 export default function EmployeeFilter({ value, onChange, className = "" }) {
-  const [employees, setEmployees] = useState([]);
-  const [loading, setLoading] = useState(true);
   const { user: currentUser } = useUser();
-
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        if (currentUser?.role === 'admin' || currentUser?.role === 'superadmin' || currentUser?.employee_role === 'manager') {
-          const tenantFilter = currentUser.tenant_id ? { tenant_id: currentUser.tenant_id } : {};
-          const empList = await Employee.filter(tenantFilter, "first_name");
-          setEmployees(empList || []);
-        }
-      } catch (error) {
-        console.error("Failed to load employees:", error);
-        setEmployees([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    if (currentUser) loadData();
-  }, [currentUser]);
+  const { employees, employeesLoading: loading } = useEmployeeScope();
 
   // Don't show filter for regular employees (they only see their own data)
   if (!currentUser || (currentUser.employee_role === 'employee' && currentUser.role !== 'admin' && currentUser.role !== 'superadmin')) {
