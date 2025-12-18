@@ -13,7 +13,7 @@ fn createContact(
   account_id: String,
   assigned_to: String
 ) -> Result<Contact, CRMError> !net {
-  let url = "/api/contacts";
+  let url = "/api/v2/contacts";
   let body = {
     tenant_id: tenant,
     first_name: first_name,
@@ -40,7 +40,7 @@ fn updateContact(
   contact_id: String,
   updates: Object
 ) -> Result<Contact, CRMError> !net {
-  let url = "/api/contacts/" + contact_id;
+  let url = "/api/v2/contacts/" + contact_id;
   
   let response = http.put(url, { body: updates });
   
@@ -55,7 +55,7 @@ fn listContactsForAccount(
   tenant: String,
   account_id: String
 ) -> Result<Array, CRMError> !net {
-  let url = "/api/contacts";
+  let url = "/api/v2/contacts";
   let params = {
     tenant_id: tenant,
     account_id: account_id
@@ -75,7 +75,7 @@ fn searchContacts(
   query: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
-  let url = "/api/contacts/search";
+  let url = "/api/v2/contacts/search";
   let params = {
     tenant_id: tenant,
     q: query,
@@ -95,7 +95,7 @@ fn deleteContact(
   tenant: String,
   contact_id: String
 ) -> Result<Boolean, CRMError> !net {
-  let url = "/api/contacts/" + contact_id;
+  let url = "/api/v2/contacts/" + contact_id;
   let response = http.delete(url, {});
   return match response {
     Ok{value} => Ok(true),
@@ -108,7 +108,7 @@ fn getContactDetails(
   tenant: String,
   contact_id: String
 ) -> Result<Contact, CRMError> !net {
-  let url = "/api/contacts/" + contact_id;
+  let url = "/api/v2/contacts/" + contact_id;
   let params = { tenant_id: tenant };
   
   let response = http.get(url, { params: params });

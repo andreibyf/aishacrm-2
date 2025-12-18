@@ -13,7 +13,7 @@ fn createActivity(
   related_to_id: String,
   body: String
 ) -> Result<Activity, CRMError> !net {
-  let url = "/api/activities";
+  let url = "/api/v2/activities";
   let payload = {
     tenant_id: tenant,
     subject: subject,
@@ -41,7 +41,7 @@ fn updateActivity(
   activity_id: String,
   updates: Object
 ) -> Result<Activity, CRMError> !net {
-  let url = "/api/activities/" + activity_id;
+  let url = "/api/v2/activities/" + activity_id;
   
   let response = http.put(url, { body: updates });
   
@@ -56,7 +56,7 @@ fn markActivityComplete(
   tenant: String,
   activity_id: String
 ) -> Result<Activity, CRMError> !net {
-  let url = "/api/activities/" + activity_id;
+  let url = "/api/v2/activities/" + activity_id;
   let updates = { status: "completed" };
   
   let response = http.put(url, { body: updates });
@@ -73,7 +73,7 @@ fn getUpcomingActivities(
   assigned_to: String,
   days: Number
 ) -> Result<Array, CRMError> !net, clock {
-  let url = "/api/activities";
+  let url = "/api/v2/activities";
   let now = clock.now();
   let params = {
     tenant_id: tenant,
@@ -99,7 +99,7 @@ fn scheduleMeeting(
   duration_minutes: Number,
   assigned_to: String
 ) -> Result<Activity, CRMError> !net {
-  let url = "/api/activities";
+  let url = "/api/v2/activities";
   let payload = {
     tenant_id: tenant,
     subject: subject,
@@ -124,7 +124,7 @@ fn deleteActivity(
   tenant: String,
   activity_id: String
 ) -> Result<Boolean, CRMError> !net {
-  let url = "/api/activities/" + activity_id;
+  let url = "/api/v2/activities/" + activity_id;
   let response = http.delete(url, {});
   return match response {
     Ok{value} => Ok(true),
@@ -138,7 +138,7 @@ fn listActivities(
   status: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
-  let url = "/api/activities";
+  let url = "/api/v2/activities";
   let params = {
     tenant_id: tenant,
     status: status,
@@ -158,7 +158,7 @@ fn getActivityDetails(
   tenant: String,
   activity_id: String
 ) -> Result<Activity, CRMError> !net {
-  let url = "/api/activities/" + activity_id;
+  let url = "/api/v2/activities/" + activity_id;
   let params = { tenant_id: tenant };
   
   let response = http.get(url, { params: params });
@@ -175,7 +175,7 @@ fn searchActivities(
   query: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
-  let url = "/api/activities/search";
+  let url = "/api/v2/activities/search";
   let params = {
     tenant_id: tenant,
     q: query,

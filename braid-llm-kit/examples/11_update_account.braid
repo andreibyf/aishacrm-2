@@ -5,7 +5,7 @@ import { Result, Account, CRMError } from "../spec/types.braid"
 
 fn updateAccountRevenue(accountId: String, newRevenue: Number, tenant: String) -> Result<Account, CRMError> !net {
   // Fetch current account
-  let fetchUrl = "/api/accounts/" + accountId;
+  let fetchUrl = "/api/v2/accounts/" + accountId;
   let getResponse = http.get(fetchUrl, { params: { tenant: tenant } });
   
   return match getResponse {
@@ -16,7 +16,7 @@ fn updateAccountRevenue(accountId: String, newRevenue: Number, tenant: String) -
       };
       
       // PUT request
-      let updateUrl = "/api/accounts/" + accountId;
+      let updateUrl = "/api/v2/accounts/" + accountId;
       let patchResponse = http.put(updateUrl, { body: payload });
       
       return match patchResponse {

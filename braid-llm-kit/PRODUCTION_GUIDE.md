@@ -94,7 +94,7 @@ fn createLead(name: String, email: String, tenant: String) -> Result<Lead, CRMEr
     return Err(ValidationError{ field: "email", message: "Invalid format" });
   }
   let payload = { name, email, tenant_id: tenant, created_at: clock.now() };
-  let response = http.post("/api/leads", { body: payload });
+  let response = http.post("/api/v2/leads", { body: payload });
   // ... error handling
 }
 ```
@@ -102,11 +102,11 @@ fn createLead(name: String, email: String, tenant: String) -> Result<Lead, CRMEr
 **11_update_account.braid** - Update with metadata merge:
 ```braid
 fn updateAccountRevenue(accountId: String, newRevenue: Number, tenant: String) -> Result<Account, CRMError> !net {
-  let getResponse = http.get("/api/accounts/" + accountId);
+  let getResponse = http.get("/api/v2/accounts/" + accountId);
   return match getResponse {
     Ok{data} => {
       let updated_metadata = { revenue_actual: newRevenue, /* preserve other fields */ };
-      http.put("/api/accounts/" + accountId, { body: { metadata: updated_metadata }})
+      http.put("/api/v2/accounts/" + accountId, { body: { metadata: updated_metadata }})
     }
   };
 }

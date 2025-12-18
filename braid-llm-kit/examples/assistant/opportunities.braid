@@ -13,7 +13,7 @@ fn createOpportunity(
   probability: Number,
   assigned_to: String
 ) -> Result<Opportunity, CRMError> !net {
-  let url = "/api/opportunities";
+  let url = "/api/v2/opportunities";
   let body = {
     tenant_id: tenant,
     name: name,
@@ -39,7 +39,7 @@ fn deleteOpportunity(
   tenant: String,
   opportunity_id: String
 ) -> Result<Boolean, CRMError> !net {
-  let url = "/api/opportunities/" + opportunity_id;
+  let url = "/api/v2/opportunities/" + opportunity_id;
   let response = http.delete(url, {});
   return match response {
     Ok{value} => Ok(true),
@@ -53,7 +53,7 @@ fn updateOpportunity(
   opportunity_id: String,
   updates: Object
 ) -> Result<Opportunity, CRMError> !net {
-  let url = "/api/opportunities/" + opportunity_id;
+  let url = "/api/v2/opportunities/" + opportunity_id;
   
   let response = http.put(url, { body: updates });
   
@@ -69,7 +69,7 @@ fn listOpportunitiesByStage(
   stage: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
-  let url = "/api/opportunities";
+  let url = "/api/v2/opportunities";
   let params = {
     tenant_id: tenant,
     stage: stage,
@@ -89,7 +89,7 @@ fn getOpportunityDetails(
   tenant: String,
   opportunity_id: String
 ) -> Result<Opportunity, CRMError> !net {
-  let url = "/api/opportunities/" + opportunity_id;
+  let url = "/api/v2/opportunities/" + opportunity_id;
   let params = { tenant_id: tenant };
   
   let response = http.get(url, { params: params });
@@ -106,7 +106,7 @@ fn searchOpportunities(
   query: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
-  let url = "/api/opportunities/search";
+  let url = "/api/v2/opportunities/search";
   let params = {
     tenant_id: tenant,
     q: query,
@@ -146,7 +146,7 @@ fn markOpportunityWon(
   opportunity_id: String,
   close_date: String
 ) -> Result<Opportunity, CRMError> !net {
-  let url = "/api/opportunities/" + opportunity_id;
+  let url = "/api/v2/opportunities/" + opportunity_id;
   let updates = {
     stage: "closed-won",
     probability: 100,

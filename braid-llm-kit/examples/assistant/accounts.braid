@@ -11,7 +11,7 @@ fn createAccount(
   website: String,
   assigned_to: String
 ) -> Result<Account, CRMError> !net {
-  let url = "/api/accounts";
+  let url = "/api/v2/accounts";
   let body = {
     tenant_id: tenant,
     name: name,
@@ -36,7 +36,7 @@ fn updateAccount(
   account_id: String,
   updates: Object
 ) -> Result<Account, CRMError> !net {
-  let url = "/api/accounts/" + account_id;
+  let url = "/api/v2/accounts/" + account_id;
   
   let response = http.put(url, { body: updates });
   
@@ -51,7 +51,7 @@ fn getAccountDetails(
   tenant: String,
   account_id: String
 ) -> Result<Account, CRMError> !net {
-  let url = "/api/accounts/" + account_id;
+  let url = "/api/v2/accounts/" + account_id;
   let params = { tenant_id: tenant };
   
   let response = http.get(url, { params: params });
@@ -68,7 +68,7 @@ fn listAccounts(
   limit: Number,
   offset: Number
 ) -> Result<Array, CRMError> !net {
-  let url = "/api/accounts";
+  let url = "/api/v2/accounts";
   let params = {
     tenant_id: tenant,
     limit: limit,
@@ -89,7 +89,7 @@ fn searchAccounts(
   query: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
-  let url = "/api/accounts/search";
+  let url = "/api/v2/accounts/search";
   let params = {
     tenant_id: tenant,
     q: query,
@@ -109,7 +109,7 @@ fn deleteAccount(
   tenant: String,
   account_id: String
 ) -> Result<Boolean, CRMError> !net {
-  let url = "/api/accounts/" + account_id;
+  let url = "/api/v2/accounts/" + account_id;
   
   let response = http.delete(url, {});
   

@@ -38,7 +38,7 @@ fn advanceToQualified(
 ) -> Result<Object, CRMError> !net {
   // v3.0.0 Workflow Step 2: Lead "new" → "qualified"
   // This step prepares the lead for conversion
-  let url = "/api/leads/" + lead_id;
+  let url = "/api/v2/leads/" + lead_id;
   let body = {
     tenant_id: tenant,
     status: "qualified",
@@ -72,7 +72,7 @@ fn advanceToAccount(
   // v3.0.0 Workflow Step 3: Lead → Contact + Account + Opportunity
   // Status: Lead "qualified" → "converted" (then deleted)
   // Creates: Contact (prospect), Account, Opportunity (prospecting stage)
-  let url = "/api/leads/" + lead_id + "/convert";
+  let url = "/api/v2/leads/" + lead_id + "/convert";
   let body = {
     tenant_id: tenant,
     create_account: create_account,
@@ -107,7 +107,7 @@ fn advanceOpportunityStage(
 ) -> Result<Object, CRMError> !net {
   // v3.0.0 Workflow Step 4: Progress opportunity through sales stages
   // Stages: prospecting → qualification → proposal → negotiation → closed_won/closed_lost
-  let url = "/api/opportunities/" + opportunity_id;
+  let url = "/api/v2/opportunities/" + opportunity_id;
   
   // Calculate probability based on stage
   let probability = 10;
@@ -163,7 +163,7 @@ fn fullLifecycleAdvance(
   }
   
   // Step 2: Qualify the Lead
-  let qualifyUrl = "/api/leads/" + leadId;
+  let qualifyUrl = "/api/v2/leads/" + leadId;
   let qualifyResponse = http.put(qualifyUrl, { body: { tenant_id: tenant, status: "qualified", qualification_notes: qualification_notes } });
   
   match qualifyResponse {
@@ -172,7 +172,7 @@ fn fullLifecycleAdvance(
   }
   
   // Step 3: Convert Lead to Contact + Account + Opportunity
-  let convertUrl = "/api/leads/" + leadId + "/convert";
+  let convertUrl = "/api/v2/leads/" + leadId + "/convert";
   let convertBody = {
     tenant_id: tenant,
     create_account: create_account,

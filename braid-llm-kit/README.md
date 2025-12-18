@@ -208,7 +208,7 @@ fn createAccount(
 	annual_revenue: Number
 ) -> Result<Account, CRMError> !net {
 	// HTTP call
-	let url = "/api/accounts";
+	let url = "/api/v2/accounts";
 	let body = { tenant_id: tenant, name: name, annual_revenue: annual_revenue };
 	let response = http.post(url, { body: body });
   
