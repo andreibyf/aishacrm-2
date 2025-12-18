@@ -38,7 +38,7 @@ async function applyMigration() {
     console.log('   Making system_logs.tenant_id nullable...');
     
     // Execute the migration
-    const { data, error } = await supabase.rpc('exec_sql', {
+    const { error } = await supabase.rpc('exec_sql', {
       sql_text: migrationSQL
     });
 

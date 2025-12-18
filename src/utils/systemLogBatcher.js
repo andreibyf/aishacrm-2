@@ -31,13 +31,28 @@ async function flush(entries) {
     await callBackendAPI('system-logs/bulk', 'POST', { entries });
     lastFlush = Date.now();
   } catch (e) {
-    // On bulk failure, fallback to individual posts to avoid total data loss for ERROR level entries
-    console.warn('[systemLogBatcher] Bulk flush failed, falling back to individual posts:', e.message);
-    for (const entry of entries) {
-      try {
-        await callBackendAPI('system-logs', 'POST', entry);
-      } catch (singleErr) {
-        console.error('[systemLogBatcher] Single log fallback failed:', singleErr.message);
+    // CRITICAL: Detect rate limiting to prevent infinite loop
+    const isRateLimited = e.message?.includes('RateLimit') || e.message?.includes('429');
+    
+    if (isRateLimited) {
+      // Silently drop logs during rate limit cooldown to prevent death spiral
+      console.warn('[systemLogBatcher] Rate limit detected, dropping', entries.length, 'logs to prevent cascade');
+      return;
+    }
+    
+    // On bulk failure (non-rate-limit), fallback to individual posts for ERROR level only
+    const criticalEntries = entries.filter(e => (e.level || '').toUpperCase() === 'ERROR');
+    if (criticalEntries.length > 0) {
+      console.warn('[systemLogBatcher] Bulk flush failed, retrying', criticalEntries.length, 'ERROR logs');
+      for (const entry of criticalEntries) {
+        try {
+          await callBackendAPI('system-logs', 'POST', entry);
+        } catch (singleErr) {
+          // Silently fail - don't log errors about logging errors
+          if (import.meta.env.DEV) {
+            console.error('[systemLogBatcher] Single log fallback failed:', singleErr.message);
+          }
+        }
       }
     }
   }
