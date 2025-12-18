@@ -6,13 +6,14 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { RotateCcw, Save, Eye, EyeOff } from 'lucide-react';
-import { toast } from 'sonner';
+import { useToast } from '@/components/ui/use-toast';
 import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
 
 export default function StatusCardsManager() {
   const { preferences, loading, savePreferences, resetToDefaults, DEFAULT_STATUS_CARDS } = useStatusCardPreferences();
   const [localPrefs, setLocalPrefs] = useState(null);
   const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (preferences && !loading) {
@@ -46,14 +47,21 @@ export default function StatusCardsManager() {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSaving(true);
     try {
-      savePreferences(localPrefs);
-      toast.success('Status card preferences saved');
+      await Promise.resolve(savePreferences(localPrefs));
+      toast({
+        title: 'Success',
+        description: 'Status card preferences saved successfully!',
+      });
     } catch (error) {
       console.error('Error saving preferences:', error);
-      toast.error('Failed to save preferences');
+      toast({
+        title: 'Error',
+        description: 'Failed to save preferences',
+        variant: 'destructive',
+      });
     } finally {
       setSaving(false);
     }
@@ -63,13 +71,18 @@ export default function StatusCardsManager() {
     if (confirm('Reset all status cards to defaults?')) {
       resetToDefaults();
       setLocalPrefs(preferences);
-      toast.success('Status cards reset to defaults');
+      toast({
+        title: 'Reset Complete',
+        description: 'Status cards reset to defaults',
+      });
     }
   };
 
   const handleResetCard = (cardId, originalLabel) => {
     handleLabelChange(cardId, originalLabel);
-    toast.success(`Reset to "${originalLabel}"`);
+    toast({
+      description: `Reset to "${originalLabel}"`,
+    });
   };
 
   if (loading || !localPrefs) {

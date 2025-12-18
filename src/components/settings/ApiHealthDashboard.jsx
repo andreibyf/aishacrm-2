@@ -9,6 +9,11 @@ import { toast } from 'sonner';
 import { BACKEND_URL } from '../../api/entities';
 import { createHealthIssue, generateAPIFixSuggestion } from '../../utils/githubIssueCreator';
 import { supabase } from '../../lib/supabase';
+import { useTenant } from '../shared/tenantContext';
+
+// Fallback tenant UUID for API health tests when no tenant is selected
+// This is the local development tenant
+const FALLBACK_TENANT_UUID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 
 // Helper to get auth headers for authenticated API requests
 async function getAuthHeaders() {
@@ -25,6 +30,10 @@ async function getAuthHeaders() {
 }
 
 export default function ApiHealthDashboard() {
+  const { selectedTenantId } = useTenant();
+  // Use tenant from context, fallback to known test tenant UUID
+  const testTenantId = selectedTenantId || FALLBACK_TENANT_UUID;
+  
   const [healthReport, setHealthReport] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -156,10 +165,10 @@ export default function ApiHealthDashboard() {
     // Define new endpoints to test
     const endpoints = [
       // Core CRM flows (internal readiness focus)
-      { name: 'Opportunities - List (v1)', method: 'GET', url: `${BACKEND_URL}/api/opportunities?tenant_id=test&limit=1` },
-      { name: 'Activities - List', method: 'GET', url: `${BACKEND_URL}/api/activities?tenant_id=test&limit=1` },
+      { name: 'Opportunities - List (v1)', method: 'GET', url: `${BACKEND_URL}/api/opportunities?tenant_id=${testTenantId}&limit=1` },
+      { name: 'Activities - List', method: 'GET', url: `${BACKEND_URL}/api/activities?tenant_id=${testTenantId}&limit=1` },
       // v2 pilot (behind FEATURE_OPPORTUNITIES_V2)
-      { name: 'Opportunities - List (v2)', method: 'GET', url: `${BACKEND_URL}/api/v2/opportunities?tenant_id=test&limit=1`, expectError: false },
+      { name: 'Opportunities - List (v2)', method: 'GET', url: `${BACKEND_URL}/api/v2/opportunities?tenant_id=${testTenantId}&limit=1`, expectError: false },
       {
         name: 'Opportunities - v2 Lifecycle (create/get/update/delete)',
         type: 'opportunity-v2-lifecycle',
@@ -193,13 +202,13 @@ export default function ApiHealthDashboard() {
         type: 'workflows-v2-lifecycle',
       },
       // Existing AI Campaigns and Telephony checks
-      { name: 'AI Campaigns - List', method: 'GET', url: `${BACKEND_URL}/api/aicampaigns?tenant_id=test&limit=1` },
-      { name: 'AI Campaigns - Get', method: 'GET', url: `${BACKEND_URL}/api/aicampaigns/test-id?tenant_id=test`, expectError: true },
-      { name: 'Telephony - Inbound Webhook', method: 'POST', url: `${BACKEND_URL}/api/telephony/inbound-webhook`, body: { tenant_id: 'test' }, expectError: true },
-      { name: 'Telephony - Outbound Webhook', method: 'POST', url: `${BACKEND_URL}/api/telephony/outbound-webhook`, body: { tenant_id: 'test' }, expectError: true },
-      { name: 'Telephony - Prepare Call', method: 'POST', url: `${BACKEND_URL}/api/telephony/prepare-call`, body: { tenant_id: 'test' }, expectError: true },
-      { name: 'Telephony - Twilio Webhook', method: 'POST', url: `${BACKEND_URL}/api/telephony/webhook/twilio/inbound?tenant_id=test`, expectError: true },
-      { name: 'Telephony - CallFluent Webhook', method: 'POST', url: `${BACKEND_URL}/api/telephony/webhook/callfluent/inbound?tenant_id=test`, expectError: true },
+      { name: 'AI Campaigns - List', method: 'GET', url: `${BACKEND_URL}/api/aicampaigns?tenant_id=${testTenantId}&limit=1` },
+      { name: 'AI Campaigns - Get', method: 'GET', url: `${BACKEND_URL}/api/aicampaigns/test-id?tenant_id=${testTenantId}`, expectError: true },
+      { name: 'Telephony - Inbound Webhook', method: 'POST', url: `${BACKEND_URL}/api/telephony/inbound-webhook`, body: { tenant_id: testTenantId }, expectError: true },
+      { name: 'Telephony - Outbound Webhook', method: 'POST', url: `${BACKEND_URL}/api/telephony/outbound-webhook`, body: { tenant_id: testTenantId }, expectError: true },
+      { name: 'Telephony - Prepare Call', method: 'POST', url: `${BACKEND_URL}/api/telephony/prepare-call`, body: { tenant_id: testTenantId }, expectError: true },
+      { name: 'Telephony - Twilio Webhook', method: 'POST', url: `${BACKEND_URL}/api/telephony/webhook/twilio/inbound?tenant_id=${testTenantId}`, expectError: true },
+      { name: 'Telephony - CallFluent Webhook', method: 'POST', url: `${BACKEND_URL}/api/telephony/webhook/callfluent/inbound?tenant_id=${testTenantId}`, expectError: true },
     ];
 
     for (const endpoint of endpoints) {
@@ -373,7 +382,7 @@ export default function ApiHealthDashboard() {
   // Synthetic full lifecycle test for /api/v2/opportunities
   async function runOpportunityV2LifecycleTest() {
     const baseName = 'API Health Test Deal';
-    const tenantId = 'test';
+    const tenantId = testTenantId;
     const authHeaders = await getAuthHeaders();
 
     try {
@@ -474,7 +483,7 @@ export default function ApiHealthDashboard() {
   // Synthetic full lifecycle test for /api/v2/activities
   async function runActivityV2LifecycleTest() {
     const baseSubject = 'API Health Test Activity';
-    const tenantId = 'test';
+    const tenantId = testTenantId;
     const authHeaders = await getAuthHeaders();
 
     try {
@@ -575,7 +584,7 @@ export default function ApiHealthDashboard() {
 
   async function runContactV2LifecycleTest() {
     const baseName = 'API Health Test Contact';
-    const tenantId = 'test';
+    const tenantId = testTenantId;
     const authHeaders = await getAuthHeaders();
 
     try {
@@ -675,7 +684,7 @@ export default function ApiHealthDashboard() {
 
   async function runAccountV2LifecycleTest() {
     const baseName = 'API Health Test Account';
-    const tenantId = 'test';
+    const tenantId = testTenantId;
     const authHeaders = await getAuthHeaders();
 
     try {
@@ -773,8 +782,7 @@ export default function ApiHealthDashboard() {
   }
 
   async function runLeadsV2LifecycleTest() {
-    // Use system tenant UUID - 'test' is not a valid UUID
-    const tenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+    const tenantId = testTenantId;
     const authHeaders = await getAuthHeaders();
 
     try {
@@ -877,8 +885,7 @@ export default function ApiHealthDashboard() {
 
   // Documents v2 lifecycle test
   async function runDocumentsV2LifecycleTest() {
-    // Use system tenant UUID - 'test' is not a valid UUID
-    const tenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+    const tenantId = testTenantId;
     const authHeaders = await getAuthHeaders();
 
     try {
@@ -988,8 +995,7 @@ export default function ApiHealthDashboard() {
 
   // Reports v2 stats test
   async function runReportsV2StatsTest() {
-    // Use system tenant UUID
-    const tenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+    const tenantId = testTenantId;
     const authHeaders = await getAuthHeaders();
 
     try {
@@ -1037,8 +1043,7 @@ export default function ApiHealthDashboard() {
 
   // Workflows v2 list test (v2 only has GET endpoints, no CRUD)
   async function runWorkflowsV2LifecycleTest() {
-    // Use system tenant UUID
-    const tenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+    const tenantId = testTenantId;
     const authHeaders = await getAuthHeaders();
 
     try {

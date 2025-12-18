@@ -10,7 +10,7 @@ import {
   isValidUUID,
   sanitizeUuidInput,
   sanitizeUuidFilter,
-} from '../lib/uuidValidator.js';
+} from '../../lib/uuidValidator.js';
 
 test('UUID Validator - isValidUUID', async (t) => {
   await t.test('returns true for valid UUIDs', () => {

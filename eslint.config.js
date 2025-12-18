@@ -27,6 +27,8 @@ export default [
       'test-results/**',
       'playwright/.cache/**',
       'orchestra/**',
+      'archive/**',
+      'backend/archive/**',
     ],
   },
   {

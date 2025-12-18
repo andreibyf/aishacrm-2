@@ -21,6 +21,15 @@ const BACKEND_URL = getBackendUrl();
 const TEST_RESULTS_KEY = 'unit_test_results';
 const TEST_CONFIG_KEY = 'unit_test_config';
 
+// Clear stale test_runner_active flag on module load (prevents stuck state after container rebuild)
+try {
+  const staleFlag = sessionStorage.getItem('test_runner_active');
+  if (staleFlag === 'true') {
+    console.log('[TestRunner] Clearing stale test_runner_active flag from previous session');
+    sessionStorage.removeItem('test_runner_active');
+  }
+} catch { /* ignore */ }
+
 export default function TestRunner({ testSuites }) {
   // Initialize results from sessionStorage to survive remounts during test run
   const [results, setResults] = useState(() => {

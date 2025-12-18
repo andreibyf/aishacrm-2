@@ -284,7 +284,7 @@ export default function SuggestionBadge({ tenantId, onViewAll }) {
         </Button>
       </PopoverTrigger>
       
-      <PopoverContent className="w-80 p-0" align="end">
+      <PopoverContent className="w-96 p-0" align="end">
         <div className="flex items-center justify-between p-3 border-b">
           <div className="flex items-center gap-2">
             <Bell className="h-4 w-4 text-muted-foreground" />

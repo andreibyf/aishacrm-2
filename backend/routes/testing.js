@@ -134,6 +134,12 @@ export default function createTestingRoutes(_pgPool) {
     }
   });
 
+  // Alias for backward compatibility - QaConsole.jsx uses this path
+  router.post('/run-playwright', (req, res, next) => {
+    req.url = '/trigger-e2e';
+    router.handle(req, res, next);
+  });
+
   // GET /api/testing/workflow-status - Get recent workflow runs with status
   // Query params: ref=main, per_page=5, created_after=ISO8601
   router.get('/workflow-status', async (req, res) => {

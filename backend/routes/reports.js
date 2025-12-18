@@ -268,18 +268,17 @@ export default function createReportRoutes(_pgPool) {
   // GET /api/reports/dashboard-bundle - Get complete dashboard bundle
   router.get('/dashboard-bundle', async (req, res) => {
     try {
-      let { tenant_id } = req.query;
-      // Normalize: treat "null" string or empty/undefined as no tenant filter (superadmin global)
-      if (tenant_id === 'null' || tenant_id === '' || !tenant_id) {
-        tenant_id = undefined;
+      const { tenant_id } = req.query;
+      
+      // Require tenant_id - no global superadmin view for strict tenant isolation
+      if (!tenant_id || tenant_id === 'null' || tenant_id === '') {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
       
-      // Note: tenant_id can be null/undefined for superadmin global view (aggregates all tenants)
       // Use redis cache for distributed, persistent caching
       const includeTestData = (req.query.include_test_data ?? 'true') !== 'false';
-      const effectiveTenantKey = tenant_id || 'SUPERADMIN_GLOBAL';
       const bustCache = req.query.bust_cache === 'true'; // Allow cache bypass for testing
-      const cacheKey = `dashboard:bundle:${effectiveTenantKey}:include=${includeTestData ? 'true' : 'false'}`;
+      const cacheKey = `dashboard:bundle:${tenant_id}:include=${includeTestData ? 'true' : 'false'}`;
       
       // Try redis cache first (distributed across instances)
       const cacheManager = req.app?.locals?.cacheManager;

@@ -61,17 +61,17 @@ export function sanitizeUuidFilter(filter, uuidColumns = []) {
 
   const sanitized = { ...filter };
 
+  // Handle $or/$and at top level - always process recursively
+  if ('$or' in sanitized && Array.isArray(sanitized.$or)) {
+    sanitized.$or = sanitized.$or.map(cond => sanitizeUuidFilter(cond, uuidColumns));
+  }
+  if ('$and' in sanitized && Array.isArray(sanitized.$and)) {
+    sanitized.$and = sanitized.$and.map(cond => sanitizeUuidFilter(cond, uuidColumns));
+  }
+
   uuidColumns.forEach(column => {
     if (column in sanitized) {
       const value = sanitized[column];
-      
-      // Handle $or/$and nested conditions
-      if (column === '$or' || column === '$and') {
-        if (Array.isArray(value)) {
-          sanitized[column] = value.map(cond => sanitizeUuidFilter(cond, uuidColumns));
-        }
-        return;
-      }
 
       // Skip if value is an operator object (e.g., { $regex: '...' })
       if (value && typeof value === 'object' && !Array.isArray(value)) {

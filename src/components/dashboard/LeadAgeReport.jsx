@@ -12,6 +12,7 @@ import { Employee } from "@/api/entities";
 import { useApiManager } from "../shared/ApiManager";
 import { useUser } from "@/components/shared/useUser";
 import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
+import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 
 const AGE_BUCKETS = [
   { label: '0-7 days', min: 0, max: 7, color: 'bg-green-100 text-green-800 border-green-200' },
@@ -30,6 +31,7 @@ function LeadAgeReport(props) {
   const { cachedRequest } = useApiManager();
   const { loading: userLoading } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
+  const { plural: leadsLabel } = useEntityLabel('leads');
 
   useEffect(() => {
         // Wait for user to be loaded before fetching data
@@ -306,7 +308,7 @@ function LeadAgeReport(props) {
             <div className="text-center pt-4 border-t border-slate-700">
               <Button variant="outline" size="sm" asChild className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
                 <Link to={createPageUrl("Leads")}>
-                  View All Active Leads
+                  View All Active {leadsLabel}
                 </Link>
               </Button>
             </div>

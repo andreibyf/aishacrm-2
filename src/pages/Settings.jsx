@@ -172,6 +172,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
       items.push(
         { id: 'users', label: 'User Management', description: 'Invite and manage team members', icon: Users, category: 'team', roles: ['admin'] },
         { id: 'entity-labels', label: 'Entity Labels', description: 'Customize terminology for your organization', icon: Tags, category: 'system', roles: ['admin'] },
+        { id: 'status-cards', label: 'Status Cards', description: 'Customize status card visibility', icon: LayoutGrid, category: 'system', roles: ['admin'] },
       );
     }
 
@@ -200,8 +201,8 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
 
         // System
         { id: 'modules', label: 'Module Settings', description: 'Enable or disable CRM modules', icon: LayoutGrid, category: 'system', roles: ['superadmin'] },
-        { id: 'entity-labels', label: 'Entity Labels', description: 'Customize terminology per tenant', icon: Tags, category: 'system', roles: ['superadmin'] },
-        { id: 'status-cards', label: 'Status Cards', description: 'Customize and manage status card visibility', icon: LayoutGrid, category: 'system', roles: ['superadmin'] },
+        { id: 'entity-labels', label: 'Entity Labels', description: 'Customize terminology per tenant', icon: Tags, category: 'system', roles: ['superadmin', 'admin'] },
+        { id: 'status-cards', label: 'Status Cards', description: 'Customize and manage status card visibility', icon: LayoutGrid, category: 'system', roles: ['superadmin', 'admin'] },
         { id: 'cron', label: 'Cron Jobs', description: 'Scheduled background tasks', icon: Clock, category: 'system', roles: ['superadmin'] },
         { id: 'announcements', label: 'Announcements', description: 'System-wide notifications', icon: Megaphone, category: 'system', roles: ['superadmin'] },
 

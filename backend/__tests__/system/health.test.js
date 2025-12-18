@@ -5,12 +5,13 @@ import { setTimeout as delay } from 'node:timers/promises';
 // In CI, skip integration tests that require a running backend
 const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : true;
 
-// The server starts automatically when server.js is imported.
-// We leverage the existing exported server for teardown.
+// When BACKEND_URL is set, we test against an external server (e.g., Docker container)
+// Otherwise, start the server locally (which requires Redis to be available)
+const EXTERNAL_SERVER = !!process.env.BACKEND_URL;
 let serverRef;
 
 async function startServerOnce() {
-  if (serverRef) return serverRef;
+  if (EXTERNAL_SERVER || serverRef) return serverRef;
   const mod = await import('../../server.js');
   serverRef = mod.server; // already listening on PORT env (default 3001)
   return serverRef;
@@ -40,7 +41,9 @@ const BASE = process.env.BACKEND_URL || 'http://localhost:3001';
 // NOTE: This does not mock external services; relies on Supabase env if configured.
 
 (SHOULD_RUN ? test : test.skip)('health endpoint returns ok status and required fields', async () => {
-  await startServerOnce();
+  if (!EXTERNAL_SERVER) {
+    await startServerOnce();
+  }
   const data = await waitForHealth(BASE);
   assert.strictEqual(data.status, 'ok', 'status should be ok');
   assert.ok(typeof data.timestamp === 'string', 'timestamp should be string');
@@ -52,7 +55,7 @@ const BASE = process.env.BACKEND_URL || 'http://localhost:3001';
 // Use node:test built-in after hook
 import { after } from 'node:test';
 after(() => {
-  if (!SHOULD_RUN) return;
+  if (!SHOULD_RUN || EXTERNAL_SERVER) return;
   if (serverRef && serverRef.close) {
     return new Promise((resolve) => {
       serverRef.close(() => resolve());

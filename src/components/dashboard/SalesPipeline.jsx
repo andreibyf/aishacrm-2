@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Target, AlertTriangle, Loader2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from "recharts";
@@ -7,6 +7,8 @@ import { useApiManager } from "@/components/shared/ApiManager";
 import { Opportunity } from "@/api/entities";
 import { useUser } from "@/components/shared/useUser";
 import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
+import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 import { Link } from "react-router-dom"; // Added import
 import { createPageUrl } from "@/utils"; // Added import
 import { Button } from "@/components/ui/button"; // Added import for Button component
@@ -18,6 +20,11 @@ function SalesPipeline(props) {
   const { cachedRequest } = useApiManager();
   const { loading: userLoading } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
+  const { getVisibleCardsForEntity } = useStatusCardPreferences();
+  const { plural: opportunitiesLabel } = useEntityLabel('opportunities');
+
+  // Get visible opportunity stages from preferences
+  const visibleOpportunityCards = useMemo(() => getVisibleCardsForEntity('opportunities'), [getVisibleCardsForEntity]);
 
   React.useEffect(() => {
         // Wait for user to be loaded before fetching data
@@ -27,16 +34,31 @@ function SalesPipeline(props) {
 
     let mounted = true; // Flag to prevent state updates on unmounted component
 
+    // Map status card IDs to stage keys
+    const stageKeyMap = {
+      'prospecting': 'prospecting',
+      'qualification': 'qualification',
+      'proposal': 'proposal',
+      'negotiation': 'negotiation',
+      'won': 'closed_won',
+      'lost': 'closed_lost',
+    };
+
+    // Build visible stages from preferences
+    const visibleStageKeys = new Set(
+      visibleOpportunityCards.map(card => stageKeyMap[card.statusKey] || card.statusKey)
+    );
+
     // Helper function to compute pipeline data from a list of opportunities
     const computeFromOpps = (opps) => {
       // Canonical stage buckets (include legacy mappings for won/lost)
       const stages = {
-        prospecting: { name: "Prospecting", count: 0, value: 0 },
-        qualification: { name: "Qualification", count: 0, value: 0 },
-        proposal: { name: "Proposal", count: 0, value: 0 },
-        negotiation: { name: "Negotiation", count: 0, value: 0 },
-        closed_won: { name: "Closed Won", count: 0, value: 0 },
-        closed_lost: { name: "Closed Lost", count: 0, value: 0 },
+        prospecting: { name: "Prospecting", count: 0, value: 0, key: 'prospecting' },
+        qualification: { name: "Qualification", count: 0, value: 0, key: 'qualification' },
+        proposal: { name: "Proposal", count: 0, value: 0, key: 'proposal' },
+        negotiation: { name: "Negotiation", count: 0, value: 0, key: 'negotiation' },
+        closed_won: { name: "Closed Won", count: 0, value: 0, key: 'closed_won' },
+        closed_lost: { name: "Closed Lost", count: 0, value: 0, key: 'closed_lost' },
       };
 
       const stageAliasMap = {
@@ -56,11 +78,14 @@ function SalesPipeline(props) {
         }
       });
 
-      const processedData = Object.values(stages).map((stage) => ({
-        stage: stage.name,
-        value: stage.value,
-        count: stage.count,
-      }));
+      // Filter to only visible stages based on preferences
+      const processedData = Object.entries(stages)
+        .filter(([key]) => visibleStageKeys.has(key))
+        .map(([, stage]) => ({
+          stage: stage.name,
+          value: stage.value,
+          count: stage.count,
+        }));
 
       // If all values are zero but there are counts, fall back to using counts
       const allValuesZero = processedData.every((s) => s.value === 0);
@@ -149,7 +174,7 @@ function SalesPipeline(props) {
     load(); // Execute the async load function
     return () => { mounted = false; }; // Cleanup function for unmounting
      
-  }, [props?.tenantFilter, props?.showTestData, props?.prefetchedOpportunities, cachedRequest, userLoading, authCookiesReady]); // Include all relevant props and cachedRequest in dependencies
+  }, [props?.tenantFilter, props?.showTestData, props?.prefetchedOpportunities, cachedRequest, userLoading, authCookiesReady, visibleOpportunityCards]); // Include all relevant props and cachedRequest in dependencies
 
   return (
     <Card className="bg-slate-800 border-slate-700 h-full">
@@ -225,7 +250,7 @@ function SalesPipeline(props) {
             <div className="text-center pt-4 border-t border-slate-700 mt-4">
               <Button variant="outline" size="sm" asChild className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
                 <Link to={createPageUrl("Opportunities")}>
-                  View All Opportunities
+                  View All {opportunitiesLabel}
                 </Link>
               </Button>
             </div>

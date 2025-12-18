@@ -32,8 +32,8 @@ function errorText(error) {
   }
 }
 
-// Test tenant UUID (matches backend test fixtures)
-const TEST_TENANT_UUID = '11111111-1111-1111-1111-111111111111';
+// Test tenant UUID - use local development tenant that exists in database
+const TEST_TENANT_UUID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 
 export const schemaValidationTests = {
   name: 'Schema Validation',

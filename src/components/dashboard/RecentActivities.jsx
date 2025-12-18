@@ -14,6 +14,8 @@ import { useApiManager } from "../shared/ApiManager";
 import { useEmployeeScope } from "../shared/EmployeeScopeContext";
 import { useUser } from "@/components/shared/useUser";
 import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
+import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -66,6 +68,8 @@ function RecentActivities(props) {
   const { selectedEmail } = useEmployeeScope();
   const { loading: userLoading } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
+  const { getVisibleCardsForEntity } = useStatusCardPreferences();
+  const { plural: activitiesLabel } = useEntityLabel('activities');
   const flipAttemptedRef = useRef(false);
 
   const backgroundScheduledRef = useRef(false);
@@ -197,31 +201,42 @@ function RecentActivities(props) {
     return filtered;
   }, [scopedActivities, cutoffMs]);
 
+  // Get visible activity statuses from preferences
+  const visibleActivityCards = useMemo(() => getVisibleCardsForEntity('activities'), [getVisibleCardsForEntity]);
+
   const summaryData = React.useMemo(() => {
-    const order = ["scheduled", "overdue", "in-progress", "completed", "cancelled", "failed"];
-    const label = {
-      scheduled: "Scheduled",
-      overdue: "Overdue",
-      "in-progress": "In Progress",
-      completed: "Completed",
-      cancelled: "Cancelled",
-      failed: "Failed"
+    // Map statusKey to handle 'in_progress' vs 'in-progress' difference
+    const statusKeyMap = {
+      'in_progress': 'in-progress',
+      'scheduled': 'scheduled',
+      'overdue': 'overdue',
+      'completed': 'completed',
+      'cancelled': 'cancelled',
     };
+    
     const counts = activitiesInWindow.reduce((acc, a) => {
       const k = a.status || "scheduled";
       acc[k] = (acc[k] || 0) + 1;
       return acc;
     }, {});
-    return order.map(k => ({ status: label[k], key: k, value: counts[k] || 0 }));
-  }, [activitiesInWindow]);
+    
+    // Only show statuses that are visible in preferences
+    return visibleActivityCards.map(card => {
+      const chartKey = statusKeyMap[card.statusKey] || card.statusKey;
+      return { 
+        status: card.label, 
+        key: chartKey, 
+        value: counts[chartKey] || 0 
+      };
+    });
+  }, [activitiesInWindow, visibleActivityCards]);
 
   const barColors = {
     scheduled: '#3B82F6',
-    overdue: '#F97316',
     'in-progress': '#06B6D4',
+    overdue: '#F97316',
     completed: '#10B981',
-    cancelled: '#94A3B8',
-    failed: '#EF4444'
+    cancelled: '#94A3B8'
   };
 
   const descriptionText =
@@ -348,7 +363,7 @@ function RecentActivities(props) {
               <div className="text-center pt-4 border-t border-slate-700 mt-4">
                 <Button variant="outline" size="sm" asChild className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
                   <Link to={createPageUrl("Activities")}>
-                    View All Activities
+                    View All {activitiesLabel}
                   </Link>
                 </Button>
               </div>
@@ -406,7 +421,7 @@ function RecentActivities(props) {
                 <div className="text-center pt-4 border-t border-slate-700 mt-4">
                   <Button variant="outline" size="sm" asChild className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
                     <Link to={createPageUrl("Activities")}>
-                      View All Activities
+                      View All {activitiesLabel}
                     </Link>
                   </Button>
                 </div>

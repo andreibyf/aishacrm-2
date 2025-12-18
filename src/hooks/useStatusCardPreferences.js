@@ -37,6 +37,7 @@ const DEFAULT_STATUS_CARDS = {
     { id: 'activity_in_progress', label: 'In Progress', visible: true, entity: 'Activities' },
     { id: 'activity_overdue', label: 'Overdue', visible: true, entity: 'Activities' },
     { id: 'activity_completed', label: 'Completed', visible: true, entity: 'Activities' },
+    { id: 'activity_cancelled', label: 'Cancelled', visible: true, entity: 'Activities' },
   ],
 };
 
@@ -152,6 +153,39 @@ export function useStatusCardPreferences() {
     return true;
   }, [preferences]);
 
+  // Get visible cards for an entity (for chart filtering)
+  // Returns array of { id, label, statusKey } in default order
+  const getVisibleCardsForEntity = useCallback((entityKey) => {
+    const defaults = DEFAULT_STATUS_CARDS[entityKey] || [];
+    
+    // Map entity key to the prefix used in card IDs
+    // e.g., 'activities' -> 'activity_', 'opportunities' -> 'opportunity_'
+    const prefixMap = {
+      'contacts': 'contact_',
+      'accounts': 'account_',
+      'leads': 'lead_',
+      'opportunities': 'opportunity_',
+      'activities': 'activity_',
+    };
+    const prefix = prefixMap[entityKey] || `${entityKey.slice(0, -1)}_`;
+    
+    if (!preferences || !preferences[entityKey]) {
+      return defaults.map(card => ({
+        id: card.id,
+        label: card.label,
+        statusKey: card.id.replace(prefix, ''), // e.g. 'activity_scheduled' -> 'scheduled'
+      }));
+    }
+    
+    return defaults
+      .filter(card => preferences[entityKey][card.id]?.visible !== false)
+      .map(card => ({
+        id: card.id,
+        label: preferences[entityKey][card.id]?.label || card.label,
+        statusKey: card.id.replace(prefix, ''),
+      }));
+  }, [preferences]);
+
   return {
     preferences,
     loading,
@@ -161,6 +195,7 @@ export function useStatusCardPreferences() {
     resetToDefaults,
     getCardLabel,
     isCardVisible,
+    getVisibleCardsForEntity,
     DEFAULT_STATUS_CARDS,
   };
 }

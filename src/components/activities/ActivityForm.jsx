@@ -552,9 +552,10 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
 
   const statusOptions = [
     { value: 'scheduled', label: 'Scheduled' },
+    { value: 'in-progress', label: 'In Progress' },
+    { value: 'overdue', label: 'Overdue' },
     { value: 'completed', label: 'Completed' },
     { value: 'cancelled', label: 'Cancelled' },
-    { value: 'in-progress', label: 'In Progress' },
   ];
 
   const { isCardVisible, getCardLabel } = useStatusCardPreferences();
@@ -564,9 +565,10 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
   const filteredStatusOptions = useMemo(() => {
     const statusCardMap = {
       'scheduled': 'activity_scheduled',
+      'in-progress': 'activity_in_progress',
+      'overdue': 'activity_overdue',
       'completed': 'activity_completed',
       'cancelled': 'activity_cancelled',
-      'in-progress': 'activity_in_progress',
     };
     
     return statusOptions
