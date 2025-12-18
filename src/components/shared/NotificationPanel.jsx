@@ -24,15 +24,21 @@ export default function NotificationPanel() {
   const { user } = useUser();
   const pollTimerRef = useRef(null);
   const pollDelayRef = useRef(15000); // start with 15s
+  const initialLoadDoneRef = useRef(false); // Guard against multiple initial loads
+  const userEmailRef = useRef(null); // Track user email to detect actual changes
   const BASE_DELAY = 15000;
   const MAX_DELAY = 60000;
 
+  // Keep userEmail in ref for stable callback
+  userEmailRef.current = user?.email;
+
   const loadNotifications = useCallback(async (options = { silent: false }) => {
-    if (!user?.email) return;
+    const email = userEmailRef.current;
+    if (!email) return;
     try {
       if (!options.silent) setLoading(true);
       const fetched = await Notification.filter(
-        { user_email: user.email },
+        { user_email: email },
         '-created_date',
         50
       );
@@ -48,9 +54,20 @@ export default function NotificationPanel() {
     } finally {
       if (!options.silent) setLoading(false);
     }
-  }, [user?.email]);
+  }, []); // Empty deps - uses ref for stable callback
 
   useEffect(() => {
+    // Only run when user email is available and hasn't been loaded yet
+    if (!user?.email) return;
+    
+    // If email changed, reset and allow reload
+    if (userEmailRef.current !== user.email) {
+      initialLoadDoneRef.current = false;
+    }
+    
+    // Skip if already loaded for this user
+    if (initialLoadDoneRef.current) return;
+    
     let cancelled = false;
 
     const scheduleNext = (delayMs) => {
@@ -86,7 +103,9 @@ export default function NotificationPanel() {
     };
 
     // Initial load immediately
+    initialLoadDoneRef.current = true; // Mark as done BEFORE starting
     loadNotifications({ silent: false }).then((res) => {
+      if (cancelled) return;
       pollDelayRef.current = computeNextDelay(BASE_DELAY, !!res?.ok, res?.error);
       scheduleNext(pollDelayRef.current);
     });
@@ -95,7 +114,7 @@ export default function NotificationPanel() {
       cancelled = true;
       clearTimeout(pollTimerRef.current);
     };
-  }, [loadNotifications]);
+  }, [user?.email, loadNotifications]); // Depend on user.email for actual user changes
 
   const handleNotificationClick = async (notification) => {
     if (!notification.is_read) {

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { BACKEND_URL } from '@/api/entities';
 
 // Default entity labels - matches backend
@@ -41,7 +41,7 @@ export function EntityLabelsProvider({ children, tenantId }) {
   console.log('[EntityLabelsContext] Provider rendered with tenantId:', tenantId);
   const [labels, setLabels] = useState(DEFAULT_LABELS);
   const [loading, setLoading] = useState(false);
-  const [lastFetchedTenantId, setLastFetchedTenantId] = useState(null);
+  const lastFetchedTenantIdRef = useRef(null); // Use ref to persist across strict mode remounts
 
   const fetchLabels = useCallback(async (tid) => {
     if (!tid) {
@@ -85,17 +85,17 @@ export function EntityLabelsProvider({ children, tenantId }) {
   }, []);
 
   useEffect(() => {
-    if (tenantId && tenantId !== lastFetchedTenantId) {
+    if (tenantId && tenantId !== lastFetchedTenantIdRef.current) {
       console.log('[EntityLabelsContext] Tenant changed, fetching labels for:', tenantId);
-      setLastFetchedTenantId(tenantId);
+      lastFetchedTenantIdRef.current = tenantId;
       fetchLabels(tenantId);
-    } else if (!tenantId && lastFetchedTenantId) {
+    } else if (!tenantId && lastFetchedTenantIdRef.current) {
       // Tenant cleared, reset to defaults
       console.log('[EntityLabelsContext] Tenant cleared, resetting to defaults');
       setLabels(DEFAULT_LABELS);
-      setLastFetchedTenantId(null);
+      lastFetchedTenantIdRef.current = null;
     }
-  }, [tenantId, lastFetchedTenantId, fetchLabels]);
+  }, [tenantId, fetchLabels]);
 
   /**
    * Get the plural label for an entity

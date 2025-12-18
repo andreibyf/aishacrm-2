@@ -1081,43 +1081,34 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     }
   }, [reloadUser]);
 
-  React.useEffect(() => {
-    // initial load
-    refetchUser();
-  }, [refetchUser]);
+  // NOTE: Removed redundant refetchUser() call on mount - UserContext already loads user
+  // The refetchUser callback is still available for explicit refresh (e.g., after profile update)
 
   // Warm backend dashboard cache after auth cookies and user/tenant ready
+  // Consolidated into single effect to prevent duplicate calls
+  const lastWarmedTenantRef = React.useRef(null);
   React.useEffect(() => {
     const warmCache = async () => {
+      if (!authCookiesReady || !user) return;
+      
+      const tenantId = selectedTenantId || user?.tenant_id || null;
+      
+      // Skip if we already warmed this tenant
+      if (tenantId && lastWarmedTenantRef.current === tenantId) {
+        return;
+      }
+      
       try {
-        const tenantId = user?.tenant_id || null;
         await getDashboardBundleFast({ tenant_id: tenantId, include_test_data: true });
+        lastWarmedTenantRef.current = tenantId;
       } catch (err) {
         if (import.meta.env.DEV) {
           console.debug('[WarmCache] skipped:', err?.message || err);
         }
       }
     };
-    if (authCookiesReady && user) {
-      warmCache();
-    }
-  }, [authCookiesReady, user]);
-
-  // Also warm cache when tenant selection changes (for admins/superadmins)
-  React.useEffect(() => {
-    const warmOnTenantChange = async () => {
-      try {
-        const nextTenantId = selectedTenantId || user?.tenant_id || null;
-        if (!authCookiesReady || !nextTenantId) return;
-        await getDashboardBundleFast({ tenant_id: nextTenantId, include_test_data: true });
-      } catch (err) {
-        if (import.meta.env.DEV) {
-          console.debug('[WarmCache] tenant-change skipped:', err?.message || err);
-        }
-      }
-    };
-    warmOnTenantChange();
-  }, [authCookiesReady, selectedTenantId]);
+    warmCache();
+  }, [authCookiesReady, user, selectedTenantId]);
 
   // Refresh user when profile data changes in-app (Employee/User updates)
   React.useEffect(() => {
