@@ -177,99 +177,116 @@ export default function createLeadsV2Routes() {
 
       const supabase = getSupabaseClient();
       
-      // Join with employees table to include assigned_to_name
-      // This eliminates the need for frontend to fetch employees separately
-      let query = supabase
-        .from('leads')
-        .select('*, employee:employees(id, first_name, last_name, email)', { count: 'exact' })
-        .eq('tenant_id', tenant_id);
+      // Helper function to build the base query with all filters
+      const buildBaseQuery = (selectClause) => {
+        let query = supabase
+          .from('leads')
+          .select(selectClause, { count: 'exact' })
+          .eq('tenant_id', tenant_id);
 
-      // Handle filter parameter with $or support
-      if (filter) {
-        let parsedFilter = filter;
-        if (typeof filter === 'string' && filter.startsWith('{')) {
-          try {
-            parsedFilter = JSON.parse(filter);
-            console.log('[V2 Leads] Parsed filter:', JSON.stringify(parsedFilter, null, 2));
-          } catch {
-            // treat as literal
+        // Handle filter parameter with $or support
+        if (filter) {
+          let parsedFilter = filter;
+          if (typeof filter === 'string' && filter.startsWith('{')) {
+            try {
+              parsedFilter = JSON.parse(filter);
+              console.log('[V2 Leads] Parsed filter:', JSON.stringify(parsedFilter, null, 2));
+            } catch {
+              // treat as literal
+            }
+          }
+
+          // Handle $or for assigned_to filtering
+          if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
+            // Normalize conditions to avoid empty strings or undefineds
+            const normalizedOr = parsedFilter.$or.filter(cond => cond && typeof cond === 'object');
+
+            // Detect unassigned explicitly and apply a safe null check
+            const hasUnassigned = normalizedOr.some(cond => cond.assigned_to === null);
+            const nonEmptyAssignedTo = normalizedOr
+              .map(cond => cond.assigned_to)
+              .filter(val => val !== undefined && val !== null && String(val).trim() !== '');
+
+            if (hasUnassigned && nonEmptyAssignedTo.length === 0) {
+              console.log('[V2 Leads] Applying unassigned-only filter');
+              query = query.is('assigned_to', null);
+            } else if (nonEmptyAssignedTo.length > 0) {
+              console.log('[V2 Leads] Applying assigned_to $or filter:', nonEmptyAssignedTo);
+              const orParts = nonEmptyAssignedTo.map(val => `assigned_to.eq.${val}`);
+              query = query.or(orParts.join(','));
+            }
+          }
+
+          // Handle is_test_data filter from parsed filter
+          if (typeof parsedFilter === 'object' && parsedFilter.is_test_data !== undefined) {
+            console.log('[V2 Leads] Applying is_test_data filter:', parsedFilter.is_test_data);
+            if (parsedFilter.is_test_data === false) {
+              query = query.or('is_test_data.is.false,is_test_data.is.null');
+            } else {
+              query = query.eq('is_test_data', parsedFilter.is_test_data);
+            }
           }
         }
 
-        // Handle $or for assigned_to filtering
-        if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
-          // Normalize conditions to avoid empty strings or undefineds
-          const normalizedOr = parsedFilter.$or.filter(cond => cond && typeof cond === 'object');
-
-          // Detect unassigned explicitly and apply a safe null check
-          const hasUnassigned = normalizedOr.some(cond => cond.assigned_to === null);
-          const nonEmptyAssignedTo = normalizedOr
-            .map(cond => cond.assigned_to)
-            .filter(val => val !== undefined && val !== null && String(val).trim() !== '');
-
-          if (hasUnassigned && nonEmptyAssignedTo.length === 0) {
-            console.log('[V2 Leads] Applying unassigned-only filter');
-            query = query.is('assigned_to', null);
-          } else if (nonEmptyAssignedTo.length > 0) {
-            console.log('[V2 Leads] Applying assigned_to $or filter:', nonEmptyAssignedTo);
-            const orParts = nonEmptyAssignedTo.map(val => `assigned_to.eq.${val}`);
-            query = query.or(orParts.join(','));
+        // Handle direct query parameters (fallback if no filter param)
+        if (status && status !== 'all' && status !== 'any' && status !== '' && status !== 'undefined') {
+          let parsedStatus = status;
+          if (typeof status === 'string' && status.startsWith('{')) {
+            try {
+              parsedStatus = JSON.parse(status);
+            } catch {
+              // treat as literal
+            }
           }
-        }
-
-        // Handle is_test_data filter from parsed filter
-        if (typeof parsedFilter === 'object' && parsedFilter.is_test_data !== undefined) {
-          console.log('[V2 Leads] Applying is_test_data filter:', parsedFilter.is_test_data);
-          if (parsedFilter.is_test_data === false) {
-            query = query.or('is_test_data.is.false,is_test_data.is.null');
+          // Handle $nin (not-in) operator for status filtering
+          if (typeof parsedStatus === 'object' && parsedStatus.$nin) {
+            console.log('[V2 Leads] Applying status $nin from query param:', parsedStatus.$nin);
+            // Use NOT IN with Supabase
+            query = query.not('status', 'in', `(${parsedStatus.$nin.join(',')})`);
           } else {
-            query = query.eq('is_test_data', parsedFilter.is_test_data);
+            query = query.eq('status', status);
           }
         }
-      }
+        if (source) query = query.eq('source', source);
+        // Sanitize potential UUID query params to avoid "invalid input syntax for type uuid" errors
+        const safeAssignedTo = sanitizeUuidInput(assigned_to);
+        if (!filter && safeAssignedTo !== undefined && safeAssignedTo !== null) {
+          query = query.eq('assigned_to', safeAssignedTo);
+        }
 
-      // Handle direct query parameters (fallback if no filter param)
-      if (status && status !== 'all' && status !== 'any' && status !== '' && status !== 'undefined') {
-        let parsedStatus = status;
-        if (typeof status === 'string' && status.startsWith('{')) {
-          try {
-            parsedStatus = JSON.parse(status);
-          } catch {
-            // treat as literal
+        // Handle is_test_data from query param
+        if (is_test_data !== undefined && !filter) {
+          const flag = String(is_test_data).toLowerCase();
+          if (flag === 'false') {
+            console.log('[V2 Leads] Excluding test data from query param');
+            query = query.or('is_test_data.is.false,is_test_data.is.null');
+          } else if (flag === 'true') {
+            console.log('[V2 Leads] Including only test data from query param');
+            query = query.eq('is_test_data', true);
           }
         }
-        // Handle $nin (not-in) operator for status filtering
-        if (typeof parsedStatus === 'object' && parsedStatus.$nin) {
-          console.log('[V2 Leads] Applying status $nin from query param:', parsedStatus.$nin);
-          // Use NOT IN with Supabase
-          query = query.not('status', 'in', `(${parsedStatus.$nin.join(',')})`);
-        } else {
-          query = query.eq('status', status);
-        }
-      }
-      if (source) query = query.eq('source', source);
-      // Sanitize potential UUID query params to avoid "invalid input syntax for type uuid" errors
-      const safeAssignedTo = sanitizeUuidInput(assigned_to);
-      if (!filter && safeAssignedTo !== undefined && safeAssignedTo !== null) {
-        query = query.eq('assigned_to', safeAssignedTo);
-      }
 
-      // Handle is_test_data from query param
-      if (is_test_data !== undefined && !filter) {
-        const flag = String(is_test_data).toLowerCase();
-        if (flag === 'false') {
-          console.log('[V2 Leads] Excluding test data from query param');
-          query = query.or('is_test_data.is.false,is_test_data.is.null');
-        } else if (flag === 'true') {
-          console.log('[V2 Leads] Including only test data from query param');
-          query = query.eq('is_test_data', true);
-        }
+        return query.order('created_at', { ascending: false })
+          .range(offset, offset + limit - 1);
+      };
+
+      // Try with FK join first (requires leads_assigned_to_fkey constraint)
+      // Falls back to simple query without join if FK constraint doesn't exist
+      let data, error, count;
+      
+      const fkJoinSelect = '*, employee:employees!leads_assigned_to_fkey(id, first_name, last_name, email)';
+      const simpleSelect = '*';
+      
+      let result = await buildBaseQuery(fkJoinSelect);
+      ({ data, error, count } = result);
+      
+      // If FK join fails (constraint doesn't exist), fall back to simple query
+      if (error && (error.message?.includes('relationship') || error.message?.includes('hint') || error.code === 'PGRST200')) {
+        console.warn('[V2 Leads GET] FK join failed, falling back to simple query:', error.message);
+        result = await buildBaseQuery(simpleSelect);
+        ({ data, error, count } = result);
       }
-
-      query = query.order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
-
-      const { data, error, count } = await query;
+      
       if (error) throw new Error(error.message);
 
       // Transform leads: expand metadata and denormalize employee name

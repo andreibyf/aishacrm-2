@@ -365,7 +365,20 @@ export default function createAuthRoutes(_pgPool) {
       res.cookie('aisha_refresh', refresh, cookieOpts(7 * 24 * 60 * 60 * 1000));
 
       console.log('[Auth.login] Login successful:', { email: normalizedEmail, role: user.role, table });
-      return res.json({ status: 'success', message: 'Login successful' });
+      return res.json({ 
+        status: 'success', 
+        message: 'Login successful',
+        data: {
+          user: {
+            id: user.id,
+            email: user.email,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            role: user.role,
+            tenant_id: user.tenant_id || null,
+          }
+        }
+      });
     } catch (err) {
       console.error('[Auth.login] error', err);
       return res.status(500).json({ status: 'error', message: 'Internal error' });
