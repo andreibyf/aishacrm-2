@@ -77,6 +77,7 @@ export default function LeadsPage() {
   const [users, setUsers] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  // Supporting data is now non-blocking since API returns denormalized names
   const [supportingDataReady, setSupportingDataReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -317,7 +318,7 @@ export default function LeadsPage() {
     loadSupportingData();
   }, [user, selectedTenantId, cachedRequest]);
 
-  // Load total stats for ALL leads (separate from paginated data)
+  // Load total stats for ALL leads using fast stats endpoint
   const loadTotalStats = useCallback(async () => {
     if (!user) return;
 
@@ -339,29 +340,25 @@ export default function LeadsPage() {
         return;
       }
 
-      // Get up to 10000 leads for stats calculation
-      const allLeads = await Lead.filter(filter, "id", 10000);
+      // Use optimized stats endpoint instead of fetching all leads
+      const stats = await Lead.getStats({
+        tenant_id: filter.tenant_id,
+        is_test_data: showTestData ? undefined : false,
+      });
 
-      const stats = {
-        total: allLeads?.length || 0,
-        new: allLeads?.filter((l) => l.status === "new").length || 0,
-        contacted: allLeads?.filter((l) => l.status === "contacted").length ||
-          0,
-        qualified: allLeads?.filter((l) => l.status === "qualified").length ||
-          0,
-        unqualified: allLeads?.filter((l) =>
-          l.status === "unqualified"
-        ).length || 0,
-        converted: allLeads?.filter((l) => l.status === "converted").length ||
-          0,
-        lost: allLeads?.filter((l) => l.status === "lost").length || 0,
-      };
-
-      setTotalStats(stats);
+      setTotalStats({
+        total: stats?.total || 0,
+        new: stats?.new || 0,
+        contacted: stats?.contacted || 0,
+        qualified: stats?.qualified || 0,
+        unqualified: stats?.unqualified || 0,
+        converted: stats?.converted || 0,
+        lost: stats?.lost || 0,
+      });
     } catch (error) {
       console.error("Failed to load total stats:", error);
     }
-  }, [user, getTenantFilter]);
+  }, [user, getTenantFilter, showTestData]);
 
   // Load total stats when dependencies change
   useEffect(() => {
@@ -508,9 +505,10 @@ export default function LeadsPage() {
     ageBuckets,
   ]); // Removed unused pageSize, showTestData deps
 
-  // Load leads when dependencies change and data is ready
+  // Load leads when dependencies change - no longer blocked by supportingDataReady
+  // since API now returns denormalized assigned_to_name directly
   useEffect(() => {
-    if (supportingDataReady) {
+    if (user) {
       loadLeads(currentPage, pageSize);
     }
   }, [
@@ -524,7 +522,6 @@ export default function LeadsPage() {
     loadLeads,
     selectedEmail,
     selectedTenantId,
-    supportingDataReady
   ]);
 
   // Clear cache when employee filter changes to force fresh data
@@ -1158,8 +1155,8 @@ export default function LeadsPage() {
         <Suspense fallback={null}>
           <LeadDetailPanel
             lead={detailLead}
-            assignedUserName={employeesMap[detailLead?.assigned_to] ||
-              usersMap[detailLead?.assigned_to] || detailLead?.assigned_to_name}
+            assignedUserName={detailLead?.assigned_to_name ||
+              employeesMap[detailLead?.assigned_to] || usersMap[detailLead?.assigned_to]}
             open={isDetailOpen}
             onOpenChange={() => {
               setIsDetailOpen(false);
@@ -1688,9 +1685,9 @@ export default function LeadsPage() {
                               </span>
                             </td>
                             <td className="px-4 py-3 text-sm text-slate-300">
-                              {employeesMap[lead.assigned_to] ||
-                                usersMap[lead.assigned_to] ||
-                                lead.assigned_to_name || (
+                              {lead.assigned_to_name ||
+                                employeesMap[lead.assigned_to] ||
+                                usersMap[lead.assigned_to] || (
                                 <span className="text-slate-500">
                                   Unassigned
                                 </span>

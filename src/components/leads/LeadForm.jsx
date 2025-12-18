@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import TagInput from "../shared/TagInput";
 import LazyAccountSelector from "../shared/LazyAccountSelector";
+import LazyEmployeeSelector from "../shared/LazyEmployeeSelector";
 import CreateAccountDialog from "../accounts/CreateAccountDialog";
 import { useApiManager } from "../shared/ApiManager";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
@@ -687,23 +688,14 @@ export default function LeadForm({
                     className="mt-1 bg-slate-600 border-slate-500 text-slate-300 cursor-not-allowed"
                   />
                 ) : (
-                  // Managers can select assignee
-                  <Select
+                  // Managers can select assignee - using LazyEmployeeSelector for immediate data loading
+                  <LazyEmployeeSelector
                     value={formData.assigned_to || "unassigned"}
-                    onValueChange={(value) => handleChange('assigned_to', value)} // Changed to pass 'unassigned' string directly
-                  >
-                    <SelectTrigger className="mt-1 bg-slate-700 border-slate-600 text-slate-200">
-                      <SelectValue placeholder="Select assignee" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700">
-                      <SelectItem value="unassigned" className="text-slate-200 hover:bg-slate-700">Unassigned</SelectItem>
-                      {assignableEmployees.map((emp) => (
-                        <SelectItem key={emp.id} value={emp.id} className="text-slate-200 hover:bg-slate-700">
-                          {emp.first_name} {emp.last_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onValueChange={(value) => handleChange('assigned_to', value)}
+                    placeholder="Select assignee"
+                    includeUnassigned={true}
+                    className="mt-1 bg-slate-700 border-slate-600 text-slate-200"
+                  />
                 )}
               </div>
             </div>

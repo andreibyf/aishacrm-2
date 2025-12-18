@@ -97,6 +97,7 @@ const pluralize = (entityName) => {
     "users": "users", // Already plural
     "systemlog": "system-logs",
     "system-logs": "system-logs", // Already plural
+    "system-logs/bulk": "system-logs/bulk", // Preserve exact path for bulk endpoint
     "auditlog": "audit-logs",
     "audit-logs": "audit-logs", // Already plural
     "notification": "notifications",
@@ -607,7 +608,43 @@ export const Account = createEntity("Account");
 // Customer is a UI alias for Account - both use the same backend endpoint
 export const Customer = createEntity("Customer");
 
-export const Lead = createEntity("Lead");
+export const Lead = {
+  ...createEntity("Lead"),
+
+  // Optimized stats endpoint - returns aggregated counts by status
+  async getStats(filter = {}) {
+    try {
+      const params = new URLSearchParams();
+      if (filter.tenant_id) params.append('tenant_id', filter.tenant_id);
+      if (filter.assigned_to !== undefined) params.append('assigned_to', filter.assigned_to);
+      if (filter.is_test_data !== undefined) params.append('is_test_data', String(filter.is_test_data));
+
+      const response = await fetch(`${BACKEND_URL}/api/v2/leads/stats?${params}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.data;
+    } catch (error) {
+      console.error("[Lead.getStats] Error:", error);
+      return {
+        total: 0,
+        new: 0,
+        contacted: 0,
+        qualified: 0,
+        unqualified: 0,
+        converted: 0,
+        lost: 0,
+      };
+    }
+  },
+};
 
 export const Opportunity = {
   ...createEntity("Opportunity"),
