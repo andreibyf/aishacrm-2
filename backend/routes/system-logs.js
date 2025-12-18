@@ -68,8 +68,8 @@ export default function createSystemLogRoutes(_pgPool) {
       // For tenant admins, use their tenant_id; for superadmins, allow null
       // This ensures RLS policies work correctly for non-superadmin users
       let effectiveTenantId = tenant_id || null;
-      if (!effectiveTenantId && req.tenant?.id) {
-        effectiveTenantId = req.tenant.id; // Use authenticated user's tenant
+      if (!effectiveTenantId && req.user?.tenant_id) {
+        effectiveTenantId = req.user.tenant_id; // Use authenticated user's tenant
       }
       
       // Sanitize to handle 'system' alias → NULL for UUID columns
@@ -147,8 +147,8 @@ export default function createSystemLogRoutes(_pgPool) {
 
         // For tenant admins, use their tenant_id; for superadmins, allow null
         let effectiveTenantId = tenant_id || null;
-        if (!effectiveTenantId && req.tenant?.id) {
-          effectiveTenantId = req.tenant.id; // Use authenticated user's tenant
+        if (!effectiveTenantId && req.user?.tenant_id) {
+          effectiveTenantId = req.user.tenant_id; // Use authenticated user's tenant
         }
         
         // Sanitize to handle 'system' alias → NULL for UUID columns
