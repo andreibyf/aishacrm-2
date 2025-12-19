@@ -13,7 +13,7 @@
  * - RLS compliance
  */
 
-import { getSupabaseClient } from '../lib/supabase-db.js';
+import { getSupabaseClient as _getSupabaseClient } from '../lib/supabase-db.js';
 
 /**
  * Find or create a placeholder B2C account for a tenant
@@ -149,12 +149,12 @@ export async function findOrCreateB2BAccountFromBizDev(client, tenantId, bizdevD
     dba_name,
     website,
     industry,
-    address_line_1,
-    address_line_2,
-    city,
-    state_province,
-    postal_code,
-    country,
+    _address_line_1,
+    _address_line_2,
+    _city,
+    _state_province,
+    _postal_code,
+    _country,
     contact_email,
     contact_phone
   } = bizdevData;

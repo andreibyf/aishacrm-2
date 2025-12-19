@@ -59,7 +59,7 @@ export default function SearchableCustomerSelector({ value, onChange, accounts, 
           )}
         >
           {selectedAccount ? (
-            <span className="truncate">{selectedCustomer.name}</span>
+            <span className="truncate">{selectedAccount.name}</span>
           ) : (
             <span className="text-slate-400">{placeholder}</span>
           )}

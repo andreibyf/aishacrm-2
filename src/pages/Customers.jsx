@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Customer } from "@/api/entities";
-import { Contact } from "@/api/entities";
-import { Employee } from "@/api/entities";
+import { Account, Contact, Employee } from "@/api/entities";
 import { useApiManager } from "../components/shared/ApiManager";
 import { loadUsersSafely } from "../components/shared/userLoader"; // TODO: remove after refactor if unused
 import { useUser } from "@/components/shared/useUser.js";
@@ -53,7 +51,7 @@ import { formatIndustry } from "@/utils/industryUtils";
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 
 // Helper to add delay between API calls
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const _delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function CustomersPage() {
   const { plural: customersLabel, singular: customerLabel } = useEntityLabel('accounts');
@@ -66,9 +64,9 @@ export default function CustomersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingCustomer, setEditingCustomer] = useState(null);
+  const [editingAccount, setEditingAccount] = useState(null);
   const [viewMode, setViewMode] = useState("list");
-  const [selectedCustomers, setSelectedCustomers] = useState(() => new Set());
+  const [selectedAccounts, setSelectedAccounts] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const { user } = useUser();
@@ -95,6 +93,7 @@ export default function CustomersPage() {
 
   const { cachedRequest, clearCacheByKey } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
+  const { getCardLabel, isCardVisible } = useStatusCardPreferences();
 
   // Ref to track if initial load is done
   const initialLoadDone = useRef(false);
@@ -449,7 +448,7 @@ export default function CustomersPage() {
 
   // Extract all tags from accounts for TagFilter
   const allTags = useMemo(() => {
-    if (!Array.isArray(accounts)) return [];
+    if (!Array.isArray(customers)) return [];
 
     const tagCounts = {};
     customers.forEach((account) => {
@@ -499,7 +498,7 @@ export default function CustomersPage() {
       loadTotalStats(),
     ]);
     toast.success(
-      editingCustomer
+      editingAccount
         ? "Account updated successfully"
         : "Account created successfully",
     );
@@ -520,7 +519,7 @@ export default function CustomersPage() {
         return next;
       });
 
-      await Customer.delete(id);
+      await Account.delete(id);
       clearCacheByKey("Account");
       await Promise.all([
         loadAccounts(),
@@ -583,7 +582,7 @@ export default function CustomersPage() {
         const BATCH_SIZE = 50;
         for (let i = 0; i < allAccountsToDelete.length; i += BATCH_SIZE) {
           const batch = allAccountsToDelete.slice(i, i + BATCH_SIZE);
-          await Promise.all(batch.map((a) => Customer.delete(a.id)));
+          await Promise.all(batch.map((a) => Account.delete(a.id)));
         }
 
         // Optimistically remove from UI immediately
@@ -609,21 +608,21 @@ export default function CustomersPage() {
         toast.error("Failed to delete accounts");
       }
     } else {
-      if (!selectedCustomers || selectedCustomers.size === 0) {
+      if (!selectedAccounts || selectedAccounts.size === 0) {
         toast.error("No accounts selected");
         return;
       }
 
-      if (!window.confirm(`Delete ${selectedCustomers.size} account(s)?`)) {
+      if (!window.confirm(`Delete ${selectedAccounts.size} account(s)?`)) {
         return;
       }
 
       try {
         await Promise.all(
-          [...selectedCustomers].map((id) => Customer.delete(id)),
+          [...selectedAccounts].map((id) => Account.delete(id)),
         );
         // Optimistically update UI for selected deletions
-        const idsToRemove = new Set(selectedCustomers);
+        const idsToRemove = new Set(selectedAccounts);
         setCustomers((prev) => prev.filter((a) => !idsToRemove.has(a.id)));
         setTotalItems((t) => Math.max(0, (t || 0) - idsToRemove.size));
         setSelectedAccounts(new Set());
@@ -632,7 +631,7 @@ export default function CustomersPage() {
           loadAccounts(),
           loadTotalStats(),
         ]);
-        toast.success(`${selectedCustomers.size} account(s) deleted`);
+        toast.success(`${selectedAccounts.size} account(s) deleted`);
       } catch (error) {
         console.error("Failed to delete accounts:", error);
         toast.error("Failed to delete accounts");
@@ -690,7 +689,7 @@ export default function CustomersPage() {
         for (let i = 0; i < allAccountsToUpdate.length; i += BATCH_SIZE) {
           const batch = allAccountsToUpdate.slice(i, i + BATCH_SIZE);
           await Promise.all(
-            batch.map((a) => Customer.update(a.id, { type: newType })),
+            batch.map((a) => Account.update(a.id, { type: newType })),
           );
         }
 
@@ -707,14 +706,14 @@ export default function CustomersPage() {
         toast.error("Failed to update accounts");
       }
     } else {
-      if (!selectedCustomers || selectedCustomers.size === 0) {
+      if (!selectedAccounts || selectedAccounts.size === 0) {
         toast.error("No accounts selected");
         return;
       }
 
       try {
-        const promises = [...selectedCustomers].map((id) =>
-          Customer.update(id, { type: newType })
+        const promises = [...selectedAccounts].map((id) =>
+          Account.update(id, { type: newType })
         );
 
         await Promise.all(promises);
@@ -782,7 +781,7 @@ export default function CustomersPage() {
           const batch = allAccountsToAssign.slice(i, i + BATCH_SIZE);
           await Promise.all(
             batch.map((a) =>
-              Customer.update(a.id, { assigned_to: assignedTo || null })
+              Account.update(a.id, { assigned_to: assignedTo || null })
             ),
           );
         }
@@ -800,14 +799,14 @@ export default function CustomersPage() {
         toast.error("Failed to assign accounts");
       }
     } else {
-      if (!selectedCustomers || selectedCustomers.size === 0) {
+      if (!selectedAccounts || selectedAccounts.size === 0) {
         toast.error("No accounts selected");
         return;
       }
 
       try {
-        const promises = [...selectedCustomers].map((id) =>
-          Customer.update(id, { assigned_to: assignedTo || null })
+        const promises = [...selectedAccounts].map((id) =>
+          Account.update(id, { assigned_to: assignedTo || null })
         );
 
         await Promise.all(promises);
@@ -826,7 +825,7 @@ export default function CustomersPage() {
   };
 
   const toggleSelection = (id) => {
-    const newSet = new Set(selectedCustomers);
+    const newSet = new Set(selectedAccounts);
     if (newSet.has(id)) {
       newSet.delete(id);
     } else {
@@ -837,7 +836,7 @@ export default function CustomersPage() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedCustomers.size === customers.length && customers.length > 0) {
+    if (selectedAccounts.size === customers.length && customers.length > 0) {
       setSelectedAccounts(new Set());
       setSelectAllMode(false);
     } else {
@@ -907,11 +906,11 @@ export default function CustomersPage() {
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-800 border-slate-700 text-slate-200">
             <DialogHeader>
               <DialogTitle className="text-slate-100">
-                {editingCustomer ? `Edit ${customerLabel}` : `Add New ${customerLabel}`}
+                {editingAccount ? `Edit ${customerLabel}` : `Add New ${customerLabel}`}
               </DialogTitle>
             </DialogHeader>
-            <AccountForm
-              account={editingCustomer}
+            <CustomerForm
+              account={editingAccount}
               // AccountForm now handles Account.create/update internally, just handle refresh
               onSubmit={async (result) => {
                 console.log('[Accounts] Account saved:', result);
@@ -939,7 +938,7 @@ export default function CustomersPage() {
           }}
         />
 
-        <AccountDetailPanel
+        <CustomerDetailPanel
           account={detailAccount}
           assignedUserName={assignedToMap[detailAccount?.assigned_to] || detailAccount?.assigned_to}
           open={isDetailOpen}
@@ -1010,14 +1009,14 @@ export default function CustomersPage() {
             </Tooltip>
             <CsvExportButton
               entityName="Account"
-              data={accounts}
+              data={customers}
               filename="accounts_export"
             />
-            {(selectedCustomers.size > 0 || selectAllMode) && (
+            {(selectedAccounts.size > 0 || selectAllMode) && (
               <BulkActionsMenu
                 selectedCount={selectAllMode
                   ? totalItems
-                  : selectedCustomers.size}
+                  : selectedAccounts.size}
                 onBulkTypeChange={handleBulkTypeChange}
                 onBulkAssign={handleBulkAssign}
                 onBulkDelete={handleBulkDelete}
@@ -1165,7 +1164,7 @@ export default function CustomersPage() {
         </div>
 
         {/* Select All Banner */}
-        {selectedCustomers.size === customers.length && customers.length > 0 &&
+        {selectedAccounts.size === customers.length && customers.length > 0 &&
           !selectAllMode && totalItems > customers.length && (
           <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1254,7 +1253,7 @@ export default function CustomersPage() {
                       <tr>
                         <th className="px-4 py-3 text-left">
                           <Checkbox
-                            checked={selectedCustomers.size ===
+                            checked={selectedAccounts.size ===
                                 customers.length &&
                               customers.length > 0 && !selectAllMode}
                             onCheckedChange={toggleSelectAll}
@@ -1292,7 +1291,7 @@ export default function CustomersPage() {
                         >
                           <td className="px-4 py-3">
                             <Checkbox
-                              checked={selectedCustomers.has(account.id) ||
+                              checked={selectedAccounts.has(account.id) ||
                                 selectAllMode}
                               onCheckedChange={() =>
                                 toggleSelection(account.id)}
@@ -1429,9 +1428,9 @@ export default function CustomersPage() {
               {/* Card View */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {customers.map((account) => (
-                  <AccountCard
+                  <CustomerCard
                     key={account.id}
-                    account={customer}
+                    account={account}
                     assignedUserName={assignedToMap[account.assigned_to] || account.assigned_to}
                     onEdit={(a) => {
                       setEditingAccount(a);
@@ -1440,7 +1439,7 @@ export default function CustomersPage() {
                     onDelete={handleDelete}
                     onViewDetails={handleViewDetails}
                     onClick={() => handleViewDetails(account)}
-                    isSelected={selectedCustomers.has(account.id) ||
+                    isSelected={selectedAccounts.has(account.id) ||
                       selectAllMode}
                     onSelect={() => toggleSelection(account.id)}
                     user={user}
