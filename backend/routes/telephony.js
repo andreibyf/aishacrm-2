@@ -476,6 +476,14 @@ export default function createTelephonyRoutes(pgPool) {
    */
   router.post('/inbound-webhook', async (req, res) => {
     try {
+      // Validate required fields
+      const { tenant_id, from_number } = req.body || {};
+      if (!tenant_id || !from_number) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id and from_number are required'
+        });
+      }
       const result = await handleInboundCall(pgPool, req.body);
       res.json(result);
     } catch (error) {
@@ -543,6 +551,14 @@ export default function createTelephonyRoutes(pgPool) {
    */
   router.post('/outbound-webhook', async (req, res) => {
     try {
+      // Validate required fields
+      const { tenant_id, to_number, provider, outcome } = req.body || {};
+      if (!tenant_id || !to_number || !provider || !outcome) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id, to_number, provider, and outcome are required'
+        });
+      }
       const result = await handleOutboundCall(pgPool, req.body);
       res.json(result);
     } catch (error) {

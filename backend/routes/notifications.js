@@ -70,12 +70,13 @@ export default function createNotificationRoutes(_pgPool) {
       const supabase = getSupabaseClient();
       let q = supabase
         .from('notifications')
-        .select('*')
-        .order('created_date', { ascending: false })
-        .range(offset, offset + limit - 1);
+        .select('*');
 
       if (tenant_id) q = q.eq('tenant_id', tenant_id);
       if (user_email) q = q.eq('user_email', user_email);
+
+      q = q.order('created_date', { ascending: false })
+        .range(offset, offset + limit - 1);
 
       const { data, error } = await q;
       if (error) throw new Error(error.message);

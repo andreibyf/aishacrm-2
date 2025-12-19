@@ -19,12 +19,18 @@ const FALLBACK_TENANT_UUID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 async function getAuthHeaders() {
   const headers = { 'Content-Type': 'application/json' };
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) {
+      console.warn('[API Health] Auth session error:', error.message);
+    }
     if (session?.access_token) {
       headers.Authorization = `Bearer ${session.access_token}`;
+      console.log('[API Health] Using Supabase bearer token');
+    } else {
+      console.warn('[API Health] No Supabase session, relying on aisha_access cookie');
     }
   } catch (e) {
-    console.warn('Failed to get auth session for API health test:', e);
+    console.warn('[API Health] Failed to get auth session:', e?.message);
   }
   return headers;
 }
