@@ -15,8 +15,14 @@ const FLUSH_INTERVAL_MS = parseInt(process.env.PERF_LOG_FLUSH_MS || '2000', 10);
 const BATCH_MAX = parseInt(process.env.PERF_LOG_BATCH_MAX || '25', 10);
 
 function safeTenantId(raw) {
-  // Performance logs should not insert non-UUID values; map system/unknown/empty to null
-  return sanitizeUuidInput(raw, { systemAliases: ['system', 'unknown', 'anonymous'] });
+  // Performance logs require tenant_id in production
+  // Map system/unknown/empty to SYSTEM_TENANT_ID if available, otherwise null
+  const sanitized = sanitizeUuidInput(raw, { systemAliases: ['system', 'unknown', 'anonymous'] });
+  // Fallback to system tenant if null and env is set
+  if (!sanitized && process.env.SYSTEM_TENANT_ID) {
+    return sanitizeUuidInput(process.env.SYSTEM_TENANT_ID);
+  }
+  return sanitized;
 }
 
 function sanitizeRecord(rec) {
