@@ -272,6 +272,92 @@ export default function createMCPRoutes(_pgPool) {
     }
   });
 
+  // GET /api/mcp/config-status - Get MCP configuration status
+  // Returns status of required secrets without exposing actual values
+  router.get("/config-status", async (req, res) => {
+    try {
+      // Required secrets for MCP server
+      const requiredSecrets = [
+        'SUPABASE_URL',
+        'SUPABASE_SERVICE_ROLE_KEY',
+        'SUPABASE_ANON_KEY',
+        'OPENAI_API_KEY',
+        'DEFAULT_OPENAI_MODEL',
+        'DEFAULT_TENANT_ID'
+      ];
+
+      // Optional secrets (warn if missing, but not critical)
+      const optionalSecrets = [
+        'CRM_BACKEND_URL',
+        'GITHUB_TOKEN',
+        'GH_TOKEN'
+      ];
+
+      // Check if Doppler is enabled
+      const dopplerEnabled = !!process.env.DOPPLER_TOKEN;
+
+      // Helper function to safely mask secret values
+      const maskSecret = (value) => {
+        if (!value) return null;
+        // Show first 4 chars for secrets 8+ chars, otherwise just show asterisks
+        if (value.length >= 8) {
+          return `${value.substring(0, 4)}${'*'.repeat(Math.min(value.length - 4, 20))}`;
+        }
+        return '*'.repeat(5); // Don't expose short secrets
+      };
+
+      // Build status for each secret
+      const secrets = {};
+      
+      for (const secretName of requiredSecrets) {
+        const value = process.env[secretName];
+        secrets[secretName] = {
+          configured: !!value,
+          source: value ? (dopplerEnabled ? 'doppler' : 'env') : 'missing',
+          masked: maskSecret(value),
+          required: true
+        };
+      }
+
+      for (const secretName of optionalSecrets) {
+        const value = process.env[secretName];
+        secrets[secretName] = {
+          configured: !!value,
+          source: value ? (dopplerEnabled ? 'doppler' : 'env') : 'missing',
+          masked: maskSecret(value),
+          required: false
+        };
+      }
+
+      // Calculate summary
+      const totalRequired = requiredSecrets.length;
+      const configuredRequired = requiredSecrets.filter(s => !!process.env[s]).length;
+      const missingRequired = requiredSecrets.filter(s => !process.env[s]);
+
+      res.json({
+        status: 'success',
+        data: {
+          environment: process.env.NODE_ENV || 'development',
+          dopplerEnabled,
+          dopplerProject: process.env.DOPPLER_PROJECT || null,
+          dopplerConfig: process.env.DOPPLER_CONFIG || null,
+          secrets,
+          summary: {
+            totalRequired,
+            configuredRequired,
+            missingRequired,
+            allConfigured: missingRequired.length === 0
+          }
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        status: "error", 
+        message: error.message 
+      });
+    }
+  });
+
   // POST /api/mcp/execute-tool - Execute MCP tool
   router.post("/execute-tool", async (req, res) => {
     try {
