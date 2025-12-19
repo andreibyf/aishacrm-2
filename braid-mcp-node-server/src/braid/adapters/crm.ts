@@ -173,29 +173,10 @@ async function callBackend(
     actionId: action.id,
   });
 
-  // Get internal service token for authentication
-  // This can be either:
-  // 1. MCP_SERVICE_TOKEN (internal JWT for server-to-server calls)
-  // 2. SUPABASE_SERVICE_ROLE_KEY (Supabase admin token)
-  const serviceToken = process.env.MCP_SERVICE_TOKEN || process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  
-  if (serviceToken) {
-    headers["Authorization"] = `Bearer ${serviceToken}`;
-  } else {
-    ctx.warn("No service token configured (MCP_SERVICE_TOKEN or SUPABASE_SERVICE_ROLE_KEY)", {
-      path,
-      method
-    });
-  }
-
   try {
     const response = await fetch(url.toString(), {
       method,
-      headers,
+      headers: { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
     });
 
