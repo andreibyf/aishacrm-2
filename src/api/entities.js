@@ -210,8 +210,8 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
 
   const mockUser = isLocalDevMode() ? createMockUser() : null;
 
-  // Entities that don't require tenant_id (logging, system operations)
-  const optionalTenantEntities = ['SystemLog', 'ImportLog', 'AuditLog'];
+  // Entities that don't require tenant_id (logging, system operations, user management)
+  const optionalTenantEntities = ['SystemLog', 'ImportLog', 'AuditLog', 'User'];
   const requiresTenantId = !optionalTenantEntities.includes(entityName);
 
   // Resolve tenant_id - MANDATORY FOR CRM DATA OPERATIONS
