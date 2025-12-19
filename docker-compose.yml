@@ -74,7 +74,6 @@ services:
       context: .
       dockerfile: backend/Dockerfile
       args:
-        DOPPLER_TOKEN: ${DOPPLER_TOKEN}
         USE_SYSTEM_CHROMIUM: "true"
         PUPPETEER_SKIP_DOWNLOAD: "1"
     container_name: aishacrm-backend
@@ -105,16 +104,6 @@ services:
       - MCP_NODE_HEALTH_URL=http://mcp:8000/health
       - AI_TRIGGERS_WORKER_ENABLED=${AI_TRIGGERS_WORKER_ENABLED:-false}
       - MCP_NODE_ID=aishacrm-backend
-    entrypoint: >
-      sh -c "
-      if [ -z \"$$DOPPLER_TOKEN\" ]; then
-        echo 'ERROR: DOPPLER_TOKEN not set - falling back to node server.js';
-        exec node server.js;
-      else
-        echo 'Starting with Doppler...';
-        exec doppler run --token $$DOPPLER_TOKEN -- node server.js;
-      fi
-      "
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -143,13 +132,7 @@ services:
     build:
       context: .
       args:
-        DOPPLER_TOKEN: ${DOPPLER_TOKEN}
-        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
-        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
-        VITE_AISHACRM_BACKEND_URL: ${VITE_AISHACRM_BACKEND_URL:-http://localhost:4001}
         VITE_CURRENT_BRANCH: ${VITE_CURRENT_BRANCH:-main}
-        VITE_SYSTEM_TENANT_ID: ${VITE_SYSTEM_TENANT_ID}
-        VITE_USER_HEARTBEAT_INTERVAL_MS: ${VITE_USER_HEARTBEAT_INTERVAL_MS:-60000}
         APP_BUILD_VERSION: ${APP_BUILD_VERSION:-dev-local}
       dockerfile: Dockerfile
     container_name: aishacrm-frontend
@@ -161,6 +144,9 @@ services:
     env_file:
       - .env
     environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=aishacrm
+      - DOPPLER_CONFIG=dev
       - PORT=${FRONTEND_PORT:-3000}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]

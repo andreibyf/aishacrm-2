@@ -70,5 +70,5 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://127.0.0.1:${PORT:-3001}/health || exit 1
 
-# Start the server with Doppler to inject secrets
-CMD ["doppler", "run", "--", "node", "server.js"]
+# Start server with Doppler if token is available, otherwise fallback to direct node execution
+CMD ["sh", "-c", "if [ -n \"$DOPPLER_TOKEN\" ]; then echo 'Starting backend with Doppler...'; doppler run --token \"$DOPPLER_TOKEN\" --project \"${DOPPLER_PROJECT:-aishacrm}\" --config \"${DOPPLER_CONFIG:-prd}\" -- node server.js; else echo 'WARNING: DOPPLER_TOKEN not set, starting without Doppler'; exec node server.js; fi"]
