@@ -38,6 +38,11 @@ RUN npm run build:ci
 # Production stage - serve static files
 FROM node:22-alpine AS runner
 
+# Install Doppler CLI for runtime secret injection
+RUN wget -q -t3 'https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.key' -O /etc/apk/keys/cli@doppler-8004D9FF50437357.rsa.pub && \
+    echo 'https://packages.doppler.com/public/cli/alpine/any-version/main' | tee -a /etc/apk/repositories && \
+    apk add doppler
+
 WORKDIR /app
 
 # Install serve globally

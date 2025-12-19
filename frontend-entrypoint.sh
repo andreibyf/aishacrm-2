@@ -1,6 +1,16 @@
 #!/usr/bin/env sh
 set -e
 
+# Fetch secrets from Doppler if token is available
+if [ -n "$DOPPLER_TOKEN" ]; then
+  echo "Fetching frontend secrets from Doppler..."
+  # Export Doppler secrets as environment variables
+  eval "$(doppler secrets download --no-file --format env-no-names --token \"$DOPPLER_TOKEN\" --project \"${DOPPLER_PROJECT:-aishacrm}\" --config \"${DOPPLER_CONFIG:-dev}\")"
+  echo "Doppler secrets loaded successfully"
+else
+  echo "WARNING: DOPPLER_TOKEN not set, using environment variables directly"
+fi
+
 # CRITICAL: Always use version baked into Docker image (/app/VERSION) as source of truth
 # This file is written during build with the git tag, ensuring version matches deployed code
 # Do NOT trust VITE_APP_BUILD_VERSION env var which may be stale from .env file
