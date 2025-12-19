@@ -17,6 +17,7 @@ import TopAccounts from "../components/dashboard/TopAccounts";
 import RecentActivities from "../components/dashboard/RecentActivities";
 import LeadAgeReport from "../components/dashboard/LeadAgeReport";
 import SalesFunnelWidget from "../components/dashboard/SalesFunnelWidget";
+import ConversionRates from "../components/dashboard/ConversionRates";
 import { Loader2, RefreshCw } from "lucide-react";
 import { getDashboardBundleFast } from "@/api/dashboard";
 import { getCachedDashboardData, cacheDashboardData } from "@/api/dashboardCache";
@@ -50,6 +51,13 @@ const ALL_WIDGETS = [
     name: "Top Accounts",
     component: TopAccounts,
     defaultVisibility: false, // Disabled by default - makes 3 slow API calls
+  },
+  {
+    id: "conversionRates",
+    name: "Conversion Rates",
+    component: ConversionRates,
+    defaultVisibility: true, // Uses bundle stats - no extra API calls
+    usesStats: true, // Special flag: receives stats prop instead of tenantFilter
   },
   {
     id: "leadAgeReport",
@@ -700,6 +708,10 @@ export default function DashboardPage() {
                       prefetchProps.leadsData = (showTestData
                         ? bundleLists.recentLeads
                         : bundleLists.recentLeads.filter(l => l?.is_test_data !== true));
+                    }
+                    // ConversionRates uses stats directly - no API calls needed
+                    if (widget.id === "conversionRates" || widget.usesStats) {
+                      prefetchProps.stats = stats;
                     }
                     return (
                       <LazyWidgetLoader
