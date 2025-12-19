@@ -7,9 +7,50 @@ import {
 } from "../types";
 import { getSupabaseClient } from "../../lib/supabase";
 import { appendEvent as memAppendEvent } from "../../lib/memory";
+import jwt from "jsonwebtoken";
 
 // Node 18+ provides a global fetch; declare for TypeScript.
 declare const fetch: any;
+
+// Cache the internal service token (refresh every 50 minutes, token expires in 1 hour)
+let cachedServiceToken: { token: string; expiresAt: number } | null = null;
+
+/**
+ * Generate an internal service token for MCP → Backend authentication.
+ * The backend's authenticate.js middleware recognizes tokens with { internal: true }
+ * and grants superadmin access for service-to-service calls.
+ */
+function getInternalServiceToken(tenantId?: string): string | null {
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) {
+    console.warn('[CRM Adapter] JWT_SECRET not set - backend calls will fail in production');
+    return null;
+  }
+
+  const now = Date.now();
+  // Return cached token if still valid (with 10 minute buffer)
+  if (cachedServiceToken && cachedServiceToken.expiresAt > now + 600000) {
+    return cachedServiceToken.token;
+  }
+
+  // Generate new token
+  const payload = {
+    sub: 'mcp-service',
+    email: 'mcp-internal@aishacrm.local',
+    tenant_id: tenantId || process.env.DEFAULT_TENANT_ID || null,
+    internal: true, // This flag tells backend to grant superadmin access
+    iat: Math.floor(now / 1000),
+    exp: Math.floor(now / 1000) + 3600, // 1 hour expiry
+  };
+
+  const token = jwt.sign(payload, jwtSecret, { algorithm: 'HS256' });
+  cachedServiceToken = {
+    token,
+    expiresAt: now + 3600000, // 1 hour from now
+  };
+
+  return token;
+}
 
 type SupportedKind =
   | "accounts"
@@ -174,9 +215,19 @@ async function callBackend(
   });
 
   try {
+    // Get internal service token for authentication
+    const tenantId = getTenantId(action);
+    const serviceToken = getInternalServiceToken(tenantId);
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (serviceToken) {
+      headers["Authorization"] = `Bearer ${serviceToken}`;
+    }
+
     const response = await fetch(url.toString(), {
       method,
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: body ? JSON.stringify(body) : undefined,
     });
 

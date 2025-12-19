@@ -40,7 +40,8 @@ const REQUIRED_SECRETS = [
   { name: 'SUPABASE_ANON_KEY', description: 'Supabase anonymous key' },
   { name: 'OPENAI_API_KEY', description: 'OpenAI API key for LLM operations' },
   { name: 'DEFAULT_OPENAI_MODEL', description: 'Default OpenAI model to use' },
-  { name: 'DEFAULT_TENANT_ID', description: 'Default tenant ID for operations' }
+  { name: 'DEFAULT_TENANT_ID', description: 'Default tenant ID for operations' },
+  { name: 'JWT_SECRET', description: 'JWT secret for signing internal service tokens (must match backend)' }
 ];
 
 // Optional secrets (warn if missing, but don't fail)

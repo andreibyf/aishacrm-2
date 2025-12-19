@@ -204,6 +204,15 @@ jobs:
             if [ -f /opt/aishacrm/.env ]; then
               OPENAI_KEY=$(grep "^OPENAI_API_KEY=" /opt/aishacrm/.env | cut -d'=' -f2-)
               [ -n "$OPENAI_KEY" ] && sed -i "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=$OPENAI_KEY|" .env || echo "OPENAI_API_KEY=$OPENAI_KEY" >> .env
+              # Sync JWT_SECRET for MCP → Backend authentication
+              JWT_KEY=$(grep "^JWT_SECRET=" /opt/aishacrm/.env | cut -d'=' -f2-)
+              if [ -n "$JWT_KEY" ]; then
+                if grep -q "^JWT_SECRET=" .env 2>/dev/null; then
+                  sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$JWT_KEY|" .env
+                else
+                  echo "JWT_SECRET=$JWT_KEY" >> .env
+                fi
+              fi
             fi
             grep -q "^DEFAULT_OPENAI_MODEL=" .env || echo "DEFAULT_OPENAI_MODEL=gpt-4o" >> .env
             
