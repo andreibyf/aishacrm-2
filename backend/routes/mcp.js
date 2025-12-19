@@ -282,12 +282,12 @@ export default function createMCPRoutes(_pgPool) {
         'SUPABASE_SERVICE_ROLE_KEY',
         'SUPABASE_ANON_KEY',
         'OPENAI_API_KEY',
+        'DEFAULT_OPENAI_MODEL',
         'DEFAULT_TENANT_ID'
       ];
 
       // Optional secrets (warn if missing, but not critical)
       const optionalSecrets = [
-        'DEFAULT_OPENAI_MODEL',
         'CRM_BACKEND_URL',
         'GITHUB_TOKEN',
         'GH_TOKEN'
@@ -295,6 +295,16 @@ export default function createMCPRoutes(_pgPool) {
 
       // Check if Doppler is enabled
       const dopplerEnabled = !!process.env.DOPPLER_TOKEN;
+
+      // Helper function to safely mask secret values
+      const maskSecret = (value) => {
+        if (!value) return null;
+        // Show first 4 chars for secrets 8+ chars, otherwise just show asterisks
+        if (value.length >= 8) {
+          return `${value.substring(0, 4)}${'*'.repeat(Math.min(value.length - 4, 20))}`;
+        }
+        return '*'.repeat(5); // Don't expose short secrets
+      };
 
       // Build status for each secret
       const secrets = {};
@@ -304,7 +314,7 @@ export default function createMCPRoutes(_pgPool) {
         secrets[secretName] = {
           configured: !!value,
           source: value ? (dopplerEnabled ? 'doppler' : 'env') : 'missing',
-          masked: value ? `${value.substring(0, 8)}*****` : null,
+          masked: maskSecret(value),
           required: true
         };
       }
@@ -314,7 +324,7 @@ export default function createMCPRoutes(_pgPool) {
         secrets[secretName] = {
           configured: !!value,
           source: value ? (dopplerEnabled ? 'doppler' : 'env') : 'missing',
-          masked: value ? `${value.substring(0, 8)}*****` : null,
+          masked: maskSecret(value),
           required: false
         };
       }

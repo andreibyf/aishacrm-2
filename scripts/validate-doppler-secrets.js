@@ -129,6 +129,12 @@ function checkDopplerToken() {
   return !!process.env.DOPPLER_TOKEN;
 }
 
+// Escape shell arguments to prevent command injection
+function escapeShellArg(arg) {
+  // Replace single quotes with '\'' (end quote, escaped quote, start quote)
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
 // Get all secrets from Doppler
 function getDopplerSecrets(project, config) {
   try {
@@ -137,7 +143,8 @@ function getDopplerSecrets(project, config) {
       throw new Error('DOPPLER_TOKEN not set in environment');
     }
 
-    const cmd = `doppler secrets download --no-file --format json --token "${token}" --project "${project}" --config "${config}"`;
+    // Use proper shell escaping to prevent command injection
+    const cmd = `doppler secrets download --no-file --format json --token ${escapeShellArg(token)} --project ${escapeShellArg(project)} --config ${escapeShellArg(config)}`;
     const output = execSync(cmd, { stdio: 'pipe', encoding: 'utf-8' });
     return JSON.parse(output);
   } catch (error) {
@@ -147,10 +154,12 @@ function getDopplerSecrets(project, config) {
 
 // Mask secret value for display
 function maskSecret(value) {
-  if (!value || value.length <= 8) {
-    return '*****';
+  if (!value) return '*****';
+  // Show first 4 chars for secrets 8+ chars, otherwise just show asterisks
+  if (value.length >= 8) {
+    return value.substring(0, 4) + '*'.repeat(Math.min(value.length - 4, 20));
   }
-  return value.substring(0, 8) + '*'.repeat(Math.min(value.length - 8, 20));
+  return '*****'; // Don't expose short secrets
 }
 
 // Validate secrets
@@ -214,7 +223,8 @@ async function promptForSecret(secretName, description) {
 function addSecretToDoppler(project, config, name, value) {
   try {
     const token = process.env.DOPPLER_TOKEN;
-    const cmd = `doppler secrets set ${name}="${value}" --token "${token}" --project "${project}" --config "${config}"`;
+    // Use proper shell escaping to prevent command injection
+    const cmd = `doppler secrets set ${escapeShellArg(name)}=${escapeShellArg(value)} --token ${escapeShellArg(token)} --project ${escapeShellArg(project)} --config ${escapeShellArg(config)}`;
     execSync(cmd, { stdio: 'pipe' });
     return true;
   } catch (error) {
