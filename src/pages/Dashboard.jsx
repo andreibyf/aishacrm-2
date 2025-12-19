@@ -49,7 +49,7 @@ const ALL_WIDGETS = [
     id: "topAccounts",
     name: "Top Accounts",
     component: TopAccounts,
-    defaultVisibility: true,
+    defaultVisibility: false, // Disabled by default - makes 3 slow API calls
   },
   {
     id: "leadAgeReport",
