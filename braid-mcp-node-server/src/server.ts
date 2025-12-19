@@ -8,10 +8,17 @@ import { WebAdapter } from "./braid/adapters/web";
 import { GitHubAdapter } from "./braid/adapters/github";
 import { LlmAdapter } from "./braid/adapters/llm";
 import { MemoryAdapter } from "./braid/adapters/memory";
-import { BraidRequestEnvelope } from "./braid/types";
+import { BraidRequestEnvelope, BraidResponseEnvelope } from "./braid/types";
 import { initMemory, isMemoryAvailable, getStatus as getMemoryStatus } from "./lib/memory";
+import { initQueue, initWorker, queueJob, getQueueStats, shutdownQueue } from "./lib/jobQueue";
 
 const app = express();
+
+// Configuration
+const MCP_ROLE = process.env.MCP_ROLE || "standalone"; // "server", "node", or "standalone"
+const MCP_NODE_ID = process.env.MCP_NODE_ID || `mcp-${process.pid}`;
+
+console.log(`[MCP] Starting in ${MCP_ROLE} mode (ID: ${MCP_NODE_ID})`);
 
 // CORS middleware - allow frontend to access MCP server
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -57,19 +64,69 @@ const executor = new BraidExecutor(registry, {
   logger: createConsoleLogger(),
 });
 
-// Initialize memory (non-fatal)
-void (async () => {
+// Execute an envelope (used by both modes)
+async function executeEnvelope(envelope: BraidRequestEnvelope): Promise<BraidResponseEnvelope> {
+  return executor.executeEnvelope(envelope);
+}
+
+// Initialize based on role
+async function initializeRole(): Promise<void> {
+  // Initialize memory for all modes
   try {
     await initMemory(process.env.REDIS_URL);
     console.log(`[MCP] Memory layer ${isMemoryAvailable() ? 'available' : 'unavailable'}`);
   } catch (e: any) {
     console.warn('[MCP] Memory init failed:', e?.message || String(e));
   }
-})();
+
+  if (MCP_ROLE === "server") {
+    // Server mode: Initialize job queue for dispatching
+    await initQueue();
+    console.log("[MCP] Server mode: Queue initialized, accepting requests");
+  } else if (MCP_ROLE === "node") {
+    // Node mode: Initialize worker to process jobs
+    await initWorker(executeEnvelope);
+    console.log("[MCP] Node mode: Worker initialized, processing jobs");
+  } else {
+    // Standalone mode: Execute directly (backward compatible)
+    console.log("[MCP] Standalone mode: Processing requests directly");
+  }
+}
 
 // Health check
-app.get("/health", (_req: Request, res: Response) => {
-  res.json({ status: "ok", service: "braid-mcp-node-server" });
+app.get("/health", async (_req: Request, res: Response) => {
+  const baseHealth = { 
+    status: "ok", 
+    service: "braid-mcp-node-server",
+    role: MCP_ROLE,
+    nodeId: MCP_NODE_ID,
+  };
+
+  // Add queue stats for server mode
+  if (MCP_ROLE === "server") {
+    try {
+      const queueStats = await getQueueStats();
+      return res.json({ ...baseHealth, queue: queueStats });
+    } catch (e: any) {
+      return res.json({ ...baseHealth, queue: { error: e?.message } });
+    }
+  }
+
+  res.json(baseHealth);
+});
+
+// Queue statistics endpoint (server mode only)
+app.get("/queue/stats", async (_req: Request, res: Response) => {
+  if (MCP_ROLE !== "server") {
+    return res.status(400).json({ error: "Queue stats only available in server mode" });
+  }
+
+  try {
+    const stats = await getQueueStats();
+    res.json({ status: "success", data: stats });
+  } catch (e: any) {
+    res.status(500).json({ status: "error", message: e?.message || String(e) });
+  }
 });
 
 // Memory quick status (debug)
@@ -111,7 +168,36 @@ app.post("/mcp/run", async (req: Request, res: Response) => {
       },
     };
 
-    const response = await executor.executeEnvelope(envelope);
+    // Extract tenant ID from metadata or first action's metadata
+    const tenantId = (body.metadata?.tenantId as string) || 
+                     (body.actions?.[0]?.metadata?.tenantId as string) ||
+                     undefined;
+
+    let response: BraidResponseEnvelope;
+
+    if (MCP_ROLE === "server") {
+      // Server mode: Queue the job and wait for result
+      console.log(`[MCP Server] Queueing job ${envelope.requestId} for tenant ${tenantId || "unknown"}`);
+      const result = await queueJob(envelope, tenantId, {
+        ip: req.ip,
+        userAgent: req.get("user-agent") || undefined,
+      });
+      response = result.response;
+      
+      // Add processing metadata to response
+      res.setHeader("X-MCP-Node-Id", result.nodeId);
+      res.setHeader("X-MCP-Duration-Ms", String(result.durationMs));
+    } else if (MCP_ROLE === "node") {
+      // Node mode: Nodes don't accept direct requests (they process from queue)
+      return res.status(400).json({
+        error: "INVALID_MODE",
+        message: "Worker nodes do not accept direct requests. Send requests to the server.",
+      });
+    } else {
+      // Standalone mode: Execute directly (backward compatible)
+      response = await executeEnvelope(envelope);
+    }
+
     res.json(response);
   } catch (err: any) {
     console.error("Error in /mcp/run", err);
@@ -128,13 +214,34 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: "UNHANDLED_ERROR", message: err?.message ?? String(err) });
 });
 
+// Graceful shutdown
+process.on("SIGTERM", async () => {
+  console.log("[MCP] Received SIGTERM, shutting down gracefully...");
+  await shutdownQueue();
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  console.log("[MCP] Received SIGINT, shutting down gracefully...");
+  await shutdownQueue();
+  process.exit(0);
+});
+
 const port = process.env.PORT || 8000;
+
 // Startup env sanity check (non-fatal): informs developer if required vars are missing.
 const requiredEnv = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "CRM_BACKEND_URL", "JWT_SECRET"];
 const missing = requiredEnv.filter(k => !process.env[k] || String(process.env[k]).trim() === "");
 if (missing.length) {
   console.warn(`[ENV WARNING] Missing env vars: ${missing.join(', ')}. Create braid-mcp-node-server/.env or sync from backend/.env (see docs/mcp/README.md).`);
 }
-app.listen(port, () => {
-  console.log(`Braid MCP Node server listening on port ${port}`);
+
+// Initialize role-specific components then start server
+initializeRole().then(() => {
+  app.listen(port, () => {
+    console.log(`Braid MCP ${MCP_ROLE} listening on port ${port} (ID: ${MCP_NODE_ID})`);
+  });
+}).catch((err) => {
+  console.error("[MCP] Failed to initialize:", err);
+  process.exit(1);
 });
