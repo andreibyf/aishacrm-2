@@ -8,7 +8,6 @@ import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -23,7 +22,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   process.exit(1);
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+const _supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false }
 });
 
@@ -117,8 +116,8 @@ async function applyMigration() {
 
   const sqlStatements = [];
   
-  for (const stmt of statements) {
-    const sql = await executeSql('Processing statement', stmt);
+  for (const _idx of statements) {
+    const sql = await executeSql('Processing statement', _idx);
     sqlStatements.push(sql);
   }
 
