@@ -36,6 +36,15 @@ const GITHUB_REPO_OWNER = process.env.REPO_OWNER || process.env.GITHUB_REPO_OWNE
 const GITHUB_REPO_NAME = process.env.REPO_NAME || process.env.GITHUB_REPO_NAME || 'aishacrm-2';
 const GITHUB_API_BASE = 'https://api.github.com';
 
+// Log config on startup (without exposing token)
+console.log('[GitHub Issues] Configuration:', {
+  hasToken: !!GITHUB_TOKEN,
+  tokenLength: GITHUB_TOKEN.length,
+  owner: GITHUB_REPO_OWNER,
+  repo: GITHUB_REPO_NAME,
+  apiBase: GITHUB_API_BASE
+});
+
 // Environment / build metadata
 const ENVIRONMENT = process.env.NODE_ENV === 'production' ? 'prod' : 'dev';
 // Build/version resolution: env vars first, then baked image file (/app/VERSION), else dev-local
@@ -201,8 +210,14 @@ router.post('/create-health-issue', async (req, res) => {
       environment: ENVIRONMENT
     });
 
-    // Check if this issue was already created recently
-    const idempotencyCheck = await checkIdempotency(idempotencyKey);
+    // Check if this issue was already created recently (safely handle Redis errors)
+    let idempotencyCheck = null;
+    try {
+      idempotencyCheck = await checkIdempotency(idempotencyKey);
+    } catch (idempErr) {
+      console.warn('[GitHub Issues] Idempotency check failed (non-blocking):', idempErr.message);
+      idempotencyCheck = { suppressed: false };
+    }
     if (idempotencyCheck.suppressed) {
       console.log('[GitHub Issues] Suppressed duplicate issue:', {
         idempotencyKey,
@@ -259,36 +274,69 @@ router.post('/create-health-issue', async (req, res) => {
     });
 
     // Create GitHub issue with retry logic
-    const issue = await retryWithBackoff(async () => {
-      const response = await fetch(
-        `${GITHUB_API_BASE}/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/issues`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github+json',
-            'Content-Type': 'application/json',
-            'User-Agent': 'aishacrm-health-monitor'
-          },
-          body: JSON.stringify(issuePayload)
+    let issue;
+    try {
+      issue = await retryWithBackoff(async () => {
+        try {
+          const response = await fetch(
+            `${GITHUB_API_BASE}/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/issues`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${GITHUB_TOKEN}`,
+                'Accept': 'application/vnd.github+json',
+                'Content-Type': 'application/json',
+                'User-Agent': 'aishacrm-health-monitor'
+              },
+              body: JSON.stringify(issuePayload)
+            }
+          );
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            const error = new Error(`GitHub API error: ${response.status}`);
+            error.status = response.status;
+            error.details = errorText;
+            throw error;
+          }
+
+          return await response.json();
+        } catch (fetchErr) {
+          console.error('[GitHub Issues] Fetch/parse error during GitHub API call:', {
+            message: fetchErr.message,
+            status: fetchErr.status,
+            details: fetchErr.details,
+            stack: fetchErr.stack,
+            requestId
+          });
+          throw fetchErr;
         }
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        const error = new Error(`GitHub API error: ${response.status}`);
-        error.status = response.status;
-        error.details = errorText;
-        throw error;
-      }
-
-      return await response.json();
-    });
+      });
+    } catch (retryErr) {
+      console.error('[GitHub Issues] GitHub API call failed after all retries:', {
+        message: retryErr.message,
+        status: retryErr.status,
+        details: retryErr.details,
+        stack: retryErr.stack,
+        requestId
+      });
+      throw retryErr;
+    }
 
     console.log('[GitHub Issues] Issue created:', issue.html_url);
 
-    // Record issue creation for idempotency
-    await recordIssueCreation(idempotencyKey, issue);
+    // Record issue creation for idempotency (non-blocking, catch errors)
+    try {
+      await recordIssueCreation(idempotencyKey, issue);
+    } catch (recordErr) {
+      console.warn('[GitHub Issues] Failed to record issue to Redis (non-blocking):', {
+        message: recordErr.message,
+        stack: recordErr.stack,
+        issueNumber: issue.number,
+        requestId
+      });
+      // Don't fail the response - issue was created successfully
+    }
 
     // Trigger GitHub Copilot review workflow (optional)
     if (process.env.TRIGGER_COPILOT_REVIEW === 'true') {
@@ -308,17 +356,21 @@ router.post('/create-health-issue', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[GitHub Issues] Error creating issue:', {
+    console.error('[GitHub Issues] CRITICAL - Error creating issue:', {
       message: error.message,
       status: error.status,
-      details: error.details
+      details: error.details,
+      stack: error.stack,
+      name: error.name,
+      type: typeof error,
+      keys: Object.keys(error || {})
     });
     
     const statusCode = error.status || 500;
     res.status(statusCode).json({
       success: false,
       error: 'Failed to create GitHub issue',
-      message: error.message,
+      message: error.message || 'Unknown error',
       ...(error.details && { details: error.details })
     });
   }
