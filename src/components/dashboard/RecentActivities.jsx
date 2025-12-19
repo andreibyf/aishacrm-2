@@ -341,12 +341,12 @@ function RecentActivities(props) {
             </div>
           ) : (
             <>
-                <div className="h-64 max-w-2xl mx-auto">
+                <div className="h-72 max-w-2xl mx-auto mt-4">
                 <ResponsiveContainer width="100%" height="100%">
                     <RBarChart data={summaryData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
                     <XAxis dataKey="status" tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#475569" />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#475569" />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#475569" domain={[0, 18]} ticks={[0, 3, 6, 9, 12, 15, 18]} />
                     <RTooltip
                       contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px', color: '#f1f5f9' }}
                       formatter={(value) => [`${value}`, 'Count']}
