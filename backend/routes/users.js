@@ -344,6 +344,106 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
     }
   });
 
+  // GET /api/users/profiles - List users with their linked employee records (using user_profile_view)
+  // This provides a clean separation: users = login accounts, employees = org chart records
+  /**
+   * @openapi
+   * /api/users/profiles:
+   *   get:
+   *     summary: List user profiles with employee linkage
+   *     description: |
+   *       Returns users from the users table with their linked employee records (if any).
+   *       Uses user_profile_view for unified data. Suitable for User Management UI.
+   *     tags: [users]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, nullable: true }
+   *         description: Filter by tenant UUID (optional)
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 100, minimum: 1, maximum: 500 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0, minimum: 0 }
+   *     responses:
+   *       200:
+   *         description: List of user profiles
+   */
+  router.get("/profiles", async (req, res) => {
+    try {
+      const { tenant_id, limit = 100, offset = 0 } = req.query;
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+
+      let query = supabase
+        .from('user_profile_view')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+
+      // Filter by tenant if specified
+      if (tenant_id) {
+        query = query.eq('tenant_id', tenant_id);
+      }
+
+      const { data: profiles, count, error } = await query;
+
+      if (error) {
+        console.error('[Users.profiles] query error:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
+      }
+
+      // Transform to include computed fields
+      const transformedProfiles = (profiles || []).map(p => ({
+        // User (login account) fields
+        id: p.user_id,
+        user_id: p.user_id,
+        email: p.email,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        full_name: [p.first_name, p.last_name].filter(Boolean).join(' ') || p.email,
+        display_name: p.user_metadata?.display_name || [p.first_name, p.last_name].filter(Boolean).join(' ') || p.email,
+        role: p.auth_role,
+        tenant_id: p.tenant_id,
+        status: p.status || 'active',
+        created_at: p.created_at,
+        updated_at: p.updated_at,
+        // User metadata
+        is_active: p.user_metadata?.is_active !== false,
+        account_status: p.user_metadata?.account_status || 'active',
+        live_status: p.user_metadata?.live_status || 'offline',
+        last_seen: p.user_metadata?.last_seen,
+        last_login: p.user_metadata?.last_login,
+        tags: p.user_metadata?.tags || [],
+        permissions: p.user_metadata?.permissions || {},
+        navigation_permissions: p.user_metadata?.navigation_permissions || {},
+        // Employee linkage (if exists)
+        employee_id: p.employee_id,
+        employee_role: p.employee_role || p.crm_user_employee_role,
+        employee_status: p.employee_status,
+        has_crm_access: p.has_crm_access,
+        manager_employee_id: p.manager_employee_id,
+        // Computed
+        has_employee_record: !!p.employee_id,
+        user_type: p.auth_role === 'superadmin' ? 'global' : (p.auth_role === 'admin' ? 'admin' : 'user'),
+      }));
+
+      res.json({
+        status: 'success',
+        data: {
+          users: transformedProfiles,
+          total: count || transformedProfiles.length,
+          limit: parseInt(limit),
+          offset: parseInt(offset),
+        },
+      });
+    } catch (error) {
+      console.error('[Users.profiles] Error:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // POST /api/users/sync-from-auth - Ensure CRM user exists based on Supabase Auth
   // Body: { email?: string } or Query: ?email=
   /**

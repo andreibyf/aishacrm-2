@@ -104,6 +104,8 @@ services:
       - MCP_NODE_HEALTH_URL=http://mcp:8000/health
       - AI_TRIGGERS_WORKER_ENABLED=${AI_TRIGGERS_WORKER_ENABLED:-false}
       - MCP_NODE_ID=aishacrm-backend
+      - DEFAULT_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
+      - CRM_BACKEND_URL=http://backend:3001
     dns:
       - 8.8.8.8
       - 8.8.4.4

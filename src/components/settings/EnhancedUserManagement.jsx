@@ -1,5 +1,6 @@
 
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -553,30 +554,41 @@ export default function EnhancedUserManagement() {
     
     // Use global user context instead of local User.me()
     const { user: currentUser } = useUser();
+    const [searchParams] = useSearchParams();
+    const urlTenantId = searchParams.get('tenant');
 
     useEffect(() => {
         if (!currentUser) return;
         loadData();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentUser]);
+    }, [currentUser, urlTenantId]);
 
     const loadData = async () => {
         if (!currentUser) return;
         setLoading(true);
         try {
-            // Tenant admins can only see users from their own tenant
-            // Superadmins can see all users
-            const userFilter = currentUser.role === 'superadmin' 
-                ? { tenant_id: null } // null = get ALL users across all tenants
-                : { tenant_id: currentUser.tenant_id }; // Filter by admin's tenant
+            // Use User.listProfiles which queries user_profile_view
+            // This returns users (login accounts) with their linked employee records (if any)
+            // Superadmins can see ALL users or filter by a specific tenant
+            let userFilter = {};
+            if (currentUser.role === 'superadmin') {
+                // Superadmins: if URL has tenant, filter by it; otherwise show ALL users
+                if (urlTenantId) {
+                    userFilter.tenant_id = urlTenantId;
+                }
+            } else {
+                // Regular admins only see their own tenant
+                userFilter.tenant_id = currentUser.tenant_id;
+            }
             
             const [usersData, tenantsData, moduleData] = await Promise.all([
-                User.list(userFilter),
+                User.listProfiles(userFilter),
                 currentUser.role === 'superadmin' ? Tenant.list() : Promise.resolve([]),
-                // Load module settings for the current tenant (to disable nav perms for disabled modules)
-                currentUser.tenant_id ? ModuleSettings.filter({ tenant_id: currentUser.tenant_id }) : Promise.resolve([])
+                // Load module settings for the current/selected tenant
+                (urlTenantId || currentUser.tenant_id) ? ModuleSettings.filter({ tenant_id: urlTenantId || currentUser.tenant_id }) : Promise.resolve([])
             ]);
             
+            console.log('[EnhancedUserManagement] Loaded users from user_profile_view:', usersData?.length || 0);
             setUsers(usersData);
             setAllTenants(tenantsData);
             setModuleSettings(moduleData || []);
@@ -745,11 +757,8 @@ export default function EnhancedUserManagement() {
     };
 
     const filteredUsers = users.filter(user => {
-        // Show both global users (superadmins) and tenant-scoped admins from users table
-        // Exclude employees (they should be managed via tenant-specific employee management)
-        if (user.user_type === 'employee') {
-            return false;
-        }
+        // user_profile_view only returns login accounts (users table)
+        // No need to filter by user_type anymore since we don't mix employees
 
         const matchesSearch = searchTerm === '' ||
             user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -764,11 +773,11 @@ export default function EnhancedUserManagement() {
             } else if (roleFilter === 'admin') {
                 matchesRoleFilter = userRole === 'admin';
             } else if (roleFilter === 'power-user') {
-                // Map 'power-user' filter to 'manager' employee_role for non-admins
+                // Users with manager employee_role linked
                 matchesRoleFilter = user.employee_role === 'manager' && userRole !== 'admin' && userRole !== 'superadmin';
             } else if (roleFilter === 'user') {
-                // Map 'user' filter to 'employee' employee_role for non-admins
-                matchesRoleFilter = user.employee_role === 'employee' && userRole !== 'admin' && userRole !== 'superadmin';
+                // Regular users (employee role or no role)
+                matchesRoleFilter = userRole !== 'admin' && userRole !== 'superadmin' && user.employee_role !== 'manager';
             }
         }
         return matchesSearch && matchesRoleFilter;

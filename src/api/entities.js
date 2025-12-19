@@ -1780,6 +1780,32 @@ export const User = {
   },
 
   /**
+   * List user profiles with employee linkage (for User Management UI)
+   * Uses user_profile_view which joins users with their linked employee records
+   */
+  listProfiles: async (filters = {}) => {
+    logDev("[User.listProfiles] Fetching user profiles via backend API");
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        params.append(key, value);
+      }
+    });
+    const url = `${BACKEND_URL}/api/users/profiles${params.toString() ? `?${params.toString()}` : ""}`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Failed to list user profiles: ${response.status}`);
+    }
+    const result = await response.json();
+    return result.data?.users || result.data || [];
+  },
+
+  /**
    * Update any user by ID (admin function - uses backend API)
    */
   update: async (userId, updates) => {
