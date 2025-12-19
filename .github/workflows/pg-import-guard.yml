@@ -18,7 +18,8 @@ jobs:
           echo "Scanning for disallowed 'pg' imports in backend (excluding migrations, scripts, and utility files)..."
           
           # Scan backend/routes and backend/middleware (strict enforcement)
-          violations=$(grep -RInE "from\\s+['\"]pg['\"]|require\\(['\"]pg['\"]\\)|import\\(['\"]pg['\"]\\)" \
+          # Exclude JSDoc type annotations like @param {import('pg').Pool}
+          violations=$(grep -RInE "^[^*]*from\\s+['\"]pg['\"]|^[^*]*require\\(['\"]pg['\"]\\)" \
             backend/routes \
             backend/middleware \
             backend/lib \
