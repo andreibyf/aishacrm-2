@@ -683,7 +683,7 @@ export default function DashboardPage() {
 
             <StatsGrid stats={stats} />
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
               {visibleWidgets.length > 0
                 ? (
                   visibleWidgets.map((widget, index) => {

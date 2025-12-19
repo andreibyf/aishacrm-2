@@ -331,7 +331,7 @@ function RecentActivities(props) {
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pb-3">
         {viewMode === "summary" ? (
           activitiesInWindow.length === 0 ? (
             <div className="text-center py-8 text-slate-500">
@@ -341,9 +341,9 @@ function RecentActivities(props) {
             </div>
           ) : (
             <>
-              <div className="h-64">
+                <div className="h-64 max-w-2xl mx-auto">
                 <ResponsiveContainer width="100%" height="100%">
-                  <RBarChart data={summaryData}>
+                    <RBarChart data={summaryData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
                     <XAxis dataKey="status" tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#475569" />
                     <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#475569" />
@@ -360,7 +360,7 @@ function RecentActivities(props) {
                   </RBarChart>
                 </ResponsiveContainer>
               </div>
-              <div className="text-center pt-4 border-t border-slate-700 mt-4">
+                <div className="text-center pt-2 border-t border-slate-700 mt-2">
                 <Button variant="outline" size="sm" asChild className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
                   <Link to={createPageUrl("Activities")}>
                     View All {activitiesLabel}
