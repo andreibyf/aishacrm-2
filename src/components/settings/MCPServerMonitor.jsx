@@ -612,9 +612,12 @@ export default function MCPServerMonitor() {
               onClick: () => window.open(result.issue.url, '_blank')
             }
           });
+        } else if (result.skipped) {
+          addLog("info", `GitHub issue creation skipped: ${result.reason}`);
         }
       } catch (error) {
-        addLog("warning", `Failed to create issue for "${test.name}": ${error.message}`);
+        // Silently log error - don't spam console or toast
+        addLog("info", `Note: GitHub issue creation unavailable`);
       }
     }
   };

@@ -48,6 +48,11 @@ export async function createHealthIssue({
 
     if (!response.ok) {
       const error = await response.json();
+      // If GitHub token not configured, just return without creating issue
+      if (response.status === 503 && error.error?.includes('token not configured')) {
+        console.warn('[GitHub Issue Creator] GitHub token not configured - skipping issue creation');
+        return { success: false, skipped: true, reason: 'GitHub token not configured' };
+      }
       throw new Error(error.error || 'Failed to create GitHub issue');
     }
 
@@ -60,7 +65,7 @@ export async function createHealthIssue({
 
     return result;
   } catch (error) {
-    console.error('[GitHub Issue Creator] Error:', error);
+    console.warn('[GitHub Issue Creator] Error:', error.message);
     throw error;
   }
 }
