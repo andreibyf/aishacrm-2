@@ -708,7 +708,7 @@ export default function ContactsPage() {
     }
 
     setSelectedContacts(new Set());
-    clearCache("Contact");
+    clearCacheByKey("Contact");
     loadContacts();
     loadTotalStats();
   };

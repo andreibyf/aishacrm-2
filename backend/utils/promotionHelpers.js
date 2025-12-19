@@ -13,8 +13,7 @@
  * - RLS compliance
  */
 
-import pkg from 'pg';
-const { Client } = pkg;
+import { getSupabaseClient } from '../lib/supabase-db.js';
 
 /**
  * Find or create a placeholder B2C account for a tenant
