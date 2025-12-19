@@ -619,7 +619,7 @@ export default function MCPServerMonitor() {
         } else if (result.skipped) {
           addLog("info", `GitHub issue creation skipped: ${result.reason}`);
         }
-      } catch (error) {
+      } catch (_error) {
         // Silently log error - don't spam console or toast
         addLog("info", `Note: GitHub issue creation unavailable`);
       }
@@ -1067,8 +1067,8 @@ export default function MCPServerMonitor() {
                     Some required secrets are missing. Run{' '}
                     <code className="px-1 py-0.5 bg-slate-800 rounded">
                       node scripts/validate-doppler-secrets.js --fix
-                    </code>{' '}
-                    to add them interactively.
+                    </code>
+                    {' '}to add them interactively.
                   </AlertDescription>
                 </Alert>
               )}
