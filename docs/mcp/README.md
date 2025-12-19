@@ -12,10 +12,88 @@ This document explains how to run and harden the local `braid-mcp-node-server` u
 - `braid-mcp-node-server/src/lib/supabase.ts` — Supabase client helper
 - `braid-mcp-node-server/docker-compose.yml` — Docker profile for running the MCP server
 
+## Doppler Secrets Management
+
+The MCP server now uses **Doppler** for secrets management instead of `.env` files. This provides:
+- ✅ Centralized secret management across all services
+- ✅ Secrets are fetched at runtime, not baked into Docker images
+- ✅ Easy secret rotation without rebuilding containers
+- ✅ Better security with no secrets in version control
+
+### Setup Doppler for MCP
+
+1. **Install Doppler CLI** (if not already installed):
+   ```bash
+   # macOS
+   brew install dopplerhq/cli/doppler
+   
+   # Linux
+   (curl -Ls --tlsv1.2 --proto "=https" --retry 3 https://cli.doppler.com/install.sh || wget -t 3 -qO- https://cli.doppler.com/install.sh) | sudo sh
+   
+   # Windows
+   # See: https://docs.doppler.com/docs/install-cli
+   ```
+
+2. **Set your Doppler token** in your environment or `.env` file:
+   ```bash
+   export DOPPLER_TOKEN=dp.st.your_token_here
+   ```
+
+3. **Validate all required secrets are configured**:
+   ```bash
+   # Check dev environment
+   node scripts/validate-doppler-secrets.js
+   
+   # Check production environment
+   node scripts/validate-doppler-secrets.js --config prd
+   
+   # Interactive mode to add missing secrets
+   node scripts/validate-doppler-secrets.js --fix
+   ```
+
+4. **Required secrets for MCP**:
+   - `SUPABASE_URL` - Your Supabase project URL
+   - `SUPABASE_SERVICE_ROLE_KEY` - Service role key for database access
+   - `SUPABASE_ANON_KEY` - Anonymous key for client operations
+   - `OPENAI_API_KEY` - OpenAI API key for LLM operations
+   - `DEFAULT_OPENAI_MODEL` - Default model (e.g., `gpt-4o-mini`)
+   - `DEFAULT_TENANT_ID` - Default tenant UUID for operations
+
+5. **Start MCP server with Doppler**:
+   ```bash
+   cd braid-mcp-node-server
+   docker compose up --build
+   ```
+   
+   The docker-compose.yml now automatically uses Doppler secrets when `DOPPLER_TOKEN` is set.
+
+### Monitoring Configuration Status
+
+The MCP Monitor UI now includes a **Configuration Status** card that shows:
+- Current environment (Development/Production)
+- Secrets source (Doppler/Environment Variables)
+- Status of all required and optional secrets
+- Masked secret values for verification
+
+Access it at: **Settings → MCP Server Monitor → Configuration Status**
+
+### Troubleshooting
+
+**Problem**: MCP server fails to start with "DOPPLER_TOKEN not set"
+- **Solution**: Set `DOPPLER_TOKEN` in your environment or `.env` file
+
+**Problem**: Secrets not being loaded from Doppler
+- **Solution**: Run `node scripts/validate-doppler-secrets.js` to check configuration
+- Verify Doppler project and config are correct (`aishacrm`, `dev` by default)
+
+**Problem**: "Secret not found" errors
+- **Solution**: Run `node scripts/validate-doppler-secrets.js --fix` to add missing secrets interactively
+
 ## Security & Hardening (recommended)
 1. Secrets
-   - Store `SUPABASE_SERVICE_ROLE_KEY` and `CRM_BACKEND_URL` in your secrets manager (Azure Key Vault, AWS Secrets Manager, or GitHub Actions secrets).
-   - Do NOT place service role keys in frontend-accessible env files.
+   - Use **Doppler** for all secret management (recommended)
+   - Fallback: Store secrets in Azure Key Vault, AWS Secrets Manager, or GitHub Actions secrets
+   - Do NOT place service role keys in frontend-accessible env files or commit them to version control
 
 2. Least privilege
    - The MCP server should run with only the privileges it needs. Prefer a dedicated service-role key with minimum scopes for audit insertion and admin operations.
@@ -46,38 +124,39 @@ docker compose -f braid-mcp-node-server/docker-compose.yml up --build
 
 ### Dev Environment Variables
 
-The dev compose file expects a `.env` inside `braid-mcp-node-server/` containing at least:
+**Preferred Method: Use Doppler** (recommended)
+
+The MCP server now uses Doppler for secrets management. Simply set your `DOPPLER_TOKEN`:
+
+```bash
+# In your shell or .env file
+export DOPPLER_TOKEN=dp.st.your_token_here
+
+# Start MCP server (secrets fetched automatically)
+cd braid-mcp-node-server
+docker compose up --build
+```
+
+Docker-specific overrides (like `CRM_BACKEND_URL` and `REDIS_URL`) are set in `docker-compose.yml` and don't need to be in Doppler.
+
+**Fallback Method: Use .env file** (legacy)
+
+If you don't have Doppler configured, you can still use a `.env` file inside `braid-mcp-node-server/`:
 
 ```
 SUPABASE_URL=https://your-dev-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key   # dev only
 SUPABASE_ANON_KEY=your_anon_key                   # optional
+OPENAI_API_KEY=your_openai_api_key
+DEFAULT_OPENAI_MODEL=gpt-4o-mini
+DEFAULT_TENANT_ID=your_default_tenant_uuid
 CRM_BACKEND_URL=http://host.docker.internal:4001  # points to backend container
 USE_DIRECT_SUPABASE_ACCESS=true                   # optional (read-only direct Supabase)
 ```
 
-If you already have these in `backend/.env`, you can sync them with a PowerShell one-liner:
-
-```powershell
-# From repo root
-Get-Content backend/.env | ForEach-Object {
-   if ($_ -match '^(SUPABASE_URL|SUPABASE_SERVICE_ROLE_KEY|SUPABASE_ANON_KEY)=') { $_ } 
-   if ($_ -match '^(FRONTEND_URL)=') { $_ } 
-} | ForEach-Object {
-   if ($_ -match '^(.*)=(.*)$') { "$($matches[1])=$($matches[2])" }
-} | Out-File braid-mcp-node-server/.env -Encoding utf8
-Add-Content braid-mcp-node-server/.env 'CRM_BACKEND_URL=http://host.docker.internal:4001'
-Add-Content braid-mcp-node-server/.env 'USE_DIRECT_SUPABASE_ACCESS=true'
-```
-
-Restart Docker Compose after creating the file:
-
-```powershell
-docker compose -f braid-mcp-node-server/docker-compose.dev.yml up --build
-```
+**Note**: The `.env` file approach is deprecated. Migrate to Doppler for better security and secret management.
 
 On startup, the server logs a warning if required env vars are missing.
-```
 
 Using Node (local):
 

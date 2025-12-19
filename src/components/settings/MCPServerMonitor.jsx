@@ -63,6 +63,10 @@ export default function MCPServerMonitor() {
   const logIdCounter = React.useRef(0);
   const [servers, setServers] = useState([]);
 
+  // Configuration status
+  const [configStatus, setConfigStatus] = useState(null);
+  const [isLoadingConfig, setIsLoadingConfig] = useState(false);
+
   // Performance metrics
   const [performanceMetrics, setPerformanceMetrics] = useState({
     avgResponseTime: 0,
@@ -722,10 +726,37 @@ export default function MCPServerMonitor() {
     addLog("info", "Logs cleared");
   };
 
+  // Fetch configuration status
+  const fetchConfigStatus = useCallback(async () => {
+    setIsLoadingConfig(true);
+    addLog("info", "Fetching configuration status...");
+    
+    try {
+      const resp = await fetch(`${BACKEND_URL}/api/mcp/config-status`);
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      }
+      
+      const json = await resp.json();
+      if (json.status === 'success') {
+        setConfigStatus(json.data);
+        addLog("success", "Configuration status loaded");
+      } else {
+        throw new Error(json.message || 'Failed to load config status');
+      }
+    } catch (error) {
+      addLog("error", `Failed to fetch config status: ${error.message}`);
+      setConfigStatus(null);
+    } finally {
+      setIsLoadingConfig(false);
+    }
+  }, [BACKEND_URL, addLog]);
+
   // Run initial health check on mount
   useEffect(() => {
     testMCPConnection();
-  }, [testMCPConnection]);
+    fetchConfigStatus();
+  }, [testMCPConnection, fetchConfigStatus]);
 
   return (
     <div className="space-y-6">
@@ -867,6 +898,188 @@ export default function MCPServerMonitor() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Configuration Status */}
+      <Card className="bg-gray-800 border-gray-700">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center gap-2">
+            <Lock className="w-4 h-4" />
+            Configuration Status
+          </CardTitle>
+          <CardDescription className="text-slate-400">
+            Secrets and environment configuration for MCP server
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-3 mb-4">
+            <Button
+              onClick={fetchConfigStatus}
+              disabled={isLoadingConfig}
+              variant="outline"
+              size="sm"
+            >
+              {isLoadingConfig ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <Activity className="w-4 h-4 mr-2" />
+                  Validate Configuration
+                </>
+              )}
+            </Button>
+          </div>
+
+          {configStatus ? (
+            <div className="space-y-4">
+              {/* Environment Info */}
+              <div className="grid grid-cols-2 gap-3 p-3 bg-slate-900 rounded">
+                <div>
+                  <div className="text-xs text-slate-400">Environment</div>
+                  <div className="text-sm font-medium text-slate-200">
+                    {configStatus.environment || 'Unknown'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-400">Secrets Source</div>
+                  <div className="text-sm font-medium text-slate-200 flex items-center gap-2">
+                    {configStatus.dopplerEnabled ? (
+                      <>
+                        <CheckCircle className="w-3 h-3 text-green-500" />
+                        Doppler ({configStatus.dopplerConfig || 'dev'})
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-3 h-3 text-yellow-500" />
+                        Environment Variables
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary Badge */}
+              {configStatus.summary && (
+                <div className="flex items-center justify-between p-3 bg-slate-900 rounded">
+                  <span className="text-sm text-slate-300">Required Secrets Status</span>
+                  <Badge className={configStatus.summary.allConfigured ? "bg-green-600" : "bg-red-600"}>
+                    {configStatus.summary.configuredRequired}/{configStatus.summary.totalRequired} Configured
+                  </Badge>
+                </div>
+              )}
+
+              {/* Secrets List */}
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-slate-300">Required Secrets</div>
+                {configStatus.secrets && Object.entries(configStatus.secrets)
+                  .filter(([_, secret]) => secret.required)
+                  .map(([name, secret]) => (
+                    <div
+                      key={name}
+                      className="flex items-center justify-between p-2 bg-slate-900 rounded text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        {secret.configured ? (
+                          <CheckCircle className="w-3 h-3 text-green-500" />
+                        ) : (
+                          <AlertCircle className="w-3 h-3 text-red-500" />
+                        )}
+                        <span className="text-slate-300 font-mono">{name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {secret.configured ? (
+                          <>
+                            <span className="text-slate-500">{secret.masked}</span>
+                            <Badge 
+                              variant="outline" 
+                              className={
+                                secret.source === 'doppler' 
+                                  ? 'border-green-600 text-green-400' 
+                                  : 'border-yellow-600 text-yellow-400'
+                              }
+                            >
+                              {secret.source}
+                            </Badge>
+                          </>
+                        ) : (
+                          <Badge variant="outline" className="border-red-600 text-red-400">
+                            missing
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+
+              {/* Optional Secrets */}
+              {configStatus.secrets && Object.entries(configStatus.secrets)
+                .filter(([_, secret]) => !secret.required).length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-slate-700">
+                  <div className="text-sm font-medium text-slate-300">Optional Secrets</div>
+                  {Object.entries(configStatus.secrets)
+                    .filter(([_, secret]) => !secret.required)
+                    .map(([name, secret]) => (
+                      <div
+                        key={name}
+                        className="flex items-center justify-between p-2 bg-slate-900 rounded text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          {secret.configured ? (
+                            <CheckCircle className="w-3 h-3 text-green-500" />
+                          ) : (
+                            <AlertTriangle className="w-3 h-3 text-yellow-500" />
+                          )}
+                          <span className="text-slate-300 font-mono">{name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {secret.configured ? (
+                            <>
+                              <span className="text-slate-500">{secret.masked}</span>
+                              <Badge 
+                                variant="outline" 
+                                className={
+                                  secret.source === 'doppler' 
+                                    ? 'border-green-600 text-green-400' 
+                                    : 'border-yellow-600 text-yellow-400'
+                                }
+                              >
+                                {secret.source}
+                              </Badge>
+                            </>
+                          ) : (
+                            <Badge variant="outline" className="border-yellow-600 text-yellow-400">
+                              not set
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              {/* Help Text */}
+              {configStatus.summary && !configStatus.summary.allConfigured && (
+                <Alert className="bg-yellow-900/20 border-yellow-700/50">
+                  <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                  <AlertDescription className="text-yellow-300 text-sm">
+                    Some required secrets are missing. Run{' '}
+                    <code className="px-1 py-0.5 bg-slate-800 rounded">
+                      node scripts/validate-doppler-secrets.js --fix
+                    </code>{' '}
+                    to add them interactively.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
+          ) : (
+            <div className="text-center text-slate-400 py-4">
+              Click "Validate Configuration" to check secret status
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Test Controls */}
       <Card className="bg-gray-800 border-gray-700">
