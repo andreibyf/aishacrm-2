@@ -1,4 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
 import { User } from "@/api/entities";
 import { Lead } from "@/api/entities";
 import { Contact } from "@/api/entities";
@@ -11,6 +25,7 @@ import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
 import DashboardHeader from "../components/dashboard/DashboardHeader";
 import StatsGrid from "../components/dashboard/StatsGrid";
 import LazyWidgetLoader from "../components/dashboard/LazyWidgetLoader";
+import SortableWidget from "../components/dashboard/SortableWidget";
 import SalesPipeline from "../components/dashboard/SalesPipeline";
 import LeadSourceChart from "../components/dashboard/LeadSourceChart";
 import TopAccounts from "../components/dashboard/TopAccounts";
@@ -98,12 +113,19 @@ export default function DashboardPage() {
   const { selectedTenantId } = useTenant();
 
   const [widgetPreferences, setWidgetPreferences] = useState({});
+  const [widgetOrder, setWidgetOrder] = useState([]); // Order of widget IDs for drag-and-drop
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [showTestData, setShowTestData] = useState(true); // Default to showing all data
 
   const { cachedRequest } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
   const logger = useLogger();
+
+  // DnD sensors for drag-and-drop
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   // Removed per-page user loading; user comes from context
 
@@ -114,6 +136,8 @@ export default function DashboardPage() {
     const loadUserPreferences = async () => {
       try {
         const savedPrefs = user.permissions?.dashboard_widgets;
+        const savedOrder = user.permissions?.dashboard_widget_order;
+
         if (savedPrefs) {
           // Normalize preferences to include all widgets with defaults for missing keys
           const normalized = ALL_WIDGETS.reduce((acc, widget) => {
@@ -138,6 +162,14 @@ export default function DashboardPage() {
             userId: user.email,
             defaultPrefs,
           });
+        }
+
+        // Load widget order or use default
+        if (Array.isArray(savedOrder) && savedOrder.length > 0) {
+          setWidgetOrder(savedOrder);
+        } else {
+          // Default order is the order in ALL_WIDGETS
+          setWidgetOrder(ALL_WIDGETS.map(w => w.id));
         }
       } catch (error) {
         logger.error("Failed to load user preferences", "Dashboard", {
@@ -630,17 +662,71 @@ export default function DashboardPage() {
     }
   };
 
+  // Sort visible widgets by user's custom order
   const visibleWidgets = useMemo(() => {
+    let widgets;
     if (Object.keys(widgetPreferences).length === 0 && user) {
-      return ALL_WIDGETS.filter((widget) => widget.defaultVisibility);
+      widgets = ALL_WIDGETS.filter((widget) => widget.defaultVisibility);
+    } else {
+      // Fall back to widget.defaultVisibility when pref is missing
+      widgets = ALL_WIDGETS.filter(
+        (widget) => (typeof widgetPreferences[widget.id] !== 'undefined'
+          ? widgetPreferences[widget.id]
+          : widget.defaultVisibility)
+      );
     }
-    // Fall back to widget.defaultVisibility when pref is missing
-    return ALL_WIDGETS.filter(
-      (widget) => (typeof widgetPreferences[widget.id] !== 'undefined'
-        ? widgetPreferences[widget.id]
-        : widget.defaultVisibility)
-    );
-  }, [widgetPreferences, user]);
+
+    // Sort by custom order if available
+    if (widgetOrder.length > 0) {
+      widgets = [...widgets].sort((a, b) => {
+        const aIndex = widgetOrder.indexOf(a.id);
+        const bIndex = widgetOrder.indexOf(b.id);
+        // If not in order array, put at end
+        return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+      });
+    }
+
+    return widgets;
+  }, [widgetPreferences, widgetOrder, user]);
+
+  // Handle drag end for widget reordering
+  const handleDragEnd = useCallback(async (event) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = visibleWidgets.findIndex(w => w.id === active.id);
+    const newIndex = visibleWidgets.findIndex(w => w.id === over.id);
+
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    // Create new order by reordering visible widgets
+    const reorderedVisible = arrayMove(visibleWidgets, oldIndex, newIndex);
+    const newOrder = reorderedVisible.map(w => w.id);
+
+    // Merge with hidden widgets to preserve their positions
+    const hiddenWidgetIds = ALL_WIDGETS
+      .filter(w => !visibleWidgets.some(v => v.id === w.id))
+      .map(w => w.id);
+    const fullOrder = [...newOrder, ...hiddenWidgetIds];
+
+    setWidgetOrder(fullOrder);
+
+    // Save to user preferences
+    try {
+      await User.updateMyUserData({
+        permissions: {
+          ...user.permissions,
+          dashboard_widget_order: fullOrder,
+        },
+      });
+      reloadUser?.();
+      toast.success("Widget order saved!");
+    } catch (error) {
+      console.error("Failed to save widget order:", error);
+      toast.error("Could not save widget order.");
+    }
+  }, [visibleWidgets, user, reloadUser]);
 
   const stableTenantFilter = useMemo(() => getTenantFilter(), [getTenantFilter]);
 
@@ -683,56 +769,68 @@ export default function DashboardPage() {
 
             <StatsGrid stats={stats} />
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-              {visibleWidgets.length > 0
-                ? (
-                  visibleWidgets.map((widget, index) => {
-                    // Prefetch lists from dashboard bundle where applicable to avoid redundant queries
-                    const prefetchProps = {};
-                    if (widget.id === "recentActivities" && Array.isArray(bundleLists?.recentActivities)) {
-                      prefetchProps.prefetchedActivities = (showTestData
-                        ? bundleLists.recentActivities
-                        : bundleLists.recentActivities.filter(a => a?.is_test_data !== true));
-                    }
-                    if (widget.id === "salesPipeline" && Array.isArray(bundleLists?.recentOpportunities)) {
-                      prefetchProps.prefetchedOpportunities = (showTestData
-                        ? bundleLists.recentOpportunities
-                        : bundleLists.recentOpportunities.filter(o => o?.is_test_data !== true));
-                    }
-                    if (widget.id === "leadSourceChart" && Array.isArray(bundleLists?.recentLeads)) {
-                      prefetchProps.leadsData = (showTestData
-                        ? bundleLists.recentLeads
-                        : bundleLists.recentLeads.filter(l => l?.is_test_data !== true));
-                    }
-                    if (widget.id === "leadAgeReport" && Array.isArray(bundleLists?.recentLeads)) {
-                      prefetchProps.leadsData = (showTestData
-                        ? bundleLists.recentLeads
-                        : bundleLists.recentLeads.filter(l => l?.is_test_data !== true));
-                    }
-                    // ConversionRates uses stats directly - no API calls needed
-                    if (widget.id === "conversionRates" || widget.usesStats) {
-                      prefetchProps.stats = stats;
-                    }
-                    return (
-                      <LazyWidgetLoader
-                        key={widget.id}
-                        component={widget.component}
-                        delay={0}
-                        user={user}
-                        tenantFilter={stableTenantFilter}
-                        showTestData={showTestData}
-                        {...prefetchProps}
-                      />
-                    );
-                  })
-                )
-                : (
-                  <div className="col-span-full text-center p-8 text-gray-500 bg-gray-800 rounded-lg">
-                    No widgets selected. Click &quot;Customize Dashboard&quot;
-                    to add widgets.
-                  </div>
-                )}
-            </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={visibleWidgets.map(w => w.id)}
+              strategy={rectSortingStrategy}
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                {visibleWidgets.length > 0
+                  ? (
+                    visibleWidgets.map((widget, index) => {
+                      // Prefetch lists from dashboard bundle where applicable to avoid redundant queries
+                      const prefetchProps = {};
+                      if (widget.id === "recentActivities" && Array.isArray(bundleLists?.recentActivities)) {
+                        prefetchProps.prefetchedActivities = (showTestData
+                          ? bundleLists.recentActivities
+                          : bundleLists.recentActivities.filter(a => a?.is_test_data !== true));
+                      }
+                      if (widget.id === "salesPipeline" && Array.isArray(bundleLists?.recentOpportunities)) {
+                        prefetchProps.prefetchedOpportunities = (showTestData
+                          ? bundleLists.recentOpportunities
+                          : bundleLists.recentOpportunities.filter(o => o?.is_test_data !== true));
+                      }
+                      if (widget.id === "leadSourceChart" && Array.isArray(bundleLists?.recentLeads)) {
+                        prefetchProps.leadsData = (showTestData
+                          ? bundleLists.recentLeads
+                          : bundleLists.recentLeads.filter(l => l?.is_test_data !== true));
+                      }
+                      if (widget.id === "leadAgeReport" && Array.isArray(bundleLists?.recentLeads)) {
+                        prefetchProps.leadsData = (showTestData
+                          ? bundleLists.recentLeads
+                          : bundleLists.recentLeads.filter(l => l?.is_test_data !== true));
+                      }
+                      // ConversionRates uses stats directly - no API calls needed
+                      if (widget.id === "conversionRates" || widget.usesStats) {
+                        prefetchProps.stats = stats;
+                      }
+                      return (
+                          <SortableWidget key={widget.id} id={widget.id}>
+                            <LazyWidgetLoader
+                              component={widget.component}
+                              delay={0}
+                              user={user}
+                              tenantFilter={stableTenantFilter}
+                              showTestData={showTestData}
+                              {...prefetchProps}
+                            />
+                          </SortableWidget>
+                        );
+                      })
+                  )
+                  : (
+                    <div className="col-span-full text-center p-8 text-gray-500 bg-gray-800 rounded-lg">
+                      No widgets selected. Click &quot;Customize Dashboard&quot;
+                      to add widgets.
+                    </div>
+                  )}
+              </div>
+            </SortableContext>
+          </DndContext>
           </div>
       )}
     </div>
