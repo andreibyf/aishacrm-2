@@ -133,10 +133,6 @@ jobs:
             # Ensure aishanet network exists
             docker network inspect aishanet >/dev/null 2>&1 || docker network create aishanet
             
-            # Authenticate to GHCR before pulling images
-            echo "Authenticating to GitHub Container Registry..."
-            echo "$MCP_GITHUB_TOKEN" | docker login ghcr.io -u andreibyf --password-stdin
-            
             # Pull specific version tags
             docker pull ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG
             docker pull ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG

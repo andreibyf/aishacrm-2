@@ -1,0 +1,756 @@
+﻿2025-12-19T04:38:30.6705474Z Current runner version: '2.330.0'
+2025-12-19T04:38:30.6900304Z ##[group]Runner Image Provisioner
+2025-12-19T04:38:30.6901642Z Hosted Compute Agent
+2025-12-19T04:38:30.6902634Z Version: 20251211.462
+2025-12-19T04:38:30.6903661Z Commit: 6cbad8c2bb55d58165063d031ccabf57e2d2db61
+2025-12-19T04:38:30.6915509Z Build Date: 2025-12-11T16:28:49Z
+2025-12-19T04:38:30.6916793Z Worker ID: {2e2cce48-8c74-4c6a-a36a-eab42b1af185}
+2025-12-19T04:38:30.6917932Z ##[endgroup]
+2025-12-19T04:38:30.6918887Z ##[group]Operating System
+2025-12-19T04:38:30.6919855Z Ubuntu
+2025-12-19T04:38:30.6921254Z 24.04.3
+2025-12-19T04:38:30.6922255Z LTS
+2025-12-19T04:38:30.6923050Z ##[endgroup]
+2025-12-19T04:38:30.6923970Z ##[group]Runner Image
+2025-12-19T04:38:30.6926261Z Image: ubuntu-24.04
+2025-12-19T04:38:30.6927186Z Version: 20251215.174.1
+2025-12-19T04:38:30.6929077Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20251215.174/images/ubuntu/Ubuntu2404-Readme.md
+2025-12-19T04:38:30.6932223Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20251215.174
+2025-12-19T04:38:30.6934025Z ##[endgroup]
+2025-12-19T04:38:30.6956651Z ##[group]GITHUB_TOKEN Permissions
+2025-12-19T04:38:30.6960398Z Contents: read
+2025-12-19T04:38:30.6961484Z Metadata: read
+2025-12-19T04:38:30.6962388Z Packages: write
+2025-12-19T04:38:30.6963377Z ##[endgroup]
+2025-12-19T04:38:30.6966960Z Secret source: Actions
+2025-12-19T04:38:30.6968441Z Prepare workflow directory
+2025-12-19T04:38:30.8528364Z Prepare all required actions
+2025-12-19T04:38:30.8586238Z Getting action download info
+2025-12-19T04:38:31.2096056Z Download action repository 'actions/checkout@v4' (SHA:34e114876b0b11c390a56381ad16ebd13914f8d5)
+2025-12-19T04:38:32.4743327Z Download action repository 'appleboy/scp-action@v0.1.7' (SHA:917f8b81dfc1ccd331fef9e2d61bdc6c8be94634)
+2025-12-19T04:38:33.0429805Z Download action repository 'appleboy/ssh-action@v1.0.3' (SHA:029f5b4aeeeb58fdfe1410a5d17f967dacf36262)
+2025-12-19T04:38:33.7430635Z Complete job name: deploy-production
+2025-12-19T04:38:33.7822228Z ##[group]Build container for action use: '/home/runner/work/_actions/appleboy/scp-action/v0.1.7/Dockerfile'.
+2025-12-19T04:38:33.7861226Z ##[command]/usr/bin/docker build -t 69ef8d:109b793838b84720b8062452f98cd85e -f "/home/runner/work/_actions/appleboy/scp-action/v0.1.7/Dockerfile" "/home/runner/work/_actions/appleboy/scp-action/v0.1.7"
+2025-12-19T04:38:34.3112442Z #0 building with "default" instance using docker driver
+2025-12-19T04:38:34.3113446Z 
+2025-12-19T04:38:34.3113938Z #1 [internal] load build definition from Dockerfile
+2025-12-19T04:38:34.3114790Z #1 transferring dockerfile: 150B done
+2025-12-19T04:38:34.3115393Z #1 DONE 0.0s
+2025-12-19T04:38:34.3115714Z 
+2025-12-19T04:38:34.3116600Z #2 [internal] load metadata for ghcr.io/appleboy/drone-scp:1.6.14
+2025-12-19T04:38:34.8959028Z #2 DONE 0.7s
+2025-12-19T04:38:35.0770266Z 
+2025-12-19T04:38:35.0773875Z #3 [internal] load .dockerignore
+2025-12-19T04:38:35.0774877Z #3 transferring context: 2B done
+2025-12-19T04:38:35.0775447Z #3 DONE 0.0s
+2025-12-19T04:38:35.0775689Z 
+2025-12-19T04:38:35.0775835Z #4 [internal] load build context
+2025-12-19T04:38:35.0776203Z #4 transferring context: 187B done
+2025-12-19T04:38:35.0776545Z #4 DONE 0.0s
+2025-12-19T04:38:35.0776730Z 
+2025-12-19T04:38:35.0777153Z #5 [1/2] FROM ghcr.io/appleboy/drone-scp:1.6.14@sha256:0e0597678b948b0aa09888c66ac75af904cce81baf6af955208527d259c61818
+2025-12-19T04:38:35.0777976Z #5 resolve ghcr.io/appleboy/drone-scp:1.6.14@sha256:0e0597678b948b0aa09888c66ac75af904cce81baf6af955208527d259c61818 done
+2025-12-19T04:38:35.0888441Z #5 sha256:6e1933d0a1a550dee7c2be05d0c681372d8661e12dec2bd66f028fd3f2e1eccb 3.65kB / 3.65kB done
+2025-12-19T04:38:35.0889423Z #5 sha256:1207c741d8c9b028d98c4006013f9de959da3c55f85b91ed5e4583438a0112ca 0B / 3.38MB 0.1s
+2025-12-19T04:38:35.0890370Z #5 sha256:57fce42a8fe3138af514e9b1be611ec437fe87def8a6946cad1d6b7608188ce2 0B / 284.84kB 0.1s
+2025-12-19T04:38:35.0891439Z #5 sha256:a7e706a435c2a53ff172ba5b50e2a06c2eaf63d2f764bdaabcca52d378beeb35 0B / 1.20kB 0.1s
+2025-12-19T04:38:35.0892621Z #5 sha256:0e0597678b948b0aa09888c66ac75af904cce81baf6af955208527d259c61818 2.38kB / 2.38kB done
+2025-12-19T04:38:35.0893575Z #5 sha256:b49e06fc857838320ee2682058d609a527fd05056650f6f6387b8a320d25aed5 1.24kB / 1.24kB done
+2025-12-19T04:38:35.1843506Z #5 sha256:57fce42a8fe3138af514e9b1be611ec437fe87def8a6946cad1d6b7608188ce2 284.84kB / 284.84kB 0.2s done
+2025-12-19T04:38:35.1851448Z #5 sha256:a7e706a435c2a53ff172ba5b50e2a06c2eaf63d2f764bdaabcca52d378beeb35 1.20kB / 1.20kB 0.2s done
+2025-12-19T04:38:35.1852497Z #5 sha256:c5ff66ca7e6bad6eb2c1b483c6c580ef147d04552f3bba4b13ac1b05cf474013 0B / 125B 0.2s
+2025-12-19T04:38:35.1853486Z #5 sha256:103b78775db928290fb85c370d3e47361a507a82b3b7c69c628783e018a9ffb8 0B / 2.49MB 0.2s
+2025-12-19T04:38:35.1854558Z #5 extracting sha256:1207c741d8c9b028d98c4006013f9de959da3c55f85b91ed5e4583438a0112ca
+2025-12-19T04:38:35.2901426Z #5 sha256:1207c741d8c9b028d98c4006013f9de959da3c55f85b91ed5e4583438a0112ca 3.38MB / 3.38MB 0.3s done
+2025-12-19T04:38:35.2908261Z #5 sha256:c5ff66ca7e6bad6eb2c1b483c6c580ef147d04552f3bba4b13ac1b05cf474013 125B / 125B 0.2s done
+2025-12-19T04:38:35.2909307Z #5 extracting sha256:1207c741d8c9b028d98c4006013f9de959da3c55f85b91ed5e4583438a0112ca 0.1s done
+2025-12-19T04:38:35.2910315Z #5 extracting sha256:57fce42a8fe3138af514e9b1be611ec437fe87def8a6946cad1d6b7608188ce2
+2025-12-19T04:38:35.4740118Z #5 sha256:103b78775db928290fb85c370d3e47361a507a82b3b7c69c628783e018a9ffb8 2.49MB / 2.49MB 0.4s done
+2025-12-19T04:38:35.4741272Z #5 extracting sha256:57fce42a8fe3138af514e9b1be611ec437fe87def8a6946cad1d6b7608188ce2 0.0s done
+2025-12-19T04:38:36.1835306Z #5 extracting sha256:a7e706a435c2a53ff172ba5b50e2a06c2eaf63d2f764bdaabcca52d378beeb35
+2025-12-19T04:38:36.2908470Z #5 extracting sha256:a7e706a435c2a53ff172ba5b50e2a06c2eaf63d2f764bdaabcca52d378beeb35 done
+2025-12-19T04:38:36.2909803Z #5 extracting sha256:c5ff66ca7e6bad6eb2c1b483c6c580ef147d04552f3bba4b13ac1b05cf474013 done
+2025-12-19T04:38:36.2911044Z #5 extracting sha256:103b78775db928290fb85c370d3e47361a507a82b3b7c69c628783e018a9ffb8 0.0s done
+2025-12-19T04:38:36.2911691Z #5 DONE 1.4s
+2025-12-19T04:38:36.2911882Z 
+2025-12-19T04:38:36.2912058Z #6 [2/2] COPY entrypoint.sh /bin/entrypoint.sh
+2025-12-19T04:38:36.2912465Z #6 DONE 0.0s
+2025-12-19T04:38:36.2912617Z 
+2025-12-19T04:38:36.2912751Z #7 exporting to image
+2025-12-19T04:38:36.2913065Z #7 exporting layers
+2025-12-19T04:38:37.0041442Z #7 exporting layers 0.7s done
+2025-12-19T04:38:37.0212468Z #7 writing image sha256:220c20a98c5e89fa0a96eed9d01e7837e9e29b17248a8a88c828002535a694de done
+2025-12-19T04:38:37.0222378Z #7 naming to docker.io/library/69ef8d:109b793838b84720b8062452f98cd85e done
+2025-12-19T04:38:37.0259501Z #7 DONE 0.7s
+2025-12-19T04:38:37.0266486Z ##[endgroup]
+2025-12-19T04:38:37.0294597Z ##[group]Build container for action use: '/home/runner/work/_actions/appleboy/ssh-action/v1.0.3/Dockerfile'.
+2025-12-19T04:38:37.0296313Z ##[command]/usr/bin/docker build -t 69ef8d:4f3d5a03c8434a90bfe0286df8e545fe -f "/home/runner/work/_actions/appleboy/ssh-action/v1.0.3/Dockerfile" "/home/runner/work/_actions/appleboy/ssh-action/v1.0.3"
+2025-12-19T04:38:37.1183978Z #0 building with "default" instance using docker driver
+2025-12-19T04:38:37.1184469Z 
+2025-12-19T04:38:37.1184615Z #1 [internal] load build definition from Dockerfile
+2025-12-19T04:38:37.2752059Z #1 transferring dockerfile: 149B done
+2025-12-19T04:38:37.2753770Z #1 DONE 0.0s
+2025-12-19T04:38:37.2754677Z 
+2025-12-19T04:38:37.2755195Z #2 [internal] load metadata for ghcr.io/appleboy/drone-ssh:1.7.3
+2025-12-19T04:38:37.8191991Z #2 DONE 0.7s
+2025-12-19T04:38:37.9477266Z 
+2025-12-19T04:38:37.9478996Z #3 [internal] load .dockerignore
+2025-12-19T04:38:37.9479483Z #3 transferring context: 2B done
+2025-12-19T04:38:37.9479971Z #3 DONE 0.0s
+2025-12-19T04:38:37.9480176Z 
+2025-12-19T04:38:37.9480342Z #4 [internal] load build context
+2025-12-19T04:38:37.9480773Z #4 transferring context: 108B done
+2025-12-19T04:38:37.9481260Z #4 DONE 0.0s
+2025-12-19T04:38:37.9481483Z 
+2025-12-19T04:38:37.9482029Z #5 [1/2] FROM ghcr.io/appleboy/drone-ssh:1.7.3@sha256:179cbd253771007f2ebcaf7a3860afe059207351de1f3378efafac93bd310158
+2025-12-19T04:38:37.9483721Z #5 resolve ghcr.io/appleboy/drone-ssh:1.7.3@sha256:179cbd253771007f2ebcaf7a3860afe059207351de1f3378efafac93bd310158 0.0s done
+2025-12-19T04:38:37.9489240Z #5 sha256:066e5b821e26d8313055e0314c056e6c297847bcf963e5df10e7aa03107f2246 0B / 125B 0.1s
+2025-12-19T04:38:37.9490395Z #5 sha256:179cbd253771007f2ebcaf7a3860afe059207351de1f3378efafac93bd310158 2.38kB / 2.38kB done
+2025-12-19T04:38:37.9491597Z #5 sha256:1a52f94820e830bc9734623deb03bbafa6a248fba19cdc2e5605c70d90d91441 1.24kB / 1.24kB done
+2025-12-19T04:38:37.9492669Z #5 sha256:c4781b8d012b16b6c7468dc9104fad0a63f2a8815b2af8b7176bb544253ea8c7 3.86kB / 3.86kB done
+2025-12-19T04:38:37.9493784Z #5 sha256:654aaee5654be60f81172539ecd74485cf8bbe2e9137bab0d429862c31c676f6 0B / 284.83kB 0.1s
+2025-12-19T04:38:37.9495188Z #5 sha256:7e20f48a19643465f486f59127b8f4e0f4114bedc8bd5260fb4f92d5fda95f1c 0B / 1.20kB 0.1s
+2025-12-19T04:38:38.0489533Z #5 sha256:654aaee5654be60f81172539ecd74485cf8bbe2e9137bab0d429862c31c676f6 284.83kB / 284.83kB 0.1s done
+2025-12-19T04:38:38.0495043Z #5 sha256:7e20f48a19643465f486f59127b8f4e0f4114bedc8bd5260fb4f92d5fda95f1c 1.20kB / 1.20kB 0.2s done
+2025-12-19T04:38:38.0497815Z #5 extracting sha256:654aaee5654be60f81172539ecd74485cf8bbe2e9137bab0d429862c31c676f6 0.0s done
+2025-12-19T04:38:38.0498428Z #5 sha256:47353a6f9201a145b687290e5ae0278ac269faf4bb61bee3e9246c37a8d74277 0B / 2.44MB 0.2s
+2025-12-19T04:38:38.1892260Z #5 sha256:066e5b821e26d8313055e0314c056e6c297847bcf963e5df10e7aa03107f2246 125B / 125B 0.2s done
+2025-12-19T04:38:38.1893596Z #5 extracting sha256:7e20f48a19643465f486f59127b8f4e0f4114bedc8bd5260fb4f92d5fda95f1c done
+2025-12-19T04:38:38.1894719Z #5 extracting sha256:066e5b821e26d8313055e0314c056e6c297847bcf963e5df10e7aa03107f2246 done
+2025-12-19T04:38:38.1895589Z #5 extracting sha256:47353a6f9201a145b687290e5ae0278ac269faf4bb61bee3e9246c37a8d74277
+2025-12-19T04:38:38.4131625Z #5 sha256:47353a6f9201a145b687290e5ae0278ac269faf4bb61bee3e9246c37a8d74277 2.44MB / 2.44MB 0.3s done
+2025-12-19T04:38:38.4133882Z #5 extracting sha256:47353a6f9201a145b687290e5ae0278ac269faf4bb61bee3e9246c37a8d74277 0.0s done
+2025-12-19T04:38:38.4135071Z #5 DONE 0.4s
+2025-12-19T04:38:38.4135280Z 
+2025-12-19T04:38:38.4135479Z #6 [2/2] COPY entrypoint.sh /bin/entrypoint.sh
+2025-12-19T04:38:38.4135835Z #6 DONE 0.0s
+2025-12-19T04:38:38.4135952Z 
+2025-12-19T04:38:38.4136037Z #7 exporting to image
+2025-12-19T04:38:38.4136257Z #7 exporting layers
+2025-12-19T04:38:39.0040821Z #7 exporting layers 0.7s done
+2025-12-19T04:38:39.0216383Z #7 writing image sha256:7276da5dc4c9256067dd046cdf9f16a2472248c1f4dc8f9a60f3fe100f7fbc3f done
+2025-12-19T04:38:39.0218161Z #7 naming to docker.io/library/69ef8d:4f3d5a03c8434a90bfe0286df8e545fe done
+2025-12-19T04:38:39.0219370Z #7 DONE 0.7s
+2025-12-19T04:38:39.0279477Z ##[endgroup]
+2025-12-19T04:38:39.0516779Z ##[group]Run actions/checkout@v4
+2025-12-19T04:38:39.0517278Z with:
+2025-12-19T04:38:39.0517628Z   repository: ***/aishacrm-2
+2025-12-19T04:38:39.0518011Z   token: ***
+2025-12-19T04:38:39.0518224Z   ssh-strict: true
+2025-12-19T04:38:39.0518434Z   ssh-user: git
+2025-12-19T04:38:39.0518644Z   persist-credentials: true
+2025-12-19T04:38:39.0518887Z   clean: true
+2025-12-19T04:38:39.0519103Z   sparse-checkout-cone-mode: true
+2025-12-19T04:38:39.0519365Z   fetch-depth: 1
+2025-12-19T04:38:39.0519568Z   fetch-tags: false
+2025-12-19T04:38:39.0519778Z   show-progress: true
+2025-12-19T04:38:39.0519997Z   lfs: false
+2025-12-19T04:38:39.0520191Z   submodules: false
+2025-12-19T04:38:39.0520403Z   set-safe-directory: true
+2025-12-19T04:38:39.0520792Z ##[endgroup]
+2025-12-19T04:38:39.1596331Z Syncing repository: ***/aishacrm-2
+2025-12-19T04:38:39.1597779Z ##[group]Getting Git version info
+2025-12-19T04:38:39.1598194Z Working directory is '/home/runner/work/aishacrm-2/aishacrm-2'
+2025-12-19T04:38:39.1598812Z [command]/usr/bin/git version
+2025-12-19T04:38:39.1606094Z git version 2.52.0
+2025-12-19T04:38:39.1636506Z ##[endgroup]
+2025-12-19T04:38:39.1647304Z Temporarily overriding HOME='/home/runner/work/_temp/a0af5c2b-ce3b-4b9a-9094-0bbbdda3e7f4' before making global git config changes
+2025-12-19T04:38:39.1649968Z Adding repository directory to the temporary git global config as a safe directory
+2025-12-19T04:38:39.1654630Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/aishacrm-2/aishacrm-2
+2025-12-19T04:38:39.1701100Z Deleting the contents of '/home/runner/work/aishacrm-2/aishacrm-2'
+2025-12-19T04:38:39.1702626Z ##[group]Initializing the repository
+2025-12-19T04:38:39.1707481Z [command]/usr/bin/git init /home/runner/work/aishacrm-2/aishacrm-2
+2025-12-19T04:38:39.1815045Z hint: Using 'master' as the name for the initial branch. This default branch name
+2025-12-19T04:38:39.1816722Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2025-12-19T04:38:39.1817599Z hint: to use in all of your new repositories, which will suppress this warning,
+2025-12-19T04:38:39.1818185Z hint: call:
+2025-12-19T04:38:39.1818532Z hint:
+2025-12-19T04:38:39.1819008Z hint: 	git config --global init.defaultBranch <name>
+2025-12-19T04:38:39.1819507Z hint:
+2025-12-19T04:38:39.1819982Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2025-12-19T04:38:39.1820733Z hint: 'development'. The just-created branch can be renamed via this command:
+2025-12-19T04:38:39.1821715Z hint:
+2025-12-19T04:38:39.1822083Z hint: 	git branch -m <name>
+2025-12-19T04:38:39.1822495Z hint:
+2025-12-19T04:38:39.1823018Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2025-12-19T04:38:39.1824574Z Initialized empty Git repository in /home/runner/work/aishacrm-2/aishacrm-2/.git/
+2025-12-19T04:38:39.1833733Z [command]/usr/bin/git remote add origin https://github.com/***/aishacrm-2
+2025-12-19T04:38:39.1872297Z ##[endgroup]
+2025-12-19T04:38:39.1873045Z ##[group]Disabling automatic garbage collection
+2025-12-19T04:38:39.1873746Z [command]/usr/bin/git config --local gc.auto 0
+2025-12-19T04:38:39.1899460Z ##[endgroup]
+2025-12-19T04:38:39.1900072Z ##[group]Setting up auth
+2025-12-19T04:38:39.1906822Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2025-12-19T04:38:39.1934442Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2025-12-19T04:38:39.2229963Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2025-12-19T04:38:39.2257734Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2025-12-19T04:38:39.2441008Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2025-12-19T04:38:39.2468743Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2025-12-19T04:38:39.2647113Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2025-12-19T04:38:39.2683795Z ##[endgroup]
+2025-12-19T04:38:39.2685648Z ##[group]Fetching the repository
+2025-12-19T04:38:39.2692829Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +e10aeaf94f8a44ba34d8804082fc3da10842177d:refs/tags/v3.0.17
+2025-12-19T04:38:40.4008047Z From https://github.com/***/aishacrm-2
+2025-12-19T04:38:40.4009403Z  * [new ref]         e10aeaf94f8a44ba34d8804082fc3da10842177d -> v3.0.17
+2025-12-19T04:38:40.4036179Z ##[endgroup]
+2025-12-19T04:38:40.4037521Z ##[group]Determining the checkout info
+2025-12-19T04:38:40.4040198Z ##[endgroup]
+2025-12-19T04:38:40.4045907Z [command]/usr/bin/git sparse-checkout disable
+2025-12-19T04:38:40.4082842Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2025-12-19T04:38:40.4107027Z ##[group]Checking out the ref
+2025-12-19T04:38:40.4110877Z [command]/usr/bin/git checkout --progress --force refs/tags/v3.0.17
+2025-12-19T04:38:40.5130173Z Note: switching to 'refs/tags/v3.0.17'.
+2025-12-19T04:38:40.5130871Z 
+2025-12-19T04:38:40.5134369Z You are in 'detached HEAD' state. You can look around, make experimental
+2025-12-19T04:38:40.5138709Z changes and commit them, and you can discard any commits you make in this
+2025-12-19T04:38:40.5139432Z state without impacting any branches by switching back to a branch.
+2025-12-19T04:38:40.5139831Z 
+2025-12-19T04:38:40.5140106Z If you want to create a new branch to retain commits you create, you may
+2025-12-19T04:38:40.5140788Z do so (now or later) by using -c with the switch command. Example:
+2025-12-19T04:38:40.5141161Z 
+2025-12-19T04:38:40.5141321Z   git switch -c <new-branch-name>
+2025-12-19T04:38:40.5141603Z 
+2025-12-19T04:38:40.5141798Z Or undo this operation with:
+2025-12-19T04:38:40.5142022Z 
+2025-12-19T04:38:40.5142135Z   git switch -
+2025-12-19T04:38:40.5142388Z 
+2025-12-19T04:38:40.5142724Z Turn off this advice by setting config variable advice.detachedHead to false
+2025-12-19T04:38:40.5143160Z 
+2025-12-19T04:38:40.5143750Z HEAD is now at e10aeaf Merge pull request #72 from ***/copilot/update-doppler-secrets-management
+2025-12-19T04:38:40.5150859Z ##[endgroup]
+2025-12-19T04:38:40.5185048Z [command]/usr/bin/git log -1 --format=%H
+2025-12-19T04:38:40.5209290Z e10aeaf94f8a44ba34d8804082fc3da10842177d
+2025-12-19T04:38:40.5424997Z ##[group]Run appleboy/scp-action@v0.1.7
+2025-12-19T04:38:40.5425284Z with:
+2025-12-19T04:38:40.5425592Z   host: ***
+2025-12-19T04:38:40.5425797Z   username: ***
+2025-12-19T04:38:40.5427518Z   key: ***
+2025-12-19T04:38:40.5427704Z   port: 22
+2025-12-19T04:38:40.5428279Z   source: docker-compose.prod.yml,nginx-n8n.conf,nginx-proxy/nginx.conf,braid-mcp-node-server/docker-compose.prod.yml,braid-mcp-node-server/.env.example
+2025-12-19T04:38:40.5428918Z   target: /opt/aishacrm/
+2025-12-19T04:38:40.5429146Z   strip_components: 0
+2025-12-19T04:38:40.5429374Z   timeout: 30s
+2025-12-19T04:38:40.5429593Z   command_timeout: 10m
+2025-12-19T04:38:40.5429825Z   use_insecure_cipher: false
+2025-12-19T04:38:40.5430057Z   rm: false
+2025-12-19T04:38:40.5430241Z   debug: false
+2025-12-19T04:38:40.5430441Z   overwrite: false
+2025-12-19T04:38:40.5430660Z   tar_dereference: false
+2025-12-19T04:38:40.5430880Z   tar_exec: tar
+2025-12-19T04:38:40.5431078Z   proxy_port: 22
+2025-12-19T04:38:40.5431339Z   proxy_timeout: 30s
+2025-12-19T04:38:40.5431571Z   proxy_use_insecure_cipher: false
+2025-12-19T04:38:40.5431815Z ##[endgroup]
+2025-12-19T04:38:40.5529681Z ##[command]/usr/bin/docker run --name ef8d109b793838b84720b8062452f98cd85e_7aa616 --label 69ef8d --workdir /github/workspace --rm -e "INPUT_HOST" -e "INPUT_USERNAME" -e "INPUT_KEY" -e "INPUT_PORT" -e "INPUT_SOURCE" -e "INPUT_TARGET" -e "INPUT_STRIP_COMPONENTS" -e "INPUT_PASSWORD" -e "INPUT_TIMEOUT" -e "INPUT_COMMAND_TIMEOUT" -e "INPUT_KEY_PATH" -e "INPUT_PASSPHRASE" -e "INPUT_FINGERPRINT" -e "INPUT_USE_INSECURE_CIPHER" -e "INPUT_RM" -e "INPUT_DEBUG" -e "INPUT_OVERWRITE" -e "INPUT_TAR_DEREFERENCE" -e "INPUT_TAR_TMP_PATH" -e "INPUT_TAR_EXEC" -e "INPUT_PROXY_HOST" -e "INPUT_PROXY_PORT" -e "INPUT_PROXY_USERNAME" -e "INPUT_PROXY_PASSWORD" -e "INPUT_PROXY_PASSPHRASE" -e "INPUT_PROXY_TIMEOUT" -e "INPUT_PROXY_KEY" -e "INPUT_PROXY_KEY_PATH" -e "INPUT_PROXY_FINGERPRINT" -e "INPUT_PROXY_USE_INSECURE_CIPHER" -e "HOME" -e "GITHUB_JOB" -e "GITHUB_REF" -e "GITHUB_SHA" -e "GITHUB_REPOSITORY" -e "GITHUB_REPOSITORY_OWNER" -e "GITHUB_REPOSITORY_OWNER_ID" -e "GITHUB_RUN_ID" -e "GITHUB_RUN_NUMBER" -e "GITHUB_RETENTION_DAYS" -e "GITHUB_RUN_ATTEMPT" -e "GITHUB_ACTOR_ID" -e "GITHUB_ACTOR" -e "GITHUB_WORKFLOW" -e "GITHUB_HEAD_REF" -e "GITHUB_BASE_REF" -e "GITHUB_EVENT_NAME" -e "GITHUB_SERVER_URL" -e "GITHUB_API_URL" -e "GITHUB_GRAPHQL_URL" -e "GITHUB_REF_NAME" -e "GITHUB_REF_PROTECTED" -e "GITHUB_REF_TYPE" -e "GITHUB_WORKFLOW_REF" -e "GITHUB_WORKFLOW_SHA" -e "GITHUB_REPOSITORY_ID" -e "GITHUB_TRIGGERING_ACTOR" -e "GITHUB_WORKSPACE" -e "GITHUB_ACTION" -e "GITHUB_EVENT_PATH" -e "GITHUB_ACTION_REPOSITORY" -e "GITHUB_ACTION_REF" -e "GITHUB_PATH" -e "GITHUB_ENV" -e "GITHUB_STEP_SUMMARY" -e "GITHUB_STATE" -e "GITHUB_OUTPUT" -e "RUNNER_OS" -e "RUNNER_ARCH" -e "RUNNER_NAME" -e "RUNNER_ENVIRONMENT" -e "RUNNER_TOOL_CACHE" -e "RUNNER_TEMP" -e "RUNNER_WORKSPACE" -e "ACTIONS_RUNTIME_URL" -e "ACTIONS_RUNTIME_TOKEN" -e "ACTIONS_CACHE_URL" -e "ACTIONS_RESULTS_URL" -e GITHUB_ACTIONS=true -e CI=true -v "/var/run/docker.sock":"/var/run/docker.sock" -v "/home/runner/work/_temp":"/github/runner_temp" -v "/home/runner/work/_temp/_github_home":"/github/home" -v "/home/runner/work/_temp/_github_workflow":"/github/workflow" -v "/home/runner/work/_temp/_runner_file_commands":"/github/file_commands" -v "/home/runner/work/aishacrm-2/aishacrm-2":"/github/workspace" 69ef8d:109b793838b84720b8062452f98cd85e
+2025-12-19T04:38:40.8077769Z drone-scp version: v1.6.14
+2025-12-19T04:38:40.8078306Z tar all files into /tmp/fSrlbMdZJA.tar.gz
+2025-12-19T04:38:41.8870473Z remote server os type is unix
+2025-12-19T04:38:41.8871074Z scp file to server.
+2025-12-19T04:38:43.1306037Z create folder /opt/aishacrm/
+2025-12-19T04:38:43.7663409Z untar file fSrlbMdZJA.tar.gz
+2025-12-19T04:38:44.4035426Z remove file fSrlbMdZJA.tar.gz
+2025-12-19T04:38:45.0363852Z ===================================================
+2025-12-19T04:38:45.0364916Z ✅ Successfully executed transfer data to all host
+2025-12-19T04:38:45.0365799Z ===================================================
+2025-12-19T04:38:45.1137678Z ##[group]Run appleboy/ssh-action@v1.0.3
+2025-12-19T04:38:45.1137980Z with:
+2025-12-19T04:38:45.1138446Z   host: ***
+2025-12-19T04:38:45.1138671Z   username: ***
+2025-12-19T04:38:45.1140390Z   key: ***
+2025-12-19T04:38:45.1140594Z   port: 22
+2025-12-19T04:38:45.1140827Z   envs: VERSION_TAG,MCP_GITHUB_TOKEN
+2025-12-19T04:38:45.1158374Z   script: set -e  # Exit on any error
+cd /opt/aishacrm
+echo "Deploying version: $VERSION_TAG"
+
+# === FULL CLEANUP: Remove orphaned containers and broken references ===
+echo "Cleaning up orphaned containers and broken Docker state..."
+docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
+docker container prune -f 2>/dev/null || true
+# Remove any containers with broken dependencies
+docker ps -aq --filter "status=exited" | xargs -r docker rm -f 2>/dev/null || true
+docker ps -aq --filter "status=dead" | xargs -r docker rm -f 2>/dev/null || true
+
+# Ensure aishanet network exists
+docker network inspect aishanet >/dev/null 2>&1 || docker network create aishanet
+
+# Pull specific version tags
+docker pull ghcr.io/***/aishacrm-2-frontend:$VERSION_TAG
+docker pull ghcr.io/***/aishacrm-2-backend:$VERSION_TAG
+docker pull ghcr.io/***/aishacrm-2-mcp:$VERSION_TAG
+# Tag as latest locally
+docker tag ghcr.io/***/aishacrm-2-frontend:$VERSION_TAG ghcr.io/***/aishacrm-2-frontend:latest
+docker tag ghcr.io/***/aishacrm-2-backend:$VERSION_TAG ghcr.io/***/aishacrm-2-backend:latest
+docker tag ghcr.io/***/aishacrm-2-mcp:$VERSION_TAG ghcr.io/***/aishacrm-2-mcp:latest
+
+# Remove VITE_APP_BUILD_VERSION from .env so container uses baked-in /app/VERSION
+# (Version is already baked into Docker image during build via Dockerfile)
+sed -i '/^VITE_APP_BUILD_VERSION=/d' .env 2>/dev/null || true
+
+# Ensure n8n URL is set for iframe embedding
+if ! grep -q "^VITE_N8N_URL=" .env 2>/dev/null; then
+  echo "VITE_N8N_URL=http://***:5679" >> .env
+fi
+# Optionally inject GitHub token for MCP GitHub adapter
+if [ -n "$MCP_GITHUB_TOKEN" ]; then
+  if grep -q "^GITHUB_TOKEN=" .env 2>/dev/null; then
+    sed -i "s/^GITHUB_TOKEN=.*/GITHUB_TOKEN=$MCP_GITHUB_TOKEN/" .env
+  else
+    echo "GITHUB_TOKEN=$MCP_GITHUB_TOKEN" >> .env
+  fi
+fi
+# Restart main services with version info (force recreate to detect :latest image changes)
+# NOTE: n8n is optional - use --profile workflows to include it
+# Frontend and backend run directly on ports 4000 and 4001 (no proxy)
+docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend
+
+# Deploy MCP server (separate compose file with 3 containers)
+echo "Deploying MCP server cluster (1 server + 2 nodes)..."
+
+# Ensure MCP directory exists
+mkdir -p /opt/aishacrm/braid-mcp-node-server
+cd /opt/aishacrm/braid-mcp-node-server
+
+# Create .env from example if it doesn't exist, or create minimal one
+if [ ! -f .env ]; then
+  if [ -f .env.example ]; then
+    cp .env.example .env
+    echo "Created .env from .env.example"
+  else
+    echo "NODE_ENV=production" > .env
+    echo "Created minimal .env"
+  fi
+fi
+
+# Update MCP .env with critical runtime variables
+# These must be set for MCP server to function properly
+
+# Environment
+grep -q "^NODE_ENV=" .env || echo "NODE_ENV=production" >> .env
+grep -q "^PORT=" .env || echo "PORT=8000" >> .env
+
+# Database (read from main .env)
+if [ -f /opt/aishacrm/.env ]; then
+  SUPABASE_URL=$(grep "^SUPABASE_URL=" /opt/aishacrm/.env | cut -d'=' -f2-)
+  SUPABASE_KEY=$(grep "^SUPABASE_SERVICE_ROLE_KEY=" /opt/aishacrm/.env | cut -d'=' -f2-)
+  [ -n "$SUPABASE_URL" ] && sed -i "s|^SUPABASE_URL=.*|SUPABASE_URL=$SUPABASE_URL|" .env || echo "SUPABASE_URL=$SUPABASE_URL" >> .env
+  [ -n "$SUPABASE_KEY" ] && sed -i "s|^SUPABASE_SERVICE_ROLE_KEY=.*|SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_KEY|" .env || echo "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_KEY" >> .env
+fi
+grep -q "^USE_SUPABASE_PROD=" .env || echo "USE_SUPABASE_PROD=true" >> .env
+
+# Redis
+grep -q "^REDIS_URL=" .env || echo "REDIS_URL=redis://aishacrm-redis-memory:6379" >> .env
+
+# OpenAI (read from main .env)
+if [ -f /opt/aishacrm/.env ]; then
+  OPENAI_KEY=$(grep "^OPENAI_API_KEY=" /opt/aishacrm/.env | cut -d'=' -f2-)
+  [ -n "$OPENAI_KEY" ] && sed -i "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=$OPENAI_KEY|" .env || echo "OPENAI_API_KEY=$OPENAI_KEY" >> .env
+fi
+grep -q "^DEFAULT_OPENAI_MODEL=" .env || echo "DEFAULT_OPENAI_MODEL=gpt-4o" >> .env
+
+# CRM Backend
+grep -q "^CRM_BACKEND_URL=" .env || echo "CRM_BACKEND_URL=http://aishacrm-backend:3001" >> .env
+
+# Tenant Context
+grep -q "^DEFAULT_TENANT_ID=" .env || echo "DEFAULT_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46" >> .env
+
+# GitHub Token (from workflow secret)
+if [ -n "$MCP_GITHUB_TOKEN" ]; then
+  if grep -q "^GITHUB_TOKEN=" .env 2>/dev/null; then
+    sed -i "s/^GITHUB_TOKEN=.*/GITHUB_TOKEN=$MCP_GITHUB_TOKEN/" .env
+  else
+    echo "GITHUB_TOKEN=$MCP_GITHUB_TOKEN" >> .env
+  fi
+fi
+
+# Optional: Direct Supabase access
+grep -q "^USE_DIRECT_SUPABASE_ACCESS=" .env || echo "USE_DIRECT_SUPABASE_ACCESS=false" >> .env
+
+echo "MCP .env configuration updated"
+
+# Check if docker-compose.prod.yml exists
+if [ ! -f docker-compose.prod.yml ]; then
+  echo "ERROR: docker-compose.prod.yml not found in /opt/aishacrm/braid-mcp-node-server/"
+  echo "SCP may have failed. Listing directory contents:"
+  ls -la /opt/aishacrm/braid-mcp-node-server/
+  exit 1
+fi
+
+# Clean up any orphaned/conflicting MCP containers before starting
+echo "Cleaning up orphaned MCP containers..."
+docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
+docker rm -f braid-mcp-1 braid-mcp-2 braid-mcp-node-server 2>/dev/null || true
+
+# Start MCP services using production compose (uses GHCR images)
+echo "Starting MCP containers..."
+docker compose -f docker-compose.prod.yml up -d --force-recreate
+
+# Verify MCP deployment
+echo "Verifying MCP deployment..."
+sleep 5
+docker ps --filter "name=braid-mcp" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+cd /opt/aishacrm
+echo "Deployment completed: $VERSION_TAG"
+
+# Final verification - all containers
+echo "=== All AishaCRM containers ==="
+docker ps --filter "name=aishacrm" --format "table {{.Names}}\t{{.Status}}"
+docker ps --filter "name=braid-mcp" --format "table {{.Names}}\t{{.Status}}"
+
+# Verify frontend version
+docker exec aishacrm-frontend cat /app/dist/env-config.js | grep VITE_APP_BUILD_VERSION || true
+
+2025-12-19T04:38:45.1173497Z   timeout: 30s
+2025-12-19T04:38:45.1173705Z   command_timeout: 10m
+2025-12-19T04:38:45.1173930Z   proxy_port: 22
+2025-12-19T04:38:45.1174190Z   proxy_timeout: 30s
+2025-12-19T04:38:45.1174400Z env:
+2025-12-19T04:38:45.1174597Z   VERSION_TAG: v3.0.17
+2025-12-19T04:38:45.1175117Z   MCP_GITHUB_TOKEN: ***
+2025-12-19T04:38:45.1175345Z ##[endgroup]
+2025-12-19T04:38:45.1205370Z ##[command]/usr/bin/docker run --name ef8d4f3d5a03c8434a90bfe0286df8e545fe_35d45b --label 69ef8d --workdir /github/workspace --rm -e "VERSION_TAG" -e "MCP_GITHUB_TOKEN" -e "INPUT_HOST" -e "INPUT_USERNAME" -e "INPUT_KEY" -e "INPUT_PORT" -e "INPUT_ENVS" -e "INPUT_SCRIPT" -e "INPUT_PASSPHRASE" -e "INPUT_PASSWORD" -e "INPUT_SYNC" -e "INPUT_USE_INSECURE_CIPHER" -e "INPUT_CIPHER" -e "INPUT_TIMEOUT" -e "INPUT_COMMAND_TIMEOUT" -e "INPUT_KEY_PATH" -e "INPUT_FINGERPRINT" -e "INPUT_PROXY_HOST" -e "INPUT_PROXY_PORT" -e "INPUT_PROXY_USERNAME" -e "INPUT_PROXY_PASSWORD" -e "INPUT_PROXY_PASSPHRASE" -e "INPUT_PROXY_TIMEOUT" -e "INPUT_PROXY_KEY" -e "INPUT_PROXY_KEY_PATH" -e "INPUT_PROXY_FINGERPRINT" -e "INPUT_PROXY_CIPHER" -e "INPUT_PROXY_USE_INSECURE_CIPHER" -e "INPUT_SCRIPT_STOP" -e "INPUT_ENVS_FORMAT" -e "INPUT_DEBUG" -e "INPUT_ALLENVS" -e "INPUT_REQUEST_PTY" -e "HOME" -e "GITHUB_JOB" -e "GITHUB_REF" -e "GITHUB_SHA" -e "GITHUB_REPOSITORY" -e "GITHUB_REPOSITORY_OWNER" -e "GITHUB_REPOSITORY_OWNER_ID" -e "GITHUB_RUN_ID" -e "GITHUB_RUN_NUMBER" -e "GITHUB_RETENTION_DAYS" -e "GITHUB_RUN_ATTEMPT" -e "GITHUB_ACTOR_ID" -e "GITHUB_ACTOR" -e "GITHUB_WORKFLOW" -e "GITHUB_HEAD_REF" -e "GITHUB_BASE_REF" -e "GITHUB_EVENT_NAME" -e "GITHUB_SERVER_URL" -e "GITHUB_API_URL" -e "GITHUB_GRAPHQL_URL" -e "GITHUB_REF_NAME" -e "GITHUB_REF_PROTECTED" -e "GITHUB_REF_TYPE" -e "GITHUB_WORKFLOW_REF" -e "GITHUB_WORKFLOW_SHA" -e "GITHUB_REPOSITORY_ID" -e "GITHUB_TRIGGERING_ACTOR" -e "GITHUB_WORKSPACE" -e "GITHUB_ACTION" -e "GITHUB_EVENT_PATH" -e "GITHUB_ACTION_REPOSITORY" -e "GITHUB_ACTION_REF" -e "GITHUB_PATH" -e "GITHUB_ENV" -e "GITHUB_STEP_SUMMARY" -e "GITHUB_STATE" -e "GITHUB_OUTPUT" -e "RUNNER_OS" -e "RUNNER_ARCH" -e "RUNNER_NAME" -e "RUNNER_ENVIRONMENT" -e "RUNNER_TOOL_CACHE" -e "RUNNER_TEMP" -e "RUNNER_WORKSPACE" -e "ACTIONS_RUNTIME_URL" -e "ACTIONS_RUNTIME_TOKEN" -e "ACTIONS_CACHE_URL" -e "ACTIONS_RESULTS_URL" -e GITHUB_ACTIONS=true -e CI=true -v "/var/run/docker.sock":"/var/run/docker.sock" -v "/home/runner/work/_temp":"/github/runner_temp" -v "/home/runner/work/_temp/_github_home":"/github/home" -v "/home/runner/work/_temp/_github_workflow":"/github/workflow" -v "/home/runner/work/_temp/_runner_file_commands":"/github/file_commands" -v "/home/runner/work/aishacrm-2/aishacrm-2":"/github/workspace" 69ef8d:4f3d5a03c8434a90bfe0286df8e545fe
+2025-12-19T04:38:45.2527028Z ======CMD======
+2025-12-19T04:38:45.2529265Z set -e  # Exit on any error
+2025-12-19T04:38:45.2529815Z cd /opt/aishacrm
+2025-12-19T04:38:45.2530243Z echo "Deploying version: $VERSION_TAG"
+2025-12-19T04:38:45.2530588Z 
+2025-12-19T04:38:45.2530914Z # === FULL CLEANUP: Remove orphaned containers and broken references ===
+2025-12-19T04:38:45.2531687Z echo "Cleaning up orphaned containers and broken Docker state..."
+2025-12-19T04:38:45.2532538Z docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
+2025-12-19T04:38:45.2533282Z docker container prune -f 2>/dev/null || true
+2025-12-19T04:38:45.2533816Z # Remove any containers with broken dependencies
+2025-12-19T04:38:45.2534743Z docker ps -aq --filter "status=exited" | xargs -r docker rm -f 2>/dev/null || true
+2025-12-19T04:38:45.2535628Z docker ps -aq --filter "status=dead" | xargs -r docker rm -f 2>/dev/null || true
+2025-12-19T04:38:45.2536126Z 
+2025-12-19T04:38:45.2536299Z # Ensure aishanet network exists
+2025-12-19T04:38:45.2536985Z docker network inspect aishanet >/dev/null 2>&1 || docker network create aishanet
+2025-12-19T04:38:45.2537539Z 
+2025-12-19T04:38:45.2537719Z # Pull specific version tags
+2025-12-19T04:38:45.2538418Z docker pull ghcr.io/***/aishacrm-2-frontend:$VERSION_TAG
+2025-12-19T04:38:45.2539145Z docker pull ghcr.io/***/aishacrm-2-backend:$VERSION_TAG
+2025-12-19T04:38:45.2539792Z docker pull ghcr.io/***/aishacrm-2-mcp:$VERSION_TAG
+2025-12-19T04:38:45.2540274Z # Tag as latest locally
+2025-12-19T04:38:45.2541023Z docker tag ghcr.io/***/aishacrm-2-frontend:$VERSION_TAG ghcr.io/***/aishacrm-2-frontend:latest
+2025-12-19T04:38:45.2542040Z docker tag ghcr.io/***/aishacrm-2-backend:$VERSION_TAG ghcr.io/***/aishacrm-2-backend:latest
+2025-12-19T04:38:45.2543280Z docker tag ghcr.io/***/aishacrm-2-mcp:$VERSION_TAG ghcr.io/***/aishacrm-2-mcp:latest
+2025-12-19T04:38:45.2543742Z 
+2025-12-19T04:38:45.2544056Z # Remove VITE_APP_BUILD_VERSION from .env so container uses baked-in /app/VERSION
+2025-12-19T04:38:45.2545040Z # (Version is already baked into Docker image during build via Dockerfile)
+2025-12-19T04:38:45.2545778Z sed -i '/^VITE_APP_BUILD_VERSION=/d' .env 2>/dev/null || true
+2025-12-19T04:38:45.2546190Z 
+2025-12-19T04:38:45.2546386Z # Ensure n8n URL is set for iframe embedding
+2025-12-19T04:38:45.2546907Z if ! grep -q "^VITE_N8N_URL=" .env 2>/dev/null; then
+2025-12-19T04:38:45.2547535Z   echo "VITE_N8N_URL=http://***:5679" >> .env
+2025-12-19T04:38:45.2547968Z fi
+2025-12-19T04:38:45.2548332Z # Optionally inject GitHub token for MCP GitHub adapter
+2025-12-19T04:38:45.2548811Z if [ -n "$MCP_GITHUB_TOKEN" ]; then
+2025-12-19T04:38:45.2549303Z   if grep -q "^GITHUB_TOKEN=" .env 2>/dev/null; then
+2025-12-19T04:38:45.2549867Z     sed -i "s/^GITHUB_TOKEN=.*/GITHUB_TOKEN=$MCP_GITHUB_TOKEN/" .env
+2025-12-19T04:38:45.2550467Z   else
+2025-12-19T04:38:45.2550804Z     echo "GITHUB_TOKEN=$MCP_GITHUB_TOKEN" >> .env
+2025-12-19T04:38:45.2551271Z   fi
+2025-12-19T04:38:45.2553465Z fi
+2025-12-19T04:38:45.2554281Z # Restart main services with version info (force recreate to detect :latest image changes)
+2025-12-19T04:38:45.2555264Z # NOTE: n8n is optional - use --profile workflows to include it
+2025-12-19T04:38:45.2555961Z # Frontend and backend run directly on ports 4000 and 4001 (no proxy)
+2025-12-19T04:38:45.2556750Z docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend
+2025-12-19T04:38:45.2557257Z 
+2025-12-19T04:38:45.2557521Z # Deploy MCP server (separate compose file with 3 containers)
+2025-12-19T04:38:45.2558166Z echo "Deploying MCP server cluster (1 server + 2 nodes)..."
+2025-12-19T04:38:45.2558615Z 
+2025-12-19T04:38:45.2558787Z # Ensure MCP directory exists
+2025-12-19T04:38:45.2559305Z mkdir -p /opt/aishacrm/braid-mcp-node-server
+2025-12-19T04:38:45.2559808Z cd /opt/aishacrm/braid-mcp-node-server
+2025-12-19T04:38:45.2560095Z 
+2025-12-19T04:38:45.2560366Z # Create .env from example if it doesn't exist, or create minimal one
+2025-12-19T04:38:45.2560904Z if [ ! -f .env ]; then
+2025-12-19T04:38:45.2561301Z   if [ -f .env.example ]; then
+2025-12-19T04:38:45.2561844Z     cp .env.example .env
+2025-12-19T04:38:45.2562241Z     echo "Created .env from .env.example"
+2025-12-19T04:38:45.2562758Z   else
+2025-12-19T04:38:45.2563075Z     echo "NODE_ENV=production" > .env
+2025-12-19T04:38:45.2563502Z     echo "Created minimal .env"
+2025-12-19T04:38:45.2563888Z   fi
+2025-12-19T04:38:45.2564410Z fi
+2025-12-19T04:38:45.2564589Z 
+2025-12-19T04:38:45.2564803Z # Update MCP .env with critical runtime variables
+2025-12-19T04:38:45.2565396Z # These must be set for MCP server to function properly
+2025-12-19T04:38:45.2565792Z 
+2025-12-19T04:38:45.2565918Z # Environment
+2025-12-19T04:38:45.2566348Z grep -q "^NODE_ENV=" .env || echo "NODE_ENV=production" >> .env
+2025-12-19T04:38:45.2566957Z grep -q "^PORT=" .env || echo "PORT=8000" >> .env
+2025-12-19T04:38:45.2567305Z 
+2025-12-19T04:38:45.2567448Z # Database (read from main .env)
+2025-12-19T04:38:45.2567845Z if [ -f /opt/aishacrm/.env ]; then
+2025-12-19T04:38:45.2568397Z   SUPABASE_URL=$(grep "^SUPABASE_URL=" /opt/aishacrm/.env | cut -d'=' -f2-)
+2025-12-19T04:38:45.2569341Z   SUPABASE_KEY=$(grep "^SUPABASE_SERVICE_ROLE_KEY=" /opt/aishacrm/.env | cut -d'=' -f2-)
+2025-12-19T04:38:45.2570435Z   [ -n "$SUPABASE_URL" ] && sed -i "s|^SUPABASE_URL=.*|SUPABASE_URL=$SUPABASE_URL|" .env || echo "SUPABASE_URL=$SUPABASE_URL" >> .env
+2025-12-19T04:38:45.2571839Z   [ -n "$SUPABASE_KEY" ] && sed -i "s|^SUPABASE_SERVICE_ROLE_KEY=.*|SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_KEY|" .env || echo "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_KEY" >> .env
+2025-12-19T04:38:45.2575117Z fi
+2025-12-19T04:38:45.2575609Z grep -q "^USE_SUPABASE_PROD=" .env || echo "USE_SUPABASE_PROD=true" >> .env
+2025-12-19T04:38:45.2576062Z 
+2025-12-19T04:38:45.2576354Z # Redis
+2025-12-19T04:38:45.2576895Z grep -q "^REDIS_URL=" .env || echo "REDIS_URL=redis://aishacrm-redis-memory:6379" >> .env
+2025-12-19T04:38:45.2577418Z 
+2025-12-19T04:38:45.2577572Z # OpenAI (read from main .env)
+2025-12-19T04:38:45.2577967Z if [ -f /opt/aishacrm/.env ]; then
+2025-12-19T04:38:45.2578459Z   OPENAI_KEY=$(grep "^OPENAI_API_KEY=" /opt/aishacrm/.env | cut -d'=' -f2-)
+2025-12-19T04:38:45.2579404Z   [ -n "$OPENAI_KEY" ] && sed -i "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=$OPENAI_KEY|" .env || echo "OPENAI_API_KEY=$OPENAI_KEY" >> .env
+2025-12-19T04:38:45.2580167Z fi
+2025-12-19T04:38:45.2580679Z grep -q "^DEFAULT_OPENAI_MODEL=" .env || echo "DEFAULT_OPENAI_MODEL=gpt-4o" >> .env
+2025-12-19T04:38:45.2581178Z 
+2025-12-19T04:38:45.2581306Z # CRM Backend
+2025-12-19T04:38:45.2581889Z grep -q "^CRM_BACKEND_URL=" .env || echo "CRM_BACKEND_URL=http://aishacrm-backend:3001" >> .env
+2025-12-19T04:38:45.2582411Z 
+2025-12-19T04:38:45.2582530Z # Tenant Context
+2025-12-19T04:38:45.2583165Z grep -q "^DEFAULT_TENANT_ID=" .env || echo "DEFAULT_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46" >> .env
+2025-12-19T04:38:45.2584493Z 
+2025-12-19T04:38:45.2584680Z # GitHub Token (from workflow secret)
+2025-12-19T04:38:45.2585152Z if [ -n "$MCP_GITHUB_TOKEN" ]; then
+2025-12-19T04:38:45.2585639Z   if grep -q "^GITHUB_TOKEN=" .env 2>/dev/null; then
+2025-12-19T04:38:45.2586223Z     sed -i "s/^GITHUB_TOKEN=.*/GITHUB_TOKEN=$MCP_GITHUB_TOKEN/" .env
+2025-12-19T04:38:45.2586939Z   else
+2025-12-19T04:38:45.2587312Z     echo "GITHUB_TOKEN=$MCP_GITHUB_TOKEN" >> .env
+2025-12-19T04:38:45.2587774Z   fi
+2025-12-19T04:38:45.2588068Z fi
+2025-12-19T04:38:45.2588224Z 
+2025-12-19T04:38:45.2588401Z # Optional: Direct Supabase access
+2025-12-19T04:38:45.2589087Z grep -q "^USE_DIRECT_SUPABASE_ACCESS=" .env || echo "USE_DIRECT_SUPABASE_ACCESS=false" >> .env
+2025-12-19T04:38:45.2589640Z 
+2025-12-19T04:38:45.2589827Z echo "MCP .env configuration updated"
+2025-12-19T04:38:45.2590150Z 
+2025-12-19T04:38:45.2590337Z # Check if docker-compose.prod.yml exists
+2025-12-19T04:38:45.2590885Z if [ ! -f docker-compose.prod.yml ]; then
+2025-12-19T04:38:45.2591589Z   echo "ERROR: docker-compose.prod.yml not found in /opt/aishacrm/braid-mcp-node-server/"
+2025-12-19T04:38:45.2592323Z   echo "SCP may have failed. Listing directory contents:"
+2025-12-19T04:38:45.2592858Z   ls -la /opt/aishacrm/braid-mcp-node-server/
+2025-12-19T04:38:45.2593620Z   exit 1
+2025-12-19T04:38:45.2593918Z fi
+2025-12-19T04:38:45.2594297Z 
+2025-12-19T04:38:45.2594616Z # Clean up any orphaned/conflicting MCP containers before starting
+2025-12-19T04:38:45.2595271Z echo "Cleaning up orphaned MCP containers..."
+2025-12-19T04:38:45.2596190Z docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
+2025-12-19T04:38:45.2596946Z docker rm -f braid-mcp-1 braid-mcp-2 braid-mcp-node-server 2>/dev/null || true
+2025-12-19T04:38:45.2597230Z 
+2025-12-19T04:38:45.2597392Z # Start MCP services using production compose (uses GHCR images)
+2025-12-19T04:38:45.2597744Z echo "Starting MCP containers..."
+2025-12-19T04:38:45.2598097Z docker compose -f docker-compose.prod.yml up -d --force-recreate
+2025-12-19T04:38:45.2598348Z 
+2025-12-19T04:38:45.2598448Z # Verify MCP deployment
+2025-12-19T04:38:45.2598686Z echo "Verifying MCP deployment..."
+2025-12-19T04:38:45.2598926Z sleep 5
+2025-12-19T04:38:45.2599250Z docker ps --filter "name=braid-mcp" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+2025-12-19T04:38:45.2599543Z 
+2025-12-19T04:38:45.2599635Z cd /opt/aishacrm
+2025-12-19T04:38:45.2599863Z echo "Deployment completed: $VERSION_TAG"
+2025-12-19T04:38:45.2600052Z 
+2025-12-19T04:38:45.2600159Z # Final verification - all containers
+2025-12-19T04:38:45.2600427Z echo "=== All AishaCRM containers ==="
+2025-12-19T04:38:45.2600790Z docker ps --filter "name=aishacrm" --format "table {{.Names}}\t{{.Status}}"
+2025-12-19T04:38:45.2601239Z docker ps --filter "name=braid-mcp" --format "table {{.Names}}\t{{.Status}}"
+2025-12-19T04:38:45.2601504Z 
+2025-12-19T04:38:45.2601596Z # Verify frontend version
+2025-12-19T04:38:45.2602163Z docker exec aishacrm-frontend cat /app/dist/env-config.js | grep VITE_APP_BUILD_VERSION || true
+2025-12-19T04:38:45.2602499Z 
+2025-12-19T04:38:45.2602587Z ======END======
+2025-12-19T04:38:45.8799331Z out: Deploying version: v3.0.17
+2025-12-19T04:38:45.8799953Z out: Cleaning up orphaned containers and broken Docker state...
+2025-12-19T04:38:58.1125976Z out: Total reclaimed space: 0B
+2025-12-19T04:38:58.5551734Z out: v3.0.17: Pulling from ***/aishacrm-2-frontend
+2025-12-19T04:38:58.6327558Z out: 1074353eec0d: Already exists
+2025-12-19T04:38:58.6348786Z out: d53378de7b14: Already exists
+2025-12-19T04:38:58.6376053Z out: 1e51518bad62: Already exists
+2025-12-19T04:38:58.6406681Z out: df42fde70614: Already exists
+2025-12-19T04:38:58.6429336Z out: 13f26d463972: Pulling fs layer
+2025-12-19T04:38:58.6429901Z out: a49a0c34cd78: Pulling fs layer
+2025-12-19T04:38:58.6430494Z out: 6304c3939715: Pulling fs layer
+2025-12-19T04:38:58.6430950Z out: 054b10f14983: Pulling fs layer
+2025-12-19T04:38:58.6431435Z out: 3b415f60c6c6: Pulling fs layer
+2025-12-19T04:38:58.6431900Z out: 6ae6e9f27cac: Pulling fs layer
+2025-12-19T04:38:58.6432386Z out: ba2c617f963f: Pulling fs layer
+2025-12-19T04:38:58.6432880Z out: 4f722c133a22: Pulling fs layer
+2025-12-19T04:38:58.6433373Z out: 6ae6e9f27cac: Waiting
+2025-12-19T04:38:58.6433831Z out: 054b10f14983: Waiting
+2025-12-19T04:38:58.6434346Z out: ba2c617f963f: Waiting
+2025-12-19T04:38:58.6435218Z out: 3b415f60c6c6: Waiting
+2025-12-19T04:38:58.6435574Z out: 4f722c133a22: Waiting
+2025-12-19T04:38:58.8284593Z out: a49a0c34cd78: Verifying Checksum
+2025-12-19T04:38:59.0710796Z out: 6304c3939715: Verifying Checksum
+2025-12-19T04:38:59.0711305Z out: 6304c3939715: Download complete
+2025-12-19T04:38:59.1299777Z out: 13f26d463972: Download complete
+2025-12-19T04:38:59.2308539Z out: 13f26d463972: Pull complete
+2025-12-19T04:38:59.2421111Z out: a49a0c34cd78: Pull complete
+2025-12-19T04:38:59.3037788Z out: 6ae6e9f27cac: Verifying Checksum
+2025-12-19T04:38:59.3038325Z out: 6ae6e9f27cac: Download complete
+2025-12-19T04:38:59.3116035Z out: 3b415f60c6c6: Verifying Checksum
+2025-12-19T04:38:59.3116537Z out: 3b415f60c6c6: Download complete
+2025-12-19T04:38:59.4842842Z out: ba2c617f963f: Download complete
+2025-12-19T04:38:59.5097532Z out: 4f722c133a22: Verifying Checksum
+2025-12-19T04:38:59.5098047Z out: 4f722c133a22: Download complete
+2025-12-19T04:38:59.5518674Z out: 054b10f14983: Download complete
+2025-12-19T04:39:00.1370891Z out: 6304c3939715: Pull complete
+2025-12-19T04:39:00.2313929Z out: 054b10f14983: Pull complete
+2025-12-19T04:39:00.2428660Z out: 3b415f60c6c6: Pull complete
+2025-12-19T04:39:00.2584009Z out: 6ae6e9f27cac: Pull complete
+2025-12-19T04:39:00.2672195Z out: ba2c617f963f: Pull complete
+2025-12-19T04:39:00.2750936Z out: 4f722c133a22: Pull complete
+2025-12-19T04:39:00.2808089Z out: Digest: sha256:e7cabf622c5371727dcb14589f6ad5d3638ef19b1cbbe242aba524ab131f7e88
+2025-12-19T04:39:00.2839180Z out: Status: Downloaded newer image for ghcr.io/***/aishacrm-2-frontend:v3.0.17
+2025-12-19T04:39:00.2854979Z out: ghcr.io/***/aishacrm-2-frontend:v3.0.17
+2025-12-19T04:39:00.5807173Z out: v3.0.17: Pulling from ***/aishacrm-2-backend
+2025-12-19T04:39:00.6625590Z out: 1074353eec0d: Already exists
+2025-12-19T04:39:00.6644034Z out: d53378de7b14: Already exists
+2025-12-19T04:39:00.6661357Z out: 1e51518bad62: Already exists
+2025-12-19T04:39:00.6680848Z out: df42fde70614: Already exists
+2025-12-19T04:39:00.6699868Z out: a4be2a1202bc: Pulling fs layer
+2025-12-19T04:39:00.6700953Z out: c7f7489605a8: Pulling fs layer
+2025-12-19T04:39:00.6701363Z out: 4f4fb700ef54: Pulling fs layer
+2025-12-19T04:39:00.6701712Z out: 4f8858dc15bd: Pulling fs layer
+2025-12-19T04:39:00.6702054Z out: 7d4082534b17: Pulling fs layer
+2025-12-19T04:39:00.6702400Z out: 3344257c0870: Pulling fs layer
+2025-12-19T04:39:00.6702797Z out: 4f8858dc15bd: Waiting
+2025-12-19T04:39:00.6703162Z out: 7d4082534b17: Waiting
+2025-12-19T04:39:00.6704959Z out: 3344257c0870: Waiting
+2025-12-19T04:39:00.8349907Z out: 4f4fb700ef54: Verifying Checksum
+2025-12-19T04:39:00.8350750Z out: 4f4fb700ef54: Download complete
+2025-12-19T04:39:00.8501417Z out: c7f7489605a8: Verifying Checksum
+2025-12-19T04:39:00.8501898Z out: c7f7489605a8: Download complete
+2025-12-19T04:39:01.1135609Z out: a4be2a1202bc: Download complete
+2025-12-19T04:39:01.2213874Z out: a4be2a1202bc: Pull complete
+2025-12-19T04:39:01.2328296Z out: c7f7489605a8: Pull complete
+2025-12-19T04:39:01.2389607Z out: 7d4082534b17: Verifying Checksum
+2025-12-19T04:39:01.2390105Z out: 7d4082534b17: Download complete
+2025-12-19T04:39:01.2470668Z out: 4f4fb700ef54: Pull complete
+2025-12-19T04:39:01.3308909Z out: 3344257c0870: Verifying Checksum
+2025-12-19T04:39:01.3309404Z out: 3344257c0870: Download complete
+2025-12-19T04:39:02.0752769Z out: 4f8858dc15bd: Verifying Checksum
+2025-12-19T04:39:02.0753292Z out: 4f8858dc15bd: Download complete
+2025-12-19T04:39:05.9971995Z out: 4f8858dc15bd: Pull complete
+2025-12-19T04:39:06.1715992Z out: 7d4082534b17: Pull complete
+2025-12-19T04:39:06.2095139Z out: 3344257c0870: Pull complete
+2025-12-19T04:39:06.2166498Z out: Digest: sha256:6391f4939161e7c45bb6071025cab9cc6f99a1f2ea16833886dc67a1e9a6a408
+2025-12-19T04:39:06.2195378Z out: Status: Downloaded newer image for ghcr.io/***/aishacrm-2-backend:v3.0.17
+2025-12-19T04:39:06.2217356Z out: ghcr.io/***/aishacrm-2-backend:v3.0.17
+2025-12-19T04:39:06.5394006Z out: v3.0.17: Pulling from ***/aishacrm-2-mcp
+2025-12-19T04:39:06.6134214Z out: 1074353eec0d: Already exists
+2025-12-19T04:39:06.6154527Z out: 8d06ba6946d1: Already exists
+2025-12-19T04:39:06.6172801Z out: cb3325e64457: Already exists
+2025-12-19T04:39:06.6190050Z out: fd1849a5c548: Already exists
+2025-12-19T04:39:06.6214914Z out: bb01ae344d88: Pulling fs layer
+2025-12-19T04:39:06.6215452Z out: 5085b7783ded: Pulling fs layer
+2025-12-19T04:39:06.6215875Z out: 148e89ace547: Pulling fs layer
+2025-12-19T04:39:06.6216310Z out: 2c81dd80a419: Pulling fs layer
+2025-12-19T04:39:06.6216858Z out: 0c715c1a6c51: Pulling fs layer
+2025-12-19T04:39:06.6217447Z out: a57968555529: Pulling fs layer
+2025-12-19T04:39:06.6217845Z out: 171811c5192b: Pulling fs layer
+2025-12-19T04:39:06.6218232Z out: 0c715c1a6c51: Waiting
+2025-12-19T04:39:06.6218559Z out: a57968555529: Waiting
+2025-12-19T04:39:06.6218926Z out: 2c81dd80a419: Waiting
+2025-12-19T04:39:06.6219274Z out: 171811c5192b: Waiting
+2025-12-19T04:39:06.8073721Z out: bb01ae344d88: Verifying Checksum
+2025-12-19T04:39:06.8074349Z out: bb01ae344d88: Download complete
+2025-12-19T04:39:06.8074827Z out: 5085b7783ded: Verifying Checksum
+2025-12-19T04:39:06.8075268Z out: 5085b7783ded: Download complete
+2025-12-19T04:39:06.8167458Z out: bb01ae344d88: Pull complete
+2025-12-19T04:39:06.8304872Z out: 5085b7783ded: Pull complete
+2025-12-19T04:39:06.8566069Z out: 148e89ace547: Verifying Checksum
+2025-12-19T04:39:06.8566952Z out: 148e89ace547: Download complete
+2025-12-19T04:39:06.8690110Z out: 148e89ace547: Pull complete
+2025-12-19T04:39:06.9911702Z out: 2c81dd80a419: Verifying Checksum
+2025-12-19T04:39:06.9912220Z out: 2c81dd80a419: Download complete
+2025-12-19T04:39:07.0077734Z out: 2c81dd80a419: Pull complete
+2025-12-19T04:39:07.0954607Z out: a57968555529: Verifying Checksum
+2025-12-19T04:39:07.0955129Z out: a57968555529: Download complete
+2025-12-19T04:39:07.2315356Z out: 171811c5192b: Verifying Checksum
+2025-12-19T04:39:07.2315862Z out: 171811c5192b: Download complete
+2025-12-19T04:39:07.3413296Z out: 0c715c1a6c51: Verifying Checksum
+2025-12-19T04:39:07.3413825Z out: 0c715c1a6c51: Download complete
+2025-12-19T04:39:08.6669514Z out: 0c715c1a6c51: Pull complete
+2025-12-19T04:39:08.6866949Z out: a57968555529: Pull complete
+2025-12-19T04:39:08.6997435Z out: 171811c5192b: Pull complete
+2025-12-19T04:39:08.7059956Z out: Digest: sha256:21e8517ebf09a66afc1bdf8fdf3f703f142dc9d8a60a3db53df1e7691efbbb47
+2025-12-19T04:39:08.7092012Z out: Status: Downloaded newer image for ghcr.io/***/aishacrm-2-mcp:v3.0.17
+2025-12-19T04:39:08.7103218Z out: ghcr.io/***/aishacrm-2-mcp:v3.0.17
+2025-12-19T04:39:08.9516526Z err:  Network aishacrm_default  Creating
+2025-12-19T04:39:09.0146866Z err:  Network aishacrm_default  Created
+2025-12-19T04:39:09.0176868Z err:  Container aishacrm-redis-memory  Creating
+2025-12-19T04:39:09.0177399Z err:  Container aishacrm-redis-cache  Creating
+2025-12-19T04:39:10.5467114Z err:  Container aishacrm-redis-cache  Created
+2025-12-19T04:39:10.5467724Z err:  Container aishacrm-redis-memory  Created
+2025-12-19T04:39:10.5468257Z err:  Container aishacrm-backend  Creating
+2025-12-19T04:39:10.5676089Z err:  Container aishacrm-backend  Created
+2025-12-19T04:39:10.5676678Z err:  Container aishacrm-frontend  Creating
+2025-12-19T04:39:10.5844527Z err:  Container aishacrm-frontend  Created
+2025-12-19T04:39:10.5860422Z err:  Container aishacrm-redis-memory  Starting
+2025-12-19T04:39:10.5861057Z err:  Container aishacrm-redis-cache  Starting
+2025-12-19T04:39:10.8732692Z err:  Container aishacrm-redis-memory  Started
+2025-12-19T04:39:10.8806238Z err:  Container aishacrm-redis-cache  Started
+2025-12-19T04:39:10.8806783Z err:  Container aishacrm-redis-cache  Waiting
+2025-12-19T04:39:10.8807108Z err:  Container aishacrm-redis-memory  Waiting
+2025-12-19T04:39:16.3829233Z err:  Container aishacrm-redis-memory  Healthy
+2025-12-19T04:39:16.3829847Z err:  Container aishacrm-redis-cache  Healthy
+2025-12-19T04:39:16.3830374Z err:  Container aishacrm-backend  Starting
+2025-12-19T04:39:16.6033526Z err:  Container aishacrm-backend  Started
+2025-12-19T04:39:16.6034101Z err:  Container aishacrm-frontend  Starting
+2025-12-19T04:39:16.8398564Z err:  Container aishacrm-frontend  Started
+2025-12-19T04:39:16.8472360Z out: Deploying MCP server cluster (1 server + 2 nodes)...
+2025-12-19T04:39:16.8780533Z out: MCP .env configuration updated
+2025-12-19T04:39:16.8781071Z out: Cleaning up orphaned MCP containers...
+2025-12-19T04:39:37.7006090Z out: Starting MCP containers...
+2025-12-19T04:39:37.8181150Z err:  Container braid-mcp-server  Creating
+2025-12-19T04:39:37.8443023Z err:  Container braid-mcp-server  Created
+2025-12-19T04:39:37.8443565Z err:  Container braid-mcp-2  Creating
+2025-12-19T04:39:37.8443984Z err:  Container braid-mcp-1  Creating
+2025-12-19T04:39:37.8661276Z err:  Container braid-mcp-2  Created
+2025-12-19T04:39:37.8684679Z err:  Container braid-mcp-1  Created
+2025-12-19T04:39:37.8707535Z err:  Container braid-mcp-server  Starting
+2025-12-19T04:39:38.0687986Z err:  Container braid-mcp-server  Started
+2025-12-19T04:39:38.0688576Z err:  Container braid-mcp-1  Starting
+2025-12-19T04:39:38.0689045Z err:  Container braid-mcp-2  Starting
+2025-12-19T04:39:38.2524909Z err:  Container braid-mcp-1  Started
+2025-12-19T04:39:38.2816846Z err:  Container braid-mcp-2  Started
+2025-12-19T04:39:38.2884886Z out: Verifying MCP deployment...
+2025-12-19T04:39:43.3159726Z out: NAMES              STATUS                            PORTS
+2025-12-19T04:39:43.3160404Z out: braid-mcp-1        Up 5 seconds (healthy)            8000/tcp
+2025-12-19T04:39:43.3161064Z out: braid-mcp-2        Up 5 seconds (health: starting)   8000/tcp
+2025-12-19T04:39:43.3168051Z out: braid-mcp-server   Up 5 seconds (healthy)            0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp
+2025-12-19T04:39:43.3187676Z out: Deployment completed: v3.0.17
+2025-12-19T04:39:43.3188155Z out: === All AishaCRM containers ===
+2025-12-19T04:39:43.3390916Z out: NAMES                   STATUS
+2025-12-19T04:39:43.3391472Z out: aishacrm-frontend       Up 26 seconds (healthy)
+2025-12-19T04:39:43.3392102Z out: aishacrm-backend        Up 26 seconds (healthy)
+2025-12-19T04:39:43.3392704Z out: aishacrm-redis-cache    Up 32 seconds (healthy)
+2025-12-19T04:39:43.3393054Z out: aishacrm-redis-memory   Up 32 seconds (healthy)
+2025-12-19T04:39:43.3616005Z out: NAMES              STATUS
+2025-12-19T04:39:43.3616508Z out: braid-mcp-1        Up 5 seconds (healthy)
+2025-12-19T04:39:43.3616832Z out: braid-mcp-2        Up 5 seconds (healthy)
+2025-12-19T04:39:43.3617137Z out: braid-mcp-server   Up 5 seconds (healthy)
+2025-12-19T04:39:43.4307364Z out:   VITE_APP_BUILD_VERSION: "v3.0.17"
+2025-12-19T04:39:43.4311719Z ==============================================
+2025-12-19T04:39:43.4312841Z ✅ Successfully executed commands to all host.
+2025-12-19T04:39:43.4314514Z ==============================================
+2025-12-19T04:39:43.5068794Z ##[group]Run echo "### 🚀 Deployed to Production VPS" >> $GITHUB_STEP_SUMMARY
+2025-12-19T04:39:43.5069422Z [36;1mecho "### 🚀 Deployed to Production VPS" >> $GITHUB_STEP_SUMMARY[0m
+2025-12-19T04:39:43.5069874Z [36;1mecho "" >> $GITHUB_STEP_SUMMARY[0m
+2025-12-19T04:39:43.5070288Z [36;1mecho "- **Version**: v3.0.17" >> $GITHUB_STEP_SUMMARY[0m
+2025-12-19T04:39:43.5070817Z [36;1mecho "- **Host**: ***" >> $GITHUB_STEP_SUMMARY[0m
+2025-12-19T04:39:43.5071247Z [36;1mecho "- **Time**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY[0m
+2025-12-19T04:39:43.5094405Z shell: /usr/bin/bash -e {0}
+2025-12-19T04:39:43.5094735Z ##[endgroup]
+2025-12-19T04:39:43.5226028Z Post job cleanup.
+2025-12-19T04:39:43.6107297Z [command]/usr/bin/git version
+2025-12-19T04:39:43.6144928Z git version 2.52.0
+2025-12-19T04:39:43.6186503Z Temporarily overriding HOME='/home/runner/work/_temp/286e0cee-0c6b-4a32-b82f-dace9417d444' before making global git config changes
+2025-12-19T04:39:43.6189294Z Adding repository directory to the temporary git global config as a safe directory
+2025-12-19T04:39:43.6193995Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/aishacrm-2/aishacrm-2
+2025-12-19T04:39:43.6236066Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2025-12-19T04:39:43.6266856Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2025-12-19T04:39:43.6457725Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2025-12-19T04:39:43.6478914Z http.https://github.com/.extraheader
+2025-12-19T04:39:43.6491276Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2025-12-19T04:39:43.6520075Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2025-12-19T04:39:43.6706605Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2025-12-19T04:39:43.6733494Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2025-12-19T04:39:43.7004063Z Cleaning up orphan processes
