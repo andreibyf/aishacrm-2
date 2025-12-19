@@ -132,7 +132,7 @@ async function applyMigration() {
   console.log('────────────────────────────────────────────────────────────────');
   
   console.log('\n-- FK Constraints Migration\n');
-  sqlStatements.forEach((sql, idx) => {
+  sqlStatements.forEach((sql) => {
     console.log(`${sql}`);
   });
   
