@@ -23,6 +23,16 @@ export async function initServices(app, pgPool) {
     await cacheManager.connect();
     console.log(`✓ API cache layer connected (${process.env.REDIS_CACHE_URL || 'redis://localhost:6380'})`);
     app.locals.cacheManager = cacheManager;
+
+    // In development mode, flush cache on startup to avoid stale data after code changes
+    if (process.env.NODE_ENV === 'development' || process.env.FLUSH_CACHE_ON_STARTUP === 'true') {
+      try {
+        await cacheManager.flushAll();
+        console.log('✓ API cache flushed on startup (dev mode)');
+      } catch (flushErr) {
+        console.warn('⚠ Failed to flush cache on startup:', flushErr?.message);
+      }
+    }
   } catch (e) {
     console.warn('⚠ API cache init skipped/failed:', e?.message || e);
   }

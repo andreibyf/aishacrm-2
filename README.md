@@ -1,506 +1,319 @@
-# Aisha CRM
+# AiSHA CRM
 
-**AI-SHA CRM: AI Super Hi-performing Assistant** - Comprehensive Executive Assistant powered by Braid SDK.
+**AI-SHA CRM: AI Super Hi-performing Assistant** — Executive AI Assistant powered by Braid SDK.
 
-Built with React + Vite frontend and Node.js backend, featuring 27+ AI-native tools for full CRM lifecycle management with **210+ API endpoints** across 28 categories.
+Built with React + Vite frontend and Node.js backend, featuring 60+ AI-native tools for full CRM lifecycle management.
+
+> **Version 3.0.x** | December 2025
 
 ---
 
 ## 📚 Documentation
 
-Aisha CRM provides comprehensive technical documentation organized into specialized manuals:
+| Document | Description |
+|----------|-------------|
+| [USER_GUIDE.md](./docs/USER_GUIDE.md) | Complete end-user guide for CRM operations |
+| [ADMIN_GUIDE.md](./docs/ADMIN_GUIDE.md) | System administration, deployment, tenant management |
+| [AI_ASSISTANT_GUIDE.md](./docs/AI_ASSISTANT_GUIDE.md) | AiSHA AI assistant features and capabilities |
+| [DEVELOPER_MANUAL.md](./docs/DEVELOPER_MANUAL.md) | Development setup, architecture, API reference |
+| [DATABASE_GUIDE.md](./docs/DATABASE_GUIDE.md) | Database schema, migrations, Supabase configuration |
+| [SECURITY_GUIDE.md](./docs/SECURITY_GUIDE.md) | Security best practices, RLS policies, authentication |
+| [BRANDING_GUIDE.md](./docs/BRANDING_GUIDE.md) | Brand assets, colors, typography |
 
-### 👥 For End Users
-- **[User Guide](./docs/AISHA_CRM_USER_GUIDE.md)** - Complete guide for using Aisha CRM features
-  - Dashboard & navigation
-  - AI assistant capabilities
-  - Contact, account, lead, and opportunity management
-  - Activities, workflows, and reporting
-  - Troubleshooting common issues
-- **[AiSHA Assistant User Guide](./docs/AISHA_ASSISTANT_USER_GUIDE.md)** - Dedicated guide for the executive assistant panel
-  - Drawer layout & hero card
-  - Quick actions, guided forms, and suggestions
-  - Realtime voice / push-to-talk workflows
-  - Preview & troubleshooting checklist for launches
-
-### 🔧 For System Administrators
-- **[System Administrator Guide](./docs/AISHA_CRM_ADMIN_GUIDE.md)** - Deployment and operations guide
-  - Docker deployment setup
-  - Environment configuration
-  - User and tenant management
-  - Security administration
-  - Monitoring, backups, and maintenance
-
-### 👨‍💻 For Developers
-- **[Developer Manual](./docs/AISHA_CRM_DEVELOPER_MANUAL.md)** - Contributing to the codebase
-  - Development environment setup
-  - Architecture overview (frontend, backend, database)
-  - API development (197 endpoints)
-  - Testing and debugging
-  - Code standards and design patterns
-
-### 🔒 For Security Teams
-- **[Security & Compliance Manual Part 1](./docs/AISHA_CRM_SECURITY_MANUAL_PART1.md)** - Security architecture & data protection
-  - Security overview and threat model
-  - Authentication & authorization (Supabase Auth, RBAC)
-  - Row-level security (RLS) implementation
-  - Permission system architecture
-  - API security and rate limiting
-  - Data protection and encryption
-
-- **[Security & Compliance Manual Part 2](./docs/AISHA_CRM_SECURITY_MANUAL_PART2.md)** - Monitoring, compliance & incident response
-  - Audit logging and compliance (GDPR, CCPA, SOC 2, HIPAA)
-  - Security monitoring and intrusion detection
-  - Incident response procedures
-  - Security testing and penetration testing
-  - Production deployment security
-  - Security best practices
-
-### 🗄️ For Database Administrators
-- **[Database Administration Manual Part 1](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md)** - Architecture & setup
-  - Database architecture (PostgreSQL 15+ on Supabase)
-  - Initial setup and configuration
-  - Schema design (50+ tables, tenant architecture)
-  - Migration management (52+ migrations)
-  - Indexing strategy and data integrity
-
-- **[Database Administration Manual Part 2](./docs/AISHA_CRM_DATABASE_MANUAL_PART2.md)** - Operations & maintenance
-  - Comprehensive migration history (001-052)
-  - Backup and recovery procedures
-  - Performance monitoring and optimization
-  - Maintenance tasks (VACUUM, ANALYZE, reindexing)
-  - Troubleshooting guide
-  - Best practices and scaling strategies
-
-### 🚀 Quick Links
-
-| Task | Manual | Chapter |
-|------|--------|---------|
-| **Get started as a user** | [User Guide](./docs/AISHA_CRM_USER_GUIDE.md) | Ch 1: Getting Started |
-| **Use the AI assistant** | [AiSHA Assistant Guide](./docs/AISHA_ASSISTANT_USER_GUIDE.md) | Sec. 2–5 |
-| **Deploy to production** | [Admin Guide](./docs/AISHA_CRM_ADMIN_GUIDE.md) | Ch 2: Docker Deployment |
-| **Set up dev environment** | [Developer Manual](./docs/AISHA_CRM_DEVELOPER_MANUAL.md) | Ch 2: Development Setup |
-| **Apply database migration** | [Database Manual Part 1](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md) | Ch 4: Migrations Management |
-| **Configure security** | [Security Manual Part 1](./docs/AISHA_CRM_SECURITY_MANUAL_PART1.md) | Ch 2: Authentication & Authorization |
-| **Troubleshoot connection issues** | [Database Manual Part 2](./docs/AISHA_CRM_DATABASE_MANUAL_PART2.md) | Ch 11: Troubleshooting |
-| **Review API endpoints** | [Developer Manual](./docs/AISHA_CRM_DEVELOPER_MANUAL.md) | Appendix B: API Reference |
-| **Set up monitoring** | [Admin Guide](./docs/AISHA_CRM_ADMIN_GUIDE.md) | Ch 7: Monitoring & Logging |
-| **Handle security incident** | [Security Manual Part 2](./docs/AISHA_CRM_SECURITY_MANUAL_PART2.md) | Ch 9: Incident Response |
-| **🆕 Configure call flows** | [Admin Guide](./docs/AISHA_CRM_ADMIN_GUIDE.md) | Ch 9.6: Call Flow System |
-| **🆕 Set up AI campaigns** | [User Guide](./docs/AISHA_CRM_USER_GUIDE.md) | Ch 10: AI Campaigns |
-| **🆕 Test telephony webhooks** | [CALL_FLOW_QUICK_TEST.md](./CALL_FLOW_QUICK_TEST.md) | All Scenarios |
-| **🆕 Validate API endpoints** | [NEW_ENDPOINTS_TEST_GUIDE.md](./NEW_ENDPOINTS_TEST_GUIDE.md) | All Tests |
+**Legacy docs** are archived in `docs/archive/` for reference.
 
 ---
 
-## 🎯 Recent Features & Enhancements
+## 🚀 Quick Start
 
-### 📞 AI-Powered Telephony & Call Flow System
-Complete telephony integration with intelligent call handling:
+### Docker (Recommended)
 
-- **Multi-Provider Support:** Twilio, SignalWire, CallFluent, Thoughtly webhook adapters
-- **Smart Lead Creation:** Auto-creates leads from unknown inbound callers
-- **AI Transcript Analysis:** Extracts action items, sentiment, customer requests via Braid MCP
-- **Activity Auto-Completion:** Detects fulfillment patterns ("I sent you...") and closes pending tasks
-- **Call Context Preparation:** AI agents receive WHO to call, WHAT to say, and conversation history
-- **Campaign Integration:** Tracks campaign-triggered calls and progress updates
+```bash
+docker compose up -d --build
+```
 
-**Documentation:** [Admin Guide Ch 9.6 - Call Flow System](./docs/AISHA_CRM_ADMIN_GUIDE.md#96-call-flow-system) | [Call Flow Quick Test Guide](./CALL_FLOW_QUICK_TEST.md)
+- **Frontend**: http://localhost:4000
+- **Backend API**: http://localhost:4001
 
-### 🚀 AI Campaign Automation
-Intelligent campaign execution with background workers:
+### Local Development
 
-- **Multi-Channel Campaigns:** Email and AI-powered call campaigns
-- **Background Worker:** Automatic campaign execution with advisory locking for multi-instance safety
-- **Progress Tracking:** Real-time campaign status, contact reach, and success metrics
-- **Smart Scheduling:** Time-zone aware execution with configurable intervals
-- **Tenant Isolation:** Campaigns scoped per tenant with data access controls
+```bash
+# Install dependencies
+npm install
 
-**Documentation:** [Admin Guide Ch 9.5 - Campaign Worker](./docs/AISHA_CRM_ADMIN_GUIDE.md#95-campaign-worker-management) | [User Guide Ch 10 - AI Campaigns](./docs/AISHA_CRM_USER_GUIDE.md#chapter-10-ai-campaigns)
+# Start frontend (port 5173)
+npm run dev
 
-### 🩺 API Health Monitoring & Testing
-Built-in endpoint validation and diagnostics:
+# In another terminal - start backend (port 3001)
+cd backend && npm install && npm run dev
+```
 
-- **Automated Endpoint Testing:** One-click validation of all 13+ new telephony and campaign endpoints
-- **Error Tracking:** Monitors 404s, 5xx errors, auth failures, timeouts, rate limits
-- **Auto-Fix Suggestions:** Copy-paste solutions for common API issues
-- **Visual Dashboard:** Real-time health metrics with pass/fail indicators
+### Environment Setup
 
-**Location:** Settings → API Health | **Test Guide:** [NEW_ENDPOINTS_TEST_GUIDE.md](./NEW_ENDPOINTS_TEST_GUIDE.md)
+```bash
+cp .env.example .env
+# Edit .env with your Supabase credentials
+```
 
-### 🧠 Braid MCP Server Integration
-AI-powered transcript analysis and action extraction:
-
-- **Dual-Mode Analysis:** Braid MCP with GPT-4o-mini or pattern-based fallback
-- **Tenant-Specific AI Keys:** Automatic OpenAI key resolution per tenant
-- **Structured Action Extraction:** Identifies emails, meetings, proposals with priority assignment
-- **Redis Memory:** Multi-turn conversation context for better understanding
-- **Activity Auto-Creation:** Generates follow-up tasks from call transcripts
-
-**Documentation:** [Admin Guide Ch 9.7 - Braid MCP Server](./docs/AISHA_CRM_ADMIN_GUIDE.md#97-braid-mcp-server)
-
-### ⚡ Performance Optimizations
-Significant performance improvements across the application:
-
-- **User Context Centralization:** Reduced `User.me()` API calls by ~90% (from 6-12 calls to 1 per session)
-- **Global UserContext:** Single bootstrap fetch with React Context for all components
-- **Tenant Resolution Caching:** In-memory TTL cache (60s default) for tenant lookups with Prometheus metrics
-- **Performance Logging:** API endpoint timing tracked in `performance_logs` table
-- **Database Indexing:** Strategic indexes on foreign keys for faster JOINs
-
-**Documentation:** [MIGRATION_STATUS.md](./MIGRATION_STATUS.md) | [Database Manual - Migration 025](./docs/AISHA_CRM_DATABASE_MANUAL_PART2.md#73-features--optimization-025-036)
+See [ADMIN_GUIDE.md](./docs/ADMIN_GUIDE.md) for complete deployment instructions.
 
 ---
 
-## ✨ What Makes AI-SHA Special
+## ✨ Key Features
 
-### 🤖 Executive Assistant, Not Just CRM
-AI-SHA isn't a traditional CRM with AI features bolted on. It's an **Executive Assistant** that manages your entire business workflow:
+### 🤖 Executive AI Assistant (AiSHA)
 
-- **Create & Update Records:** Accounts, leads, contacts, opportunities
-- **Calendar Management:** Schedule meetings, detect conflicts, suggest alternatives
-- **Note Taking:** Capture meeting notes, search across all records
-- **Sales Pipeline:** Track opportunities, forecast revenue, manage stages
-- **Web Research:** Search companies, enrich data, validate information
-- **🆕 Call Management:** Handle inbound/outbound calls with AI transcript analysis
-- **🆕 Campaign Automation:** Execute multi-channel campaigns with AI-powered outreach
+AiSHA isn't a traditional CRM with AI bolted on — it's an **Executive Assistant** that manages your entire business workflow:
 
-### 🚀 Powered by Braid SDK
-Braid is an **AI-native language designed by LLMs, for LLMs** with:
+- **CRM Management**: Create, update, search accounts, leads, contacts, opportunities
+- **Calendar & Activities**: Schedule meetings, track tasks, manage deadlines
+- **Notes & Documentation**: Create, search, and organize notes across all records
+- **Sales Pipeline**: Track opportunities, forecast revenue, manage stages
+- **Web Research**: Search for company information, fetch external data
+- **AI Calling**: Initiate outbound calls via CallFluent or Thoughtly AI agents
+- **CRM Navigation**: Navigate users to any page via voice or chat commands
+- **Workflow Automation**: Create workflows from templates with customizable parameters
 
-- **Type Safety:** LLMs generate correct tool calls (no parameter hallucination)
-- **Capability Enforcement:** Explicit effect declarations (`!net`, `!clock`, `!fs`)
-- **Tenant Isolation:** Automatic `tenant_id` injection prevents data leaks
-- **Audit Logging:** Every action tracked for compliance
-- **Result Types:** `Result<T, E>` for explicit error handling
-- **🆕 MCP Server Integration:** Remote tool execution via HTTP with transcript analysis
+### 🔧 v3.0.0 CRM Lifecycle
 
-**27+ Production Tools** across 8 domains - see [EXECUTIVE_ASSISTANT_TRANSFORMATION.md](./EXECUTIVE_ASSISTANT_TRANSFORMATION.md) for full details.
+```
+BizDev Source → promote → Lead → qualify → Lead (qualified) → convert → Contact + Account + Opportunity
+```
+
+- **BizDev Sources**: Raw prospect data from various channels
+- **Leads**: Qualified prospects being nurtured
+- **Contacts**: Individuals with relationships to accounts
+- **Accounts**: Companies/organizations (B2B) or individuals (B2C)
+- **Opportunities**: Sales deals with pipeline stages
+
+### 🧠 Braid: AI-Native Database Language
+
+**Braid** is a custom domain-specific language (DSL) created specifically for AiSHA CRM to **enhance and secure AI-database interactions**. Developed collaboratively by the project creator and AI companions, Braid solves the fundamental challenge of giving AI assistants safe, structured access to production databases.
+
+#### Why Braid Was Created
+
+Traditional approaches to AI+database integration have critical flaws:
+- **Raw SQL is dangerous**: LLMs can hallucinate destructive queries
+- **ORM wrappers are leaky**: No tenant isolation guarantees
+- **JSON schemas are verbose**: Tool definitions become unwieldy at scale
+
+Braid addresses these with a purpose-built language:
+
+```braid
+// Example: Safe lead creation with automatic tenant isolation
+fn createLead(tenant: String, first_name: String, last_name: String, email: String) -> Result<Lead, CRMError> !net {
+  let response = http.post("/api/leads", {
+    body: { tenant_id: tenant, first_name, last_name, email }
+  });
+  return match response {
+    Ok{value} => Ok(value.data.lead),
+    Err{error} => Err({ tag: "CreationError", code: error.status })
+  };
+}
+```
+
+#### Key Braid Features
+
+| Feature | Benefit |
+|---------|---------|
+| **Type-Safe Parameters** | LLMs generate correct tool calls — no parameter hallucination |
+| **Automatic Tenant Injection** | Every operation is scoped to the current tenant |
+| **Effect Declarations** | `!net`, `!fs`, `!clock` make side effects explicit |
+| **Result Types** | `Result<T, E>` forces explicit error handling |
+| **Whitelist Enforcement** | Tools can only access pre-approved endpoints |
+| **60+ Production Tools** | CRM, calendar, notes, telephony, workflows, navigation |
+
+#### Dual Execution Modes
+
+Braid supports two execution paths:
+
+1. **In-Process (Primary)**: Tools execute directly in the backend via `braidIntegration-v2.js`
+   - Used for AiSHA chat interface
+   - Low latency, synchronous execution
+   - Tools defined in `braid-llm-kit/examples/assistant/*.braid`
+
+2. **Distributed MCP**: Tools execute via HTTP on the Braid MCP Node Server
+   - Used for external integrations, parallel execution, scaling
+   - Containerized in `braid-mcp-node-server/`
+   - Supports multi-tenant job queuing with Redis
+
+#### Braid Tool Categories
+
+```
+braid-llm-kit/examples/assistant/
+├── accounts.braid        # Account CRUD operations
+├── activities.braid      # Calendar and task management
+├── bizdev-sources.braid  # BizDev source management
+├── contacts.braid        # Contact CRUD operations
+├── leads.braid           # Lead management and qualification
+├── lifecycle.braid       # v3.0.0 promotion/conversion workflows
+├── navigation.braid      # CRM page navigation commands
+├── notes.braid           # Note creation and search
+├── opportunities.braid   # Sales pipeline management
+├── snapshot.braid        # Tenant data overview
+├── suggestions.braid     # AI-generated suggestions
+├── telephony.braid       # AI calling integration
+├── web-research.braid    # External data fetching
+└── workflows.braid       # Workflow automation
+```
+
+See `braid-llm-kit/README.md` for complete Braid documentation.
+
+### 🏗️ Architecture
+
+| Component | Technology |
+|-----------|------------|
+| **Frontend** | React 18 + Vite, TailwindCSS, shadcn/ui |
+| **Backend** | Node.js + Express, 210+ API endpoints |
+| **Database** | PostgreSQL 15+ on Supabase, 50+ tables with RLS |
+| **AI Tools** | Braid DSL (`.braid` files in `braid-llm-kit/`) |
+| **Secrets** | Doppler for production, `.env` for local |
+| **Caching** | Redis (memory + cache layers) |
+| **Containers** | Docker Compose with health checks |
 
 ---
 
-## 🚨 Critical: Read This First
+## 📁 Project Structure
 
-**Before running ANY commands, read:**
-- **[System Administrator Guide - Ch 2: Docker Deployment](./docs/AISHA_CRM_ADMIN_GUIDE.md#chapter-2-docker-deployment)** - Production deployment setup
-- **[Developer Manual - Ch 2: Development Setup](./docs/AISHA_CRM_DEVELOPER_MANUAL.md#chapter-2-development-setup)** - Local dev environment
-- [TERMINAL_RULES.md](./TERMINAL_RULES.md) - **MANDATORY** terminal & directory rules
-- [DEV_QUICK_START.md](./DEV_QUICK_START.md) - Development workflow guide
-- **🆕 [CALL_FLOW_QUICK_TEST.md](./CALL_FLOW_QUICK_TEST.md)** - Test telephony integration
-
-**Having Git Issues?**
-- [GIT_SOLUTION_SUMMARY.md](./GIT_SOLUTION_SUMMARY.md) - **START HERE** for all git help
-- [GIT_QUICK_REFERENCE.md](./GIT_QUICK_REFERENCE.md) - Common git commands & fixes
-- [GIT_CONFLICT_RESOLUTION.md](./GIT_CONFLICT_RESOLUTION.md) - Fix merge conflicts & clean up branches
-- [EXAMPLE_CONFLICT_RESOLUTION.md](./EXAMPLE_CONFLICT_RESOLUTION.md) - Step-by-step walkthrough
-
-**TL;DR:**
-1. ALWAYS run `Get-Location` before executing commands
-2. Use separate terminals for backend, frontend, and your work
-3. Verify directory location - never assume where you are
- 4. See **[User Guide](./docs/AISHA_CRM_USER_GUIDE.md)** for feature documentation
- 5. See **[Database Manual](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md)** for database operations
- 6. Having git issues? Run `\.\cleanup-branches.ps1` or `./cleanup-branches.sh`
-
-## Getting Started
-
-### Quick Setup
-
-For **detailed setup instructions**, see:
-- **Production Deployment:** [System Administrator Guide - Ch 2: Docker Deployment](./docs/AISHA_CRM_ADMIN_GUIDE.md#chapter-2-docker-deployment)
-- **Development Setup:** [Developer Manual - Ch 2: Development Setup](./docs/AISHA_CRM_DEVELOPER_MANUAL.md#chapter-2-development-setup)
-- **Database Configuration:** [Database Manual - Ch 2: Initial Setup](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md#chapter-2-initial-setup)
-
-### Initial Setup (Quick Reference)
-
-1. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-2. **Configure environment variables**
-   ```bash
-   cp .env.example .env
-   ```
-   
-   Edit `.env` and configure:
-   ```
-   VITE_BASE44_APP_ID=your_app_id_here  # For data migration only
-   # Backend URL:
-   # - Local dev (npm run dev backend):       http://localhost:3001
-   # - Docker (recommended for this project): http://localhost:4001
-   VITE_AISHACRM_BACKEND_URL=http://localhost:4001
-   ```
-   
-   **⚠️ See [Admin Guide - Ch 3: Environment Configuration](./docs/AISHA_CRM_ADMIN_GUIDE.md#chapter-3-environment-configuration) for complete environment setup.**
-
-3. **Set up your backend server**
-   ```bash
-   cd backend
-   npm install
-   cp .env.example .env
-   # Edit backend/.env with your database credentials
-   npm run dev  # Starts with auto-restart enabled
-   ```
-   
-   **⚠️ Database setup required - see [Database Manual - Ch 2: Initial Setup](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md#chapter-2-initial-setup)**
-
-4. **Run the development server**
-   ```bash
-   npm run dev  # Frontend with hot module replacement
-   ```
-
-### Development vs Docker Ports
-
-To avoid confusion when testing, different ports are used for local development vs Docker containers:
-
-| Service | Local Dev | Docker Container |
-|---------|-----------|-----------------|
-| Frontend | `http://localhost:5173` (Vite default) | `http://localhost:4000` |
-| Backend API | `http://localhost:3001` | `http://localhost:4001` |
-
-**Local Development (non-Docker):**
-- Start with `npm run dev` (frontend at 5173) and `cd backend && npm run dev` (backend at 3001)
-- Or use `\.\start-all.ps1` to start both in background
-
-Note: This project primarily runs in Docker. When using Docker, always use ports 4000 (frontend) and 4001 (backend), and set `VITE_AISHACRM_BACKEND_URL` accordingly.
-
-**Docker Containers (recommended):**
-- Start with `docker compose up -d --build`
-- Access frontend at `http://localhost:4000`, backend at `http://localhost:4001`
-- Ensure root `.env` has `VITE_AISHACRM_BACKEND_URL=http://localhost:4001`
-
-## Quick Start (All Services)
-
-Use the convenience script to start everything at once:
-```bash
-.\start-all.ps1  # Starts both backend and frontend with auto-restart
+```
+├── src/                    # React frontend
+│   ├── components/         # UI components by domain
+│   ├── pages/              # Page-level components
+│   └── hooks/              # Custom React hooks
+├── backend/                # Node.js API server
+│   ├── routes/             # Express routes (28 categories)
+│   ├── lib/                # Core libraries (AI, caching, auth)
+│   └── migrations/         # Database migrations
+├── braid-llm-kit/          # Braid DSL tools
+│   └── examples/assistant/ # AI tool definitions (.braid files)
+├── braid-mcp-node-server/  # MCP server for distributed AI
+├── docs/                   # Documentation (7 core guides)
+├── scripts/                # Utility scripts
+└── docker-compose.yml      # Container orchestration
 ```
 
-## Braid MCP Node Server Integration
+---
 
-Networking note: this repo defines a shared Docker bridge network named `aishanet` so the backend and MCP server can communicate by service name across separate Compose projects. See `docs/SHARED_NETWORK.md`.
+## 🔒 Security
 
-This repo includes a Dockerized Node.js MCP-style Braid server under `braid-mcp-node-server/`. It exposes the Braid v0 executor (including the CRM adapter) over HTTP for use as a remote tool.
+- **Row-Level Security (RLS)**: Tenant isolation at database level
+- **JWT Authentication**: Supabase Auth with bcrypt password hashing
+- **Role-Based Access Control**: SuperAdmin, Admin, Manager, Employee
+- **Audit Logging**: All actions tracked to `audit_log` table
+- **Rate Limiting**: 100 requests/min per IP/user
 
-- Health check: `GET http://localhost:8000/health`
-- MCP endpoint: `POST http://localhost:8000/mcp/run` (expects `BraidRequestEnvelope`, returns `BraidResponseEnvelope`)
-- **🆕 Transcript Analysis:** AI-powered call transcript analysis with action item extraction
-- **🆕 Activity Auto-Creation:** Generates follow-up tasks from customer requests
-- **🆕 Tenant-Specific Keys:** Automatic OpenAI API key resolution per tenant
+See [SECURITY_GUIDE.md](./docs/SECURITY_GUIDE.md) for complete security documentation.
 
-### Running the MCP server
+---
 
-There are two ways to run the MCP server:
+## 🛠️ Development
 
-- **Standalone (recommended):**
-  ```bash
-  # From repo root
-  docker compose -f braid-mcp-node-server/docker-compose.yml up -d --build
-  # Server available at http://localhost:8000
-  ```
-
-- **Local dev script (if provided):**
-  ```bash
-  npm run serve:braid
-  ```
-  This uses `braid-mcp-node-server/docker-compose.yml` to bind the server to `http://localhost:8000`.
-
-When both stacks are up, the backend addresses the MCP at `http://braid-mcp-node-server:8000` via the shared `aishanet` network. The System Health dashboard probes MCP over the shared network first, then uses environment overrides.
-
-### LLM kit integration
-
-The AiSHA Braid LLM kit can treat the MCP server as a remote tool via:
-
-- `braid-llm-kit/tools/mcp-braid-server.json`:
-  ```json
-  {
-    "toolName": "braid-mcp-node-server",
-    "type": "http",
-    "endpoint": "http://localhost:8000/mcp/run",
-    "requestFormat": "BraidRequestEnvelope",
-    "responseFormat": "BraidResponseEnvelope"
-  }
-  ```
-
-Any Braid action with `resource.system: "crm"` sent to this endpoint will be handled by the CRM adapter in `braid-mcp-node-server`, which delegates to the existing AiSHA CRM backend routes.
-
-## Tenant Resolution & Archival
-
-### Canonical Tenant Resolution
-All APIs and internal jobs operate **UUID-first** for tenant identity. A shared resolver normalizes any identifier (UUID, legacy slug, or the special `system` slug) to a canonical form:
-
-- Endpoint (single): `GET /api/tenantresolve/:identifier?stats=true`
-- Endpoint (batch): `GET /api/tenantresolve?ids=a,b,c&stats=true`
-- Endpoint (reset): `POST /api/tenantresolve/reset` - clear cache and reset counters
-- Endpoint (metrics): `GET /api/tenantresolve/metrics` - Prometheus-style metrics
-- Response fields: `uuid`, `slug`, `found`, `source` (with `-cache` suffix when served from in-memory cache)
-- Environment: Set `SYSTEM_TENANT_ID` in `backend/.env` so `'system'` resolves to a stable UUID.
-
-The resolver includes an in‑memory TTL cache (default 60s, override with `TENANT_RESOLVE_CACHE_TTL_MS`) to reduce repeated Supabase lookups under high concurrency.
-
-**Cache Instrumentation:**
-- Pass `?stats=true` to any resolve endpoint to include cache statistics in the response
-- Visit `/api/tenantresolve/metrics` for Prometheus-compatible metrics:
-  - `tenant_resolve_cache_size` - Current cache entries
-  - `tenant_resolve_cache_hits_total` - Total cache hits
-  - `tenant_resolve_cache_misses_total` - Total cache misses
-  - `tenant_resolve_cache_hit_ratio` - Hit ratio (0-1)
-  - `tenant_resolve_cache_ttl_ms` - Cache TTL in milliseconds
-- Use `POST /api/tenantresolve/reset` to clear cache and reset counters (useful for testing or after tenant schema changes)
-
-### Memory Archival
-Ephemeral agent sessions/events stored in Redis are persisted via the archival job:
-- Tables: `agent_sessions_archive`, `agent_events_archive` (migration 075)
-- Uniqueness: Migration 076 adds a unique constraint on `(tenant_id, user_id, session_id)` to prevent duplicate session rows.
-- Upsert Logic: Archival uses `upsert` (conflict on tenant/user/session) ensuring idempotency.
-- Provenance: Each archived record embeds a `_tenant` object: `{ input, slug, uuid, source }` aiding audits and trace reviews.
-
-### Operational Guarantees
-- Duplicate archiving attempts are safe (no constraint violation).
-- Legacy clients sending slugs can rely on the resolve endpoints before invoking CRUD operations.
-- Audit and compliance tooling can batch-resolve historical slugs quickly using the batch endpoint.
-
-### Example Batch Resolve
-```bash
-curl "http://localhost:4001/api/tenantresolve?ids=system,acme-corp,550e8400-e29b-41d4-a716-446655440000"
-```
-
-### Recommended Usage Pattern
-1. Resolve all external tenant identifiers once at session start.
-2. Cache result locally (frontend or MCP adapter) for duration of interaction.
-3. Pass canonical UUID (`tenant_id`) in all mutating API calls.
-4. Store slug only for display; never for authorization decisions.
-
-
-## Development Features
-
-### Auto-Restart
-Both frontend and backend automatically restart when you save changes:
-- **Frontend**: Vite HMR (Hot Module Replacement) - instant updates in browser
-- **Backend**: Node.js `--watch` flag - auto-restarts on file changes
-
-### Development Mode
-- Backend: `npm run dev` uses `node --watch` for automatic restart
-- Frontend: `npm run dev` uses Vite with HMR enabled
-- Production: `npm start` (backend) and `npm run build` (frontend)
-
-### Copilot PR reviews
-- This repo auto-requests a GitHub Copilot code review on pull requests to `main` (or the default branch).
-- Workflow: `.github/workflows/copilot-review.yml`
-- Triggers: PR opened, reopened, synchronized, or marked ready for review (not drafts).
-- Skip convention: add label `no-copilot` to a PR to prevent Copilot from being requested.
-- Requirements: Copilot for Pull Requests must be enabled for your org/repo. You can also enable the built-in setting at Settings → Copilot → Pull requests → “Automatically request a review from GitHub Copilot”.
-- Tweaks: adjust the branch condition in the workflow if you want Copilot on other target branches.
-
-### Copilot Instructions & Tasks
-This repository includes comprehensive configuration for GitHub Copilot coding agent:
-
-- **Instructions:** `.github/copilot-instructions.md` - Project-specific guidance covering architecture, workflows, conventions, testing practices, and common pitfalls
-- **Tasks:** `.copilot/tasks.yml` - Pre-defined task templates for code refactoring, bug fixes, test improvements, and documentation updates
-- **Usage:** Assign issues to Copilot with clear descriptions and it will follow these instructions to maintain code quality and consistency
-
-## Building the app
+### Scripts
 
 ```bash
-npm run build
+npm run dev       # Start frontend dev server
+npm run build     # Production build
+npm run lint      # Run ESLint
+npm run test      # Run tests
 ```
 
-## Scripts
+### Docker Commands
 
-### Development Scripts
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run preview` - Preview production build locally
-- `npm run lint` - Run ESLint
-- `npm audit` - Check for security vulnerabilities
+```bash
+docker compose up -d --build     # Start all services
+docker compose logs -f backend   # View backend logs
+docker compose down              # Stop all services
+```
 
-### Utility Scripts
-- `.\start-all.ps1` - Start both frontend and backend (PowerShell)
-- `.\cleanup-branches.ps1` - Clean up git branches (PowerShell)
-- `./cleanup-branches.sh` - Clean up git branches (Bash)
-- `.\stop-all.ps1` - Stop all background processes
+### Port Reference
 
-## Project Structure
+| Service | Local Dev | Docker |
+|---------|-----------|--------|
+| Frontend | 5173 | 4000 |
+| Backend | 3001 | 4001 |
+| Braid MCP | — | 8000 |
 
-**For comprehensive architecture documentation, see:**
-- **[Developer Manual - Ch 3: Architecture Overview](./docs/AISHA_CRM_DEVELOPER_MANUAL.md#chapter-3-architecture-overview)** - Complete system architecture
-- **[Database Manual - Ch 3: Schema Design](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md#chapter-3-schema-design)** - Database schema (50+ tables)
+---
 
-### Frontend
-- `src/api/` - API clients with automatic Ai-SHA → Your Backend fallback
-- `src/functions/` - 197 business functions organized in 26 categories
-- `src/entities/` - 47 data entity schemas
-- `src/components/` - Reusable React components organized by domain
-- `src/pages/` - Page-level components and routes
-- `src/utils/` - **NEW:** Shared utility modules (logging, validation, permissions) - See `src/utils/README.md`
-- `src/hooks/` - Custom React hooks
+## 📞 Telephony Integration
 
-**See [Developer Manual - Ch 4: Frontend Development](./docs/AISHA_CRM_DEVELOPER_MANUAL.md#chapter-4-frontend-development) for details.**
+AiSHA integrates with AI calling providers:
 
-### Backend
-- `backend/server.js` - Express server with **210+ API endpoints**
-- `backend/routes/` - API route handlers (**28 categories**)
-- `backend/utils/` - **NEW:** Backend utility modules (logging, error handling)
-- `backend/.env` - Backend configuration
-- `backend/migrations/` - Database migrations (52+ files)
-- **🆕 `backend/lib/callFlowHandler.js`** - Telephony webhook processing
-- **🆕 `backend/lib/campaignWorker.js`** - Background campaign execution
-- **🆕 `backend/routes/telephony.js`** - 8 telephony webhook endpoints
-- **🆕 `backend/routes/aicampaigns.js`** - 8 AI campaign management endpoints
+- **CallFluent**: AI-powered outbound calls
+- **Thoughtly**: Conversational AI agents
+- **Twilio/SignalWire**: Webhook adapters for call events
 
-**See [Developer Manual - Ch 5: Backend Development](./docs/AISHA_CRM_DEVELOPER_MANUAL.md#chapter-5-backend-development) for details.**
+See [ADMIN_GUIDE.md](./docs/ADMIN_GUIDE.md) for telephony configuration.
 
-### Database
-- PostgreSQL 15+ hosted on Supabase Cloud
-- 50+ tables with row-level security (RLS)
-- UUID primary keys with tenant isolation
-- JSONB metadata for flexible schema
+---
 
-**See [Database Manual Part 1](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md) for complete schema documentation.**
+## 🔄 Braid MCP Server
 
-See also:
-- `docs/AI_CONVERSATIONS.md` — AI chat conversations: titles, topics, and Supabase-backed routes
+The **Braid MCP (Model Context Protocol) Node Server** is the distributed execution engine for Braid tools. Built in TypeScript, it enables remote AI tool execution over HTTP with enterprise features.
 
-## 🎯 Why Your Own Backend?
+### Architecture
 
-**The Problem:** When Ai-SHA went down, your entire app was inaccessible.
+```
+┌─────────────────┐     HTTP      ┌─────────────────────┐     Redis     ┌──────────────┐
+│  AiSHA Backend  │ ───────────►  │  Braid MCP Server   │ ◄───────────► │  Job Queue   │
+│  (port 4001)    │               │  (port 8000)        │               │  (BullMQ)    │
+└─────────────────┘               └─────────────────────┘               └──────────────┘
+                                           │
+                                           ▼
+                                  ┌─────────────────────┐
+                                  │  CRM Adapter        │
+                                  │  (crm.ts)           │
+                                  └─────────────────────┘
+```
 
-**The Solution:** Your own independent backend server that:
-- ✅ Hosts all 197+ business functions locally
-- ✅ **210+ API endpoints** across 28 categories
-- ✅ Stores data in your own PostgreSQL database (Supabase)
-- ✅ Auto-failover from Base44 to your backend
-- ✅ Complete control - no vendor lock-in
-- ✅ Can run on-premise or your own cloud
-- ✅ **🆕 AI-powered telephony** with call flow automation
-- ✅ **🆕 Campaign worker** for background email/call execution
+### Key Features
 
-**For detailed backend documentation, see:**
-- **[Developer Manual - Ch 5: Backend Development](./docs/AISHA_CRM_DEVELOPER_MANUAL.md#chapter-5-backend-development)** - Backend architecture and API development
-- **[Developer Manual - Appendix B: API Reference](./docs/AISHA_CRM_DEVELOPER_MANUAL.md#appendix-b-api-reference)** - Complete API endpoint listing (210+ endpoints across 28 categories)
-- **[Database Manual Part 1](./docs/AISHA_CRM_DATABASE_MANUAL_PART1.md)** - Database architecture and setup
-- **🆕 [CALL_FLOW_QUICK_TEST.md](./CALL_FLOW_QUICK_TEST.md)** - Test telephony webhooks and call flows
-- **🆕 [NEW_ENDPOINTS_TEST_GUIDE.md](./NEW_ENDPOINTS_TEST_GUIDE.md)** - Test AI campaigns and telephony endpoints
+- **HTTP API**: RESTful endpoint for tool execution (`POST /mcp/run`)
+- **Master-Worker Mode**: Scalable job queue with Redis for high-concurrency workloads
+- **Tenant Isolation**: Every request scoped by `tenant_id`
+- **Shared Docker Network**: Communicates with backend via `aishanet` bridge network
+- **Health Monitoring**: Built-in health checks and metrics
 
-See `backend/README.md` for legacy backend notes.
+### Running the MCP Server
 
-## Security Notes
+```bash
+# Start MCP server (standalone)
+docker compose -f braid-mcp-node-server/docker-compose.yml up -d --build
 
-⚠️ **Important**: Never commit your `.env` file to version control. It contains sensitive configuration.
+# Health check
+curl http://localhost:8000/health
 
-For comprehensive security documentation, see:
-- **[Security Manual Part 1](./docs/AISHA_CRM_SECURITY_MANUAL_PART1.md)** - Authentication, RLS, permissions, API security, data protection
-- **[Security Manual Part 2](./docs/AISHA_CRM_SECURITY_MANUAL_PART2.md)** - Audit logging, monitoring, incident response, compliance (GDPR, CCPA, SOC 2, HIPAA)
-- **[Admin Guide - Ch 6: Security Administration](./docs/AISHA_CRM_ADMIN_GUIDE.md#chapter-6-security-administration)** - Security operations and user management
+# Execute a Braid tool
+curl -X POST http://localhost:8000/mcp/run \
+  -H "Content-Type: application/json" \
+  -d '{"tool": "list_leads", "tenant_id": "your-tenant-uuid", "params": {}}'
+```
 
-### Key Security Features
-- 🔒 **Row-Level Security (RLS)** - Tenant isolation at database level (48+ tables)
-- 🔑 **JWT Authentication** - Supabase Auth with bcrypt password hashing
-- 👥 **Role-Based Access Control** - 4 roles: SuperAdmin, Admin, Manager, Employee
-- 📊 **Audit Logging** - All actions tracked to `audit_log` table
-- 🔐 **API Key Management** - Bcrypt-hashed keys with expiration support
-- 🛡️ **Rate Limiting** - 100 requests/min per IP/user
-- 🚨 **Security Monitoring** - Intrusion detection, suspicious pattern matching
+### Directory Structure
 
-See `SECURITY_PERFORMANCE_REVIEW.md` for legacy security notes.
+```
+braid-mcp-node-server/
+├── src/
+│   ├── server.ts           # Express server with 3 modes: server, node, standalone
+│   ├── lib/jobQueue.ts     # BullMQ job queue for master-worker pattern
+│   └── braid/adapters/
+│       └── crm.ts          # CRM adapter for Supabase operations
+├── docker-compose.yml      # Production container config
+└── docker-compose.local.yml # Local dev with .env file
+```
+
+See `braid-mcp-node-server/README.md` for complete documentation.
+
+---
+
+## 📝 License
+
+Proprietary. All rights reserved.
+
+---
+
+## 🔗 Quick Links
+
+- **Changelog**: [CHANGELOG.md](./CHANGELOG.md)
+- **Claude Instructions**: [CLAUDE.md](./CLAUDE.md)
+- **Docs Index**: [docs/README.md](./docs/README.md)

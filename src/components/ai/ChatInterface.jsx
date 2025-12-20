@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Send, Loader2, Phone, FileText, Headphones, ExternalLink } from "lucide-react";
@@ -8,6 +9,7 @@ import toast from 'react-hot-toast';
 import { processChatCommand } from '@/api/functions';
 
 export default function ChatInterface({ user }) {
+  const navigate = useNavigate();
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
@@ -20,6 +22,41 @@ export default function ChatInterface({ user }) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
+
+  // Helper to detect and execute navigation commands from AI tool responses
+  const handleNavigationFromToolResult = (toolInteractions) => {
+    if (!Array.isArray(toolInteractions)) return false;
+
+    for (const interaction of toolInteractions) {
+      if (interaction.tool === 'navigate_to_page') {
+        const resultStr = interaction.result_preview || '';
+        try {
+          // Parse the result_preview to get the navigation path
+          const result = JSON.parse(resultStr);
+
+          if (result?.action === 'navigate' && result?.path) {
+            setTimeout(() => {
+              navigate(result.path);
+              toast.success(`Navigating to ${result.page || result.path}`);
+            }, 500); // Small delay so user sees the message first
+            return true;
+          }
+        } catch (_e) {
+          // Try regex fallback for truncated JSON
+          const pathMatch = resultStr.match(/"path":\s*"([^"]+)"/);
+          const pageMatch = resultStr.match(/"page":\s*"([^"]+)"/);
+          if (pathMatch?.[1]) {
+            setTimeout(() => {
+              navigate(pathMatch[1]);
+              toast.success(`Navigating to ${pageMatch?.[1] || pathMatch[1]}`);
+            }, 500);
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -65,6 +102,11 @@ export default function ChatInterface({ user }) {
             data: data.data || {},
             data_summary: data.data_summary
           }]);
+
+          // Check for navigation commands in tool interactions
+          if (data.tool_interactions) {
+            handleNavigationFromToolResult(data.tool_interactions);
+          }
         } else {
           setMessages(prev => [...prev, { 
             role: 'assistant', 

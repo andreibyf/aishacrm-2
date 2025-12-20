@@ -94,17 +94,26 @@ export default function createActivityV2Routes(_pgPool) {
       // In Progress = In Progress AND (Due Date >= Today OR Null)
       const todayStr = new Date().toISOString().split('T')[0];
 
-      if (status === 'overdue') {
-        q = q.in('status', ['scheduled', 'in_progress'])
-          .lt('due_date', todayStr);
-      } else if (status === 'scheduled') {
+      // Normalize status aliases (context dictionary mapping)
+      // AI/user-friendly terms → database terms
+      let normalizedStatus = status;
+      if (status === 'planned' || status === 'pending') {
+        normalizedStatus = 'scheduled';
+      } else if (status === 'done' || status === 'finished') {
+        normalizedStatus = 'completed';
+      }
+
+      if (normalizedStatus === 'overdue') {
+        // Just check for status='overdue' in DB
+        q = q.eq('status', 'overdue');
+      } else if (normalizedStatus === 'scheduled') {
         q = q.eq('status', 'scheduled')
           .or(`due_date.gte.${todayStr},due_date.is.null`);
-      } else if (status === 'in_progress') {
+      } else if (normalizedStatus === 'in_progress') {
         q = q.eq('status', 'in_progress')
           .or(`due_date.gte.${todayStr},due_date.is.null`);
-      } else if (status) {
-        q = q.eq('status', status);
+      } else if (normalizedStatus && normalizedStatus !== 'all') {
+        q = q.eq('status', normalizedStatus);
       }
 
       if (filter) {

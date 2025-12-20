@@ -236,6 +236,22 @@ class CacheManager {
   }
 
   /**
+   * Flush all cache (for dev mode startup or manual cache clear)
+   */
+  async flushAll() {
+    if (!this.connected) return false;
+
+    try {
+      await this.client.flushAll();
+      console.log('[CacheManager] All cache flushed');
+      return true;
+    } catch (error) {
+      console.error('[CacheManager] FlushAll error:', error);
+      return false;
+    }
+  }
+
+  /**
    * Close Redis connection
    */
   async disconnect() {

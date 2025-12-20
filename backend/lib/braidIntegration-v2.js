@@ -114,7 +114,11 @@ export const TOOL_REGISTRY = {
   approve_suggestion: { file: 'suggestions.braid', function: 'approveSuggestion', policy: 'WRITE_OPERATIONS' },
   reject_suggestion: { file: 'suggestions.braid', function: 'rejectSuggestion', policy: 'WRITE_OPERATIONS' },
   apply_suggestion: { file: 'suggestions.braid', function: 'applySuggestion', policy: 'WRITE_OPERATIONS' },
-  trigger_suggestion_generation: { file: 'suggestions.braid', function: 'triggerSuggestionGeneration', policy: 'WRITE_OPERATIONS' }
+  trigger_suggestion_generation: { file: 'suggestions.braid', function: 'triggerSuggestionGeneration', policy: 'WRITE_OPERATIONS' },
+
+  // CRM Navigation (v3.0.0 - allows AI to navigate user to pages)
+  navigate_to_page: { file: 'navigation.braid', function: 'navigateTo', policy: 'READ_ONLY' },
+  get_current_page: { file: 'navigation.braid', function: 'getCurrentPage', policy: 'READ_ONLY' }
 };
 
 /**
@@ -145,9 +149,14 @@ const TOOL_DESCRIPTIONS = {
   create_activity: 'Create a new Activity (task, meeting, call, email) in the CRM.',
   update_activity: 'Update an existing Activity record by its ID.',
   mark_activity_complete: 'Mark an Activity as completed.',
-  list_activities: 'List Activities in the CRM. FIRST ask user: "Would you like all activities, or filter by status (pending, completed, overdue)?" Pass status="all" for all activities. IMPORTANT: If more than 5 results, summarize the count and tell user to check the Activities page in the UI for the full list.',
+  get_upcoming_activities: 'Get upcoming activities for a SPECIFIC user by their email. Requires assigned_to as the user\'s email address. Use list_activities instead for general calendar queries.',
+  schedule_meeting: 'Schedule a new meeting with attendees. Creates a meeting-type activity with date, time, duration, and attendee list.',
+  list_activities: 'List all Activities in the CRM. Use this for calendar/schedule queries. Pass status="planned" for upcoming/pending activities, status="completed" for past activities, or status="all" for everything. Returns activities across the tenant.',
   search_activities: 'Search for Activities by subject, body, or type. ALWAYS use this first when user asks about an activity by name or keyword.',
   get_activity_details: 'Get the full details of a specific Activity by its UUID. Only use when you already have the activity_id.',
+  delete_activity: 'Delete an Activity by its ID. Use with caution - this permanently removes the activity.',
+
+
 
   // Notes
   create_note: 'Create a new Note attached to any CRM record (account, lead, contact, opportunity).',
@@ -212,7 +221,11 @@ const TOOL_DESCRIPTIONS = {
   approve_suggestion: 'Approve a pending AI suggestion, marking it ready for application. Requires reviewer notes.',
   reject_suggestion: 'Reject an AI suggestion with reason. Helps improve future suggestion quality through feedback.',
   apply_suggestion: 'Execute an approved AI suggestion. This performs the suggested action (create, update, etc.) on the target record.',
-  trigger_suggestion_generation: 'Manually trigger AI suggestion generation for a specific trigger ID. Runs the trigger logic immediately.'
+  trigger_suggestion_generation: 'Manually trigger AI suggestion generation for a specific trigger ID. Runs the trigger logic immediately.',
+
+  // CRM Navigation (v3.0.0 - allows AI to navigate user to pages)
+  navigate_to_page: 'Navigate the user to a specific CRM page. Use this when the user says "take me to", "go to", "show me", or "open" a page. Valid pages: dashboard, leads, contacts, accounts, opportunities, activities, calendar, settings, workflows, reports, bizdev-sources, projects, workers, user-management. Optionally pass a record_id to go directly to a specific record.',
+  get_current_page: 'Get information about the current page the user is viewing. Useful for context-aware responses.'
 };
 
 /**
@@ -257,7 +270,16 @@ Example response: "You're welcome! Let me know if you need anything else. Going 
 - **Web Research:** Search for company information, fetch external data
 - **Workflow Automation:** Create workflows from templates with customizable parameters
 - **AI Calling:** Initiate outbound calls via CallFluent or Thoughtly AI agents
+- **CRM Navigation:** Navigate users to any page in the CRM (dashboard, leads, contacts, accounts, etc.)
 - **Proactive Assistance:** Suggest next actions, follow-ups, priority tasks
+
+**CRM NAVIGATION (IMPORTANT):**
+- You CAN navigate users to different CRM pages using the navigate_to_page tool
+- When user says "take me to", "go to", "show me", "open", or "navigate to" a page, USE the navigate_to_page tool
+- Valid pages: dashboard, leads, contacts, accounts, opportunities, activities, calendar, settings, workflows, reports, bizdev-sources, projects, workers, user-management
+- Example: User says "Take me to the Leads page" → Call navigate_to_page with page="leads"
+- You can also navigate to specific records by passing record_id parameter
+- ALWAYS use the tool for navigation requests - do NOT tell users you cannot navigate
 
 **Data Structure Guide (CRITICAL - Matches DB):**
 - Accounts: {id, name, annual_revenue, industry, website, email, phone, assigned_to, metadata}
@@ -305,6 +327,7 @@ When creating a workflow, ALWAYS use list_workflow_templates first to see availa
 - Check calendar for conflicts before scheduling
 - Before initiating calls, confirm contact has a valid phone number
 - When uncertain about which entity (Account/Lead/Contact) is meant, ASK before acting
+- When user asks to navigate to a page, USE navigate_to_page tool immediately
 `;
 
 /**
@@ -544,6 +567,7 @@ const BRAID_PARAM_ORDER = {
   updateAccount: ['tenant', 'account_id', 'updates'],
   getAccountDetails: ['tenant', 'account_id'],
   listAccounts: ['tenant', 'limit'],
+  searchAccounts: ['tenant', 'query', 'limit'],
   deleteAccount: ['tenant', 'account_id'],
 
   // Leads
@@ -552,18 +576,21 @@ const BRAID_PARAM_ORDER = {
   qualifyLead: ['tenant', 'lead_id', 'notes'],
   convertLeadToAccount: ['tenant', 'lead_id', 'options'],
   listLeads: ['tenant', 'status', 'limit'],
+  searchLeads: ['tenant', 'query', 'limit'],
   getLeadDetails: ['tenant', 'lead_id'],
   deleteLead: ['tenant', 'lead_id'],
 
   // Activities
-  createActivity: ['tenant', 'type', 'subject', 'body', 'related_to', 'related_id', 'due_date'],
+  createActivity: ['tenant', 'subject', 'activity_type', 'due_date', 'assigned_to', 'related_to_type', 'related_to_id', 'body'],
   updateActivity: ['tenant', 'activity_id', 'updates'],
   markActivityComplete: ['tenant', 'activity_id'],
-  getUpcomingActivities: ['tenant', 'days', 'limit'],
+  getUpcomingActivities: ['tenant', 'assigned_to', 'days'],
   listActivities: ['tenant', 'status', 'limit'],
+  searchActivities: ['tenant', 'query', 'limit'],
   getActivityDetails: ['tenant', 'activity_id'],
-  scheduleMeeting: ['tenant', 'subject', 'attendees', 'date', 'duration', 'location'],
+  scheduleMeeting: ['tenant', 'subject', 'attendees', 'date_time', 'duration_minutes', 'assigned_to'],
   deleteActivity: ['tenant', 'activity_id'],
+
 
   // Notes
   createNote: ['tenant', 'content', 'related_to', 'related_id'],
@@ -577,6 +604,7 @@ const BRAID_PARAM_ORDER = {
   createOpportunity: ['tenant', 'name', 'description', 'amount', 'stage', 'probability', 'close_date', 'account_id', 'contact_id'],
   updateOpportunity: ['tenant', 'opportunity_id', 'updates'],
   listOpportunitiesByStage: ['tenant', 'stage', 'limit'],
+  searchOpportunities: ['tenant', 'query', 'limit'],
   getOpportunityDetails: ['tenant', 'opportunity_id'],
   getOpportunityForecast: ['tenant', 'period'],
   markOpportunityWon: ['tenant', 'opportunity_id', 'close_details'],
@@ -619,7 +647,11 @@ const BRAID_PARAM_ORDER = {
   approveSuggestion: ['tenant', 'suggestion_id', 'reviewer_notes'],
   rejectSuggestion: ['tenant', 'suggestion_id', 'rejection_reason'],
   applySuggestion: ['tenant', 'suggestion_id'],
-  triggerSuggestionGeneration: ['tenant', 'trigger_id']
+  triggerSuggestionGeneration: ['tenant', 'trigger_id'],
+
+  // CRM Navigation (v3.0.0)
+  navigateTo: ['tenant', 'page', 'record_id'],
+  getCurrentPage: ['tenant']
 };
 
 /**
