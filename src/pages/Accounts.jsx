@@ -432,17 +432,75 @@ export default function AccountsPage() {
 
   // Listen for entity-modified events for instant refresh
   useEffect(() => {
-    const handleEntityModified = (event) => {
+    const handleEntityModified = async (event) => {
       if (event.detail?.entity === 'Account') {
-        console.log('[Accounts] Entity modified event received, refreshing...');
+        console.log('[Accounts] Entity modified event received, force refreshing...');
+        // Clear cache first
         clearCacheByKey('Account');
-        loadAccounts();
-        loadTotalStats();
+
+        // Force direct API fetch, bypassing cache entirely
+        setLoading(true);
+        try {
+          const currentTenantFilter = getTenantFilter();
+          // Direct call without cache
+          const freshData = await Account.filter(currentTenantFilter);
+
+          let filtered = freshData || [];
+
+          // Apply client-side filters
+          if (searchTerm) {
+            const search = searchTerm.toLowerCase();
+            filtered = filtered.filter((account) =>
+              account.name?.toLowerCase().includes(search) ||
+              account.website?.toLowerCase().includes(search) ||
+              account.email?.toLowerCase().includes(search) ||
+              account.phone?.includes(searchTerm)
+            );
+          }
+
+          if (typeFilter !== "all") {
+            filtered = filtered.filter((account) => account.type === typeFilter);
+          }
+
+          if (selectedTags.length > 0) {
+            filtered = filtered.filter((account) =>
+              Array.isArray(account.tags) &&
+              selectedTags.every((tag) => account.tags.includes(tag))
+            );
+          }
+
+          // Sort by created_date descending
+          filtered.sort((a, b) =>
+            new Date(b.created_date) - new Date(a.created_date)
+          );
+
+          setTotalItems(filtered.length);
+
+          // Apply pagination
+          const startIndex = (currentPage - 1) * pageSize;
+          const endIndex = startIndex + pageSize;
+          setAccounts(filtered.slice(startIndex, endIndex));
+
+          // Update stats
+          const stats = {
+            total: freshData.length,
+            customer: freshData.filter((a) => a.type === "customer").length,
+            prospect: freshData.filter((a) => a.type === "prospect").length,
+            partner: freshData.filter((a) => a.type === "partner").length,
+            competitor: freshData.filter((a) => a.type === "competitor").length,
+            inactive: freshData.filter((a) => a.type === "inactive").length || 0,
+          };
+          setTotalStats(stats);
+        } catch (error) {
+          console.error('[Accounts] Force refresh failed:', error);
+        } finally {
+          setLoading(false);
+        }
       }
     };
     window.addEventListener('entity-modified', handleEntityModified);
     return () => window.removeEventListener('entity-modified', handleEntityModified);
-  }, [clearCacheByKey, loadAccounts, loadTotalStats]);
+  }, [clearCacheByKey, getTenantFilter, searchTerm, typeFilter, selectedTags, currentPage, pageSize]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
