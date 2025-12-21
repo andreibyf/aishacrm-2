@@ -45,6 +45,16 @@ const FORBIDDEN_PATTERNS = [
   'doppler',
 ];
 
+/**
+ * Escape shell argument to prevent command injection (CWE-78)
+ * Wraps the argument in single quotes and escapes any single quotes within
+ */
+function escapeShellArg(arg) {
+  if (arg === undefined || arg === null) return "''";
+  // Replace single quotes with '\'' (end quote, escaped quote, start quote)
+  return "'" + String(arg).replace(/'/g, "'\\''") + "'";
+}
+
 // Developer AI Tools
 const DEVELOPER_TOOLS = [
   {
@@ -359,8 +369,13 @@ async function searchCode({ pattern, directory = 'backend', file_pattern, case_i
   
   const fullPath = path.join('/app', directory);
   
+  // Sanitize inputs to prevent shell injection (CWE-78)
+  const safePattern = escapeShellArg(pattern);
+  const safeFilePattern = escapeShellArg(file_pattern || '*.js');
+  const safeFullPath = escapeShellArg(fullPath);
+
   try {
-    let cmd = `grep -rn${case_insensitive ? 'i' : ''} --include="${file_pattern || '*.js'}" "${pattern}" "${fullPath}" 2>/dev/null | head -50`;
+    let cmd = `grep -rn${case_insensitive ? 'i' : ''} --include=${safeFilePattern} ${safePattern} ${safeFullPath} 2>/dev/null | head -50`;
     const { stdout } = await execAsync(cmd, { maxBuffer: 1024 * 1024 });
     
     if (!stdout.trim()) {
@@ -425,8 +440,10 @@ async function readLogs({ log_type, lines = 100, filter }) {
         return { error: `Unknown log type: ${log_type}` };
     }
     
+    // Sanitize filter to prevent shell injection (CWE-78)
     if (filter) {
-      cmd = `${cmd} | grep -i "${filter}"`;
+      const safeFilter = escapeShellArg(filter);
+      cmd = `${cmd} | grep -i ${safeFilter}`;
     }
     
     const { stdout } = await execAsync(cmd, { maxBuffer: 1024 * 1024 });
