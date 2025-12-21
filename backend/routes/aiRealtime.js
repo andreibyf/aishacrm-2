@@ -190,6 +190,7 @@ export default function createAiRealtimeRoutes(pgPool) {
           type: 'realtime',
           model: DEFAULT_REALTIME_MODEL,
           instructions: enhancedInstructions,
+          max_output_tokens: 4096, // Maximum allowed for gpt-4o-realtime
           audio: {
             output: {
               voice: DEFAULT_REALTIME_VOICE,
