@@ -103,19 +103,14 @@ fn advanceOpportunityStage(
   tenant: String,
   opportunity_id: String,
   new_stage: String,
+  probability: Number,
   notes: String
 ) -> Result<Object, CRMError> !net {
   // v3.0.0 Workflow Step 4: Progress opportunity through sales stages
   // Stages: prospecting → qualification → proposal → negotiation → closed_won/closed_lost
+  // Probability should be set by caller based on stage:
+  //   prospecting: 10, qualification: 25, proposal: 50, negotiation: 75, closed_won: 100, closed_lost: 0
   let url = "/api/v2/opportunities/" + opportunity_id;
-  
-  // Calculate probability based on stage
-  let probability = 10;
-  if new_stage == "qualification" { probability = 25; }
-  if new_stage == "proposal" { probability = 50; }
-  if new_stage == "negotiation" { probability = 75; }
-  if new_stage == "closed_won" { probability = 100; }
-  if new_stage == "closed_lost" { probability = 0; }
   
   let body = {
     tenant_id: tenant,
