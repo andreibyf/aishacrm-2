@@ -1453,8 +1453,10 @@ export default function createMCPRoutes(_pgPool) {
       // Build fallback baseline helper
       const buildBaseline = () => {
         const strip = (s) => String(s || '').replace(/<[^>]+>/g, '').trim();
+        // Generate industry-specific market overview instead of using irrelevant Wikipedia content
+        const industryOverview = `The ${INDUSTRY} market in ${LOCATION} continues to evolve with changing economic conditions and technological advancements. Key drivers include infrastructure investment, digital transformation, and workforce development initiatives. ${BUSINESS_MODEL} companies in this sector are navigating supply chain dynamics, regulatory requirements, and competitive pressures while capitalizing on regional growth opportunities.`;
         return {
-          market_overview: overview || `Market context for ${INDUSTRY} in ${LOCATION}.`,
+          market_overview: industryOverview,
           swot_analysis: {
             strengths: [
               `${INDUSTRY} demand resilience in ${LOCATION}`,
@@ -1530,15 +1532,8 @@ export default function createMCPRoutes(_pgPool) {
       let insights = null;
       try { insights = JSON.parse(failoverResult.result.content || "null"); } catch { insights = null; }
       if (!insights) {
-        // fallback minimal object
-        insights = {
-          market_overview: overview || `Market context for ${INDUSTRY} in ${LOCATION}.`,
-          swot_analysis: { strengths: [], weaknesses: [], opportunities: [], threats: [] },
-          competitive_landscape: { overview: "", major_competitors: [], market_dynamics: "" },
-          major_news: [],
-          recommendations: [],
-          economic_indicators: [],
-        };
+        // Use the full baseline generator instead of minimal object
+        insights = buildBaseline();
       }
 
       return res.json({
