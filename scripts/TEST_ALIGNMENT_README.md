@@ -309,6 +309,9 @@ To extend the script:
 
 ## Related Documentation
 
+- [Required Secrets for Workflow](../docs/workflows/TEST_ALIGNMENT_SECRETS.md) - **Zero custom secrets needed!**
+- [Workflow Secrets Reference](../docs/WORKFLOW_SECRETS_REFERENCE.md)
+- [Secrets Analysis Summary](../docs/TEST_ALIGNMENT_SECRETS_ANALYSIS.md)
 - [Testing Strategy](../docs/TESTING.md)
 - [CI/CD Pipeline](../.github/workflows/)
 - [Code Quality Standards](../docs/CODE_QUALITY.md)
