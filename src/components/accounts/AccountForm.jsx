@@ -230,6 +230,9 @@ export default function AccountForm({
       // Show success toast
       toast.success(account?.id ? 'Account updated successfully' : 'Account created successfully');
 
+      // Dispatch entity-modified event for instant refresh across all components
+      window.dispatchEvent(new CustomEvent('entity-modified', { detail: { entity: 'Account', id: result?.id } }));
+
       // Defensive: verify onSubmit is still valid before calling
       if (onSubmit && typeof onSubmit === 'function') {
         console.log('[AccountForm] Calling onSubmit...');

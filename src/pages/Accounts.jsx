@@ -430,6 +430,20 @@ export default function AccountsPage() {
     }
   }, [user, selectedTenantId, selectedEmail, loadTotalStats]);
 
+  // Listen for entity-modified events for instant refresh
+  useEffect(() => {
+    const handleEntityModified = (event) => {
+      if (event.detail?.entity === 'Account') {
+        console.log('[Accounts] Entity modified event received, refreshing...');
+        clearCacheByKey('Account');
+        loadAccounts();
+        loadTotalStats();
+      }
+    };
+    window.addEventListener('entity-modified', handleEntityModified);
+    return () => window.removeEventListener('entity-modified', handleEntityModified);
+  }, [clearCacheByKey, loadAccounts, loadTotalStats]);
+
   // Reset to page 1 when filters change
   useEffect(() => {
     if (initialLoadDone.current) {

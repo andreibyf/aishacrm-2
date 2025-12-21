@@ -217,6 +217,9 @@ export default function CustomerForm({
       // Show success toast
       toast.success(customer?.id ? 'Customer updated successfully' : 'Customer created successfully');
 
+      // Dispatch entity-modified event for instant refresh across all components
+      window.dispatchEvent(new CustomEvent('entity-modified', { detail: { entity: 'Account', id: result?.id } }));
+
       // Defensive: verify onSubmit is still valid before calling
       if (onSubmit && typeof onSubmit === 'function') {
         await onSubmit(result);
