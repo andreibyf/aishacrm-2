@@ -1,6 +1,10 @@
 # GitHub Copilot Code Coverage Configuration
 # This file configures how Copilot identifies test files and their corresponding source files.
 
+# IMPORTANT: Backend tests use Node.js assert module (node:assert/strict)
+# Assertions use: assert.equal(), assert.ok(), assert.strictEqual(), assert.deepEqual()
+# NOT expect() - this is valid and should not be flagged as "no assertions"
+
 # Test file patterns - tells Copilot where to find tests
 test_patterns:
   # Backend tests (node:test framework)
