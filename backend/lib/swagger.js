@@ -10,7 +10,7 @@ const options = {
     openapi: '3.0.0',
     info: {
       title: 'Aisha CRM API',
-      version: '2.1.0',
+      version: '3.1.0',
       description: `# Independent CRM Backend
 
 **210+ endpoints** organized across **28 API categories** for comprehensive customer relationship management.
@@ -138,7 +138,8 @@ For detailed guides and examples, visit the API documentation at \`/api-docs\``,
       { name: 'leads-v2', description: 'v2 Lead management with flattened metadata (internal pilot)' },
       { name: 'reports-v2', description: 'v2 Reports with AI-powered analytics, health scores, and predictions (internal pilot)' },
       { name: 'workflows-v2', description: 'v2 Workflows with AI-powered health analysis, structure validation, and optimization (internal pilot)' },
-      { name: 'workflow-templates', description: 'Pre-built workflow templates with parameterized instantiation for AI-assisted automation creation' }
+      { name: 'workflow-templates', description: 'Pre-built workflow templates with parameterized instantiation for AI-assisted automation creation' },
+      { name: 'developer-ai', description: 'Superadmin-only AI-powered code development assistant. Features: file read/write, code search, command execution with safety guardrails. Powered by Claude 3.5 Sonnet. Requires superadmin role.' }
     ]
   },
   // Paths to files containing OpenAPI definitions

@@ -2151,6 +2151,63 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
   // ============================================
   // DEVELOPER AI - Superadmin-only Claude-powered code assistant
   // ============================================
+
+  /**
+   * @swagger
+   * /api/ai/developer:
+   *   post:
+   *     summary: Developer AI Chat
+   *     description: |
+   *       Superadmin-only AI-powered code development assistant.
+   *       Features: file read/write, code search, command execution with safety guardrails.
+   *       Powered by Claude 3.5 Sonnet.
+   *     tags: [developer-ai]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - messages
+   *             properties:
+   *               messages:
+   *                 type: array
+   *                 items:
+   *                   type: object
+   *                   properties:
+   *                     role:
+   *                       type: string
+   *                       enum: [user, assistant]
+   *                     content:
+   *                       type: string
+   *     responses:
+   *       200:
+   *         description: AI response generated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 response:
+   *                   type: string
+   *                 model:
+   *                   type: string
+   *                   example: claude-3-5-sonnet
+   *                 usage:
+   *                   type: object
+   *                 durationMs:
+   *                   type: number
+   *       403:
+   *         description: Access denied - superadmin role required
+   *       503:
+   *         description: Developer AI not configured
+   */
   router.post('/developer', async (req, res) => {
     const startedAt = Date.now();
 
@@ -2220,6 +2277,46 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
   // ============================================
   // DEVELOPER AI - Approve pending action
   // ============================================
+
+  /**
+   * @swagger
+   * /api/ai/developer/approve/{actionId}:
+   *   post:
+   *     summary: Approve Developer AI Action
+   *     description: |
+   *       Approve and execute a pending Developer AI action (file write, command execution, etc.).
+   *       The actionId is returned when an action requires approval.
+   *     tags: [developer-ai]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: actionId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: The pending action ID to approve
+   *     responses:
+   *       200:
+   *         description: Action executed successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 action_type:
+   *                   type: string
+   *                   example: write_file
+   *                 durationMs:
+   *                   type: number
+   *       403:
+   *         description: Access denied - superadmin role required
+   *       404:
+   *         description: Action not found or already executed
+   */
   router.post('/developer/approve/:actionId', async (req, res) => {
     const startedAt = Date.now();
 
@@ -2282,6 +2379,43 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
   // ============================================
   // DEVELOPER AI - Reject pending action
   // ============================================
+
+  /**
+   * @swagger
+   * /api/ai/developer/reject/{actionId}:
+   *   post:
+   *     summary: Reject Developer AI Action
+   *     description: |
+   *       Reject a pending Developer AI action. The action will be cancelled and not executed.
+   *     tags: [developer-ai]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: actionId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: The pending action ID to reject
+   *     responses:
+   *       200:
+   *         description: Action rejected successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 message:
+   *                   type: string
+   *                   example: Action rejected
+   *       403:
+   *         description: Access denied - superadmin role required
+   *       404:
+   *         description: Action not found or already processed
+   */
   router.post('/developer/reject/:actionId', async (req, res) => {
     const startedAt = Date.now();
 
