@@ -11,6 +11,10 @@
   - SUPABASE_URL
   - SUPABASE_SERVICE_ROLE_KEY
 
+  Performance Optimization:
+  - Set TENANT_ID environment variable to skip auto-detection and improve performance
+    Example: TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46 node scripts/test-mcp-audit.js
+
   Usage:
     node scripts/test-mcp-audit.js
 */
@@ -65,13 +69,12 @@ let cachedTenantTable;
 
 async function detectTenantTable() {
   if (cachedTenantTable) return cachedTenantTable;
-  for (const table of TENANT_TABLE_NAMES) {
+  
+  // Parallel table detection for improved performance
+  const checks = TENANT_TABLE_NAMES.map(async (table) => {
     try {
       const { data: _data, error } = await supa.from(table).select('id').limit(1);
-      if (!error) {
-        cachedTenantTable = table;
-        return table;
-      }
+      if (!error) return table;
       if (error && !error.message?.includes('does not exist')) {
         console.warn(`Unexpected error checking table ${table}:`, error.message ?? error);
       }
@@ -80,11 +83,18 @@ async function detectTenantTable() {
         console.warn(`Error probing table ${table}:`, err.message);
       }
     }
-  }
-  return null;
+    return null;
+  });
+  
+  const results = await Promise.all(checks);
+  cachedTenantTable = results.find(r => r !== null) || null;
+  return cachedTenantTable;
 }
 
 (async () => {
+  const perfStart = Date.now();
+  console.log('[PERF] Test started');
+  
   const requestId = `test-${Date.now()}`;
   // Attempt to find a tenant to use for this test. The Supabase project used
   // for testing should contain a `tenants` or `tenant` table; otherwise set TENANT_ID
@@ -190,6 +200,8 @@ async function detectTenantTable() {
     process.exit(5);
   }
 
+  console.log(`[PERF] Tenant resolved in ${Date.now() - perfStart}ms`);
+
   const envelope = makeEnvelope(requestId, tenantId);
 
   console.log('Sending envelope to MCP:', MCP_RUN);
@@ -200,9 +212,32 @@ async function detectTenantTable() {
   });
   const body = await resp.json().catch(() => null);
   console.log('MCP response status', resp.status, body);
+  console.log(`[PERF] MCP call completed in ${Date.now() - perfStart}ms`);
 
-  // wait a bit for audit insertion
-  await sleep(1500);
+  // Poll for audit log entry (max 3s, check every 200ms)
+  const maxWait = 3000;
+  const pollInterval = 200;
+  const pollStartTime = Date.now();
+  let found = false;
+
+  while (Date.now() - pollStartTime < maxWait) {
+    const { data: checkData } = await supa
+      .from('audit_log')
+      .select('id')
+      .eq('request_id', requestId)
+      .limit(1);
+    
+    if (checkData && checkData.length > 0) {
+      found = true;
+      console.log(`[PERF] Audit log entry found after ${Date.now() - pollStartTime}ms`);
+      break;
+    }
+    await sleep(pollInterval);
+  }
+
+  if (!found) {
+    console.warn(`[PERF] Audit log polling timeout after ${maxWait}ms`);
+  }
 
   // Query by `request_id` (migration 053 adds this column)
   console.log('Querying Supabase audit_log for request_id=', requestId);
@@ -242,5 +277,7 @@ async function detectTenantTable() {
       created_at: row.created_at,
     }, null, 2));
   }
+  
+  console.log(`[PERF] Total test time: ${Date.now() - perfStart}ms`);
   process.exit(0);
 })();
