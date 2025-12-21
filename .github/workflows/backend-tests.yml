@@ -9,10 +9,51 @@ on:
     paths:
       - 'backend/**'
       - '.github/workflows/backend-tests.yml'
+  workflow_dispatch:
+
+env:
+  # Standard backend port used across the codebase
+  PORT: 3001
+  BACKEND_URL: http://localhost:3001
+  NODE_ENV: test
 
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: aishacrm_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/aishacrm_test
+      REDIS_URL: redis://localhost:6379
+      CI_BACKEND_TESTS: 'true'
+      # Skip tests that require Supabase in CI
+      SUPABASE_URL: ''
+      SUPABASE_SERVICE_KEY: ''
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,8 +68,14 @@ jobs:
       - name: Install backend dependencies
         run: npm --prefix backend ci
 
-      - name: Run backend tests
-        run: npm --prefix backend test
+      - name: Run backend unit tests
+        run: |
+          cd backend
+          node --test --test-timeout=30000 --test-reporter=tap \
+            __tests__/ai/*.test.js \
+            __tests__/routes/*.test.js
+        env:
+          BACKEND_URL: http://localhost:3001
 
       - name: Upload test artifacts (optional)
         if: failure()

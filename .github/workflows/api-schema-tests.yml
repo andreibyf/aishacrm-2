@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       backend_url:
-        description: "Backend URL to test (default: http://localhost:4001)"
+        description: "Backend URL to test (default: http://localhost:3001)"
         required: false
         type: string
       use_supabase:
@@ -52,11 +52,11 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/aishacrm_test
-      PORT: 4001
+      PORT: 3001
       NODE_ENV: test
       USE_SUPABASE_PROD: ${{ inputs.use_supabase && 'true' || 'false' }}
-      ALLOWED_ORIGINS: http://localhost:4000,http://localhost:5173
-      PLAYWRIGHT_BACKEND_URL: ${{ inputs.backend_url || 'http://localhost:4001' }}
+      ALLOWED_ORIGINS: http://localhost:3000,http://localhost:5173
+      PLAYWRIGHT_BACKEND_URL: ${{ inputs.backend_url || 'http://localhost:3001' }}
 
     steps:
       - name: Checkout code
@@ -109,14 +109,14 @@ jobs:
           echo $! > backend.pid
           # Wait for backend to be ready
           for i in {1..30}; do
-            if curl -sSf http://localhost:4001/health > /dev/null 2>&1; then
+            if curl -sSf http://localhost:3001/health > /dev/null 2>&1; then
               echo "Backend is ready"
               break
             fi
             echo "Waiting for backend... ($i/30)"
             sleep 2
           done
-          curl -v http://localhost:4001/health || exit 1
+          curl -v http://localhost:3001/health || exit 1
 
       - name: Install Playwright browsers
         run: npx playwright install chromium
