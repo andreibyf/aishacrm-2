@@ -462,7 +462,7 @@ export default function createAccountV2Routes(_pgPool) {
    *       404:
    *         description: Account not found
    */
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', invalidateCache('accounts'), async (req, res) => {
     try {
       const { id } = req.params;
       const body = req.body;
@@ -596,7 +596,7 @@ export default function createAccountV2Routes(_pgPool) {
    *       404:
    *         description: Account not found
    */
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', invalidateCache('accounts'), async (req, res) => {
     try {
       const { tenant_id } = req.query;
       const { id } = req.params;

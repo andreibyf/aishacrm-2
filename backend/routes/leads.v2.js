@@ -438,7 +438,7 @@ export default function createLeadsV2Routes() {
    *       200:
    *         description: Lead created
    */
-  router.post('/', async (req, res) => {
+  router.post('/', invalidateCache('leads'), async (req, res) => {
     try {
       const {
         tenant_id,
@@ -618,7 +618,7 @@ export default function createLeadsV2Routes() {
    *       404:
    *         description: Lead not found
    */
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', invalidateCache('leads'), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id, ...updates } = req.body;

@@ -223,7 +223,7 @@ export default function createActivityV2Routes(_pgPool) {
     }
   });
 
-  router.post('/', async (req, res) => {
+  router.post('/', invalidateCache('activities'), async (req, res) => {
     try {
       const { tenant_id, metadata, description, body, duration_minutes, duration, tags, ...payload } = req.body || {};
       // Accept either duration_minutes or duration (legacy) - prefer duration_minutes
@@ -299,7 +299,7 @@ export default function createActivityV2Routes(_pgPool) {
     }
   });
 
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', invalidateCache('activities'), async (req, res) => {
     try {
       const { id } = req.params;
       const { tenant_id, metadata, description, body, duration_minutes, duration, tags, ...payload } = req.body || {};
