@@ -68,6 +68,42 @@ jobs:
       - name: Install backend dependencies
         run: npm --prefix backend ci
 
+      - name: Start backend server
+        run: |
+          cd backend
+          # Start server in background
+          node server.js &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
+          
+          # Wait for server to be ready
+          echo "Waiting for backend server..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:3001/health > /dev/null 2>&1; then
+              echo "Backend server is ready!"
+              break
+            fi
+            if ! kill -0 $SERVER_PID 2>/dev/null; then
+              echo "Server died unexpectedly"
+              exit 1
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
+          
+          curl -sf http://localhost:3001/health || (echo 'Server did not start' && exit 1)
+        env:
+          BACKEND_URL: http://localhost:3001
+          PORT: 3001
+          NODE_ENV: test
+          # Provide minimal secrets for server to start
+          JWT_SECRET: test-jwt-secret-for-ci
+          SESSION_SECRET: test-session-secret-for-ci
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          REDIS_CACHE_URL: redis://localhost:6379
+          REDIS_MEMORY_URL: redis://localhost:6379
+
       - name: Run backend unit tests
         run: |
           cd backend
@@ -76,6 +112,16 @@ jobs:
             __tests__/routes/*.test.js
         env:
           BACKEND_URL: http://localhost:3001
+          CI: 'true'
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+      - name: Stop backend server
+        if: always()
+        run: |
+          if [ -n "$SERVER_PID" ]; then
+            kill $SERVER_PID 2>/dev/null || true
+          fi
 
       - name: Upload test artifacts (optional)
         if: failure()
