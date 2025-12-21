@@ -1268,6 +1268,9 @@ export default function createMCPRoutes(_pgPool) {
   // POST /api/mcp/market-insights - Orchestrate web + CRM tools and summarize via LLM into JSON schema
   router.post("/market-insights", async (req, res) => {
     try {
+      // User-Agent required by Wikipedia/MediaWiki API policy
+      const WIKIPEDIA_USER_AGENT = 'AishaCRM/1.0 (market-insights; contact@aishacrm.com)';
+
       const body = req.body || {};
       const tenantId = req.headers["x-tenant-id"] || body.tenant_id || body.tenantId || null;
       if (!tenantId) {
@@ -1306,17 +1309,45 @@ export default function createMCPRoutes(_pgPool) {
 
       // Wikipedia context (reuse logic from web tools)
       const searchQ = `${INDUSTRY} market ${LOCATION}`;
-      const searchResp = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=5&srsearch=${encodeURIComponent(searchQ)}`);
-      const searchJson = await searchResp.json();
-      const searchResults = searchJson?.query?.search || [];
+      let searchResults = [];
       let overview = "";
+
+      try {
+        const searchResp = await fetch(
+          `https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=5&srsearch=${encodeURIComponent(searchQ)}`,
+          {
+            headers: {
+              'User-Agent': WIKIPEDIA_USER_AGENT,
+              'Accept': 'application/json'
+            }
+          }
+        );
+        if (searchResp.ok) {
+          const searchJson = await searchResp.json();
+          searchResults = searchJson?.query?.search || [];
+        }
+      } catch (wikiErr) {
+        console.warn('[market-insights] Wikipedia search failed:', wikiErr?.message);
+        // Continue with empty results - LLM will generate baseline content
+      }
+
       if (searchResults.length) {
         const first = searchResults[0];
         const pageid = String(first.pageid);
         try {
-          const pageResp = await fetch(`https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&format=json&pageids=${encodeURIComponent(pageid)}`);
-          const pageJson = await pageResp.json();
-          overview = pageJson?.query?.pages?.[pageid]?.extract || "";
+          const pageResp = await fetch(
+            `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&format=json&pageids=${encodeURIComponent(pageid)}`,
+            {
+              headers: {
+                'User-Agent': WIKIPEDIA_USER_AGENT,
+                'Accept': 'application/json'
+              }
+            }
+          );
+          if (pageResp.ok) {
+            const pageJson = await pageResp.json();
+            overview = pageJson?.query?.pages?.[pageid]?.extract || "";
+          }
         } catch {
           overview = "";
         }
