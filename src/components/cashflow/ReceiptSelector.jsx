@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { DocumentationFile } from "@/api/entities";
 import { getTenantFilter } from "../shared/tenantUtils";
 import { useTenant } from "../shared/tenantContext";
-import { User } from "@/api/entities";
+import { useUser } from '@/components/shared/useUser.js';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,11 +20,12 @@ export default function ReceiptSelector({ onReceiptSelected, onCancel }) {
   const [processing, setProcessing] = useState(null);
   const { selectedTenantId } = useTenant();
 
+  const { user: currentUser } = useUser();
+
   const loadReceiptsAndUser = useCallback(async () => {
     try {
-      const user = await User.me();
-
-      const tenantFilter = getTenantFilter(user, selectedTenantId);
+      if (!currentUser) return;
+      const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
       
       const allDocs = await DocumentationFile.filter({
         ...tenantFilter,
@@ -41,7 +42,7 @@ export default function ReceiptSelector({ onReceiptSelected, onCancel }) {
     } finally {
       setLoading(false);
     }
-  }, [selectedTenantId]);
+  }, [selectedTenantId, currentUser]);
 
   useEffect(() => {
     loadReceiptsAndUser();

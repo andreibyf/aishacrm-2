@@ -17,8 +17,8 @@ permissions:
 jobs:
   analyze-default:
     # For private repos, CodeQL requires GitHub Advanced Security (GHAS).
-    # Run only for public repos OR when repo variable GHAS_ENABLED=='true'; skip scheduled here.
-    if: ${{ github.event_name != 'schedule' && (github.repository_visibility == 'public' || vars.GHAS_ENABLED == 'true') }}
+    # Run only for public repos; skip scheduled here.
+    if: ${{ github.event_name != 'schedule' && github.event.repository.private == false }}
     name: Analyze (default queries)
     runs-on: ubuntu-latest
     permissions:
@@ -47,7 +47,7 @@ jobs:
 
   analyze-extended:
     # Weekly security-extended run; same GHAS gating applies for private repos.
-    if: ${{ (github.event_name == 'schedule') && (github.repository_visibility == 'public' || vars.GHAS_ENABLED == 'true') }}
+    if: ${{ github.event_name == 'schedule' }}
     name: Analyze (security-extended)
     runs-on: ubuntu-latest
     permissions:

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { MessageCircle, X, Mic, MicOff, Volume2, VolumeX, Loader2 } from 'lucide-react';
+import { MessageCircle, X, Mic, MicOff, Volume2, VolumeX, Loader2, Code } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { generateDailyBriefing } from "@/api/functions";
 import { generateElevenLabsSpeech } from "@/api/functions";
-import { processChatCommand } from "@/api/functions";
+import { processChatCommand, processDeveloperCommand } from "@/api/functions";
+import { logDev } from "@/utils/devLogger";
+
+const EXEC_AVATAR_SRC = '/assets/aisha-executive-portrait.jpg';
 
 export default function AIAssistantWidget({ user }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -27,6 +30,7 @@ export default function AIAssistantWidget({ user }) {
   const [isDetectingVoice, setIsDetectingVoice] = useState(false);
   const [currentTranscript, setCurrentTranscript] = useState('');
   const [isProcessing, setIsProcessing] = useState(false); // Add processing state to prevent loops
+  const [isDeveloperMode, setIsDeveloperMode] = useState(false); // Developer Mode for superadmins
 
   const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -72,7 +76,7 @@ export default function AIAssistantWidget({ user }) {
   // Separate fallback function to avoid repetition
   const fallbackToWebSpeech = useCallback((text) => {
     if (!voiceEnabled || !text || typeof text !== 'string' || text.trim().length === 0) {
-      console.log('❌ Cannot speak (fallback): voiceEnabled =', voiceEnabled, 'text =', text);
+      logDev('❌ Cannot speak (fallback): voiceEnabled =', voiceEnabled, 'text =', text);
       return;
     }
 
@@ -99,11 +103,11 @@ export default function AIAssistantWidget({ user }) {
         }
         
         utterance.onstart = () => {
-          console.log('🔊 Web Speech API started');
+          logDev('🔊 Web Speech API started');
           setIsSpeaking(true);
         };
         utterance.onend = () => {
-          console.log('🔊 Web Speech API ended');
+          logDev('🔊 Web Speech API ended');
           setIsSpeaking(false);
         };
         utterance.onerror = (error) => {
@@ -112,7 +116,7 @@ export default function AIAssistantWidget({ user }) {
         };
         
         window.speechSynthesis.speak(utterance);
-        console.log('🔊 Using browser TTS fallback');
+        logDev('🔊 Using browser TTS fallback');
       } catch (webSpeechError) {
         console.error('❌ Web Speech API also failed:', webSpeechError);
         setIsSpeaking(false);
@@ -125,7 +129,7 @@ export default function AIAssistantWidget({ user }) {
 
   const speakText = useCallback(async (text) => {
     if (!voiceEnabled || !text || typeof text !== 'string' || text.trim().length === 0) {
-      console.log('❌ Cannot speak: voiceEnabled =', voiceEnabled, 'text =', text);
+      logDev('❌ Cannot speak: voiceEnabled =', voiceEnabled, 'text =', text);
       return;
     }
     
@@ -136,7 +140,7 @@ export default function AIAssistantWidget({ user }) {
       setIsSpeaking(true);
 
       // Try ElevenLabs first (premium voice - Rachel)
-      console.log('🎵 Calling ElevenLabs TTS with text:', text.substring(0, Math.min(text.length, 50)) + '...');
+      logDev('🎵 Calling ElevenLabs TTS with text:', text.substring(0, Math.min(text.length, 50)) + '...');
       
       const response = await generateElevenLabsSpeech({
         text: text.trim(), // Ensure text is properly passed and trimmed
@@ -145,7 +149,7 @@ export default function AIAssistantWidget({ user }) {
 
       if (response && response.data && response.data.success) {
         // Play ElevenLabs audio
-        console.log('✅ ElevenLabs response received, creating audio...');
+        logDev('✅ ElevenLabs response received, creating audio...');
         const audioBlob = new Blob([
           Uint8Array.from(atob(response.data.audio_base64), c => c.charCodeAt(0))
         ], { type: 'audio/mpeg' });
@@ -156,7 +160,7 @@ export default function AIAssistantWidget({ user }) {
         setCurrentAudio(audio);
         
         audio.onended = () => {
-          console.log('🎵 Audio playback ended');
+          logDev('🎵 Audio playback ended');
           setIsSpeaking(false);
           setCurrentAudio(null);
           URL.revokeObjectURL(audioUrl);
@@ -172,7 +176,7 @@ export default function AIAssistantWidget({ user }) {
         
         try {
           await audio.play();
-          console.log('✨ Using ElevenLabs premium voice (Rachel)');
+          logDev('✨ Using ElevenLabs premium voice (Rachel)');
         } catch (playError) {
           console.warn('❌ Audio play failed:', playError);
           fallbackToWebSpeech(text);
@@ -196,7 +200,7 @@ export default function AIAssistantWidget({ user }) {
     setIsLoading(true);
     
     try {
-      console.log('🌅 Generating daily briefing...');
+      logDev('🌅 Generating daily briefing...');
       
       const response = await generateDailyBriefing();
       
@@ -304,9 +308,12 @@ export default function AIAssistantWidget({ user }) {
     setIsLoading(true);
 
     try {
-      console.log('🤖 Sending voice message to AI:', messageText);
-      
-      const response = await processChatCommand({
+      logDev('🤖 Sending voice message to AI:', messageText, isDeveloperMode ? '(Developer Mode)' : '');
+
+      // Use Developer AI (Claude) when in developer mode, otherwise use regular chat
+      const chatFunction = isDeveloperMode ? processDeveloperCommand : processChatCommand;
+
+      const response = await chatFunction({
         message: messageText,
         user_context: {
           email: user.email,
@@ -318,7 +325,7 @@ export default function AIAssistantWidget({ user }) {
 
       // Check if we should still process (user might have stopped voice mode)
       if (!isListeningRef.current && !voiceEnabled) { // Use ref for isListening
-        console.log('🛑 User stopped voice mode or voice is disabled, not adding response or speaking.');
+        logDev('🛑 User stopped voice mode or voice is disabled, not adding response or speaking.');
         return; // Early exit if voice mode is off and voice disabled
       }
 
@@ -331,12 +338,12 @@ export default function AIAssistantWidget({ user }) {
           isVoiceResponse: true
         };
         
-        console.log('🤖 Adding AI response to chat:', assistantMessage.content.substring(0, Math.min(assistantMessage.content.length, 100)) + '...');
+        logDev('🤖 Adding AI response to chat:', assistantMessage.content.substring(0, Math.min(assistantMessage.content.length, 100)) + '...');
         setMessages(prev => [...prev, assistantMessage]);
         
         // Only speak if voice is still enabled
         if (voiceEnabled) {
-          console.log('🔊 Speaking AI response...');
+          logDev('🔊 Speaking AI response...');
           setTimeout(() => {
             speakText(response.data.response);
           }, 300); // Small delay to allow UI update
@@ -366,7 +373,7 @@ export default function AIAssistantWidget({ user }) {
       setIsLoading(false);
       setIsProcessing(false);
     }
-  }, [user, voiceEnabled, speakText]);
+  }, [user, voiceEnabled, speakText, isDeveloperMode]);
 
   // Update processVoiceMessageRef whenever processVoiceMessage changes
   useEffect(() => { processVoiceMessageRef.current = processVoiceMessage; }, [processVoiceMessage]);
@@ -403,7 +410,7 @@ export default function AIAssistantWidget({ user }) {
   useEffect(() => { handleSendMessageRef.current = handleSendMessage; }, [handleSendMessage]);
 
   const stopVoiceMode = useCallback(() => {
-    console.log('🛑 Stopping voice mode...');
+    logDev('🛑 Stopping voice mode...');
     
     setIsListening(false);
     setTimeRemaining(0);
@@ -414,7 +421,7 @@ export default function AIAssistantWidget({ user }) {
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
-      console.log('⏰ Timer cleared');
+      logDev('⏰ Timer cleared');
     }
 
     // Stop recognition
@@ -434,7 +441,7 @@ export default function AIAssistantWidget({ user }) {
   useEffect(() => { stopVoiceModeRef.current = stopVoiceMode; }, [stopVoiceMode]);
 
   const startVoiceMode = useCallback(async () => {
-    console.log('🚀 Starting voice mode...');
+    logDev('🚀 Starting voice mode...');
     
     // Check for speech recognition support first
     if (!speechRecognition) {
@@ -465,16 +472,16 @@ export default function AIAssistantWidget({ user }) {
       setMessages(prev => [...prev, greetingMessage]);
 
       // Start the timer countdown
-      console.log('⏰ Starting timer countdown...');
+      logDev('⏰ Starting timer countdown...');
       // Clear any existing timer
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
       }
       timerIntervalRef.current = setInterval(() => {
         setTimeRemaining(prev => {
-          console.log('⏰ Timer tick, remaining:', prev - 1);
+          logDev('⏰ Timer tick, remaining:', prev - 1);
           if (prev <= 1) {
-            console.log('⏰ Timer expired');
+            logDev('⏰ Timer expired');
             stopVoiceMode();
             return 0;
           }
@@ -486,11 +493,11 @@ export default function AIAssistantWidget({ user }) {
       stopSpeaking();
 
       // Start speech recognition
-      console.log('🎤 Starting speech recognition...');
+      logDev('🎙️ Starting speech recognition...');
       if (recognitionRef.current) {
-        console.log('🎤 Starting speech recognition...');
+        logDev('🎙️ Starting speech recognition...');
         recognitionRef.current.start();
-        toast.success('🎤 Voice mode ON - Speak now!');
+        toast.success('🎙️ Voice mode ON - Speak now!');
       } else {
         console.error('Recognition ref is null, could not start.');
       }
@@ -512,7 +519,7 @@ export default function AIAssistantWidget({ user }) {
 
 
   const toggleVoiceMode = useCallback(() => {
-    console.log('🔄 Toggle voice mode - current state:', isListening);
+    logDev('🔄 Toggle voice mode - current state:', isListening);
     if (isListening) {
       stopVoiceMode();
     } else {
@@ -535,11 +542,11 @@ export default function AIAssistantWidget({ user }) {
 
       recognition.onresult = (event) => {
         if (!isListeningRef.current) { // Use ref for latest state
-            console.log('🎤 Ignoring result - not listening anymore (via onresult)');
+          logDev('🎙️ Ignoring result - not listening anymore (via onresult)');
             return;
         }
 
-        console.log('🎤 Speech result received');
+        logDev('🎙️ Speech result received');
         let finalTranscript = '';
         let interimTranscript = '';
 
@@ -561,7 +568,7 @@ export default function AIAssistantWidget({ user }) {
 
         // Process final result
         if (finalTranscript.trim() && finalTranscript.trim().length > 3) {
-          console.log('🎤 Final speech:', finalTranscript);
+          logDev('🎙️ Final speech:', finalTranscript);
           
           // Clear transcript display after brief delay
           setTimeout(() => setCurrentTranscript(''), 500);
@@ -584,12 +591,12 @@ export default function AIAssistantWidget({ user }) {
       };
 
       recognition.onstart = () => {
-        console.log('🎤 Recognition started');
+        logDev('🎙️ Recognition started');
         setIsDetectingVoice(false);
       };
 
       recognition.onend = () => {
-        console.log('🎤 Recognition ended, listening:', isListeningRef.current, 'time remaining:', timeRemaining);
+        logDev('🎙️ Recognition ended, listening:', isListeningRef.current, 'time remaining:', timeRemaining);
         setIsDetectingVoice(false);
         
         // Restart if we're still supposed to be listening (2-min timer active)
@@ -598,7 +605,7 @@ export default function AIAssistantWidget({ user }) {
             if (isListeningRef.current && recognitionRef.current) { // Double check again before restarting
               try {
                 recognitionRef.current.start();
-                console.log('🎤 Recognition restarted successfully');
+                logDev('🎙️ Recognition restarted successfully');
               } catch (error) {
                 console.warn('Failed to restart recognition:', error);
               }
@@ -608,7 +615,7 @@ export default function AIAssistantWidget({ user }) {
             // If we're not listening, ensure recognition is stopped
             try {
                 recognitionRef.current.stop();
-                console.log('🎤 Recognition manually stopped via onend (not listening)');
+              logDev('🎙️ Recognition manually stopped via onend (not listening)');
             } catch {
                 console.warn('Error stopping recognition onend cleanup');
             }
@@ -616,7 +623,7 @@ export default function AIAssistantWidget({ user }) {
       };
 
       recognition.onerror = (event) => {
-        console.log('🎤 Recognition error:', event.error);
+        logDev('🎙️ Recognition error:', event.error);
         setIsDetectingVoice(false);
         
         if (event.error === 'not-allowed') {
@@ -631,7 +638,7 @@ export default function AIAssistantWidget({ user }) {
 
       recognitionRef.current = recognition;
       setSpeechRecognition(recognition);
-      console.log('🎤 Speech recognition initialized');
+      logDev('🎙️ Speech recognition initialized');
     }
 
     return () => {
@@ -762,7 +769,15 @@ export default function AIAssistantWidget({ user }) {
           <CardHeader className="text-white rounded-t-lg p-4 bg-gradient-to-r from-purple-600 to-blue-600">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg font-semibold">
-                🤖 Ai-SHA Assistant
+                <span className="flex items-center gap-2">
+                  <img
+                    src={EXEC_AVATAR_SRC}
+                    alt="AiSHA assistant"
+                    className={`h-8 w-8 rounded-xl object-cover ring-2 ${isDeveloperMode ? 'ring-green-400' : 'ring-white/40'}`}
+                    loading="lazy"
+                  />
+                  <span>{isDeveloperMode ? 'Developer AI (Claude)' : 'AiSHA Executive Assistant'}</span>
+                </span>
               </CardTitle>
               <div className="flex items-center gap-2">
                 {isSpeaking && <Badge variant="secondary" className="text-xs">Speaking</Badge>}
@@ -784,6 +799,21 @@ export default function AIAssistantWidget({ user }) {
                 >
                   {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
                 </Button>
+                {/* Developer Mode Toggle - Superadmin Only */}
+                {user?.role === 'superadmin' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setIsDeveloperMode(!isDeveloperMode);
+                      toast.success(isDeveloperMode ? '🤖 AiSHA Mode' : '💻 Developer Mode (Claude)');
+                    }}
+                    className={`text-white hover:bg-white/20 ${isDeveloperMode ? 'bg-green-600/50 ring-1 ring-green-300' : ''}`}
+                    title={isDeveloperMode ? 'Developer Mode ON (using Claude)' : 'Enable Developer Mode'}
+                  >
+                    <Code className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
             </div>
             

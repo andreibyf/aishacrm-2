@@ -1,0 +1,63 @@
+Ident       = Letter , { Letter | Digit | "_" } ;
+Letter      = "A"…"Z" | "a"…"z" ;
+Digit       = "0"…"9" ;
+
+Program     = { Item } ;
+Item        = TypeDecl | EnumDecl | TraitDecl | ImplDecl | FnDecl ;
+
+TypeDecl    = "type" Ident "=" TypeExpr ";" ;
+EnumDecl    = "enum" Ident "{" { Variant } "}" ;
+Variant     = Ident [ "(" TypeExpr { "," TypeExpr } ")" ] ;
+
+TraitDecl   = "trait" Ident "{" { FnSig ";" } "}" ;
+ImplDecl    = "impl" Ident "for" TypeExpr "{" { FnDecl } "}" ;
+
+FnDecl      = FnSig Block ;
+FnSig       = "fn" Ident "(" [ Params ] ")" "->" TypeExpr [ "!" EffectList ] ;
+Params      = Param { "," Param } ;
+Param       = Ident ":" TypeExpr ;
+
+EffectList  = Ident { "," Ident } ;
+
+TypeExpr    = Ident
+            | "[" TypeExpr "]"                 (* slice *)
+            | Ident "[" TypeExpr { "," TypeExpr } "]"  (* generic *)
+            | "Result" "[" TypeExpr "," TypeExpr "]"
+            | "Option" "[" TypeExpr "]"
+            | "{" Field { "," Field } "}"      (* record *)
+            ;
+
+Field       = Ident ":" TypeExpr ;
+
+Block       = "{" { Stmt } "}" ;
+Stmt        = Let | Expr ";" ;
+Let         = "let" [ "mut" ] Ident ":" TypeExpr "=" Expr ";" ;
+
+Expr        = Ident
+            | Literal
+            | Call
+            | Match
+            | Lambda
+            | RecordLit
+            | "Ok" "(" Expr ")"
+            | "Err" "(" Expr ")"
+            | "??" [ StringLiteral ]           (* hole *)
+            ;
+
+Call        = Ident "(" [ ArgList ] ")" ;
+ArgList     = Expr { "," Expr } ;
+
+Match       = "match" Expr "{" { MatchArm } "}" ;
+MatchArm    = Pattern "=>" Expr ;
+
+Pattern     = "_" | Literal | Ident | RecordPat ;
+RecordPat   = "{" { Ident ":" Pattern } "}" ;
+
+Lambda      = "|" Ident "|" "->" TypeExpr Block ;
+
+RecordLit   = "{" { Ident ":" Expr } "}" ;
+
+Literal     = Int | StringLiteral | Bool ;
+Int         = Digit { Digit } ;
+Bool        = "true" | "false" ;
+StringLiteral = '"' { ? any but " ? } '"' ;

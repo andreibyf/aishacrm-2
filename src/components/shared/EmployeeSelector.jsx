@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Employee } from '@/api/entities';
-import { User } from '@/api/entities';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from 'lucide-react';
+import { useUser } from "@/components/shared/useUser.js";
 
 export default function EmployeeSelector({
   value,
@@ -15,16 +15,15 @@ export default function EmployeeSelector({
 }) {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { user } = useUser();
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const currentUser = await User.me();
-
         // Build filter based on user's tenant
         let filter = {};
-        if (currentUser.tenant_id) {
-          filter.tenant_id = currentUser.tenant_id;
+        if (user?.tenant_id) {
+          filter.tenant_id = user.tenant_id;
         }
 
         // Load active employees
@@ -40,8 +39,10 @@ export default function EmployeeSelector({
       }
     };
 
-    loadData();
-  }, []);
+    if (user) {
+      loadData();
+    }
+  }, [user]);
 
   // Sort employees by name
   const sortedEmployees = useMemo(() => {
@@ -75,7 +76,7 @@ export default function EmployeeSelector({
         {sortedEmployees.map((employee) => (
           <SelectItem 
             key={employee.id} 
-            value={employee.email || employee.user_email} 
+            value={employee.id} 
             className="text-slate-200 hover:bg-slate-700"
           >
             {employee.first_name} {employee.last_name}

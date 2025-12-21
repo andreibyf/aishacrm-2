@@ -16,11 +16,9 @@ import {
   File, // Added File icon
   Loader2,
   Shield,
-  Workflow, // Added Workflow icon
   Zap,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { User } from "@/api/entities";
 import AdminOpenAISettings from "./AdminOpenAISettings";
 import WebhookEmailSettings from "./WebhookEmailSettings";
 import SecuritySettings from "./SecuritySettings";
@@ -34,6 +32,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { checkBackendStatus } from "@/api/functions"; // Added direct import for checkBackendStatus
+import { useUser } from "@/components/shared/useUser.js";
 
 // Construct the correct, clean base URL for webhooks (remove preview subdomain)
 const WEBHOOK_BASE_URL = (() => {
@@ -54,31 +53,6 @@ const webhookServices = [
     method: "POST",
     payloadExample: `{
   "question": "List my contacts"
-}`,
-  },
-  {
-    name: "n8n - Create Lead",
-    description: "Creates a new lead in the CRM from an n8n workflow.",
-    webhook: `${WEBHOOK_BASE_URL}/functions/n8nCreateLead`,
-    icon: Workflow,
-    method: "POST",
-    payloadExample: `{
-  "first_name": "John",
-  "last_name": "Doe",
-  "email": "john.doe@example.com",
-  "company": "Example Inc."
-}`,
-  },
-  {
-    name: "n8n - Create Contact",
-    description: "Creates a new contact in the CRM from an n8n workflow.",
-    webhook: `${WEBHOOK_BASE_URL}/functions/n8nCreateContact`,
-    icon: Workflow,
-    method: "POST",
-    payloadExample: `{
-  "first_name": "Jane",
-  "last_name": "Smith",
-  "email": "jane.smith@example.com"
 }`,
   },
   {
@@ -121,15 +95,12 @@ const copyToClipboard = (text, type) => {
 export default function IntegrationSettings() {
   const [backendEnabled, setBackendEnabled] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser, loading: userLoading } = useUser();
 
   useEffect(() => {
     const checkStatus = async () => {
       setIsChecking(true);
       try {
-        const user = await User.me();
-        setCurrentUser(user);
-
         try {
           // Using proper function import instead of dynamic import
           await checkBackendStatus();
@@ -145,15 +116,17 @@ export default function IntegrationSettings() {
         }
       } catch (error) {
         if (import.meta.env.DEV) {
-          console.warn("Could not load user or check backend status:", error);
+          console.warn("Backend status check failed:", error);
         }
         setBackendEnabled(false);
       } finally {
         setIsChecking(false);
       }
     };
-    checkStatus();
-  }, []);
+    if (!userLoading) {
+      checkStatus();
+    }
+  }, [userLoading]);
 
   if (isChecking) {
     return (

@@ -4,8 +4,8 @@
  */
 import { test, expect } from '@playwright/test';
 
-const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:5173';
-const BACKEND_URL = process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+const BASE_URL = process.env.PLAYWRIGHT_FRONTEND_URL || 'http://localhost:4000';
+const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || 'http://localhost:4001';
 
 // Helper: Wait for backend to be healthy
 async function waitForBackendHealth() {
@@ -38,8 +38,9 @@ test.describe('Basic CRUD Operations', () => {
   });
 
   test('should load the home page', async ({ page }) => {
-    // Just verify the page loaded
-    await expect(page).toHaveURL(BASE_URL);
+    // Just verify the page loaded (URL may have tenant query param)
+    const currentUrl = page.url();
+    expect(currentUrl).toContain(BASE_URL);
     
     // Check for any content
     const body = await page.locator('body').textContent();
@@ -75,18 +76,18 @@ test.describe('Basic CRUD Operations', () => {
     await expect(page).toHaveURL(/opportunities/);
   });
 
-  test('backend health check should return success', async () => {
-    const response = await fetch(`${BACKEND_URL}/api/system/status`);
-    expect(response.ok).toBe(true);
+  test('backend health check should return success', async ({ request }) => {
+    const response = await request.get(`${BACKEND_URL}/api/system/status`);
+    expect(response.ok()).toBe(true);
     
     const data = await response.json();
     expect(data.status).toBe('success');
     expect(data.data.server).toBe('running');
   });
 
-  test('should fetch opportunities from backend', async () => {
-    const response = await fetch(`${BACKEND_URL}/api/opportunities?tenant_id=local-tenant-001`);
-    expect(response.ok).toBe(true);
+  test('should fetch opportunities from backend', async ({ request }) => {
+    const response = await request.get(`${BACKEND_URL}/api/opportunities?tenant_id=local-tenant-001`);
+    expect(response.ok()).toBe(true);
     
     const data = await response.json();
     expect(data.status).toBe('success');

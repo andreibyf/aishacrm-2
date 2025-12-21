@@ -3,7 +3,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { CashFlow } from '@/api/entities';
 import { Account } from '@/api/entities';
 import { Opportunity } from '@/api/entities';
-import { User } from '@/api/entities';
+// User comes from global context
+import { useUser } from '@/components/shared/useUser.js';
 import CashFlowSummary from '../components/cashflow/CashFlowSummary';
 import CashFlowChart from '../components/cashflow/CashFlowChart';
 import CashFlowForm from '../components/cashflow/CashFlowForm';
@@ -41,28 +42,31 @@ function CashFlowPage() {
   });
   const [showForm, setShowForm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
   const logger = useLogger();
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const user = await User.me();
-        setCurrentUser(user);
-        logger.info('Current user loaded', 'CashFlowPage', { userId: user.id, email: user.email });
-      } catch (error) {
-        logger.error('Failed to load user', 'CashFlowPage', { error: error.message });
-      }
-    };
-    loadUser();
-  }, [logger]);
+  // User provided by global context
 
   useEffect(() => {
     const loadStaticData = async () => {
+      if (!currentUser) return;
+      
       try {
+        const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
+        
+        // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
+        if ((currentUser.role === 'superadmin' || currentUser.role === 'admin') && !tenantFilter?.tenant_id) {
+          if (import.meta.env.DEV) {
+            console.log("[CashFlow] Skipping data load - no tenant selected");
+          }
+          setAccounts([]);
+          setOpportunities([]);
+          return;
+        }
+        
         const [accountsData, opportunitiesData] = await Promise.all([
-          Account.list(),
-          Opportunity.list(),
+          Account.filter(tenantFilter),
+          Opportunity.filter(tenantFilter),
         ]);
         setAccounts(accountsData || []);
         setOpportunities(opportunitiesData || []);
@@ -75,7 +79,7 @@ function CashFlowPage() {
       }
     };
     loadStaticData();
-  }, [logger]);
+  }, [currentUser, selectedTenantId, logger]);
 
   const fetchTransactions = useCallback(async () => {
     if (!currentUser) return;

@@ -4,8 +4,9 @@
  */
 
 import express from 'express';
+import { validateTenantScopedId } from '../lib/validation.js';
 
-export default function createWebhookRoutes(pgPool) {
+export default function createWebhookRoutes(_pgPool) {
   const router = express.Router();
 
   // GET /api/webhooks - List webhooks
@@ -13,54 +14,23 @@ export default function createWebhookRoutes(pgPool) {
     try {
       const { tenant_id, limit = 50, offset = 0, is_active } = req.query;
 
-      if (!pgPool) {
-        return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      }
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      let query = supabase.from('webhook').select('*', { count: 'exact' });
 
-      let query = 'SELECT * FROM webhook WHERE 1=1';
-      const params = [];
-      let paramCount = 1;
+      if (tenant_id) query = query.eq('tenant_id', tenant_id);
+      if (is_active !== undefined) query = query.eq('is_active', is_active === 'true');
 
-      if (tenant_id) {
-        query += ` AND tenant_id = $${paramCount}`;
-        params.push(tenant_id);
-        paramCount++;
-      }
+      query = query.order('created_at', { ascending: false }).range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
 
-      if (is_active !== undefined) {
-        query += ` AND is_active = $${paramCount}`;
-        params.push(is_active === 'true');
-        paramCount++;
-      }
-
-      query += ` ORDER BY created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
-      params.push(parseInt(limit), parseInt(offset));
-
-      const result = await pgPool.query(query, params);
-
-      // Get total count
-      let countQuery = 'SELECT COUNT(*) FROM webhook WHERE 1=1';
-      const countParams = [];
-      let countParamCount = 1;
-
-      if (tenant_id) {
-        countQuery += ` AND tenant_id = $${countParamCount}`;
-        countParams.push(tenant_id);
-        countParamCount++;
-      }
-
-      if (is_active !== undefined) {
-        countQuery += ` AND is_active = $${countParamCount}`;
-        countParams.push(is_active === 'true');
-      }
-
-      const countResult = await pgPool.query(countQuery, countParams);
+      const { data, error, count } = await query;
+      if (error) throw new Error(error.message);
 
       res.json({
         status: 'success',
         data: {
-          webhooks: result.rows,
-          total: parseInt(countResult.rows[0].count),
+          webhooks: data || [],
+          total: count || 0,
           limit: parseInt(limit),
           offset: parseInt(offset)
         }
@@ -71,22 +41,29 @@ export default function createWebhookRoutes(pgPool) {
     }
   });
 
-  // GET /api/webhooks/:id - Get single webhook
+  // GET /api/webhooks/:id - Get single webhook (tenant scoped)
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      const { tenant_id } = req.query;
 
-      if (!pgPool) {
-        return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      }
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
 
-      const result = await pgPool.query('SELECT * FROM webhook WHERE id = $1', [id]);
-
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('webhook')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .single();
+      
+      if (error?.code === 'PGRST116') {
+          if (error) throw new Error(error.message);
         return res.status(404).json({ status: 'error', message: 'Webhook not found' });
       }
 
-      res.json({ status: 'success', data: { webhook: result.rows[0] } });
+      res.json({ status: 'success', data: { webhook: data } });
     } catch (error) {
       console.error('Error fetching webhook:', error);
       res.status(500).json({ status: 'error', message: error.message });
@@ -102,31 +79,26 @@ export default function createWebhookRoutes(pgPool) {
         return res.status(400).json({ status: 'error', message: 'tenant_id and url are required' });
       }
 
-      if (!pgPool) {
-        return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      }
-
-      const query = `
-        INSERT INTO webhook (tenant_id, url, event_types, is_active, secret, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING *
-      `;
-
-      const values = [
-        webhook.tenant_id,
-        webhook.url,
-        JSON.stringify(webhook.event_types || []),
-        webhook.is_active !== undefined ? webhook.is_active : true,
-        webhook.secret || null,
-        JSON.stringify(webhook.metadata || {})
-      ];
-
-      const result = await pgPool.query(query, values);
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('webhook')
+        .insert([{
+          tenant_id: webhook.tenant_id,
+          url: webhook.url,
+          event_types: webhook.event_types || [],
+          is_active: webhook.is_active !== undefined ? webhook.is_active : true,
+          secret: webhook.secret || null,
+          metadata: webhook.metadata || {}
+        }])
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
 
       res.status(201).json({
         status: 'success',
         message: 'Webhook created successfully',
-        data: { webhook: result.rows[0] }
+        data: { webhook: data }
       });
     } catch (error) {
       console.error('Error creating webhook:', error);
@@ -134,58 +106,46 @@ export default function createWebhookRoutes(pgPool) {
     }
   });
 
-  // PUT /api/webhooks/:id - Update webhook
+  // PUT /api/webhooks/:id - Update webhook (tenant scoped)
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      const { tenant_id } = req.query;
       const updates = req.body;
 
-      if (!pgPool) {
-        return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      }
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
 
       const allowedFields = ['url', 'event_types', 'is_active', 'secret', 'metadata'];
-      const setStatements = [];
-      const values = [];
-      let paramCount = 1;
-
+      const payload = {};
       Object.entries(updates).forEach(([key, value]) => {
         if (allowedFields.includes(key)) {
-          if (key === 'event_types' || key === 'metadata') {
-            setStatements.push(`${key} = $${paramCount}`);
-            values.push(JSON.stringify(value));
-          } else {
-            setStatements.push(`${key} = $${paramCount}`);
-            values.push(value);
-          }
-          paramCount++;
+          payload[key] = value;
         }
       });
 
-      if (setStatements.length === 0) {
+      if (Object.keys(payload).length === 0) {
         return res.status(400).json({ status: 'error', message: 'No valid fields to update' });
       }
 
-      setStatements.push(`updated_at = NOW()`);
-      values.push(id);
-
-      const query = `
-        UPDATE webhook 
-        SET ${setStatements.join(', ')} 
-        WHERE id = $${paramCount} 
-        RETURNING *
-      `;
-
-      const result = await pgPool.query(query, values);
-
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('webhook')
+        .update(payload)
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
+      
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) {
         return res.status(404).json({ status: 'error', message: 'Webhook not found' });
       }
 
       res.json({
         status: 'success',
         message: 'Webhook updated successfully',
-        data: { webhook: result.rows[0] }
+        data: { webhook: data }
       });
     } catch (error) {
       console.error('Error updating webhook:', error);
@@ -193,25 +153,33 @@ export default function createWebhookRoutes(pgPool) {
     }
   });
 
-  // DELETE /api/webhooks/:id - Delete webhook
+  // DELETE /api/webhooks/:id - Delete webhook (tenant scoped)
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      const { tenant_id } = req.query;
 
-      if (!pgPool) {
-        return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      }
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
 
-      const result = await pgPool.query('DELETE FROM webhook WHERE id = $1 RETURNING id', [id]);
-
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('webhook')
+        .delete()
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .select('id')
+        .maybeSingle();
+      
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) {
         return res.status(404).json({ status: 'error', message: 'Webhook not found' });
       }
 
       res.json({
         status: 'success',
         message: 'Webhook deleted successfully',
-        data: { id: result.rows[0].id }
+        data: { id: data.id }
       });
     } catch (error) {
       console.error('Error deleting webhook:', error);

@@ -1,0 +1,192 @@
+// Executive Assistant Tools - Activity & Calendar Management
+// Schedule meetings, track tasks, manage calendar
+
+import { Result, Activity, CRMError } from "../../spec/types.braid"
+
+fn createActivity(
+  tenant: String,
+  subject: String,
+  activity_type: String,
+  due_date: String,
+  assigned_to: String,
+  related_to_type: String,
+  related_to_id: String,
+  body: String
+) -> Result<Activity, CRMError> !net {
+  let url = "/api/v2/activities";
+  let payload = {
+    tenant_id: tenant,
+    subject: subject,
+    activity_type: activity_type,
+    due_date: due_date,
+    assigned_to: assigned_to,
+    related_to_type: related_to_type,
+    related_to_id: related_to_id,
+    body: body,
+    status: "planned",
+    metadata: {}
+  };
+  
+  let response = http.post(url, { body: payload });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn updateActivity(
+  tenant: String,
+  activity_id: String,
+  updates: Object
+) -> Result<Activity, CRMError> !net {
+  let url = "/api/v2/activities/" + activity_id;
+  
+  let response = http.put(url, { body: updates });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn markActivityComplete(
+  tenant: String,
+  activity_id: String
+) -> Result<Activity, CRMError> !net {
+  let url = "/api/v2/activities/" + activity_id;
+  let updates = { status: "completed" };
+  
+  let response = http.put(url, { body: updates });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getUpcomingActivities(
+  tenant: String,
+  assigned_to: String,
+  days: Number
+) -> Result<Array, CRMError> !net, clock {
+  let url = "/api/v2/activities";
+  let now = clock.now();
+  let params = {
+    tenant_id: tenant,
+    assigned_to: assigned_to,
+    status: "planned",
+    limit: 50
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn scheduleMeeting(
+  tenant: String,
+  subject: String,
+  attendees: Array,
+  date_time: String,
+  duration_minutes: Number,
+  assigned_to: String
+) -> Result<Activity, CRMError> !net {
+  let url = "/api/v2/activities";
+  let payload = {
+    tenant_id: tenant,
+    subject: subject,
+    activity_type: "meeting",
+    due_date: date_time,
+    assigned_to: assigned_to,
+    body: "Attendees: meeting",
+    status: "planned",
+    metadata: {}
+  };
+  
+  let response = http.post(url, { body: payload });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn deleteActivity(
+  tenant: String,
+  activity_id: String
+) -> Result<Boolean, CRMError> !net {
+  let url = "/api/v2/activities/" + activity_id;
+  let response = http.delete(url, {});
+  return match response {
+    Ok{value} => Ok(true),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn listActivities(
+  tenant: String,
+  status: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/v2/activities";
+  let params = {
+    tenant_id: tenant,
+    status: status,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getActivityDetails(
+  tenant: String,
+  activity_id: String
+) -> Result<Activity, CRMError> !net {
+  let url = "/api/v2/activities/" + activity_id;
+  let params = { tenant_id: tenant };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn searchActivities(
+  tenant: String,
+  query: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/v2/activities/search";
+  let params = {
+    tenant_id: tenant,
+    q: query,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

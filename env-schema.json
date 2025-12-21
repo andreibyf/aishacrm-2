@@ -1,0 +1,337 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AishaCRM Environment Configuration Schema",
+  "description": "Defines all environment variables used across frontend, backend, and MCP server",
+  "definitions": {
+    "backend": {
+      "type": "object",
+      "required": [
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "SUPABASE_ANON_KEY",
+        "JWT_SECRET",
+        "SYSTEM_TENANT_ID",
+        "OPENAI_API_KEY"
+      ],
+      "properties": {
+        "NODE_ENV": {
+          "type": "string",
+          "enum": ["development", "production", "test"],
+          "default": "development",
+          "managedBy": "docker-compose",
+          "description": "Runtime environment (set by Docker Compose)"
+        },
+        "PORT": {
+          "type": "number",
+          "default": 3001,
+          "managedBy": "docker-compose",
+          "description": "Backend server port (internal)"
+        },
+        "DATABASE_URL": {
+          "type": "string",
+          "format": "uri",
+          "sensitive": true,
+          "required": false,
+          "description": "Direct PostgreSQL connection (optional, for performance logs)"
+        },
+        "SUPABASE_URL": {
+          "type": "string",
+          "format": "uri",
+          "sensitive": false,
+          "githubSecret": "SUPABASE_URL",
+          "description": "Supabase project URL"
+        },
+        "SUPABASE_SERVICE_ROLE_KEY": {
+          "type": "string",
+          "sensitive": true,
+          "githubSecret": "SUPABASE_SERVICE_ROLE_KEY",
+          "description": "Supabase service role key (backend admin access)"
+        },
+        "SUPABASE_ANON_KEY": {
+          "type": "string",
+          "sensitive": false,
+          "githubSecret": "VITE_SUPABASE_ANON_KEY",
+          "description": "Supabase anonymous key (public access)"
+        },
+        "JWT_SECRET": {
+          "type": "string",
+          "sensitive": true,
+          "githubSecret": "JWT_SECRET",
+          "description": "JWT signing secret (generate with crypto.randomBytes(64).toString('hex'))"
+        },
+        "SESSION_SECRET": {
+          "type": "string",
+          "sensitive": true,
+          "githubSecret": "SESSION_SECRET",
+          "description": "Session encryption secret"
+        },
+        "SYSTEM_TENANT_ID": {
+          "type": "string",
+          "format": "uuid",
+          "default": "a11dfb63-4b18-4eb8-872e-747af2e37c46",
+          "githubSecret": "SYSTEM_TENANT_ID",
+          "description": "System tenant UUID"
+        },
+        "REDIS_URL": {
+          "type": "string",
+          "format": "uri",
+          "managedBy": "docker-compose",
+          "default": "redis://redis-memory:6379",
+          "description": "Redis memory URL (Docker service name)"
+        },
+        "REDIS_CACHE_URL": {
+          "type": "string",
+          "format": "uri",
+          "managedBy": "docker-compose",
+          "default": "redis://redis-cache:6379",
+          "description": "Redis cache URL (Docker service name)"
+        },
+        "BRAID_MCP_URL": {
+          "type": "string",
+          "format": "uri",
+          "managedBy": "docker-compose",
+          "default": "http://braid-mcp-server:8000",
+          "description": "MCP server URL (Docker service name)"
+        },
+        "OPENAI_API_KEY": {
+          "type": "string",
+          "sensitive": true,
+          "githubSecret": "OPENAI_API_KEY",
+          "syncTo": ["mcp"],
+          "description": "OpenAI API key"
+        },
+        "ANTHROPIC_API_KEY": {
+          "type": "string",
+          "sensitive": true,
+          "githubSecret": "ANTHROPIC_API_KEY",
+          "syncTo": ["mcp"],
+          "required": false,
+          "description": "Anthropic Claude API key (optional)"
+        },
+        "GROQ_API_KEY": {
+          "type": "string",
+          "sensitive": true,
+          "githubSecret": "GROQ_API_KEY",
+          "syncTo": ["mcp"],
+          "required": false,
+          "description": "Groq API key (optional)"
+        },
+        "GITHUB_TOKEN": {
+          "type": "string",
+          "sensitive": true,
+          "githubSecret": "PROD_MCP_GITHUB_TOKEN",
+          "syncTo": ["mcp"],
+          "description": "GitHub personal access token (for CI/CD and MCP GitHub adapter)"
+        },
+        "N8N_API_KEY": {
+          "type": "string",
+          "sensitive": true,
+          "required": false,
+          "description": "n8n API key"
+        },
+        "N8N_BASE_URL": {
+          "type": "string",
+          "format": "uri",
+          "default": "http://n8n:5678",
+          "required": false,
+          "description": "n8n base URL"
+        },
+        "ELEVENLABS_API_KEY": {
+          "type": "string",
+          "sensitive": true,
+          "required": false,
+          "description": "ElevenLabs TTS API key"
+        },
+        "ABUSEIPDB_API_KEY": {
+          "type": "string",
+          "sensitive": true,
+          "required": false,
+          "description": "AbuseIPDB threat intel API key"
+        },
+        "IDR_EMERGENCY_SECRET": {
+          "type": "string",
+          "sensitive": true,
+          "required": false,
+          "description": "Emergency IDR unblock secret"
+        }
+      }
+    },
+    "mcp": {
+      "type": "object",
+      "required": [
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "OPENAI_API_KEY",
+        "DEFAULT_TENANT_ID"
+      ],
+      "properties": {
+        "NODE_ENV": {
+          "type": "string",
+          "managedBy": "docker-compose",
+          "description": "Set by Docker Compose"
+        },
+        "PORT": {
+          "type": "number",
+          "default": 8000,
+          "managedBy": "docker-compose"
+        },
+        "MCP_ROLE": {
+          "type": "string",
+          "enum": ["server", "node"],
+          "managedBy": "docker-compose",
+          "description": "Set by Docker Compose per container"
+        },
+        "MCP_NODE_ID": {
+          "type": "string",
+          "managedBy": "docker-compose",
+          "description": "Set by Docker Compose per container"
+        },
+        "REDIS_URL": {
+          "type": "string",
+          "format": "uri",
+          "managedBy": "docker-compose",
+          "default": "redis://aishacrm-redis-memory:6379"
+        },
+        "CRM_BACKEND_URL": {
+          "type": "string",
+          "format": "uri",
+          "managedBy": "docker-compose",
+          "default": "http://aishacrm-backend:3001"
+        },
+        "SUPABASE_URL": {
+          "type": "string",
+          "format": "uri",
+          "syncFrom": "backend",
+          "githubSecret": "SUPABASE_URL"
+        },
+        "SUPABASE_SERVICE_ROLE_KEY": {
+          "type": "string",
+          "sensitive": true,
+          "syncFrom": "backend",
+          "githubSecret": "SUPABASE_SERVICE_ROLE_KEY"
+        },
+        "USE_SUPABASE_PROD": {
+          "type": "boolean",
+          "default": true
+        },
+        "OPENAI_API_KEY": {
+          "type": "string",
+          "sensitive": true,
+          "syncFrom": "backend",
+          "githubSecret": "OPENAI_API_KEY"
+        },
+        "DEFAULT_OPENAI_MODEL": {
+          "type": "string",
+          "default": "gpt-4o"
+        },
+        "DEFAULT_TENANT_ID": {
+          "type": "string",
+          "format": "uuid",
+          "syncFrom": "backend.SYSTEM_TENANT_ID",
+          "githubSecret": "SYSTEM_TENANT_ID"
+        },
+        "GITHUB_TOKEN": {
+          "type": "string",
+          "sensitive": true,
+          "syncFrom": "backend",
+          "githubSecret": "PROD_MCP_GITHUB_TOKEN",
+          "required": false,
+          "description": "GitHub token for GitHub adapter (optional)"
+        },
+        "USE_DIRECT_SUPABASE_ACCESS": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "frontend": {
+      "type": "object",
+      "required": [
+        "VITE_SUPABASE_URL",
+        "VITE_SUPABASE_ANON_KEY",
+        "VITE_AISHACRM_BACKEND_URL"
+      ],
+      "properties": {
+        "VITE_SUPABASE_URL": {
+          "type": "string",
+          "format": "uri",
+          "buildArg": true,
+          "githubSecret": "VITE_SUPABASE_URL",
+          "syncFrom": "backend.SUPABASE_URL"
+        },
+        "VITE_SUPABASE_ANON_KEY": {
+          "type": "string",
+          "buildArg": true,
+          "githubSecret": "VITE_SUPABASE_ANON_KEY",
+          "syncFrom": "backend.SUPABASE_ANON_KEY"
+        },
+        "VITE_AISHACRM_BACKEND_URL": {
+          "type": "string",
+          "format": "uri",
+          "buildArg": true,
+          "githubSecret": "VITE_AISHACRM_BACKEND_URL",
+          "default": "http://localhost:4001"
+        },
+        "VITE_SYSTEM_TENANT_ID": {
+          "type": "string",
+          "format": "uuid",
+          "buildArg": true,
+          "githubSecret": "VITE_SYSTEM_TENANT_ID",
+          "syncFrom": "backend.SYSTEM_TENANT_ID"
+        },
+        "VITE_APP_BUILD_VERSION": {
+          "type": "string",
+          "buildArg": true,
+          "managedBy": "github-actions",
+          "description": "Injected by GitHub Actions workflow"
+        },
+        "VITE_N8N_URL": {
+          "type": "string",
+          "format": "uri",
+          "required": false
+        }
+      }
+    }
+  },
+  "metadata": {
+    "syncRules": [
+      {
+        "from": "backend.SUPABASE_URL",
+        "to": ["mcp.SUPABASE_URL", "frontend.VITE_SUPABASE_URL"]
+      },
+      {
+        "from": "backend.SUPABASE_SERVICE_ROLE_KEY",
+        "to": ["mcp.SUPABASE_SERVICE_ROLE_KEY"]
+      },
+      {
+        "from": "backend.SUPABASE_ANON_KEY",
+        "to": ["frontend.VITE_SUPABASE_ANON_KEY"]
+      },
+      {
+        "from": "backend.OPENAI_API_KEY",
+        "to": ["mcp.OPENAI_API_KEY"]
+      },
+      {
+        "from": "backend.SYSTEM_TENANT_ID",
+        "to": ["mcp.DEFAULT_TENANT_ID", "frontend.VITE_SYSTEM_TENANT_ID"]
+      },
+      {
+        "from": "backend.GITHUB_TOKEN",
+        "to": ["mcp.GITHUB_TOKEN"]
+      }
+    ],
+    "dockerManagedVars": [
+      "NODE_ENV",
+      "PORT",
+      "REDIS_URL",
+      "REDIS_CACHE_URL",
+      "BRAID_MCP_URL",
+      "CRM_BACKEND_URL",
+      "MCP_ROLE",
+      "MCP_NODE_ID"
+    ],
+    "notes": {
+      "dockerManagedVars": "These variables are hardcoded in docker-compose.yml and should NOT be set in .env files. Compose will override any .env values."
+    }
+  }
+}

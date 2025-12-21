@@ -13,12 +13,13 @@ import {
   Trash2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { User } from "@/api/entities";
+// Replaced direct User.me() usage with global user context hook
 import { Tenant } from "@/api/entities";
 import { UploadFile } from "@/api/integrations";
 import * as conversations from "@/api/conversations";
 import MicButton from "./MicButton";
 import MessageBubble from "./MessageBubble";
+import { useUser } from "@/components/shared/useUser.js";
 
 const INDUSTRY_LABELS = {
   aerospace_and_defense: "Aerospace & Defense",
@@ -68,6 +69,7 @@ const wrapMessage = (msg) => {
 };
 
 export default function ChatWindow() {
+  const { user: currentUser } = useUser();
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -85,11 +87,11 @@ export default function ChatWindow() {
 
   useEffect(() => {
     loadTenantContext();
-  }, []);
+  }, [loadTenantContext]);
 
-  const loadTenantContext = async () => {
+  const loadTenantContext = useCallback(async () => {
     try {
-      const user = await User.me();
+      const user = currentUser;
       if (user?.tenant_id) {
         const tenant = await Tenant.get(user.tenant_id);
         setTenantInfo(tenant);
@@ -120,21 +122,34 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
     } catch (error) {
       console.error("Error loading tenant context:", error);
     }
-  };
+  }, [currentUser]);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
   const loadConversation = useCallback(async () => {
-    if (!conversationId) return;
+    if (!conversationId) {
+      console.log('[ChatWindow] loadConversation: No conversationId, skipping');
+      return;
+    }
+    console.log(`[ChatWindow] Loading conversation ${conversationId}`);
     try {
       const conv = await conversations.getConversation(conversationId);
+      console.log(`[ChatWindow] Loaded conversation:`, conv);
+      console.log(`[ChatWindow] Messages array:`, conv?.messages);
+      console.log(`[ChatWindow] Messages count: ${conv?.messages?.length || 0}`);
+      
       if (conv?.messages) {
-        setMessages(conv.messages.map(wrapMessage));
+        const wrappedMessages = conv.messages.map(wrapMessage);
+        console.log('[ChatWindow] Wrapped messages:', wrappedMessages);
+        setMessages(wrappedMessages);
+        console.log('[ChatWindow] Messages state updated');
+      } else {
+        console.warn('[ChatWindow] No messages in conversation');
       }
     } catch (error) {
-      console.error("Error loading conversation:", error);
+      console.error("[ChatWindow] Error loading conversation:", error);
       toast({
         title: "Error",
         description: "Failed to load conversation history",
@@ -145,17 +160,19 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
 
   useEffect(() => {
     let mounted = true;
+    console.log('[ChatWindow] Initializing, creating conversation...');
     (async () => {
       try {
         const conv = await conversations.createConversation({
           agent_name: "crm_assistant",
           metadata: { name: "Chat Session", description: "User chat session" }
         });
+        console.log('[ChatWindow] Conversation created:', conv);
         if (mounted && conv?.id) {
           setConversationId(conv.id);
         }
       } catch (error) {
-        console.error("Error creating conversation:", error);
+        console.error("[ChatWindow] Error creating conversation:", error);
       }
     })();
     return () => { mounted = false; };
@@ -163,14 +180,19 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
 
   useEffect(() => {
     if (!conversationId) return;
+    console.log(`[ChatWindow] Setting up subscription for conversation ${conversationId}`);
     loadConversation();
     const unsub = conversations.subscribeToConversation(conversationId, (data) => {
+      console.log('[ChatWindow] SSE update received:', data);
       if (data?.messages) {
         setMessages(data.messages.map(wrapMessage));
         setIsLoading(false);
       }
     });
-    return () => unsub();
+    return () => {
+      console.log(`[ChatWindow] Cleaning up subscription for ${conversationId}`);
+      unsub();
+    };
   }, [conversationId, loadConversation]);
 
   const handleSend = async () => {
@@ -180,26 +202,61 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
     setInputValue("");
     setIsLoading(true);
 
+    // Optimistically render the user's message so the UI responds immediately
+    const optimisticMessage = wrapMessage({ role: 'user', content: userMessage });
+    setMessages(prev => [...prev, optimisticMessage]);
+
     try {
       const conv = await conversations.getConversation(conversationId);
-      
+
       // Add industry context to the message if it exists
       const enhancedMessage = industryContext 
         ? `${industryContext}\n\nUser Question: ${userMessage}`
         : userMessage;
-      
+
       await conversations.addMessage(conv, {
         role: "user",
         content: enhancedMessage
       });
+
+      // Poll for AI response with exponential backoff
+      let attempts = 0;
+      const maxAttempts = 10;
+      const pollInterval = 1000; // Start with 1 second
+
+      const pollForResponse = async () => {
+        attempts++;
+        await loadConversation();
+        
+        // Check if we got a response from the assistant
+        const latestMessages = await conversations.getConversation(conversationId);
+        const hasAssistantReply = latestMessages.messages?.some(
+          (msg, idx) => idx > 0 && msg.role === 'assistant' && 
+          latestMessages.messages[idx - 1].content === enhancedMessage
+        );
+
+        if (hasAssistantReply || attempts >= maxAttempts) {
+          setIsLoading(false);
+        } else {
+          // Continue polling with exponential backoff
+          setTimeout(pollForResponse, Math.min(pollInterval * attempts, 5000));
+        }
+      };
+
+      // Start polling after a brief delay
+      setTimeout(pollForResponse, 1500);
+
     } catch (error) {
       console.error("Error sending message:", error);
       setIsLoading(false);
+      // Roll back optimistic message when the backend rejects the send
+      setMessages(prev => prev.filter(m => m !== optimisticMessage));
       toast({
         title: "Error",
         description: "Failed to send message",
         variant: "destructive",
       });
+      return;
     }
   };
 

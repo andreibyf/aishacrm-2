@@ -15,7 +15,9 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
-import { analyzeDataQuality } from "@/api/functions";
+import { getBackendUrl } from "@/api/backendUrl";
+
+const BACKEND_URL = getBackendUrl();
 
 export default function DataQualityReport({ tenantFilter }) {
   const [loading, setLoading] = useState(true);
@@ -31,7 +33,18 @@ export default function DataQualityReport({ tenantFilter }) {
       // Extract tenant_id from tenantFilter for the backend call
       const tenant_id = tenantFilter?.tenant_id || null;
 
-      const result = await analyzeDataQuality({ tenant_id });
+      // Call backend API directly
+      const url = new URL(`${BACKEND_URL}/api/reports/data-quality`);
+      if (tenant_id) {
+        url.searchParams.append('tenant_id', tenant_id);
+      }
+
+      const response = await fetch(url.toString());
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
       console.log("DataQualityReport: Raw result:", result);
 
       // Check if we got a valid response
@@ -69,6 +82,10 @@ export default function DataQualityReport({ tenantFilter }) {
         const leadIssues = report.leads.issues_percentage || 0;
         entityScores.Leads = Math.round(100 - leadIssues);
       }
+      if (report.opportunities) {
+        const oppIssues = report.opportunities.issues_percentage || 0;
+        entityScores.Opportunities = Math.round(100 - oppIssues);
+      }
 
       // Calculate overall score
       const scores = Object.values(entityScores);
@@ -84,108 +101,127 @@ export default function DataQualityReport({ tenantFilter }) {
         Opportunities: [],
       };
 
-      // Process contacts issues
-      if (report.contacts?.issues) {
-        const contactIssues = report.contacts.issues;
-        if (contactIssues.missing_first_name > 0) {
+      // Process contacts issues from missing_fields
+      if (report.contacts?.missing_fields) {
+        const missingFields = report.contacts.missing_fields;
+        if (missingFields.first_name > 0) {
           issues.Contacts.push({
             field: "First Name",
             issue: "Missing first name",
-            count: contactIssues.missing_first_name,
+            count: missingFields.first_name,
           });
         }
-        if (contactIssues.missing_last_name > 0) {
+        if (missingFields.last_name > 0) {
           issues.Contacts.push({
             field: "Last Name",
             issue: "Missing last name",
-            count: contactIssues.missing_last_name,
+            count: missingFields.last_name,
           });
         }
-        if (contactIssues.invalid_email > 0) {
+        if (missingFields.email > 0) {
           issues.Contacts.push({
             field: "Email",
-            issue: "Invalid email format",
-            count: contactIssues.invalid_email,
+            issue: "Missing email",
+            count: missingFields.email,
           });
         }
-        if (contactIssues.missing_contact_info > 0) {
+        if (missingFields.phone > 0) {
           issues.Contacts.push({
-            field: "Contact Info",
-            issue: "Missing both phone and email",
-            count: contactIssues.missing_contact_info,
-          });
-        }
-        if (contactIssues.invalid_name_characters > 0) {
-          issues.Contacts.push({
-            field: "Name",
-            issue: "Invalid characters in name",
-            count: contactIssues.invalid_name_characters,
+            field: "Phone",
+            issue: "Missing phone",
+            count: missingFields.phone,
           });
         }
       }
 
-      // Process accounts issues
-      if (report.accounts?.issues) {
-        const accountIssues = report.accounts.issues;
-        if (accountIssues.invalid_email > 0) {
-          issues.Accounts.push({
-            field: "Email",
-            issue: "Invalid email format",
-            count: accountIssues.invalid_email,
-          });
-        }
-        if (accountIssues.missing_contact_info > 0) {
-          issues.Accounts.push({
-            field: "Contact Info",
-            issue: "Missing both phone and email",
-            count: accountIssues.missing_contact_info,
-          });
-        }
-        if (accountIssues.invalid_name_characters > 0) {
+      // Process accounts issues from missing_fields
+      if (report.accounts?.missing_fields) {
+        const missingFields = report.accounts.missing_fields;
+        if (missingFields.name > 0) {
           issues.Accounts.push({
             field: "Name",
-            issue: "Invalid characters in name",
-            count: accountIssues.invalid_name_characters,
+            issue: "Missing account name",
+            count: missingFields.name,
+          });
+        }
+        if (missingFields.industry > 0) {
+          issues.Accounts.push({
+            field: "Industry",
+            issue: "Missing industry",
+            count: missingFields.industry,
+          });
+        }
+        if (missingFields.website > 0) {
+          issues.Accounts.push({
+            field: "Website",
+            issue: "Missing website",
+            count: missingFields.website,
           });
         }
       }
 
-      // Process leads issues
-      if (report.leads?.issues) {
-        const leadIssues = report.leads.issues;
-        if (leadIssues.missing_first_name > 0) {
-          issues.Leads.push({
-            field: "First Name",
-            issue: "Missing first name",
-            count: leadIssues.missing_first_name,
-          });
-        }
-        if (leadIssues.missing_last_name > 0) {
-          issues.Leads.push({
-            field: "Last Name",
-            issue: "Missing last name",
-            count: leadIssues.missing_last_name,
-          });
-        }
-        if (leadIssues.invalid_email > 0) {
+      // Process leads issues from missing_fields
+      if (report.leads?.missing_fields) {
+        const missingFields = report.leads.missing_fields;
+        if (missingFields.email > 0) {
           issues.Leads.push({
             field: "Email",
-            issue: "Invalid email format",
-            count: leadIssues.invalid_email,
+            issue: "Missing email",
+            count: missingFields.email,
           });
         }
-        if (leadIssues.missing_contact_info > 0) {
+        if (missingFields.phone > 0) {
           issues.Leads.push({
-            field: "Contact Info",
-            issue: "Missing both phone and email",
-            count: leadIssues.missing_contact_info,
+            field: "Phone",
+            issue: "Missing phone",
+            count: missingFields.phone,
           });
         }
-        if (leadIssues.invalid_name_characters > 0) {
+        if (missingFields.status > 0) {
           issues.Leads.push({
-            field: "Name",
-            issue: "Invalid characters in name",
-            count: leadIssues.invalid_name_characters,
+            field: "Status",
+            issue: "Missing status",
+            count: missingFields.status,
+          });
+        }
+        if (missingFields.source > 0) {
+          issues.Leads.push({
+            field: "Source",
+            issue: "Missing source",
+            count: missingFields.source,
+          });
+        }
+      }
+
+      // Process opportunities issues from missing_fields
+      if (report.opportunities?.missing_fields) {
+        const missingFields = report.opportunities.missing_fields;
+        if (missingFields.account_id > 0) {
+          issues.Opportunities.push({
+            field: "Account",
+            issue: "Missing linked account",
+            count: missingFields.account_id,
+          });
+        }
+        if (missingFields.stage > 0) {
+          issues.Opportunities.push({
+            field: "Stage",
+            issue: "Missing stage",
+            count: missingFields.stage,
+          });
+        }
+        if (missingFields.close_date > 0) {
+          issues.Opportunities.push({
+            field: "Close Date",
+            issue: "Missing close date",
+            count: missingFields.close_date,
+          });
+        }
+        if (missingFields.amount > 0) {
+          issues.Opportunities.push({
+            field: "Amount",
+            issue: "Missing amount",
+            count: missingFields.amount,
           });
         }
       }

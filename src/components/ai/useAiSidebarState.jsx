@@ -1,0 +1,448 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { processChatCommand } from '@/ai/engine/processChatCommand';
+import { processDeveloperCommand } from '@/api/functions';
+import { addHistoryEntry, getRecentHistory, getSuggestions } from '@/lib/suggestionEngine';
+import { useUser } from '@/components/shared/useUser';
+
+const ROUTE_CONTEXT_RULES = [
+  { test: /^\/?$/, routeName: 'dashboard:home', entity: 'dashboard' },
+  { test: /^\/dashboard/, routeName: 'dashboard:home', entity: 'dashboard' },
+  { test: /^\/leads\/[^/]+$/, routeName: 'leads:detail', entity: 'leads' },
+  { test: /^\/leads/, routeName: 'leads:list', entity: 'leads' },
+  { test: /^\/accounts\/[^/]+$/, routeName: 'accounts:detail', entity: 'accounts' },
+  { test: /^\/accounts/, routeName: 'accounts:list', entity: 'accounts' },
+  { test: /^\/contacts/, routeName: 'contacts:list', entity: 'contacts' },
+  { test: /^\/opportunities/, routeName: 'opportunities:list', entity: 'opportunities' },
+  { test: /^\/activities/, routeName: 'activities:list', entity: 'activities' }
+];
+
+const deriveRouteContext = (path = '/') => {
+  const normalized = path || '/';
+  const rule = ROUTE_CONTEXT_RULES.find((entry) => entry.test.test(normalized));
+  if (!rule) {
+    return { routeName: 'general:home', entity: 'general' };
+  }
+  return { routeName: rule.routeName, entity: rule.entity };
+};
+
+const AiSidebarContext = createContext(null);
+
+const welcomeMessage = {
+  id: 'welcome',
+  role: 'assistant',
+  content: "Hi, I'm AiSHA. Ask about leads, accounts, or anything you need help with in the CRM.",
+  timestamp: Date.now()
+};
+
+const resolveTenantContext = (user = null) => {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+  const context = {};
+  try {
+    // Priority: 1. Authenticated user's assigned tenant_id (most authoritative)
+    //           2. localStorage selected_tenant_id (superadmin manual selection)
+    //           3. localStorage tenant_id (legacy fallback)
+    if (user?.tenant_id) {
+      context.tenantId = user.tenant_id;
+    } else {
+      context.tenantId =
+        localStorage.getItem('selected_tenant_id') ||
+        localStorage.getItem('tenant_id') ||
+        undefined;
+    }
+  } catch {
+    context.tenantId = undefined;
+  }
+  try {
+    context.tenantName = localStorage.getItem('selected_tenant_name') || undefined;
+  } catch {
+    context.tenantName = undefined;
+  }
+  context.currentPath = window.location?.pathname;
+  const routeMeta = deriveRouteContext(context.currentPath || '/');
+  context.routeName = routeMeta.routeName;
+  context.primaryEntity = routeMeta.entity;
+  context.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return context;
+};
+
+const buildSuggestionContext = () => {
+  const tenantContext = resolveTenantContext();
+  return {
+    tenantId: tenantContext.tenantId,
+    routeName: tenantContext.routeName,
+    entity: tenantContext.primaryEntity || 'general'
+  };
+};
+
+const createMessageId = () => {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch {
+    // ignore and fall through
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+};
+
+export function AiSidebarProvider({ children }) {
+  const { user } = useUser();
+  const [isOpen, setIsOpen] = useState(false);
+  const [messages, setMessages] = useState(() => [{ ...welcomeMessage, id: createMessageId(), timestamp: Date.now() }]);
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState(null);
+  const [realtimeMode, setRealtimeMode] = useState(false);
+  const [isDeveloperMode, setIsDeveloperMode] = useState(false); // Developer Mode for superadmins
+  const [suggestions, setSuggestions] = useState([]);
+  // Session entity context: maps entity names/references to their IDs for follow-up questions
+  // Format: { "jack lemon": { id: "uuid", type: "lead", data: {...} }, ... }
+  const [sessionEntityContext, setSessionEntityContext] = useState({});
+  const messagesRef = useRef(messages);
+  const userRef = useRef(user);
+  const suggestionContextRef = useRef(buildSuggestionContext());
+  const suggestionIndexRef = useRef(new Map());
+  const sessionContextRef = useRef({});
+
+  // Keep userRef updated for use in sendMessage
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // Keep sessionContextRef in sync
+  useEffect(() => {
+    sessionContextRef.current = sessionEntityContext;
+  }, [sessionEntityContext]);
+
+  // Extract entities from AI response data and add to session context
+  const extractAndStoreEntities = useCallback((data, entityType) => {
+    if (!data) return;
+
+    const newContext = { ...sessionContextRef.current };
+    const items = Array.isArray(data) ? data : (data.items || data.records || [data]);
+
+    for (const item of items) {
+      if (!item?.id) continue;
+
+      // Build searchable keys from the entity
+      const keys = [];
+
+      // Full name for leads/contacts
+      if (item.first_name || item.last_name) {
+        const fullName = [item.first_name, item.last_name].filter(Boolean).join(' ').trim().toLowerCase();
+        if (fullName) keys.push(fullName);
+      }
+
+      // Name field (accounts, opportunities)
+      if (item.name) {
+        keys.push(item.name.toLowerCase());
+      }
+
+      // Company name
+      if (item.company_name) {
+        keys.push(item.company_name.toLowerCase());
+      }
+
+      // Email
+      if (item.email) {
+        keys.push(item.email.toLowerCase());
+      }
+
+      // Subject for activities
+      if (item.subject) {
+        keys.push(item.subject.toLowerCase());
+      }
+
+      // Store each key pointing to the entity
+      for (const key of keys) {
+        if (key && key.length > 1) {
+          newContext[key] = {
+            id: item.id,
+            type: entityType || item.type || 'unknown',
+            name: item.name || [item.first_name, item.last_name].filter(Boolean).join(' ') || item.subject || key,
+            data: item
+          };
+        }
+      }
+    }
+
+    setSessionEntityContext(newContext);
+    if (import.meta.env?.DEV) {
+      console.log('[SessionContext] Updated with', Object.keys(newContext).length, 'entity references');
+    }
+  }, []);
+
+  // Resolve a mention to an entity from session context
+  const resolveEntityFromContext = useCallback((mention) => {
+    if (!mention) return null;
+    const normalized = mention.toLowerCase().trim();
+    return sessionContextRef.current[normalized] || null;
+  }, []);
+
+  // Build context summary for AI (names -> IDs)
+  const buildSessionContextSummary = useCallback(() => {
+    const ctx = sessionContextRef.current;
+    if (!ctx || Object.keys(ctx).length === 0) return null;
+
+    // Dedupe by ID and create a summary
+    const byId = {};
+    for (const [key, value] of Object.entries(ctx)) {
+      if (!byId[value.id]) {
+        byId[value.id] = { ...value, aliases: [key] };
+      } else {
+        byId[value.id].aliases.push(key);
+      }
+    }
+
+    return Object.values(byId).map(e => ({
+      id: e.id,
+      type: e.type,
+      name: e.name,
+      aliases: e.aliases.slice(0, 3) // Limit aliases
+    }));
+  }, []);
+
+  const refreshSuggestions = useCallback(() => {
+    const context = buildSuggestionContext();
+    suggestionContextRef.current = context;
+    const history = getRecentHistory();
+    const next = getSuggestions({ context, history });
+    suggestionIndexRef.current = new Map(next.map((item) => [item.id, item]));
+    setSuggestions(next);
+  }, []);
+
+  useEffect(() => {
+    refreshSuggestions();
+  }, [refreshSuggestions]);
+
+  const openSidebar = useCallback(() => setIsOpen(true), []);
+  const closeSidebar = useCallback(() => setIsOpen(false), []);
+  const toggleSidebar = useCallback(() => setIsOpen((prev) => !prev), []);
+
+  const resetThread = useCallback(() => {
+    setMessages([{ ...welcomeMessage, id: createMessageId(), timestamp: Date.now() }]);
+    setError(null);
+    setSessionEntityContext({}); // Clear session context on reset
+    refreshSuggestions();
+  }, [refreshSuggestions]);
+
+  const clearError = useCallback(() => setError(null), []);
+
+  const sendMessage = useCallback(async (rawText, options = {}) => {
+    const text = (rawText || '').trim();
+    if (!text) return null;
+    const origin = options.origin === 'voice' ? 'voice' : 'text';
+    const autoSend = Boolean(options.autoSend);
+
+    const newUserMessage = {
+      id: createMessageId(),
+      role: 'user',
+      content: text,
+      timestamp: Date.now(),
+      metadata: {
+        ...(options.metadata || {}),
+        origin,
+        autoSend
+      }
+    };
+
+    const updatedHistory = [...(messagesRef.current || []), newUserMessage];
+    setMessages(updatedHistory);
+    messagesRef.current = updatedHistory;
+    setIsSending(true);
+    setError(null);
+
+    const chatHistory = updatedHistory
+      .filter((msg) => msg.role === 'assistant' || msg.role === 'user')
+      .map((msg) => ({ role: msg.role, content: msg.content }));
+
+    // Use authenticated user's tenant_id as primary source for AI context
+    const context = resolveTenantContext(userRef.current);
+
+    try {
+      let result;
+
+      // Use Developer AI (Claude) when in developer mode
+      if (isDeveloperMode && userRef.current?.role === 'superadmin') {
+        const devResponse = await processDeveloperCommand({
+          message: text,
+          userRole: userRef.current?.role,
+          userEmail: userRef.current?.email
+        });
+        if (devResponse?.data?.status === 'success') {
+          result = {
+            assistantMessage: {
+              content: devResponse.data.response || 'No response from Developer AI.',
+              actions: [],
+              data: null,
+              mode: 'developer'
+            },
+            route: 'developer',
+            classification: { intent: 'developer', entity: 'code' }
+          };
+        } else {
+          throw new Error(devResponse?.data?.message || 'Developer AI request failed');
+        }
+      } else {
+        // Include session context for entity resolution in follow-up questions
+        const sessionContext = buildSessionContextSummary();
+        result = await processChatCommand({
+          text,
+          history: chatHistory,
+          context,
+          sessionEntities: sessionContext
+        });
+      }
+
+      const assistantMessage = {
+        id: createMessageId(),
+        role: 'assistant',
+        content:
+          result.assistantMessage.content || 'I could not find any details yet, but I am ready to keep helping.',
+        timestamp: Date.now(),
+        actions: result.assistantMessage.actions || [],
+        data: result.assistantMessage.data || null,
+        data_summary: result.assistantMessage.data_summary,
+        mode: result.assistantMessage.mode || 'read_only',
+        metadata: {
+          route: result.route,
+          classification: result.classification,
+          localAction: result.localAction || null
+        }
+      };
+
+      if (result.localAction && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('aisha:ai-local-action', { detail: result.localAction }));
+      }
+
+      const parserSummary = result?.classification?.parserResult || result?.classification?.effectiveParser;
+      if (parserSummary) {
+        addHistoryEntry({
+          intent: parserSummary.intent || 'ambiguous',
+          entity: parserSummary.entity || 'general',
+          rawText: text,
+          timestamp: new Date().toISOString(),
+          origin
+        });
+        refreshSuggestions();
+      }
+
+      // Extract entities from response data for session context
+      if (result.assistantMessage?.data) {
+        const entityType = result.classification?.parserResult?.entity ||
+          result.classification?.effectiveParser?.entity ||
+          result.route;
+        extractAndStoreEntities(result.assistantMessage.data, entityType);
+      }
+
+      setMessages((prev) => {
+        const next = [...prev, assistantMessage];
+        messagesRef.current = next;
+        return next;
+      });
+      return assistantMessage;
+    } catch (err) {
+      const fallback = {
+        id: createMessageId(),
+        role: 'assistant',
+        content: `I'm having trouble reaching the AI service: ${err?.message || err}. Please try again in a bit.`,
+        timestamp: Date.now(),
+        error: true
+      };
+      setMessages((prev) => [...prev, fallback]);
+      setError(err);
+      return null;
+    } finally {
+      setIsSending(false);
+    }
+  }, [refreshSuggestions, isDeveloperMode, buildSessionContextSummary, extractAndStoreEntities]);
+
+  const addRealtimeMessage = useCallback((message) => {
+    const content = (message?.content || '').toString();
+    if (!content) return;
+
+    const normalized = {
+      id: createMessageId(),
+      role: message?.role === 'user' ? 'user' : 'assistant',
+      content,
+      timestamp: Date.now(),
+      metadata: {
+        ...(message?.metadata || {}),
+        origin: 'realtime'
+      }
+    };
+
+    setMessages((prev) => {
+      const next = [...prev, normalized];
+      messagesRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const applySuggestion = useCallback((suggestionId) => {
+    const suggestion = suggestionIndexRef.current.get(suggestionId);
+    return suggestion?.command || '';
+  }, []);
+
+  const value = useMemo(
+    () => ({
+      isOpen,
+      openSidebar,
+      closeSidebar,
+      toggleSidebar,
+      resetThread,
+      messages,
+      isSending,
+      error,
+      clearError,
+      sendMessage,
+      realtimeMode,
+      setRealtimeMode,
+      addRealtimeMessage,
+      suggestions,
+      applySuggestion,
+      isDeveloperMode,
+      setIsDeveloperMode
+    }),
+    [
+      isOpen,
+      messages,
+      isSending,
+      error,
+      openSidebar,
+      closeSidebar,
+      toggleSidebar,
+      resetThread,
+      clearError,
+      sendMessage,
+      realtimeMode,
+      setRealtimeMode,
+      addRealtimeMessage,
+      suggestions,
+      applySuggestion,
+      isDeveloperMode,
+      setIsDeveloperMode
+    ]
+  );
+
+  return <AiSidebarContext.Provider value={value}>{children}</AiSidebarContext.Provider>;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useAiSidebarState() {
+  const context = useContext(AiSidebarContext);
+  if (!context) {
+    throw new Error('useAiSidebarState must be used within an AiSidebarProvider');
+  }
+  return context;
+}

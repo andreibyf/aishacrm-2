@@ -1,5 +1,7 @@
 import React, { useState } from "react";
-import { Contact, Account, Opportunity, Lead, User } from "@/api/entities";
+import { Contact, Account, Opportunity, Lead } from "@/api/entities";
+import { useUser } from '@/components/shared/useUser.js';
+import { useTenant } from '@/components/shared/tenantContext';
 import {
   Dialog,
   DialogContent,
@@ -14,18 +16,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 
 import { Loader2, UserPlus, Building2, Target, ArrowRight } from "lucide-react";
-import { generateUniqueId } from "@/api/functions";
 import { useApiManager } from "../shared/ApiManager";
 
 export default function LeadConversionDialog({ lead, accounts, open, onConvert, onClose }) {
   const [isConverting, setIsConverting] = useState(false);
-  const [createAccount, setCreateAccount] = useState(true);
+  const [createAccount, setCreateAccount] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [createOpportunity, setCreateOpportunity] = useState(false);
   const [accountName, setAccountName] = useState("");
   const [opportunityName, setOpportunityName] = useState("");
   const [opportunityAmount, setOpportunityAmount] = useState("");
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
+  const { selectedTenantId } = useTenant();
+
+  // Use selectedTenantId from dropdown first, then fall back to user's primary tenant
+  const effectiveTenantId = selectedTenantId || currentUser?.tenant_id;
 
   const { cachedRequest } = useApiManager();
 
@@ -46,21 +51,11 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
     }
   }, [lead]);
 
-  React.useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const user = await User.me();
-        setCurrentUser(user);
-      } catch (error) {
-        console.error("Failed to load current user:", error);
-      }
-    };
-    loadUser();
-  }, []);
+  // User now provided by global context (useUser)
 
   const handleConvert = async () => {
-    if (!currentUser?.tenant_id) {
-      alert("Cannot convert lead: Your account is not configured with a tenant.");
+    if (!effectiveTenantId) {
+      alert("Cannot convert lead: No tenant selected. Please select a tenant first.");
       return;
     }
 
@@ -74,7 +69,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
 
         const newAccountData = {
           name: accountName,
-          tenant_id: currentUser.tenant_id,
+          tenant_id: effectiveTenantId,
           type: "prospect",
           phone: lead.phone || null,
           address_1: lead.address_1 || null,
@@ -83,26 +78,25 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
           state: lead.state || null,
           zip: lead.zip || null,
           country: lead.country || null,
-          assigned_to: lead.assigned_to || currentUser.email,
+          assigned_to: lead.assigned_to || null,
         };
 
+        // Backend will auto-generate unique_id if not provided
         try {
-          const idResponse = await generateUniqueId({ entity_type: 'Account', tenant_id: currentUser.tenant_id });
-          if (idResponse.data?.unique_id) {
-            newAccountData.unique_id = idResponse.data.unique_id;
-            console.log("Generated unique_id for new account during conversion:", newAccountData.unique_id);
-          }
+          const newAccount = await cachedRequest(
+            'Account',
+            'create',
+            { data: newAccountData },
+            () => Account.create(newAccountData)
+          );
+          accountId = newAccount.id;
         } catch (error) {
-          console.warn("Failed to generate unique_id for account during conversion", error);
+          // Check for duplicate account error
+          if (error.message?.includes('duplicate') || error.message?.includes('already exists')) {
+            throw new Error(`An account named "${accountName}" already exists. Please choose a different name or select the existing account.`);
+          }
+          throw error;
         }
-
-        const newAccount = await cachedRequest(
-          'Account',
-          'create',
-          { data: newAccountData },
-          () => Account.create(newAccountData)
-        );
-        accountId = newAccount.id;
       } else if (!createAccount && selectedAccountId) {
         accountId = selectedAccountId;
         console.log("Using existing account:", accountId);
@@ -117,7 +111,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
         'create',
         {
           data: {
-            tenant_id: currentUser.tenant_id,
+            tenant_id: effectiveTenantId,
             first_name: lead.first_name,
             last_name: lead.last_name,
             email: lead.email,
@@ -138,11 +132,11 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
             ai_action: "follow_up",
             last_contacted: new Date().toISOString().split('T')[0],
             next_action: "Initial contact as converted lead",
-            assigned_to: lead.assigned_to || currentUser.email,
+            assigned_to: lead.assigned_to || null,
           }
         },
         () => Contact.create({
-          tenant_id: currentUser.tenant_id,
+          tenant_id: effectiveTenantId,
           first_name: lead.first_name,
           last_name: lead.last_name,
           email: lead.email,
@@ -163,7 +157,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
           ai_action: "follow_up",
           last_contacted: new Date().toISOString().split('T')[0],
           next_action: "Initial contact as converted lead",
-          assigned_to: lead.assigned_to || currentUser.email,
+          assigned_to: lead.assigned_to || null,
         })
       );
 
@@ -176,7 +170,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
           'create',
           {
             data: {
-              tenant_id: currentUser.tenant_id,
+              tenant_id: effectiveTenantId,
               name: opportunityName,
               account_id: accountId || null,
               contact_id: newContact.id,
@@ -184,13 +178,13 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
               amount: parseFloat(opportunityAmount) || 0,
               probability: 25,
               lead_source: lead.source || "other",
-              assigned_to: lead.assigned_to || currentUser.email,
+              assigned_to: lead.assigned_to || null,
               close_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
               type: "new_business",
             }
           },
           () => Opportunity.create({
-            tenant_id: currentUser.tenant_id,
+            tenant_id: effectiveTenantId,
             name: opportunityName,
             account_id: accountId || null,
             contact_id: newContact.id,
@@ -198,7 +192,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
             amount: parseFloat(opportunityAmount) || 0,
             probability: 25,
             lead_source: lead.source || "other",
-            assigned_to: lead.assigned_to || currentUser.email,
+            assigned_to: lead.assigned_to || null,
             close_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             type: "new_business",
           })
@@ -383,7 +377,7 @@ export default function LeadConversionDialog({ lead, accounts, open, onConvert, 
           </Button>
           <Button 
             onClick={handleConvert} 
-            disabled={isConverting || (createAccount && !accountName.trim()) || (!createAccount && !selectedAccountId && createOpportunity)}
+            disabled={isConverting || (createAccount && !accountName.trim())}
             className="bg-green-600 hover:bg-green-700"
           >
             {isConverting ? (

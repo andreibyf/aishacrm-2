@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Account } from "@/api/entities";
 import { Contact } from "@/api/entities";
-import { User } from "@/api/entities";
 import { Employee } from "@/api/entities";
 import { useApiManager } from "../components/shared/ApiManager";
-import { loadUsersSafely } from "../components/shared/userLoader";
+import { loadUsersSafely } from "../components/shared/userLoader"; // TODO: remove after refactor if unused
+import { useUser } from "@/components/shared/useUser.js";
 import AccountCard from "../components/accounts/AccountCard";
 import AccountForm from "../components/accounts/AccountForm";
 import AccountDetailPanel from "../components/accounts/AccountDetailPanel";
@@ -47,15 +47,23 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import StatusHelper from "../components/shared/StatusHelper";
+import { ComponentHelp } from "../components/shared/ComponentHelp";
+import { formatIndustry } from "@/utils/industryUtils";
+import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
+import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 
 // Helper to add delay between API calls
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function AccountsPage() {
+  const { plural: accountsLabel, singular: accountLabel } = useEntityLabel('accounts');
+  const { getCardLabel, isCardVisible } = useStatusCardPreferences();
   const [accounts, setAccounts] = useState([]);
   const [, setContacts] = useState([]);
   const [users, setUsers] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [supportingDataReady, setSupportingDataReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -65,7 +73,7 @@ export default function AccountsPage() {
   const [selectedAccounts, setSelectedAccounts] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
   const { selectedTenantId } = useTenant();
   const [detailAccount, setDetailAccount] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -78,6 +86,7 @@ export default function AccountsPage() {
     customer: 0,
     prospect: 0,
     partner: 0,
+    competitor: 0,
     inactive: 0,
   });
 
@@ -118,12 +127,34 @@ export default function AccountsPage() {
       filter.tenant_id = user.tenant_id;
     }
 
+    const filterObj = {}; // For accumulating JSON filter properties
+
     // Employee scope filtering from context
     if (selectedEmail && selectedEmail !== "all") {
       if (selectedEmail === "unassigned") {
-        filter.$or = [{ assigned_to: null }, { assigned_to: "" }];
+        // Only filter by null
+        filterObj.$or = [{ assigned_to: null }];
       } else {
-        filter.assigned_to = selectedEmail;
+        // Robust filtering: Match by ID or Email
+        let emailToUse = selectedEmail;
+        // Check if selectedEmail looks like a UUID (it often is from LazyEmployeeSelector)
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedEmail);
+
+        if (isUuid && employees && employees.length > 0) {
+          const emp = employees.find(e => e.id === selectedEmail);
+          if (emp && emp.email) {
+            emailToUse = emp.email;
+            // Match either ID OR Email
+            filterObj.$or = [
+              { assigned_to: selectedEmail },
+              { assigned_to: emailToUse }
+            ];
+          } else {
+            filter.assigned_to = selectedEmail;
+          }
+        } else {
+          filter.assigned_to = selectedEmail;
+        }
       }
     } else if (
       user.employee_role === "employee" && user.role !== "admin" &&
@@ -135,25 +166,18 @@ export default function AccountsPage() {
 
     // Test data filtering
     if (!showTestData) {
-      filter.is_test_data = { $ne: true };
+      filter.is_test_data = false;
+    }
+
+    // Package the complex filterObj into the 'filter' parameter
+    if (Object.keys(filterObj).length > 0) {
+      filter.filter = JSON.stringify(filterObj);
     }
 
     return filter;
-  }, [user, selectedTenantId, showTestData, selectedEmail]);
+  }, [user, selectedTenantId, showTestData, selectedEmail, employees]);
 
-  // Load user once
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Failed to load user:", error);
-        toast.error("Failed to load user information");
-      }
-    };
-    loadUser();
-  }, []);
+  // User provided by global context
 
   // Load supporting data (contacts, users, employees) ONCE with delays and error handling
   useEffect(() => {
@@ -166,7 +190,8 @@ export default function AccountsPage() {
         // since supporting data like employees/contacts are usually loaded for all within the tenant
         // for selection in other forms, not necessarily to be filtered by assigned_to.
         // We revert to basic tenant filter for supporting data for now.
-        const baseTenantFilter = {};
+        // Base tenant filter without employee scope for Account and Employee entities
+        let baseTenantFilter = {};
         if (user.role === "superadmin" || user.role === "admin") {
           if (selectedTenantId) {
             baseTenantFilter.tenant_id = selectedTenantId;
@@ -175,34 +200,60 @@ export default function AccountsPage() {
           baseTenantFilter.tenant_id = user.tenant_id;
         }
 
-        // Load contacts
-        const contactsData = await cachedRequest("Contact", "filter", {
-          filter: baseTenantFilter,
-        }, () => Contact.filter(baseTenantFilter));
+        // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
+        if ((user.role === 'superadmin' || user.role === 'admin') && !baseTenantFilter.tenant_id) {
+          if (import.meta.env.DEV) {
+            console.log("[Accounts] Skipping data load - no tenant selected");
+          }
+          supportingDataLoaded.current = true;
+          return;
+        }
+
+        // PERFORMANCE OPTIMIZATION: Load all data concurrently
+        // This reduces the 'UUID -> Email -> Name' transition flicker
+        const [
+          accountsData,
+          contactsData,
+          usersData,
+          employeesData
+        ] = await Promise.all([
+          // Load accounts for lookups (e.g. parent accounts)
+          cachedRequest("Account", "filter", {
+            filter: baseTenantFilter,
+          }, () => Account.filter(baseTenantFilter)),
+
+          // Load contacts
+          cachedRequest("Contact", "filter", {
+            filter: baseTenantFilter,
+          }, () => Contact.filter(baseTenantFilter)),
+
+          // Load users safely (limit 1000)
+          loadUsersSafely(
+            user,
+            selectedTenantId,
+            cachedRequest,
+            1000
+          ),
+
+          // Load employees (limit 1000)
+          cachedRequest("Employee", "filter", {
+            filter: baseTenantFilter,
+            limit: 1000
+          }, () => Employee.filter(baseTenantFilter, 'created_at', 1000))
+        ]);
+
+        // Batch updates to reduce render cycles
+        setAccounts(accountsData || []);
         setContacts(contactsData || []);
-
-        await delay(300);
-
-        // Load users safely
-        const usersData = await loadUsersSafely(
-          user,
-          selectedTenantId,
-          cachedRequest,
-        );
         setUsers(usersData || []);
-
-        await delay(300);
-
-        // Load employees
-        const employeesData = await cachedRequest("Employee", "filter", {
-          filter: baseTenantFilter,
-        }, () => Employee.filter(baseTenantFilter));
         setEmployees(employeesData || []);
 
         supportingDataLoaded.current = true; // Mark as loaded
+        setSupportingDataReady(true);
       } catch (error) {
         console.error("[Accounts] Failed to load supporting data:", error);
-        // Don't toast here - the page will still function
+        // Even on error, allow accounts to load (will just show UUIDs)
+        setSupportingDataReady(true);
       }
     };
 
@@ -243,6 +294,19 @@ export default function AccountsPage() {
 
     try {
       const currentTenantFilter = getTenantFilter();
+      
+      // Guard: Don't load stats if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !currentTenantFilter.tenant_id) {
+        setTotalStats({
+          total: 0,
+          customer: 0,
+          prospect: 0,
+          partner: 0,
+          inactive: 0,
+        });
+        return;
+      }
+      
       const allAccounts = await cachedRequest(
         "Account",
         "filter",
@@ -255,6 +319,7 @@ export default function AccountsPage() {
         customer: allAccounts.filter((a) => a.type === "customer").length,
         prospect: allAccounts.filter((a) => a.type === "prospect").length,
         partner: allAccounts.filter((a) => a.type === "partner").length,
+        competitor: allAccounts.filter((a) => a.type === "competitor").length,
         inactive: allAccounts.filter((a) => a.type === "inactive").length || 0,
       };
 
@@ -271,6 +336,14 @@ export default function AccountsPage() {
     setLoading(true);
     try {
       const currentTenantFilter = getTenantFilter();
+
+      // Guard: Don't load accounts if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !currentTenantFilter.tenant_id) {
+        setAccounts([]);
+        setTotalItems(0);
+        setLoading(false);
+        return;
+      }
 
       const allAccounts = await cachedRequest(
         "Account",
@@ -310,8 +383,14 @@ export default function AccountsPage() {
 
       setTotalItems(filtered.length);
 
-      // Apply pagination
+      // Apply pagination with out-of-range guard (e.g., after deletions)
       const startIndex = (currentPage - 1) * pageSize;
+      if (startIndex >= filtered.length && currentPage > 1) {
+        setCurrentPage(currentPage - 1);
+        setLoading(false);
+        return;
+      }
+
       const endIndex = startIndex + pageSize;
       const paginatedAccounts = filtered.slice(startIndex, endIndex);
 
@@ -337,10 +416,12 @@ export default function AccountsPage() {
     getTenantFilter,
   ]);
 
-  // Load accounts when dependencies change
+  // Load accounts when dependencies change and data is ready
   useEffect(() => {
-    loadAccounts();
-  }, [loadAccounts]);
+    if (supportingDataReady) {
+      loadAccounts();
+    }
+  }, [loadAccounts, supportingDataReady]);
 
   // Load stats once when user/tenant/scope changes
   useEffect(() => {
@@ -389,35 +470,55 @@ export default function AccountsPage() {
   }, [accounts]);
 
   // Create lookup maps for denormalized fields
-  const usersMap = useMemo(() => {
-    return users.reduce((acc, user) => {
-      acc[user.email] = user.full_name || user.email;
-      return acc;
-    }, {});
-  }, [users]);
+  // Consolidate lookup maps into a single stable map to prevent flicker
+  const assignedToMap = useMemo(() => {
+    const map = {};
 
-  const employeesMap = useMemo(() => {
-    return employees.reduce((acc, employee) => {
-      if (employee.email) {
-        acc[employee.email] = `${employee.first_name} ${employee.last_name}`;
-      }
-      return acc;
-    }, {});
-  }, [employees]);
+    // First pass: Users (often have full_name or email)
+    users.forEach((user) => {
+      const name = user.full_name || user.email;
+      if (user.email) map[user.email] = name;
+      if (user.id) map[user.id] = name;
+    });
+
+    // Second pass: Employees (Overwrite/Augment with authoritative names)
+    employees.forEach((employee) => {
+      const name = `${employee.first_name} ${employee.last_name}`;
+      if (employee.email) map[employee.email] = name;
+      if (employee.id) map[employee.id] = name;
+      if (employee.user_id) map[employee.user_id] = name;
+    });
+
+    return map;
+  }, [users, employees]);
 
   const handleSave = async () => {
-    setIsFormOpen(false);
-    setEditingAccount(null);
-    clearCacheByKey("Account");
-    await Promise.all([
-      loadAccounts(),
-      loadTotalStats(),
-    ]);
-    toast.success(
-      editingAccount
-        ? "Account updated successfully"
-        : "Account created successfully",
-    );
+    const wasEditing = !!editingAccount;
+    
+    try {
+      // Clear cache and reload BEFORE closing the dialog
+      clearCacheByKey("Account");
+      await Promise.all([
+        loadAccounts(),
+        loadTotalStats(),
+      ]);
+      
+      // Now close the dialog after data is fresh
+      setIsFormOpen(false);
+      setEditingAccount(null);
+      
+      toast.success(
+        wasEditing
+          ? "Account updated successfully"
+          : "Account created successfully",
+      );
+    } catch (error) {
+      console.error('[Accounts] Error in handleSave:', error);
+      toast.error("Failed to refresh account list");
+      // Still close the dialog even on error
+      setIsFormOpen(false);
+      setEditingAccount(null);
+    }
   };
 
   const handleDelete = async (id) => {
@@ -426,6 +527,15 @@ export default function AccountsPage() {
     }
 
     try {
+      // Optimistically update UI for instant feedback
+      setAccounts((prev) => prev.filter((a) => a.id !== id));
+      setTotalItems((t) => Math.max(0, (t || 0) - 1));
+      setSelectedAccounts((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+
       await Account.delete(id);
       clearCacheByKey("Account");
       await Promise.all([
@@ -436,6 +546,8 @@ export default function AccountsPage() {
     } catch (error) {
       console.error("Failed to delete account:", error);
       toast.error("Failed to delete account");
+      // Ensure UI consistency by reloading on failure
+      await loadAccounts();
     }
   };
 
@@ -490,13 +602,23 @@ export default function AccountsPage() {
           await Promise.all(batch.map((a) => Account.delete(a.id)));
         }
 
+        // Optimistically remove from UI immediately
+        const deletedIds = new Set(allAccountsToDelete.map(a => a.id));
+        setAccounts((prev) => prev.filter((a) => !deletedIds.has(a.id)));
+        setTotalItems((t) => Math.max(0, (t || 0) - deleteCount));
+
         setSelectedAccounts(new Set());
         setSelectAllMode(false);
-        clearCacheByKey("Account");
-        await Promise.all([
-          loadAccounts(),
-          loadTotalStats(),
-        ]);
+        
+        // Refresh in background to ensure sync
+        setTimeout(async () => {
+          clearCacheByKey("Account");
+          await Promise.all([
+            loadAccounts(),
+            loadTotalStats(),
+          ]);
+        }, 500);
+        
         toast.success(`${deleteCount} account(s) deleted`);
       } catch (error) {
         console.error("Failed to delete accounts:", error);
@@ -516,6 +638,10 @@ export default function AccountsPage() {
         await Promise.all(
           [...selectedAccounts].map((id) => Account.delete(id)),
         );
+        // Optimistically update UI for selected deletions
+        const idsToRemove = new Set(selectedAccounts);
+        setAccounts((prev) => prev.filter((a) => !idsToRemove.has(a.id)));
+        setTotalItems((t) => Math.max(0, (t || 0) - idsToRemove.size));
         setSelectedAccounts(new Set());
         clearCacheByKey("Account");
         await Promise.all([
@@ -526,6 +652,7 @@ export default function AccountsPage() {
       } catch (error) {
         console.error("Failed to delete accounts:", error);
         toast.error("Failed to delete accounts");
+        await loadAccounts();
       }
     }
   };
@@ -781,6 +908,39 @@ export default function AccountsPage() {
     return searchTerm !== "" || typeFilter !== "all" || selectedTags.length > 0;
   }, [searchTerm, typeFilter, selectedTags]);
 
+  // AiSHA events listener - allows AI to trigger page actions
+  useAiShaEvents({
+    entityType: 'accounts',
+    onOpenEdit: ({ id }) => {
+      const account = accounts.find(a => a.id === id);
+      if (account) {
+        setEditingAccount(account);
+        setIsFormOpen(true);
+      } else {
+        // Account not in current page, try to fetch it
+        Account.get(id).then(result => {
+          if (result) {
+            setEditingAccount(result);
+            setIsFormOpen(true);
+          }
+        });
+      }
+    },
+    onSelectRow: ({ id }) => {
+      // Highlight the row and open detail panel
+      const account = accounts.find(a => a.id === id);
+      if (account) {
+        setDetailAccount(account);
+        setIsDetailOpen(true);
+      }
+    },
+    onOpenForm: () => {
+      setEditingAccount(null);
+      setIsFormOpen(true);
+    },
+    onRefresh: handleRefresh,
+  });
+
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-900 p-6 flex items-center justify-center">
@@ -791,17 +951,21 @@ export default function AccountsPage() {
 
   return (
     <TooltipProvider>
-      <div className="min-h-screen bg-slate-900 p-4 sm:p-6">
+      <div className="space-y-6">
         <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-800 border-slate-700 text-slate-200">
             <DialogHeader>
               <DialogTitle className="text-slate-100">
-                {editingAccount ? "Edit Account" : "Add New Account"}
+                {editingAccount ? `Edit ${accountLabel}` : `Add New ${accountLabel}`}
               </DialogTitle>
             </DialogHeader>
             <AccountForm
               account={editingAccount}
-              onSuccess={handleSave}
+              // AccountForm now handles Account.create/update internally, just handle refresh
+              onSubmit={async (result) => {
+                console.log('[Accounts] Account saved:', result);
+                await handleSave();
+              }}
               onCancel={() => {
                 setIsFormOpen(false);
                 setEditingAccount(null);
@@ -826,8 +990,7 @@ export default function AccountsPage() {
 
         <AccountDetailPanel
           account={detailAccount}
-          assignedUserName={employeesMap[detailAccount?.assigned_to] ||
-            usersMap[detailAccount?.assigned_to]}
+          assignedUserName={assignedToMap[detailAccount?.assigned_to] || detailAccount?.assigned_to}
           open={isDetailOpen}
           onOpenChange={() => {
             setIsDetailOpen(false);
@@ -846,11 +1009,18 @@ export default function AccountsPage() {
           user={user}
         />
 
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-100 mb-2">Accounts</h1>
-            <p className="text-slate-400">
-              Manage your company accounts and partnerships.
+            <div className="flex items-center gap-2">
+              <h1 className="text-3xl font-bold text-slate-100">{accountsLabel}</h1>
+              <ComponentHelp 
+                title="Accounts Management Guide" 
+                description="Learn how to create, filter, and manage your accounts effectively."
+                videoUrl="https://www.youtube.com/embed/dQw4w9WgXcQ" 
+              />
+            </div>
+            <p className="text-slate-400 mt-1">
+              Manage your company {accountsLabel.toLowerCase()} and partnerships.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -915,21 +1085,21 @@ export default function AccountsPage() {
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Account
+                  Add {accountLabel}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Create new account</p>
+                <p>Create new {accountLabel.toLowerCase()}</p>
               </TooltipContent>
             </Tooltip>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           {[
             {
-              label: "Total Accounts",
+              label: `Total ${accountsLabel}`,
               value: totalStats.total,
               filter: "all",
               bgColor: "bg-slate-800",
@@ -960,6 +1130,14 @@ export default function AccountsPage() {
               tooltip: "account_partner",
             },
             {
+              label: "Competitors",
+              value: totalStats.competitor,
+              filter: "competitor",
+              bgColor: "bg-red-900/20",
+              borderColor: "border-red-700",
+              tooltip: "account_competitor",
+            },
+            {
               label: "Inactive",
               value: totalStats.inactive,
               filter: "inactive",
@@ -967,7 +1145,7 @@ export default function AccountsPage() {
               borderColor: "border-gray-700",
               tooltip: "account_inactive",
             },
-          ].map((stat) => (
+          ].filter(stat => stat.tooltip === 'total_all' || isCardVisible(stat.tooltip)).map((stat) => (
             <div
               key={stat.label}
               className={`${stat.bgColor} ${
@@ -980,7 +1158,7 @@ export default function AccountsPage() {
               onClick={() => handleTypeFilterClick(stat.filter)}
             >
               <div className="flex items-center justify-between mb-1">
-                <p className="text-sm text-slate-400">{stat.label}</p>
+                <p className="text-sm text-slate-400">{getCardLabel(stat.tooltip) || stat.label}</p>
                 <StatusHelper statusKey={stat.tooltip} />
               </div>
               <p className="text-2xl font-bold text-slate-100">{stat.value}</p>
@@ -988,7 +1166,7 @@ export default function AccountsPage() {
           ))}
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-3 w-5 h-5 text-slate-500" />
             <Input
@@ -1036,7 +1214,7 @@ export default function AccountsPage() {
         {/* Select All Banner */}
         {selectedAccounts.size === accounts.length && accounts.length > 0 &&
           !selectAllMode && totalItems > accounts.length && (
-          <div className="mb-4 bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
+          <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-blue-400" />
               <span className="text-blue-200">
@@ -1062,7 +1240,7 @@ export default function AccountsPage() {
         )}
 
         {selectAllMode && (
-          <div className="mb-4 bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
+          <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-blue-400" />
               <span className="text-blue-200 font-semibold">
@@ -1094,12 +1272,12 @@ export default function AccountsPage() {
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
               <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-slate-300 mb-2">
-                No accounts found
+                No {accountsLabel.toLowerCase()} found
               </h3>
               <p className="text-slate-500 mb-6">
                 {hasActiveFilters
                   ? "Try adjusting your filters or search term"
-                  : "Get started by adding your first account"}
+                  : `Get started by adding your first ${accountLabel.toLowerCase()}`}
               </p>
               {!hasActiveFilters && (
                 <Button
@@ -1107,7 +1285,7 @@ export default function AccountsPage() {
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Your First Account
+                  Add Your First {accountLabel}
                 </Button>
               )}
             </div>
@@ -1191,13 +1369,13 @@ export default function AccountsPage() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-sm text-slate-300">
-                            {account.industry || (
+                            {formatIndustry(account.industry) || (
                               <span className="text-slate-500">—</span>
                             )}
                           </td>
                           <td className="px-4 py-3 text-sm text-slate-300">
-                            {employeesMap[account.assigned_to] ||
-                              usersMap[account.assigned_to] || (
+                            {assignedToMap[account.assigned_to] ||
+                              account.assigned_to || (
                               <span className="text-slate-500">Unassigned</span>
                             )}
                           </td>
@@ -1252,7 +1430,7 @@ export default function AccountsPage() {
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>Edit account</p>
+                                  <p>Edit {accountLabel.toLowerCase()}</p>
                                 </TooltipContent>
                               </Tooltip>
                               <Tooltip>
@@ -1301,8 +1479,7 @@ export default function AccountsPage() {
                   <AccountCard
                     key={account.id}
                     account={account}
-                    assignedUserName={employeesMap[account.assigned_to] ||
-                      usersMap[account.assigned_to]}
+                    assignedUserName={assignedToMap[account.assigned_to] || account.assigned_to}
                     onEdit={(a) => {
                       setEditingAccount(a);
                       setIsFormOpen(true);

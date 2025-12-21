@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Tenant, User } from "@/api/entities";
+import { Tenant } from "@/api/entities";
 import {
   Card,
   CardContent,
@@ -33,15 +33,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import {
-  AlertCircle,
-  Building2,
-  Edit,
-  Loader2,
-  Plus,
-} from "lucide-react";
+import { AlertCircle, Building2, Edit, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useUser } from "../components/shared/useUser.js";
 
 const TenantForm = ({ tenant, onSave, onCancel }) => {
   const [formData, setFormData] = useState({
@@ -279,24 +274,22 @@ const TenantForm = ({ tenant, onSave, onCancel }) => {
 
 export default function TenantsPage() {
   const [tenants, setTenants] = useState([]);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser, loading: userLoading } = useUser();
   const [loading, setLoading] = useState(true);
   const [editingTenant, setEditingTenant] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (!userLoading) {
+      loadData();
+    }
+  }, [userLoading]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [tenantsData, userData] = await Promise.all([
-        Tenant.list("display_order"),
-        User.me(),
-      ]);
+      const tenantsData = await Tenant.list("display_order");
       setTenants(tenantsData);
-      setCurrentUser(userData);
     } catch (error) {
       if (import.meta.env.DEV) {
         console.error("Error loading tenants:", error);
@@ -332,7 +325,7 @@ export default function TenantsPage() {
     setShowCreateForm(false);
   };
 
-  if (loading) {
+  if (loading || userLoading) {
     return (
       <div className="flex items-center justify-center p-12">
         <Loader2 className="w-8 h-8 animate-spin mr-3" />
@@ -399,19 +392,17 @@ export default function TenantsPage() {
                 <TableRow key={tenant.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      {tenant.logo_url
-                        ? (
-                          <img
-                            src={tenant.logo_url}
-                            alt={tenant.name}
-                            className="w-8 h-8 rounded object-cover"
-                          />
-                        )
-                        : (
-                          <div className="w-8 h-8 bg-slate-200 rounded flex items-center justify-center">
-                            <Building2 className="w-4 h-4 text-slate-600" />
-                          </div>
-                        )}
+                      {tenant.logo_url ? (
+                        <img
+                          src={tenant.logo_url}
+                          alt={tenant.name}
+                          className="w-8 h-8 rounded object-cover"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 bg-slate-200 rounded flex items-center justify-center">
+                          <Building2 className="w-4 h-4 text-slate-600" />
+                        </div>
+                      )}
                       <div>
                         <div className="font-medium">{tenant.name}</div>
                         <div className="text-sm text-slate-500">
@@ -421,15 +412,15 @@ export default function TenantsPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    {tenant.domain
-                      ? <Badge variant="outline">{tenant.domain}</Badge>
-                      : <span className="text-slate-400">No domain</span>}
+                    {tenant.domain ? (
+                      <Badge variant="outline">{tenant.domain}</Badge>
+                    ) : (
+                      <span className="text-slate-400">No domain</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary">
-                      {tenant.industry
-                        ? tenant.industry.replace(/_/g, " ")
-                        : "Not set"}
+                      {tenant.industry ? tenant.industry.replace(/_/g, " ") : "Not set"}
                     </Badge>
                   </TableCell>
                   <TableCell>

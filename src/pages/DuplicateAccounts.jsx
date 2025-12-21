@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Account } from "@/api/entities";
-import { User } from "@/api/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { formatIndustry } from "@/utils/industryUtils";
 import {
   AlertTriangle,
   ArrowDownCircle,
@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { useTenant } from "../components/shared/tenantContext";
 import { findDuplicates } from "@/api/functions";
-import { bulkDeleteAccounts } from "@/api/functions";
 import { consolidateDuplicateAccounts } from "@/api/functions";
 import AccountDetailPanel from "../components/accounts/AccountDetailPanel";
 import OperationOverlay from "../components/shared/OperationOverlay";
@@ -32,11 +31,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useUser } from "../components/shared/useUser.js";
 
 export default function DuplicateAccounts() {
   const [loading, setLoading] = useState(true);
   const [duplicateGroups, setDuplicateGroups] = useState([]);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -52,19 +52,6 @@ export default function DuplicateAccounts() {
 
   const [consolidating, setConsolidating] = useState(false);
   const [, setConsolidateTarget] = useState(null);
-
-  useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const user = await User.me();
-      setCurrentUser(user);
-    } catch (error) {
-      console.error("Failed to load user:", error);
-    }
-  };
 
   const loadDuplicates = useCallback(async () => {
     if (!currentUser) return;
@@ -139,33 +126,32 @@ export default function DuplicateAccounts() {
     });
 
     try {
-      // For small batches (< 10), delete directly without backend function
-      if (totalCount < 10) {
-        for (let i = 0; i < accountIds.length; i++) {
-          try {
-            await Account.delete(accountIds[i]);
-            setOperationProgress((prev) => ({ ...prev, current: i + 1 }));
-          } catch (error) {
-            console.error(`Failed to delete account ${accountIds[i]}:`, error);
-          }
-        }
+      let successCount = 0;
+      let failCount = 0;
 
+      // Delete accounts one by one with progress tracking
+      for (let i = 0; i < accountIds.length; i++) {
+        try {
+          await Account.delete(accountIds[i]);
+          successCount++;
+          setOperationProgress((prev) => ({ ...prev, current: i + 1 }));
+        } catch (error) {
+          console.error(`Failed to delete account ${accountIds[i]}:`, error);
+          failCount++;
+        }
+      }
+
+      if (successCount > 0) {
         toast({
           title: "Success",
-          description: `Successfully deleted ${totalCount} account(s)`,
+          description: `Successfully deleted ${successCount} account(s)${failCount > 0 ? `, ${failCount} failed` : ''}`,
         });
       } else {
-        // For larger batches, use the backend function for chunked processing
-        const response = await bulkDeleteAccounts({ accountIds });
-
-        if (response.data?.status === "success") {
-          toast({
-            title: "Success",
-            description: response.data.message,
-          });
-        } else {
-          throw new Error(response.data?.message || "Bulk delete failed");
-        }
+        toast({
+          title: "Error",
+          description: `Failed to delete accounts`,
+          variant: "destructive",
+        });
       }
 
       setSelectedForDeletion(new Set());
@@ -537,7 +523,7 @@ export default function DuplicateAccounts() {
                                     <span className="font-medium">
                                       Industry:
                                     </span>{" "}
-                                    {account.industry.replace(/_/g, " ")}
+                                    {formatIndustry(account.industry)}
                                   </p>
                                 )}
                                 {account?.website && (

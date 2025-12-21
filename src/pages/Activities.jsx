@@ -6,6 +6,7 @@ import { Contact } from "@/api/entities";
 import { Lead } from "@/api/entities";
 import { Opportunity } from "@/api/entities";
 import { User } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import { Employee } from "@/api/entities";
 import { useApiManager } from "../components/shared/ApiManager";
 import ActivityCard from "../components/activities/ActivityCard";
@@ -36,6 +37,9 @@ import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
 import { utcToLocal, getCurrentTimezoneOffset } from '../components/shared/timezoneUtils';
 import { useTimezone } from '../components/shared/TimezoneContext';
+import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
+import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 
 const statusColors = {
   scheduled: "bg-blue-900/20 text-blue-300 border-blue-700",
@@ -56,6 +60,7 @@ const typeColors = {
 };
 
 export default function ActivitiesPage() {
+  const { plural: activitiesLabel, singular: activityLabel } = useEntityLabel('activities');
   const [activities, setActivities] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [contacts, setContacts] = useState([]);
@@ -73,7 +78,8 @@ export default function ActivitiesPage() {
   const [selectedActivities, setSelectedActivities] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [user, setUser] = useState(null);
+  // Use global user context instead of per-page fetch
+  const { user } = useUser();
   const { selectedTenantId } = useTenant();
   const [detailActivity, setDetailActivity] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -100,104 +106,83 @@ export default function ActivitiesPage() {
 
   const { cachedRequest, clearCache } = useApiManager();
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
+  const { isCardVisible, getCardLabel } = useStatusCardPreferences();
   
   const initialLoadDone = useRef(false);
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        // In E2E mode, use injected mock user to avoid failed User.me() calls
-        if (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser) {
-          setUser(window.__e2eUser);
-          return;
-        }
-        
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Failed to load user:", error);
-        toast.error("Failed to load user information");
+  // Build backend filter object from current UI state
+  const buildFilter = useCallback((overrides = {}) => {
+    const filter = {};
+    if (user) {
+      if (user.role === 'superadmin' || user.role === 'admin') {
+        if (selectedTenantId) filter.tenant_id = selectedTenantId;
+      } else if (user.tenant_id) {
+        filter.tenant_id = user.tenant_id;
       }
-    };
-    loadUser();
-  }, []);
-
-  const buildFilter = useCallback(() => {
-    if (!user) return {};
-    
-    let filter = {};
-    
-    if (user.role === 'superadmin' || user.role === 'admin') {
-      if (selectedTenantId) {
-        filter.tenant_id = selectedTenantId;
-      }
-    } else if (user.tenant_id) {
-      filter.tenant_id = user.tenant_id;
     }
-    
-    if (selectedEmail && selectedEmail !== 'all') {
-      if (selectedEmail === 'unassigned') {
+
+    // Precompute date range (used for both normal and overdue paths)
+    const dateRangeFilter = {};
+    if (dateRange.start) dateRangeFilter.$gte = format(new Date(dateRange.start), 'yyyy-MM-dd');
+    if (dateRange.end) dateRangeFilter.$lte = format(new Date(dateRange.end), 'yyyy-MM-dd');
+    const hasDateRange = Object.keys(dateRangeFilter).length > 0;
+
+    const effectiveStatus = Object.prototype.hasOwnProperty.call(overrides, 'status') ? overrides.status : statusFilter;
+    const effectiveType = Object.prototype.hasOwnProperty.call(overrides, 'type') ? overrides.type : typeFilter;
+    const effectiveEmail = Object.prototype.hasOwnProperty.call(overrides, 'email') ? overrides.email : selectedEmail;
+
+    if (effectiveStatus !== 'all') {
+      filter.status = effectiveStatus;
+    }
+
+    if (effectiveType !== 'all') {
+      filter.type = effectiveType;
+    }
+
+    if (effectiveEmail && effectiveEmail !== 'all') {
+      if (effectiveEmail === 'unassigned') {
         filter.$or = [{ assigned_to: null }, { assigned_to: '' }];
       } else {
-        filter.assigned_to = selectedEmail;
+        filter.assigned_to = effectiveEmail;
       }
-    } else if (user.employee_role === 'employee' && user.role !== 'admin' && user.role !== 'superadmin') {
-      filter.assigned_to = user.email;
-    }
-
-    if (statusFilter !== 'all') {
-      if (statusFilter === "overdue") {
-        filter.due_date = { $lt: new Date().toISOString() };
-        filter.status = { $nin: ['completed', 'cancelled'] };
-      } else {
-        filter.status = statusFilter;
-      }
-    }
-
-    if (typeFilter !== 'all') {
-      filter.type = typeFilter;
-    }
-
-    if (dateRange.start) {
-      filter.due_date = filter.due_date || {};
-      filter.due_date.$gte = dateRange.start;
-    }
-    if (dateRange.end) {
-      filter.due_date = filter.due_date || {};
-      filter.due_date.$lte = dateRange.end;
     }
 
     if (!showTestData) {
       filter.is_test_data = { $ne: true };
     }
 
+    // Apply date range only when status is not overdue (overdue implies its own date logic)
+    if (hasDateRange && effectiveStatus !== 'overdue') {
+      filter.due_date = { ...(filter.due_date || {}), ...dateRangeFilter };
+    }
+
     return filter;
-  }, [user, selectedTenantId, selectedEmail, statusFilter, typeFilter, dateRange, showTestData]);
+  }, [user, selectedTenantId, statusFilter, typeFilter, selectedEmail, showTestData, dateRange.start, dateRange.end]);
 
-
+  // Removed per-page user fetch; context handles loading and E2E override
+  // Load supporting data (users, accounts, etc.) once user/tenant resolved
   useEffect(() => {
+    if (!user) return;
+    const supportingDataTenantFilter = {};
+    if (user.role === 'superadmin' || user.role === 'admin') {
+      if (selectedTenantId) supportingDataTenantFilter.tenant_id = selectedTenantId;
+    } else if (user.tenant_id) {
+      supportingDataTenantFilter.tenant_id = user.tenant_id;
+    }
+    if ((user.role === 'superadmin' || user.role === 'admin') && !supportingDataTenantFilter.tenant_id) {
+      if (import.meta.env.DEV) console.log('[Activities] Skipping data load - no tenant selected');
+      return;
+    }
     const loadSupportingData = async () => {
-      if (!user) return;
-
       try {
-        const supportingDataTenantFilter = {};
-        if (user.role === 'superadmin' || user.role === 'admin') {
-          if (selectedTenantId) {
-            supportingDataTenantFilter.tenant_id = selectedTenantId;
-          }
-        } else if (user.tenant_id) {
-          supportingDataTenantFilter.tenant_id = user.tenant_id;
-        }
-        
         const [usersData, employeesData, accountsData, contactsData, leadsData, opportunitiesData] = await Promise.all([
           cachedRequest('User', 'list', {}, () => User.list()),
           cachedRequest('Employee', 'filter', { filter: supportingDataTenantFilter }, () => Employee.filter(supportingDataTenantFilter)),
           cachedRequest('Account', 'filter', { filter: supportingDataTenantFilter }, () => Account.filter(supportingDataTenantFilter)),
           cachedRequest('Contact', 'filter', { filter: supportingDataTenantFilter }, () => Contact.filter(supportingDataTenantFilter)),
           cachedRequest('Lead', 'filter', { filter: supportingDataTenantFilter }, () => Lead.filter(supportingDataTenantFilter)),
-          cachedRequest('Opportunity', 'filter', { filter: supportingDataTenantFilter }, () => Opportunity.filter(supportingDataTenantFilter))
+          cachedRequest('Opportunity', 'filter', { filter: supportingDataTenantFilter }, () => Opportunity.filter(supportingDataTenantFilter)),
         ]);
-
         setUsers(usersData || []);
         setEmployees(employeesData || []);
         setAccounts(accountsData || []);
@@ -205,64 +190,86 @@ export default function ActivitiesPage() {
         setLeads(leadsData || []);
         setOpportunities(opportunitiesData || []);
       } catch (error) {
-        console.error("Failed to load supporting data:", error);
+        console.error('Failed to load supporting data:', error);
       }
     };
-
     loadSupportingData();
   }, [user, selectedTenantId, cachedRequest]);
 
-  const loadTotalStats = useCallback(async () => {
+  // Independent stats loader
+  const loadStats = useCallback(async () => {
     if (!user) return;
 
     try {
-      const baseFilter = buildFilter();
-      
-      const allActivities = await Activity.filter(baseFilter, 'id', 10000);
-      
-      const now = new Date();
-      const stats = {
-        total: allActivities?.length || 0,
-        scheduled: allActivities?.filter(a => a.status === 'scheduled' && (!a.due_date || new Date(a.due_date) >= now)).length || 0,
-        in_progress: allActivities?.filter(a => a.status === 'in_progress' || a.status === 'in-progress').length || 0,
-        overdue: allActivities?.filter(a => {
-          if (a.status === 'completed' || a.status === 'cancelled') return false;
-          if (!a.due_date) return false;
-          return new Date(a.due_date) < now;
-        }).length || 0,
-        completed: allActivities?.filter(a => a.status === 'completed').length || 0,
-        cancelled: allActivities?.filter(a => a.status === 'cancelled').length || 0
+      // 1. Get Base Stats (All statuses)
+      // Use status='all' to get the breakdown of stored statuses
+      const baseFilter = { ...buildFilter({ status: 'all' }), include_stats: true, limit: 1 };
+
+      // 2. Get Overdue Count
+      // Specific query for overdue items
+      const overdueFilter = { ...buildFilter({ status: 'overdue' }), limit: 1 };
+
+      const [baseResult, overdueResult] = await Promise.all([
+        Activity.filter(baseFilter, '-due_date', 1, 0),
+        Activity.filter(overdueFilter, '-due_date', 1, 0)
+      ]);
+
+      const baseCounts = !Array.isArray(baseResult) ? (baseResult.counts || {}) : {};
+      const baseTotal = !Array.isArray(baseResult) && typeof baseResult.total === 'number' ? baseResult.total : 0;
+
+      const overdueCount = !Array.isArray(overdueResult) ? overdueResult.total : (overdueResult.length || 0);
+
+      const newStats = {
+        total: baseTotal,
+        scheduled: baseCounts.scheduled || 0,
+        in_progress: baseCounts.in_progress || 0,
+        overdue: overdueCount,
+        completed: baseCounts.completed || 0,
+        cancelled: baseCounts.cancelled || 0,
       };
 
-      setTotalStats(stats);
+      setTotalStats(newStats);
     } catch (error) {
-      console.error("Failed to load total stats:", error);
+      console.error("Failed to load stats:", error);
     }
   }, [user, buildFilter]);
-
-  useEffect(() => {
-    if (user) {
-      loadTotalStats();
-    }
-  }, [user, buildFilter, loadTotalStats]);
 
   const loadActivities = useCallback(async (page = 1, size = 25) => {
     if (!user) return;
 
     setLoading(true);
     try {
-      let currentFilter = buildFilter();
+      let currentFilter = { ...buildFilter(), include_stats: false }; // We load stats separately now
+      
+      // Guard: Don't load activities if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !currentFilter.tenant_id) {
+        setActivities([]);
+        setTotalItems(0);
+        setLoading(false);
+        return;
+      }
       
       if (searchTerm) {
         const searchRegex = { $regex: searchTerm, $options: 'i' };
-        currentFilter = {
-          ...currentFilter,
-          $or: [
-            { subject: searchRegex },
-            { description: searchRegex },
-            { related_name: searchRegex }
-          ]
-        };
+        const searchConditions = [
+          { subject: searchRegex },
+          { description: searchRegex },
+          { related_name: searchRegex }
+        ];
+
+        // If $or already exists (e.g., from unassigned filter), combine via $and
+        if (currentFilter.$or) {
+          currentFilter = {
+            ...currentFilter,
+            $and: [...(currentFilter.$and || []), { $or: currentFilter.$or }, { $or: searchConditions }],
+          };
+          delete currentFilter.$or;
+        } else {
+          currentFilter = {
+            ...currentFilter,
+            $or: searchConditions
+          };
+        }
       }
 
       if (selectedTags.length > 0) {
@@ -273,15 +280,74 @@ export default function ActivitiesPage() {
 
       console.log('[Activities] Loading page:', page, 'size:', size, 'skip:', skip, 'filter:', currentFilter);
 
-      const activitiesData = await Activity.filter(currentFilter, '-due_date', size, skip);
-      
-      const countQuery = await Activity.filter(currentFilter, 'id', 10000);
-      const totalCount = countQuery?.length || 0;
+      const activitiesResult = await Activity.filter(currentFilter, '-due_date', size, skip);
+      // activitiesResult may be array (legacy) or object with meta
+      let items = Array.isArray(activitiesResult) ? activitiesResult : activitiesResult.activities;
+      const totalCount = !Array.isArray(activitiesResult) && typeof activitiesResult.total === 'number'
+        ? activitiesResult.total
+        : (items?.length || 0);
 
-      console.log('[Activities] Loaded:', activitiesData?.length, 'Total:', totalCount);
+      console.log('[Activities] Loaded:', items?.length, 'Total:', totalCount);
+      // Auto-mark overdue for display: scheduled/in_progress with past due_date or due_datetime
+      const nowLocal = new Date();
+      const normalizeDate = (d) => {
+        if (!d) return null;
+        try {
+          // Handle date-only strings (yyyy-MM-dd) and full ISO datetimes
+          const asDate = typeof d === 'string' ? new Date(d) : d;
+          return asDate;
+        } catch {
+          return null;
+        }
+      };
 
-      setActivities(activitiesData || []);
+      items = (items || []).map(a => {
+        const status = a.status;
+        const dueDate = normalizeDate(a.due_date);
+        const dueDateTime = normalizeDate(a.due_datetime);
+        const isPending = status === 'scheduled' || status === 'in_progress';
+
+        // Calculate if the activity is past due
+        // For date-only comparison (no time), compare just the date parts to avoid timezone issues
+        let isPastDue = false;
+        if (dueDateTime) {
+          // If we have a specific datetime, use full comparison
+          isPastDue = dueDateTime.getTime() < nowLocal.getTime();
+        } else if (dueDate) {
+          // For date-only, compare just the date (year-month-day)
+          // Extract just the date portion to avoid timezone confusion
+          const todayDateOnly = new Date(nowLocal.getFullYear(), nowLocal.getMonth(), nowLocal.getDate());
+          const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+          isPastDue = dueDateOnly.getTime() < todayDateOnly.getTime();
+        }
+
+        if (isPending && isPastDue) {
+          return { ...a, status: 'overdue' };
+        }
+        return a;
+      });
+
+      // Client-side safety filter for employee scope (handles unassigned reliably)
+      if (selectedEmail && selectedEmail !== 'all') {
+        if (selectedEmail === 'unassigned') {
+          items = (items || []).filter(a => !a.assigned_to);
+        } else {
+          items = (items || []).filter(a => a.assigned_to === selectedEmail);
+        }
+      }
+
+      // No need for client-side status filtering if the backend filter is correct!
+      // But we keep it as a safety net ONLY if we are NOT in 'overdue' mode (since backend returns scheduled items for overdue query)
+      // Actually, if we use the new complex query for overdue, the backend returns items that match the critera.
+      // We map them to 'overdue' status above (lines 260+).
+      // So they should appear correctly.
+
+      setActivities(items || []);
       setTotalItems(totalCount);
+
+      // Load stats independently to keep them stable
+      loadStats();
+
       setCurrentPage(page);
       initialLoadDone.current = true;
     } catch (error) {
@@ -292,13 +358,20 @@ export default function ActivitiesPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, searchTerm, selectedTags, buildFilter]);
+  }, [user, searchTerm, selectedTags, buildFilter, loadStats]);
 
   useEffect(() => {
     if (user) {
       loadActivities(currentPage, pageSize);
     }
   }, [user, currentPage, pageSize, loadActivities]);
+
+  // Clear cache when employee filter changes to force fresh data
+  useEffect(() => {
+    if (selectedEmail !== null) {
+      clearCache("Activity");
+    }
+  }, [selectedEmail, clearCache]);
 
   const handlePageChange = useCallback((newPage) => {
     setCurrentPage(newPage);
@@ -318,12 +391,28 @@ export default function ActivitiesPage() {
   }, [users]);
 
   const employeesMap = useMemo(() => {
-    return employees.reduce((acc, employee) => {
+    const map = employees.reduce((acc, employee) => {
+      const fullName = `${employee.first_name} ${employee.last_name}`;
+      // Map by ID (new assignments)
+      if (employee.id) {
+        acc[employee.id] = fullName;
+      }
+    // Map by email (legacy assignments) for backwards compatibility
       if (employee.email) {
-        acc[employee.email] = `${employee.first_name} ${employee.last_name}`;
+        acc[employee.email] = fullName;
       }
       return acc;
     }, {});
+
+    if (import.meta.env.DEV) {
+      console.log('[Activities] employeesMap built:', {
+        employeeCount: employees.length,
+        mappedKeys: Object.keys(map).length,
+        sampleKeys: Object.keys(map).slice(0, 3)
+      });
+    }
+
+    return map;
   }, [employees]);
 
   // Note: maps for accounts/contacts/leads/opportunities are not used directly here
@@ -354,14 +443,25 @@ export default function ActivitiesPage() {
       setCurrentPage(1);
     }
 
-    setIsFormOpen(false);
-    setEditingActivity(null);
-    clearCache('');
-    await Promise.all([
-      loadActivities(1, pageSize),
-      loadTotalStats()
-    ]);
-    toast.success(editingActivity ? "Activity updated successfully" : "Activity created successfully");
+    const wasEditing = !!editingActivity;
+    
+    try {
+      // Clear cache and reload BEFORE closing the dialog
+      clearCache('');
+      await loadActivities(1, pageSize);
+      
+      // Now close the dialog after data is fresh
+      setIsFormOpen(false);
+      setEditingActivity(null);
+      
+      toast.success(wasEditing ? "Activity updated successfully" : "Activity created successfully");
+    } catch (error) {
+      console.error('[Activities] Error in handleSave:', error);
+      // Still close the dialog even on error
+      setIsFormOpen(false);
+      setEditingActivity(null);
+      toast.error("Failed to refresh activity list");
+    }
   };
 
   const handleDelete = async (id) => {
@@ -385,10 +485,7 @@ export default function ActivitiesPage() {
       await new Promise(resolve => setTimeout(resolve, 100));
       
       clearCache('');
-      await Promise.all([
-        loadActivities(currentPage, pageSize),
-        loadTotalStats()
-      ]);
+      await loadActivities(currentPage, pageSize);
     } catch (error) {
       console.error("Failed to delete activity:", error);
       toast.error("Failed to delete activity");
@@ -425,13 +522,20 @@ export default function ActivitiesPage() {
           await Promise.all(batch.map(a => Activity.delete(a.id)));
         }
 
+        // Optimistically remove from UI immediately
+        const deletedIds = new Set(allActivities.map(a => a.id));
+        setActivities((prev) => prev.filter((a) => !deletedIds.has(a.id)));
+        setTotalItems((t) => Math.max(0, (t || 0) - deleteCount));
+
         setSelectedActivities(new Set());
         setSelectAllMode(false);
-        clearCache('');
-        await Promise.all([
-          loadActivities(1, pageSize),
-          loadTotalStats()
-        ]);
+        
+        // Refresh in background to ensure sync
+        setTimeout(() => {
+          clearCache('');
+          loadActivities(1, pageSize);
+        }, 500);
+        
         toast.success(`${deleteCount} activity/activities deleted`);
       } catch (error) {
         console.error("Failed to delete activities:", error);
@@ -447,12 +551,20 @@ export default function ActivitiesPage() {
 
       try {
         await Promise.all([...selectedActivities].map(id => Activity.delete(id)));
+        
+        // Optimistically remove from UI immediately
+        const deletedIds = new Set(selectedActivities);
+        setActivities((prev) => prev.filter((a) => !deletedIds.has(a.id)));
+        setTotalItems((t) => Math.max(0, (t || 0) - deletedIds.size));
+        
         setSelectedActivities(new Set());
-        clearCache('');
-        await Promise.all([
-          loadActivities(currentPage, pageSize),
-          loadTotalStats()
-        ]);
+        
+        // Refresh in background to ensure sync
+        setTimeout(() => {
+          clearCache('');
+          loadActivities(currentPage, pageSize);
+        }, 500);
+        
         toast.success(`${selectedActivities.size} activity/activities deleted`);
       } catch (error) {
         console.error("Failed to delete activities:", error);
@@ -492,10 +604,7 @@ export default function ActivitiesPage() {
         setSelectedActivities(new Set());
         setSelectAllMode(false);
         clearCache('');
-        await Promise.all([
-          loadActivities(currentPage, pageSize),
-          loadTotalStats()
-        ]);
+        await loadActivities(currentPage, pageSize);
         toast.success(`Updated ${updateCount} activity/activities to ${newStatus}`);
       } catch (error) {
         console.error("Failed to update activities:", error);
@@ -515,10 +624,7 @@ export default function ActivitiesPage() {
         await Promise.all(promises);
         setSelectedActivities(new Set());
         clearCache('');
-        await Promise.all([
-          loadActivities(currentPage, pageSize),
-          loadTotalStats()
-        ]);
+        await loadActivities(currentPage, pageSize);
         toast.success(`Updated ${promises.length} activity/activities to ${newStatus}`);
       } catch (error) {
         console.error("Failed to update activities:", error);
@@ -558,10 +664,7 @@ export default function ActivitiesPage() {
         setSelectedActivities(new Set());
         setSelectAllMode(false);
         clearCache('');
-        await Promise.all([
-          loadActivities(currentPage, pageSize),
-          loadTotalStats()
-        ]);
+        await loadActivities(currentPage, pageSize);
         toast.success(`Assigned ${updateCount} activity/activities`);
       } catch (error) {
         console.error("Failed to assign activities:", error);
@@ -581,10 +684,7 @@ export default function ActivitiesPage() {
         await Promise.all(promises);
         setSelectedActivities(new Set());
         clearCache('');
-        await Promise.all([
-          loadActivities(currentPage, pageSize),
-          loadTotalStats()
-        ]);
+        await loadActivities(currentPage, pageSize);
         toast.success(`Assigned ${promises.length} activity/activities`);
       } catch (error) {
         console.error("Failed to assign activities:", error);
@@ -636,10 +736,7 @@ export default function ActivitiesPage() {
     clearCache('');
     clearCache('');
     clearCache('');
-    await Promise.all([
-      loadActivities(currentPage, pageSize),
-      loadTotalStats()
-    ]);
+    await loadActivities(currentPage, pageSize);
     toast.success("Activities refreshed");
   };
 
@@ -668,6 +765,37 @@ export default function ActivitiesPage() {
       || dateRange.end !== null
       || showTestData;
   }, [searchTerm, statusFilter, typeFilter, selectedTags, dateRange, showTestData]);
+
+  // AiSHA events listener - allows AI to trigger page actions
+  useAiShaEvents({
+    entityType: 'activities',
+    onOpenEdit: ({ id }) => {
+      const activity = activities.find(a => a.id === id);
+      if (activity) {
+        setEditingActivity(activity);
+        setIsFormOpen(true);
+      } else {
+        Activity.filter({ id }).then(result => {
+          if (result && result.length > 0) {
+            setEditingActivity(result[0]);
+            setIsFormOpen(true);
+          }
+        });
+      }
+    },
+    onSelectRow: ({ id }) => {
+      const activity = activities.find(a => a.id === id);
+      if (activity) {
+        setDetailActivity(activity);
+        setIsDetailOpen(true);
+      }
+    },
+    onOpenForm: () => {
+      setEditingActivity(null);
+      setIsFormOpen(true);
+    },
+    onRefresh: handleRefresh,
+  });
 
   const getRelatedEntityLink = (activity) => {
     if (!activity.related_to || !activity.related_id) return null;
@@ -708,8 +836,14 @@ export default function ActivitiesPage() {
     try {
       if (activity.due_time) {
         const datePart = activity.due_date.split('T')[0];
-        const utcString = `${datePart}T${activity.due_time}:00.000Z`;
-        const localDate = utcToLocal(utcString, offsetMinutes);
+        // Normalize time to HH:mm format
+        const parts = activity.due_time.split(':');
+        const hours = parseInt(parts[0], 10);
+        const minutes = parseInt(parts[1] || '0', 10);
+
+        // due_time is stored as LOCAL time, not UTC - just display it directly
+        const [year, month, day] = datePart.split('-').map(Number);
+        const localDate = new Date(year, month - 1, day, hours, minutes);
         return format(localDate, 'MMM d, yyyy h:mm a');
       } else {
         const parts = activity.due_date.split('-').map(Number);
@@ -742,7 +876,7 @@ export default function ActivitiesPage() {
               setEditingActivity(null);
             }
           }}
-          title={editingActivity ? "Edit Activity" : "Add New Activity"}
+          title={editingActivity ? `Edit ${activityLabel}` : `Add New ${activityLabel}`}
           size="lg"
         >
           <ActivityForm
@@ -769,10 +903,7 @@ export default function ActivitiesPage() {
           schema={Activity.schema ? Activity.schema() : null}
           onSuccess={async () => {
             clearCache('');
-            await Promise.all([
-              loadActivities(1, pageSize),
-              loadTotalStats()
-            ]);
+            await loadActivities(1, pageSize);
           }}
         />
 
@@ -784,7 +915,13 @@ export default function ActivitiesPage() {
             leads={leads}
             opportunities={opportunities}
             users={users}
-            assignedUserName={employeesMap[detailActivity.assigned_to] || usersMap[detailActivity.assigned_to] || detailActivity.assigned_to_name}
+            assignedUserName={(() => {
+              if (!detailActivity.assigned_to) return undefined;
+              return employeesMap[detailActivity.assigned_to] ||
+                usersMap[detailActivity.assigned_to] ||
+                detailActivity.assigned_to_name ||
+                detailActivity.assigned_to;
+            })()}
             relatedName={detailActivity.related_name}
             open={isDetailOpen}
             onOpenChange={() => {
@@ -806,8 +943,8 @@ export default function ActivitiesPage() {
 
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-100 mb-2">Activities</h1>
-            <p className="text-slate-400">Track and manage your team&apos;s activities and tasks</p>
+            <h1 className="text-3xl font-bold text-slate-100 mb-2">{activitiesLabel}</h1>
+            <p className="text-slate-400">Track and manage your team&apos;s {activitiesLabel.toLowerCase()} and tasks</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <RefreshButton onClick={handleRefresh} loading={loading} />
@@ -867,11 +1004,11 @@ export default function ActivitiesPage() {
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Activity
+                  Add {activityLabel}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Create new activity</p>
+                <p>Create new {activityLabel.toLowerCase()}</p>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -880,7 +1017,7 @@ export default function ActivitiesPage() {
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
           {[
             { 
-              label: 'Total Activities', 
+              label: `Total ${activitiesLabel}`, 
               value: totalStats.total, 
               filter: 'all', 
               bgColor: 'bg-slate-800',
@@ -926,7 +1063,9 @@ export default function ActivitiesPage() {
               borderColor: 'border-slate-700',
               tooltip: 'activity_cancelled'
             },
-          ].map((stat) => (
+          ]
+            .filter(stat => stat.tooltip === 'total_all' || isCardVisible(stat.tooltip))
+            .map((stat) => (
             <Tooltip key={stat.label}>
               <TooltipTrigger asChild>
                 <div
@@ -936,7 +1075,7 @@ export default function ActivitiesPage() {
                   onClick={() => handleStatusFilterClick(stat.filter)}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <p className="text-sm text-slate-400">{stat.label}</p>
+                    <p className="text-sm text-slate-400">{getCardLabel(stat.tooltip) || stat.label}</p>
                     <StatusHelper statusKey={stat.tooltip} />
                   </div>
                   <p className="text-2xl font-bold text-slate-100">{stat.value}</p>
@@ -1049,11 +1188,11 @@ export default function ActivitiesPage() {
         ) : activities.length === 0 ? (
           <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
             <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-slate-300 mb-2">No activities found</h3>
+            <h3 className="text-xl font-semibold text-slate-300 mb-2">No {activitiesLabel.toLowerCase()} found</h3>
             <p className="text-slate-500 mb-6">
               {hasActiveFilters
                 ? "Try adjusting your filters or search term"
-                : "Get started by adding your first activity"}
+                : `Get started by adding your first ${activityLabel.toLowerCase()}`}
             </p>
             {!hasActiveFilters && (
               <Button
@@ -1061,7 +1200,7 @@ export default function ActivitiesPage() {
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Add Your First Activity
+                Add Your First {activityLabel}
               </Button>
             )}
           </div>
@@ -1073,7 +1212,13 @@ export default function ActivitiesPage() {
                   <ActivityCard
                     key={activity.id}
                     activity={activity}
-                    assignedUserName={employeesMap[activity.assigned_to] || usersMap[activity.assigned_to] || activity.assigned_to_name}
+                    assignedUserName={(() => {
+                      if (!activity.assigned_to) return undefined;
+                      return employeesMap[activity.assigned_to] ||
+                        usersMap[activity.assigned_to] ||
+                        activity.assigned_to_name ||
+                        activity.assigned_to;
+                    })()}
                     relatedName={activity.related_name}
                     onEdit={() => {
                       setEditingActivity(activity);
@@ -1156,7 +1301,54 @@ export default function ActivitiesPage() {
                           {getRelatedEntityLink(activity) || '—'}
                         </TableCell>
                         <TableCell className="text-slate-300 cursor-pointer p-3" onClick={() => handleViewDetails(activity)}>
-                          {employeesMap[activity.assigned_to] || usersMap[activity.assigned_to] || activity.assigned_to_name || <span className="text-slate-500">Unassigned</span>}
+                          {(() => {
+                            // If no assigned_to, show Unassigned
+                            if (!activity.assigned_to) {
+                              return <span className="text-slate-500">Unassigned</span>;
+                            }
+
+                            // Try employee lookup first (by ID or email)
+                            const employeeName = employeesMap[activity.assigned_to];
+                            if (employeeName) {
+                              return employeeName;
+                            }
+
+                            // Try user lookup
+                            const userName = usersMap[activity.assigned_to];
+                            if (userName) {
+                              return userName;
+                            }
+
+                            // Try the activity's embedded name field
+                            if (activity.assigned_to_name) {
+                              return activity.assigned_to_name;
+                            }
+
+                            // If we have a value but no lookup match, show it for debugging
+                            // This helps identify missing employee records
+                            if (import.meta.env.DEV) {
+                              console.log('[Activities] Missing employee lookup:', {
+                                activityId: activity.id,
+                                activitySubject: activity.subject,
+                                assigned_to: activity.assigned_to,
+                                employeesMapKeys: Object.keys(employeesMap).length,
+                                usersMapKeys: Object.keys(usersMap).length
+                              });
+                            }
+
+                            // Show abbreviated ID/email as fallback
+                            const assignedValue = String(activity.assigned_to);
+                            if (assignedValue.includes('@')) {
+                              // It's an email - show it
+                              return <span className="text-amber-400 text-xs" title={assignedValue}>{assignedValue}</span>;
+                            } else if (assignedValue.length > 20) {
+                              // It's likely a UUID - show abbreviated
+                              return <span className="text-amber-400 text-xs" title={assignedValue}>{assignedValue.substring(0, 8)}...</span>;
+                            } else {
+                              // Short value - show it
+                              return <span className="text-amber-400 text-xs">{assignedValue}</span>;
+                            }
+                          })()}
                         </TableCell>
                         <TableCell className="p-3">
                           <div className="flex items-center gap-1">
@@ -1177,7 +1369,7 @@ export default function ActivitiesPage() {
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Edit activity</p>
+                                <p>Edit {activityLabel.toLowerCase()}</p>
                               </TooltipContent>
                             </Tooltip>
                             <Tooltip>

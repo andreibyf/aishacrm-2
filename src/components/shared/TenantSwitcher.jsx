@@ -6,7 +6,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { AlertCircle, Building2, Globe } from "lucide-react";
 import { Tenant } from "@/api/entities";
 import { useTenant } from "./tenantContext";
@@ -75,13 +74,14 @@ export default function TenantSwitcher({ user }) {
   }, [cachedRequest, selectedTenantId, setSelectedTenantId]);
 
   useEffect(() => {
-    if (user?.role === "admin" || user?.role === "superadmin") {
+    // Only superadmins can switch between tenants
+    if (user?.role === "superadmin") {
       loadTenants();
     }
   }, [user, loadTenants]);
 
-  // Only show for admin/superadmin users
-  if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+  // Only show for superadmin users (NOT tenant admins)
+  if (!user || user.role !== "superadmin") {
     return null;
   }
 
@@ -158,7 +158,8 @@ export default function TenantSwitcher({ user }) {
     return selectedTenantId ?? "all";
   };
 
-  const getCurrentTenantName = () => {
+  // Reserved for future display use (e.g., header showing current tenant)
+  const _getCurrentTenantName = () => {
     if (!selectedTenantId) return "All Clients";
     const tenantsArray = Array.isArray(tenants) ? tenants : [];
     // Match by UUID id only
@@ -189,7 +190,7 @@ export default function TenantSwitcher({ user }) {
           onValueChange={handleTenantChange}
           disabled={loading}
         >
-          <SelectTrigger className="w-[280px] h-8 text-xs bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
+          <SelectTrigger className="w-[280px] h-10 text-xs bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
             <SelectValue
               placeholder={loading
                 ? "Loading clients..."
@@ -233,7 +234,7 @@ export default function TenantSwitcher({ user }) {
           onValueChange={handleTenantChange}
           disabled={loading}
         >
-          <SelectTrigger className="w-36 h-8 text-xs bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
+          <SelectTrigger className="w-36 h-10 text-xs bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
             <SelectValue
               placeholder={loading ? "Loading clients..." : "Select client..."}
             />
@@ -258,14 +259,6 @@ export default function TenantSwitcher({ user }) {
         </Select>
       </div>
 
-      <div className="hidden lg:block">
-        <Badge
-          variant="outline"
-          className="text-xs bg-slate-700/50 text-slate-300 border-slate-600"
-        >
-          Managing Client: {getCurrentTenantName()}
-        </Badge>
-      </div>
     </div>
   );
 }

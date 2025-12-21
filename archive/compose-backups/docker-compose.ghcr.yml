@@ -1,0 +1,13 @@
+services:
+  backend:
+    image: ghcr.io/andreibyf/aishacrm-2-backend:v1.0.9
+    build: null
+  frontend:
+    image: ghcr.io/andreibyf/aishacrm-2-frontend:v1.0.9
+    build: null
+
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
+# Notes:
+# - This override switches services to use GHCR images and disables local builds.
+# - Ensure the tag v1.0.9 exists in GHCR (pushed via GitHub Actions on tag).

@@ -1,0 +1,8 @@
+{
+  "toolName": "braid-mcp-server",
+  "type": "http",
+  "endpoint": "http://localhost:8000/mcp/run",
+  "requestFormat": "BraidRequestEnvelope",
+  "responseFormat": "BraidResponseEnvelope"
+}
+

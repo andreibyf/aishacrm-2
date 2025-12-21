@@ -7,13 +7,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Save, AlertCircle } from "lucide-react";
-import { useTenant } from "../shared/tenantContext"; // Fixed `useTenant` import
-import { isValidId } from "../shared/tenantUtils"; // Import shared validation
+import { useTenant } from "../shared/tenantContext";
+import { isValidId } from "../shared/tenantUtils";
 import PhoneInput from "../shared/PhoneInput";
 import AddressFields from "../shared/AddressFields";
 import EmployeeSelector from "../shared/EmployeeSelector";
-import { User } from "@/api/entities";
-import { generateUniqueId } from "@/api/functions";
+import { Account } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
+import { useEntityForm } from "@/hooks/useEntityForm";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
+import { toast } from "sonner";
+import { useMemo } from "react";
 
 const industries = [
     { value: "aerospace_and_defense", label: "Aerospace & Defense" },
@@ -55,15 +59,18 @@ const typeOptions = [
     { value: "vendor", label: "Vendor" },
 ];
 
+// Standardized props: supports both legacy (account, onSubmit) and new (initialData, onSubmit) patterns
 export default function AccountForm({ 
-  account: propAccount, 
+  account: legacyAccount,
+  initialData,
   onSubmit, 
   onCancel, 
 }) {
-  // CRITICAL: Defensive defaults for ALL props - never undefined/null
-  const account = propAccount ?? null;
-
+  // Prefer initialData if provided; fall back to legacy 'account' prop
+  const account = initialData || legacyAccount || null;
+  
   const { selectedTenantId } = useTenant();
+  const { sanitizeNumbers, normalizeError } = useEntityForm();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -87,164 +94,157 @@ export default function AccountForm({
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser, loading: userLoading } = useUser();
   const [loading, setLoading] = useState(true);
+  const { isCardVisible, getCardLabel } = useStatusCardPreferences();
 
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+  const isSuperadmin = currentUser?.role === 'superadmin';
+
+  // Filter account type options based on card visibility and apply custom labels
+  // Keep hidden types if the current account has them
+  const filteredTypeOptions = useMemo(() => {
+    const typeCardMap = {
+      'prospect': 'account_prospect',
+      'customer': 'account_customer',
+      'partner': 'account_partner',
+      'competitor': 'account_competitor',
+      'vendor': 'account_inactive', // Map vendor to the inactive card for now
+    };
+    
+    return typeOptions
+      .filter(option => 
+        isCardVisible(typeCardMap[option.value]) || formData.type === option.value
+      )
+      .map(option => ({
+        ...option,
+        label: getCardLabel(typeCardMap[option.value]) || option.label
+      }));
+  }, [isCardVisible, getCardLabel, formData.type]);
 
   useEffect(() => {
-    const loadInitialData = async () => {
-      setLoading(true);
-      try {
-        const user = await User.me();
-        setCurrentUser(user);
-
-        if (account?.id) {
-          setFormData({
-            name: account.name || "",
-            type: account.type || "prospect",
-            industry: account.industry || "",
-            website: account.website || "",
-            phone: account.phone || "",
-            email: account.email || "",
-            annual_revenue: account.annual_revenue || "",
-            employee_count: account.employee_count || "",
-            address_1: account.address_1 || "",
-            address_2: account.address_2 || "",
-            city: account.city || "",
+    // Wait for user to be available
+    if (userLoading) return;
+    setLoading(true);
+    try {
+      if (!currentUser) return; // user failed to load; keep minimal state
+      if (account?.id) {
+        setFormData({
+          name: account.name || "",
+          type: account.type || "prospect",
+          industry: account.industry || "",
+          website: account.website || "",
+          phone: account.phone || "",
+          email: account.email || "",
+          annual_revenue: account.annual_revenue || "",
+          employee_count: account.employee_count || "",
+          address_1: account.address_1 || "",
+          address_2: account.address_2 || "",
+          city: account.city || "",
             state: account.state || "",
-            zip: account.zip || "",
-            country: account.country || "United States",
-            description: account.description || "",
-            tags: Array.isArray(account.tags) ? account.tags : [],
-            assigned_to: account.assigned_to || user.email,
-            is_test_data: account.is_test_data || false
-          });
-        } else {
-          setFormData(prev => ({
-            ...prev,
-            assigned_to: user.email
-          }));
-        }
-      } catch (error) {
-        console.error("[ACCOUNT_FORM_DEBUG] Error loading user or initial account data:", error);
-      } finally {
-        setLoading(false);
+          zip: account.zip || "",
+          country: account.country || "United States",
+          description: account.description || "",
+          tags: Array.isArray(account.tags) ? account.tags : [],
+          assigned_to: account.assigned_to || "",
+          is_test_data: account.is_test_data || false
+        });
+      } else {
+        // For new accounts, don't default assigned_to - user must select from dropdown
+        setFormData(prev => ({
+          ...prev,
+          assigned_to: ""
+        }));
       }
-    };
-
-    loadInitialData();
-  }, [
-    account?.id,
-    account?.address_1,
-    account?.address_2,
-    account?.annual_revenue,
-    account?.assigned_to,
-    account?.city,
-    account?.country,
-    account?.description,
-    account?.email,
-    account?.employee_count,
-    account?.industry,
-    account?.is_test_data,
-    account?.name,
-    account?.phone,
-    account?.state,
-    account?.tags,
-    account?.type,
-    account?.website,
-    account?.zip,
-    onSubmit
-  ]);
+    } catch (error) {
+      console.error("[AccountForm] Initialization error:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [userLoading, currentUser, account]);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const cleanFormData = (data) => {
-    const cleaned = { ...data };
-    
-    if (cleaned.annual_revenue === '' || cleaned.annual_revenue === undefined) {
-      cleaned.annual_revenue = null;
-    } else if (cleaned.annual_revenue !== null) {
-      cleaned.annual_revenue = parseFloat(cleaned.annual_revenue) || null;
-    }
-    
-    if (cleaned.employee_count === '' || cleaned.employee_count === undefined) {
-      cleaned.employee_count = null;
-    } else if (cleaned.employee_count !== null) {
-      cleaned.employee_count = parseInt(cleaned.employee_count) || null;
-    }
-
-    Object.keys(cleaned).forEach(key => {
-      if (cleaned[key] === '' && typeof cleaned[key] === 'string') {
-        cleaned[key] = null;
-      }
-    });
-
-    return cleaned;
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    console.log('[ACCOUNT_FORM_DEBUG] handleSubmit called');
-    console.log('[ACCOUNT_FORM_DEBUG] onSubmit prop:', typeof onSubmit, onSubmit);
-
     if (!onSubmit || typeof onSubmit !== 'function') {
-      console.error('[ACCOUNT_FORM_DEBUG] onSubmit is not a function!');
-      alert("Form error: onSubmit handler is missing");
+      console.error('[AccountForm] onSubmit is not a function!');
+      toast.error("Form error: onSubmit handler is missing");
       return;
     }
 
     if (!currentUser) {
-      alert("Cannot save account: User not loaded. Please refresh the page.");
+      toast.error("Cannot save account: User not loaded. Please refresh the page.");
       return;
     }
     
     setIsSubmitting(true);
-    let submissionData = { ...formData };
 
     try {
+      // Resolve tenant_id
       let currentTenantId;
       if (currentUser.role === 'superadmin' && selectedTenantId) {
         currentTenantId = selectedTenantId;
       } else if (currentUser.tenant_id) {
         currentTenantId = currentUser.tenant_id;
       } else {
-         alert("Cannot save account: Your account is not configured with a tenant. Please contact your administrator.");
-         setIsSubmitting(false);
-         return;
-      }
-
-      if (!isValidId(currentTenantId)) {
-        alert("Invalid tenant ID format. Please contact your administrator.");
+        toast.error("Cannot save account: Your account is not configured with a tenant. Please contact your administrator.");
         setIsSubmitting(false);
         return;
       }
 
-      submissionData.tenant_id = currentTenantId;
-
-      if (!account?.id) {
-        try {
-          const idResponse = await generateUniqueId({ entity_type: 'Account', tenant_id: currentTenantId });
-          if (idResponse.data?.unique_id) {
-            submissionData.unique_id = idResponse.data.unique_id;
-            console.log('[ACCOUNT_FORM_DEBUG] Generated unique ID for new account:', submissionData.unique_id);
-          }
-        } catch (error) {
-          console.warn('[ACCOUNT_FORM_DEBUG] Failed to generate unique ID for new account, proceeding without:', error);
-        }
+      if (!isValidId(currentTenantId)) {
+        toast.error("Invalid tenant ID format. Please contact your administrator.");
+        setIsSubmitting(false);
+        return;
       }
 
-      submissionData = cleanFormData(submissionData);
+      // Build clean payload with sanitized numeric fields
+      let payload = sanitizeNumbers(
+        { ...formData, tenant_id: currentTenantId },
+        ['annual_revenue', 'employee_count']
+      );
 
-      console.log('[ACCOUNT_FORM_DEBUG] Calling onSubmit with:', submissionData);
-      await onSubmit(submissionData);
-      console.log('[ACCOUNT_FORM_DEBUG] onSubmit completed successfully');
+      // Clean empty strings to null
+      Object.keys(payload).forEach(key => {
+        if (payload[key] === '' && typeof payload[key] === 'string') {
+          payload[key] = null;
+        }
+      });
+
+      // Call Account.create or Account.update directly
+      console.log('[AccountForm] Submitting payload:', payload);
+      let result;
+      if (account?.id) {
+        console.log('[AccountForm] Updating account...');
+        result = await Account.update(account.id, payload);
+      } else {
+        console.log('[AccountForm] Creating new account...');
+        result = await Account.create(payload);
+      }
+
+      console.log('[AccountForm] Save result:', result);
+
+      // Defensive: verify onSubmit is still valid before calling
+      if (onSubmit && typeof onSubmit === 'function') {
+        console.log('[AccountForm] Calling onSubmit...');
+        await onSubmit(result);
+        console.log('[AccountForm] onSubmit completed');
+      } else {
+        console.error('[AccountForm] onSubmit became invalid after save');
+      }
     } catch (error) {
-      console.error("[ACCOUNT_FORM_DEBUG] Error submitting account:", error);
-      alert("Failed to save account. Please try again.");
+      console.error("[AccountForm] Error submitting account:", error);
+      console.error("[AccountForm] Error details:", {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        stack: error.stack
+      });
+      const errorMsg = normalizeError(error);
+      toast.error(errorMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -261,7 +261,7 @@ export default function AccountForm({
         </Alert>
       )}
       
-      <form onSubmit={handleSubmit} className="space-y-6">
+  <form onSubmit={handleSubmit} className="space-y-6">
       
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -292,7 +292,7 @@ export default function AccountForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-slate-800 border-slate-700">
-                {typeOptions.map(option => (
+                {filteredTypeOptions.map(option => (
                   <SelectItem key={option.value} value={option.value} className="text-slate-200 hover:bg-slate-700">
                     {option.label}
                   </SelectItem>
@@ -336,13 +336,12 @@ export default function AccountForm({
             showPrefixPicker={true}
           />
           <div>
-            <Label htmlFor="email" className="text-slate-200">Email *</Label>
+            <Label htmlFor="email" className="text-slate-200">Email</Label>
             <Input 
               id="email" 
               type="email" 
               value={formData.email} 
               onChange={(e) => handleChange('email', e.target.value)} 
-              required 
               className="mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500" 
             />
           </div>
@@ -387,7 +386,7 @@ export default function AccountForm({
           />
         </div>
 
-        {isAdmin && (
+        {isSuperadmin && (
           <div className="flex items-center space-x-2 p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
             <Switch
               id="is_test_data"
@@ -398,23 +397,28 @@ export default function AccountForm({
               Mark as Test Data
             </Label>
             <span className="text-xs text-amber-400 ml-2">
-              (For admin cleanup purposes)
+              (For Superadmin cleanup purposes)
             </span>
           </div>
         )}
 
-        <div className="flex justify-end gap-3 pt-6 border-t border-slate-600">
-          <Button type="button" variant="outline" onClick={onCancel} className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
-            Cancel
-          </Button>
-          <Button 
-            type="submit" 
-            disabled={isSubmitting || loading || (!currentUser?.tenant_id && !selectedTenantId && currentUser?.role !== 'superadmin')}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            <Save className="w-4 h-4 mr-2" />
-            {isSubmitting ? 'Saving...' : account?.id ? 'Update Account' : 'Create Account'}
-          </Button>
+        <div className="flex items-center justify-between pt-6 border-t border-slate-600">
+          <p className="text-xs text-slate-400">
+            <span className="text-red-400">*</span> Required fields
+          </p>
+          <div className="flex gap-3">
+            <Button type="button" variant="outline" onClick={onCancel} className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
+              Cancel
+            </Button>
+            <Button 
+              type="submit" 
+              disabled={isSubmitting || loading || (!currentUser?.tenant_id && !selectedTenantId && currentUser?.role !== 'superadmin')}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {isSubmitting ? 'Saving...' : account?.id ? 'Update Account' : 'Create Account'}
+            </Button>
+          </div>
         </div>
       </form>
     </div>

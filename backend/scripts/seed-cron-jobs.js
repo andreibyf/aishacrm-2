@@ -26,6 +26,15 @@ const defaultJobs = [
     }
   },
   {
+    name: 'Mark Activities Overdue',
+    schedule: 'hourly',
+    function_name: 'markActivitiesOverdue',  // Match the executor function name
+    is_active: true,
+    metadata: {
+      description: 'Updates status to overdue for activities past their due date'
+    }
+  },
+  {
     name: 'Clean Old Activities',
     schedule: 'daily',
     function_name: 'cleanOldActivities',  // Match the executor function name
@@ -33,6 +42,16 @@ const defaultJobs = [
     metadata: {
       description: 'Archives activities older than 1 year',
       retention_days: 365
+    }
+  },
+  {
+    name: 'Warm Dashboard Bundle Cache',
+    schedule: 'cron:0 0 * * *',  // Every day at midnight UTC
+    function_name: 'warmDashboardBundleCache',  // Match the executor function name
+    is_active: true,
+    metadata: {
+      description: 'Pre-populates redis-cache with dashboard bundles for all tenants to ensure fast first loads',
+      run_time: 'midnight_utc'
     }
   },
   {

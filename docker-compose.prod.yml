@@ -1,0 +1,164 @@
+services:
+  # Redis/Valkey - Ephemeral memory layer for agent sessions
+  redis-memory:
+    image: redis:7-alpine
+    container_name: aishacrm-redis-memory
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_memory_data:/data
+    command: redis-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - default
+      - aishanet
+
+  # Redis Cache - API response caching
+  redis-cache:
+    image: redis:7-alpine
+    container_name: aishacrm-redis-cache
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - redis_cache_data:/data
+    command: redis-server --save "" --loglevel warning --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Backend API
+  backend:
+    image: ghcr.io/andreibyf/aishacrm-2-backend:latest
+    container_name: aishacrm-backend
+    restart: unless-stopped
+    depends_on:
+      redis-memory:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:4001:3001"
+    env_file:
+      - .env.from-doppler
+    environment:
+      - NODE_ENV=production
+      - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
+      # Override Docker network URLs
+      - REDIS_URL=redis://redis-memory:6379
+      - REDIS_CACHE_URL=redis://redis-cache:6379
+      - BRAID_MCP_URL=${BRAID_MCP_URL:-http://braid-mcp-server:8000}
+      - MCP_NODE_HEALTH_URL=${MCP_NODE_HEALTH_URL:-http://braid-mcp-server:8000/health}
+      - MCP_NODE_ID=${MCP_NODE_ID:-aishacrm-backend-prod}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - default
+      - aishanet
+
+  # NOTE: MCP server is deployed separately from braid-mcp-node-server/
+  # It must be on the 'aishanet' external network to be reachable by backend
+  # Container name: braid-mcp-server (or aishacrm-mcp if using legacy setup)
+  # Backend connects via BRAID_MCP_URL environment variable
+
+  # Frontend
+  frontend:
+    image: ghcr.io/andreibyf/aishacrm-2-frontend:latest
+    container_name: aishacrm-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "4000:3000"  # External port 4000 maps to internal 3000
+    env_file:
+      - .env.from-doppler
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # n8n - Workflow automation platform (OPTIONAL - not part of core CRM)
+  # To start n8n: docker compose -f docker-compose.prod.yml --profile workflows up -d
+  # Access at http://localhost:5679 (via n8n-proxy on production VPS)
+  # Used for building custom workflows that can call CRM APIs via webhooks
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: aishacrm-n8n
+    restart: unless-stopped
+    profiles: [workflows]
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      - N8N_PORT=5678
+      - N8N_HOST=0.0.0.0
+      - GENERIC_TIMEZONE=UTC
+      - N8N_DIAGNOSTICS_ENABLED=false
+      # Serve editor under main domain path /n8n to avoid separate subdomain
+      - N8N_EDITOR_BASE_URL=https://app.aishacrm.com/n8n
+      - N8N_SECURE_COOKIE=false
+      - N8N_SKIP_WEBHOOK_DEREGISTRATION_SHUTDOWN=true
+      - N8N_HIRING_BANNER_ENABLED=false
+      - VUE_APP_URL_BASE_API=https://app.aishacrm.com/n8n
+      # Enable Public API for proper REST endpoint authentication
+      - N8N_PUBLIC_API_DISABLED=false
+      # Enable Basic Auth for iframe embedding (simpler than user management)
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5678/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # nginx proxy for n8n - strips X-Frame-Options header (external use)
+  # Note: n8n is no longer embedded in CRM UI; this proxy remains for potential external iframe embedding
+  # To start: docker compose -f docker-compose.prod.yml --profile workflows up -d
+  n8n-proxy:
+    image: nginx:alpine
+    container_name: aishacrm-n8n-proxy
+    restart: unless-stopped
+    profiles: [workflows]
+    depends_on:
+      - n8n
+    ports:
+      - "5679:5679"
+    volumes:
+      - ./nginx-n8n.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5679/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  redis_memory_data:
+    driver: local
+  redis_cache_data:
+    driver: local
+  n8n_data:
+    driver: local
+
+networks:
+  aishanet:
+    external: true

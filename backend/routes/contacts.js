@@ -5,67 +5,288 @@
 
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 
-export default function createContactRoutes(pgPool) {
+export default function createContactRoutes(_pgPool) {
   const router = express.Router();
+  /**
+   * @openapi
+   * /api/contacts:
+   *   get:
+   *     summary: List contacts
+   *     tags: [contacts]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: status
+   *         schema: { type: string, nullable: true }
+   *       - in: query
+   *         name: account_id
+   *         schema: { type: string, nullable: true }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Contacts list
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     contacts:
+   *                       type: array
+   *                       items:
+   *                         type: object
+   *                         properties:
+   *                           id:
+   *                             type: string
+   *                           tenant_id:
+   *                             type: string
+   *                             format: uuid
+   *                           first_name:
+   *                             type: string
+   *                           last_name:
+   *                             type: string
+   *                           email:
+   *                             type: string
+   *                             format: email
+   *                           phone:
+   *                             type: string
+   *                           account_id:
+   *                             type: string
+   *                             nullable: true
+   *                           status:
+   *                             type: string
+   *                           created_at:
+   *                             type: string
+   *                             format: date-time
+   *   post:
+   *     summary: Create contact
+   *     tags: [contacts]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, first_name, last_name]
+   *             properties:
+   *               tenant_id: { type: string }
+   *               first_name: { type: string }
+   *               last_name: { type: string }
+   *               email: { type: string }
+   *               phone: { type: string }
+   *               account_id: { type: string, nullable: true }
+   *           example:
+   *             tenant_id: "550e8400-e29b-41d4-a716-446655440000"
+   *             first_name: "Jane"
+   *             last_name: "Doe"
+   *             email: "jane.doe@example.com"
+   *             phone: "+1-555-0123"
+   *             account_id: "acc_12345"
+   *     responses:
+   *       200:
+   *         description: Contact created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     id:
+   *                       type: string
+   *                     tenant_id:
+   *                       type: string
+   *                       format: uuid
+   *                     first_name:
+   *                       type: string
+   *                     last_name:
+   *                       type: string
+   *                     email:
+   *                       type: string
+   *                       format: email
+   *                     phone:
+   *                       type: string
+   *                     account_id:
+   *                       type: string
+   *                     created_at:
+   *                       type: string
+   *                       format: date-time
+   */
 
   // Apply tenant validation and employee data scope to all routes
   router.use(validateTenantAccess);
   router.use(enforceEmployeeDataScope);
 
+  const toNullableString = (value) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    }
+    if (value === null) return null;
+    return value === undefined ? undefined : String(value);
+  };
+
+  const toTagArray = (value) => {
+    if (!Array.isArray(value)) return null;
+    return value
+      .map((tag) => (typeof tag === 'string' ? tag.trim() : ''))
+      .filter(Boolean);
+  };
+
+  const MIRRORED_METADATA_KEYS = [
+    'mobile',
+    'lead_source',
+    'address_1',
+    'address_2',
+    'city',
+    'state',
+    'zip',
+    'country',
+    'tags',
+    'email',
+    'phone',
+    'status',
+    'account_id',
+    'first_name',
+    'last_name',
+  ];
+
+  const sanitizeMetadataPayload = (...sources) => {
+    const merged = sources.reduce((acc, src) => {
+      if (src && typeof src === 'object' && !Array.isArray(src)) {
+        Object.assign(acc, src);
+      }
+      return acc;
+    }, {});
+
+    MIRRORED_METADATA_KEYS.forEach((key) => {
+      if (key in merged) {
+        delete merged[key];
+      }
+    });
+
+    return merged;
+  };
+
+  const assignStringField = (target, key, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target[key] = null;
+      return;
+    }
+    target[key] = toNullableString(value);
+  };
+
+  const assignTagsField = (target, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target.tags = null;
+      return;
+    }
+    const parsed = toTagArray(value);
+    if (parsed !== null) {
+      target.tags = parsed;
+    }
+  };
+
   // Helper function to expand metadata fields to top-level properties
   const expandMetadata = (record) => {
     if (!record) return record;
-    const { metadata = {}, ...rest } = record;
+    const { metadata, ...rest } = record;
+    const metadataObj = metadata && typeof metadata === 'object' ? metadata : {};
     return {
+      ...metadataObj,
       ...rest,
-      ...metadata,
-      metadata,
+      metadata: metadataObj,
     };
   };
 
   // GET /api/contacts - List contacts
-  router.get('/', async (req, res) => {
+  router.get('/', cacheList('contacts', 180), async (req, res) => {
     try {
-      const { tenant_id, limit = 50, offset = 0, status } = req.query;
+      let { tenant_id, status, account_id, assigned_to, filter } = req.query;
+      const limit = parseInt(req.query.limit || '50', 10);
+      const offset = parseInt(req.query.offset || '0', 10);
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
-      // Build query with optional filters
-      let query = 'SELECT * FROM contacts WHERE tenant_id = $1';
-      const params = [tenant_id];
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      let q = supabase.from('contacts').select('*', { count: 'exact' }).eq('tenant_id', tenant_id);
       
-      if (status) {
-        params.push(status);
-        query += ` AND status = $${params.length}`;
+      // Handle $or filter for dynamic search (frontend passes filter as JSON string)
+      if (filter) {
+        let parsedFilter = filter;
+        if (typeof filter === 'string' && filter.startsWith('{')) {
+          try {
+            parsedFilter = JSON.parse(filter);
+          } catch {
+            // treat as literal
+          }
+        }
+        
+        if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
+          // Build OR condition: match any of the $or criteria
+          const orConditions = parsedFilter.$or.map(condition => {
+            const [field, opObj] = Object.entries(condition)[0];
+            if (opObj && typeof opObj === 'object' && opObj.$icontains) {
+              return `${field}.ilike.%${opObj.$icontains}%`;
+            }
+            if (opObj === null) {
+              return `${field}.is.null`;
+            }
+            // Support direct equality for non-object values (strings, numbers, booleans)
+            // e.g. { assigned_to: "abc" } -> assigned_to.eq.abc
+            if (typeof opObj === 'string' || typeof opObj === 'number' || typeof opObj === 'boolean') {
+              return `${field}.eq.${opObj}`;
+            }
+            return null;
+          }).filter(Boolean);
+          
+          if (orConditions.length > 0) {
+            q = q.or(orConditions.join(','));
+          }
+        }
       }
       
-      query += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
-      params.push(parseInt(limit), parseInt(offset));
+      if (status) q = q.eq('status', status);
+      if (account_id) q = q.eq('account_id', account_id);
+      if (assigned_to) q = q.eq('assigned_to', assigned_to);
+      q = q.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
 
-      const result = await pgPool.query(query, params);
-      
-      // Get total count
-      let countQuery = 'SELECT COUNT(*) FROM contacts WHERE tenant_id = $1';
-      const countParams = [tenant_id];
-      if (status) {
-        countParams.push(status);
-        countQuery += ' AND status = $2';
-      }
-      const countResult = await pgPool.query(countQuery, countParams);
+      const { data, error, count } = await q;
+      if (error) throw new Error(error.message);
 
-      // Expand metadata for all contacts
-      const contacts = result.rows.map(expandMetadata);
+      const contacts = (data || []).map(expandMetadata);
 
       res.json({
         status: 'success',
         data: {
           contacts,
-            total: parseInt(countResult.rows?.[0]?.count || 0),
-          limit: parseInt(limit),
-          offset: parseInt(offset)
+          total: count || 0,
+          limit,
+          offset
         },
       });
     } catch (error) {
@@ -74,8 +295,81 @@ export default function createContactRoutes(pgPool) {
     }
   });
 
+  // GET /api/contacts/search - Search contacts by name/email/phone
+  /**
+   * @openapi
+   * /api/contacts/search:
+   *   get:
+   *     summary: Search contacts
+   *     tags: [contacts]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: q
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 25 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Search results
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
+  router.get('/search', cacheList('contacts', 180), async (req, res) => {
+    try {
+      let { tenant_id, q = '' } = req.query;
+      const limit = parseInt(req.query.limit || '25', 10);
+      const offset = parseInt(req.query.offset || '0', 10);
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      if (!q || !q.trim()) {
+        return res.status(400).json({ status: 'error', message: 'q is required' });
+      }
+
+      const like = `%${q}%`;
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error, count } = await supabase
+        .from('contacts')
+        .select('*', { count: 'exact' })
+        .eq('tenant_id', tenant_id)
+        .or(`first_name.ilike.${like},last_name.ilike.${like},email.ilike.${like},phone.ilike.${like}`)
+        .order('updated_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (error) throw new Error(error.message);
+
+      const contacts = (data || []).map(expandMetadata);
+
+      res.json({
+        status: 'success',
+        data: {
+          contacts,
+          total: count || 0,
+          limit,
+          offset,
+        },
+      });
+    } catch (error) {
+      console.error('Error searching contacts:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // POST /api/contacts - Create contact
-  router.post('/', async (req, res) => {
+  router.post('/', invalidateCache('contacts'), async (req, res) => {
     try {
       const {
         tenant_id,
@@ -83,9 +377,23 @@ export default function createContactRoutes(pgPool) {
         last_name,
         email,
         phone,
+        title,
+        department,
+        description,
         account_id,
         status = 'active',
-        metadata: incomingMetadata,
+        metadata = {},
+        mobile,
+        lead_source,
+        address_1,
+        address_2,
+        city,
+        state,
+        zip,
+        country,
+        tags,
+        assigned_to,
+        assigned_to_name,
         ...otherFields
       } = req.body || {};
 
@@ -110,36 +418,56 @@ export default function createContactRoutes(pgPool) {
         });
       }
 
-      // Merge all extra fields (including is_test_data, tags, etc.) into metadata JSON
-      const mergedMetadata = {
-        ...(incomingMetadata || {}),
-        ...otherFields,
+      const normalizedStatus = typeof status === 'string' && status.trim() ? status.trim() : 'active';
+      const metadataExtras = {};
+      if (title !== undefined && title !== null) metadataExtras.title = title;
+      if (department !== undefined && department !== null) metadataExtras.department = department;
+      if (description !== undefined && description !== null) metadataExtras.description = description;
+      const mergedMetadata = sanitizeMetadataPayload(metadata, otherFields, metadataExtras);
+
+      const nowIso = new Date().toISOString();
+      const contactPayload = {
+        tenant_id,
+        first_name: first_name.trim(),
+        last_name: last_name.trim(),
+        status: normalizedStatus,
+        metadata: mergedMetadata,
+        created_at: nowIso,
+        updated_at: nowIso,
       };
 
-      const query = `
-        INSERT INTO contacts (
-          tenant_id, first_name, last_name, email, phone, account_id, status, metadata, created_at, updated_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()
-        )
-        RETURNING *
-      `;
-      
-      const result = await pgPool.query(query, [
-        tenant_id,
-        first_name,
-        last_name,
-        email,
-        phone,
-        account_id || null,
-        status,
-        mergedMetadata,
-      ]);
+      assignStringField(contactPayload, 'email', email);
+      assignStringField(contactPayload, 'phone', phone);
+      assignStringField(contactPayload, 'mobile', mobile);
+      assignStringField(contactPayload, 'lead_source', lead_source);
+      assignStringField(contactPayload, 'address_1', address_1);
+      assignStringField(contactPayload, 'address_2', address_2);
+      assignStringField(contactPayload, 'city', city);
+      assignStringField(contactPayload, 'state', state);
+      assignStringField(contactPayload, 'zip', zip);
+      assignStringField(contactPayload, 'country', country);
+      assignTagsField(contactPayload, tags);
+      if (account_id !== undefined) {
+        contactPayload.account_id = account_id || null;
+      }
+      if (assigned_to !== undefined) contactPayload.assigned_to = assigned_to || null;
+      if (assigned_to_name !== undefined) contactPayload.assigned_to_name = assigned_to_name || null;
 
-      res.json({
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('contacts')
+        .insert([contactPayload])
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
+
+      const contact = expandMetadata(data);
+
+      res.status(201).json({
         status: 'success',
         message: 'Contact created',
-        data: result.rows[0],
+        data: { contact },
       });
     } catch (error) {
       console.error('Error creating contact:', error);
@@ -147,30 +475,89 @@ export default function createContactRoutes(pgPool) {
     }
   });
 
-  // GET /api/contacts/:id - Get single contact
+  // GET /api/contacts/:id - Get single contact (tenant required)
+  /**
+   * @openapi
+   * /api/contacts/{id}:
+   *   get:
+   *     summary: Get contact by ID
+   *     tags: [contacts]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Contact details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   put:
+   *     summary: Update contact
+   *     tags: [contacts]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *     responses:
+   *       200:
+   *         description: Contact updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   delete:
+   *     summary: Delete contact
+   *     tags: [contacts]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Contact deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query || {};
+      let { tenant_id } = req.query || {};
 
-      let result;
-      if (tenant_id) {
-        // Enforce tenant scoping when tenant_id is supplied
-        result = await pgPool.query(
-          'SELECT * FROM contacts WHERE id = $1 AND tenant_id = $2',
-          [id, tenant_id]
-        );
-      } else {
-        // Legacy behavior: fetch by id only (consider requiring tenant_id in production)
-        result = await pgPool.query('SELECT * FROM contacts WHERE id = $1', [id]);
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
-      
-      if (result.rows.length === 0) {
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('contacts')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .single();
+      if (error?.code === 'PGRST116') {
         return res.status(404).json({ status: 'error', message: 'Contact not found' });
       }
+      if (error) throw new Error(error.message);
 
-      // Expand metadata to top-level properties
-      const contact = expandMetadata(result.rows[0]);
+      const contact = expandMetadata(data);
 
       res.json({
         status: 'success',
@@ -183,10 +570,33 @@ export default function createContactRoutes(pgPool) {
   });
 
   // PUT /api/contacts/:id - Update contact
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', invalidateCache('contacts'), async (req, res) => {
     try {
       const { id } = req.params;
-      const { first_name, last_name, email, phone, account_id, status, metadata, ...otherFields } = req.body;
+      const {
+        first_name,
+        last_name,
+        email,
+        phone,
+        title,
+        department,
+        description,
+        account_id,
+        status,
+        metadata = {},
+        mobile,
+        lead_source,
+        address_1,
+        address_2,
+        city,
+        state,
+        zip,
+        country,
+        tags,
+        assigned_to,
+        assigned_to_name,
+        ...otherFields
+      } = req.body || {};
 
       // Validate required name fields if provided
       if (first_name !== undefined && (!first_name || !first_name.trim())) {
@@ -205,68 +615,63 @@ export default function createContactRoutes(pgPool) {
         });
       }
 
-      // First, get current contact to merge metadata
-      const currentContact = await pgPool.query('SELECT metadata FROM contacts WHERE id = $1', [id]);
-      
-      if (currentContact.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data: current, error: fetchErr } = await supabase
+        .from('contacts')
+        .select('metadata')
+        .eq('id', id)
+        .single();
+      if (fetchErr?.code === 'PGRST116') {
         return res.status(404).json({ status: 'error', message: 'Contact not found' });
       }
+      if (fetchErr) throw new Error(fetchErr.message);
 
-      // Merge metadata
-      const currentMetadata = currentContact.rows[0].metadata || {};
-      const updatedMetadata = {
-        ...currentMetadata,
-        ...(metadata || {}),
-        ...otherFields,
-      };
+      const metadataExtras = {};
+      if (title !== undefined) metadataExtras.title = title;
+      if (department !== undefined) metadataExtras.department = department;
+      if (description !== undefined) metadataExtras.description = description;
+      const updatedMetadata = sanitizeMetadataPayload(current?.metadata, metadata, otherFields, metadataExtras);
 
-      // Build dynamic update query
-      const updates = [];
-      const values = [];
-      let paramCount = 1;
-
-      if (first_name !== undefined) {
-        updates.push(`first_name = $${paramCount++}`);
-        values.push(first_name);
-      }
-      if (last_name !== undefined) {
-        updates.push(`last_name = $${paramCount++}`);
-        values.push(last_name);
-      }
-      if (email !== undefined) {
-        updates.push(`email = $${paramCount++}`);
-        values.push(email);
-      }
-      if (phone !== undefined) {
-        updates.push(`phone = $${paramCount++}`);
-        values.push(phone);
-      }
-      if (account_id !== undefined) {
-        updates.push(`account_id = $${paramCount++}`);
-        values.push(account_id);
-      }
+      const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
+      if (first_name !== undefined) payload.first_name = first_name?.trim?.() || null;
+      if (last_name !== undefined) payload.last_name = last_name?.trim?.() || null;
+      assignStringField(payload, 'email', email);
+      assignStringField(payload, 'phone', phone);
+      assignStringField(payload, 'mobile', mobile);
+      assignStringField(payload, 'lead_source', lead_source);
+      assignStringField(payload, 'address_1', address_1);
+      assignStringField(payload, 'address_2', address_2);
+      assignStringField(payload, 'city', city);
+      assignStringField(payload, 'state', state);
+      assignStringField(payload, 'zip', zip);
+      assignStringField(payload, 'country', country);
+      assignTagsField(payload, tags);
+      if (assigned_to !== undefined) payload.assigned_to = assigned_to || null;
+      if (assigned_to_name !== undefined) payload.assigned_to_name = assigned_to_name || null;
+      if (account_id !== undefined) payload.account_id = account_id || null;
       if (status !== undefined) {
-        updates.push(`status = $${paramCount++}`);
-        values.push(status);
+        if (status === null) {
+          payload.status = null;
+        } else if (typeof status === 'string') {
+          payload.status = status.trim() || null;
+        } else {
+          payload.status = status;
+        }
       }
 
-      // Always update metadata
-      updates.push(`metadata = $${paramCount++}`);
-      values.push(updatedMetadata);
-
-      updates.push(`updated_at = NOW()`);
-      values.push(id);
-
-      const query = `UPDATE contacts SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`;
-      const result = await pgPool.query(query, values);
-
-      if (result.rows.length === 0) {
+      const { data, error } = await supabase
+        .from('contacts')
+        .update(payload)
+        .eq('id', id)
+        .select('*')
+        .single();
+      if (error?.code === 'PGRST116') {
         return res.status(404).json({ status: 'error', message: 'Contact not found' });
       }
+      if (error) throw new Error(error.message);
 
-      // Expand metadata in response
-      // Expand metadata in response
-      const updatedContact = expandMetadata(result.rows[0]);
+      const updatedContact = expandMetadata(data);
 
       res.json({
         status: 'success',
@@ -280,20 +685,25 @@ export default function createContactRoutes(pgPool) {
   });
 
   // DELETE /api/contacts/:id - Delete contact
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', invalidateCache('contacts'), async (req, res) => {
     try {
       const { id } = req.params;
 
-      const result = await pgPool.query('DELETE FROM contacts WHERE id = $1 RETURNING id', [id]);
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({ status: 'error', message: 'Contact not found' });
-      }
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('contacts')
+        .delete()
+        .eq('id', id)
+        .select('id')
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) return res.status(404).json({ status: 'error', message: 'Contact not found' });
 
       res.json({
         status: 'success',
         message: 'Contact deleted',
-        data: { id: result.rows[0].id },
+        data: { id: data.id },
       });
     } catch (error) {
       console.error('Error deleting contact:', error);

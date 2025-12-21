@@ -1,0 +1,4 @@
+fn read_text(path: Path) -> Result[String, IoError] !fs {
+  let f: File = fs.open(path, ReadOnly)?;
+  f.read_to_string()
+}

@@ -1,9 +1,10 @@
+import { logDev } from "@/utils/devLogger";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Opportunity } from "@/api/entities";
 import { Account } from "@/api/entities";
 import { Contact } from "@/api/entities";
 import { Lead } from "@/api/entities";
-import { User } from "@/api/entities";
+// User entity not needed here; user comes from context
 import { Employee } from "@/api/entities";
 import { useApiManager } from "../components/shared/ApiManager";
 import OpportunityCard from "../components/opportunities/OpportunityCard";
@@ -36,6 +37,7 @@ import { toast } from "sonner";
 import TagFilter from "../components/shared/TagFilter";
 import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
 import RefreshButton from "../components/shared/RefreshButton";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -57,6 +59,9 @@ import SimpleModal from "../components/shared/SimpleModal";
 import StatusHelper from "../components/shared/StatusHelper";
 import { loadUsersSafely } from "../components/shared/userLoader";
 import { useConfirmDialog } from "../components/shared/ConfirmDialog";
+import { useUser } from "@/components/shared/useUser.js";
+import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 
 const stageColors = {
   prospecting: "bg-blue-900/20 text-blue-300 border-blue-700",
@@ -67,7 +72,18 @@ const stageColors = {
   closed_lost: "bg-red-900/20 text-red-300 border-red-700",
 };
 
+// Map stage IDs to their card IDs for custom label lookup
+const stageToCardId = {
+  prospecting: 'opportunity_prospecting',
+  qualification: 'opportunity_qualification',
+  proposal: 'opportunity_proposal',
+  negotiation: 'opportunity_negotiation',
+  closed_won: 'opportunity_won',
+  closed_lost: 'opportunity_lost',
+};
+
 export default function OpportunitiesPage() {
+  const { plural: opportunitiesLabel, singular: opportunityLabel } = useEntityLabel('opportunities');
   const [opportunities, setOpportunities] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [contacts, setContacts] = useState([]);
@@ -85,7 +101,7 @@ export default function OpportunitiesPage() {
   );
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
   const { selectedTenantId } = useTenant();
   const [detailOpportunity, setDetailOpportunity] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -109,88 +125,59 @@ export default function OpportunitiesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [totalItems, setTotalItems] = useState(0);
+  
+  // Keyset pagination cursors (for future backend optimization)
+  const [paginationCursors, setPaginationCursors] = useState({});
+  const [lastSeenRecord, setLastSeenRecord] = useState(null);
 
-  const { cachedRequest, clearCache } = useApiManager();
+  const { cachedRequest, clearCacheByKey } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
+  const { isCardVisible, getCardLabel } = useStatusCardPreferences();
 
   // Ref to track if initial load is done
   const initialLoadDone = useRef(false);
   const supportingDataLoaded = useRef(false); // NEW: Track if supporting data is loaded
   const [supportingDataReady, setSupportingDataReady] = useState(false); // trigger renders when supporting data completes
 
-  // Load user once
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        // In E2E mode, use injected mock user to avoid failed User.me() calls
-        if (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser) {
-          if (import.meta.env.DEV) {
-            console.log("[Opportunities] E2E mock user loaded:", {
-              email: window.__e2eUser.email,
-              role: window.__e2eUser.role,
-              tenant_id: window.__e2eUser.tenant_id,
-            });
-          }
-          setUser(window.__e2eUser);
-          return;
-        }
-        
-        const currentUser = await User.me();
-        if (import.meta.env.DEV) {
-          console.log("[Opportunities] User loaded:", {
-            email: currentUser.email,
-            role: currentUser.role,
-            employee_role: currentUser.employee_role,
-            tenant_id: currentUser.tenant_id,
-          });
-        }
-        setUser(currentUser);
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.error("Failed to load user:", error);
-        }
-        toast.error("Failed to load user information");
-      }
-    };
-    loadUser();
-  }, []);
-
+  // Centralized tenant filter builder
   const getTenantFilter = useCallback(() => {
+    // console.log('[Opportunities] getTenantFilter called with:', { selectedEmail, employeesCount: employees.length });
     if (!user) return {};
 
     let filter = {};
 
     // Tenant filtering
-    if (user.role === "superadmin" || user.role === "admin") {
+    if (user.role === 'superadmin' || user.role === 'admin') {
       if (selectedTenantId) {
         filter.tenant_id = selectedTenantId;
       }
+      // If no tenant selected (admin views all), backend may enforce scope; callers guard accordingly
     } else if (user.tenant_id) {
       filter.tenant_id = user.tenant_id;
     }
 
     // Employee scope filtering from context
-    if (selectedEmail && selectedEmail !== "all") {
-      if (selectedEmail === "unassigned") {
-        filter.$or = [{ assigned_to: null }, { assigned_to: "" }];
+    // Note: selectedEmail can contain either an email address or an employee ID
+    if (selectedEmail && selectedEmail !== 'all') {
+      if (selectedEmail === 'unassigned') {
+        // Opportunities.assigned_to is a UUID column; empty string causes backend UUID parse errors
+        // Filter only for NULL to represent unassigned
+        filter.$or = [{ assigned_to: null }];
       } else {
+        // Use the selected value directly (works for both UUIDs and emails)
         filter.assigned_to = selectedEmail;
       }
-    } else if (
-      user.employee_role === "employee" && user.role !== "admin" &&
-      user.role !== "superadmin"
-    ) {
-      // Regular employees only see their own data
+    } else if (user.employee_role === 'employee' && user.role !== 'admin' && user.role !== 'superadmin') {
       filter.assigned_to = user.email;
     }
 
-    // Test data filtering
+    // Test data filtering (only exclude when toggled off)
     if (!showTestData) {
-      filter.is_test_data = { $ne: true };
+      filter.is_test_data = false;
     }
 
     return filter;
-  }, [user, selectedTenantId, showTestData, selectedEmail]);
+  }, [user, selectedTenantId, selectedEmail, showTestData]);
 
   // Load supporting data (accounts, contacts, users, employees) ONCE - OPTIMIZED WITH CONCURRENT FETCHING
   useEffect(() => {
@@ -201,8 +188,18 @@ export default function OpportunitiesPage() {
       try {
         const tenantFilter = getTenantFilter();
 
+        // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
+        if ((user.role === 'superadmin' || user.role === 'admin') && !tenantFilter.tenant_id) {
+          if (import.meta.env.DEV) {
+            logDev("[Opportunities] Skipping data load - no tenant selected");
+          }
+          supportingDataLoaded.current = true;
+          setSupportingDataReady(true);
+          return;
+        }
+
         if (import.meta.env.DEV) {
-          console.log(
+          logDev(
             "[Opportunities] Loading supporting data with tenant filter:",
             tenantFilter,
           );
@@ -235,12 +232,12 @@ export default function OpportunitiesPage() {
             { filter: tenantFilter },
             () => Lead.filter(tenantFilter),
           ),
-          loadUsersSafely(user, selectedTenantId, cachedRequest),
+          loadUsersSafely(user, selectedTenantId, cachedRequest, 1000), // Updated with limit
           cachedRequest(
             "Employee",
             "filter",
-            { filter: tenantFilter },
-            () => Employee.filter(tenantFilter),
+            { filter: tenantFilter, limit: 1000 },
+            () => Employee.filter(tenantFilter, 'created_at', 1000),
           ),
         ]);
 
@@ -252,7 +249,7 @@ export default function OpportunitiesPage() {
         setEmployees(employeesData || []);
 
         if (import.meta.env.DEV) {
-          console.log("[Opportunities] Supporting data loaded successfully");
+          logDev("[Opportunities] Supporting data loaded successfully");
         }
         supportingDataLoaded.current = true; // Mark as loaded (ref)
         setSupportingDataReady(true); // notify effects to proceed
@@ -290,46 +287,29 @@ export default function OpportunitiesPage() {
     try {
       const effectiveFilter = getTenantFilter();
 
-      console.log(
+      // Guard: Don't load stats if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !effectiveFilter.tenant_id) {
+        setTotalStats({
+          total: 0,
+          prospecting: 0,
+          qualification: 0,
+          proposal: 0,
+          negotiation: 0,
+          closed_won: 0,
+          closed_lost: 0,
+        });
+        return;
+      }
+
+      logDev(
         "[Opportunities] Loading stats with filter:",
         effectiveFilter,
       );
 
-      // Get up to 10000 opportunities for stats calculation
-      const allOpportunities = await Opportunity.filter(
-        effectiveFilter,
-        "id",
-        10000,
-      );
+      // Use optimized /stats endpoint - server-side aggregation instead of fetching all records
+      const stats = await Opportunity.getStats(effectiveFilter);
 
-      console.log(
-        "[Opportunities] Loaded opportunities for stats:",
-        allOpportunities?.length,
-      );
-
-      const stats = {
-        total: allOpportunities?.length || 0,
-        prospecting: allOpportunities?.filter((o) =>
-          o.stage === "prospecting"
-        ).length || 0,
-        qualification: allOpportunities?.filter((o) =>
-          o.stage === "qualification"
-        ).length || 0,
-        proposal: allOpportunities?.filter((o) =>
-          o.stage === "proposal"
-        ).length || 0,
-        negotiation: allOpportunities?.filter((o) =>
-          o.stage === "negotiation"
-        ).length || 0,
-        closed_won: allOpportunities?.filter((o) =>
-          o.stage === "closed_won"
-        ).length || 0,
-        closed_lost: allOpportunities?.filter((o) =>
-          o.stage === "closed_lost"
-        ).length || 0,
-      };
-
-      console.log("[Opportunities] Calculated stats:", stats);
+      logDev("[Opportunities] Received stats from backend:", stats);
       setTotalStats(stats);
     } catch (error) {
       console.error("Failed to load total stats:", error);
@@ -351,23 +331,39 @@ export default function OpportunitiesPage() {
     try {
       let effectiveFilter = getTenantFilter();
 
+      // Guard: Don't load opportunities if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !effectiveFilter.tenant_id) {
+        setOpportunities([]);
+        setTotalItems(0);
+        setLoading(false);
+        return;
+      }
+
       // Apply stage filter
       if (stageFilter !== "all") {
         effectiveFilter = { ...effectiveFilter, stage: stageFilter };
       }
 
-      // Apply search term filter
+      // Apply search term filter while preserving existing $or filters (e.g., unassigned)
       if (searchTerm) {
         const searchRegex = { $regex: searchTerm, $options: "i" };
-        effectiveFilter = {
-          ...effectiveFilter,
-          $or: [
-            { name: searchRegex },
-            { account_name: searchRegex },
-            { contact_name: searchRegex },
-            { description: searchRegex },
-          ],
-        };
+        const searchConditions = [
+          { name: searchRegex },
+          { account_name: searchRegex },
+          { contact_name: searchRegex },
+          { description: searchRegex },
+        ];
+
+        // If $or already exists (e.g., from unassigned filter), combine via $and
+        if (effectiveFilter.$or) {
+          effectiveFilter = {
+            ...effectiveFilter,
+            $and: [...(effectiveFilter.$and || []), { $or: effectiveFilter.$or }, { $or: searchConditions }],
+          };
+          delete effectiveFilter.$or;
+        } else {
+          effectiveFilter = { ...effectiveFilter, $or: searchConditions };
+        }
       }
 
       // Apply tag filter
@@ -378,7 +374,7 @@ export default function OpportunitiesPage() {
       // Calculate offset for pagination
       const skip = (page - 1) * size;
 
-      console.log(
+      logDev(
         "[Opportunities] Loading page:",
         page,
         "size:",
@@ -387,20 +383,55 @@ export default function OpportunitiesPage() {
         skip,
         "filter:",
         effectiveFilter,
+        "cursor:",
+        paginationCursors[page - 1],
       );
 
+      // Build API query with keyset cursor if available
+      const apiFilter = { ...effectiveFilter };
+      
+      // Add cursor for keyset pagination if navigating forward
+      const cursor = paginationCursors[page - 1];
+      if (cursor && cursor.updated_at && cursor.id) {
+        apiFilter.cursor_updated_at = cursor.updated_at;
+        apiFilter.cursor_id = cursor.id;
+        logDev("[Opportunities] Using keyset cursor:", cursor);
+      }
+
+      // Sort by updated_at DESC, id DESC to match composite index (tenant_id, stage, updated_at DESC)
+      // This aligns with query optimization guidance for indexed scans
       const opportunitiesData = await Opportunity.filter(
-        effectiveFilter,
-        "-close_date",
+        apiFilter,
+        "-updated_at,-id",
         size,
         skip,
       );
 
-      // Get total count for pagination
-      const countQuery = await Opportunity.filter(effectiveFilter, "id", 10000);
-      const totalCount = countQuery?.length || 0;
+      // Track last record for keyset pagination
+      if (opportunitiesData && opportunitiesData.length > 0) {
+        const lastRecord = opportunitiesData[opportunitiesData.length - 1];
+        setLastSeenRecord({
+          updated_at: lastRecord.updated_at,
+          id: lastRecord.id,
+          page: page
+        });
+      }
 
-      console.log(
+      // Use optimized count endpoint - server-side COUNT instead of fetching 10k records
+      const countFilter = { ...effectiveFilter };
+      if (searchTerm) {
+        // Convert search term to filter format for count endpoint
+        const searchRegex = { $regex: searchTerm, $options: "i" };
+        countFilter.$or = [
+          { name: searchRegex },
+          { account_name: searchRegex },
+          { contact_name: searchRegex },
+          { description: searchRegex },
+        ];
+      }
+      const totalCount = await Opportunity.getCount(countFilter);
+
+      logDev(
         "[Opportunities] Loaded:",
         opportunitiesData?.length,
         "Total:",
@@ -440,10 +471,28 @@ export default function OpportunitiesPage() {
     supportingDataReady,
   ]);
 
+  // Clear cache when employee filter changes to force fresh data
+  useEffect(() => {
+    if (selectedEmail !== null) {
+      clearCacheByKey("Opportunity");
+    }
+  }, [selectedEmail, clearCacheByKey]);
+
   const handlePageChange = useCallback((newPage) => {
+    // Store cursor for the page we're leaving
+    if (lastSeenRecord && lastSeenRecord.page === currentPage) {
+      setPaginationCursors(prev => ({
+        ...prev,
+        [currentPage]: {
+          updated_at: lastSeenRecord.updated_at,
+          id: lastSeenRecord.id
+        }
+      }));
+    }
+    
     setCurrentPage(newPage);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
+  }, [lastSeenRecord, currentPage]);
 
   const handlePageSizeChange = useCallback((newSize) => {
     setPageSize(newSize);
@@ -472,17 +521,34 @@ export default function OpportunitiesPage() {
   const usersMap = useMemo(() => {
     return users.reduce((acc, user) => {
       acc[user.email] = user.full_name || user.email;
+      if (user.id) acc[user.id] = user.full_name || user.email; // Index by ID
       return acc;
     }, {});
   }, [users]);
 
   const employeesMap = useMemo(() => {
-    return employees.reduce((acc, employee) => {
+    const map = employees.reduce((acc, employee) => {
+      const fullName = `${employee.first_name} ${employee.last_name}`;
+      // Map by ID (new assignments)
+      if (employee.id) {
+        acc[employee.id] = fullName;
+      }
+      // Map by email (legacy assignments) for backwards compatibility
       if (employee.email) {
-        acc[employee.email] = `${employee.first_name} ${employee.last_name}`;
+        acc[employee.email] = fullName;
       }
       return acc;
     }, {});
+    
+    if (import.meta.env.DEV) {
+      logDev('[Opportunities] employeesMap built:', { 
+        employeeCount: employees.length, 
+        mappedKeys: Object.keys(map).length,
+        sampleKeys: Object.keys(map).slice(0, 3)
+      });
+    }
+    
+    return map;
   }, [employees]);
 
   const accountsMap = useMemo(() => {
@@ -494,24 +560,29 @@ export default function OpportunitiesPage() {
 
   const handleSave = async () => {
     const wasCreating = !editingOpportunity;
-    setIsFormOpen(false);
-    setEditingOpportunity(null);
 
-    // Reset to page 1 for new opportunities to show them
-    if (wasCreating) {
-      setCurrentPage(1);
+    try {
+      // Reset to page 1 for new opportunities to show them
+      if (wasCreating) {
+        setCurrentPage(1);
+      }
+
+      // Clear cache and reload BEFORE closing the dialog
+      clearCacheByKey("Opportunity");
+      await Promise.all([
+        loadOpportunities(wasCreating ? 1 : currentPage, pageSize),
+        loadTotalStats(),
+      ]);
+      
+      // Now close the dialog after data is fresh
+      setIsFormOpen(false);
+      setEditingOpportunity(null);
+    } catch (error) {
+      console.error('[Opportunities] Error in handleSave:', error);
+      // Still close the dialog even on error
+      setIsFormOpen(false);
+      setEditingOpportunity(null);
     }
-
-    clearCache("Opportunity");
-    await Promise.all([
-      loadOpportunities(wasCreating ? 1 : currentPage, pageSize),
-      loadTotalStats(),
-    ]);
-    toast.success(
-      editingOpportunity
-        ? "Opportunity updated successfully"
-        : "Opportunity created successfully",
-    );
   };
 
   const handleDelete = async (id) => {
@@ -534,7 +605,7 @@ export default function OpportunitiesPage() {
       // Small delay to let optimistic update settle
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      clearCache("Opportunity");
+      clearCacheByKey("Opportunity");
       await Promise.all([
         loadOpportunities(currentPage, pageSize),
         loadTotalStats(),
@@ -568,15 +639,26 @@ export default function OpportunitiesPage() {
 
         if (searchTerm) {
           const searchRegex = { $regex: searchTerm, $options: "i" };
-          effectiveFilter = {
-            ...effectiveFilter,
-            $or: [
-              { name: searchRegex },
-              { account_name: searchRegex },
-              { contact_name: searchRegex },
-              { description: searchRegex },
-            ],
-          };
+          const searchConditions = [
+            { name: searchRegex },
+            { account_name: searchRegex },
+            { contact_name: searchRegex },
+            { description: searchRegex },
+          ];
+
+          // If $or already exists (e.g., from unassigned filter), combine via $and
+          if (effectiveFilter.$or) {
+            effectiveFilter = {
+              ...effectiveFilter,
+              $and: [...(effectiveFilter.$and || []), { $or: effectiveFilter.$or }, { $or: searchConditions }],
+            };
+            delete effectiveFilter.$or;
+          } else {
+            effectiveFilter = {
+              ...effectiveFilter,
+              $or: searchConditions,
+            };
+          }
         }
 
         if (selectedTags.length > 0) {
@@ -600,13 +682,23 @@ export default function OpportunitiesPage() {
           // removed delay(1000); // Add delay between batches
         }
 
+        // Optimistically remove from UI immediately
+        const deletedIds = new Set(allOpportunitiesToDelete.map(o => o.id));
+        setOpportunities((prev) => prev.filter((o) => !deletedIds.has(o.id)));
+        setTotalItems((t) => Math.max(0, (t || 0) - deleteCount));
+
         setSelectedOpportunities(new Set());
         setSelectAllMode(false);
-        clearCache("Opportunity");
-        await Promise.all([
-          loadOpportunities(1, pageSize),
-          loadTotalStats(),
-        ]);
+        
+        // Refresh in background to ensure sync
+        setTimeout(async () => {
+          clearCacheByKey("Opportunity");
+          await Promise.all([
+            loadOpportunities(1, pageSize),
+            loadTotalStats(),
+          ]);
+        }, 500);
+        
         toast.success(`${deleteCount} opportunity/opportunities deleted`);
       } catch (error) {
         console.error("Failed to delete opportunities:", error);
@@ -632,12 +724,23 @@ export default function OpportunitiesPage() {
         await Promise.all(
           [...selectedOpportunities].map((id) => Opportunity.delete(id)),
         );
+        
+        // Optimistically remove from UI immediately
+        const deletedIds = new Set(selectedOpportunities);
+        setOpportunities((prev) => prev.filter((o) => !deletedIds.has(o.id)));
+        setTotalItems((t) => Math.max(0, (t || 0) - deletedIds.size));
+        
         setSelectedOpportunities(new Set());
-        clearCache("Opportunity");
-        await Promise.all([
-          loadOpportunities(currentPage, pageSize),
-          loadTotalStats(),
-        ]);
+        
+        // Refresh in background to ensure sync
+        setTimeout(async () => {
+          clearCacheByKey("Opportunity");
+          await Promise.all([
+            loadOpportunities(currentPage, pageSize),
+            loadTotalStats(),
+          ]);
+        }, 500);
+        
         toast.success(
           `${selectedOpportunities.size} opportunity/opportunities deleted`,
         );
@@ -671,15 +774,26 @@ export default function OpportunitiesPage() {
 
         if (searchTerm) {
           const searchRegex = { $regex: searchTerm, $options: "i" };
-          effectiveFilter = {
-            ...effectiveFilter,
-            $or: [
-              { name: searchRegex },
-              { account_name: searchRegex },
-              { contact_name: searchRegex },
-              { description: searchRegex },
-            ],
-          };
+          const searchConditions = [
+            { name: searchRegex },
+            { account_name: searchRegex },
+            { contact_name: searchRegex },
+            { description: searchRegex },
+          ];
+
+          // If $or already exists (e.g., from unassigned filter), combine via $and
+          if (effectiveFilter.$or) {
+            effectiveFilter = {
+              ...effectiveFilter,
+              $and: [...(effectiveFilter.$and || []), { $or: effectiveFilter.$or }, { $or: searchConditions }],
+            };
+            delete effectiveFilter.$or;
+          } else {
+            effectiveFilter = {
+              ...effectiveFilter,
+              $or: searchConditions,
+            };
+          }
         }
 
         if (selectedTags.length > 0) {
@@ -707,7 +821,7 @@ export default function OpportunitiesPage() {
 
         setSelectedOpportunities(new Set());
         setSelectAllMode(false);
-        clearCache("Opportunity");
+        clearCacheByKey("Opportunity");
         await Promise.all([
           loadOpportunities(currentPage, pageSize),
           loadTotalStats(),
@@ -734,7 +848,7 @@ export default function OpportunitiesPage() {
 
         await Promise.all(promises);
         setSelectedOpportunities(new Set());
-        clearCache("Opportunity");
+        clearCacheByKey("Opportunity");
         await Promise.all([
           loadOpportunities(currentPage, pageSize),
           loadTotalStats(),
@@ -772,15 +886,26 @@ export default function OpportunitiesPage() {
 
         if (searchTerm) {
           const searchRegex = { $regex: searchTerm, $options: "i" };
-          effectiveFilter = {
-            ...effectiveFilter,
-            $or: [
-              { name: searchRegex },
-              { account_name: searchRegex },
-              { contact_name: searchRegex },
-              { description: searchRegex },
-            ],
-          };
+          const searchConditions = [
+            { name: searchRegex },
+            { account_name: searchRegex },
+            { contact_name: searchRegex },
+            { description: searchRegex },
+          ];
+
+          // If $or already exists (e.g., from unassigned filter), combine via $and
+          if (effectiveFilter.$or) {
+            effectiveFilter = {
+              ...effectiveFilter,
+              $and: [...(effectiveFilter.$and || []), { $or: effectiveFilter.$or }, { $or: searchConditions }],
+            };
+            delete effectiveFilter.$or;
+          } else {
+            effectiveFilter = {
+              ...effectiveFilter,
+              $or: searchConditions,
+            };
+          }
         }
 
         if (selectedTags.length > 0) {
@@ -810,7 +935,7 @@ export default function OpportunitiesPage() {
 
         setSelectedOpportunities(new Set());
         setSelectAllMode(false);
-        clearCache("Opportunity");
+        clearCacheByKey("Opportunity");
         await Promise.all([
           loadOpportunities(currentPage, pageSize),
           loadTotalStats(),
@@ -833,7 +958,7 @@ export default function OpportunitiesPage() {
 
         await Promise.all(promises);
         setSelectedOpportunities(new Set());
-        clearCache("Opportunity");
+        clearCacheByKey("Opportunity");
         await Promise.all([
           loadOpportunities(currentPage, pageSize),
           loadTotalStats(),
@@ -886,12 +1011,12 @@ export default function OpportunitiesPage() {
   };
 
   const handleRefresh = async () => {
-    clearCache("Opportunity");
-    clearCache("Employee");
-    clearCache("Account");
-    clearCache("Contact");
-    clearCache("Lead");
-    clearCache("User"); // Added clearing User cache
+    clearCacheByKey("Opportunity");
+    clearCacheByKey("Employee");
+    clearCacheByKey("Account");
+    clearCacheByKey("Contact");
+    clearCacheByKey("Lead");
+    clearCacheByKey("User"); // Added clearing User cache
     supportingDataLoaded.current = false; // Force reload supporting data next time
     setSupportingDataReady(false);
     await Promise.all([
@@ -911,6 +1036,8 @@ export default function OpportunitiesPage() {
     setStageFilter("all");
     setSelectedTags([]);
     setCurrentPage(1);
+    setPaginationCursors({});
+    setLastSeenRecord(null);
     handleClearSelection();
   };
 
@@ -919,18 +1046,63 @@ export default function OpportunitiesPage() {
       selectedTags.length > 0;
   }, [searchTerm, stageFilter, selectedTags]);
 
+  // AiSHA events listener - allows AI to trigger page actions
+  useAiShaEvents({
+    entityType: 'opportunities',
+    onOpenEdit: ({ id }) => {
+      const opportunity = opportunities.find(o => o.id === id);
+      if (opportunity) {
+        setEditingOpportunity(opportunity);
+        setIsFormOpen(true);
+      } else {
+        Opportunity.get(id).then(result => {
+          if (result) {
+            setEditingOpportunity(result);
+            setIsFormOpen(true);
+          }
+        });
+      }
+    },
+    onSelectRow: ({ id }) => {
+      const opportunity = opportunities.find(o => o.id === id);
+      if (opportunity) {
+        setDetailOpportunity(opportunity);
+        setIsDetailOpen(true);
+      }
+    },
+    onOpenForm: () => {
+      setEditingOpportunity(null);
+      setIsFormOpen(true);
+    },
+    onRefresh: handleRefresh,
+  });
+
   const handleStageChange = async (opportunityId, newStage) => {
     try {
-      await Opportunity.update(opportunityId, { stage: newStage });
-      clearCache("Opportunity");
+      logDev('[Opportunities] handleStageChange:', { opportunityId, newStage, tenant: selectedTenantId });
+      
+      // Include tenant_id in the update - use selectedTenantId from useTenant hook
+      const updateData = {
+        stage: newStage,
+        tenant_id: selectedTenantId
+      };
+      
+      await Opportunity.update(opportunityId, updateData);
+      logDev('[Opportunities] Stage update successful, clearing cache and reloading...');
+      
+      clearCacheByKey("Opportunity");
       await Promise.all([
         loadOpportunities(currentPage, pageSize),
         loadTotalStats(),
       ]);
-      toast.success(`Opportunity moved to ${newStage.replace(/_/g, " ")}`); // Updated toast message as per outline
-      return await Opportunity.filter({ id: opportunityId }, "id", 1).then(
+      
+      toast.success(`Opportunity moved to ${newStage.replace(/_/g, " ")}`);
+      
+      const updated = await Opportunity.filter({ id: opportunityId, tenant_id: selectedTenantId }, "id", 1).then(
         (r) => r[0],
       );
+      logDev('[Opportunities] Retrieved updated opportunity:', updated);
+      return updated;
     } catch (error) {
       console.error("Error updating opportunity stage:", error);
       toast.error("Failed to update opportunity stage");
@@ -951,19 +1123,19 @@ export default function OpportunitiesPage() {
 
   return (
     <TooltipProvider>
-      <div className="min-h-screen bg-slate-900 p-4 sm:p-6">
+      <div className="space-y-6">
         <SimpleModal
           open={isFormOpen}
           onOpenChange={(open) => {
-            console.log("[Opportunities] Modal onOpenChange:", open);
+            logDev("[Opportunities] Modal onOpenChange:", open);
             setIsFormOpen(open);
             if (!open) {
               setEditingOpportunity(null);
             }
           }}
           title={editingOpportunity
-            ? "Edit Opportunity"
-            : "Add New Opportunity"}
+            ? `Edit ${opportunityLabel}`
+            : `Add New ${opportunityLabel}`}
           size="lg"
         >
           <OpportunityForm
@@ -972,25 +1144,12 @@ export default function OpportunitiesPage() {
             contacts={contacts}
             users={users}
             leads={leads}
-            onSubmit={async (payload) => {
-              try {
-                console.log("[Opportunities] Form submitted:", {
-                  isEdit: !!editingOpportunity,
-                  payload,
-                });
-                if (editingOpportunity) {
-                  await Opportunity.update(editingOpportunity.id, payload);
-                } else {
-                  await Opportunity.create(payload);
-                }
-                await handleSave();
-              } catch (error) {
-                console.error("Error saving opportunity:", error);
-                toast.error("Failed to save opportunity");
-              }
+            onSubmit={async (result) => {
+              logDev("[Opportunities] Form submitted with result:", result);
+              await handleSave();
             }}
             onCancel={() => {
-              console.log("[Opportunities] Form cancelled");
+              logDev("[Opportunities] Form cancelled");
               setIsFormOpen(false);
               setEditingOpportunity(null);
             }}
@@ -1002,7 +1161,7 @@ export default function OpportunitiesPage() {
           onOpenChange={setIsImportOpen}
           schema={Opportunity.schema ? Opportunity.schema() : null}
           onSuccess={async () => {
-            clearCache("Opportunity");
+            clearCacheByKey("Opportunity");
             await Promise.all([
               loadOpportunities(1, pageSize),
               loadTotalStats(),
@@ -1016,13 +1175,14 @@ export default function OpportunitiesPage() {
             accounts={accounts}
             contacts={contacts}
             users={users}
+            employees={employees}
             leads={leads}
             onClose={() => {
               setIsDetailOpen(false);
               setDetailOpportunity(null);
             }}
             onEdit={(opp) => {
-              console.log(
+              logDev(
                 "[Opportunities] Edit clicked from detail panel:",
                 opp.id,
               );
@@ -1038,13 +1198,13 @@ export default function OpportunitiesPage() {
           />
         )}
 
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-100 mb-2">
-              Opportunities
+            <h1 className="text-3xl font-bold text-slate-100">
+              {opportunitiesLabel}
             </h1>
-            <p className="text-slate-400">
-              Track and manage your sales opportunities and pipeline.
+            <p className="text-slate-400 mt-1">
+              Track and manage your sales {opportunitiesLabel.toLowerCase()} and pipeline.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1054,7 +1214,7 @@ export default function OpportunitiesPage() {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    console.log(
+                    logDev(
                       "[Opportunities] View mode button clicked, current:",
                       viewMode,
                     );
@@ -1080,7 +1240,7 @@ export default function OpportunitiesPage() {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    console.log("[Opportunities] Import button clicked");
+                    logDev("[Opportunities] Import button clicked");
                     setIsImportOpen(true);
                   }}
                   className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
@@ -1115,10 +1275,10 @@ export default function OpportunitiesPage() {
               <TooltipTrigger asChild>
                 <Button
                   onClick={() => {
-                    console.log("[Opportunities] Add button clicked");
+                    logDev("[Opportunities] Add button clicked");
                     setEditingOpportunity(null);
                     setIsFormOpen(true);
-                    console.log("[Opportunities] State after click:", {
+                    logDev("[Opportunities] State after click:", {
                       isFormOpen: true,
                       editingOpportunity: null,
                     });
@@ -1126,21 +1286,21 @@ export default function OpportunitiesPage() {
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Opportunity
+                  Add {opportunityLabel}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Create new opportunity</p>
+                <p>Create new {opportunityLabel.toLowerCase()}</p>
               </TooltipContent>
             </Tooltip>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-7 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-7 gap-4">
           {[
             {
-              label: "Total Pipeline",
+              label: `Total ${opportunitiesLabel}`,
               value: totalStats.total,
               filter: "all",
               bgColor: "bg-slate-800",
@@ -1194,7 +1354,9 @@ export default function OpportunitiesPage() {
               borderColor: "border-red-700",
               tooltip: "opportunity_closed_lost",
             },
-          ].map((stat) => (
+          ]
+            .filter(stat => stat.tooltip === 'total_all' || isCardVisible(stat.tooltip))
+            .map((stat) => (
             <div
               key={stat.label}
               className={`${stat.bgColor} ${
@@ -1207,7 +1369,7 @@ export default function OpportunitiesPage() {
               onClick={() => handleStageFilterClick(stat.filter)}
             >
               <div className="flex items-center justify-between mb-1">
-                <p className="text-sm text-slate-400">{stat.label}</p>
+                <p className="text-sm text-slate-400">{getCardLabel(stat.tooltip) || stat.label}</p>
                 <StatusHelper statusKey={stat.tooltip} />
               </div>
               <p className="text-2xl font-bold text-slate-100">{stat.value}</p>
@@ -1216,7 +1378,7 @@ export default function OpportunitiesPage() {
         </div>
 
         {viewMode !== "kanban" && (
-          <div className="flex flex-col lg:flex-row gap-4 mb-6">
+          <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-3 w-5 h-5 text-slate-500" />
               <Input
@@ -1267,7 +1429,7 @@ export default function OpportunitiesPage() {
           selectedOpportunities.size === opportunities.length &&
           opportunities.length > 0 && !selectAllMode &&
           totalItems > opportunities.length && (
-          <div className="mb-4 bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
+          <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-blue-400" />
               <span className="text-blue-200">
@@ -1294,7 +1456,7 @@ export default function OpportunitiesPage() {
         )}
 
         {viewMode !== "kanban" && selectAllMode && (
-          <div className="mb-4 bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
+          <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-blue-400" />
               <span className="text-blue-200 font-semibold">
@@ -1327,12 +1489,12 @@ export default function OpportunitiesPage() {
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
               <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-slate-300 mb-2">
-                No opportunities found
+                No {opportunitiesLabel.toLowerCase()} found
               </h3>
               <p className="text-slate-500 mb-6">
                 {hasActiveFilters
                   ? "Try adjusting your filters or search term"
-                  : "Get started by adding your first opportunity"}
+                  : `Get started by adding your first ${opportunityLabel.toLowerCase()}`}
               </p>
               {!hasActiveFilters && (
                 <Button
@@ -1340,7 +1502,7 @@ export default function OpportunitiesPage() {
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Your First Opportunity
+                  Add Your First {opportunityLabel}
                 </Button>
               )}
             </div>
@@ -1362,7 +1524,7 @@ export default function OpportunitiesPage() {
                 onView={handleViewDetails}
                 onStageChange={handleStageChange}
                 onDataRefresh={async () => {
-                  clearCache("Opportunity");
+                  clearCacheByKey("Opportunity");
                   await Promise.all([
                     loadOpportunities(currentPage, pageSize),
                     loadTotalStats(),
@@ -1392,8 +1554,13 @@ export default function OpportunitiesPage() {
                         contactName={contact
                           ? `${contact.first_name} ${contact.last_name}`
                           : ""}
-                        assignedUserName={employeesMap[opp.assigned_to] ||
-                          usersMap[opp.assigned_to]}
+                        assignedUserName={(() => {
+                          if (!opp.assigned_to) return undefined;
+                          return employeesMap[opp.assigned_to] || 
+                                 usersMap[opp.assigned_to] || 
+                                 opp.assigned_to_name || 
+                                 opp.assigned_to;
+                        })()}
                         onEdit={() => {
                           setEditingOpportunity(opp);
                           setIsFormOpen(true);
@@ -1496,7 +1663,7 @@ export default function OpportunitiesPage() {
                               data-variant="status"
                               data-status={opp.stage}
                             >
-                              {opp.stage?.replace(/_/g, " ")}
+                              {getCardLabel(stageToCardId[opp.stage]) || opp.stage?.replace(/_/g, " ")}
                             </Badge>
                           </TableCell>
                           <TableCell
@@ -1525,11 +1692,54 @@ export default function OpportunitiesPage() {
                             className="text-center text-slate-300 cursor-pointer p-3"
                             onClick={() => handleViewDetails(opp)}
                           >
-                            {employeesMap[opp.assigned_to] ||
-                              usersMap[opp.assigned_to] ||
-                              opp.assigned_to_name || (
-                              <span className="text-slate-500">Unassigned</span>
-                            )}
+                            {(() => {
+                              // If no assigned_to, show Unassigned
+                              if (!opp.assigned_to) {
+                                return <span className="text-slate-500">Unassigned</span>;
+                              }
+                              
+                              // Try employee lookup first (by ID or email)
+                              const employeeName = employeesMap[opp.assigned_to];
+                              if (employeeName) {
+                                return employeeName;
+                              }
+                              
+                              // Try user lookup
+                              const userName = usersMap[opp.assigned_to];
+                              if (userName) {
+                                return userName;
+                              }
+                              
+                              // Try the opportunity's embedded name field
+                              if (opp.assigned_to_name) {
+                                return opp.assigned_to_name;
+                              }
+                              
+                              // If we have a value but no lookup match, show it for debugging
+                              // This helps identify missing employee records
+                              if (import.meta.env.DEV) {
+                                logDev('[Opportunities] Missing employee lookup:', {
+                                  opportunityId: opp.id,
+                                  opportunityName: opp.name,
+                                  assigned_to: opp.assigned_to,
+                                  employeesMapKeys: Object.keys(employeesMap).length,
+                                  usersMapKeys: Object.keys(usersMap).length
+                                });
+                              }
+                              
+                              // Show abbreviated ID/email as fallback
+                              const assignedValue = String(opp.assigned_to);
+                              if (assignedValue.includes('@')) {
+                                // It's an email - show it
+                                return <span className="text-amber-400 text-xs" title={assignedValue}>{assignedValue}</span>;
+                              } else if (assignedValue.length > 20) {
+                                // It's likely a UUID - show abbreviated
+                                return <span className="text-amber-400 text-xs" title={assignedValue}>{assignedValue.substring(0, 8)}...</span>;
+                              } else {
+                                // Short value - show it
+                                return <span className="text-amber-400 text-xs">{assignedValue}</span>;
+                              }
+                            })()}
                           </TableCell>
                           <TableCell className="p-3 text-center">
                             <div className="flex items-center justify-center gap-1">
@@ -1549,7 +1759,7 @@ export default function OpportunitiesPage() {
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>Edit opportunity</p>
+                                  <p>Edit {opportunityLabel.toLowerCase()}</p>
                                 </TooltipContent>
                               </Tooltip>
                               <Tooltip>

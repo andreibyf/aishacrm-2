@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useState, useEffect, createContext, useContext } from 'react';
-import { User, SystemLog } from '@/api/entities';
+import { useState, createContext, useContext } from 'react';
+import { enqueueSystemLog } from '@/utils/systemLogBatcher.js';
+import { useUser } from '@/components/shared/useUser.js';
 
 // Client-side error log storage
 const errorLog = [];
@@ -14,11 +15,7 @@ export function useErrorLog() {
 
 export function ErrorLogProvider({ children }) {
   const [errors, setErrors] = useState([]);
-  const [user, setUser] = useState(null);
-
-  useEffect(() => {
-    User.me().then(setUser).catch(() => {});
-  }, []);
+  const { user } = useUser();
 
   const logError = (error) => {
     const errorEntry = {
@@ -43,29 +40,36 @@ export function ErrorLogProvider({ children }) {
     // Also log to console for developers
     console.error(`[${errorEntry.component}]`, errorEntry.message, errorEntry.details);
 
-    // CRITICAL: Persist errors to system_logs table
-    // Map severity to log level: critical/error → ERROR, warning → WARNING
-    const logLevel = errorEntry.severity === 'critical' || errorEntry.severity === 'error' ? 'ERROR' : 'WARNING';
+    // CRITICAL: Persist errors to system_logs table (only if user is authenticated)
+    // Skip logging "Auth session missing" errors to avoid 403s on login page
+    const isAuthError = errorEntry.message?.includes('Auth session missing');
     
-    SystemLog.create({
-      level: logLevel,
-      message: `[${errorEntry.component}] ${errorEntry.message}`,
-      source: errorEntry.component,
-      user_email: errorEntry.userEmail || 'anonymous',
-      tenant_id: user?.tenant_id || null,
-      metadata: {
-        status: errorEntry.status,
-        severity: errorEntry.severity,
-        actionable: errorEntry.actionable,
-        details: errorEntry.details,
-        timestamp: errorEntry.timestamp
-      },
-      user_agent: navigator.userAgent,
-      url: window.location.href
-    }).catch((logErr) => {
-      // Don't fail the app if logging fails
-      console.warn('Failed to persist error to system_logs:', logErr);
-    });
+    if (user && !isAuthError) {
+      // Map severity to log level: critical/error → ERROR, warning → WARNING
+      const logLevel = errorEntry.severity === 'critical' || errorEntry.severity === 'error' ? 'ERROR' : 'WARNING';
+      
+      // Use batcher for system logs to reduce network overhead
+      // Note: ERROR level bypasses batching and flushes immediately
+      enqueueSystemLog({
+        level: logLevel,
+        message: `[${errorEntry.component}] ${errorEntry.message}`,
+        source: errorEntry.component,
+        user_email: errorEntry.userEmail || 'anonymous',
+        tenant_id: user?.tenant_id || null,
+        metadata: {
+          status: errorEntry.status,
+          severity: errorEntry.severity,
+          actionable: errorEntry.actionable,
+          details: errorEntry.details,
+          timestamp: errorEntry.timestamp
+        },
+        user_agent: navigator.userAgent,
+        url: window.location.href
+      }).catch((logErr) => {
+        // Don't fail the app if logging fails
+        console.warn('Failed to persist error to system_logs:', logErr);
+      });
+    }
   };
 
   const clearErrors = () => {

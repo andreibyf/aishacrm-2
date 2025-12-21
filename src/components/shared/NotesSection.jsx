@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Note } from "@/api/entities";
-import { User } from "@/api/entities";
+// Removed direct User.me() usage; rely on global user context
+import { useUser } from "@/components/shared/useUser.js";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,8 +44,8 @@ const getTypeColor = (type) => {
 export default function NotesSection({ relatedTo, relatedId, className = "" }) {
   const [notes, setNotes] = useState([]);
   const [loadingNotes, setLoadingNotes] = useState(true);
-  const [currentUser, setCurrentUser] = useState(null);
-  const [_userLoading, setUserLoading] = useState(true);
+  // Use normalized user from context
+  const { user } = useUser();
 
   const [newNote, setNewNote] = useState({
     title: "",
@@ -55,31 +56,16 @@ export default function NotesSection({ relatedTo, relatedId, className = "" }) {
   const [success, setSuccess] = useState(null);
   const [loading, setLoading] = useState(false); // For the add note button
 
+  // Warn once if tenant_id missing (superadmin without selection or misconfiguration)
   useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    setUserLoading(true);
-    try {
-      const user = await User.me();
-      setCurrentUser(user);
-
-      if (!user.tenant_id) {
-        console.warn(
-          "User does not have a tenant_id assigned. Please contact your administrator.",
-        );
-      }
-    } catch (error) {
-      console.error("Error loading user:", error);
-      setError("Failed to load user information.");
-    } finally {
-      setUserLoading(false);
+    if (user && !user.tenant_id) {
+      console.warn("[NotesSection] user missing tenant_id; notes will be read-only.");
     }
-  };
+  }, [user]);
 
   const loadNotes = useCallback(async () => {
-    if (!currentUser?.tenant_id) return;
+    // Allow loading even if tenant_id absent (superadmin may view cross-tenant?)
+    if (!user) return;
     setLoadingNotes(true);
     setError(null);
     try {
@@ -94,19 +80,17 @@ export default function NotesSection({ relatedTo, relatedId, className = "" }) {
     } finally {
       setLoadingNotes(false);
     }
-  }, [relatedTo, relatedId, currentUser?.tenant_id]);
+  }, [relatedTo, relatedId, user]);
 
   useEffect(() => {
-    if (currentUser && currentUser.tenant_id) {
-      loadNotes();
-    }
-  }, [relatedId, currentUser, loadNotes]);
+    if (user) loadNotes();
+  }, [relatedId, user, loadNotes]);
 
   const handleAddNote = async () => {
     setError(null);
     setSuccess(null);
 
-    if (!currentUser?.tenant_id) {
+    if (!user?.tenant_id) {
       setError(
         "Error: User information not loaded or tenant not assigned. Please contact your administrator.",
       );
@@ -129,7 +113,7 @@ export default function NotesSection({ relatedTo, relatedId, className = "" }) {
         ...newNote,
         title: newNote.title.trim(),
         content: newNote.content.trim(),
-        tenant_id: currentUser.tenant_id,
+        tenant_id: user.tenant_id,
         related_to: relatedTo,
         related_id: relatedId,
         is_private: false, // Default value as the form doesn't support it
@@ -211,7 +195,7 @@ export default function NotesSection({ relatedTo, relatedId, className = "" }) {
             <Button
               onClick={handleAddNote}
               disabled={!newNote.title.trim() || !newNote.content.trim() ||
-                loading || !currentUser?.tenant_id}
+                loading || !user?.tenant_id}
               size="sm"
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
@@ -283,7 +267,7 @@ export default function NotesSection({ relatedTo, relatedId, className = "" }) {
                   <div className="flex items-center gap-1">
                     <UserIcon className="w-3 h-3" />
                     <span>
-                      {note.created_by === currentUser?.email
+                      {note.created_by === user?.email
                         ? "You"
                         : note.created_by}
                     </span>

@@ -1,4 +1,4 @@
-import { Search, Edit, Mail, Plus, GitBranch, UserPlus } from 'lucide-react'
+import { Search, Edit, Mail, Plus, GitBranch, UserPlus, Globe, Building2, Briefcase, Activity, Brain, Sparkles, Phone } from 'lucide-react'
 
 const nodeTypes = [
   {
@@ -21,6 +21,13 @@ const nodeTypes = [
     icon: Edit,
     description: 'Update lead fields',
     color: 'emerald'
+  },
+  {
+    type: 'http_request',
+    label: 'HTTP Request',
+    icon: Globe,
+    description: 'Send data to external API (Zapier-style)',
+    color: 'orange'
   },
   {
     type: 'condition',
@@ -49,6 +56,82 @@ const nodeTypes = [
     icon: Mail,
     description: 'Send an email',
     color: 'purple'
+  },
+  {
+    type: 'initiate_call',
+    label: 'AI Call',
+    icon: Phone,
+    description: 'Initiate AI outbound call via CallFluent/Thoughtly',
+    color: 'rose'
+  }
+  ,
+  // Account nodes
+  {
+    type: 'find_account',
+    label: 'Find Account',
+    icon: Building2,
+    description: 'Find an account by name or email domain',
+    color: 'indigo'
+  },
+  {
+    type: 'update_account',
+    label: 'Update Account',
+    icon: Edit,
+    description: 'Update account fields',
+    color: 'indigo'
+  },
+  // Opportunity nodes
+  {
+    type: 'create_opportunity',
+    label: 'Create Opportunity',
+    icon: Briefcase,
+    description: 'Create a new sales opportunity',
+    color: 'pink'
+  },
+  {
+    type: 'update_opportunity',
+    label: 'Update Opportunity',
+    icon: Edit,
+    description: 'Update opportunity fields',
+    color: 'pink'
+  },
+  // Activities nodes
+  {
+    type: 'create_activity',
+    label: 'Create Activity',
+    icon: Activity,
+    description: 'Log an activity (email, call, task)',
+    color: 'violet'
+  }
+  ,
+  // AI-driven nodes
+  {
+    type: 'ai_classify_opportunity_stage',
+    label: 'AI: Classify Stage',
+    icon: Brain,
+    description: 'Classify opportunity stage from text/context',
+    color: 'purple'
+  },
+  {
+    type: 'ai_generate_email',
+    label: 'AI: Generate Email',
+    icon: Sparkles,
+    description: 'Draft personalized email from context',
+    color: 'pink'
+  },
+  {
+    type: 'ai_enrich_account',
+    label: 'AI: Enrich Account',
+    icon: Brain,
+    description: 'Enrich company data via MCP/API',
+    color: 'indigo'
+  },
+  {
+    type: 'ai_route_activity',
+    label: 'AI: Route Activity',
+    icon: Sparkles,
+    description: 'Suggest next best action and priority',
+    color: 'cyan'
   }
 ];
 

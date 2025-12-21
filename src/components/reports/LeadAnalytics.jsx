@@ -18,229 +18,7 @@ import {
   YAxis,
 } from "recharts";
 import { format, subDays } from "date-fns"; // Changed from subMonths/startOfMonth
-
-// Mock Lead entity to simulate data fetching.
-// In a real application, this would typically import an actual API client or ORM model.
-class Lead {
-  constructor(
-    { id, status, source, estimated_value, created_date, score, tenant_id },
-  ) {
-    this.id = id;
-    this.status = status;
-    this.source = source;
-    this.estimated_value = estimated_value;
-    this.created_date = created_date;
-    this.score = score;
-    this.tenant_id = tenant_id;
-  }
-
-  static async filter(tenantFilter) {
-    // Simulate an asynchronous API call
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    const mockLeads = [
-      // Tenant 'tenant1' Leads
-      new Lead({
-        id: "l1",
-        status: "new",
-        source: "website",
-        estimated_value: 1000,
-        created_date: "2024-07-28T10:00:00Z",
-        score: 75,
-        tenant_id: "tenant1",
-      }),
-      new Lead({
-        id: "l2",
-        status: "contacted",
-        source: "referral",
-        estimated_value: 1500,
-        created_date: "2024-07-25T11:00:00Z",
-        score: 80,
-        tenant_id: "tenant1",
-      }),
-      new Lead({
-        id: "l3",
-        status: "converted",
-        source: "website",
-        estimated_value: 5000,
-        created_date: "2024-07-20T12:00:00Z",
-        score: 90,
-        tenant_id: "tenant1",
-      }),
-      new Lead({
-        id: "l4",
-        status: "new",
-        source: "campaign",
-        estimated_value: 800,
-        created_date: "2024-07-27T09:00:00Z",
-        score: 60,
-        tenant_id: "tenant1",
-      }),
-      new Lead({
-        id: "l5",
-        status: "converted",
-        source: "referral",
-        estimated_value: 3000,
-        created_date: "2024-07-15T14:00:00Z",
-        score: 85,
-        tenant_id: "tenant1",
-      }),
-      new Lead({
-        id: "l6",
-        status: "contacted",
-        source: "website",
-        estimated_value: 1200,
-        created_date: "2024-07-22T16:00:00Z",
-        score: 55,
-        tenant_id: "tenant1",
-      }),
-      new Lead({
-        id: "l7",
-        status: "qualified",
-        source: "website",
-        estimated_value: 2000,
-        created_date: "2024-07-18T10:00:00Z",
-        score: 70,
-        tenant_id: "tenant1",
-      }),
-      new Lead({
-        id: "l8",
-        status: "new",
-        source: "cold call",
-        estimated_value: 500,
-        created_date: "2024-07-26T10:00:00Z",
-        score: 30,
-        tenant_id: "tenant1",
-      }),
-      new Lead({
-        id: "l9",
-        status: "new",
-        source: "cold call",
-        estimated_value: 500,
-        created_date: "2024-07-25T10:00:00Z",
-        score: 25,
-        tenant_id: "tenant1",
-      }),
-      new Lead({
-        id: "l10",
-        status: "new",
-        source: "cold call",
-        estimated_value: 500,
-        created_date: "2024-07-24T10:00:00Z",
-        score: 20,
-        tenant_id: "tenant1",
-      }),
-      new Lead({
-        id: "l11",
-        status: "converted",
-        source: "campaign",
-        estimated_value: 6000,
-        created_date: "2024-07-10T09:00:00Z",
-        score: 92,
-        tenant_id: "tenant1",
-      }),
-      new Lead({
-        id: "l12",
-        status: "qualified",
-        source: "website",
-        estimated_value: 2500,
-        created_date: "2024-07-23T15:00:00Z",
-        score: 78,
-        tenant_id: "tenant1",
-      }),
-      new Lead({
-        id: "l13",
-        status: "contacted",
-        source: "social media",
-        estimated_value: 900,
-        created_date: "2024-07-21T11:00:00Z",
-        score: 65,
-        tenant_id: "tenant1",
-      }),
-      new Lead({
-        id: "l14",
-        status: "new",
-        source: "referral",
-        estimated_value: 1100,
-        created_date: "2024-07-29T13:00:00Z",
-        score: 70,
-        tenant_id: "tenant1",
-      }),
-      new Lead({
-        id: "l15",
-        status: "new",
-        source: "campaign",
-        estimated_value: 700,
-        created_date: "2024-07-28T14:00:00Z",
-        score: 40,
-        tenant_id: "tenant1",
-      }),
-
-      // Tenant 'tenant2' Leads
-      new Lead({
-        id: "l16",
-        status: "new",
-        source: "partner",
-        estimated_value: 2000,
-        created_date: "2024-07-29T10:00:00Z",
-        score: 65,
-        tenant_id: "tenant2",
-      }),
-      new Lead({
-        id: "l17",
-        status: "converted",
-        source: "website",
-        estimated_value: 7000,
-        created_date: "2024-07-19T11:00:00Z",
-        score: 95,
-        tenant_id: "tenant2",
-      }),
-      new Lead({
-        id: "l18",
-        status: "contacted",
-        source: "partner",
-        estimated_value: 1800,
-        created_date: "2024-07-24T12:00:00Z",
-        score: 70,
-        tenant_id: "tenant2",
-      }),
-      new Lead({
-        id: "l19",
-        status: "new",
-        source: "social media",
-        estimated_value: 900,
-        created_date: "2024-07-28T09:00:00Z",
-        score: 45,
-        tenant_id: "tenant2",
-      }),
-      new Lead({
-        id: "l20",
-        status: "converted",
-        source: "social media",
-        estimated_value: 4000,
-        created_date: "2024-07-13T14:00:00Z",
-        score: 88,
-        tenant_id: "tenant2",
-      }),
-      new Lead({
-        id: "l21",
-        status: "new",
-        source: "website",
-        estimated_value: 1100,
-        created_date: "2024-07-27T10:00:00Z",
-        score: 58,
-        tenant_id: "tenant2",
-      }),
-    ];
-
-    // If tenantFilter is 'all', return all leads. Otherwise, filter by tenant_id.
-    if (tenantFilter === "all") {
-      return mockLeads;
-    } else {
-      return mockLeads.filter((lead) => lead.tenant_id === tenantFilter);
-    }
-  }
-}
+import { Lead } from "@/api/entities";
 
 // Updated COLORS as per outline + added a few more for variety
 const COLORS = [
@@ -260,6 +38,8 @@ export default function LeadAnalytics({ tenantFilter }) {
   const [leadsBySource, setLeadsBySource] = useState([]);
   const [leadsOverTime, setLeadsOverTime] = useState([]);
   const [leadQualityData, setLeadQualityData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   // Key metrics states, derived from allLeads
   const [totalLeadsCount, setTotalLeadsCount] = useState(0);
@@ -269,9 +49,32 @@ export default function LeadAnalytics({ tenantFilter }) {
 
   useEffect(() => {
     const fetchLeadData = async () => {
-      // Fetch leads based on the tenantFilter
-      const fetchedLeads = await Lead.filter(tenantFilter);
-      setAllLeads(fetchedLeads); // Store raw leads if needed elsewhere, otherwise just process
+      setLoading(true);
+      setError(null);
+      try {
+        // Guard: require a tenant_id to avoid cross-tenant loads for admins/superadmins
+        if (!tenantFilter || (tenantFilter && !tenantFilter.tenant_id)) {
+          setAllLeads([]);
+          setLeadsByStatus([]);
+          setLeadsBySource([]);
+          setLeadsOverTime([]);
+          setLeadQualityData([]);
+          setTotalLeadsCount(0);
+          setConvertedLeadsCount(0);
+          setConversionRate(0);
+          setAvgLeadScore(0);
+          return;
+        }
+
+        // Ensure test data is excluded unless explicitly allowed
+        const effectiveFilter = { ...tenantFilter };
+        if (!("is_test_data" in effectiveFilter)) {
+          effectiveFilter.is_test_data = false;
+        }
+
+        // Fetch leads from real API/entity layer
+        const fetchedLeads = await Lead.filter(effectiveFilter).catch(() => []);
+        setAllLeads(fetchedLeads); // Store raw leads if needed elsewhere, otherwise just process
 
       // --- Calculate Key Metrics ---
       const total = fetchedLeads.length;
@@ -369,6 +172,21 @@ export default function LeadAnalytics({ tenantFilter }) {
         [range, count],
       ) => ({ range, count }));
       setLeadQualityData(qualityData);
+      } catch (e) {
+        console.error("LeadAnalytics: failed to load leads", e);
+        setError(e?.message || String(e));
+        setAllLeads([]);
+        setLeadsByStatus([]);
+        setLeadsBySource([]);
+        setLeadsOverTime([]);
+        setLeadQualityData([]);
+        setTotalLeadsCount(0);
+        setConvertedLeadsCount(0);
+        setConversionRate(0);
+        setAvgLeadScore(0);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchLeadData();
@@ -401,6 +219,20 @@ export default function LeadAnalytics({ tenantFilter }) {
 
   return (
     <div className="space-y-6">
+      {loading && (
+        <Card className="shadow-lg bg-slate-800 border-slate-700">
+          <CardContent className="p-6 text-center text-slate-400">
+            Loading lead analytics...
+          </CardContent>
+        </Card>
+      )}
+      {error && !loading && (
+        <Card className="shadow-lg bg-slate-800 border-slate-700">
+          <CardContent className="p-6 text-center text-red-400">
+            {error}
+          </CardContent>
+        </Card>
+      )}
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="shadow-lg bg-slate-800 border-slate-700">

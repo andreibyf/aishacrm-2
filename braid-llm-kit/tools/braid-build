@@ -1,0 +1,14 @@
+#!/usr/bin/env node
+import fs from "fs";
+import path from "path";
+const proj = process.argv[2] || ".";
+const manifest = {
+  target: "wasm32-wasi",
+  artifacts: [ { kind: "wasm", path: path.join(proj,"out","app.wasm"), size: 0 } ],
+  sources: fs.readdirSync(proj).filter(f=>f.endsWith(".braid"))
+};
+const out = JSON.stringify(manifest, null, 2);
+process.stdout.write(out + "\n");
+fs.mkdirSync(path.join(proj,"out"),{recursive:true});
+fs.writeFileSync(path.join(proj,"out","build-manifest.json"), out);
+process.exit(0);

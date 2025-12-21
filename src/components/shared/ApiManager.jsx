@@ -10,10 +10,13 @@ export const ApiProvider = ({ children }) => {
   const cachedRequest = useCallback(async (entityName, methodName, params, fetcher) => {
     const cacheKey = `${entityName}.${methodName}:${JSON.stringify(params)}`;
     
+    // Cache timeout: 5 seconds in dev, 30 seconds in production for better responsiveness
+    const CACHE_TIMEOUT = import.meta.env.DEV ? 5000 : 30000;
+    
     if (cacheRef.current.has(cacheKey)) {
       const cached = cacheRef.current.get(cacheKey);
       const age = Date.now() - cached.timestamp;
-      if (age < 30000) {
+      if (age < CACHE_TIMEOUT) {
         return cached.data;
       }
     }
@@ -53,8 +56,13 @@ export const ApiProvider = ({ children }) => {
     keysToDelete.forEach(key => cacheRef.current.delete(key));
   }, []);
 
+  // Backward-compatible alias expected by some pages (e.g., Accounts.jsx)
+  const clearCacheByKey = useCallback((pattern) => {
+    return clearCache(pattern);
+  }, [clearCache]);
+
   return (
-    <ApiContext.Provider value={{ cachedRequest, clearCache }}>
+    <ApiContext.Provider value={{ cachedRequest, clearCache, clearCacheByKey }}>
       {children}
     </ApiContext.Provider>
   );

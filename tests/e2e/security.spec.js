@@ -4,7 +4,7 @@
  */
 import { test, expect } from '@playwright/test';
 
-const BASE_URL = process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:5173';
+const BASE_URL = process.env.PLAYWRIGHT_FRONTEND_URL || 'http://localhost:4000';
 
 test.describe('Settings - Security', () => {
   test('should render Security metrics and allow refresh', async ({ page }) => {

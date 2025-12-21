@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 // Tabs are not used here
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -13,44 +14,519 @@ import {
   Calendar,
   Database,
   DollarSign,
+  Download,
   FileText,
   Info,
   Puzzle,
-  Route,
   Search,
   Settings,
+  Shield,
   Star,
   Target,
   Users,
   Wrench,
 } from "lucide-react";
-import { User } from "@/api/entities";
 import ReactMarkdown from "react-markdown";
+import UserContext from "@/components/shared/UserContext";
+import { useContext } from "react";
+import { getBackendUrl } from "@/api/backendUrl";
 
 export default function DocumentationPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeSection, setActiveSection] = useState("overview");
-  const [, setUser] = useState(null);
+  const { currentUser } = useContext(UserContext);
+  
+  const isAdmin = currentUser?.role === 'admin';
+  const isSuperadmin = currentUser?.role === 'superadmin';
+  
+  const handleDownloadPDF = async () => {
+    // Prefer backend-generated PDF from our markdown-based User Guide
+    const backendUrl = getBackendUrl().replace(/\/$/, '');
+    const candidates = [
+      backendUrl ? `${backendUrl}/api/documentation/user-guide.pdf` : null,
+      // Local static fallbacks if present
+      '/guides/Ai-SHA-CRM-User-Guide-2025-10-26.pdf',
+      '/guides/AISHA_CRM_USER_GUIDE.pdf',
+      // Raw GitHub fallback (repo: andreibyf/aishacrm-2)
+      'https://raw.githubusercontent.com/andreibyf/aishacrm-2/main/docs/Ai-SHA-CRM-User-Guide-2025-10-26.pdf',
+    ].filter(Boolean);
 
-  useEffect(() => {
-    const loadUser = async () => {
+    let urlToDownload = null;
+    for (const url of candidates) {
       try {
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Failed to load user:", error);
+        // Use HEAD where possible; some CDNs may block HEAD so allow GET with no-cors fallback
+        const res = await fetch(url, { method: 'HEAD' });
+        if (res.ok) { urlToDownload = url; break; }
+      } catch {
+        // ignore and try next
       }
-    };
-    loadUser();
-  }, []);
+    }
 
-  // isAdmin removed (unused)
+    if (!urlToDownload && backendUrl) {
+      // Last resort: overview report as a PDF
+      urlToDownload = `${backendUrl}/api/reports/export-pdf?report_type=overview`;
+    }
+
+    if (!urlToDownload) {
+      alert('Unable to locate the User Guide PDF. Please check with your administrator.');
+      return;
+    }
+
+    const link = document.createElement('a');
+    link.href = urlToDownload;
+    link.download = 'Aisha_CRM_User_Guide.pdf';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const documentationSections = [
     {
+      id: "user-guide",
+      title: "User Guide",
+      icon: Book,
+      color: "text-blue-500",
+      content: `
+# Comprehensive User Guide
+
+Welcome to the complete Aisha CRM User Guide. This comprehensive 14-chapter guide covers everything from getting started to advanced features.
+
+## 📚 Quick Access to Chapters
+
+### Getting Started
+- **Chapter 1: Introduction** - About Aisha CRM, what makes it special, system requirements
+- **Chapter 2: Getting Started** - First login, interface overview, navigation basics, user profile setup
+
+### Core CRM Features
+- **Chapter 3: Core Features** - Dashboard overview, AI Executive Assistant, calendar management, search and filters
+- **Chapter 4: Contact Management** - Creating and managing contacts, activities, bulk operations
+- **Chapter 5: Account Management** - Creating accounts, account hierarchy, relationships
+- **Chapter 6: Lead Management** - Creating leads, qualification, conversion, source tracking
+- **Chapter 7: Opportunity Management** - Creating opportunities, pipeline stages, revenue forecasting
+- **Chapter 8: Activities and Tasks** - Activity types, creation, management, and reporting
+
+### AI-Powered Features
+- **Chapter 9: AI Telephony and Call Management** - Call tracking, call history, AI-generated notes, automatic follow-ups, call outcomes
+- **Chapter 10: AI Campaigns** - Campaign types, creation, progress tracking, performance metrics
+
+### Advanced Features
+- **Chapter 11: Reports and Analytics** - Dashboard reports, custom reports, exporting data, data visualization
+- **Chapter 12: Workflows and Automation** - Understanding workflows, triggers, workflow management
+- **Chapter 13: Advanced Features** - Document processing, email integration, business card scanner, duplicate detection
+- **Chapter 14: Troubleshooting** - Common issues, error messages, getting help
+
+### Appendices
+- **Appendix A: Keyboard Shortcuts** - Quick reference for keyboard commands
+- **Appendix B: Glossary** - CRM terminology and definitions
+- **Appendix C: FAQ** - Frequently asked questions and answers
+
+## 📖 Download Complete Guide
+
+The full User Guide with detailed screenshots, step-by-step instructions, and best practices is available as a downloadable PDF document.
+
+**Click the &quot;Download PDF Guide&quot; button** at the top of this page to get the complete documentation.
+
+## 🎯 Key Features Covered
+
+### AI Executive Assistant
+Your personal AI assistant that can:
+- Search and retrieve CRM data
+- Create and update records via natural language
+- Answer questions about your business
+- Provide insights and recommendations
+- Access via chat interface or WhatsApp integration
+
+### AI Telephony
+Automated call tracking and management:
+- Automatic call logging and notes
+- AI-generated call summaries
+- Follow-up task creation
+- Call outcome tracking
+- Integration with telephony providers
+
+### AI Campaigns
+Automated outreach at scale:
+- AI-powered call campaigns
+- Email campaigns with AI content generation
+- Progress tracking and performance metrics
+- Target contact management
+- Campaign scheduling and automation
+
+### Complete CRM Functionality
+- Contact, Account, Lead, and Opportunity management
+- Activity tracking and calendar management
+- Reports and analytics
+- Document processing and business card scanning
+- Cash flow management
+- Employee management with role-based access
+
+## 💡 Quick Start Checklist
+
+**For New Users:**
+1. ✓ Complete your user profile (Chapter 2.4)
+2. ✓ Learn the dashboard (Chapter 3.1)
+3. ✓ Create your first contact (Chapter 4.1)
+4. ✓ Try the AI Assistant (Chapter 3.2)
+5. ✓ Set up your calendar (Chapter 3.3)
+
+**For Sales Teams:**
+1. ✓ Import contacts (Chapter 4.4)
+2. ✓ Create leads (Chapter 6.1)
+3. ✓ Set up pipeline (Chapter 7.2)
+4. ✓ Log activities (Chapter 8.2)
+5. ✓ Review reports (Chapter 11.1)
+
+**For Managers:**
+1. ✓ Configure team access (Admin Guide)
+2. ✓ Set up workflows (Chapter 12)
+3. ✓ Create custom reports (Chapter 11.2)
+4. ✓ Monitor team performance (Chapter 11.1)
+5. ✓ Set up AI campaigns (Chapter 10)
+
+## 🔍 Finding What You Need
+
+Use the search function above to find specific topics quickly. The User Guide includes:
+- Detailed step-by-step instructions
+- Screenshots and visual guides
+- Best practices and tips
+- Troubleshooting solutions
+- Real-world examples
+
+## 📧 Need Help?
+
+- **AI Assistant**: Ask questions directly in the CRM
+- **Support**: support@ai-sha.com
+- **Documentation**: Download the complete PDF User Guide using the button above
+- **Admin Guide**: Administrators can download the Admin Guide PDF for system configuration
+      `,
+    },
+    {
+      id: "tenant-admin",
+      title: "Tenant Administration",
+      icon: Shield,
+      color: "text-amber-500",
+      content: `
+# Tenant Administration
+
+**For Tenant Administrators** - Manage your organization's users, settings, and access control.
+
+## Your Admin Role
+
+As a **Tenant Administrator**, you have full control over your organization&apos;s CRM instance:
+
+✓ Manage users within your tenant
+✓ Configure tenant settings and branding
+✓ Control module access
+✓ View all tenant data
+✓ Assign permissions and roles
+✗ Cannot access other tenants' data
+✗ Cannot manage system-level settings (Superadmin only)
+
+## User Management
+
+### Inviting New Users
+
+1. Navigate to **Settings** → **User Management**
+2. Click **"+ Invite User"**
+3. Fill in user details:
+   - **Email Address** - User&apos;s work email
+   - **First Name** and **Last Name**
+   - **Job Title** and **Department**
+4. Select **CRM Role**:
+   - **Manager** - Can view all tenant records
+   - **Employee** - Can only view own/assigned records
+5. Set **Access Level**:
+   - **Read/Write** - Full CRUD permissions
+   - **Read Only** - View-only access
+6. Configure **Module Access** (see below)
+7. Click **"Send Invitation"**
+
+The user will receive an email with a signup link.
+
+### User Roles Explained
+
+**Manager Role**
+- View all contacts, accounts, leads, opportunities
+- Access to all reports and analytics
+- Can assign records to team members
+- Export capabilities
+- Cannot manage other users (unless also admin)
+
+**Employee Role**
+- View only their own records
+- View records assigned to them
+- Limited export (own data only)
+- Cannot see other employees&apos; data
+- Cannot assign records
+
+### Managing Existing Users
+
+**View User List**
+1. **Settings** → **User Management**
+2. See all users in your tenant
+3. Filter by role, status, department
+
+**Edit User**
+1. Click on user name
+2. Update details, role, or module access
+3. Click **"Save Changes"**
+
+**Deactivate User**
+1. Select user
+2. Click **"Deactivate"**
+3. Confirm action
+4. User can no longer login
+5. Their data remains for handoff
+
+**Reactivate User**
+1. Filter to show inactive users
+2. Select user
+3. Click **"Reactivate"**
+4. User can login again
+
+## Module Access Control
+
+### Available Modules
+
+Control which features each user can access:
+
+**Core Modules**
+- ☑ Dashboard - Home page and overview
+- ☑ Contacts - Contact management
+- ☑ Accounts - Company management
+- ☑ Leads - Lead pipeline
+- ☑ Opportunities - Sales pipeline
+- ☑ Activities - Task and calendar
+
+**Additional Modules**
+- ☑ BizDev Sources - Business development
+- ☑ Cash Flow - Financial tracking
+- ☑ Documents - File management
+- ☑ Reports - Analytics and reports
+- ☑ AI Campaigns - Automated campaigns
+- ☑ AI Agent - Executive assistant
+- ☑ Calendar - Calendar view
+- ☑ Utilities - Data tools
+
+**Administrative Modules**
+- ☑ Employees - Employee management
+- ☑ Settings - User settings only
+- ☑ User Management - Admin only
+
+### Configuring Module Access
+
+**For New Users** (during invitation):
+1. In the invitation form
+2. Scroll to **"Module Access"**
+3. Check modules to enable
+4. Uncheck to disable
+
+**For Existing Users**:
+1. **Settings** → **User Management**
+2. Click user name
+3. Click **"Edit Permissions"**
+4. Update module checkboxes
+5. Save changes
+
+**Best Practices**:
+- Start with minimal access
+- Add modules as needed
+- Sales team: Enable Contacts, Accounts, Leads, Opportunities
+- Marketing team: Enable Leads, Campaigns, Reports
+- Finance team: Enable Cash Flow, Reports
+- Management: Enable all modules
+
+## Tenant Settings
+
+### Branding
+
+**Company Information**
+1. **Settings** → **Tenant Settings** → **Branding**
+2. Update:
+   - **Company Name** - Your organization name
+   - **Industry** - Select from dropdown
+   - **Business Model** - B2B, B2C, or Hybrid
+
+**Visual Branding** (Coming Soon)
+- Upload company logo
+- Set primary brand color
+- Set accent color
+- Customize email templates
+
+### Business Settings
+
+**Industry Configuration**
+- Helps AI provide relevant suggestions
+- Affects default fields and workflows
+- Over 30 industries supported
+
+**Business Model**
+- **B2B** - Business to Business
+- **B2C** - Business to Consumer
+- **Hybrid** - Both B2B and B2C
+
+### Module Configuration
+
+**Enable/Disable Modules**
+Turn off modules your team doesn't need:
+1. **Settings** → **Module Settings**
+2. Toggle modules on/off
+3. Disabled modules are hidden from all users
+4. Can re-enable anytime
+
+**Benefits**:
+- Simplified interface
+- Reduced confusion
+- Better performance
+- Focus on what matters
+
+## Data Management
+
+### Export Tenant Data
+
+**Full Export**
+1. **Settings** → **Data Management**
+2. Click **"Export All Data"**
+3. Select format (CSV or JSON)
+4. Click **"Request Export"**
+5. Receive download link via email (24-48 hours)
+
+**Scheduled Exports** (Coming Soon)
+- Weekly or monthly exports
+- Automatic backups
+- Email delivery
+
+### Data Quality
+
+**Run Quality Checks**
+1. **Utilities** → **Data Quality**
+2. Click **"Run Analysis"**
+3. Review issues found:
+   - Missing required fields
+   - Duplicate records
+   - Invalid data formats
+   - Stale records
+4. Take action:
+   - Bulk update
+   - Merge duplicates
+   - Clean up old data
+
+### Duplicate Management
+
+**Find Duplicates**
+1. **Utilities** → **Duplicates**
+2. Select entity type (Contacts, Accounts, Leads)
+3. Click **"Find Duplicates"**
+4. Review matches
+5. Merge or mark as not duplicate
+
+## Reporting & Analytics
+
+### Tenant-Wide Reports
+
+**Access All Reports**
+As admin, you can:
+- View all team member activities
+- See complete pipeline
+- Track overall performance
+- Export any report
+
+**Standard Reports**
+- Sales Performance
+- Lead Conversion
+- Activity Summary
+- Pipeline Forecast
+- Team Productivity
+
+**Custom Reports** (Coming Soon)
+- Build your own reports
+- Schedule delivery
+- Share with team
+
+## Security & Compliance
+
+### Access Monitoring
+
+**Audit Logs**
+1. **Settings** → **Audit Log**
+2. View all user actions:
+   - Logins/logouts
+   - Record changes
+   - Exports
+   - Permission changes
+3. Filter by user, date, action
+4. Export for compliance
+
+### Data Privacy
+
+**GDPR Compliance**
+- Users can request data export
+- Data deletion requests (contact support)
+- Audit trail maintained
+- Secure data storage
+
+### Password Policies
+
+**Requirements** (System-enforced)
+- Minimum 8 characters
+- Mix of upper/lowercase
+- At least one number
+- At least one special character
+
+**User Password Reset**
+1. User clicks &quot;Forgot Password&quot;
+2. System sends reset email
+3. User creates new password
+4. Admin cannot see passwords
+
+## Best Practices
+
+### User Onboarding
+✓ Create user accounts before first day
+✓ Send invitations with clear instructions
+✓ Schedule onboarding session
+✓ Grant minimal permissions initially
+✓ Add modules as user gets comfortable
+
+### Permission Management
+✓ Regular access reviews (quarterly)
+✓ Remove access for departed employees immediately
+✓ Follow principle of least privilege
+✓ Document permission changes
+✓ Train users on their specific modules
+
+### Data Governance
+✓ Monthly data quality checks
+✓ Regular duplicate cleanup
+✓ Archive old/closed records
+✓ Export backups monthly
+✓ Monitor audit logs weekly
+
+### Team Communication
+✓ Announce new users to team
+✓ Share updates on new features
+✓ Create internal documentation
+✓ Regular training sessions
+✓ Encourage CRM usage
+
+## Getting Additional Help
+
+**For Tenant Admins:**
+- Download the **Administrator Guide PDF** (see download button above)
+- Contact support@ai-sha.com for assistance
+- Use AI Agent for quick questions
+- Request training sessions
+
+**For System Issues:**
+- Contact your system administrator (Superadmin)
+- Report bugs to support
+- Request new features
+      `,
+    },
+    {
       id: "overview",
       title: "Overview",
-      icon: Book,
+      icon: Info,
       color: "text-purple-400",
       content: `
 # Welcome to Ai-SHA CRM
@@ -59,7 +535,7 @@ Ai-SHA CRM is a comprehensive customer relationship management system designed t
 
 ## Key Features
 
-- **Contact & Account Management**: Centralized customer database
+- **Contact & Customer Management**: Centralized customer database
 - **Lead Management**: Track and nurture potential customers
 - **Sales Pipeline**: Visualize and manage your opportunities
 - **Activity Tracking**: Log calls, meetings, emails, and tasks
@@ -122,7 +598,7 @@ Contacts are individuals you interact with - potential customers, existing clien
 ## Best Practices
 
 ✓ **Link contacts to accounts** for better organization
-✓ **Use tags** to segment your contacts (e.g., "VIP", "Newsletter")
+✓ **Use tags** to segment your contacts (e.g., &quot;VIP&quot;, &quot;Newsletter&quot;)
 ✓ **Keep notes updated** after each interaction
 ✓ **Assign ownership** for accountability
 ✓ **Regular cleanup** - mark inactive contacts
@@ -236,7 +712,7 @@ When a lead is qualified, convert to:
 
 ## Best Practices
 
-✓ **Qualify quickly** - don't let leads stagnate
+✓ **Qualify quickly** - don&apos;t let leads stagnate
 ✓ **Use lead scoring** to prioritize outreach
 ✓ **Track lead sources** for ROI analysis
 ✓ **Add notes** at each touchpoint
@@ -391,7 +867,7 @@ Think of BizDev Sources as a **staging area** for prospects:
 - Import company lists from directories
 - Store prospect information before qualification
 - Track license status and compliance
-- Promote to Accounts when business is won
+- Promote to Leads for qualification
 
 ## Workflow
 
@@ -416,10 +892,11 @@ BizDev Source → Create Lead → Qualify → Win Deal → Promote to Account
    - Create opportunities
    - Work deals through pipeline
 
-4. **Promote to Account**
-   - When deal is won, promote BizDev Source to Account
-   - Creates permanent Account record
-   - Preserves all linked leads and history
+4. **Promote to Lead**
+   - When ready to pursue, promote BizDev Source to Lead
+   - Creates Lead record with all data carried forward
+   - Preserves all linked history
+   - Lead can then be qualified and converted to Contact/Account
 
 ## Key Features
 
@@ -444,7 +921,7 @@ Track industry-specific licenses:
 
 ## Best Practices
 
-✓ **Use descriptive source names** (e.g., "ABC Directory 2025 Q1")
+✓ **Use descriptive source names** (e.g., &quot;ABC Directory 2025 Q1&quot;)
 ✓ **Regular cleanup** - archive old sources
 ✓ **Track conversion rates** - which sources perform best
 ✓ **Don't promote prematurely** - wait until deal is won
@@ -531,7 +1008,7 @@ Set up repeating transactions:
 
 ## Best Practices
 
-✓ **Record promptly** - don't wait until month-end
+✓ **Record promptly** - don&apos;t wait until month-end
 ✓ **Use categories consistently** - easier to analyze
 ✓ **Upload receipts** - for tax compliance
 ✓ **Set up recurring** - for predictable expenses
@@ -615,7 +1092,7 @@ AI suggests appropriate tax categories:
 
 ## Best Practices
 
-✓ **Process immediately** - don't let cards pile up
+✓ **Process immediately** - don&apos;t let cards pile up
 ✓ **Review AI extraction** - verify accuracy
 ✓ **Add notes** - context for later
 ✓ **Organize files** - use consistent naming
@@ -718,7 +1195,7 @@ All reports support:
 ✓ **Share with team** - transparency builds accountability
 ✓ **Set benchmarks** - track against goals
 ✓ **Export regularly** - for board meetings and reviews
-✓ **Act on insights** - don't just collect data
+✓ **Act on insights** - don&apos;t just collect data
       `,
     },
     {
@@ -854,9 +1331,9 @@ The AI Agent can:
 ### Using the Agent
 
 **Voice Commands** (if mic enabled):
-- "Show me all high-value opportunities"
-- "Create a new contact for John Smith at Acme Corp"
-- "What's my pipeline value this month?"
+- &quot;Show me all high-value opportunities&quot;
+- &quot;Create a new contact for John Smith at Acme Corp&quot;
+- &quot;What&apos;s my pipeline value this month?&quot;
 
 **Text Chat**:
 - Type natural language queries
@@ -989,7 +1466,7 @@ Connect Ai-SHA CRM with other tools and automate your workflows.
 
 ### Automation
 - **Zapier** - Connect 3,000+ apps
-- **n8n** - Open-source automation
+- **n8n** - Open-source automation (external access at http://localhost:5679 in dev)
 - **Webhooks** - Custom integrations
 
 ### AI Providers
@@ -1038,8 +1515,8 @@ Includes:
 ## Email Integration
 
 ### Webhook-Based Email
-Send automated emails via n8n or Make:
-1. Set up webhook in automation tool
+Send automated emails via external automation tools (n8n, Make/Integromat, Zapier):
+1. Set up webhook in automation tool (n8n accessible at http://localhost:5679 in dev)
 2. Configure email template
 3. Map CRM data fields
 4. Trigger on CRM events
@@ -1220,7 +1697,7 @@ Activities color-coded by:
 ## Best Practices
 
 ✓ **Block time** - Schedule focused work periods
-✓ **Set realistic durations** - Don't overbook
+✓ **Set realistic durations** - Don&apos;t overbook
 ✓ **Use recurring** - For regular meetings
 ✓ **Update promptly** - Mark as complete when done
 ✓ **Review weekly** - Plan upcoming week on Fridays
@@ -1386,7 +1863,7 @@ Configure retention policies:
 ## Best Practices
 
 ✓ **Run quality checks monthly** - Stay on top of data hygiene
-✓ **Merge duplicates promptly** - Don't let them multiply
+✓ **Merge duplicates promptly** - Don&apos;t let them multiply
 ✓ **Import carefully** - Validate data before bulk import
 ✓ **Regular exports** - Backup your data externally
 ✓ **Archive old data** - Keep system performant
@@ -1395,465 +1872,161 @@ Configure retention policies:
     },
     {
       id: "settings",
-      title: "Settings & Administration",
+      title: "User Settings",
       icon: Settings,
       color: "text-gray-400",
       content: `
-# Settings & Administration
+# User Settings & Preferences
 
-Configure your CRM instance, manage users, and customize the system to your needs.
+Personalize your Aisha CRM experience and manage your user profile.
 
-## User Settings
+## Your Profile
 
 ### Profile Information
-- Full name and display name
-- Email address (login)
-- Phone number (for softphone)
-- Profile picture
-- Timezone and date format
+1. Click your profile avatar (top-right corner)
+2. Select **&quot;Profile Settings&quot;**
+3. Update your information:
+   - **Full Name** - Your display name
+   - **Email Address** - Login email (cannot be changed)
+   - **Phone Number** - For softphone and notifications
+   - **Profile Picture** - Upload a photo (JPG, PNG)
+   - **Job Title** - Your role
+   - **Department** - Your team
 
-### Preferences
-- **Timezone** - Your local timezone
-- **Date Format** - MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD
-- **Time Format** - 12hr or 24hr
-- **Language** - Interface language (future)
+### Timezone & Locale
 
-## Tenant Settings (Admins)
+**Why it matters**: Ensures correct times for meetings, activities, and reports.
 
-### Branding
-- **Company Name** - Your business name
-- **Logo Upload** - Company logo (header & footer)
-- **Primary Color** - Brand color for UI
-- **Accent Color** - Secondary brand color
-- **Industry** - Your industry (for AI context)
-- **Business Model** - B2B, B2C, or Hybrid
+1. Navigate to **Settings** → **Preferences**
+2. Set your preferences:
+   - **Timezone** - Select your local timezone
+   - **Date Format** - MM/DD/YYYY, DD/MM/YYYY, or YYYY-MM-DD
+   - **Time Format** - 12-hour (AM/PM) or 24-hour
+   - **First Day of Week** - Sunday or Monday
 
-### Company Information
-- Business address
-- Contact information
-- Tax ID / Business number
-- Website
-- Social media links
+## Notification Preferences
 
-## User Management (Admins)
+### Email Notifications
+Control which emails you receive:
+- ✓ New lead assignments
+- ✓ Opportunity stage changes
+- ✓ Activity reminders
+- ✓ Mentions in notes
+- ✓ System announcements
 
-### Inviting Users
-1. **Settings** → **User Management**
-2. Click **"Invite User"**
-3. Enter email and name
-4. Select role:
-   - **Superadmin** - Full system access (app owner)
-   - **Admin** - Tenant administrator
-   - **Power User** - Advanced features
-   - **User** - Standard access
-5. Set employee role:
-   - **Manager** - Full tenant visibility
-   - **Employee** - Own records only
-6. Configure navigation permissions
-7. Send invitation
+### In-App Notifications
+Manage real-time alerts:
+- Task due reminders (15 min, 1 hour, 1 day)
+- New record assignments
+- Comments and mentions
+- System updates
 
-### User Roles Explained
+### Quiet Hours
+Set times when you don&apos;t want notifications:
+- Start time (e.g., 8:00 PM)
+- End time (e.g., 7:00 AM)
+- Weekend notifications (on/off)
 
-**Superadmin** (App Creator)
-- Access all tenants
-- System-wide settings
-- Create tenants
-- Global user management
+## Display Preferences
 
-**Admin** (Tenant Owner)
-- Full tenant access
-- Manage tenant users
-- Configure integrations
-- Billing and subscriptions
+### Dashboard Customization
+- Choose default widgets
+- Arrange widget layout
+- Set default date ranges
+- Customize chart colors
 
-**Power User**
-- Full tenant data access
-- Create and edit all records
-- Export capabilities
-- Limited admin functions
+### List View Options
+- Records per page (25, 50, 100)
+- Default sort order
+- Visible columns
+- Compact or expanded view
 
-**User** (Standard)
-- View assigned records
-- Create and edit own records
-- Limited export
-- No admin access
+### Theme (Coming Soon)
+- Light mode
+- Dark mode
+- Auto (follow system)
 
-### Employee Roles
+## Calendar Settings
 
-**Manager**
-- View all tenant records
-- Manage team members
-- Assign leads and opportunities
-- Full reporting access
+### Default View
+- Month, Week, Day, or Agenda
+- Start time (e.g., 8:00 AM)
+- End time (e.g., 6:00 PM)
+- Show weekends (on/off)
 
-**Employee**
-- View own records
-- View records assigned to them
-- Limited reporting
-- Cannot see other employees' data
+### Meeting Defaults
+- Default meeting duration (15, 30, 60 minutes)
+- Buffer time between meetings
+- Default meeting type (Call, Video, In-person)
 
-### Navigation Permissions
-Customize which modules each user can access:
-- Check/uncheck modules
-- Override defaults
-- Per-user customization
-- Security through obscurity + RLS
+## Privacy & Security
 
-## Module Settings
+### Password Management
+1. Navigate to **Settings** → **Security**
+2. Click **&quot;Change Password&quot;**
+3. Enter current password
+4. Enter new password (min 8 characters)
+5. Confirm new password
 
-### Enable/Disable Modules
-Turn modules on/off for your tenant:
-- Dashboard, Contacts, Accounts
-- Leads, Opportunities, Activities
-- BizDev Sources, Cash Flow
-- Documents, Reports, Integrations
-- AI Campaigns, Calendar
-- Utilities
+**Password Requirements**:
+- Minimum 8 characters
+- At least one uppercase letter
+- At least one number
+- At least one special character (!@#$%^&*)
 
-**Effect**:
-- Hides from navigation
-- Blocks page access
-- Optimizes performance
-- Simplifies interface for specific use cases
+### Active Sessions
+View and manage your active login sessions:
+- Current device (this one)
+- Other devices
+- Last activity time
+- Revoke access to specific devices
 
-## Integration Settings
+### Two-Factor Authentication (Coming Soon)
+- SMS verification
+- Authenticator app
+- Backup codes
 
-### API Keys
-- Generate API keys for integrations
-- Set expiration dates
-- Revoke keys
-- Monitor usage
+## Data & Privacy
 
-### Webhooks
-- Configure outgoing webhooks
-- Set up event triggers
-- Test webhook endpoints
-- View webhook logs
+### Data Export
+Request a copy of your personal data:
+1. **Settings** → **Privacy**
+2. Click **&quot;Request Data Export&quot;**
+3. Receive download link via email (24-48 hours)
+4. Download ZIP file with all your data
 
-### Third-Party Integrations
-- Connect Google Workspace
-- Connect Microsoft 365
-- Configure Stripe
-- Set up Zapier/n8n
+### Account Deactivation
+If you need to leave:
+1. Contact your administrator
+2. Admin can deactivate your account
+3. Your data remains for handoff
+4. Can be reactivated if needed
 
-## Security Settings
+## Integration Preferences
 
-### Authentication
-- Password requirements
-- Two-factor authentication (future)
-- Session timeout
-- IP whitelist (future)
+### Connected Accounts
+Manage your connected services:
+- **Google Calendar** - Sync calendar events
+- **Gmail** - Email integration
+- **Outlook** - Microsoft services
+- **Zapier** - Automation connections
 
-### Data Security
-- Encryption at rest
-- Encryption in transit
-- Regular backups
-- Access logging
-
-### Audit Logging
-Track all actions:
-- User logins/logouts
-- Record changes
-- Permission changes
-- Setting modifications
-- Export activities
-
-## Billing & Subscriptions (Admins)
-
-### Subscription Plans
-- View current plan
-- Upgrade/downgrade
-- Add user licenses
-- Payment method management
-
-### Usage Tracking
-- API call usage
-- Storage used
-- User count
-- Integration limits
-
-### Invoices
-- Download invoices
-- Payment history
-- Billing address
-- Tax information
-
-## Data Management
-
-### Export Options
-- Export all tenant data
-- Scheduled exports
-- Backup downloads
-- GDPR compliance exports
-
-### Import Tools
-- CSV import
-- Data mapping
-- Validation rules
-- Error handling
-
-### Data Retention
-- Set retention policies
-- Auto-archive old data
-- Purge deleted records
-- Compliance settings
+### API Access (Power Users)
+If you're integrating with external tools:
+1. **Settings** → **API Keys**
+2. Generate new API key
+3. Set expiration date (optional)
+4. Copy key (shown only once)
+5. Use in your integrations
 
 ## Best Practices
 
-✓ **Regular audits** - Review user access quarterly
-✓ **Strong passwords** - Enforce password policy
-✓ **Least privilege** - Give minimum required permissions
-✓ **Monitor usage** - Check audit logs regularly
-✓ **Backup data** - Export data regularly
-✓ **Update branding** - Keep logo and colors current
-✓ **Test integrations** - Verify webhook functionality
-      `,
-    },
-    {
-      id: "workflow",
-      title: "Workflow Guide",
-      icon: Route,
-      color: "text-indigo-400",
-      content: `
-# Workflow Guide
-
-Learn best practices and recommended workflows for common CRM scenarios.
-
-## New Lead to Customer Workflow
-
-\`\`\`
-1. Lead Captured (Website, Referral, etc.)
-   ↓
-2. Lead Created in CRM
-   - Auto-assigned based on territory/round-robin
-   - AI scores lead automatically
-   ↓
-3. Initial Contact (within 24 hours)
-   - Phone call or email
-   - Log activity
-   - Update lead status to "Contacted"
-   ↓
-4. Qualification
-   - Assess budget, authority, need, timeline (BANT)
-   - Update lead score
-   - Add qualifying notes
-   ↓
-5. Convert Lead
-   - Create Contact record
-   - Create/link Account record
-   - Create Opportunity
-   ↓
-6. Opportunity Management
-   - Move through pipeline stages
-   - Log activities
-   - Update probability
-   ↓
-7. Deal Close
-   - Closed Won: Promote to customer
-   - Closed Lost: Document reason
-   ↓
-8. Customer Onboarding (if won)
-   - Welcome email
-   - Schedule kickoff meeting
-   - Create onboarding tasks
-\`\`\`
-
-## Daily Activities Workflow
-
-### Morning Routine (15-30 min)
-1. **Review Calendar**
-   - Check today's activities
-   - Prepare for meetings
-   - Reschedule conflicts
-
-2. **Check Dashboard**
-   - Review overdue tasks
-   - Check new leads assigned
-   - Monitor pipeline changes
-
-3. **Prioritize Tasks**
-   - Focus on urgent/important
-   - Set 3 must-do items for today
-   - Block time for key activities
-
-### Throughout Day
-4. **Log Activities Promptly**
-   - After each call/meeting
-   - Add next steps
-   - Update opportunity stages
-
-5. **Respond to Notifications**
-   - New lead assignments
-   - Activity reminders
-   - Team updates
-
-### End of Day (10-15 min)
-6. **Complete Pending Activities**
-   - Mark tasks as done
-   - Reschedule unfinished items
-   - Add follow-up notes
-
-7. **Plan Tomorrow**
-   - Review calendar for tomorrow
-   - Create task list
-   - Set priorities
-
-## Weekly Pipeline Review
-
-### Monday Morning
-- Review pipeline value and velocity
-- Check deals closing this week
-- Assign new leads
-
-### Mid-Week
-- Follow up on stalled opportunities
-- Update close dates
-- Log all customer interactions
-
-### Friday Afternoon
-- Clean up completed activities
-- Update opportunity probabilities
-- Plan next week's priorities
-- Review team performance
-
-## Monthly Reporting Workflow
-
-### First Week of Month
-1. **Close Last Month**
-   - Mark won/lost deals
-   - Complete overdue activities
-   - Archive old records
-
-2. **Generate Reports**
-   - Sales performance
-   - Lead conversion rates
-   - Team productivity
-   - Pipeline forecast
-
-3. **Review Metrics**
-   - Compare to goals
-   - Identify trends
-   - Spot issues
-
-4. **Plan Ahead**
-   - Set goals for new month
-   - Adjust strategies
-   - Update forecasts
-
-## BizDev Source Workflow
-
-\`\`\`
-1. Import Business Development List
-   - Upload CSV from directory
-   - Tag with source name
-   - Review for duplicates
-   ↓
-2. Research & Filter
-   - Identify promising companies
-   - Check license status
-   - Prioritize targets
-   ↓
-3. Create Leads
-   - Generate lead for target company
-   - Link back to BizDev Source
-   - Assign to sales rep
-   ↓
-4. Pursue Opportunity
-   - Qualify lead
-   - Create opportunity
-   - Work through pipeline
-   ↓
-5. Upon Winning
-   - Close opportunity as Won
-   - Promote BizDev Source to Account
-   - Begin customer relationship
-   ↓
-6. Cleanup
-   - Archive non-converted sources
-   - Track conversion rates by source
-   - Refine targeting
-\`\`\`
-
-## Document Processing Workflow
-
-### Business Cards
-\`\`\`
-1. Collect Cards (Networking Event)
-   ↓
-2. Batch Upload to CRM
-   - Take photos or scan
-   - Upload to Document Processing
-   ↓
-3. AI Extracts Data
-   - Review extracted information
-   - Correct any errors
-   ↓
-4. Create Records
-   - Create Contact
-   - Create Account (if new company)
-   - Tag with event name
-   ↓
-5. Immediate Follow-Up
-   - Send connection email
-   - Add to nurture campaign
-   - Schedule follow-up call
-\`\`\`
-
-### Receipt Processing
-\`\`\`
-1. Receive Receipt
-   ↓
-2. Upload Immediately
-   - Photo or PDF
-   - Upload to Document Processing
-   ↓
-3. AI Extracts Transaction
-   - Verify merchant and amount
-   - Confirm category
-   ↓
-4. Review & Approve
-   - Check tax category
-   - Add notes if needed
-   ↓
-5. Cash Flow Updated
-   - Transaction created automatically
-   - Reports updated in real-time
-\`\`\`
-
-## Team Collaboration Workflow
-
-### Lead Assignment
-- **Round Robin**: Auto-assign to next available rep
-- **Territory**: Based on geographic location
-- **Specialization**: By industry or product line
-- **Workload**: Balance across team
-
-### Handoffs
-When transferring records between team members:
-1. Add detailed handoff notes
-2. Schedule transition call
-3. Update assignment
-4. Notify new owner
-5. Follow up after 1 week
-
-### Team Meetings
-**Weekly Sales Meeting Structure**:
-1. Pipeline review (each rep presents)
-2. Wins and losses discussion
-3. Stuck deals brainstorming
-4. New leads assignment
-5. Next week priorities
-
-## Best Practices Summary
-
-✓ **Consistency is key** - Follow processes every time
-✓ **Log everything** - If it's not in the CRM, it didn't happen
-✓ **Update promptly** - Don't wait until end of day
-✓ **Review regularly** - Daily tasks, weekly pipeline, monthly performance
-✓ **Clean as you go** - Don't let data pile up
-✓ **Communicate** - Use notes to keep team informed
-✓ **Leverage automation** - Let AI and integrations handle routine tasks
-✓ **Measure and improve** - Track metrics and adjust processes
+✓ **Keep profile updated** - Accurate info helps team collaboration
+✓ **Set realistic timezone** - Ensures correct meeting times
+✓ **Configure notifications** - Balance staying informed vs overwhelmed
+✓ **Regular password changes** - Every 90 days recommended
+✓ **Review sessions** - Logout unused devices
+✓ **Enable 2FA** - Extra security when available
       `,
     },
   ];
@@ -1885,10 +2058,22 @@ When transferring records between team members:
             </p>
           </div>
 
-          {/* Version Badge */}
-          <Badge variant="outline" className="text-xs">
-            v2.0 - Updated {new Date().toLocaleDateString()}
-          </Badge>
+          <div className="flex items-center gap-3">
+            {/* Download PDF Button */}
+            <Button
+              onClick={handleDownloadPDF}
+              variant="outline"
+              className="bg-purple-900/30 border-purple-700/50 text-purple-300 hover:bg-purple-800/50"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Download PDF Guide
+            </Button>
+            
+            {/* Version Badge */}
+            <Badge variant="outline" className="text-xs">
+              v2.0 - Updated {new Date().toLocaleDateString()}
+            </Badge>
+          </div>
         </div>
 
         {/* Search */}
@@ -2071,6 +2256,30 @@ When transferring records between team members:
                 instant assistance.
               </AlertDescription>
             </Alert>
+
+            {/* Admin Guide Notice - Only show for admins */}
+            {(isAdmin || isSuperadmin) && (
+              <Alert className="mt-4 bg-amber-900/20 border-amber-700/50">
+                <Shield className="h-4 w-4 text-amber-400" />
+                <AlertDescription className="text-amber-300">
+                  <strong>Tenant Administrators:</strong>{" "}
+                  See the <strong>&ldquo;Tenant Administration&rdquo;</strong> section above for managing users, 
+                  permissions, and tenant settings. For complete admin documentation, download the Administrator Guide PDF.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* System Admin Notice - Only for superadmins */}
+            {isSuperadmin && (
+              <Alert className="mt-4 bg-purple-900/20 border-purple-700/50">
+                <Settings className="h-4 w-4 text-purple-400" />
+                <AlertDescription className="text-purple-300">
+                  <strong>System Administrators:</strong>{" "}
+                  For system configuration, deployment, database management, and advanced settings, 
+                  download the complete <strong>System Administrator Guide PDF</strong>.
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
         </div>
       </div>

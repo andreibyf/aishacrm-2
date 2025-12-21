@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Bell, Loader2, Users, Star, Target, Calendar, AlertTriangle } from "lucide-react";
 import { Notification } from "@/api/entities";
-import { User } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import { formatDistanceToNow } from "date-fns";
 
 const iconMap = {
@@ -21,66 +21,125 @@ export default function NotificationPanel() {
   const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const { user } = useUser();
+  const pollTimerRef = useRef(null);
+  const pollDelayRef = useRef(15000); // start with 15s
+  const initialLoadDoneRef = useRef(false); // Guard against multiple initial loads
+  const userEmailRef = useRef(null); // Track user email to detect actual changes
+  const BASE_DELAY = 15000;
+  const MAX_DELAY = 60000;
 
-  useEffect(() => {
-    loadNotifications();
-  }, []);
+  // Keep userEmail in ref for stable callback
+  userEmailRef.current = user?.email;
 
-  const loadNotifications = async () => {
+  const loadNotifications = useCallback(async (options = { silent: false }) => {
+    const email = userEmailRef.current;
+    if (!email) return;
     try {
-      setLoading(true);
-      const user = await User.me();
-      const fetchedNotifications = await Notification.filter(
-        { user_email: user?.email },
+      if (!options.silent) setLoading(true);
+      const fetched = await Notification.filter(
+        { user_email: email },
         '-created_date',
         50
       );
-      setNotifications(fetchedNotifications);
-      
-      const unread = fetchedNotifications.filter(n => !n.is_read).length;
-      setUnreadCount(unread);
-    } catch (error) {
-      console.error("Failed to load notifications:", error);
+      setNotifications(fetched);
+      setUnreadCount(fetched.filter(n => !n.is_read).length);
+      return { ok: true };
+    } catch (err) {
+      // Suppress error if notifications table doesn't exist (non-critical feature)
+      if (import.meta.env.DEV || !err?.message?.includes('relation "notifications" does not exist')) {
+        console.warn('[NotificationPanel] Failed to load notifications:', err.message || err);
+      }
+      return { ok: false, error: err };
     } finally {
-      setLoading(false);
+      if (!options.silent) setLoading(false);
     }
-  };
+  }, []); // Empty deps - uses ref for stable callback
+
+  useEffect(() => {
+    // Only run when user email is available and hasn't been loaded yet
+    if (!user?.email) return;
+    
+    // If email changed, reset and allow reload
+    if (userEmailRef.current !== user.email) {
+      initialLoadDoneRef.current = false;
+    }
+    
+    // Skip if already loaded for this user
+    if (initialLoadDoneRef.current) return;
+    
+    let cancelled = false;
+
+    const scheduleNext = (delayMs) => {
+      if (cancelled) return;
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = setTimeout(tick, delayMs);
+    };
+
+    const computeNextDelay = (prevDelay, wasSuccess, err) => {
+      if (wasSuccess) return BASE_DELAY;
+      const jitter = Math.floor(Math.random() * 1000);
+      // If 429 or network error, back off aggressively
+      const isRateLimit = err?.status === 429 || err?.response?.status === 429;
+      const next = isRateLimit ? Math.min(MAX_DELAY, Math.max(prevDelay * 2, BASE_DELAY * 2) + jitter)
+        : Math.min(MAX_DELAY, prevDelay * 2 + jitter);
+      return next;
+    };
+
+    const tick = async () => {
+      if (cancelled) return;
+      // Pause when tab not focused to reduce load
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        scheduleNext(BASE_DELAY);
+        return;
+      }
+      const result = await loadNotifications({ silent: true });
+      pollDelayRef.current = computeNextDelay(
+        pollDelayRef.current,
+        !!result?.ok,
+        result?.error,
+      );
+      scheduleNext(pollDelayRef.current);
+    };
+
+    // Initial load immediately
+    initialLoadDoneRef.current = true; // Mark as done BEFORE starting
+    loadNotifications({ silent: false }).then((res) => {
+      if (cancelled) return;
+      pollDelayRef.current = computeNextDelay(BASE_DELAY, !!res?.ok, res?.error);
+      scheduleNext(pollDelayRef.current);
+    });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(pollTimerRef.current);
+    };
+  }, [user?.email, loadNotifications]); // Depend on user.email for actual user changes
 
   const handleNotificationClick = async (notification) => {
     if (!notification.is_read) {
       try {
         await Notification.update(notification.id, { is_read: true });
-        setNotifications(prev => 
-          prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n)
-        );
+        setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n));
         setUnreadCount(prev => Math.max(0, prev - 1));
-      } catch (error) {
-        console.error("Failed to mark notification as read:", error);
+      } catch (err) {
+        console.error('[NotificationPanel] Mark read failed:', err);
       }
     }
-
-    // Use 'link' field defined in Notification schema for navigation
     if (notification.link) {
       window.location.href = notification.link;
     }
   };
 
   const markAllAsRead = async () => {
+    const unread = notifications.filter(n => !n.is_read);
+    if (unread.length === 0) return;
     try {
-      const unreadNotifications = notifications.filter(n => !n.is_read);
-      
-      await Promise.all(
-        unreadNotifications.map(n => 
-          Notification.update(n.id, { is_read: true })
-        )
-      );
-
-      setNotifications(prev => 
-        prev.map(n => ({ ...n, is_read: true }))
-      );
+      await Promise.all(unread.map(n => Notification.update(n.id, { is_read: true })));
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
       setUnreadCount(0);
-    } catch (error) {
-      console.error("Failed to mark all notifications as read:", error);
+    } catch (err) {
+      console.error('[NotificationPanel] Bulk mark read failed:', err);
     }
   };
 
@@ -112,7 +171,6 @@ export default function NotificationPanel() {
             )}
           </SheetTitle>
         </SheetHeader>
-
         <div className="mt-4 space-y-2 max-h-[70vh] overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-8">
@@ -126,38 +184,31 @@ export default function NotificationPanel() {
               <p className="text-sm">You&apos;ll see important updates here</p>
             </div>
           ) : (
-            notifications.map((notification) => (
+            notifications.map(n => (
               <div
-                key={notification.id}
+                key={n.id}
                 className={`p-4 rounded-lg border cursor-pointer transition-colors ${
-                  notification.is_read
+                  n.is_read
                     ? 'bg-slate-700/50 border-slate-600 text-slate-300'
                     : 'bg-blue-900/30 border-blue-700/50 text-slate-200'
                 }`}
-                onClick={() => handleNotificationClick(notification)}
+                onClick={() => handleNotificationClick(n)}
               >
                 <div className="flex items-start gap-3">
-                  {notification.icon && (
+                  {n.icon && (
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      notification.is_read 
-                        ? 'bg-slate-600 text-slate-400' 
-                        : 'bg-blue-600 text-white'
+                      n.is_read ? 'bg-slate-600 text-slate-400' : 'bg-blue-600 text-white'
                     }`}>
-                      {React.createElement(
-                        iconMap[notification.icon] || Bell,
-                        { className: "w-4 h-4" }
-                      )}
+                      {React.createElement(iconMap[n.icon] || Bell, { className: 'w-4 h-4' })}
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-medium text-sm">{notification.title}</h4>
-                    {notification.description && (
-                      <p className="text-sm text-slate-400 mt-1">
-                        {notification.description}
-                      </p>
+                    <h4 className="font-medium text-sm">{n.title}</h4>
+                    {n.description && (
+                      <p className="text-sm text-slate-400 mt-1">{n.description}</p>
                     )}
                     <p className="text-xs text-slate-500 mt-2">
-                      {formatDistanceToNow(new Date(notification.created_date))} ago
+                      {formatDistanceToNow(new Date(n.created_date))} ago
                     </p>
                   </div>
                 </div>

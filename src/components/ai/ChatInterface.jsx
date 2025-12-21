@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Send, Loader2, Phone, FileText, Headphones, ExternalLink } from "lucide-react";
+import { Send, Loader2, Phone, FileText, Headphones, ExternalLink, Code } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import toast from 'react-hot-toast';
 
-import { processChatCommand } from '@/api/functions';
+import { processChatCommand, processDeveloperCommand } from '@/api/functions';
 
 export default function ChatInterface({ user }) {
+  const navigate = useNavigate();
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
@@ -19,7 +21,43 @@ export default function ChatInterface({ user }) {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isDeveloperMode, setIsDeveloperMode] = useState(false); // Developer Mode for superadmins
   const messagesEndRef = useRef(null);
+
+  // Helper to detect and execute navigation commands from AI tool responses
+  const handleNavigationFromToolResult = (toolInteractions) => {
+    if (!Array.isArray(toolInteractions)) return false;
+
+    for (const interaction of toolInteractions) {
+      if (interaction.tool === 'navigate_to_page') {
+        const resultStr = interaction.result_preview || '';
+        try {
+          // Parse the result_preview to get the navigation path
+          const result = JSON.parse(resultStr);
+
+          if (result?.action === 'navigate' && result?.path) {
+            setTimeout(() => {
+              navigate(result.path);
+              toast.success(`Navigating to ${result.page || result.path}`);
+            }, 500); // Small delay so user sees the message first
+            return true;
+          }
+        } catch (_e) {
+          // Try regex fallback for truncated JSON
+          const pathMatch = resultStr.match(/"path":\s*"([^"]+)"/);
+          const pageMatch = resultStr.match(/"page":\s*"([^"]+)"/);
+          if (pathMatch?.[1]) {
+            setTimeout(() => {
+              navigate(pathMatch[1]);
+              toast.success(`Navigating to ${pageMatch?.[1] || pathMatch[1]}`);
+            }, 500);
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -37,11 +75,24 @@ export default function ChatInterface({ user }) {
     setInput('');
     setIsLoading(true);
 
-    // Add user message
-    setMessages(prev => [...prev, { role: 'user', content: userMessage, timestamp: new Date() }]);
+    // Add user message to local state
+    const newUserMessage = { role: 'user', content: userMessage, timestamp: new Date() };
+    setMessages(prev => [...prev, newUserMessage]);
 
     try {
-      const response = await processChatCommand({ message: userMessage });
+      // Build conversation history for the backend (include previous messages + new user message)
+      // Filter to only role/content for API, exclude system messages and metadata
+      const conversationHistory = [...messages, newUserMessage]
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(m => ({ role: m.role, content: m.content }));
+
+      // Use Developer AI (Claude) when in developer mode, otherwise use regular chat
+      const chatFunction = isDeveloperMode ? processDeveloperCommand : processChatCommand;
+
+      const response = await chatFunction({
+        messages: conversationHistory,
+        tenantId: user?.tenant_id || user?.tenant?.id,
+      });
       
       if (response.status === 200) {
         const data = response.data;
@@ -55,6 +106,11 @@ export default function ChatInterface({ user }) {
             data: data.data || {},
             data_summary: data.data_summary
           }]);
+
+          // Check for navigation commands in tool interactions
+          if (data.tool_interactions) {
+            handleNavigationFromToolResult(data.tool_interactions);
+          }
         } else {
           setMessages(prev => [...prev, { 
             role: 'assistant', 
@@ -205,10 +261,26 @@ export default function ChatInterface({ user }) {
 
       <div className="p-4 border-t bg-white">
         <form onSubmit={handleSubmit} className="flex gap-2">
+          {/* Developer Mode Toggle - Superadmin Only */}
+          {user?.role === 'superadmin' && (
+            <Button
+              type="button"
+              variant={isDeveloperMode ? 'default' : 'outline'}
+              size="icon"
+              onClick={() => {
+                setIsDeveloperMode(!isDeveloperMode);
+                toast.success(isDeveloperMode ? '🤖 AiSHA Mode' : '💻 Developer Mode (Claude)');
+              }}
+              className={isDeveloperMode ? 'bg-green-600 hover:bg-green-700' : ''}
+              title={isDeveloperMode ? 'Developer Mode ON (Claude)' : 'Enable Developer Mode'}
+            >
+              <Code className="w-4 h-4" />
+            </Button>
+          )}
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask me anything about your CRM..."
+            placeholder={isDeveloperMode ? "Ask about the codebase..." : "Ask me anything about your CRM..."}
             className="flex-1"
             disabled={isLoading}
           />

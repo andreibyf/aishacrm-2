@@ -39,17 +39,36 @@ export function validateTenantAccess(req, res, next) {
     });
   }
 
-  // Superadmins bypass all tenant restrictions
-  if (user.role === 'superadmin') {
-    return next();
-  }
-
   // Get tenant_id from various request sources
   const requestedTenantId = 
     req.body.tenant_id || 
     req.query.tenant_id || 
     req.params.tenant_id ||
     req.params.tenantId; // Support both snake_case and camelCase
+
+  // Superadmins have special privileges:
+  // - READ operations: can access ANY tenant's data (cross-tenant read access)
+  // - WRITE operations: must specify a valid tenant_id (no global writes)
+  if (user.role === 'superadmin') {
+    const isReadOperation = req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS';
+    
+    if (isReadOperation) {
+      // Allow read access to any tenant or no tenant (global view)
+      return next();
+    }
+    
+    // For write operations (POST, PUT, PATCH, DELETE), require a tenant_id
+    if (!requestedTenantId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Superadmin write operations require a tenant_id to be specified',
+        hint: 'Select a tenant from the dropdown before creating or modifying data'
+      });
+    }
+    
+    // Allow the write operation with the specified tenant
+    return next();
+  }
 
   // Admin/Manager/Employee must have a tenant_id assigned
   if (!user.tenant_id) {
@@ -168,8 +187,48 @@ export function enforceEmployeeDataScope(req, res, next) {
   next();
 }
 
+/**
+ * Middleware to require superadmin role (more restrictive than requireAdminRole)
+ * Only superadmins can access protected endpoints (e.g., entity labels, global settings)
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+export function requireSuperAdminRole(req, res, next) {
+  const { user } = req;
+  
+  // In local dev mode without auth, create a mock superadmin user
+  if (!user && process.env.NODE_ENV === 'development') {
+    req.user = {
+      id: 'local-dev-superadmin',
+      email: 'dev@localhost',
+      role: 'superadmin',
+      tenant_id: null
+    };
+    return next();
+  }
+  
+  if (!user) {
+    return res.status(401).json({ 
+      status: 'error', 
+      message: 'Authentication required' 
+    });
+  }
+
+  // Only superadmin can access these endpoints
+  if (user.role !== 'superadmin') {
+    return res.status(403).json({ 
+      status: 'error', 
+      message: 'Access denied. Only superadmins can perform this action.' 
+    });
+  }
+
+  next();
+}
+
 export default {
   validateTenantAccess,
   requireAdminRole,
+  requireSuperAdminRole,
   enforceEmployeeDataScope
 };

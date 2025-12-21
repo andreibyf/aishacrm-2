@@ -1,0 +1,360 @@
+import type { IntentClassification } from '@/ai/nlu/intentClassifier';
+import { classifyIntent as legacyClassifyIntent } from '@/ai/nlu/intentClassifier';
+import type { PromptContext } from './promptBuilder';
+import { buildPrompt } from './promptBuilder';
+import { routeCommand } from './commandRouter';
+import type { LocalActionDescriptor } from './commandRouter';
+import type { ParsedIntent, ConversationalIntent, ConversationalEntity } from '@/lib/intentParser';
+import { enforceParserSafety, legacyIntentFromParser, parseIntent } from '@/lib/intentParser';
+import { resolveAmbiguity, getContextualExamples, buildFallbackMessage, type ClarificationRequest } from '@/lib/ambiguityResolver';
+
+interface SessionEntity {
+  id: string;
+  type: string;
+  name: string;
+  aliases?: string[];
+}
+
+interface ProcessChatCommandOptions {
+  text: string;
+  history?: { role: 'user' | 'assistant'; content: string }[];
+  context?: PromptContext;
+  origin?: 'text' | 'voice';
+  consecutiveFailures?: number;
+  sessionEntities?: SessionEntity[] | null; // Entity context from previous queries
+}
+
+interface AssistantMessagePayload {
+  content: string;
+  actions?: Array<{ label?: string; type?: string; prompt?: string }>;
+  data?: unknown;
+  data_summary?: string;
+  mode?: string;
+  clarification?: ClarificationRequest;
+  examples?: string[];
+}
+
+interface ProcessChatCommandResult {
+  route: 'local_action' | 'ai_chat' | 'ai_brain' | 'clarification';
+  assistantMessage: AssistantMessagePayload;
+  classification: IntentClassification;
+  localAction?: LocalActionDescriptor;
+  needsClarification?: boolean;
+}
+
+type ParserAugmentedClassification = IntentClassification & {
+  parserResult: ParsedIntent;
+  effectiveParser: ParsedIntent;
+};
+
+const PARSER_TO_LEGACY_INTENT: Record<ConversationalIntent, IntentClassification['intent']> = {
+  query: 'list_records',
+  create: 'tasks',
+  update: 'tasks',
+  navigate: 'activities',
+  analyze: 'summaries',
+  ambiguous: 'generic_question'
+};
+
+const PARSER_TO_LEGACY_ENTITY: Record<ConversationalEntity, IntentClassification['entity']> = {
+  leads: 'leads',
+  accounts: 'accounts',
+  contacts: 'leads',
+  opportunities: 'opportunities',
+  activities: 'activities',
+  dashboard: 'dashboard',
+  general: 'general'
+};
+
+const LEGACY_TO_PARSER_INTENT: Record<IntentClassification['intent'], ConversationalIntent> = {
+  list_records: 'query',
+  summaries: 'analyze',
+  forecast: 'analyze',
+  activities: 'navigate',
+  tasks: 'update',
+  generic_question: 'ambiguous'
+};
+
+const LEGACY_TO_PARSER_ENTITY: Record<IntentClassification['entity'], ConversationalEntity> = {
+  leads: 'leads',
+  accounts: 'accounts',
+  opportunities: 'opportunities',
+  activities: 'activities',
+  tasks: 'activities',
+  pipeline: 'opportunities',
+  dashboard: 'dashboard',
+  general: 'general'
+};
+
+const convertIntentToLegacy = (intent: ConversationalIntent) => PARSER_TO_LEGACY_INTENT[intent] ?? 'generic_question';
+const convertEntityToLegacy = (entity: ConversationalEntity) => PARSER_TO_LEGACY_ENTITY[entity] ?? 'general';
+
+const buildParserFromLegacy = (legacy: IntentClassification): ParsedIntent => ({
+  rawText: legacy.rawText,
+  normalized: legacy.normalized,
+  intent: LEGACY_TO_PARSER_INTENT[legacy.intent] ?? 'ambiguous',
+  entity: LEGACY_TO_PARSER_ENTITY[legacy.entity] ?? 'general',
+  filters: {},
+  confidence: legacy.confidence,
+  isAmbiguous: legacy.intent === 'generic_question' || legacy.entity === 'general',
+  isMultiStep: false,
+  isPotentiallyDestructive: false,
+  detectedPhrases: legacy.matchedKeywords ?? []
+});
+
+const mapParsedToLegacyClassification = (effective: ParsedIntent, original: ParsedIntent): ParserAugmentedClassification => {
+  const filters = legacyIntentFromParser(original);
+  const classification: ParserAugmentedClassification = {
+    rawText: original.rawText,
+    normalized: original.normalized,
+    intent: convertIntentToLegacy(effective.intent),
+    entity: convertEntityToLegacy(effective.entity),
+    filters,
+    confidence: Number(Math.max(0.1, Math.min(0.95, effective.confidence)).toFixed(2)),
+    matchedKeywords: original.detectedPhrases,
+    parserResult: original,
+    effectiveParser: effective
+  };
+  return classification;
+};
+
+const ensureHistoryFormat = (history: ProcessChatCommandOptions['history']) => {
+  if (!history) return [];
+  return history
+    .filter((msg) => (msg.role === 'user' || msg.role === 'assistant') && Boolean(msg.content))
+    .map((msg) => ({ role: msg.role, content: msg.content.trim() }));
+};
+
+const buildLocalAssistantMessage = (action: LocalActionDescriptor): AssistantMessagePayload => {
+  const label = `Open ${action.entity}`;
+  const summaryParts = [`Intent: ${action.intent}`];
+  if (action.filters.timeframe) summaryParts.push(`timeframe=${action.filters.timeframe}`);
+  if (action.filters.owner) summaryParts.push(`owner=${action.filters.owner}`);
+  if (action.filters.status) summaryParts.push(`status=${action.filters.status}`);
+
+  return {
+    content: `I'll help with that. ${action.description}. Tap the highlighted section in the UI to continue.`,
+    actions: [{ label, type: 'ui_navigation' }],
+    data: { localAction: action },
+    data_summary: summaryParts.join(', '),
+    mode: 'ui_helper'
+  };
+};
+
+const normalizeChatResponse = (route: 'ai_chat' | 'ai_brain', response: any): AssistantMessagePayload => {
+  if (!response) {
+    return {
+      content: 'AiSHA could not complete that request. Please try again.',
+      mode: route === 'ai_brain' ? 'propose_actions' : 'read_only'
+    };
+  }
+
+  if (route === 'ai_chat') {
+    const payload = response?.data || {};
+    if (response.status !== 200 || payload.status !== 'success') {
+      const message = payload?.message || `AiSHA returned status ${response.status || 'unknown'}`;
+      throw new Error(message);
+    }
+    return {
+      content: payload.response || payload.data?.response || 'I have no further updates yet.',
+      actions: Array.isArray(payload.actions) ? payload.actions : undefined,
+      data: payload.data,
+      data_summary: payload.data_summary,
+      mode: payload.mode || 'read_only'
+    };
+  }
+
+  const brainPayload = response?.data || {};
+  if (response.status !== 200) {
+    throw new Error(brainPayload?.message || `Brain task failed with status ${response.status}`);
+  }
+
+  return {
+    content: brainPayload.summary || 'Here is what I found.',
+    actions: Array.isArray(brainPayload.proposed_actions) ? brainPayload.proposed_actions : undefined,
+    data: brainPayload,
+    data_summary: brainPayload.summary,
+    mode: 'propose_actions'
+  };
+};
+
+const buildClarificationMessage = (
+  clarification: ClarificationRequest,
+  entity: ConversationalEntity
+): AssistantMessagePayload => {
+  const examples = getContextualExamples(entity);
+
+  // Build action buttons from clarification options
+  const actions = clarification.options.map((opt) => ({
+    label: opt.label,
+    type: 'clarification_option',
+    prompt: opt.prompt
+  }));
+
+  // Add recovery actions
+  if (clarification.canRetry) {
+    actions.push({ label: 'Try again', type: 'retry' });
+  }
+  if (clarification.offerTextFallback) {
+    actions.push({ label: 'Type instead', type: 'switch_to_text' });
+  }
+
+  return {
+    content: clarification.message,
+    actions,
+    data: { clarification, examples },
+    data_summary: clarification.hint || 'Please clarify your request.',
+    mode: 'clarification',
+    clarification,
+    examples
+  };
+};
+
+export async function processChatCommand({
+  text,
+  history = [],
+  context,
+  origin = 'text',
+  consecutiveFailures = 0,
+  sessionEntities = null
+}: ProcessChatCommandOptions): Promise<ProcessChatCommandResult> {
+  const sanitizedHistory = ensureHistoryFormat(history);
+  let parserResult: ParsedIntent | null = null;
+
+  // Check if text references a known entity from session context
+  let resolvedEntityContext: { id: string; type: string; name: string } | null = null;
+  if (sessionEntities && sessionEntities.length > 0) {
+    const normalizedText = text.toLowerCase();
+    for (const entity of sessionEntities) {
+      // Check if the text mentions the entity name or any alias
+      const namesToCheck = [entity.name, ...(entity.aliases || [])].map(n => n.toLowerCase());
+      for (const name of namesToCheck) {
+        if (normalizedText.includes(name)) {
+          resolvedEntityContext = { id: entity.id, type: entity.type, name: entity.name };
+          break;
+        }
+      }
+      if (resolvedEntityContext) break;
+    }
+  }
+
+  try {
+    parserResult = parseIntent(text);
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn('intentParser failed, falling back to legacy classifier', error);
+  }
+
+  let classification: ParserAugmentedClassification;
+
+  if (!parserResult) {
+    const legacy = legacyClassifyIntent(text);
+    const fallbackParser = buildParserFromLegacy(legacy);
+    classification = {
+      ...legacy,
+      parserResult: fallbackParser,
+      effectiveParser: fallbackParser
+    };
+    parserResult = fallbackParser;
+  } else {
+    const effectiveParser = enforceParserSafety(parserResult);
+    classification = mapParsedToLegacyClassification(effectiveParser, parserResult);
+  }
+
+  // Check for ambiguity and provide clarification if needed
+  const ambiguityCheck = resolveAmbiguity(parserResult, text, { origin });
+
+  if (ambiguityCheck.isAmbiguous && ambiguityCheck.clarification) {
+    const entity = parserResult?.entity || 'general';
+
+    // If we've had multiple failures, enhance the message with fallback suggestions
+    if (consecutiveFailures >= 2) {
+      const fallback = buildFallbackMessage(parserResult, text, consecutiveFailures);
+      const clarification = {
+        ...ambiguityCheck.clarification,
+        message: fallback.content
+      };
+
+      // Add escalation action for persistent failures
+      if (consecutiveFailures >= 3) {
+        clarification.options = [
+          ...clarification.options,
+          { label: 'Contact Support', prompt: '', entity: 'general', intent: 'ambiguous' as const }
+        ];
+      }
+
+      return {
+        route: 'clarification',
+        assistantMessage: buildClarificationMessage(clarification, entity),
+        classification,
+        needsClarification: true
+      };
+    }
+
+    return {
+      route: 'clarification',
+      assistantMessage: buildClarificationMessage(ambiguityCheck.clarification, entity),
+      classification,
+      needsClarification: true
+    };
+  }
+
+  let prompt = buildPrompt({ text, classification, history: sanitizedHistory, context });
+  if (parserResult.isPotentiallyDestructive && prompt.mode !== 'propose_actions') {
+    prompt = { ...prompt, mode: 'propose_actions' };
+  }
+  
+  // Inject resolved entity context into the prompt for follow-up questions
+  if (resolvedEntityContext) {
+    // Add a context note to help the AI understand what entity the user is referring to
+    const contextNote = `[Context: The user is asking about a ${resolvedEntityContext.type} named "${resolvedEntityContext.name}" with ID ${resolvedEntityContext.id}]`;
+    
+    // Inject context into the last user message
+    const enhancedMessages = prompt.messages.map((msg, idx) => {
+      if (idx === prompt.messages.length - 1 && msg.role === 'user') {
+        return { ...msg, content: `${contextNote}\n\n${msg.content}` };
+      }
+      return msg;
+    });
+    
+    prompt = {
+      ...prompt,
+      messages: enhancedMessages,
+      entityContext: resolvedEntityContext
+    };
+  }
+
+  const routeResult = await routeCommand({ text, classification, prompt, context });
+
+  if (routeResult.type === 'local_action') {
+    return {
+      route: 'local_action',
+      assistantMessage: buildLocalAssistantMessage(routeResult.action),
+      classification,
+      localAction: routeResult.action
+    };
+  }
+
+  if (routeResult.type === 'ai_brain') {
+    const assistantMessage = normalizeChatResponse('ai_brain', routeResult.response);
+    if (parserResult.isPotentiallyDestructive) {
+      assistantMessage.mode = 'propose_actions';
+    }
+    return {
+      route: 'ai_brain',
+      assistantMessage,
+      classification
+    };
+  }
+
+  const assistantMessage = normalizeChatResponse('ai_chat', routeResult.response);
+  if (parserResult.isPotentiallyDestructive) {
+    assistantMessage.mode = 'propose_actions';
+  }
+
+  return {
+    route: 'ai_chat',
+    assistantMessage,
+    classification
+  };
+}

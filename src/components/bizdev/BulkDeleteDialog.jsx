@@ -10,7 +10,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { bulkDeleteBizDevSources } from "@/api/functions";
+import { BizDevSource } from "@/api/entities";
 
 export default function BulkDeleteDialog({ sources, onClose, onComplete }) {
   const [deleting, setDeleting] = useState(false);
@@ -25,31 +25,42 @@ export default function BulkDeleteDialog({ sources, onClose, onComplete }) {
     setDeleting(true);
 
     try {
-      const { data, status } = await bulkDeleteBizDevSources({
-        bizdev_source_ids: sources.map(s => s.id)
-      });
+      const results = {
+        successful: 0,
+        failed: 0,
+        errors: []
+      };
 
-      if (status === 200 && data.status === 'success') {
-        toast.success(data.message);
-        
-        if (onComplete) {
-          onComplete(data.results);
+      // Delete each source individually
+      for (const source of sources) {
+        try {
+          await BizDevSource.delete(source.id);
+          results.successful++;
+        } catch (error) {
+          results.failed++;
+          results.errors.push({
+            id: source.id,
+            name: source.company_name || source.source || source.source_name,
+            error: error.message
+          });
         }
-        
-        onClose();
-      } else if (status === 200 && data.status === 'partial') {
-        toast.warning(data.message, {
-          description: `${data.results.failed} record(s) failed to delete`
-        });
-        
-        if (onComplete) {
-          onComplete(data.results);
-        }
-        
-        onClose();
-      } else {
-        toast.error(data.message || 'Failed to delete BizDev Sources');
       }
+
+      if (results.failed === 0) {
+        toast.success(`Successfully deleted ${results.successful} BizDev Source(s)`);
+      } else if (results.successful > 0) {
+        toast.warning(`Deleted ${results.successful} of ${sources.length} sources`, {
+          description: `${results.failed} record(s) failed to delete`
+        });
+      } else {
+        toast.error('Failed to delete BizDev Sources');
+      }
+
+      if (onComplete) {
+        onComplete(results);
+      }
+
+      onClose();
     } catch (error) {
       console.error('Delete error:', error);
       toast.error(error.message || 'Failed to delete BizDev Sources');

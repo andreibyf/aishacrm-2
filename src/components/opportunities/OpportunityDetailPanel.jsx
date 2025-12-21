@@ -43,6 +43,7 @@ export default function OpportunityDetailPanel({
   accounts,
   contacts,
   users,
+  employees,
   leads,
   onClose,
   onEdit,
@@ -67,9 +68,9 @@ export default function OpportunityDetailPanel({
       setLoadingActivities(true);
       try {
         const allActivities = await Activity.filter({ tenant_id: localOpportunity.tenant_id });
-        const filtered = allActivities.filter(
+        const filtered = Array.isArray(allActivities) ? allActivities.filter(
           (a) => a.related_to === "opportunity" && a.related_id === localOpportunity.id
-        );
+        ) : [];
         // Sort by due date descending (most recent first). Null due_dates come last.
         filtered.sort((a, b) => {
           const dateA = a.due_date ? new Date(a.due_date).getTime() : -Infinity;
@@ -107,8 +108,10 @@ export default function OpportunityDetailPanel({
     leads?.find((lead) => lead.id === localOpportunity.lead_id)?.name || "N/A";
   
   // Helper function to get Assigned To Name
-  const getAssignedToName = () =>
-    users?.find((u) => u.id === localOpportunity.assigned_to)?.name || "N/A";
+  const getAssignedToName = () => {
+    const employee = employees?.find((e) => e.id === localOpportunity.assigned_to);
+    return employee ? `${employee.first_name} ${employee.last_name}` : "N/A";
+  };
 
   const handleStageUpdate = async (newStage) => {
     if (onStageChange) {
@@ -184,9 +187,9 @@ export default function OpportunityDetailPanel({
 
       // Reload activities
       const allActivities = await Activity.filter({ tenant_id: localOpportunity.tenant_id });
-      const filtered = allActivities.filter(
+      const filtered = Array.isArray(allActivities) ? allActivities.filter(
         (a) => a.related_to === "opportunity" && a.related_id === localOpportunity.id
-      );
+      ) : [];
       filtered.sort((a, b) => {
         const dateA = a.due_date ? new Date(a.due_date).getTime() : -Infinity;
         const dateB = b.due_date ? new Date(b.due_date).getTime() : -Infinity;

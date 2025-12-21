@@ -1,6 +1,6 @@
 import express from 'express';
 
-export default function createNotificationRoutes(pgPool) {
+export default function createNotificationRoutes(_pgPool) {
   const router = express.Router();
 
 // Helper function to expand metadata fields to top-level properties
@@ -14,41 +14,82 @@ export default function createNotificationRoutes(pgPool) {
     };
   };
 
+  /**
+   * @openapi
+   * /api/notifications:
+   *   get:
+   *     summary: List notifications
+   *     description: Returns notifications for a tenant and/or user with pagination.
+   *     tags: [notifications]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         required: false
+   *         description: Tenant UUID scope
+   *       - in: query
+   *         name: user_email
+   *         schema:
+   *           type: string
+   *           format: email
+   *         required: false
+   *         description: Filter notifications for a specific user
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *           minimum: 1
+   *           maximum: 200
+   *         required: false
+   *         description: Number of items to return (default 50)
+   *       - in: query
+   *         name: offset
+   *         schema:
+   *           type: integer
+   *           minimum: 0
+   *         required: false
+   *         description: Offset for pagination (default 0)
+   *     responses:
+   *       200:
+   *         description: List of notifications
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // GET /api/notifications - List notifications
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, user_email, limit = 50, offset = 0 } = req.query;
+      const { tenant_id, user_email } = req.query;
+      const limit = parseInt(req.query.limit || '50', 10);
+      const offset = parseInt(req.query.offset || '0', 10);
 
-      let query = 'SELECT * FROM notifications WHERE 1=1';
-      const values = [];
-      let valueIndex = 1;
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      let q = supabase
+        .from('notifications')
+        .select('*');
 
-      if (tenant_id) {
-        query += ` AND tenant_id = $${valueIndex}`;
-        values.push(tenant_id);
-        valueIndex++;
-      }
+      if (tenant_id) q = q.eq('tenant_id', tenant_id);
+      if (user_email) q = q.eq('user_email', user_email);
 
-      if (user_email) {
-        query += ` AND user_email = $${valueIndex}`;
-        values.push(user_email);
-        valueIndex++;
-      }
+      q = q.order('created_date', { ascending: false })
+        .range(offset, offset + limit - 1);
 
-      query += ` ORDER BY created_date DESC LIMIT $${valueIndex} OFFSET $${valueIndex + 1}`;
-      values.push(parseInt(limit), parseInt(offset));
-      
-      const result = await pgPool.query(query, values);
-      
-      const notifications = result.rows.map(expandMetadata);
-      
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+
+      const notifications = (data || []).map(expandMetadata);
+
       res.json({
         status: 'success',
         data: {
           notifications,
-          total: result.rows.length,
-          limit: parseInt(limit),
-          offset: parseInt(offset)
+          total: notifications.length,
+          limit,
+          offset
         }
       });
     } catch (error) {
@@ -60,40 +101,79 @@ export default function createNotificationRoutes(pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/notifications:
+   *   post:
+   *     summary: Create a notification
+   *     description: Creates a notification record for a tenant/user.
+   *     tags: [notifications]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               tenant_id:
+   *                 type: string
+   *                 format: uuid
+   *               user_email:
+   *                 type: string
+   *                 format: email
+   *               title:
+   *                 type: string
+   *               message:
+   *                 type: string
+   *               type:
+   *                 type: string
+   *                 enum: [info, warning, error, success]
+   *               is_read:
+   *                 type: boolean
+   *               metadata:
+   *                 type: object
+   *     responses:
+   *       201:
+   *         description: Notification created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   // POST /api/notifications - Create notification
   router.post('/', async (req, res) => {
     try {
       const { tenant_id, user_email, title, message, type, is_read, metadata, ...otherFields } = req.body;
-      
-      // Merge metadata with unknown fields
+
       const combinedMetadata = {
         ...(metadata || {}),
         ...otherFields
       };
-      
-      const query = `
-        INSERT INTO notifications (
-          tenant_id, user_email, title, message, type, 
-          is_read, metadata, created_date
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, NOW()
-        ) RETURNING *
-      `;
-      
-      const values = [
-        tenant_id,
-        user_email,
-        title,
-        message,
-        type || 'info',
-        is_read || false,
-        combinedMetadata
-      ];
-      
-      const result = await pgPool.query(query, values);
-      
-      const notification = expandMetadata(result.rows[0]);
-      
+
+      const nowIso = new Date().toISOString();
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('notifications')
+        .insert([
+          {
+            tenant_id,
+            user_email,
+            title,
+            message,
+            type: type || 'info',
+            is_read: is_read || false,
+            metadata: combinedMetadata,
+            created_date: nowIso,
+            created_at: nowIso,
+          }
+        ])
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
+
+      const notification = expandMetadata(data);
+
       res.status(201).json({
         status: 'success',
         data: notification
@@ -107,49 +187,87 @@ export default function createNotificationRoutes(pgPool) {
     }
   });
 
+  /**
+   * @openapi
+   * /api/notifications/{id}:
+   *   put:
+   *     summary: Update a notification
+   *     description: Updates notification read status and/or metadata.
+   *     tags: [notifications]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               is_read:
+   *                 type: boolean
+   *               metadata:
+   *                 type: object
+   *     responses:
+   *       200:
+   *         description: Notification updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *       404:
+   *         description: Notification not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   // PUT /api/notifications/:id - Update notification (mark as read)
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
       const { is_read, metadata, ...otherFields } = req.body;
-      
-      // Fetch current metadata
-      const currentNotif = await pgPool.query('SELECT metadata FROM notifications WHERE id = $1', [id]);
-      
-      if (currentNotif.rows.length === 0) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'Notification not found'
-        });
-      }
 
-      // Merge metadata
-      const currentMetadata = currentNotif.rows[0].metadata || {};
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+
+      // Fetch current metadata
+      const { data: current, error: fetchErr } = await supabase
+        .from('notifications')
+        .select('metadata, is_read')
+        .eq('id', id)
+        .single();
+      if (fetchErr?.code === 'PGRST116') {
+        return res.status(404).json({ status: 'error', message: 'Notification not found' });
+      }
+      if (fetchErr) throw new Error(fetchErr.message);
+
+      const currentMetadata = current?.metadata || {};
       const updatedMetadata = {
         ...currentMetadata,
         ...(metadata || {}),
         ...otherFields,
       };
-      
-      const query = `
-        UPDATE notifications SET
-          is_read = COALESCE($1, is_read),
-          metadata = $2
-        WHERE id = $3
-        RETURNING *
-      `;
-      
-      const result = await pgPool.query(query, [is_read, updatedMetadata, id]);
-      
-      if (result.rows.length === 0) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'Notification not found'
-        });
+
+      const payload = { metadata: updatedMetadata };
+      if (typeof is_read !== 'undefined') payload.is_read = is_read;
+
+      const { data, error } = await supabase
+        .from('notifications')
+        .update(payload)
+        .eq('id', id)
+        .select('*')
+        .single();
+      if (error?.code === 'PGRST116') {
+        return res.status(404).json({ status: 'error', message: 'Notification not found' });
       }
-      
-      const updatedNotification = expandMetadata(result.rows[0]);
-      
+      if (error) throw new Error(error.message);
+
+      const updatedNotification = expandMetadata(data);
+
       res.json({
         status: 'success',
         data: updatedNotification

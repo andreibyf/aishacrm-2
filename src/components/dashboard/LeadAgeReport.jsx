@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Lead } from "@/api/entities";
-import { Employee } from "@/api/entities";
 import { useApiManager } from "../shared/ApiManager";
+import { useUser } from "@/components/shared/useUser";
+import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
+import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useEmployeeScope } from "@/components/shared/EmployeeScopeContext";
 
 const AGE_BUCKETS = [
   { label: '0-7 days', min: 0, max: 7, color: 'bg-green-100 text-green-800 border-green-200' },
@@ -19,15 +22,23 @@ const AGE_BUCKETS = [
   { label: '30+ days', min: 31, max: 999, color: 'bg-purple-100 text-purple-800 border-purple-200' },
 ];
 
-export default function LeadAgeReport(props) {
+function LeadAgeReport(props) {
   const [leads, setLeads] = useState([]);
-  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [ageBuckets, setAgeBuckets] = useState([]);
   const [selectedBucket, setSelectedBucket] = useState(null);
   const { cachedRequest } = useApiManager();
+  const { loading: userLoading } = useUser();
+  const { authCookiesReady } = useAuthCookiesReady();
+  const { plural: leadsLabel } = useEntityLabel('leads');
+  const { employees } = useEmployeeScope(); // Use centralized employees
 
   useEffect(() => {
+        // Wait for user to be loaded before fetching data
+        if (userLoading || !authCookiesReady) {
+          return;
+        }
+
     let mounted = true;
     const load = async () => {
       setLoading(true);
@@ -36,12 +47,19 @@ export default function LeadAgeReport(props) {
         
         console.log('LeadAgeReport: Using tenant filter from Dashboard:', tenantFilter);
 
+        // Guard: Don't fetch if no tenant_id is present
+        if (!tenantFilter?.tenant_id) {
+          setLeads([]);
+          setLoading(false);
+          return;
+        }
+
         // If prefetched leads are provided, use them and skip fetching
         if (Array.isArray(props?.leadsData)) {
           const filtered = props.leadsData.filter(l => {
             const statusOk = !['converted', 'lost'].includes(l.status);
             const tenantOk = !tenantFilter?.tenant_id || l.tenant_id === tenantFilter.tenant_id;
-            const testOk = tenantFilter?.is_test_data?.$ne === true ? !l.is_test_data : true;
+            const testOk = tenantFilter?.is_test_data === false ? !l.is_test_data : true;
             return statusOk && tenantOk && testOk;
           });
           
@@ -53,18 +71,28 @@ export default function LeadAgeReport(props) {
           });
 
           setLeads(leadsWithAge);
-          
-          if (Array.isArray(props?.employeesData)) {
-            setEmployees(props.employeesData);
-          } else {
-            // Pass tenant_id when fetching employees
-            const employeeFilter = tenantFilter?.tenant_id ? { tenant_id: tenantFilter.tenant_id } : {};
-            const employeesData = await cachedRequest('Employee', 'list', employeeFilter, function () { 
-              return Employee.list(employeeFilter); 
-            });
-            setEmployees(employeesData);
-          }
+          // Employees come from centralized context, no fetch needed
           setLoading(false);
+          // Background refresh to hydrate from full dataset quietly
+          (async () => {
+            try {
+              let effectiveFilter = { 
+                ...tenantFilter, 
+                status: { $nin: ['converted', 'lost'] } 
+              };
+              const activeLeadsFull = await cachedRequest('Lead', 'filter', { filter: effectiveFilter }, function () { return Lead.filter(effectiveFilter); });
+
+              const hydrated = (activeLeadsFull || []).map(lead => {
+                const createdDate = new Date(lead.created_date);
+                const today = new Date();
+                const ageInDays = Math.floor((today - createdDate) / (1000 * 60 * 60 * 24));
+                return { ...lead, ageInDays };
+              });
+              if (mounted) {
+                setLeads(hydrated);
+              }
+            } catch { /* ignore background errors */ }
+          })();
           return;
         }
 
@@ -76,14 +104,7 @@ export default function LeadAgeReport(props) {
         
         console.log('LeadAgeReport: Using effective filter:', effectiveFilter);
         
-        const [activeLeads, employeesData] = await Promise.all([
-          cachedRequest('Lead', 'filter', { filter: effectiveFilter }, function () { return Lead.filter(effectiveFilter); }),
-          Array.isArray(props?.employeesData)
-            ? Promise.resolve(props.employeesData)
-            : cachedRequest('Employee', 'list', { tenant_id: tenantFilter?.tenant_id }, function () { 
-                return Employee.list({ tenant_id: tenantFilter?.tenant_id }); 
-              })
-        ]);
+        const activeLeads = await cachedRequest('Lead', 'filter', { filter: effectiveFilter }, function () { return Lead.filter(effectiveFilter); });
         
         console.log('LeadAgeReport: Found active leads:', (activeLeads || []).length);
 
@@ -99,11 +120,10 @@ export default function LeadAgeReport(props) {
         });
 
         setLeads(leadsWithAge);
-        setEmployees(employeesData || []);
+        // Employees come from centralized context
       } catch (e) {
         console.warn('LeadAgeReport: failed to fetch data:', e);
         setLeads([]);
-        setEmployees(Array.isArray(props?.employeesData) ? props.employeesData : []);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -111,7 +131,7 @@ export default function LeadAgeReport(props) {
 
     load();
     return () => { mounted = false; };
-  }, [props, cachedRequest]);
+  }, [props, cachedRequest, userLoading, authCookiesReady]);
 
   // Calculate age distribution
   useEffect(() => {
@@ -261,7 +281,7 @@ export default function LeadAgeReport(props) {
             <div className="text-center pt-4 border-t border-slate-700">
               <Button variant="outline" size="sm" asChild className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
                 <Link to={createPageUrl("Leads")}>
-                  View All Active Leads
+                  View All Active {leadsLabel}
                 </Link>
               </Button>
             </div>
@@ -271,3 +291,5 @@ export default function LeadAgeReport(props) {
     </Card>
   );
 }
+
+export default memo(LeadAgeReport);

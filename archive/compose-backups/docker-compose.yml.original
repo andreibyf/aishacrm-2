@@ -1,0 +1,202 @@
+# Backup of previous development docker-compose.yml prior to unification
+# Timestamp: 2025-11-27
+# Do not edit; kept for reference in case rollback is needed.
+services:
+  # PostgreSQL Database (DISABLED - Using Supabase Cloud)
+  db:
+    image: postgres:15-alpine
+    container_name: aishacrm-db
+    restart: "no"
+    profiles:
+      - migration-testing
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${LOCAL_POSTGRES_PASSWORD:-changeme_local_dev_only}
+      POSTGRES_DB: aishacrm
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  redis:
+    image: valkey/valkey:7-alpine
+    container_name: aishacrm-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: valkey-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - aishanet
+  redis-cache:
+    image: valkey/valkey:7-alpine
+    container_name: aishacrm-redis-cache
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_cache_data:/data
+    command: valkey-server --save "" --loglevel warning --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - aishanet
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: aishacrm-backend
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+    ports:
+      - "4001:3001"
+    env_file:
+      - ./backend/.env
+    environment:
+      - NODE_ENV=development
+      - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
+      - PORT=${PORT:-3001}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4000}
+      - PGSSLMODE=require
+      - REDIS_URL=redis://redis:6379
+      - REDIS_CACHE_URL=redis://redis-cache:6379
+      - SYSTEM_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
+      - TENANT_RESOLVE_CACHE_TTL_MS=${TENANT_RESOLVE_CACHE_TTL_MS:-300000}
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - aishanet
+  frontend:
+    build:
+      context: .
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_AISHACRM_BACKEND_URL: ${VITE_AISHACRM_BACKEND_URL:-http://localhost:4001}
+        VITE_CURRENT_BRANCH: ${VITE_CURRENT_BRANCH:-main}
+        VITE_SYSTEM_TENANT_ID: ${VITE_SYSTEM_TENANT_ID}
+        VITE_USER_HEARTBEAT_INTERVAL_MS: ${VITE_USER_HEARTBEAT_INTERVAL_MS:-60000}
+        APP_BUILD_VERSION: ${APP_BUILD_VERSION:-dev-local}
+      dockerfile: Dockerfile
+    container_name: aishacrm-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "4000:3000"
+    env_file:
+      - .env
+    environment:
+      - PORT=${FRONTEND_PORT:-3000}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - aishanet
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: aishacrm-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_PORT=5678
+      - N8N_HOST=0.0.0.0
+      - GENERIC_TIMEZONE=UTC
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_EDITOR_BASE_URL=http://localhost:5679
+      - N8N_SECURE_COOKIE=false
+      - N8N_SKIP_WEBHOOK_DEREGISTRATION_SHUTDOWN=true
+      - N8N_HIRING_BANNER_ENABLED=false
+      - VUE_APP_URL_BASE_API=http://localhost:5679
+      - N8N_CUSTOM_EXTENSIONS=/home/node/.n8n/custom
+      - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE:-false}
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-nodes-mcp:/home/node/.n8n/custom:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5678/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - aishanet
+  n8n-proxy:
+    image: nginx:alpine
+    container_name: aishacrm-n8n-proxy
+    restart: unless-stopped
+    depends_on:
+      - n8n
+    ports:
+      - "5679:5679"
+    volumes:
+      - ./nginx-n8n.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5679/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - aishanet
+volumes:
+  postgres_data:
+    driver: local
+  n8n_data:
+    driver: local
+  redis_data:
+    driver: local
+  redis_cache_data:
+    driver: local
+networks:
+  aishanet:
+    name: aishanet
+    driver: bridge

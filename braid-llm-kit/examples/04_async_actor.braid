@@ -1,0 +1,11 @@
+actor Counter {
+  state { value: u64 }
+  fn inc(by: u64) { self.value += by; }
+  fn get() -> u64 { self.value }
+}
+
+async fn demo() -> u64 {
+  let c = spawn Counter { value: 0 };
+  await c.inc(1);
+  await c.get()
+}

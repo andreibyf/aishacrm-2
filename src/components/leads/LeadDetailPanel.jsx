@@ -1,6 +1,6 @@
 import UniversalDetailPanel from "../shared/UniversalDetailPanel";
 import { Button } from "@/components/ui/button";
-import { UserCheck } from "lucide-react";
+import { Building2, UserCheck } from "lucide-react";
 
 export default function LeadDetailPanel({
   lead,
@@ -10,11 +10,21 @@ export default function LeadDetailPanel({
   onEdit,
   onDelete,
   onConvert,
-  user
+  user,
+  associatedAccountName,
 }) {
   if (!lead) {
     return null;
   }
+
+  // Debug: Log account information
+  console.log('[LeadDetailPanel] Debug:', {
+    lead,
+    associatedAccountName,
+    account_id: lead.account_id,
+    metadata_account_id: lead.metadata?.account_id,
+    metadata: lead.metadata
+  });
 
   const customActions = lead.status !== 'converted' ? [
     <Button
@@ -27,6 +37,24 @@ export default function LeadDetailPanel({
     </Button>
   ] : [];
 
+  const detailDisplayData = {
+    "Associated Account": associatedAccountName ? (
+      <div className="text-slate-200 font-medium mt-1 flex items-center gap-2">
+        <Building2 className="w-4 h-4 text-slate-400" />
+        {associatedAccountName}
+      </div>
+    ) : (
+      <div className="text-slate-500 italic mt-1">
+        No associated account
+      </div>
+    ),
+    "Assigned To": (
+      <p className="text-slate-200 font-medium mt-1">
+        {assignedUserName || 'Unassigned'}
+      </p>
+    ),
+  };
+
   return (
     <UniversalDetailPanel
       entity={lead}
@@ -36,13 +64,7 @@ export default function LeadDetailPanel({
       onEdit={onEdit}
       onDelete={onDelete}
       user={user}
-      displayData={{
-        "Assigned To": (
-          <p className="text-slate-200 font-medium mt-1">
-            {assignedUserName || 'Unassigned'}
-          </p>
-        )
-      }}
+      displayData={detailDisplayData}
       customActions={customActions}
       showNotes={true}
     />

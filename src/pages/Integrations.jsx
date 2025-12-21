@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+// Removed local user loading state; using global context instead
 import {
   Card,
   CardContent,
@@ -16,19 +16,17 @@ import {
   Calendar,
   Copy,
   CreditCard,
-  Database,
   ExternalLink,
   FileText,
   Loader2,
   Mail,
   Phone,
   Settings,
-  TrendingUp,
-  Users,
   Webhook,
   Zap,
 } from "lucide-react";
-import { User } from "@/api/entities";
+// Removed direct User.me() call; rely on global user context
+import { useUser } from "../components/shared/useUser.js";
 import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
 
@@ -107,46 +105,6 @@ const webhookServices = [
     purpose: "Creates activities directly from external scheduling systems",
   },
   {
-    name: "n8n Create Lead",
-    description: "Lead creation through n8n automation",
-    webhook: "/functions/n8nCreateLead",
-    icon: TrendingUp,
-    color: "bg-yellow-100 text-yellow-800",
-    status: "active",
-    method: "POST",
-    purpose: "Creates leads via n8n workflow automation",
-  },
-  {
-    name: "n8n Create Contact",
-    description: "Contact creation through n8n automation",
-    webhook: "/functions/n8nCreateContact",
-    icon: Users,
-    color: "bg-yellow-100 text-yellow-800",
-    status: "active",
-    method: "POST",
-    purpose: "Creates contacts via n8n workflow automation",
-  },
-  {
-    name: "n8n Update Contact",
-    description: "Contact updates through n8n automation",
-    webhook: "/functions/n8nUpdateContact",
-    icon: Users,
-    color: "bg-yellow-100 text-yellow-800",
-    status: "active",
-    method: "POST",
-    purpose: "Updates contact information via n8n workflows",
-  },
-  {
-    name: "n8n Get Data",
-    description: "Data retrieval for n8n workflows",
-    webhook: "/functions/n8nGetData",
-    icon: Database,
-    color: "bg-yellow-100 text-yellow-800",
-    status: "active",
-    method: "GET/POST",
-    purpose: "Retrieves CRM data for n8n workflow processing",
-  },
-  {
     name: "Google Drive Integration",
     description: "Tenant-specific Google Drive file management",
     webhook: "/functions/tenantGoogleDrive",
@@ -213,10 +171,6 @@ const integrationCategories = [
   {
     name: "Automation Platforms",
     services: [
-      "n8n Create Lead",
-      "n8n Create Contact",
-      "n8n Update Contact",
-      "n8n Get Data",
       "Zapier Integration",
     ],
     icon: Zap,
@@ -253,22 +207,8 @@ const integrationCategories = [
 ];
 
 export default function IntegrationsPage() {
-  const [, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Failed to load user:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadUser();
-  }, []);
+  const { loading: userLoading } = useUser();
+  const loading = userLoading; // Preserve existing variable usage
 
   const copyWebhookUrl = (webhook) => {
     const baseUrl = window.location.origin;

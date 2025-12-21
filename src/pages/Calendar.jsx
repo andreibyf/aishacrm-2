@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { Activity, User } from "@/api/entities";
+import { Activity } from "@/api/entities";
 import { getTenantFilter as getTenantFilterHelper } from "../components/shared/tenantUtils";
 import { useTenant } from "../components/shared/tenantContext";
 import { useApiManager } from "../components/shared/ApiManager";
+import { useUser } from "@/components/shared/useUser.js";
 import CalendarToolbar from "../components/calendar/CalendarToolbar";
 import MonthGrid from "../components/calendar/MonthGrid";
 import WeekView from "../components/calendar/WeekView";
@@ -15,27 +16,31 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, ad
 import CalendarQuickActions from "../components/calendar/CalendarQuickActions";
 
 export default function CalendarPage() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
   const [view, setView] = useState("month");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [activities, setActivities] = useState([]);
   const [selected, setSelected] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const { selectedTenantId } = useTenant();
-  const { cachedRequest } = useApiManager();
+  const { cachedRequest, clearCache } = useApiManager();
 
-  useEffect(() => {
-    (async () => {
-      const u = await User.me();
-      setCurrentUser(u);
-    })();
-  }, []);
+  // User provided by context
 
   const loadActivities = useCallback(async () => {
     if (!currentUser) return;
 
     const tenantFilter = getTenantFilterHelper(currentUser, selectedTenantId);
     let filter = { ...tenantFilter };
+
+    // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
+    if ((currentUser.role === 'superadmin' || currentUser.role === 'admin') && !filter.tenant_id) {
+      if (import.meta.env.DEV) {
+        console.log("[Calendar] Skipping data load - no tenant selected");
+      }
+      setActivities([]);
+      return;
+    }
 
     const isAdminLike = currentUser.role === "admin" || currentUser.role === "superadmin";
     const isManager = currentUser.employee_role === "manager";
@@ -45,21 +50,28 @@ export default function CalendarPage() {
       filter = { ...filter, assigned_to: currentUser.email };
     }
 
-    const list = await cachedRequest("Activity", "filter", { filter }, () => Activity.filter(filter));
+    const result = await cachedRequest("Activity", "filter", { filter }, () => Activity.filter(filter));
     
-    // CRITICAL FIX: Normalize dates properly - treat due_date as local date, not UTC
+    // Handle both array and { activities: [...] } response formats
+    const list = Array.isArray(result) ? result : (result?.activities || []);
+    
+    // Normalize dates: use due_date if available, otherwise default to today
+    const todayStr = format(new Date(), "yyyy-MM-dd");
     const normalized = (list || [])
-      .filter(a => !!a.due_date)
       .map(a => {
-        // Parse the stored due_date (which is in YYYY-MM-DD format)
+        // If activity has due_date, use it; otherwise show on today
+        const dateSource = a.due_date || todayStr;
+        // Parse the date (which is in YYYY-MM-DD format)
         // Create a date object treating the date as local (not UTC)
-        const [year, month, day] = a.due_date.split('-').map(Number);
+        const [year, month, day] = dateSource.split('-').map(Number);
         const localDate = new Date(year, month - 1, day);
         
         // Format as YYYY-MM-DD for grouping (this will be in local timezone)
         const dateKey = format(localDate, "yyyy-MM-dd");
         
-        console.log('[Calendar] Activity:', a.subject, 'due_date:', a.due_date, '_dateKey:', dateKey);
+        if (import.meta.env.DEV) {
+          console.log('[Calendar] Activity:', a.subject, 'due_date:', a.due_date, '_dateKey:', dateKey);
+        }
         
         return {
           ...a,
@@ -70,6 +82,18 @@ export default function CalendarPage() {
     console.log('[Calendar] Loaded activities:', normalized.length);
     setActivities(normalized);
   }, [currentUser, selectedTenantId, cachedRequest]);
+
+  // Listen for activity modifications to refresh calendar
+  useEffect(() => {
+    const handleActivityModified = (event) => {
+      if (event.detail?.entity === 'Activity') {
+        clearCache('Activity');
+        loadActivities();
+      }
+    };
+    window.addEventListener('entity-modified', handleActivityModified);
+    return () => window.removeEventListener('entity-modified', handleActivityModified);
+  }, [clearCache, loadActivities]);
 
   useEffect(() => {
     loadActivities();

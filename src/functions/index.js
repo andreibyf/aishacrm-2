@@ -17,12 +17,6 @@ export { cronOrphanCleanup } from './database/cronOrphanCleanup';
 export { trackEntityChange } from './database/trackEntityChange';
 export { getEntityAtDate } from './database/getEntityAtDate';
 
-// n8n Integration
-export { n8nCreateLead } from './integrations/n8nCreateLead';
-export { n8nCreateContact } from './integrations/n8nCreateContact';
-export { n8nGetData } from './integrations/n8nGetData';
-export { n8nUpdateContact } from './integrations/n8nUpdateContact';
-
 // Telephony & Call Management
 export { makeCall } from './telephony/makeCall';
 export { callStatus } from './telephony/callStatus';
@@ -39,7 +33,7 @@ export { checkScheduledAICalls } from './telephony/checkScheduledAICalls';
 export { cleanupUserData } from './users/cleanupUserData';
 export { updateUserRole } from './users/updateUserRole';
 export { inviteUser } from './users/inviteUser';
-// updateLastLogin - removed, now handled by backend /api/users/login and heartbeat
+export { updateLastLogin } from './users/updateLastLogin';
 export { checkUserRecord } from './users/checkUserRecord';
 export { userExistsByEmail } from './users/userExistsByEmail';
 export { listTenantUsers } from './users/listTenantUsers';

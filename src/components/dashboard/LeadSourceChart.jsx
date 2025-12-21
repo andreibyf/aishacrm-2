@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Cell,
@@ -9,6 +9,8 @@ import {
   Tooltip,
 } from "recharts";
 import { Lead } from "@/api/entities"; // ensure correct SDK import
+import { useUser } from "@/components/shared/useUser";
+import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
 import { Loader2, PieChart as PieChartIcon, TrendingUp } from "lucide-react";
 import { useApiManager } from "@/components/shared/ApiManager"; // Updated import path for useApiManager
 
@@ -22,10 +24,12 @@ const COLORS = [
   "#ff4d4d",
 ];
 
-export default function LeadSourceChart(props) { // Changed to receive `props`
+function LeadSourceChart(props) { // Changed to receive `props`
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const { cachedRequest } = useApiManager();
+  const { loading: userLoading } = useUser();
+  const { authCookiesReady } = useAuthCookiesReady();
 
   // Helper: compute chart data from a leads array
   const computeFromLeads = (leadsArr) => {
@@ -61,12 +65,26 @@ export default function LeadSourceChart(props) { // Changed to receive `props`
     const run = async () => {
       setLoading(true);
       try {
+        // Guard: wait for user + auth cookies
+        if (userLoading || !authCookiesReady) {
+          if (mounted) setLoading(true);
+          return;
+        }
         const tenantFilter = props?.tenantFilter || {};
         const showTestData = props?.showTestData;
 
+        // Guard: If no tenant_id in filter, don't fetch (superadmin needs to select tenant)
+        if (!tenantFilter.tenant_id) {
+          if (mounted) {
+            setData([]);
+            setLoading(false);
+          }
+          return;
+        }
+
         const effectiveFilter = showTestData
           ? { ...tenantFilter }
-          : Object.assign({}, tenantFilter, { is_test_data: { $ne: true } });
+          : Object.assign({}, tenantFilter, { is_test_data: false });
 
         // If prefetched leads are provided (from dashboard bundle), use them
         // `props.leadsData.length >= 0` is used to ensure it's an array and not null/undefined
@@ -89,6 +107,18 @@ export default function LeadSourceChart(props) { // Changed to receive `props`
           });
           computeFromLeads(filtered);
           setLoading(false); // Crucial to set loading to false when using prefetched data
+          // Background refresh to hydrate with full dataset
+          (async () => {
+            try {
+              const fullLeads = await cachedRequest(
+                "Lead",
+                "filter",
+                { filter: effectiveFilter },
+                () => Lead.filter(effectiveFilter),
+              );
+              if (mounted) computeFromLeads(fullLeads);
+            } catch { /* ignore background errors */ }
+          })();
           return; // Exit early as we've processed prefetched data
         }
 
@@ -119,7 +149,7 @@ export default function LeadSourceChart(props) { // Changed to receive `props`
       mounted = false;
     };
     // Depend on filter, test toggle, cachedRequest, and leadsData from parent
-  }, [props.tenantFilter, props.showTestData, props.leadsData, cachedRequest]);
+  }, [props.tenantFilter, props.showTestData, props.leadsData, cachedRequest, userLoading, authCookiesReady]);
 
   return (
     <Card className="bg-slate-800 border-slate-700 h-full">
@@ -173,6 +203,7 @@ export default function LeadSourceChart(props) { // Changed to receive `props`
                         outerRadius={80}
                         fill="#8884d8"
                         dataKey="value"
+                        isAnimationActive={false}
                       >
                         {data.filter((item) => item.value > 0).map((
                           entry,
@@ -253,3 +284,5 @@ export default function LeadSourceChart(props) { // Changed to receive `props`
     </Card>
   );
 }
+
+export default memo(LeadSourceChart);

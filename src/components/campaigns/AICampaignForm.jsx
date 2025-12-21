@@ -16,8 +16,9 @@ import {
   Zap,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Contact, Lead } from "@/api/entities";
-import { User } from "@/api/entities";
+import { Contact, Lead, TenantIntegration } from "@/api/entities";
+// Replaced direct User.me() usage with global user context hook
+import { useUser } from "@/components/shared/useUser.js";
 import { getTenantFilter } from "../shared/tenantUtils";
 import { useTenant } from "../shared/tenantContext";
 
@@ -47,11 +48,15 @@ const promptTemplates = {
 
 export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
   const [formData, setFormData] = useState({
+    campaign_type: "call",
     name: "",
     description: "",
     ai_provider: "callfluent",
     ai_prompt_template: "",
     call_objective: "follow_up",
+    // Email-only fields
+    email_subject: "",
+    email_body_template: "",
     target_contacts: [],
     call_settings: {
       max_duration: 300,
@@ -71,53 +76,67 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
     }
   });
 
+  const [allContacts, setAllContacts] = useState([]);
   const [availableContacts, setAvailableContacts] = useState([]);
   const [selectedContacts, setSelectedContacts] = useState([]);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [emailSendingProfiles, setEmailSendingProfiles] = useState([]);
+  const [callProviders, setCallProviders] = useState([]);
+  // Global user context (replaces prior local fetch via User.me())
+  const { user: currentUser } = useUser();
   const [previewPrompt, setPreviewPrompt] = useState("");
   const { selectedTenantId } = useTenant();
 
   useEffect(() => {
+    // Wait until user context is available
+    if (!currentUser) return;
+
     const loadData = async () => {
       try {
-        const user = await User.me();
-        setCurrentUser(user);
-
-        const tenantFilter = getTenantFilter(user, selectedTenantId);
+        const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
 
         const contactsData = await Contact.filter(tenantFilter);
         const leadsData = await Lead.filter(tenantFilter);
 
-        const combinedContacts = [
+        const combinedContactsAll = [
           ...contactsData.map(c => ({ ...c, type: 'contact' })),
           ...leadsData.map(l => ({ ...l, type: 'lead' }))
-        ].filter(c => c.phone);
+        ];
 
+        // Filter by channel: require phone for calls, email for emails
+        const combinedContacts = (formData.campaign_type === 'email')
+          ? combinedContactsAll.filter(c => c.email)
+          : combinedContactsAll.filter(c => c.phone);
+
+        setAllContacts(combinedContactsAll);
         setAvailableContacts(combinedContacts);
 
         if (campaign) {
+          const meta = campaign.metadata || {};
           setFormData({
+            campaign_type: meta.campaign_type || campaign.campaign_type || "call",
             name: campaign.name || "",
             description: campaign.description || "",
-            ai_provider: campaign.ai_provider || "callfluent",
-            ai_prompt_template: campaign.ai_prompt_template || "",
-            call_objective: campaign.call_objective || "follow_up",
+            ai_provider: meta.ai_provider || campaign.ai_provider || "callfluent",
+            ai_prompt_template: campaign.ai_prompt_template || meta.ai_prompt_template || "",
+            call_objective: campaign.call_objective || meta.call_objective || "follow_up",
+            email_subject: meta.ai_email_config?.subject || "",
+            email_body_template: meta.ai_email_config?.body_template || "",
             target_contacts: campaign.target_contacts || [],
             call_settings: {
-              max_duration: campaign.call_settings?.max_duration || 300,
-              retry_attempts: campaign.call_settings?.retry_attempts || 2,
-              business_hours_only: campaign.call_settings?.business_hours_only ?? true,
-              timezone: campaign.call_settings?.timezone || "America/New_York",
-              delay_between_calls: campaign.call_settings?.delay_between_calls || 60
+              max_duration: campaign.call_settings?.max_duration || meta.call_settings?.max_duration || 300,
+              retry_attempts: campaign.call_settings?.retry_attempts || meta.call_settings?.retry_attempts || 2,
+              business_hours_only: (campaign.call_settings?.business_hours_only ?? meta.call_settings?.business_hours_only ?? true),
+              timezone: campaign.call_settings?.timezone || meta.call_settings?.timezone || "America/New_York",
+              delay_between_calls: campaign.call_settings?.delay_between_calls || meta.call_settings?.delay_between_calls || 60
             },
             schedule_config: {
-              start_date: campaign.schedule_config?.start_date || "",
-              end_date: campaign.schedule_config?.end_date || "",
+              start_date: campaign.schedule_config?.start_date || meta.schedule_config?.start_date || "",
+              end_date: campaign.schedule_config?.end_date || meta.schedule_config?.end_date || "",
               preferred_hours: {
-                start: campaign.schedule_config?.preferred_hours?.start || "09:00",
-                end: campaign.schedule_config?.preferred_hours?.end || "17:00"
+                start: campaign.schedule_config?.preferred_hours?.start || meta.schedule_config?.preferred_hours?.start || "09:00",
+                end: campaign.schedule_config?.preferred_hours?.end || meta.schedule_config?.preferred_hours?.end || "17:00"
               },
-              excluded_days: campaign.schedule_config?.excluded_days || ["saturday", "sunday"]
+              excluded_days: campaign.schedule_config?.excluded_days || meta.schedule_config?.excluded_days || ["saturday", "sunday"]
             }
           });
 
@@ -146,7 +165,33 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
     };
 
     loadData();
-  }, [campaign, selectedTenantId]);
+  }, [campaign, selectedTenantId, currentUser, formData.campaign_type]);
+
+  // Load tenant integrations to enforce tenant-specific profiles
+  useEffect(() => {
+    if (!currentUser && !selectedTenantId) return;
+    const tenant_id = currentUser?.tenant_id || selectedTenantId;
+    if (!tenant_id) return;
+    (async () => {
+      try {
+        const integrations = await TenantIntegration.filter({ tenant_id, is_active: true });
+        const list = Array.isArray(integrations) ? integrations : [];
+        const lower = (s) => (s || "").toString().toLowerCase();
+        const emailProfiles = list.filter((i) => [
+          'gmail', 'outlook_email', 'webhook_email'
+        ].includes(lower(i.integration_type)));
+        const callList = list.filter((i) => {
+          const name = lower(i.integration_name);
+          const type = lower(i.integration_type);
+          return name.includes('callfluent') || name.includes('thoughtly') || type.includes('call');
+        });
+        setEmailSendingProfiles(emailProfiles);
+        setCallProviders(callList);
+      } catch (e) {
+        console.warn('[AICampaignForm] Failed to load tenant integrations', e);
+      }
+    })();
+  }, [currentUser, selectedTenantId]);
 
   useEffect(() => {
     if (!formData.ai_prompt_template) {
@@ -174,6 +219,14 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
       call_objective: objective,
       ai_prompt_template: template
     }));
+  };
+
+  const handleCampaignTypeChange = (value) => {
+    setFormData(prev => ({ ...prev, campaign_type: value }));
+    // When switching types, clear current selections and refilter contacts
+    setSelectedContacts([]);
+    const filtered = (value === 'email') ? allContacts.filter(c => c.email) : allContacts.filter(c => c.phone);
+    setAvailableContacts(filtered);
   };
 
   const handleContactSelection = (contactId, checked) => {
@@ -213,7 +266,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
       return {
         contact_id: contact?.id,
         contact_name: contactName,
-        phone: contact?.phone,
+        ...(formData.campaign_type === 'email' ? { email: contact?.email } : { phone: contact?.phone }),
         company: contactCompany,
         scheduled_date: formData.schedule_config.start_date,
         scheduled_time: formData.schedule_config.preferred_hours.start,
@@ -221,12 +274,28 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
       };
     });
 
+    const metadata = {
+      campaign_type: formData.campaign_type,
+      ai_provider: formData.ai_provider,
+      call_objective: formData.call_objective,
+      call_settings: formData.call_settings,
+      schedule_config: formData.schedule_config,
+      ai_email_config: formData.campaign_type === 'email' ? {
+        subject: formData.email_subject,
+        body_template: formData.email_body_template,
+        sending_profile_id: formData.email_sending_profile_id || "",
+      } : undefined,
+      ai_call_integration_id: formData.campaign_type === 'call' ? (formData.call_integration_id || "") : undefined,
+    };
+
     const submissionData = {
-      ...formData,
+      name: formData.name,
+      description: formData.description,
       target_contacts: targetContacts,
       tenant_id: currentUser?.tenant_id || selectedTenantId,
       assigned_to: currentUser?.email,
       status: "draft",
+      metadata,
       performance_metrics: {
         total_calls: 0,
         successful_calls: 0,
@@ -263,6 +332,18 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
           {/* Basic Info */}
           <div className="space-y-4">
             <div>
+              <Label htmlFor="campaign_type" className="text-slate-200">Campaign Type</Label>
+              <Select value={formData.campaign_type} onValueChange={handleCampaignTypeChange}>
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectItem value="call" className="focus:bg-slate-700">Phone Calls</SelectItem>
+                  <SelectItem value="email" className="focus:bg-slate-700">Emails</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
               <Label htmlFor="name" className="text-slate-200">Campaign Name</Label>
               <Input
                 id="name"
@@ -286,86 +367,140 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               />
             </div>
 
-            {/* AI Provider Selection */}
-            <div>
-              <Label htmlFor="ai_provider" className="text-slate-200">AI Calling Provider</Label>
-              <Select value={formData.ai_provider} onValueChange={(value) => setFormData(prev => ({ ...prev, ai_provider: value }))}>
-                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
-                  <SelectValue placeholder="Select AI provider" />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                  <SelectItem value="callfluent" className="focus:bg-slate-700">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                      CallFluent
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="thoughtly" className="focus:bg-slate-700">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                      Thoughtly
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-sm text-slate-500 mt-1">
-                Choose the AI calling platform for this campaign. Configure providers in Tenant Settings.
-              </p>
-            </div>
+            {/* Provider Selection (Calls only) */}
+            {formData.campaign_type === 'call' && (
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="ai_provider" className="text-slate-200">AI Calling Provider</Label>
+                  <Select value={formData.ai_provider} onValueChange={(value) => setFormData(prev => ({ ...prev, ai_provider: value }))}>
+                    <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                      <SelectValue placeholder="Select AI provider" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                      <SelectItem value="callfluent" className="focus:bg-slate-700">CallFluent</SelectItem>
+                      <SelectItem value="thoughtly" className="focus:bg-slate-700">Thoughtly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-slate-200">Tenant Call Provider/Agent</Label>
+                  <Select value={formData.call_integration_id || ""} onValueChange={(v) => setFormData(prev => ({ ...prev, call_integration_id: v }))}>
+                    <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                      <SelectValue placeholder="Select provider/agent" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                      <SelectItem value="">Select provider…</SelectItem>
+                      {callProviders.map(p => (
+                        <SelectItem key={p.id} value={p.id} className="focus:bg-slate-700">
+                          {(p.display_name || p.integration_name || p.id)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-slate-500 mt-1">Only integrations belonging to your tenant are listed.</p>
+                </div>
+              </div>
+            )}
           </div>
 
           <Separator className="bg-slate-700" />
 
-          {/* AI Configuration */}
+          {/* AI/Email Configuration */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold flex items-center gap-2 text-slate-100">
               <Target className="w-5 h-5" />
-              AI Configuration
+              {formData.campaign_type === 'email' ? 'Email Configuration' : 'AI Configuration'}
             </h3>
-
-            <div>
-              <Label htmlFor="call_objective" className="text-slate-200">Call Objective</Label>
-              <Select value={formData.call_objective} onValueChange={handleObjectiveChange}>
-                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                  {callObjectives.map((objective) => (
-                    <SelectItem key={objective.value} value={objective.value} className="focus:bg-slate-700">
-                      <div>
-                        <div className="font-medium">{objective.label}</div>
-                        <div className="text-xs text-slate-400">{objective.description}</div>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="ai_prompt_template" className="text-slate-200">AI Prompt Template</Label>
-              <Textarea
-                id="ai_prompt_template"
-                value={formData.ai_prompt_template}
-                onChange={(e) => setFormData(prev => ({ ...prev, ai_prompt_template: e.target.value }))}
-                rows={6}
-                placeholder="Enter the AI prompt template for this campaign..."
-                required
-                className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Use variables: {"{{contact_name}}"}, {"{{company}}"}, {"{{company_name}}"}
-              </p>
-            </div>
-
-            {/* Prompt Preview */}
-            {previewPrompt && (
-              <div>
-                <Label className="text-slate-200">Prompt Preview</Label>
-                <div className="p-3 bg-slate-800/50 border border-slate-700 rounded-md text-sm text-slate-300">
-                  {previewPrompt}
+            {formData.campaign_type === 'call' ? (
+              <>
+                <div>
+                  <Label htmlFor="call_objective" className="text-slate-200">Call Objective</Label>
+                  <Select value={formData.call_objective} onValueChange={handleObjectiveChange}>
+                    <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                      {callObjectives.map((objective) => (
+                        <SelectItem key={objective.value} value={objective.value} className="focus:bg-slate-700">
+                          <div>
+                            <div className="font-medium">{objective.label}</div>
+                            <div className="text-xs text-slate-400">{objective.description}</div>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
+
+                <div>
+                  <Label htmlFor="ai_prompt_template" className="text-slate-200">AI Prompt Template</Label>
+                  <Textarea
+                    id="ai_prompt_template"
+                    value={formData.ai_prompt_template}
+                    onChange={(e) => setFormData(prev => ({ ...prev, ai_prompt_template: e.target.value }))}
+                    rows={6}
+                    placeholder="Enter the AI prompt template for this campaign..."
+                    required
+                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    Use variables: {"{{contact_name}}"}, {"{{company}}"}, {"{{company_name}}"}
+                  </p>
+                </div>
+
+                {/* Prompt Preview */}
+                {previewPrompt && (
+                  <div>
+                    <Label className="text-slate-200">Prompt Preview</Label>
+                    <div className="p-3 bg-slate-800/50 border border-slate-700 rounded-md text-sm text-slate-300">
+                      {previewPrompt}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div>
+                  <Label className="text-slate-200">Email Sending Profile</Label>
+                  <Select value={formData.email_sending_profile_id || ""} onValueChange={(v) => setFormData(prev => ({ ...prev, email_sending_profile_id: v }))}>
+                    <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                      <SelectValue placeholder="Select sending profile" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                      <SelectItem value="">Select profile…</SelectItem>
+                      {emailSendingProfiles.map(p => (
+                        <SelectItem key={p.id} value={p.id} className="focus:bg-slate-700">
+                          {(p.display_name || p.integration_name || p.id)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-slate-500 mt-1">Profiles are limited to the current tenant.</p>
+                </div>
+                <div>
+                  <Label htmlFor="email_subject" className="text-slate-200">Email Subject</Label>
+                  <Input
+                    id="email_subject"
+                    value={formData.email_subject}
+                    onChange={(e) => setFormData(prev => ({ ...prev, email_subject: e.target.value }))}
+                    placeholder="e.g., Quick follow-up from {{company_name}}"
+                    required
+                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="email_body_template" className="text-slate-200">Email Body Template</Label>
+                  <Textarea
+                    id="email_body_template"
+                    value={formData.email_body_template}
+                    onChange={(e) => setFormData(prev => ({ ...prev, email_body_template: e.target.value }))}
+                    rows={8}
+                    placeholder="Write the email body... Use variables: {{contact_name}}, {{company}}, {{company_name}}"
+                    required
+                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                  />
+                </div>
+              </>
             )}
           </div>
 
@@ -390,7 +525,9 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
 
             <div className="max-h-60 overflow-y-auto border border-slate-700 rounded-md p-4 space-y-2">
               {availableContacts.length === 0 ? (
-                <p className="text-sm text-slate-500">No contacts with phone numbers found</p>
+                <p className="text-sm text-slate-500">
+                  {formData.campaign_type === 'email' ? 'No contacts with email addresses found' : 'No contacts with phone numbers found'}
+                </p>
               ) : (
                 availableContacts.map((contact) => (
                   <div key={contact.id} className="flex items-center gap-3 p-2 hover:bg-slate-800 rounded">
@@ -409,7 +546,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                         </span>
                         {contact.company && <span className="text-slate-400">- {contact.company}</span>}
                       </div>
-                      <div className="text-sm text-slate-400">{contact.phone}</div>
+                      <div className="text-sm text-slate-400">{formData.campaign_type === 'email' ? contact.email : contact.phone}</div>
                     </div>
                   </div>
                 ))
@@ -495,7 +632,8 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
 
           <Separator className="bg-slate-700" />
 
-          {/* Call Settings */}
+          {/* Call Settings (Calls only) */}
+          {formData.campaign_type === 'call' && (
           <div className="space-y-6">
             <h3 className="text-lg font-semibold flex items-center gap-2 text-slate-100">
               <Zap className="w-5 h-5" />
@@ -564,16 +702,19 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               <Label htmlFor="business_hours_only" className="text-slate-200">Only call during business hours</Label>
             </div>
           </div>
+          )}
 
-          <div className="mt-8">
-            <Alert className="bg-slate-800 border-slate-700">
-              <Zap className="h-4 w-4 text-blue-400" />
-              <AlertDescription className="text-slate-400">
-                <strong>{formData.ai_provider === 'callfluent' ? 'CallFluent' : 'Thoughtly'}</strong> will be used for all calls in this campaign.
-                Make sure the provider is configured for your tenant.
-              </AlertDescription>
-            </Alert>
-          </div>
+          {formData.campaign_type === 'call' && (
+            <div className="mt-8">
+              <Alert className="bg-slate-800 border-slate-700">
+                <Zap className="h-4 w-4 text-blue-400" />
+                <AlertDescription className="text-slate-400">
+                  <strong>{formData.ai_provider === 'callfluent' ? 'CallFluent' : 'Thoughtly'}</strong> will be used for all calls in this campaign.
+                  Make sure the provider is configured for your tenant.
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
 
           {/* Form Actions */}
           <div className="flex justify-end gap-3 pt-6 border-t border-slate-700">

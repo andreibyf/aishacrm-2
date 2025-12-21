@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, RefreshCw, Users, Building, Star, Target, Activity, BrainCircuit, History, Clock, AlertCircle, CheckCircle, AlertTriangle, ListTodo } from 'lucide-react';
+import { Loader2, RefreshCw, Users, Building, Star, Target, Activity, BrainCircuit, History, Clock, AlertCircle, CheckCircle, AlertTriangle, ListTodo, Shield, X } from 'lucide-react';
 import { toast } from "sonner";
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { timeApiCall } from '../utils/apiTimer';
@@ -28,21 +28,31 @@ export default function InternalPerformanceDashboard({ user }) {
     recentErrors: [],
     rawLogs: []
   });
+  const [securityStatus, setSecurityStatus] = useState({
+    blocked_ips: [],
+    active_trackers: 0,
+    redis_available: false
+  });
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(null);
 
   const loadMetrics = useCallback(async () => {
     setLoading(true);
     try {
-      // Get tenant_id from user context
-      const tenantId = user?.tenant_id || 'local-tenant-001';
-      
-      const [
-        perfLogsResp
-      ] = await timeApiCall('dashboard.loadAllMetrics', () => Promise.all([
-        // Use backend metrics API endpoint
-        fetch(`${BACKEND_URL}/api/metrics/performance?tenant_id=${tenantId}&limit=500`).then(r => r.json())
-      ]));
+      // Build metrics URL: superadmin sees global metrics (no tenant filter)
+      const isSuperAdmin = user?.role === 'superadmin';
+      const tenantId = user?.tenant_id || import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+      const metricsUrl = isSuperAdmin
+        ? `${BACKEND_URL}/api/metrics/performance?limit=500`
+        : `${BACKEND_URL}/api/metrics/performance?tenant_id=${tenantId}&limit=500`;
+
+      const [perfLogsResp, securityResp] = await timeApiCall(
+        'dashboard.loadAllMetrics',
+        () => Promise.all([
+          fetch(metricsUrl).then(r => r.json()),
+          fetch(`${BACKEND_URL}/api/security/status`).then(r => r.json()).catch(() => ({ data: { blocked_ips: [], active_trackers: 0 } }))
+        ])
+      );
 
       // Backend returns logs in data.logs and metrics in data.metrics
       const perfLogs = Array.isArray(perfLogsResp?.data?.logs) ? perfLogsResp.data.logs : [];
@@ -96,6 +106,9 @@ export default function InternalPerformanceDashboard({ user }) {
         rawLogs: transformedLogs.slice(0, 10)
       });
 
+      // Set security status (blocked IPs)
+      setSecurityStatus(securityResp?.data || { blocked_ips: [], active_trackers: 0, redis_available: false });
+
       setLastRefresh(new Date());
     } catch (error) {
       console.error("Error loading metrics:", error);
@@ -121,6 +134,28 @@ export default function InternalPerformanceDashboard({ user }) {
   const handleForceRecalculate = () => {
     toast.info("Recalculating performance metrics...");
     loadMetrics();
+  };
+
+  const handleUnblockIP = async (ip) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/security/unblock-ip`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip, reason: 'Manually unblocked by admin' })
+      });
+
+      const result = await response.json();
+
+      if (result.status === 'success') {
+        toast.success(`IP ${ip} unblocked successfully`);
+        loadMetrics(); // Refresh to show updated list
+      } else {
+        toast.error(`Failed to unblock IP: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('Error unblocking IP:', error);
+      toast.error(`Error unblocking IP: ${error.message}`);
+    }
   };
 
   const formatNumber = (num, digits = 0) => {
@@ -308,6 +343,64 @@ export default function InternalPerformanceDashboard({ user }) {
                     No recent errors logged.
                   </div>
                 }
+              </CardContent>
+            </Card>
+
+            {/* Blocked IPs (IDR System) */}
+            <Card className="bg-slate-800 border-slate-700">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-slate-100">
+                  <Shield className="w-5 h-5 text-orange-500" />
+                  Blocked IPs (Intrusion Detection)
+                  <Badge variant="outline" className="ml-auto text-xs">
+                    {securityStatus.redis_available ? 'Redis Active' : 'In-Memory Only'}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {securityStatus.blocked_ips && securityStatus.blocked_ips.length > 0 ? (
+                  <div className="space-y-2">
+                    {securityStatus.blocked_ips.map((blockedIP, index) => {
+                      const expiresAt = blockedIP.expires_at !== 'unknown'
+                        ? new Date(blockedIP.expires_at)
+                        : null;
+                      const expiresIn = blockedIP.expires_in_seconds > 0
+                        ? `${Math.floor(blockedIP.expires_in_seconds / 60)}m ${blockedIP.expires_in_seconds % 60}s`
+                        : 'Expired';
+
+                      return (
+                        <div key={index} className="p-3 bg-orange-900/20 rounded border border-orange-700/40 text-sm flex items-center justify-between">
+                          <div>
+                            <p className="text-orange-400 font-mono font-semibold">{blockedIP.ip}</p>
+                            <p className="text-orange-500 text-xs mt-1">
+                              Blocked: {blockedIP.blocked_at !== 'unknown' ? new Date(blockedIP.blocked_at).toLocaleString() : 'Unknown'}
+                            </p>
+                            <p className="text-orange-500 text-xs">
+                              Expires: {expiresAt ? expiresAt.toLocaleString() : expiresIn}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleUnblockIP(blockedIP.ip)}
+                            className="text-orange-400 hover:text-orange-300 hover:bg-orange-900/30"
+                            title="Unblock this IP"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                    <p className="text-xs text-slate-500 mt-2">
+                      Active suspicious activity trackers: {securityStatus.active_trackers}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-slate-400">
+                    <Shield className="w-8 h-8 mx-auto mb-2 text-green-600" />
+                    No IPs currently blocked by intrusion detection.
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

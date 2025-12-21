@@ -4,8 +4,17 @@
  * Provides functions to log user management actions for compliance and security tracking.
  * Logs are stored in the system_logs table via the backend API.
  */
+import { enqueueSystemLog } from '@/utils/systemLogBatcher.js';
 
-import { callBackendAPI } from '@/api/entities.js';
+// Central log level gate: default to ERROR-only unless explicitly widened via env.
+// Supported levels (ascending verbosity): ERROR, WARN, INFO
+const LEVEL_ORDER = ['ERROR','WARN','INFO'];
+const envLevel = (import.meta.env.VITE_SYSTEM_LOG_LEVEL || 'ERROR').toUpperCase();
+const effectiveIndex = LEVEL_ORDER.indexOf(envLevel) === -1 ? 0 : LEVEL_ORDER.indexOf(envLevel);
+function shouldSend(level){
+  const idx = LEVEL_ORDER.indexOf((level||'').toUpperCase());
+  return idx !== -1 && idx <= effectiveIndex; // allow if level severity >= configured threshold
+}
 
 /**
  * Log when CRM access is granted to a user
@@ -15,7 +24,8 @@ import { callBackendAPI } from '@/api/entities.js';
  */
 export async function logCRMAccessGrant(actor, targetUser, details = {}) {
   try {
-    await callBackendAPI('system-logs', 'POST', {
+    if (!shouldSend('INFO')) return; // Skip if below threshold
+    await enqueueSystemLog({
       tenant_id: targetUser?.tenant_id || actor?.tenant_id || 'global',
       level: 'INFO',
       message: `CRM access granted to ${targetUser?.email} by ${actor?.email}`,
@@ -52,7 +62,8 @@ export async function logCRMAccessGrant(actor, targetUser, details = {}) {
  */
 export async function logCRMAccessRevoke(actor, targetUser, details = {}) {
   try {
-    await callBackendAPI('system-logs', 'POST', null, {
+    if (!shouldSend('WARN')) return;
+    await enqueueSystemLog({
       tenant_id: targetUser?.tenant_id || actor?.tenant_id || 'global',
       level: 'WARN',
       message: `CRM access revoked from ${targetUser?.email} by ${actor?.email}`,
@@ -88,7 +99,8 @@ export async function logCRMAccessRevoke(actor, targetUser, details = {}) {
  */
 export async function logUserCreated(actor, newUser, details = {}) {
   try {
-    await callBackendAPI('system-logs', 'POST', null, {
+    if (!shouldSend('INFO')) return;
+    await enqueueSystemLog({
       tenant_id: newUser?.tenant_id || actor?.tenant_id || 'global',
       level: 'INFO',
       message: `User created: ${newUser?.email} (${newUser?.role}) by ${actor?.email}`,
@@ -128,7 +140,8 @@ export async function logUserCreated(actor, newUser, details = {}) {
  */
 export async function logUserUpdated(actor, targetUser, changes = {}, details = {}) {
   try {
-    await callBackendAPI('system-logs', 'POST', null, {
+    if (!shouldSend('INFO')) return;
+    await enqueueSystemLog({
       tenant_id: targetUser?.tenant_id || actor?.tenant_id || 'global',
       level: 'INFO',
       message: `User updated: ${targetUser?.email} by ${actor?.email}`,
@@ -165,7 +178,8 @@ export async function logUserUpdated(actor, targetUser, changes = {}, details = 
  */
 export async function logRoleChange(actor, targetUser, oldRole, newRole) {
   try {
-    await callBackendAPI('system-logs', 'POST', null, {
+    if (!shouldSend('WARN')) return;
+    await enqueueSystemLog({
       tenant_id: targetUser?.tenant_id || actor?.tenant_id || 'global',
       level: 'WARN',
       message: `Role changed: ${targetUser?.email} from ${oldRole} to ${newRole} by ${actor?.email}`,
@@ -200,7 +214,8 @@ export async function logRoleChange(actor, targetUser, oldRole, newRole) {
  */
 export async function logUserDeleted(actor, deletedUser, details = {}) {
   try {
-    await callBackendAPI('system-logs', 'POST', null, {
+    if (!shouldSend('WARN')) return;
+    await enqueueSystemLog({
       tenant_id: deletedUser?.tenant_id || actor?.tenant_id || 'global',
       level: 'WARN',
       message: `User deleted: ${deletedUser?.email || deletedUser?.id} by ${actor?.email}`,
@@ -234,7 +249,8 @@ export async function logUserDeleted(actor, deletedUser, details = {}) {
  */
 export async function logUnauthorizedAttempt(actor, action, details = {}) {
   try {
-    await callBackendAPI('system-logs', 'POST', null, {
+    if (!shouldSend('ERROR')) return;
+    await enqueueSystemLog({
       tenant_id: actor?.tenant_id || 'global',
       level: 'ERROR',
       message: `Unauthorized attempt: ${actor?.email} tried to ${action}`,

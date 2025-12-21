@@ -1,0 +1,64 @@
+// Executive Assistant Tools - Web Research & External Data
+// Fetch information from the web, search for company data
+
+import { Result, CRMError } from "../../spec/types.braid"
+
+fn searchWeb(
+  query: String,
+  max_results: Number
+) -> Result<Array, CRMError> !net {
+  // Note: In production, integrate with Google Custom Search API, Bing API, or similar
+  // For now, this is a placeholder that would call an external search service
+  
+  let url = "/api/utils/web-search";
+  let params = {
+    q: query,
+    max_results: max_results
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn fetchWebPage(
+  url_to_fetch: String
+) -> Result<Object, CRMError> !net {
+  // Fetch and parse a web page
+  let url = "/api/utils/fetch-page";
+  let body = {
+    url: url_to_fetch
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn lookupCompanyInfo(
+  company_name: String,
+  domain: String
+) -> Result<Object, CRMError> !net {
+  // Enrich company data from external sources
+  let url = "/api/utils/company-lookup";
+  let body = {
+    company_name: company_name,
+    domain: domain
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

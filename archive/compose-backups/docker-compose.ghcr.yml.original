@@ -1,0 +1,9 @@
+# Backup of previous GHCR override compose file
+# Timestamp: 2025-11-27
+services:
+  backend:
+    image: ghcr.io/andreibyf/aishacrm-2-backend:v1.0.9
+    build: null
+  frontend:
+    image: ghcr.io/andreibyf/aishacrm-2-frontend:v1.0.9
+    build: null

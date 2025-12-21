@@ -1,12 +1,36 @@
-import js from '@eslint/js'
-import globals from 'globals'
-import react from 'eslint-plugin-react'
-import reactHooks from 'eslint-plugin-react-hooks'
-import reactRefresh from 'eslint-plugin-react-refresh'
-import prettier from 'eslint-config-prettier'
+import js from '@eslint/js';
+import globals from 'globals';
+import react from 'eslint-plugin-react';
+import reactHooks from 'eslint-plugin-react-hooks';
+import reactRefresh from 'eslint-plugin-react-refresh';
+import prettier from 'eslint-config-prettier';
 
 export default [
-  { ignores: ['dist', 'logseq/**', 'scripts/**', 'backend/node_modules/**', 'src/functions/**', 'node_modules/**', '.DS_Store', '*.local', '.env.*', '*.env', 'logseq/bak/**', 'playwright-report/**', 'test-results/**'] },
+  {
+    ignores: [
+      'dist',
+      '**/dist/**',
+      'braid-mcp-node-server/dist/**',
+      'n8n-nodes-mcp/**',
+      'logseq/**',
+      'scripts/**',
+      'backend/node_modules/**',
+      'src/functions/**',
+      'src/functions.archived/**',
+      'node_modules/**',
+      '.DS_Store',
+      '*.local',
+      '.env.*',
+      '*.env',
+      'logseq/bak/**',
+      'playwright-report/**',
+      'test-results/**',
+      'playwright/.cache/**',
+      'orchestra/**',
+      'archive/**',
+      'backend/archive/**',
+    ],
+  },
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {
@@ -31,11 +55,9 @@ export default [
       ...reactHooks.configs.recommended.rules,
       'react/jsx-no-target-blank': 'off',
       'react/prop-types': 'off', // Disabled - using modern React patterns instead of legacy PropTypes
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }], // Allow underscore-prefixed unused vars
-      'react-refresh/only-export-components': [
-        'warn',
-        { allowConstantExport: true },
-      ],
+      // Allow underscore-prefixed unused vars and ignore unused React import in JSX runtime projects
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^(?:React|_)' }],
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       // Lower-volume policy: many components include unescaped characters in
       // long docs/strings and several case-declaration patterns trip the linter
       // as errors. Treat these as warnings for now so CI/dev workflow isn't
@@ -46,7 +68,13 @@ export default [
   },
   // Backend (Node.js) override: allow Node globals like `process`, disable React rules
   {
-    files: ['backend/**/*.js', 'vite.config.js', 'tailwind.config.js', 'postcss.config.js', 'playwright.config.js'],
+    files: [
+      'backend/**/*.js',
+      'vite.config.js',
+      'tailwind.config.js',
+      'postcss.config.js',
+      'playwright.config.js',
+    ],
     languageOptions: {
       ecmaVersion: 2020,
       globals: {
@@ -70,16 +98,38 @@ export default [
       'react/jsx-no-target-blank': 'off',
       'react/prop-types': 'off',
       'react-refresh/only-export-components': 'off',
-      // Keep unused vars as warnings, ignore underscored args/vars
+      // Keep unused vars as warnings, ignore underscored args/vars/caught errors
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
+      // Disallow direct Postgres access; use Supabase client instead
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            { name: 'pg', message: 'Use Supabase client (backend/lib/supabase-db.js) instead of pg' },
+          ],
+        },
+      ],
+    },
+  },
+  // Maintenance scripts override: allow 'pg' in non-runtime backend scripts
+  {
+    files: ['backend/*.js', 'backend/scripts/**/*.js'],
+    ignores: ['backend/server.js', 'backend/routes/**', 'backend/workers/**', 'backend/lib/**', 'backend/middleware/**'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: { ...globals.node },
+      parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-undef': 'off',
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-restricted-imports': 'off',
     },
   },
   // Root scripts override: Node environment for maintenance/utility scripts at repo root
   {
-    files: [
-      '*.js',
-      'scripts/**/*.js',
-    ],
+    files: ['*.js', 'scripts/**/*.js'],
     languageOptions: {
       ecmaVersion: 2020,
       globals: {
@@ -159,4 +209,4 @@ export default [
   },
   // Disable ESLint rules that conflict with Prettier formatting
   prettier,
-]
+];

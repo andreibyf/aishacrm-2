@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
-import { User } from "@/api/entities";
+import { useCallback, useState } from "react";
 import {
   Card,
   CardContent,
@@ -22,24 +21,13 @@ import DocumentExtractor from "../components/documents/DocumentExtractor";
 import ProcessingHistory from "../components/documents/ProcessingHistory";
 import CashFlowExtractor from "../components/documents/CashFlowExtractor"; // New import
 import { ArrowRightLeft } from "lucide-react"; // New icon import
+import { useUser } from "../components/shared/useUser.js";
 
 export default function DocumentProcessing() {
   const [activeProcessor, setActiveProcessor] = useState(null);
   const [, setUploadMode] = useState(null); // 'extract' or 'storage'
   const [isProcessing, setIsProcessing] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
-
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const user = await User.me();
-        setCurrentUser(user);
-      } catch (error) {
-        console.error("Failed to load user in DocumentProcessing:", error);
-      }
-    };
-    loadUser();
-  }, []);
+  const { user: currentUser } = useUser();
 
   const handleCancel = useCallback(() => {
     setActiveProcessor(null);
@@ -245,6 +233,7 @@ function StorageUploader({ onCancel, onProcessingChange }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
+  const { user: currentUser } = useUser();
 
   const handleFileSelect = (event) => {
     const file = event.target.files[0];
@@ -259,30 +248,36 @@ function StorageUploader({ onCancel, onProcessingChange }) {
     onProcessingChange(true);
 
     try {
-      const { UploadPrivateFile } = await import("@/api/integrations");
+      const { UploadFile } = await import("@/api/integrations");
       const { DocumentationFile } = await import("@/api/entities");
-      const { User } = await import("@/api/entities");
 
-      // Upload file to private storage
-      const uploadResult = await UploadPrivateFile({ file: selectedFile });
-
-      if (!uploadResult.file_uri) {
-        throw new Error("File upload failed - no URI returned");
+      // Current user provided by global context
+      if (!currentUser) {
+        throw new Error("User not loaded");
       }
 
-      // Get current user for tenant info
-      const currentUser = await User.me();
+      // Upload file to storage
+      const uploadResult = await UploadFile({ 
+        file: selectedFile,
+        tenant_id: currentUser.tenant_id 
+      });
+
+      if (!uploadResult.file_url) {
+        throw new Error("File upload failed - no URL returned");
+      }
 
       // Create document record for storage
       const documentRecord = await DocumentationFile.create({
         title: selectedFile.name,
-        description: "Document uploaded for storage only",
-        file_name: selectedFile.name,
-        file_uri: uploadResult.file_uri,
-        file_type: selectedFile.type.split("/")[1] || "unknown",
+        filename: selectedFile.name,
+        filepath: uploadResult.filename, // Storage path from upload
+        file_uri: uploadResult.file_url,  // Public/signed URL
+        filesize: selectedFile.size,
+        mimetype: selectedFile.type,
         category: "other",
         tenant_id: currentUser.tenant_id,
         tags: ["storage-upload"],
+        uploaded_by: currentUser.email || currentUser.username,
       });
 
       setUploadResult({

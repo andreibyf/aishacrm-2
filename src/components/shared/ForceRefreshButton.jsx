@@ -7,10 +7,30 @@ export default function ForceRefreshButton({ _entityName, onRefresh }) {
   const { clearCache } = useApiManager();
 
   const handleRefresh = () => {
-    // Clear all caches
+    // Clear API cache
     clearCache();
+    
+    // Preserve navigation order preferences before clearing localStorage
+    const navOrderKeys = [];
+    const navOrderValues = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith("aisha_crm_nav_order") || key.startsWith("aisha_crm_secondary_nav_order"))) {
+        navOrderKeys.push(key);
+        navOrderValues.push(localStorage.getItem(key));
+      }
+    }
+    
+    // Clear storage
     localStorage.clear();
     sessionStorage.clear();
+    
+    // Restore navigation order preferences
+    navOrderKeys.forEach((key, index) => {
+      if (navOrderValues[index]) {
+        localStorage.setItem(key, navOrderValues[index]);
+      }
+    });
 
     toast.success("Cache cleared! Refreshing...");
 

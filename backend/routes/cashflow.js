@@ -4,47 +4,72 @@
  */
 
 import express from 'express';
+import { validateTenantScopedId } from '../lib/validation.js';
+import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
+import { getSupabaseClient } from '../lib/supabase-db.js';
 
-export default function createCashFlowRoutes(pgPool) {
+/**
+ * @module routes/cashflow
+ * @description Cash flow management routes
+ */
+
+export default function createCashFlowRoutes(_pgPool) {
   const router = express.Router();
+  const supabase = getSupabaseClient();
+
+  // Enforce tenant scoping and employee data scope consistently with other routes
+  router.use(validateTenantAccess);
+  router.use(enforceEmployeeDataScope);
 
   // GET /api/cashflow - List cash flow records
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, limit = 50, offset = 0, type } = req.query;
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
+      let { tenant_id, limit = 50, offset = 0, type } = req.query;
 
-      let query = 'SELECT * FROM cash_flow WHERE 1=1';
-      const params = [];
-      let pc = 1;
-      if (tenant_id) { query += ` AND tenant_id = $${pc}`; params.push(tenant_id); pc++; }
-      if (type) { query += ` AND type = $${pc}`; params.push(type); pc++; }
-      query += ` ORDER BY transaction_date DESC LIMIT $${pc} OFFSET $${pc + 1}`;
-      params.push(parseInt(limit), parseInt(offset));
+      let query = supabase
+        .from('cash_flow')
+        .select('*', { count: 'exact' })
+        .order('transaction_date', { ascending: false });
 
-      const result = await pgPool.query(query, params);
-      let countQuery = 'SELECT COUNT(*) FROM cash_flow WHERE 1=1';
-      const countParams = [];
-      let cpc = 1;
-      if (tenant_id) { countQuery += ` AND tenant_id = $${cpc}`; countParams.push(tenant_id); cpc++; }
-      if (type) { countQuery += ` AND type = $${cpc}`; countParams.push(type); }
-      const countResult = await pgPool.query(countQuery, countParams);
+      if (tenant_id) {
+        query = query.eq('tenant_id', tenant_id);
+      }
+      if (type) {
+        query = query.eq('type', type);
+      }
 
-      res.json({ status: 'success', data: { cashflow: result.rows, total: parseInt(countResult.rows[0].count) } });
+      const { data, error, count } = await query
+        .range(Number(offset), Number(offset) + Number(limit) - 1);
+
+      if (error) throw error;
+
+      res.json({ status: 'success', data: { cashflow: data || [], total: count || 0 } });
     } catch (error) {
       console.error('Error fetching cash flow:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
-  // GET /api/cashflow/:id - Get single record
+  // GET /api/cashflow/:id - Get single record (tenant scoped)
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      const result = await pgPool.query('SELECT * FROM cash_flow WHERE id = $1', [id]);
-      if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
-      res.json({ status: 'success', data: { cashflow: result.rows[0] } });
+      let { tenant_id } = req.query || {};
+      // Accept UUID or slug; normalize
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
+
+      const { data, error } = await supabase
+        .from('cash_flow')
+        .select('*')
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return res.status(404).json({ status: 'error', message: 'Not found' });
+      // Safety check
+      if (data.tenant_id !== tenant_id) return res.status(404).json({ status: 'error', message: 'Not found' });
+      res.json({ status: 'success', data: { cashflow: data } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }
@@ -57,54 +82,90 @@ export default function createCashFlowRoutes(pgPool) {
       if (!c.tenant_id || !c.amount || !c.type || !c.transaction_date) {
         return res.status(400).json({ status: 'error', message: 'tenant_id, amount, type, and transaction_date required' });
       }
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
 
-      const query = `INSERT INTO cash_flow (tenant_id, transaction_date, amount, type, category, description, account_id, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`;
-      const vals = [c.tenant_id, c.transaction_date, c.amount, c.type, c.category || null, c.description || null, c.account_id || null, JSON.stringify(c.metadata || {})];
-      const result = await pgPool.query(query, vals);
-      res.status(201).json({ status: 'success', message: 'Created', data: { cashflow: result.rows[0] } });
+      // Normalize tenant_id if UUID provided
+      const resolvedTenantId = c.tenant_id;
+
+      const { data, error } = await supabase
+        .from('cash_flow')
+        .insert({
+          tenant_id: resolvedTenantId,
+          transaction_date: c.transaction_date,
+          amount: c.amount,
+          type: c.type,
+          category: c.category || null,
+          description: c.description || null,
+          account_id: c.account_id || null,
+          metadata: c.metadata || {}
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      res.status(201).json({ status: 'success', message: 'Created', data: { cashflow: data } });
     } catch (error) {
       console.error('Error creating cash flow:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
-  // PUT /api/cashflow/:id - Update record
+  // PUT /api/cashflow/:id - Update record (tenant scoped)
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      let { tenant_id } = req.query || {};
       const u = req.body;
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
 
       const allowed = ['transaction_date', 'amount', 'type', 'category', 'description', 'account_id', 'metadata'];
-      const sets = [], vals = [];
-      let pc = 1;
+      const updatePayload = {};
       Object.entries(u).forEach(([k, v]) => {
         if (allowed.includes(k)) {
-          sets.push(`${k} = $${pc}`);
-          vals.push(k === 'metadata' ? JSON.stringify(v) : v);
-          pc++;
+          updatePayload[k] = v;
         }
       });
-      if (sets.length === 0) return res.status(400).json({ status: 'error', message: 'No valid fields' });
-      vals.push(id);
-      const result = await pgPool.query(`UPDATE cash_flow SET ${sets.join(', ')} WHERE id = $${pc} RETURNING *`, vals);
-      if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
-      res.json({ status: 'success', message: 'Updated', data: { cashflow: result.rows[0] } });
+
+      if (Object.keys(updatePayload).length === 0) {
+        return res.status(400).json({ status: 'error', message: 'No valid fields' });
+      }
+
+      const { data, error } = await supabase
+        .from('cash_flow')
+        .update(updatePayload)
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .select()
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return res.status(404).json({ status: 'error', message: 'Not found' });
+
+      res.json({ status: 'success', message: 'Updated', data: { cashflow: data } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
-  // DELETE /api/cashflow/:id - Delete record
+  // DELETE /api/cashflow/:id - Delete record (tenant scoped)
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      if (!pgPool) return res.status(503).json({ status: 'error', message: 'Database not configured' });
-      const result = await pgPool.query('DELETE FROM cash_flow WHERE id = $1 RETURNING id', [id]);
-      if (result.rows.length === 0) return res.status(404).json({ status: 'error', message: 'Not found' });
-      res.json({ status: 'success', message: 'Deleted', data: { id: result.rows[0].id } });
+      let { tenant_id } = req.query || {};
+      if (!validateTenantScopedId(id, tenant_id, res)) return;
+
+      const { data, error } = await supabase
+        .from('cash_flow')
+        .delete()
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .select('id')
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return res.status(404).json({ status: 'error', message: 'Not found' });
+
+      res.json({ status: 'success', message: 'Deleted', data: { id: data.id } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }
@@ -113,8 +174,34 @@ export default function createCashFlowRoutes(pgPool) {
   // GET /api/cashflow/summary - Get cash flow summary
   router.get('/summary', async (req, res) => {
     try {
-      const { tenant_id, start_date, end_date } = req.query;
-      res.json({ status: 'success', data: { tenant_id, period: { start_date, end_date }, income: 0, expenses: 0, net: 0 } });
+      let { tenant_id, start_date, end_date } = req.query;
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      // Normalize tenant id
+
+      let query = supabase
+        .from('cash_flow')
+        .select('type, amount')
+        .eq('tenant_id', tenant_id);
+
+      if (start_date) {
+        query = query.gte('transaction_date', start_date);
+      }
+      if (end_date) {
+        query = query.lte('transaction_date', end_date);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      // Client-side aggregation
+      const income = (data || []).filter(r => r.type === 'income').reduce((sum, r) => sum + Number(r.amount), 0);
+      const expenses = (data || []).filter(r => r.type === 'expense').reduce((sum, r) => sum + Number(r.amount), 0);
+      const net = income - expenses;
+
+      res.json({ status: 'success', data: { tenant_id, period: { start_date: start_date || null, end_date: end_date || null }, income, expenses, net } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }

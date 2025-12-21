@@ -22,6 +22,12 @@ const InviteUserModal = ({ tenants, onInvite, onCancel }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        
+        // Prevent double-submission
+        if (sending) {
+            return;
+        }
+        
         if (!email || !fullName) {
             toast.error("Full Name and Email are required.");
             return;

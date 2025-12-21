@@ -1,5 +1,6 @@
-import { base44 } from './base44Client';
 import { isLocalDevMode } from './mockData';
+import { getBackendUrl } from '@/api/backendUrl';
+import { logDev } from '@/utils/devLogger';
 
 // Optional direct MCP server URL (useful for connecting your own MCP instance)
 const MCP_SERVER_URL = import.meta.env.VITE_MCP_SERVER_URL || null;
@@ -16,7 +17,7 @@ const callMCPServerDirect = async (payload) => {
   } else {
     try {
       // Try to infer tenant_id from payload.params or payload.context
-      const tenantId = payload?.params?.tenant_id || payload?.params?.tenantId || payload?.context?.tenant_id || 'local-tenant-001';
+      const tenantId = payload?.params?.tenant_id || payload?.params?.tenantId || payload?.context?.tenant_id || import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
       const storageKey = `local_user_api_key_${tenantId}`;
       const stored = localStorage.getItem(storageKey);
       if (stored) headers['x-api-key'] = stored;
@@ -43,14 +44,167 @@ const createFunctionProxy = (functionName) => {
   // Provide local fallbacks for functions used by Settings checks and CRUD operations
   // so the UI works in standalone mode without backend/cloud-functions running.
   return async (...args) => {
+    // Unified handler for chat: always call backend /api/ai/chat so ChatInterface uses the tools pipeline
+    if (functionName === 'processChatCommand') {
+      try {
+        const BACKEND_URL = getBackendUrl();
+        const opts = args[0] || {};
+
+        // Prefer explicit tenantId (from caller/user context), then selected_tenant_id, then legacy tenant_id
+        let tenantId = opts.tenantId || opts.tenant_id || opts.userTenantId || '';
+        let tenantSource = tenantId ? 'explicit' : '';
+
+        if (!tenantId && typeof localStorage !== 'undefined') {
+          tenantId = localStorage.getItem('selected_tenant_id') || '';
+          tenantSource = tenantId ? 'selected_tenant_id' : '';
+          if (!tenantId) {
+            tenantId = localStorage.getItem('tenant_id') || '';
+            tenantSource = tenantId ? 'tenant_id (legacy)' : 'none';
+          }
+        }
+
+        if (import.meta.env.DEV) {
+          logDev(`[processChatCommand] tenantId=${tenantId || 'none'} (source: ${tenantSource || 'none'})`);
+        }
+
+        const messages = Array.isArray(opts.messages)
+          ? opts.messages
+          : [{ role: 'user', content: String(opts.message || '').trim() }].filter(m => m.content);
+        const body = {
+          messages,
+          model: opts.model,
+          temperature: typeof opts.temperature === 'number' ? opts.temperature : undefined,
+          api_key: opts.api_key
+        };
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (tenantId) {
+          headers['x-tenant-id'] = tenantId;
+        } else if (import.meta.env.DEV) {
+          console.warn('[processChatCommand] Missing tenantId (superadmin global view or not selected). Header omitted.');
+        }
+
+        const resp = await fetch(`${BACKEND_URL}/api/ai/chat`, {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify(body)
+        });
+        const json = await resp.json().catch(() => ({}));
+        return { status: resp.status, data: json };
+      } catch (err) {
+        return { status: 500, data: { status: 'error', message: err?.message || String(err) } };
+      }
+    }
+
+    // Developer AI handler: superadmin-only Claude-powered code assistant
+    if (functionName === 'processDeveloperCommand') {
+      try {
+        const BACKEND_URL = getBackendUrl();
+        const opts = args[0] || {};
+
+        if (import.meta.env.DEV) {
+          logDev(`[processDeveloperCommand] Developer AI request`);
+        }
+
+        const messages = Array.isArray(opts.messages)
+          ? opts.messages
+          : [{ role: 'user', content: String(opts.message || '').trim() }].filter(m => m.content);
+
+        const body = { messages };
+
+        // Get user role - prefer passed values (from React context), fallback to localStorage
+        let userRole = opts.userRole || '';
+        let userEmail = opts.userEmail || '';
+
+        // Fallback to localStorage if not passed
+        if (!userRole) {
+          try {
+            const userDataStr = localStorage.getItem('user_data');
+            if (userDataStr) {
+              const userData = JSON.parse(userDataStr);
+              userRole = userData?.role || '';
+              userEmail = userData?.email || '';
+            }
+          } catch {
+            // Fallback to direct role storage
+            userRole = localStorage.getItem('user_role') || '';
+            userEmail = localStorage.getItem('user_email') || '';
+          }
+        }
+
+        if (import.meta.env.DEV) {
+          logDev(`[processDeveloperCommand] userRole=${userRole}, userEmail=${userEmail}`);
+        }
+
+        const headers = {
+          'Content-Type': 'application/json',
+          'x-user-role': userRole,
+          'x-user-email': userEmail
+        };
+
+        const resp = await fetch(`${BACKEND_URL}/api/ai/developer`, {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify(body)
+        });
+        const json = await resp.json().catch(() => ({}));
+        return { status: resp.status, data: json };
+      } catch (err) {
+        return { status: 500, data: { status: 'error', message: err?.message || String(err) } };
+      }
+    }
+
     if (isLocalDevMode()) {
+            // ========================================
+            // Dashboard Stats & Bundle (Local Dev -> call backend directly)
+            // ========================================
+            if (functionName === 'getDashboardStats') {
+              try {
+                const BACKEND_URL = getBackendUrl();
+                const opts = args[0] || {};
+                const params = new URLSearchParams();
+                if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
+                const resp = await fetch(`${BACKEND_URL}/api/reports/dashboard-stats?${params}`, {
+                  method: 'GET',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                });
+                const json = await resp.json().catch(() => ({}));
+                return { data: json.data || json };
+              } catch (err) {
+                console.warn('[Local Dev Mode] getDashboardStats failed:', err?.message || err);
+                return { data: { status: 'error', message: err?.message || String(err) } };
+              }
+            }
+
+            if (functionName === 'getDashboardBundle') {
+              try {
+                const BACKEND_URL = getBackendUrl();
+                const opts = args[0] || {};
+                const params = new URLSearchParams();
+                if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
+                if (typeof opts.include_test_data !== 'undefined') params.append('include_test_data', String(!!opts.include_test_data));
+                const resp = await fetch(`${BACKEND_URL}/api/reports/dashboard-bundle?${params}`, {
+                  method: 'GET',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                });
+                const json = await resp.json().catch(() => ({}));
+                return { data: json.data || json };
+              } catch (err) {
+                console.warn('[Local Dev Mode] getDashboardBundle failed:', err?.message || err);
+                return { data: { status: 'error', message: err?.message || String(err) } };
+              }
+            }
       // ========================================
       // Workflows (Local Backend)
       // ========================================
 
       if (functionName === 'executeWorkflow') {
         try {
-          const BACKEND_URL = import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:3001';
+          const BACKEND_URL = getBackendUrl();
           const { workflow_id, payload, input_data } = args[0] || {};
           const body = { workflow_id, payload: payload ?? input_data };
           const response = await fetch(`${BACKEND_URL}/api/workflows/execute`, {
@@ -78,7 +232,7 @@ const createFunctionProxy = (functionName) => {
         try {
           const payload = args[0] || {};
           const { employeeId, employeeData, tenantId } = payload;
-          const key = `local_employees_${tenantId || 'local-tenant-001'}`;
+          const key = `local_employees_${tenantId || import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46'}`;
           const raw = localStorage.getItem(key);
           const list = raw ? JSON.parse(raw) : [];
 
@@ -98,7 +252,7 @@ const createFunctionProxy = (functionName) => {
           const newEmployee = {
             id: `local-emp-${Date.now()}`,
             ...employeeData,
-            tenant_id: tenantId || 'local-tenant-001',
+            tenant_id: tenantId || import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           };
@@ -116,7 +270,7 @@ const createFunctionProxy = (functionName) => {
       // ========================================
       
       if (functionName === 'checkBackendStatus') {
-        console.log('[Local Dev Mode] checkBackendStatus: returning mock healthy status');
+        logDev('[Local Dev Mode] checkBackendStatus: returning mock healthy status');
         return { 
           data: { 
             success: true, 
@@ -129,7 +283,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'checkR2Config') {
-        console.log('[Local Dev Mode] checkR2Config: returning mock config status');
+        logDev('[Local Dev Mode] checkR2Config: returning mock config status');
         return {
           data: {
             current_env_status: {
@@ -145,7 +299,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'testStripeConnection') {
-        console.log('[Local Dev Mode] testStripeConnection: returning mock success');
+        logDev('[Local Dev Mode] testStripeConnection: returning mock success');
         return {
           data: {
             success: true,
@@ -156,7 +310,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'testSystemOpenAI') {
-        console.log('[Local Dev Mode] testSystemOpenAI: returning mock success');
+        logDev('[Local Dev Mode] testSystemOpenAI: returning mock success');
         return {
           data: {
             success: true,
@@ -173,7 +327,7 @@ const createFunctionProxy = (functionName) => {
       
       if (functionName === 'runComponentTests') {
         const { testNames } = args[0] || {};
-        console.log('[Local Dev Mode] runComponentTests: returning mock test results for', testNames);
+        logDev('[Local Dev Mode] runComponentTests: returning mock test results for', testNames);
         return {
           data: {
             status: 'success',
@@ -190,7 +344,7 @@ const createFunctionProxy = (functionName) => {
 
       if (functionName === 'testSuites') {
         try {
-          const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+          const BACKEND_URL = getBackendUrl();
           const response = await fetch(`${BACKEND_URL}/api/testing/suites`);
           if (response.ok) {
             const result = await response.json();
@@ -213,7 +367,7 @@ const createFunctionProxy = (functionName) => {
 
       if (functionName === 'checkUserRecord') {
         const { userId } = args[0] || {};
-        console.log('[Local Dev Mode] checkUserRecord: returning mock diagnostic for', userId);
+        logDev('[Local Dev Mode] checkUserRecord: returning mock diagnostic for', userId);
         return {
           data: {
             success: true,
@@ -230,7 +384,7 @@ const createFunctionProxy = (functionName) => {
 
       if (functionName === 'diagnoseLeadVisibility') {
         const { leadId } = args[0] || {};
-        console.log('[Local Dev Mode] diagnoseLeadVisibility: returning mock diagnostic for', leadId);
+        logDev('[Local Dev Mode] diagnoseLeadVisibility: returning mock diagnostic for', leadId);
         return {
           data: {
             success: true,
@@ -247,7 +401,7 @@ const createFunctionProxy = (functionName) => {
 
       if (functionName === 'fixLeadVisibility') {
         const { leadId } = args[0] || {};
-        console.log('[Local Dev Mode] fixLeadVisibility: returning mock fix result for', leadId);
+        logDev('[Local Dev Mode] fixLeadVisibility: returning mock fix result for', leadId);
         return {
           data: {
             success: true,
@@ -263,7 +417,7 @@ const createFunctionProxy = (functionName) => {
       
       if (functionName === 'listPerformanceLogs') {
         try {
-          const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+          const BACKEND_URL = getBackendUrl();
           const params = new URLSearchParams();
           
           if (args[0]?.tenant_id) params.append('tenant_id', args[0].tenant_id);
@@ -306,7 +460,7 @@ const createFunctionProxy = (functionName) => {
       // ========================================
       
       if (functionName === 'cleanupTestRecords') {
-        console.log('[Local Dev Mode] cleanupTestRecords: returning mock cleanup result');
+        logDev('[Local Dev Mode] cleanupTestRecords: returning mock cleanup result');
         return {
           data: {
             success: true,
@@ -317,18 +471,19 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'cleanupOrphanedData') {
-        console.log('[Local Dev Mode] cleanupOrphanedData: returning mock cleanup result');
+        logDev('[Local Dev Mode] cleanupOrphanedData: returning mock cleanup result');
         return {
           data: {
             success: true,
             message: 'Orphaned data cleanup (local-dev mock)',
-            deleted: 0
+            deleted: 0,
+            summary: {}
           }
         };
       }
 
       if (functionName === 'detectOrphanedRecords') {
-        console.log('[Local Dev Mode] detectOrphanedRecords: returning mock detection result');
+        logDev('[Local Dev Mode] detectOrphanedRecords: returning mock detection result');
         return {
           data: {
             success: true,
@@ -339,7 +494,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'syncDenormalizedFields') {
-        console.log('[Local Dev Mode] syncDenormalizedFields: returning mock sync result');
+        logDev('[Local Dev Mode] syncDenormalizedFields: returning mock sync result');
         return {
           data: {
             success: true,
@@ -350,7 +505,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'checkDataVolume') {
-        console.log('[Local Dev Mode] checkDataVolume: returning mock volume data');
+        logDev('[Local Dev Mode] checkDataVolume: returning mock volume data');
         return {
           data: {
             success: true,
@@ -366,7 +521,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'archiveAgedData') {
-        console.log('[Local Dev Mode] archiveAgedData: returning mock archive result');
+        logDev('[Local Dev Mode] archiveAgedData: returning mock archive result');
         return {
           data: {
             success: true,
@@ -380,15 +535,19 @@ const createFunctionProxy = (functionName) => {
       // User & Tenant Management
       // ========================================
       
-      // inviteUser: Call the REAL implementation instead of mocking
+      // inviteUser: Route to backend (this function should be called directly via backend API)
       if (functionName === 'inviteUser') {
-        // Import and call the actual backend function
-        const { inviteUser: actualInviteUser } = await import('../functions/users/inviteUser.js');
-        return actualInviteUser(args[0], args[1]);
+        console.warn('[Functions] inviteUser should be called directly via backend API at /api/users/invite');
+        return {
+          data: {
+            success: false,
+            message: 'inviteUser should be called directly via backend API'
+          }
+        };
       }
       
       if (functionName === 'cleanupUserData') {
-        console.log('[Local Dev Mode] cleanupUserData: returning mock cleanup result');
+        logDev('[Local Dev Mode] cleanupUserData: returning mock cleanup result');
         return {
           data: {
             success: true,
@@ -400,7 +559,7 @@ const createFunctionProxy = (functionName) => {
 
       if (functionName === 'updateEmployeeSecure') {
         const { employeeId, updates } = args[0] || {};
-        console.log('[Local Dev Mode] updateEmployeeSecure: returning mock update result for', employeeId);
+        logDev('[Local Dev Mode] updateEmployeeSecure: returning mock update result for', employeeId);
         return {
           data: {
             success: true,
@@ -412,7 +571,7 @@ const createFunctionProxy = (functionName) => {
 
       if (functionName === 'updateEmployeeUserAccess') {
         const { employeeId, access } = args[0] || {};
-        console.log('[Local Dev Mode] updateEmployeeUserAccess: returning mock access update for', employeeId);
+        logDev('[Local Dev Mode] updateEmployeeUserAccess: returning mock access update for', employeeId);
         return {
           data: {
             success: true,
@@ -424,7 +583,7 @@ const createFunctionProxy = (functionName) => {
 
       if (functionName === 'deleteTenantWithData') {
         const { tenantId } = args[0] || {};
-        console.log('[Local Dev Mode] deleteTenantWithData: returning mock delete result for', tenantId);
+        logDev('[Local Dev Mode] deleteTenantWithData: returning mock delete result for', tenantId);
         return {
           data: {
             success: true,
@@ -439,7 +598,7 @@ const createFunctionProxy = (functionName) => {
       // ========================================
       
       if (functionName === 'seedDocumentation') {
-        console.log('[Local Dev Mode] seedDocumentation: returning mock seed result');
+        logDev('[Local Dev Mode] seedDocumentation: returning mock seed result');
         return {
           data: {
             success: true,
@@ -450,7 +609,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'mcpServerPublic') {
-        console.log('[Local Dev Mode] mcpServerPublic: returning mock MCP server status');
+        logDev('[Local Dev Mode] mcpServerPublic: returning mock MCP server status');
         return {
           data: {
             success: true,
@@ -462,7 +621,7 @@ const createFunctionProxy = (functionName) => {
 
       if (functionName === 'getOrCreateUserApiKey') {
         try {
-          const mockTenant = args[0]?.tenantId || 'local-tenant-001';
+          const mockTenant = args[0]?.tenantId || import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
           const storageKey = `local_user_api_key_${mockTenant}`;
           const persistAllowed = (import.meta.env.VITE_ALLOW_PERSIST_API_KEYS === 'true');
 
@@ -520,7 +679,7 @@ const createFunctionProxy = (functionName) => {
       // ========================================
       
       if (functionName === 'createCheckoutSession') {
-        console.log('[Local Dev Mode] createCheckoutSession: returning mock checkout URL');
+        logDev('[Local Dev Mode] createCheckoutSession: returning mock checkout URL');
         return {
           data: {
             success: true,
@@ -531,7 +690,7 @@ const createFunctionProxy = (functionName) => {
       }
 
       if (functionName === 'createBillingPortalSession') {
-        console.log('[Local Dev Mode] createBillingPortalSession: returning mock portal URL');
+        logDev('[Local Dev Mode] createBillingPortalSession: returning mock portal URL');
         return {
           data: {
             success: true,
@@ -546,7 +705,7 @@ const createFunctionProxy = (functionName) => {
       // ========================================
       
       if (functionName === 'createInitialCronJobs') {
-        console.log('[Local Dev Mode] createInitialCronJobs: returning mock cron init result');
+        logDev('[Local Dev Mode] createInitialCronJobs: returning mock cron init result');
         return {
           data: {
             success: true,
@@ -556,15 +715,209 @@ const createFunctionProxy = (functionName) => {
         };
       }
 
+      // ========================================
+      // CSV Import & Validation
+      // ========================================
+      
+      if (functionName === 'validateAndImport') {
+        try {
+          const BACKEND_URL = getBackendUrl();
+          const payload = args[0] || {};
+          const response = await fetch(`${BACKEND_URL}/api/validation/validate-and-import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(payload),
+          });
+          const json = await response.json();
+          if (!response.ok) {
+            return { data: { status: 'error', error: json?.message || response.statusText } };
+          }
+          return { data: json.data || json };
+        } catch (err) {
+          console.warn(`[Local Dev Mode] validateAndImport backend call failed: ${err?.message || err}`);
+          return { data: { status: 'error', error: err?.message || String(err) } };
+        }
+      }
+
       // Default behavior for other functions in local dev mode: warn + no-op
       console.warn(`[Local Dev Mode] Function '${functionName}' called but not available in local dev mode.`);
       return Promise.resolve({ data: { success: false, message: 'Function not available in local dev mode' } });
     }
 
-    // Not local-dev: call the real function if present on base44.functions
-    return base44.functions?.[functionName]?.(...args);
+    // Non-local mode: Use backend routes for all functions
+    if (functionName === 'testSystemOpenAI') {
+      const payload = args[0] || {};
+      const { api_key, model = 'gpt-4o-mini' } = payload;
+      if (!api_key) {
+        return { data: { success: false, error: 'OpenAI API key is required for connectivity test.' } };
+      }
+
+      const BACKEND_URL = getBackendUrl();
+      const headers = { 'Content-Type': 'application/json' };
+      const tenantHeader = payload.tenantId || payload.tenant_id;
+      if (tenantHeader) headers['x-tenant-id'] = tenantHeader;
+
+      const messages = Array.isArray(payload.messages) && payload.messages.length
+        ? payload.messages
+        : [
+            { role: 'system', content: 'You are performing a diagnostic connectivity check for the Aisha CRM platform.' },
+            { role: 'user', content: 'Please reply with a short confirmation that the OpenAI connectivity test succeeded.' }
+          ];
+
+      const body = {
+        messages,
+        model,
+        temperature: typeof payload.temperature === 'number' ? payload.temperature : 0.2,
+        api_key
+      };
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/ai/chat`, {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify(body)
+        });
+
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok || json?.status !== 'success') {
+          const errorMessage = json?.message || `OpenAI test failed with status ${response.status}`;
+          return { data: { success: false, error: errorMessage, details: json?.data || null } };
+        }
+
+        return {
+          data: {
+            success: true,
+            message: json?.data?.response ? 'OpenAI connection verified.' : 'OpenAI connection verified with empty response.',
+            response: json?.data?.response || '',
+            usage: json?.data?.usage || null,
+            model: json?.data?.model || model
+          }
+        };
+      } catch (err) {
+        console.error('[testSystemOpenAI] Backend call failed:', err);
+        throw err;
+      }
+    }
+
+    if (functionName === 'getDashboardStats') {
+      try {
+        const BACKEND_URL = getBackendUrl();
+        const opts = args[0] || {};
+        const params = new URLSearchParams();
+        if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
+        const resp = await fetch(`${BACKEND_URL}/api/reports/dashboard-stats?${params}`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        });
+        const json = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          return Promise.reject(new Error(json?.message || `Failed: ${resp.status}`));
+        }
+        return { data: json.data || json };
+      } catch (err) {
+        return Promise.reject(err);
+      }
+    }
+
+    if (functionName === 'getDashboardBundle') {
+      try {
+        const BACKEND_URL = getBackendUrl();
+        const opts = args[0] || {};
+        const params = new URLSearchParams();
+        if (opts.tenant_id) params.append('tenant_id', opts.tenant_id);
+        if (typeof opts.include_test_data !== 'undefined') params.append('include_test_data', String(!!opts.include_test_data));
+        const resp = await fetch(`${BACKEND_URL}/api/reports/dashboard-bundle?${params}`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        });
+        const json = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          return Promise.reject(new Error(json?.message || `Failed: ${resp.status}`));
+        }
+        return { data: json.data || json };
+      } catch (err) {
+        return Promise.reject(err);
+      }
+    }
+
+    if (functionName === 'cleanupOrphanedData') {
+      try {
+        const BACKEND_URL = getBackendUrl();
+        const response = await fetch(`${BACKEND_URL}/api/system/cleanup-orphans`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include'
+        });
+        const json = await response.json();
+        if (!response.ok) {
+          return { data: { success: false, message: json.message || 'Cleanup failed', error: json.message } };
+        }
+        return { data: { success: true, message: json.message, summary: json.data?.summary || {}, total_deleted: json.data?.total_deleted || 0 } };
+      } catch (err) {
+        return { data: { success: false, message: err?.message || 'Cleanup failed', error: err?.message } };
+      }
+    }
+    // Non-local: call backend validate-and-import directly when Base44 doesn't expose it
+    if (functionName === 'validateAndImport') {
+      logDev('[validateAndImport] Non-local mode handler called');
+      try {
+        const BACKEND_URL = getBackendUrl();
+        const payload = args[0] || {};
+        logDev('[validateAndImport] Calling', `${BACKEND_URL}/api/validation/validate-and-import`, 'with payload:', payload);
+        const response = await fetch(`${BACKEND_URL}/api/validation/validate-and-import`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+        const json = await response.json();
+        logDev('[validateAndImport] Response status:', response.status, 'json:', json);
+        if (!response.ok) {
+          return { data: { status: 'error', error: json?.message || response.statusText } };
+        }
+        return { data: json.data || json };
+      } catch (err) {
+        console.error('[validateAndImport] Error:', err);
+        return { data: { status: 'error', error: err?.message || String(err) } };
+      }
+    }
+
+    // generateUniqueId: always call backend route
+    if (functionName === 'generateUniqueId') {
+      try {
+        const BACKEND_URL = getBackendUrl();
+        const payload = args[0] || {};
+        const response = await fetch(`${BACKEND_URL}/api/utils/generate-unique-id`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+        const json = await response.json();
+        if (!response.ok) {
+          return { data: { status: 'error', error: json?.message || response.statusText } };
+        }
+        return { data: json.data || json };
+      } catch (err) {
+        console.error('[generateUniqueId] Error:', err);
+        return { data: { status: 'error', error: err?.message || String(err) } };
+      }
+    }
+
+    // Fallback: warn if function not found
+    console.warn(`[Production Mode] Function '${functionName}' not available. Use backend routes.`);
+    return Promise.reject(new Error(`Function '${functionName}' not available. Use backend routes.`));
   };
 };
+
+// Functions we always override with our proxy implementation even if Base44 exposes them.
+// Rationale: We need custom logic (e.g., direct backend call + logging + response shape normalization)
+// that the Base44 stub either doesn't provide or returns in a different shape.
+const OVERRIDE_FUNCTIONS = new Set(['validateAndImport']);
 
 // Create a Proxy handler that wraps all function access
 const functionsProxy = new Proxy({}, {
@@ -590,12 +943,12 @@ const functionsProxy = new Proxy({}, {
       return createFunctionProxy(prop);
     }
 
-    // If Base44 provides the function, use it
-    if (base44.functions && base44.functions[prop]) {
-      return base44.functions[prop];
+    // Always override certain functions with custom implementation
+    if (OVERRIDE_FUNCTIONS.has(String(prop))) {
+      return createFunctionProxy(prop);
     }
 
-    // Fallback: return the local dev proxy (no-op) if function not present
+    // Production mode: all functions use backend routes
     return createFunctionProxy(prop);
   }
 });
@@ -606,6 +959,7 @@ export const n8nCreateLead = functionsProxy.n8nCreateLead;
 export const n8nCreateContact = functionsProxy.n8nCreateContact;
 export const n8nGetData = functionsProxy.n8nGetData;
 export const processChatCommand = functionsProxy.processChatCommand;
+export const processDeveloperCommand = functionsProxy.processDeveloperCommand;
 
 export const makeCall = functionsProxy.makeCall;
 

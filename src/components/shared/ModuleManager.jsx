@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ModuleSettings } from "@/api/entities";
-import { User } from "@/api/entities";
+import { useUser } from '@/components/shared/useUser.js';
+import { useAuthCookiesReady } from '@/components/shared/useAuthCookiesReady';
+import { useTenant } from '@/components/shared/tenantContext';
 import {
   Card,
   CardContent,
@@ -23,15 +25,16 @@ import {
   DollarSign,
   FileText,
   LayoutDashboard,
+  Mic,
   Settings,
   Target,
   TrendingUp,
   Users,
+  Workflow,
   Wrench,
   Zap,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { createAuditLog } from "@/api/functions";
 import { toast } from "sonner";
 
 const defaultModules = [
@@ -135,7 +138,7 @@ const defaultModules = [
     icon: Database,
     features: [
       "Bulk CSV Import",
-      "Promote to Account",
+      "Promote to Lead",
       "Archive to R2 Cloud",
       "Batch Management",
       "License Tracking",
@@ -260,40 +263,103 @@ const defaultModules = [
     ],
   },
   {
+    id: "ai_agent",
+    name: "AI Agent",
+    description: "Intelligent AI assistant for CRM tasks and queries",
+    icon: BrainCircuit,
+    features: [
+      "Natural Language Queries",
+      "Data Analysis",
+      "Task Automation",
+      "Smart Recommendations",
+      "Context-Aware Assistance",
+    ],
+  },
+  {
+    id: "realtime_voice",
+    name: "Realtime Voice",
+    description: "Hands-free voice conversations with AiSHA using the realtime assistant.",
+    icon: Mic,
+    experimental: true,
+    features: [
+      "OpenAI Realtime streaming",
+      "Live microphone input",
+      "Instant assistant replies",
+      "Telemetry + safety enforcement",
+      "Fallback to text chat",
+    ],
+  },
+  {
     id: "workflows",
-    name: "Workflows (Experimental)",
-    description:
-      "Automate business processes with custom workflows and triggers",
-    icon: Zap,
+    name: "Workflows",
+    description: "Automate CRM tasks with custom workflows and triggers",
+    icon: Workflow,
     features: [
       "Visual Workflow Builder",
-      "Custom Triggers",
-      "Multi-step Automation",
+      "Event-Based Triggers",
+      "Multi-Step Automation",
       "Conditional Logic",
-      "Email & Notification Actions",
+      "External Integrations",
     ],
-    experimental: true,
+  },
+  {
+    id: "construction_projects",
+    name: "Construction Projects",
+    description: "Track construction projects and worker assignments for staffing companies",
+    icon: Building2,
+    features: [
+      "Project Management",
+      "Worker Assignments",
+      "Site & Client Tracking",
+      "Pay/Bill Rate Management",
+      "Role-Based Assignments",
+      "Lead to Project Conversion",
+    ],
+  },
+  {
+    id: "workers",
+    name: "Workers",
+    description: "Manage contractors, temp labor, and subcontractors for construction staffing",
+    icon: Users,
+    features: [
+      "Worker Management",
+      "Contractor Management",
+      "Temp Labor Tracking",
+      "Skills Tracking",
+      "Certifications",
+      "Project Assignments",
+    ],
   },
 ];
 
 export default function ModuleManager() {
   const [moduleSettings, setModuleSettings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
+  const { authCookiesReady } = useAuthCookiesReady();
+  const { selectedTenantId } = useTenant();
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // Determine effective tenant: prefer selectedTenantId (for superadmin switching), fall back to user.tenant_id
+  const effectiveTenantId = selectedTenantId || user?.tenant_id;
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    if (!effectiveTenantId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const [currentUser] = await Promise.all([User.me()]);
-      setUser(currentUser);
-
       let currentModuleSettings = [];
       try {
-        currentModuleSettings = await ModuleSettings.list();
+        // CRITICAL: Filter by the effective tenant to ensure tenant isolation
+        currentModuleSettings = await ModuleSettings.list({ tenant_id: effectiveTenantId });
+        // Normalize response shape to array
+        if (!Array.isArray(currentModuleSettings)) {
+          const rows = currentModuleSettings?.data?.modulesettings || currentModuleSettings?.data || [];
+          currentModuleSettings = Array.isArray(rows) ? rows : [];
+        }
+        // Double-filter to ensure only this tenant's settings are used
+        currentModuleSettings = currentModuleSettings.filter(s => s.tenant_id === effectiveTenantId);
         setModuleSettings(currentModuleSettings);
       } catch (error) {
         console.warn("Could not load module settings:", error);
@@ -301,24 +367,29 @@ export default function ModuleManager() {
         currentModuleSettings = [];
       }
 
-      // Initialize default settings for modules that don't exist
-      const existingModuleIds = currentModuleSettings.map((s) => s.module_id);
+      // Initialize default settings for modules that don't exist FOR THIS TENANT
+      const existingModuleNames = currentModuleSettings.map((s) => s.module_name);
       const missingModules = defaultModules.filter((m) =>
-        !existingModuleIds.includes(m.id)
+        !existingModuleNames.includes(m.name)
       );
 
-      if (missingModules.length > 0 && currentUser) {
+      if (missingModules.length > 0 && effectiveTenantId) {
         try {
           const newModuleRecords = missingModules.map((module) => ({
-            module_id: module.id,
+            tenant_id: effectiveTenantId, // Use effective tenant, not user.tenant_id
             module_name: module.name,
-            is_active: true,
-            user_email: currentUser.email,
+            is_enabled: true,
           }));
           await ModuleSettings.bulkCreate(newModuleRecords);
 
-          const updatedSettings = await ModuleSettings.list();
-          setModuleSettings(updatedSettings);
+          const updatedSettings = await ModuleSettings.list({ tenant_id: effectiveTenantId });
+          let updatedArray = updatedSettings;
+          if (!Array.isArray(updatedArray)) {
+            const rows = updatedSettings?.data?.modulesettings || updatedSettings?.data || [];
+            updatedArray = Array.isArray(rows) ? rows : [];
+          }
+          updatedArray = updatedArray.filter(s => s.tenant_id === effectiveTenantId);
+          setModuleSettings(updatedArray);
         } catch (error) {
           console.warn("Could not create default module settings:", error);
         }
@@ -328,61 +399,67 @@ export default function ModuleManager() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [effectiveTenantId]);
+
+  useEffect(() => {
+    if (user && authCookiesReady && effectiveTenantId) {
+      loadData();
+    }
+  }, [user, authCookiesReady, effectiveTenantId, loadData]);
 
   const toggleModule = async (moduleId, currentStatus) => {
-    if (!user) return;
+    if (!user || !effectiveTenantId) return;
 
     try {
-      const setting = moduleSettings.find((s) => s.module_id === moduleId);
       const module = defaultModules.find((m) => m.id === moduleId);
+      // CRITICAL: Find setting for the current effective tenant only
+      const setting = moduleSettings.find((s) => 
+        s.module_name === module?.name && s.tenant_id === effectiveTenantId
+      );
       const newStatus = !currentStatus;
 
       if (setting) {
+        // Update existing setting
         await ModuleSettings.update(setting.id, {
-          is_active: newStatus,
-          user_email: user.email,
+          tenant_id: effectiveTenantId,
+          is_enabled: newStatus,
         });
 
         // Update local state
         setModuleSettings((prev) =>
           prev.map((s) =>
-            s.module_id === moduleId ? { ...s, is_active: newStatus } : s
+            s.module_name === module?.name && s.tenant_id === effectiveTenantId 
+              ? { ...s, is_enabled: newStatus } 
+              : s
           )
         );
+      } else {
+        // Create new setting if none exists
+        const newSetting = await ModuleSettings.create({
+          tenant_id: effectiveTenantId,
+          module_name: module?.name,
+          is_enabled: newStatus,
+        });
 
-        // Create audit log
-        try {
-          await createAuditLog({
-            action_type: "module_toggle",
-            entity_type: "ModuleSettings",
-            entity_id: setting.id,
-            description: `${newStatus ? "Enabled" : "Disabled"} module: ${
-              module?.name || moduleId
-            }`,
-            old_values: { is_active: currentStatus },
-            new_values: { is_active: newStatus },
-          });
-        } catch (auditError) {
-          console.warn("Failed to create audit log:", auditError);
-        }
-
-        // Dispatch event to notify Layout and other components
-        window.dispatchEvent(
-          new CustomEvent("module-settings-changed", {
-            detail: {
-              moduleId,
-              moduleName: module?.name || moduleId,
-              isActive: newStatus,
-              changedBy: user.email,
-            },
-          }),
-        );
-
-        toast.success(
-          `${module?.name || moduleId} ${newStatus ? "enabled" : "disabled"}`,
-        );
+        // Add to local state
+        setModuleSettings((prev) => [...prev, newSetting]);
       }
+
+      // Dispatch event to notify Layout and other components
+      window.dispatchEvent(
+        new CustomEvent("module-settings-changed", {
+          detail: {
+            moduleId,
+            moduleName: module?.name || moduleId,
+            isActive: newStatus,
+            changedBy: user.email,
+          },
+        }),
+      );
+
+      toast.success(
+        `${module?.name || moduleId} ${newStatus ? "enabled" : "disabled"}`,
+      );
     } catch (error) {
       console.error("Error toggling module:", error);
       toast.error("Failed to update module setting");
@@ -390,8 +467,38 @@ export default function ModuleManager() {
   };
 
   const getModuleStatus = (moduleId) => {
-    const setting = moduleSettings.find((s) => s.module_id === moduleId);
-    return setting?.is_active ?? true;
+    const module = defaultModules.find((m) => m.id === moduleId);
+    // CRITICAL: Find setting for the current effective tenant only
+    const setting = moduleSettings.find((s) => 
+      s.module_name === module?.name && s.tenant_id === effectiveTenantId
+    );
+    return setting?.is_enabled ?? true;
+  };
+
+  // Admin-only: List currently disabled modules for the selected tenant
+  const DisabledModulesPanel = () => {
+    const isAdminLike = user?.role === 'admin' || user?.role === 'superadmin' || user?.is_superadmin === true;
+    // Use effectiveTenantId which is already calculated at component level
+    if (!isAdminLike || !effectiveTenantId) return null;
+
+    const disabled = moduleSettings
+      .filter((s) => s.tenant_id === effectiveTenantId && s.is_enabled === false)
+      .map((s) => s.module_name);
+
+    return (
+      <div className="mt-6 p-3 rounded border border-yellow-700/40 bg-yellow-900/20">
+        <div className="text-sm font-medium text-yellow-300">Disabled for tenant</div>
+        {disabled.length === 0 ? (
+          <div className="text-xs text-yellow-200/80 mt-1">No modules are disabled for this tenant.</div>
+        ) : (
+          <ul className="mt-2 text-sm text-yellow-100 list-disc list-inside">
+            {disabled.map((name) => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
   };
 
   if (loading) {
@@ -558,6 +665,9 @@ export default function ModuleManager() {
               <div className="text-sm text-slate-400">Total Available</div>
             </div>
           </div>
+
+          {/* Disabled Modules Panel */}
+          <DisabledModulesPanel />
         </CardContent>
       </Card>
     </div>

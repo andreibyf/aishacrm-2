@@ -1,0 +1,96 @@
+// Executive Assistant Tools - Telephony & AI Calling
+// Initiate outbound calls, check call status, manage AI agents
+
+import { Result, CRMError } from "../../spec/types.braid"
+
+// Initiate an outbound AI call to a contact or lead
+fn initiateCall(
+  tenant: String,
+  provider: String,
+  phone_number: String,
+  contact_name: String,
+  company: String,
+  purpose: String,
+  talking_points: Array
+) -> Result<Object, CRMError> !net {
+  let url = "/api/telephony/initiate-call";
+  let payload = {
+    tenant_id: tenant,
+    provider: provider,
+    phone_number: phone_number,
+    contact_name: contact_name,
+    company: company,
+    purpose: purpose,
+    talking_points: talking_points
+  };
+  
+  let response = http.post(url, { body: payload });
+  
+  return match response {
+    Ok{value} => Ok(value),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+// Initiate call to a specific contact by ID
+// Note: This function gets contact details first, then initiates the call
+fn callContact(
+  tenant: String,
+  contact_id: String,
+  provider: String,
+  purpose: String,
+  talking_points: Array
+) -> Result<Object, CRMError> !net {
+  // Initiate the call using the contact ID directly
+  let call_url = "/api/telephony/initiate-call";
+  let payload = {
+    tenant_id: tenant,
+    provider: provider,
+    contact_id: contact_id,
+    purpose: purpose,
+    talking_points: talking_points
+  };
+  
+  let call_response = http.post(call_url, { body: payload });
+  
+  return match call_response {
+    Ok{value} => Ok(value),
+    Err{error} => Err({ tag: "NetworkError", url: call_url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: call_url, code: 500 })
+  };
+}
+
+// Check if a calling provider is configured for the tenant
+fn checkCallingProvider(
+  tenant: String,
+  provider: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/telephony/provider-status/" + provider;
+  let params = { tenant_id: tenant };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+// Get available AI agents for a provider
+fn getCallingAgents(
+  tenant: String,
+  provider: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/telephony/agents/" + provider;
+  let params = { tenant_id: tenant };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

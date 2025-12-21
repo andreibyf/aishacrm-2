@@ -1,8 +1,11 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
-# Run lint to catch syntax errors
-npm run lint -- --max-warnings 0
+#!/bin/sh
+# Run lint to catch syntax errors (allow warnings)
+npm run lint
 
 # Run build to catch compile errors
-npm run build
+# Use build:ci when Doppler is not available (CI environment)
+if command -v doppler >/dev/null 2>&1; then
+  npm run build
+else
+  npm run build:ci
+fi

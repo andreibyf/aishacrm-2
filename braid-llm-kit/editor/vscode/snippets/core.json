@@ -1,0 +1,18 @@
+{
+  "fn": {
+    "prefix": "fn",
+    "body": [
+      "fn ${1:name}(${2:params}) -> ${3:Type} {",
+      "  $0",
+      "}"
+    ]
+  },
+  "match": {
+    "prefix": "match",
+    "body": [
+      "match ${1:expr} {",
+      "  ${2:_} => ${3:expr}",
+      "}"
+    ]
+  }
+}

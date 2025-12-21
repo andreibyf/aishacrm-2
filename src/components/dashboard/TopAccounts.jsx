@@ -1,20 +1,37 @@
 import React from "react";
+import { useUser } from "@/components/shared/useUser";
+import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, DollarSign } from "lucide-react";
 import { createPageUrl } from "@/utils";
+import { formatIndustry } from "@/utils/industryUtils";
 
 export default function TopAccounts({ tenantFilter, showTestData }) {
   const [accounts, setAccounts] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const { loading: userLoading } = useUser();
+  const { authCookiesReady } = useAuthCookiesReady();
 
   React.useEffect(() => {
+    // Wait for user + auth cookies readiness
+    if (userLoading || !authCookiesReady) {
+      setLoading(true);
+      return;
+    }
     const loadTopAccounts = async () => {
       try {
+        // Guard: Don't fetch if no tenant_id is present
+        if (!tenantFilter?.tenant_id) {
+          setAccounts([]);
+          setLoading(false);
+          return;
+        }
+        
         const { Account, Opportunity, Contact } = await import("@/api/entities");
         
         let filter = { ...tenantFilter };
         if (!showTestData) {
-          filter.is_test_data = { $ne: true };
+          filter.is_test_data = false;
         }
         
         // Load all necessary data
@@ -74,7 +91,7 @@ export default function TopAccounts({ tenantFilter, showTestData }) {
     };
 
     loadTopAccounts();
-  }, [tenantFilter, showTestData]);
+  }, [tenantFilter, showTestData, userLoading, authCookiesReady]);
 
   const formatCurrency = (amount) => {
     if (!amount) return "$0";
@@ -91,7 +108,7 @@ export default function TopAccounts({ tenantFilter, showTestData }) {
       <CardHeader>
         <CardTitle className="text-slate-100 flex items-center gap-2">
           <Building2 className="w-5 h-5 text-blue-400" />
-          Top Accounts by Won Deals
+          Top Customers by Won Deals
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -119,7 +136,7 @@ export default function TopAccounts({ tenantFilter, showTestData }) {
                     </p>
                     <p className="text-slate-500 text-xs">
                       {account.dealCount} {account.dealCount === 1 ? 'deal' : 'deals'} won
-                      {account.industry && ` • ${account.industry}`}
+                      {account.industry && ` • ${formatIndustry(account.industry)}`}
                     </p>
                   </div>
                 </div>

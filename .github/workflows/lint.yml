@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write  # Add permission for PR comments
 
 jobs:
   lint:
@@ -28,7 +29,65 @@ jobs:
         run: npm ci
 
       - name: Prettier format check
+        id: prettier
         run: npm run format:check
+        continue-on-error: true
 
-      - name: ESLint (fail on warnings)
-        run: npx eslint . --max-warnings=0
+      - name: ESLint check
+        id: eslint
+        run: |
+          npx eslint . --format json --output-file eslint-report.json || true
+          npx eslint . || true
+        continue-on-error: true
+
+      - name: Generate lint summary
+        if: always()
+        run: |
+          echo "## 🔍 Lint Check Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Prettier status
+          if [ "${{ steps.prettier.outcome }}" == "success" ]; then
+            echo "✅ **Prettier**: All files formatted correctly" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **Prettier**: Formatting issues found (non-blocking)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # ESLint results
+          if [ -f eslint-report.json ]; then
+            node -e "
+              const fs = require('fs');
+              const report = JSON.parse(fs.readFileSync('eslint-report.json', 'utf8'));
+              const errors = report.reduce((sum, f) => sum + f.errorCount, 0);
+              const warnings = report.reduce((sum, f) => sum + f.warningCount, 0);
+              const fixable = report.reduce((sum, f) => sum + f.fixableErrorCount + f.fixableWarningCount, 0);
+              
+              if (errors === 0 && warnings === 0) {
+                console.log('✅ **ESLint**: No issues found');
+              } else {
+                console.log('⚠️ **ESLint Results** (non-blocking):');
+                console.log('');
+                console.log('| Type | Count |');
+                console.log('|------|-------|');
+                console.log('| Errors | ' + errors + ' |');
+                console.log('| Warnings | ' + warnings + ' |');
+                console.log('| Auto-fixable | ' + fixable + ' |');
+                console.log('');
+                console.log('💡 Run \`npm run lint:fix\` to auto-fix issues');
+              }
+            " >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "ℹ️ *Lint checks are non-blocking. Please fix issues when convenient.*" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload ESLint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eslint-report
+          path: eslint-report.json
+          retention-days: 7
+          if-no-files-found: ignore

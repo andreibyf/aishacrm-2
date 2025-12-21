@@ -160,11 +160,21 @@ function isValidDateString(dateStr) {
   return dateRegex.test(dateStr);
 }
 
-// Validate time string format
+// Validate time string format (accepts HH:mm or HH:mm:ss)
 function isValidTimeString(timeStr) {
   if (!timeStr || typeof timeStr !== 'string') return false;
-  const timeRegex = /^\d{2}:\d{2}$/;
+  const timeRegex = /^\d{2}:\d{2}(:\d{2})?$/;
   return timeRegex.test(timeStr);
+}
+
+// Normalize time to HH:mm:ss format
+function normalizeTimeString(timeStr) {
+  if (!timeStr) return null;
+  const parts = timeStr.split(':');
+  if (parts.length === 2) {
+    return `${parts[0]}:${parts[1]}:00`;
+  }
+  return timeStr; // Already has seconds
 }
 
 // Helper function to format activity date/time for display
@@ -187,9 +197,14 @@ export function formatActivityDateTime(activity, offsetMinutes = null) {
   }
 
   try {
-    // If no offset provided, try to get from system/user settings
-    if (offsetMinutes === null) {
-      offsetMinutes = new Date().getTimezoneOffset();
+    const dateParts = datePart.split('-');
+    const year = parseInt(dateParts[0]);
+    const month = parseInt(dateParts[1]) - 1; // JS months are 0-indexed
+    const day = parseInt(dateParts[2]);
+
+    // Validate parsed date parts
+    if (isNaN(year) || isNaN(month) || isNaN(day)) {
+      return 'Invalid date';
     }
 
     if (activity.due_time) {
@@ -198,25 +213,22 @@ export function formatActivityDateTime(activity, offsetMinutes = null) {
         return 'Invalid time';
       }
 
-      // Create UTC datetime string from stored values
-      const utcString = `${datePart}T${activity.due_time}:00.000Z`;
+      // FIXED: due_time is stored as LOCAL time, not UTC
+      // Just display it directly without timezone conversion
+      const timeParts = activity.due_time.split(':');
+      const hours = parseInt(timeParts[0]);
+      const minutes = parseInt(timeParts[1] || '0');
+
+      const displayDate = new Date(year, month, day, hours, minutes);
       
-      // Convert to local time using user's timezone offset
-      const displayDate = utcToLocal(utcString, offsetMinutes);
-      
-      return format(displayDate, 'PPP p'); // e.g., "September 26, 2025 at 5:00 AM"
-    } else {
-      // Date only - treat as local date without time conversion
-      const dateParts = datePart.split('-');
-      const year = parseInt(dateParts[0]);
-      const month = parseInt(dateParts[1]) - 1; // JS months are 0-indexed
-      const day = parseInt(dateParts[2]);
-      
-      // Validate parsed date parts
-      if (isNaN(year) || isNaN(month) || isNaN(day)) {
-        return 'Invalid date';
+      // Check if constructed date is valid
+      if (isNaN(displayDate.getTime())) {
+        return 'Invalid date/time';
       }
       
+      return format(displayDate, 'PPP p'); // e.g., "September 26, 2025 at 5:00 PM"
+    } else {
+      // Date only - treat as local date without time conversion
       const dateOnly = new Date(year, month, day);
       
       // Check if constructed date is valid
@@ -253,4 +265,39 @@ export function getTimezoneDisplayName(timezone) {
   };
   
   return `${displayNames[timezone] || timezone} (${offsetString})`;
+}
+
+/**
+ * Convert a UTC time string (HH:mm or HH:mm:ss) to local time for display.
+ * Uses the user's browser timezone offset.
+ * @param {string} utcTimeStr - Time in UTC (e.g., "17:30:00")
+ * @param {string} dateStr - Optional date string (YYYY-MM-DD) for DST accuracy, defaults to today
+ * @returns {string} - Formatted local time (e.g., "2:30 PM")
+ */
+export function formatUtcTimeToLocal(utcTimeStr, dateStr = null) {
+  if (!utcTimeStr) return '';
+  
+  try {
+    // Use provided date or today
+    const datePart = dateStr || format(new Date(), 'yyyy-MM-dd');
+    
+    // Normalize time to HH:mm:ss
+    const normalizedTime = normalizeTimeString(utcTimeStr);
+    if (!normalizedTime) return utcTimeStr;
+    
+    // Create UTC datetime string
+    const utcString = `${datePart}T${normalizedTime}.000Z`;
+    
+    // Get user's timezone offset
+    const offsetMinutes = new Date().getTimezoneOffset();
+    
+    // Convert to local time
+    const displayDate = utcToLocal(utcString, offsetMinutes);
+    
+    // Format as local time (e.g., "2:30 PM")
+    return format(displayDate, 'h:mm a');
+  } catch (e) {
+    console.error('formatUtcTimeToLocal error:', e);
+    return utcTimeStr; // Fallback to raw value
+  }
 }

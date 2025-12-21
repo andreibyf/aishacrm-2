@@ -4,164 +4,69 @@
  */
 
 import express from "express";
-import cors from "cors";
-import helmet from "helmet";
-import morgan from "morgan";
-import compression from "compression";
 import dotenv from "dotenv";
 import { createServer } from "http";
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './lib/swagger.js';
-import { initSupabaseDB, pool as supabasePool } from './lib/supabase-db.js';
+import { initSupabaseAuth } from "./lib/supabaseAuth.js";
+
+// Import startup modules
+import { initDatabase } from "./startup/initDatabase.js";
+import { initServices } from "./startup/initServices.js";
+import { initMiddleware } from "./startup/initMiddleware.js";
+import workflowQueue from "./services/workflowQueue.js";
+
+// Import background workers
+import { startCampaignWorker } from "./lib/campaignWorker.js";
+import { startAiTriggersWorker } from "./lib/aiTriggersWorker.js";
+
+// Import UUID validation
+import { sanitizeUuidInput } from "./lib/uuidValidator.js";
 
 // Load environment variables
 // Try .env.local first (for local development), then fall back to .env
 dotenv.config({ path: ".env.local" });
 dotenv.config(); // Fallback to .env if .env.local doesn't exist
 
-// NOTE: Using Supabase PostgREST API instead of direct PostgreSQL connection
-// Direct connection requires IPv6 which Docker doesn't support well
-let ipv4FirstApplied = false;
-
 const app = express();
 // Behind proxies, trust X-Forwarded-* to get real client IPs
 app.set('trust proxy', 1);
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.BACKEND_PORT || process.env.PORT || 3001;
 
-// Database connection using Supabase PostgREST API (avoids IPv6 issues)
-let pgPool = null;
-let dbConnectionType = "none";
+// Initialize Database
+const { pgPool, dbConnectionType, ipv4FirstApplied: _ipv4FirstApplied } = await initDatabase(app);
 
-// Initialize diagnostics locals with defaults (updated after DB init)
-app.locals.ipv4FirstApplied = ipv4FirstApplied;
-app.locals.dbConnectionType = dbConnectionType;
-app.locals.resolvedDbIPv4 = null;
-app.locals.dbConfigPath = (process.env.USE_SUPABASE_PROD === 'true')
-  ? 'supabase_api'
-  : 'none';
+// Initialize Services (Redis, Cache, Perf Log Batcher)
+await initServices(app, pgPool);
 
-// Initialize database using Supabase JS API (HTTP/REST, not direct PostgreSQL)
-await (async () => {
-  if (process.env.USE_SUPABASE_PROD === "true") {
-    // Use Supabase PostgREST API - works over HTTP, avoids IPv6 PostgreSQL issues
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
-    }
-    
-    initSupabaseDB(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    pgPool = supabasePool;
-    dbConnectionType = "Supabase API";
-    console.log("✓ Supabase PostgREST API initialized (HTTP-based, bypassing PostgreSQL IPv6)");
-    
-    // update diagnostics
-    app.locals.dbConnectionType = dbConnectionType;
-    app.locals.dbConfigPath = 'supabase_api';
-    return;
-  }
-
-  console.warn("⚠ No database configured - set USE_SUPABASE_PROD=true with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
-})();
-
+// Initialize Middleware
+const { resilientPerfDb } = initMiddleware(app, pgPool);
 
 // Initialize Supabase Auth
-import { initSupabaseAuth } from "./lib/supabaseAuth.js";
 const supabaseAuth = initSupabaseAuth();
 
-// Middleware
-// Apply Helmet with secure defaults globally
-app.use(helmet()); // Security headers (no insecure overrides globally)
-app.use(compression()); // Compress responses
-app.use(morgan("combined")); // Logging
-
-// Simple, in-memory rate limiter (dependency-free)
-// Configure via ENV: RATE_LIMIT_WINDOW_MS (default 60000), RATE_LIMIT_MAX (default 120)
-// Skips health and docs endpoints by default
-const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10);
-const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX || '120', 10);
-const rateBucket = new Map(); // key -> { count, ts }
-const rateSkip = new Set(['/health', '/api/status', '/api-docs', '/api-docs.json']);
-
-function rateLimiter(req, res, next) {
+// ----------------------------------------------------------------------------
+// Canary logging middleware for BizDevSource promote diagnostics
+// Logs every POST to /api/bizdevsources/* BEFORE route handlers.
+// Helps distinguish client/network stall vs server handling issues.
+// ----------------------------------------------------------------------------
+app.use((req, _res, next) => {
   try {
-    if (rateSkip.has(req.path)) return next();
-    // Allow OPTIONS preflight freely
-    if (req.method === 'OPTIONS') return next();
-    const now = Date.now();
-    const key = `${req.ip}`; // after trust proxy, this reflects client IP
-    const entry = rateBucket.get(key);
-    if (!entry || now - entry.ts >= RATE_LIMIT_WINDOW_MS) {
-      rateBucket.set(key, { count: 1, ts: now });
-      return next();
+    if (req.method === 'POST' && req.path.startsWith('/api/bizdevsources/')) {
+      console.log('[CANARY Promote POST] Incoming request', {
+        path: req.path,
+        method: req.method,
+        origin: req.headers.origin,
+        contentType: req.headers['content-type'],
+        hasBody: !!req.headers['content-length'],
+        productionGuardEnabled: true,
+      });
     }
-    if (entry.count < RATE_LIMIT_MAX) {
-      entry.count++;
-      return next();
-    }
-    res.setHeader('Retry-After', Math.ceil((entry.ts + RATE_LIMIT_WINDOW_MS - now) / 1000));
-    return res.status(429).json({
-      error: 'Too Many Requests',
-      message: `Rate limit exceeded. Try again soon.`,
-    });
-  } catch {
-    // Fail open on limiter errors
-    return next();
+  } catch (e) {
+    console.warn('[CANARY Promote POST] Logging error', e?.message);
   }
-}
-
-// Apply limiter to API routes; keep health/docs unthrottled
-app.use('/api', rateLimiter);
-
-// CORS configuration
-// Defaults: allow localhost dev; rely on ALLOWED_ORIGINS for anything else
-const defaultAllowed = [
-  "http://localhost:5173",
-  "https://localhost:5173",
-];
-const envAllowed = (process.env.ALLOWED_ORIGINS?.split(",") || [])
-  .map(s => s.trim())
-  .filter(Boolean);
-const allowedOrigins = [...new Set([...defaultAllowed, ...envAllowed])];
-
-app.use(cors({
-  origin: (origin, callback) => {
-    try {
-      // Allow server-to-server or same-origin calls
-      if (!origin) return callback(null, true);
-
-      // Explicit allowlist or wildcard
-      if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      // No platform-specific defaults; configure via ALLOWED_ORIGINS
-
-      return callback(new Error("Not allowed by CORS"));
-    } catch {
-      return callback(new Error("CORS configuration error"));
-    }
-  },
-  credentials: true,
-}));
-
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
-
-// Performance logging middleware (must be after body parsers, before routes)
-import { performanceLogger } from "./middleware/performanceLogger.js";
-import { productionSafetyGuard } from "./middleware/productionSafetyGuard.js";
-if (pgPool) {
-  app.use(performanceLogger(pgPool));
-  console.log("✓ Performance logging middleware enabled");
-}
-
-// Block mutating requests in production Supabase unless explicitly allowed
-// Exempt non-DB-mutating CI endpoints (GitHub Actions dispatch) from the guard
-app.use(productionSafetyGuard({
-  exemptPaths: [
-    '/api/testing/run-playwright', // POST triggers GitHub workflow, no DB writes
-  ],
-}));
-console.log("✓ Production safety guard enabled");
+  return next();
+});
 
 // Root endpoint - provides API information
 app.get("/", (req, res) => {
@@ -193,56 +98,44 @@ app.get("/health", (req, res) => {
 
 // Swagger API Documentation
 // Restrict framing for docs to known dev origins using CSP frame-ancestors on this route only
-app.use('/api-docs',
+// IMPORTANT: Remove global CSP header first, then set a route-specific CSP to avoid header merging
+import helmet from "helmet"; // Need helmet here for the route-specific config
+app.use(
+  '/api-docs',
+  (req, res, next) => { res.removeHeader('Content-Security-Policy'); next(); },
   helmet({
     frameguard: false, // Use CSP frame-ancestors instead for this route only
     contentSecurityPolicy: {
       directives: {
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        // Allow Swagger UI assets and behavior
+        "default-src": ["'self'"],
+        "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "img-src": ["'self'", "data:", "blob:"],
+        "font-src": ["'self'", "data:"],
+        "connect-src": ["'self'", "http:", "https:"],
+        // If download links or workers are used by Swagger UI
+        "worker-src": ["'self'", "blob:"],
         "frame-ancestors": [
           "'self'",
           ...(process.env.ALLOWED_DOCS_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean) || [
             'http://localhost:5173',
-            'https://localhost:5173'
+            'https://localhost:5173',
+            'http://localhost:4000',
+            'https://localhost:4000'
           ])
         ]
       }
     },
-    // Swagger UI may load inline styles; relax only here if needed
     crossOriginEmbedderPolicy: false
   }),
   swaggerUi.serve,
   swaggerUi.setup(swaggerSpec, {
-  customCss: `
-    body { background-color: #1e293b; }
-    .swagger-ui .topbar { display: none }
-    .swagger-ui { background-color: #1e293b; color: #e2e8f0; }
-    .swagger-ui .wrapper { background-color: #1e293b; }
-    .swagger-ui .information-container { background-color: #1e293b; }
-    .swagger-ui .info .title { color: #f1f5f9; }
-    .swagger-ui .info { color: #cbd5e1; }
-    .swagger-ui .scheme-container { background: #334155; }
-    .swagger-ui .opblock-tag { color: #f1f5f9; border-color: #475569; }
-    .swagger-ui .opblock { background: #334155; border-color: #475569; }
-    .swagger-ui .opblock .opblock-summary { background: #475569; }
-    .swagger-ui .opblock-description-wrapper, .swagger-ui .opblock-external-docs-wrapper, .swagger-ui .opblock-title_normal { color: #cbd5e1; }
-    .swagger-ui table thead tr td, .swagger-ui table thead tr th { color: #f1f5f9; border-color: #475569; }
-    .swagger-ui .parameter__name, .swagger-ui .parameter__type { color: #e2e8f0; }
-    .swagger-ui .response-col_status { color: #f1f5f9; }
-    .swagger-ui .response-col_description { color: #cbd5e1; }
-    .swagger-ui section.models { border-color: #475569; }
-    .swagger-ui section.models .model-container { background: #334155; }
-    .swagger-ui .model-title { color: #f1f5f9; }
-    .swagger-ui .model { color: #cbd5e1; }
-    .swagger-ui .prop-type { color: #94a3b8; }
-    .swagger-ui input[type=text], .swagger-ui textarea, .swagger-ui select { 
-      background: #1e293b; 
-      color: #e2e8f0; 
-      border-color: #475569; 
-    }
-  `,
-  customSiteTitle: 'Aisha CRM API Documentation'
-}));
+    // Use default (light) Swagger UI theme
+    customSiteTitle: 'Aisha CRM API Documentation'
+  })
+);
 
 // Swagger JSON spec endpoint
 app.get('/api-docs.json', (req, res) => {
@@ -251,6 +144,21 @@ app.get('/api-docs.json', (req, res) => {
 });
 
 // Status endpoint (compatible with checkBackendStatus function)
+/**
+ * @openapi
+ * /api/status:
+ *   get:
+ *     summary: API status
+ *     description: Simple health/status endpoint for the API layer.
+ *     tags: [system]
+ *     responses:
+ *       200:
+ *         description: API is running
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Success'
+ */
 app.get("/api/status", (req, res) => {
   res.json({
     status: "success",
@@ -278,77 +186,162 @@ import createBillingRoutes from "./routes/billing.js";
 import createStorageRoutes from "./routes/storage.js";
 import createWebhookRoutes from "./routes/webhooks.js";
 import createSystemRoutes from "./routes/system.js";
+import createSystemSettingsRoutes from "./routes/system-settings.js";
 import createUserRoutes from "./routes/users.js";
 import createEmployeeRoutes from "./routes/employees.js";
 import createPermissionRoutes from "./routes/permissions.js";
 import createTestingRoutes from "./routes/testing.js";
 import createDocumentRoutes from "./routes/documents.js";
+import createDocumentationFileRoutes from "./routes/documentationfiles.js";
 import createReportRoutes from "./routes/reports.js";
+import createDocumentationRoutes from "./routes/documentation.js";
 import createCashflowRoutes from "./routes/cashflow.js";
 import createCronRoutes from "./routes/cron.js";
 import createMetricsRoutes from "./routes/metrics.js";
+import createEdgeFunctionRoutes from "./routes/edgeFunctions.js";
+import createAISummaryRoutes from "./routes/aiSummary.js";
 import createUtilsRoutes from "./routes/utils.js";
-import createBizdevRoutes from "./routes/bizdev.js";
+import createBizDevRoutes from "./routes/bizdev.js";
 import createClientRoutes from "./routes/clients.js";
 import createWorkflowRoutes from "./routes/workflows.js";
 import createWorkflowExecutionRoutes from "./routes/workflowexecutions.js";
 import createActivityRoutes from "./routes/activities.js";
 import createOpportunityRoutes from "./routes/opportunities.js";
+import createOpportunityV2Routes from "./routes/opportunities.v2.js";
+import createActivityV2Routes from "./routes/activities.v2.js";
+import createContactV2Routes from "./routes/contacts.v2.js";
+import createAccountV2Routes from "./routes/accounts.v2.js";
+import createLeadsV2Routes from "./routes/leads.v2.js";
+import createReportsV2Routes from "./routes/reports.v2.js";
+import createWorkflowV2Routes from "./routes/workflows.v2.js";
+import createDocumentV2Routes from "./routes/documents.v2.js";
+import createWorkflowTemplateRoutes from "./routes/workflow-templates.js";
 import createNotificationRoutes from "./routes/notifications.js";
 import createSystemLogRoutes from "./routes/system-logs.js";
 import createAuditLogRoutes from "./routes/audit-logs.js";
 import createModuleSettingsRoutes from "./routes/modulesettings.js";
+import createEntityLabelsRoutes from "./routes/entitylabels.js";
 import createTenantIntegrationRoutes from "./routes/tenant-integrations.js";
 import createBizDevSourceRoutes from "./routes/bizdevsources.js";
 import createTenantRoutes from "./routes/tenants.js";
+import createTenantResolveRoutes from "./routes/tenant-resolve.js";
 import createAnnouncementRoutes from "./routes/announcements.js";
 import createApikeyRoutes from "./routes/apikeys.js";
 import createNoteRoutes from "./routes/notes.js";
 import createSystemBrandingRoutes from "./routes/systembrandings.js";
 import createSyncHealthRoutes from "./routes/synchealths.js";
+import createAICampaignRoutes from "./routes/aicampaigns.js";
+import createSecurityRoutes from "./routes/security.js";
+import createMemoryRoutes from "./routes/memory.js";
+import createAuthRoutes from "./routes/auth.js";
+import createGitHubIssuesRoutes from "./routes/github-issues.js";
+import createSupabaseProxyRoutes from "./routes/supabaseProxy.js";
+import createSuggestionsRoutes from "./routes/suggestions.js";
+import createConstructionProjectsRoutes from "./routes/construction-projects.js";
+import createConstructionAssignmentsRoutes from "./routes/construction-assignments.js";
+import createWorkersRoutes from "./routes/workers.js";
+import { createDeprecationMiddleware } from "./middleware/deprecation.js";
 
-// Mount routers with database pool
-app.use("/api/database", createDatabaseRoutes(pgPool));
-app.use("/api/integrations", createIntegrationRoutes(pgPool));
-app.use("/api/telephony", createTelephonyRoutes(pgPool));
-app.use("/api/ai", createAiRoutes(pgPool));
-app.use("/api/mcp", createMcpRoutes(pgPool));
-app.use("/api/accounts", createAccountRoutes(pgPool));
-app.use("/api/leads", createLeadRoutes(pgPool));
-app.use("/api/contacts", createContactRoutes(pgPool));
-app.use("/api/validation", createValidationRoutes(pgPool));
-app.use("/api/billing", createBillingRoutes(pgPool));
-app.use("/api/storage", createStorageRoutes(pgPool));
-app.use("/api/webhooks", createWebhookRoutes(pgPool));
-app.use("/api/system", createSystemRoutes(pgPool));
-app.use("/api/users", createUserRoutes(pgPool, supabaseAuth));
-app.use("/api/employees", createEmployeeRoutes(pgPool));
-app.use("/api/permissions", createPermissionRoutes(pgPool));
-app.use("/api/testing", createTestingRoutes(pgPool));
-app.use("/api/documents", createDocumentRoutes(pgPool));
-app.use("/api/reports", createReportRoutes(pgPool));
-app.use("/api/cashflow", createCashflowRoutes(pgPool));
-app.use("/api/cron", createCronRoutes(pgPool));
-app.use("/api/metrics", createMetricsRoutes(pgPool));
-app.use("/api/utils", createUtilsRoutes(pgPool));
-app.use("/api/bizdev", createBizdevRoutes(pgPool));
-app.use("/api/bizdevsources", createBizDevSourceRoutes(pgPool));
-app.use("/api/clients", createClientRoutes(pgPool));
-app.use("/api/workflows", createWorkflowRoutes(pgPool));
-app.use("/api/workflowexecutions", createWorkflowExecutionRoutes(pgPool));
-app.use("/api/activities", createActivityRoutes(pgPool));
-app.use("/api/opportunities", createOpportunityRoutes(pgPool));
-app.use("/api/notifications", createNotificationRoutes(pgPool));
-app.use("/api/system-logs", createSystemLogRoutes(pgPool));
-app.use("/api/audit-logs", createAuditLogRoutes(pgPool));
-app.use("/api/modulesettings", createModuleSettingsRoutes(pgPool));
-app.use("/api/tenantintegrations", createTenantIntegrationRoutes(pgPool));
-app.use("/api/tenants", createTenantRoutes(pgPool));
-app.use("/api/announcements", createAnnouncementRoutes(pgPool));
-app.use("/api/apikeys", createApikeyRoutes(pgPool));
-app.use("/api/notes", createNoteRoutes(pgPool));
-app.use("/api/systembrandings", createSystemBrandingRoutes(pgPool));
-app.use("/api/synchealths", createSyncHealthRoutes(pgPool));
+// Apply v1 deprecation headers middleware (before routes)
+app.use(createDeprecationMiddleware());
+console.log("✓ v1 API deprecation headers middleware enabled");
+
+// Use the pgPool directly; per-request DB time is measured inside the DB adapter
+const measuredPgPool = pgPool;
+
+// Mount routers with instrumented database pool
+app.use("/api/database", createDatabaseRoutes(measuredPgPool));
+app.use("/api/integrations", createIntegrationRoutes(measuredPgPool));
+app.use("/api/telephony", createTelephonyRoutes(measuredPgPool));
+app.use("/api/ai", createAiRoutes(measuredPgPool));
+app.use("/api/mcp", createMcpRoutes(measuredPgPool));
+app.use("/api/accounts", createAccountRoutes(measuredPgPool));
+app.use("/api/leads", createLeadRoutes(measuredPgPool));
+app.use("/api/contacts", createContactRoutes(measuredPgPool));
+app.use("/api/validation", createValidationRoutes(measuredPgPool));
+app.use("/api/billing", createBillingRoutes(measuredPgPool));
+app.use("/api/storage", createStorageRoutes(measuredPgPool));
+app.use("/api/webhooks", createWebhookRoutes(measuredPgPool));
+app.use("/api/system", createSystemRoutes(measuredPgPool));
+app.use("/api/system-settings", createSystemSettingsRoutes(measuredPgPool));
+app.use("/api/users", createUserRoutes(measuredPgPool, supabaseAuth));
+app.use("/api/employees", createEmployeeRoutes(measuredPgPool));
+app.use("/api/permissions", createPermissionRoutes(measuredPgPool));
+app.use("/api/testing", createTestingRoutes(measuredPgPool));
+app.use("/api/documents", createDocumentRoutes(measuredPgPool));
+app.use("/api/documentationfiles", createDocumentationFileRoutes(measuredPgPool));
+app.use("/api/reports", createReportRoutes(measuredPgPool));
+app.use("/api/documentation", createDocumentationRoutes(measuredPgPool));
+app.use("/api/cashflow", createCashflowRoutes(measuredPgPool));
+app.use("/api/cron", createCronRoutes(measuredPgPool));
+// Metrics routes read from performance_logs; use resilient wrapper to avoid ended pool errors
+app.use("/api/metrics", createMetricsRoutes(resilientPerfDb));
+app.use("/api/utils", createUtilsRoutes(measuredPgPool));
+app.use("/api/bizdev", createBizDevRoutes(measuredPgPool));
+app.use("/api/bizdevsources", createBizDevSourceRoutes(measuredPgPool));
+app.use("/api/clients", createClientRoutes(measuredPgPool));
+app.use("/api/workflows", createWorkflowRoutes(measuredPgPool));
+app.use("/api/workflowexecutions", createWorkflowExecutionRoutes(measuredPgPool));
+// Route activities through Supabase API (primary test target)
+app.use("/api/activities", createActivityRoutes(measuredPgPool));
+app.use("/api/opportunities", createOpportunityRoutes(measuredPgPool));
+// v2 opportunities endpoints (Phase 4.2 internal pilot).
+// Always mounted in local/dev backend; production gating is handled via CI/CD.
+console.log("✓ Mounting /api/v2/opportunities routes (dev/internal)");
+app.use("/api/v2/opportunities", createOpportunityV2Routes(measuredPgPool));
+console.log("✓ Mounting /api/v2/activities routes (dev/internal)");
+app.use("/api/v2/activities", createActivityV2Routes(measuredPgPool));
+console.log("✓ Mounting /api/v2/contacts routes (dev/internal)");
+app.use("/api/v2/contacts", createContactV2Routes(measuredPgPool));
+console.log("✓ Mounting /api/v2/accounts routes (dev/internal)");
+app.use("/api/v2/accounts", createAccountV2Routes(measuredPgPool));
+console.log("✓ Mounting /api/v2/leads routes (dev/internal)");
+app.use("/api/v2/leads", createLeadsV2Routes(measuredPgPool));
+console.log("✓ Mounting /api/v2/reports routes (dev/internal)");
+app.use("/api/v2/reports", createReportsV2Routes(measuredPgPool));
+console.log("✓ Mounting /api/v2/workflows routes (dev/internal)");
+app.use("/api/v2/workflows", createWorkflowV2Routes(measuredPgPool));
+console.log("✓ Mounting /api/v2/documents routes (dev/internal)");
+app.use("/api/v2/documents", createDocumentV2Routes(measuredPgPool));
+console.log("✓ Mounting /api/workflow-templates routes");
+app.use("/api/workflow-templates", createWorkflowTemplateRoutes(measuredPgPool));
+app.use("/api/notifications", createNotificationRoutes(measuredPgPool));
+app.use("/api/system-logs", createSystemLogRoutes(measuredPgPool));
+app.use("/api/audit-logs", createAuditLogRoutes(measuredPgPool));
+app.use("/api/modulesettings", createModuleSettingsRoutes(measuredPgPool));
+app.use("/api/entity-labels", createEntityLabelsRoutes(measuredPgPool));
+app.use("/api/tenantintegrations", createTenantIntegrationRoutes(measuredPgPool));
+app.use("/api/tenants", createTenantRoutes(measuredPgPool));
+app.use("/api/tenantresolve", createTenantResolveRoutes(measuredPgPool));
+app.use("/api/announcements", createAnnouncementRoutes(measuredPgPool));
+app.use("/api/apikeys", createApikeyRoutes(measuredPgPool));
+app.use("/api/notes", createNoteRoutes(measuredPgPool));
+app.use("/api/systembrandings", createSystemBrandingRoutes(measuredPgPool));
+app.use("/api/synchealths", createSyncHealthRoutes(measuredPgPool));
+app.use("/api/aicampaigns", createAICampaignRoutes(measuredPgPool));
+app.use("/api/security", createSecurityRoutes(measuredPgPool));
+// Construction Projects module routes
+console.log("✓ Mounting /api/construction/projects routes");
+app.use("/api/construction/projects", createConstructionProjectsRoutes(measuredPgPool));
+console.log("✓ Mounting /api/construction/assignments routes");
+app.use("/api/construction/assignments", createConstructionAssignmentsRoutes(measuredPgPool));
+console.log("✓ Mounting /api/workers routes");
+app.use("/api/workers", createWorkersRoutes(measuredPgPool));
+// Memory routes use Redis/Valkey; DB pool not required
+app.use("/api/memory", createMemoryRoutes());
+// Auth routes (cookie-based login/refresh/logout)
+app.use("/api/auth", createAuthRoutes(measuredPgPool));
+// GitHub Issues routes for autonomous health monitoring
+app.use("/api/github-issues", createGitHubIssuesRoutes);
+// Proxy selected Supabase Edge Functions to avoid CORS issues in browsers
+app.use("/api/edge", createEdgeFunctionRoutes());
+
+// AI summary generation
+app.use("/api/ai", createAISummaryRoutes);
+// Supabase Auth proxy (CORS-controlled access to /auth/v1/user)
+app.use("/api/supabase-proxy", createSupabaseProxyRoutes());
+// AI Suggestions routes (Phase 3 Autonomous Operations)
+app.use("/api/ai/suggestions", createSuggestionsRoutes(measuredPgPool));
 
 // 404 handler
 app.use((req, res) => {
@@ -376,6 +369,10 @@ async function logBackendEvent(level, message, metadata = {}) {
   if (!pgPool) return; // Skip if no database
 
   try {
+    // Sanitize tenant_id: 'system' → NULL for UUID columns
+    // If SYSTEM_TENANT_ID env is set to a valid UUID, use it; otherwise NULL
+    const tenantId = sanitizeUuidInput(process.env.SYSTEM_TENANT_ID || 'system');
+
     const query = `
       INSERT INTO system_logs (
         tenant_id, level, message, source, metadata, created_at
@@ -385,7 +382,7 @@ async function logBackendEvent(level, message, metadata = {}) {
     `;
 
     await pgPool.query(query, [
-      "system", // Special tenant_id for system events
+      tenantId, // NULL or valid UUID (if SYSTEM_TENANT_ID env is set)
       level,
       message,
       "Backend Server",
@@ -419,6 +416,12 @@ process.on("SIGTERM", async () => {
   );
   if (heartbeatTimer) clearInterval(heartbeatTimer);
 
+  // Close workflow queue
+  if (workflowQueue) {
+    await workflowQueue.close();
+    console.log("Workflow queue closed");
+  }
+
   if (pgPool) {
     pgPool.end(() => {
       console.log("PostgreSQL pool closed");
@@ -450,6 +453,8 @@ process.on("uncaughtException", async (err) => {
 // Heartbeat support: record periodic heartbeats so missing intervals indicate downtime
 // ----------------------------------------------------------------------------
 let heartbeatTimer = null;
+const HEARTBEAT_ENABLED = process.env.HEARTBEAT_ENABLED !== 'false';
+const HEARTBEAT_INTERVAL_MS = Math.max(15000, parseInt(process.env.HEARTBEAT_INTERVAL_MS || '60000', 10));
 
 async function writeHeartbeat() {
   if (!pgPool) return;
@@ -458,7 +463,7 @@ async function writeHeartbeat() {
       `INSERT INTO system_logs (tenant_id, level, message, source, metadata, created_at)
        VALUES ($1, $2, $3, $4, $5, NOW())`,
       [
-        "system",
+        null,  // NULL for system-level logs (not tenant-specific)
         "INFO",
         "Heartbeat",
         "Backend Server",
@@ -474,10 +479,15 @@ async function writeHeartbeat() {
 
 function startHeartbeat() {
   if (!pgPool) return;
+  if (!HEARTBEAT_ENABLED) {
+    console.log("✓ Backend heartbeat disabled via HEARTBEAT_ENABLED=false");
+    return;
+  }
   if (heartbeatTimer) clearInterval(heartbeatTimer);
-  // Immediate heartbeat then every 60 seconds
+  // Immediate heartbeat then at configured interval
   writeHeartbeat();
-  heartbeatTimer = setInterval(writeHeartbeat, 60000);
+  heartbeatTimer = setInterval(writeHeartbeat, HEARTBEAT_INTERVAL_MS);
+  console.log(`✓ Heartbeat interval set to ${HEARTBEAT_INTERVAL_MS} ms`);
 }
 
 async function logRecoveryIfGap() {
@@ -485,7 +495,7 @@ async function logRecoveryIfGap() {
   try {
     const result = await pgPool.query(
       `SELECT created_at FROM system_logs
-       WHERE tenant_id = 'system' AND source = 'Backend Server' AND message = 'Heartbeat'
+       WHERE tenant_id IS NULL AND source = 'Backend Server' AND message = 'Heartbeat'
        ORDER BY created_at DESC LIMIT 1`,
     );
     if (result.rows.length > 0) {
@@ -585,19 +595,11 @@ async function ensureStorageBucketExists() {
   }
 }
 
-server.listen(PORT, '0.0.0.0', () => {
+// Start listening
+server.listen(PORT, async () => {
+  const startTimestamp = new Date().toISOString();
+  console.log(`[startup] backend start | env=${process.env.NODE_ENV || 'unknown'} | port=${PORT} | started=${startTimestamp}`);
   console.log(`
-╔═══════════════════════════════════════════════════════════╗
-║                                                           ║
-║   🚀 Aisha CRM Independent Backend Server                 ║
-║                                                           ║
-║   Status: Running                                         ║
-║   Port: ${PORT}                                              ║
-║   Environment: ${
-    process.env.NODE_ENV || "development"
-  }                              ║
-║   Database: ${
-    pgPool ? "Connected (" + dbConnectionType + ")" : "Not configured"
   }   ║
 ║                                                           ║
 ║   Health Check: http://localhost:${PORT}/health             ║
@@ -614,6 +616,8 @@ server.listen(PORT, '0.0.0.0', () => {
   ensureStorageBucketExists().catch((err) =>
     console.error("Bucket ensure failed:", err?.message)
   );
+
+  console.log("!!! BACKEND VERSION CHECK: FIX APPLIED (v2) !!!");
 
   // Log startup event (non-blocking - don't block server startup)
   logBackendEvent("INFO", "Backend server started successfully", {
@@ -637,6 +641,22 @@ server.listen(PORT, '0.0.0.0', () => {
       console.error("Failed to start heartbeat system:", err.message);
     }
   }, 1000); // Delay 1 second to ensure server is fully started
+
+  // Start campaign worker if enabled
+  if (process.env.CAMPAIGN_WORKER_ENABLED === 'true' && pgPool) {
+    const workerInterval = parseInt(process.env.CAMPAIGN_WORKER_INTERVAL_MS || '30000', 10);
+    startCampaignWorker(pgPool, workerInterval);
+  } else {
+    console.log('[CampaignWorker] Disabled (set CAMPAIGN_WORKER_ENABLED=true to enable)');
+  }
+
+  // Start AI triggers worker if enabled (Phase 3 Autonomous Operations)
+  if (process.env.AI_TRIGGERS_WORKER_ENABLED === 'true' && pgPool) {
+    const triggersInterval = parseInt(process.env.AI_TRIGGERS_WORKER_INTERVAL_MS || '60000', 10);
+    startAiTriggersWorker(pgPool, triggersInterval);
+  } else {
+    console.log('[AiTriggersWorker] Disabled (set AI_TRIGGERS_WORKER_ENABLED=true to enable)');
+  }
 
   // Keep-alive interval to prevent process from exiting
   setInterval(() => {

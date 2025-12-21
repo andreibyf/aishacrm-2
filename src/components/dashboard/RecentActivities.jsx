@@ -12,6 +12,10 @@ import { BarChart as RBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTo
 import { Activity } from "@/api/entities";
 import { useApiManager } from "../shared/ApiManager";
 import { useEmployeeScope } from "../shared/EmployeeScopeContext";
+import { useUser } from "@/components/shared/useUser";
+import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
+import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -45,7 +49,7 @@ const priorityColors = {
   urgent: "bg-red-100 text-red-800 border-red-200"
 };
 
-export default function RecentActivities(props) {
+function RecentActivities(props) {
   const { tenantFilter: tenantFilterProp, showTestData: showTestDataProp } = props || {};
   const memoTenantFilter = useMemo(() => (tenantFilterProp ? tenantFilterProp : {}), [tenantFilterProp]);
   const memoShowTestData = useMemo(
@@ -62,22 +66,54 @@ export default function RecentActivities(props) {
 
   const { cachedRequest } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
+  const { loading: userLoading } = useUser();
+  const { authCookiesReady } = useAuthCookiesReady();
+  const { getVisibleCardsForEntity } = useStatusCardPreferences();
+  const { plural: activitiesLabel } = useEntityLabel('activities');
   const flipAttemptedRef = useRef(false);
 
-  const fetchActivities = useCallback(async () => {
+  const backgroundScheduledRef = useRef(false);
+
+  const fetchActivities = useCallback(async (forceFull = false) => {
+    // Use prefetched data immediately without waiting for auth
+    // (Dashboard already handles auth before passing prefetched data)
+    if (!forceFull && Array.isArray(props?.prefetchedActivities) && props.prefetchedActivities.length > 0) {
+      const pref = props.prefetchedActivities;
+      setActivities(pref.map(a => ({ ...a })));
+      setLastUpdated(Date.now());
+      setLoading(false);
+      if (!backgroundScheduledRef.current) {
+        backgroundScheduledRef.current = true;
+        setTimeout(() => {
+          // Single background refresh to hydrate with full data
+          fetchActivities(true);
+        }, 300);
+      }
+      return;
+    }
+
+    // Wait for user to be loaded before fetching data (for non-prefetch path)
+    if (userLoading || !authCookiesReady) {
+      return;
+    }
+
     setLoading(true);
     try {
-      if (Array.isArray(props?.prefetchedActivities)) {
-        const pref = props.prefetchedActivities || [];
-        setActivities(pref.map(a => ({ ...a })));
-        setLastUpdated(Date.now());
-        setLoading(false);
+      // Guard: Don't fetch if no tenant_id is present
+      // When forceFull (background refresh), just return silently to preserve prefetched data
+      if (!memoTenantFilter?.tenant_id) {
+        if (!forceFull) {
+          // Only clear activities on initial load, not background refresh
+          setActivities([]);
+          setLastUpdated(Date.now());
+          setLoading(false);
+        }
         return;
       }
 
       const effectiveFilter = memoShowTestData
         ? { ...memoTenantFilter }
-        : { ...memoTenantFilter, is_test_data: { $ne: true } };
+        : { ...memoTenantFilter, is_test_data: false };
       
       const recentActivities = await cachedRequest(
         "Activity",
@@ -99,7 +135,9 @@ export default function RecentActivities(props) {
         return isNaN(dt.getTime()) ? null : dt;
       };
       
-      const mutableActivities = (recentActivities || []).map(a => ({ ...a }));
+      const mutableActivities = Array.isArray(recentActivities)
+        ? recentActivities.map(a => ({ ...a }))
+        : [];
 
       if (!flipAttemptedRef.current) {
         const flipCandidates = mutableActivities.filter(a => a.status === "scheduled" && toDueDate(a) && toDueDate(a) < now);
@@ -121,7 +159,7 @@ export default function RecentActivities(props) {
     } finally {
       setLoading(false);
     }
-  }, [memoTenantFilter, memoShowTestData, cachedRequest, props.prefetchedActivities]);
+  }, [memoTenantFilter, memoShowTestData, cachedRequest, props.prefetchedActivities, userLoading, authCookiesReady]);
 
   useEffect(() => {
     fetchActivities();
@@ -129,7 +167,7 @@ export default function RecentActivities(props) {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      fetchActivities();
+      fetchActivities(true);
     }, 180000);
     return () => clearInterval(interval);
   }, [fetchActivities]);
@@ -143,7 +181,8 @@ export default function RecentActivities(props) {
     }
     
     const filtered = (activities || []).filter(a => {
-      const matches = a.assigned_to === selectedEmail;
+      // Include activities assigned to the selected employee OR unassigned activities
+      const matches = a.assigned_to === selectedEmail || !a.assigned_to;
       return matches;
     });
     
@@ -162,37 +201,48 @@ export default function RecentActivities(props) {
     return filtered;
   }, [scopedActivities, cutoffMs]);
 
+  // Get visible activity statuses from preferences
+  const visibleActivityCards = useMemo(() => getVisibleCardsForEntity('activities'), [getVisibleCardsForEntity]);
+
   const summaryData = React.useMemo(() => {
-    const order = ["scheduled", "overdue", "in-progress", "completed", "cancelled", "failed"];
-    const label = {
-      scheduled: "Scheduled",
-      overdue: "Overdue",
-      "in-progress": "In Progress",
-      completed: "Completed",
-      cancelled: "Cancelled",
-      failed: "Failed"
+    // Map statusKey to handle 'in_progress' vs 'in-progress' difference
+    const statusKeyMap = {
+      'in_progress': 'in-progress',
+      'scheduled': 'scheduled',
+      'overdue': 'overdue',
+      'completed': 'completed',
+      'cancelled': 'cancelled',
     };
+    
     const counts = activitiesInWindow.reduce((acc, a) => {
       const k = a.status || "scheduled";
       acc[k] = (acc[k] || 0) + 1;
       return acc;
     }, {});
-    return order.map(k => ({ status: label[k], key: k, value: counts[k] || 0 }));
-  }, [activitiesInWindow]);
+    
+    // Only show statuses that are visible in preferences
+    return visibleActivityCards.map(card => {
+      const chartKey = statusKeyMap[card.statusKey] || card.statusKey;
+      return { 
+        status: card.label, 
+        key: chartKey, 
+        value: counts[chartKey] || 0 
+      };
+    });
+  }, [activitiesInWindow, visibleActivityCards]);
 
   const barColors = {
     scheduled: '#3B82F6',
-    overdue: '#F97316',
     'in-progress': '#06B6D4',
+    overdue: '#F97316',
     completed: '#10B981',
-    cancelled: '#94A3B8',
-    failed: '#EF4444'
+    cancelled: '#94A3B8'
   };
 
   const descriptionText =
     memoTenantFilter && memoTenantFilter.tenant_id
-      ? `Showing recent activities for Client ID: ${memoTenantFilter.tenant_id}`
-      : "Showing recent activities for all clients";
+      ? `Client: ${memoTenantFilter.tenant_id.slice(0, 8)}...`
+      : "All clients";
 
   const handleRefresh = () => {
     fetchActivities();
@@ -225,28 +275,28 @@ export default function RecentActivities(props) {
 
   return (
     <Card className="shadow-lg border-0 bg-slate-800 border-slate-700">
-      <CardHeader className="border-b border-slate-700">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
+      <CardHeader className="border-b border-slate-700 pb-3">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <div className="min-w-0">
             <CardTitle className="flex items-center gap-2 text-slate-100">
-              <ActivityIcon className="w-5 h-5 text-indigo-400" />
+              <ActivityIcon className="w-5 h-5 text-indigo-400 flex-shrink-0" />
               Recent Activities
             </CardTitle>
-            <CardDescription className="text-slate-400">
+            <CardDescription className="text-slate-400 text-sm mt-1">
               {descriptionText} • Last {timeframeWeeks} week{timeframeWeeks === "1" ? "" : "s"}
             </CardDescription>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <Select value={timeframeWeeks} onValueChange={setTimeframeWeeks}>
-              <SelectTrigger className="w-32 bg-slate-700 border-slate-600 text-slate-200">
+              <SelectTrigger className="w-28 bg-slate-700 border-slate-600 text-slate-200 text-sm h-8">
                 <SelectValue placeholder="Timeframe" />
               </SelectTrigger>
               <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                <SelectItem value="1">Last 1 week</SelectItem>
-                <SelectItem value="2">Last 2 weeks</SelectItem>
-                <SelectItem value="3">Last 3 weeks</SelectItem>
-                <SelectItem value="4">Last 4 weeks</SelectItem>
+                <SelectItem value="1">1 week</SelectItem>
+                <SelectItem value="2">2 weeks</SelectItem>
+                <SelectItem value="3">3 weeks</SelectItem>
+                <SelectItem value="4">4 weeks</SelectItem>
               </SelectContent>
             </Select>
 
@@ -254,7 +304,7 @@ export default function RecentActivities(props) {
               <Button
                 variant={viewMode === "summary" ? "default" : "ghost"}
                 size="sm"
-                className={viewMode === "summary" ? "bg-indigo-600 hover:bg-indigo-700" : "text-slate-300 hover:bg-slate-700"}
+                className={`h-8 px-3 ${viewMode === "summary" ? "bg-indigo-600 hover:bg-indigo-700" : "text-slate-300 hover:bg-slate-700"}`}
                 onClick={() => setViewMode("summary")}
               >
                 Summary
@@ -262,7 +312,7 @@ export default function RecentActivities(props) {
               <Button
                 variant={viewMode === "list" ? "default" : "ghost"}
                 size="sm"
-                className={viewMode === "list" ? "bg-indigo-600 hover:bg-indigo-700" : "text-slate-300 hover:bg-slate-700"}
+                className={`h-8 px-3 ${viewMode === "list" ? "bg-indigo-600 hover:bg-indigo-700" : "text-slate-300 hover:bg-slate-700"}`}
                 onClick={() => setViewMode("list")}
               >
                 List
@@ -273,7 +323,7 @@ export default function RecentActivities(props) {
               variant="ghost"
               size="sm"
               onClick={handleRefresh}
-              className="text-slate-400 hover:text-slate-200 hover:bg-slate-700"
+              className="text-slate-400 hover:text-slate-200 hover:bg-slate-700 h-8 w-8 p-0"
               disabled={loading}
             >
               <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
@@ -281,7 +331,7 @@ export default function RecentActivities(props) {
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pb-3">
         {viewMode === "summary" ? (
           activitiesInWindow.length === 0 ? (
             <div className="text-center py-8 text-slate-500">
@@ -291,17 +341,17 @@ export default function RecentActivities(props) {
             </div>
           ) : (
             <>
-              <div className="h-64">
+                <div className="h-72 max-w-2xl mx-auto mt-4">
                 <ResponsiveContainer width="100%" height="100%">
-                  <RBarChart data={summaryData}>
+                    <RBarChart data={summaryData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
                     <XAxis dataKey="status" tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#475569" />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#475569" />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#475569" domain={[0, 18]} ticks={[0, 3, 6, 9, 12, 15, 18]} />
                     <RTooltip
                       contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px', color: '#f1f5f9' }}
                       formatter={(value) => [`${value}`, 'Count']}
                     />
-                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false}>
                       {summaryData.map((d, i) => (
                         <Cell key={`cell-${d.key}-${i}`} fill={barColors[d.key] || '#6366f1'} />
                       ))}
@@ -310,10 +360,10 @@ export default function RecentActivities(props) {
                   </RBarChart>
                 </ResponsiveContainer>
               </div>
-              <div className="text-center pt-4 border-t border-slate-700 mt-4">
+                <div className="text-center pt-2 border-t border-slate-700 mt-2">
                 <Button variant="outline" size="sm" asChild className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
                   <Link to={createPageUrl("Activities")}>
-                    View All Activities
+                    View All {activitiesLabel}
                   </Link>
                 </Button>
               </div>
@@ -371,7 +421,7 @@ export default function RecentActivities(props) {
                 <div className="text-center pt-4 border-t border-slate-700 mt-4">
                   <Button variant="outline" size="sm" asChild className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
                     <Link to={createPageUrl("Activities")}>
-                      View All Activities
+                      View All {activitiesLabel}
                     </Link>
                   </Button>
                 </div>
@@ -383,3 +433,5 @@ export default function RecentActivities(props) {
     </Card>
   );
 }
+
+export default React.memo(RecentActivities);

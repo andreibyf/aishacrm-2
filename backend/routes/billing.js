@@ -8,6 +8,31 @@ import express from 'express';
 export default function createBillingRoutes(_pgPool) {
   const router = express.Router();
 
+  // GET /api/billing/usage - Get tenant usage statistics
+  router.get('/usage', async (req, res) => {
+    try {
+      const { tenant_id } = req.query;
+      
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id required' });
+      }
+
+      res.json({
+        status: 'success',
+        data: {
+          tenant_id,
+          period: 'current_month',
+          api_calls: 0,
+          storage_gb: 0,
+          users: 0,
+          cost: 0
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // GET /api/billing/invoices - List invoices
   router.get('/invoices', async (req, res) => {
     try {

@@ -1,0 +1,59 @@
+// Example: Create Lead with Validation
+// Demonstrates: Write operations, clock effect, validation, audit logging
+
+import { Result, Lead, CRMError } from "../spec/types.braid"
+
+fn validateEmail(email: String) -> Boolean {
+  // Simple email validation (pure function, no effects)
+  let hasAt = includes(email, "@");
+  let hasDot = includes(email, ".");
+  return hasAt && hasDot;
+}
+
+fn createLead(name: String, email: String, tenant: String) -> Result<Lead, CRMError> !net, clock {
+  // Pre-flight validation (pure)
+  if !validateEmail(email) {
+    return Err(ValidationError{
+      field: "email",
+      message: "Invalid email format"
+    });
+  }
+  
+  if len(name) < 2 {
+    return Err(ValidationError{
+      field: "name",
+      message: "Name must be at least 2 characters"
+    });
+  }
+  
+  // Prepare payload
+  let timestamp = clock.now();
+  let payload = {
+    name: name,
+    email: email,
+    tenant_id: tenant,
+    status: "new",
+    metadata: {
+      source: "ai_assistant",
+      score: 50,
+      notes: "Created via Braid AI tool"
+    },
+    created_at: timestamp
+  };
+  
+  // POST request (tenant isolation enforced by policy)
+  let response = http.post("/api/v2/leads", { body: payload });
+  
+  return match response {
+    Ok{data} => Ok(data),
+    Err{error} => Err(DatabaseError{
+      query: "INSERT INTO leads",
+      message: error.message
+    }),
+    _ => Err(DatabaseError{ query: "INSERT INTO leads", message: "Unknown error" })
+  };
+}
+
+// AI Tool Usage:
+// const policy = CRM_POLICIES.WRITE_OPERATIONS;  // audit_log=true, tenant_isolation=true
+// const result = await createLead(policy, deps, "Jane Doe", "jane@example.com", "acme");

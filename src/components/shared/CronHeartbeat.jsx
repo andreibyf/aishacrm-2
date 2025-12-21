@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { User, BACKEND_URL } from '@/api/entities';
+import { BACKEND_URL } from '@/api/entities';
 import { useErrorLog, handleApiError, createError } from './ErrorLogger';
+import { useUser } from '@/components/shared/useUser.js';
 
 export default function CronHeartbeat() {
   const lastRunRef = useRef(null);
@@ -8,6 +9,9 @@ export default function CronHeartbeat() {
   const failureCountRef = useRef(0);
   const MAX_FAILURES = 3;
   const { logError } = useErrorLog();
+  
+  // Use global user context instead of local User.me()
+  const { user } = useUser();
 
   useEffect(() => {
     const checkAndRunCronJobs = async () => {
@@ -21,8 +25,6 @@ export default function CronHeartbeat() {
       }
 
       try {
-        const user = await User.me();
-        
         if (user?.role !== 'admin' && user?.role !== 'superadmin') {
           return;
         }
@@ -77,7 +79,7 @@ export default function CronHeartbeat() {
       clearTimeout(initialTimeout);
       clearInterval(interval);
     };
-  }, [logError]);
+  }, [logError, user]);
 
   return null;
 }

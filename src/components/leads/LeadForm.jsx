@@ -16,8 +16,10 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import TagInput from "../shared/TagInput";
 import LazyAccountSelector from "../shared/LazyAccountSelector";
+import LazyEmployeeSelector from "../shared/LazyEmployeeSelector";
 import CreateAccountDialog from "../accounts/CreateAccountDialog";
 import { useApiManager } from "../shared/ApiManager";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 
 // Utility: Normalize date to yyyy-MM-dd format for HTML5 date inputs
 const formatDateForInput = (dateValue) => {
@@ -65,7 +67,19 @@ const statusOptions = [
   { value: "lost", label: "Lost" }
 ];
 
-export default function LeadForm({ lead, onSave, onCancel, user, employees = [], isManager }) {
+export default function LeadForm({ 
+  lead: leadProp, 
+  initialData, 
+  onSave: onSaveProp, 
+  onSubmit, 
+  onCancel, 
+  user, 
+  employees = [], 
+  isManager 
+}) {
+  // Unified contract: support both new and legacy prop names
+  const lead = initialData || leadProp;
+  const onSuccess = onSubmit || onSaveProp;
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -109,16 +123,39 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
   const assignableEmployees = useMemo(() => {
     if (!employees || !user) return [];
 
-    // Managers can assign to anyone with CRM access
+    // Managers can assign to any active employee
     if (isManager) {
-      return employees.filter(e => e.user_email && e.has_crm_access);
+      return employees.filter(e => e.is_active !== false && e.status !== 'inactive');
     }
 
-    // Employees can only assign to themselves if they have CRM access
-    return employees.filter(e => e.user_email === user.email && e.has_crm_access);
+    // Employees can only assign to themselves
+    return employees.filter(e => e.id === user.employee_id || e.email === user.email);
   }, [employees, user, isManager]);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  const isSuperadmin = user?.role === 'superadmin';
+  const { isCardVisible, getCardLabel } = useStatusCardPreferences();
+
+  // Filter lead status options based on card visibility and apply custom labels
+  // Keep hidden statuses if the current lead has them
+  const filteredStatusOptions = useMemo(() => {
+    const statusCardMap = {
+      'new': 'lead_new',
+      'contacted': 'lead_contacted',
+      'qualified': 'lead_qualified',
+      'unqualified': 'lead_rejected',
+      'converted': 'lead_converted',
+      'lost': 'lead_rejected',
+    };
+    
+    return statusOptions
+      .filter(option => 
+        isCardVisible(statusCardMap[option.value]) || formData.status === option.value
+      )
+      .map(option => ({
+        ...option,
+        label: getCardLabel(statusCardMap[option.value]) || option.label
+      }));
+  }, [isCardVisible, getCardLabel, formData.status]);
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -144,7 +181,7 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
             do_not_call: lead.do_not_call || false, // Populate DNC from lead
             do_not_text: lead.do_not_text || false, // Populate DNT from lead
             company: lead.company || "",
-            account_id: lead.account_id || "",
+            account_id: lead.account_id || lead.metadata?.account_id || "",
             job_title: lead.job_title || "",
             source: lead.source || "website",
             status: lead.status || "new",
@@ -279,18 +316,12 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
       last_name: ''
     };
 
-    if (!formData.first_name?.trim()) {
-      errors.first_name = 'First name is required';
-    }
-
-    if (!formData.last_name?.trim()) {
-      errors.last_name = 'Last name is required';
-    }
-
-    // If there are validation errors, set them and stop submission
-    if (errors.first_name || errors.last_name) {
+    // Require at least first name OR last name (not both mandatory)
+    if (!formData.first_name?.trim() && !formData.last_name?.trim()) {
+      errors.first_name = 'First name or last name is required';
+      errors.last_name = 'First name or last name is required';
       setFieldErrors(errors);
-      toast.error("First name and last name are required.");
+      toast.error("At least first name or last name is required.");
       return;
     }
 
@@ -298,13 +329,6 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
     if (!user) {
       console.error('LeadForm.Submit: User is undefined');
       toast.error("Cannot save lead: User not loaded. Please refresh the page.");
-      return;
-    }
-
-    // Guard: Ensure onSave callback exists
-    if (!onSave || typeof onSave !== 'function') {
-      console.error('LeadForm.Submit: onSave callback is not a function', { onSave });
-      toast.error("Cannot save lead: Invalid save handler. Please refresh the page.");
       return;
     }
 
@@ -334,10 +358,11 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
       }
 
       // CRITICAL: Enforce assignment fallback for employees
-      if (!isManager) {
-        submissionData.assigned_to = user.email;
-      } else if (!submissionData.assigned_to || submissionData.assigned_to === 'unassigned') {
-        submissionData.assigned_to = submissionData.assigned_to === 'unassigned' ? null : (submissionData.assigned_to || user.email);
+      // Note: assigned_to is now a UUID (employee.id), not email
+      // For non-managers, we cannot auto-assign by email - they must select from dropdown
+      // For managers, if 'unassigned' is selected, set to null
+      if (submissionData.assigned_to === 'unassigned') {
+        submissionData.assigned_to = null;
       }
 
       if (!lead) { // This is a new lead creation
@@ -392,19 +417,26 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
       submissionData.do_not_call = !!submissionData.do_not_call;
       submissionData.do_not_text = !!submissionData.do_not_text;
 
-
-      console.log('LeadForm.Submit: Passing data to parent for submission:', submissionData);
+      console.log('LeadForm.Submit: Saving lead to database:', submissionData);
       
-      // Pass the prepared data to the parent for submission
-      await onSave(submissionData);
+      // Perform persistence internally (unified contract pattern)
+      let result;
+      if (lead) {
+        // Update existing lead
+        result = await Lead.update(lead.id, submissionData);
+        console.log('LeadForm.Submit: Lead updated successfully:', result);
+      } else {
+        // Create new lead
+        result = await Lead.create(submissionData);
+        console.log('LeadForm.Submit: Lead created successfully:', result);
+      }
 
-      console.log('LeadForm.Submit: Save completed successfully');
+      // Call success callback with result object
+      if (onSuccess && typeof onSuccess === 'function') {
+        await onSuccess(result);
+      }
 
-      toast({
-        title: "Success!",
-        description: lead ? "Lead updated successfully!" : "Lead created successfully!",
-        variant: "default",
-      });
+      toast.success(lead ? "Lead updated successfully!" : "Lead created successfully!");
 
     } catch (error) {
       console.error("LeadForm.Submit: Error during form submission:", {
@@ -450,14 +482,43 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
               </Alert>
             )}
 
+            {/* B2B leads: Show Account/Company first */}
+            {formData.lead_type === 'b2b' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="company" className="text-slate-200">Company</Label>
+                  <Input 
+                    id="company" 
+                    value={formData.company || ''}
+                    onChange={(e) => handleChange('company', e.target.value)} 
+                    className="mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500" 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="account_id" className="text-slate-200">Associated Account</Label>
+                  <LazyAccountSelector
+                    value={formData.account_id}
+                    onChange={(value) => handleChange('account_id', value)}
+                    onCreateNew={() => setShowCreateAccountDialog(true)}
+                    tenantFilter={getTenantFilter(user, selectedTenantId)}
+                    className="mt-1 bg-slate-700 border-slate-600 text-slate-200"
+                    contentClassName="bg-slate-800 border-slate-700"
+                    itemClassName="text-slate-200 hover:bg-slate-700"
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="first_name" className="text-slate-200">First Name *</Label>
+                <Label htmlFor="first_name" className="text-slate-200">
+                  First Name <span className="text-red-400">*</span>
+                  <span className="text-xs text-slate-400 ml-2">(or Last Name required)</span>
+                </Label>
                 <Input
                   id="first_name"
                   value={formData.first_name || ""}
                   onChange={(e) => handleChange('first_name', e.target.value)}
-                  required
                   aria-invalid={!!fieldErrors.first_name}
                   aria-describedby={fieldErrors.first_name ? "first_name-error" : undefined}
                   className={`mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500 ${
@@ -471,12 +532,14 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
                 )}
               </div>
               <div>
-                <Label htmlFor="last_name" className="text-slate-200">Last Name *</Label>
+                <Label htmlFor="last_name" className="text-slate-200">
+                  Last Name <span className="text-red-400">*</span>
+                  <span className="text-xs text-slate-400 ml-2">(or First Name required)</span>
+                </Label>
                 <Input
                   id="last_name"
                   value={formData.last_name || ""}
                   onChange={(e) => handleChange('last_name', e.target.value)}
-                  required
                   aria-invalid={!!fieldErrors.last_name}
                   aria-describedby={fieldErrors.last_name ? "last_name-error" : undefined}
                   className={`mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500 ${
@@ -543,29 +606,32 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="company" className="text-slate-200">Company</Label>
-                <Input 
-                  id="company" 
-                  value={formData.company || ''}
-                  onChange={(e) => handleChange('company', e.target.value)} 
-                  className="mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500" 
-                />
+            {/* B2C leads: Show Company/Account fields here */}
+            {formData.lead_type !== 'b2b' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="company" className="text-slate-200">Company</Label>
+                  <Input 
+                    id="company" 
+                    value={formData.company || ''}
+                    onChange={(e) => handleChange('company', e.target.value)} 
+                    className="mt-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500" 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="account_id" className="text-slate-200">Associated Account</Label>
+                  <LazyAccountSelector
+                    value={formData.account_id}
+                    onChange={(value) => handleChange('account_id', value)}
+                    onCreateNew={() => setShowCreateAccountDialog(true)}
+                    tenantFilter={getTenantFilter(user, selectedTenantId)} // Pass current tenant filter
+                    className="mt-1 bg-slate-700 border-slate-600 text-slate-200"
+                    contentClassName="bg-slate-800 border-slate-700"
+                    itemClassName="text-slate-200 hover:bg-slate-700"
+                  />
+                </div>
               </div>
-              <div>
-                <Label htmlFor="account_id" className="text-slate-200">Associated Account</Label>
-                <LazyAccountSelector
-                  value={formData.account_id}
-                  onChange={(value) => handleChange('account_id', value)}
-                  onCreateNew={() => setShowCreateAccountDialog(true)}
-                  tenantFilter={getTenantFilter(user, selectedTenantId)} // Pass current tenant filter
-                  className="mt-1 bg-slate-700 border-slate-600 text-slate-200"
-                  contentClassName="bg-slate-800 border-slate-700"
-                  itemClassName="text-slate-200 hover:bg-slate-700"
-                />
-              </div>
-            </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                <div>
@@ -602,7 +668,7 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
                     <SelectValue placeholder="Select status..." />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-slate-700">
-                    {statusOptions.map((option) => (
+                    {filteredStatusOptions.map((option) => (
                       <SelectItem key={option.value} value={option.value} className="text-slate-200 hover:bg-slate-700">
                         {option.label}
                       </SelectItem>
@@ -622,23 +688,14 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
                     className="mt-1 bg-slate-600 border-slate-500 text-slate-300 cursor-not-allowed"
                   />
                 ) : (
-                  // Managers can select assignee
-                  <Select
+                  // Managers can select assignee - using LazyEmployeeSelector for immediate data loading
+                  <LazyEmployeeSelector
                     value={formData.assigned_to || "unassigned"}
-                    onValueChange={(value) => handleChange('assigned_to', value)} // Changed to pass 'unassigned' string directly
-                  >
-                    <SelectTrigger className="mt-1 bg-slate-700 border-slate-600 text-slate-200">
-                      <SelectValue placeholder="Select assignee" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700">
-                      <SelectItem value="unassigned" className="text-slate-200 hover:bg-slate-700">Unassigned</SelectItem>
-                      {assignableEmployees.map((emp) => (
-                        <SelectItem key={emp.id} value={emp.user_email} className="text-slate-200 hover:bg-slate-700">
-                          {emp.first_name} {emp.last_name} ({emp.user_email})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onValueChange={(value) => handleChange('assigned_to', value)}
+                    placeholder="Select assignee"
+                    includeUnassigned={true}
+                    className="mt-1 bg-slate-700 border-slate-600 text-slate-200"
+                  />
                 )}
               </div>
             </div>
@@ -698,7 +755,7 @@ export default function LeadForm({ lead, onSave, onCancel, user, employees = [],
               />
             </div>
 
-            {isAdmin && (
+            {isSuperadmin && (
               <div className="flex items-center space-x-2 p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
                 <Switch
                   id="is_test_data"

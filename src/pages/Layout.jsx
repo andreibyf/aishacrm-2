@@ -1,10 +1,30 @@
-import React, { useRef, useState } from "react";
+import { logDev } from "@/utils/devLogger";
+import React, { useRef, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom"; // Import useNavigate
 import { createPageUrl } from "@/utils";
 import PasswordChangeModal from "@/components/auth/PasswordChangeModal";
+import EnvironmentBanner from "@/components/shared/EnvironmentBanner";
+import { getBackendUrl } from "@/api/backendUrl";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { SortableNavItem } from "@/components/shared/SortableNavItem";
+import { usePrimaryNavOrder, useSecondaryNavOrder } from "@/hooks/useNavOrder";
+import { EntityLabelsProvider, useEntityLabels } from "@/components/shared/EntityLabelsContext";
 import {
   BarChart3,
-  BookOpen, // NEW: Added for Documentation and WorkflowGuide
+  BookOpen, // NEW: Added for Documentation
   Bot,
   Building2,
   Calendar,
@@ -15,14 +35,16 @@ import {
   DollarSign,
   FileText,
   FolderOpen,
+  GripVertical,
+  HardHat, // NEW: Added for Construction Projects
   LayoutDashboard,
   Loader2,
   LogOut,
   Megaphone, // NEW: Added for AI Campaigns
   Menu,
-  Monitor,
   Moon,
   Plug, // NEW: Added for Integrations
+  RotateCcw,
   Settings,
   Sun,
   Target, // Changed Leads icon to Target
@@ -52,6 +74,7 @@ import { User } from "@/api/entities";
 import { Tenant } from "@/api/entities";
 import { ModuleSettings } from "@/api/entities";
 import { Employee } from "@/api/entities";
+import { supabase } from "@/lib/supabase";
 import NotificationPanel from "../components/notifications/NotificationPanel";
 import { TenantProvider, useTenant } from "../components/shared/tenantContext";
 import { isValidId } from "../components/shared/tenantUtils";
@@ -60,12 +83,15 @@ import { TimezoneProvider } from "../components/shared/TimezoneContext";
 import TenantSwitcher from "../components/shared/TenantSwitcher";
 import SystemStatusIndicator from "../components/shared/SystemStatusIndicator";
 import Clock from "../components/shared/Clock";
+import { useUser } from "@/components/shared/useUser.js";
 import RouteGuard from "../components/shared/RouteGuard";
 import { getOrCreateUserApiKey } from "@/api/functions";
 import { createAuditLog } from "@/api/functions";
 import { MCPManager } from "../components/shared/MCPClient";
 import GlobalDetailViewer from "../components/shared/GlobalDetailViewer";
-import { getMyTenantBranding } from "@/api/functions";
+import { getTenantBrandingFast } from "@/api/entities";
+import { getDashboardBundleFast } from "@/api/dashboard";
+import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
 import EmployeeScopeFilter from "../components/shared/EmployeeScopeFilter";
 import { EmployeeScopeProvider } from "../components/shared/EmployeeScopeContext";
 import FooterBrand from "../components/shared/FooterBrand";
@@ -75,6 +101,11 @@ import {
 } from "@/components/ai/agentSdkGuard";
 import ClearChatButton from "../components/ai/ClearChatButton";
 import { clearChat } from "../components/ai/chatUtils";
+import AiSidebar from "@/components/ai/AiSidebar";
+import AiAssistantLauncher from "@/components/ai/AiAssistantLauncher.jsx";
+import { AiSidebarProvider, useAiSidebarState } from "@/components/ai/useAiSidebarState.jsx";
+import SuggestionBadge from "@/components/ai/SuggestionBadge";
+import AiShaActionHandler from "@/components/ai/AiShaActionHandler";
 import CronHeartbeat from "../components/shared/CronHeartbeat";
 import UserPresenceHeartbeat from "../components/shared/UserPresenceHeartbeat";
 import GlobalDomPatches from "../components/shared/GlobalDomPatches";
@@ -94,7 +125,9 @@ const navItems = [
   { href: "Opportunities", icon: TrendingUp, label: "Opportunities" }, // Changed icon to TrendingUp
   { href: "Activities", icon: CheckSquare, label: "Activities" },
   { href: "Calendar", icon: Calendar, label: "Calendar" },
-  { href: "BizDevSources", icon: Database, label: "BizDev Sources" },
+  { href: "ConstructionProjects", icon: HardHat, label: "Construction Projects" }, // Construction staffing module
+  { href: "Workers", icon: Users, label: "Workers" }, // Contractors/temp labor management
+  { href: "BizDevSources", icon: Database, label: "BizDev Sources" }, // Business development sources
   { href: "CashFlow", icon: DollarSign, label: "Cash Flow" },
   { href: "DocumentProcessing", icon: FileText, label: "Document Processing" },
   {
@@ -113,14 +146,13 @@ const navItems = [
 ];
 
 const secondaryNavItems = [
-  { href: "WorkflowGuide", icon: BookOpen, label: "Workflow Guide" }, // Changed icon to BookOpen
   { href: "Documentation", icon: BookOpen, label: "Documentation" }, // Changed icon to BookOpen
   {
     href: "Agent",
     icon: Bot,
     label: "AI Agent",
     isAvatar: true,
-    avatarUrl: "/assets/Ai-SHA-logo-2.png",
+    avatarUrl: "/assets/aisha-executive-portrait.jpg",
   },
   {
     href: "ClientRequirements",
@@ -144,124 +176,103 @@ function isSuperAdmin(user) {
  */
 function isAdminOrSuperAdmin(user) {
   if (!user) return false;
-  return user.role === "admin" ||
-    user.role === "superadmin" ||
-    user.is_superadmin === true;
+  return user.role === 'admin' || user.role === 'superadmin' || user.is_superadmin === true;
 }
 
 function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
   if (!user) return false;
 
-  // GOD MODE: SuperAdmins bypass ALL restrictions
-  if (isSuperAdmin(user)) {
+  logDev("[hasPageAccess] Called with:", {
+    pageName,
+    userEmail: user.email,
+    userRole: user.role,
+    hasNavigationPermissions: !!user.navigation_permissions,
+    navigationPermissionsType: typeof user.navigation_permissions,
+    navigationPermissions: user.navigation_permissions,
+  });
+
+  // Superadmins bypass disables only in global view (no tenant selected)
+  if (isSuperAdmin(user) && (selectedTenantId === null || selectedTenantId === undefined)) {
     return true;
   }
 
-  // CRM access gating: if CRM access is disabled, restrict all CRM pages
-  const pagesAllowedWithoutCRM = new Set([
-    "Documentation",
-    "Agent",
-    "Settings",
-    "AuditLog",
-    "UnitTests",
-    "WorkflowGuide",
-    "ClientRequirements",
-    "Workflows",
-  ]); // Added Workflows
-  if (user.crm_access === false) {
-    return pagesAllowedWithoutCRM.has(pageName);
-  }
+  const superadminOnlyPages = new Set(["Tenants"]);
+  if (superadminOnlyPages.has(pageName) && user.role !== 'superadmin') return false;
 
-  // Map page names to module IDs
+  const pagesAllowedWithoutCRM = new Set([
+    "Documentation","Agent","Settings","AuditLog","UnitTests","ClientRequirements",
+  ]);
+  if (user.crm_access === false) return pagesAllowedWithoutCRM.has(pageName);
+
+  // Module names must match EXACTLY what's stored in modulesettings table
+  // See ModuleManager.jsx defaultModules for the canonical names
   const moduleMapping = {
-    "Dashboard": "dashboard",
-    "Contacts": "contacts",
-    "Accounts": "accounts",
-    "Leads": "leads",
-    "Opportunities": "opportunities",
-    "Activities": "activities",
-    "Calendar": "calendar",
-    "BizDevSources": "bizdev_sources",
-    "CashFlow": "cash_flow",
-    "DocumentProcessing": "document_processing",
-    "DocumentManagement": "document_processing",
-    "Employees": "employees",
-    "Reports": "reports",
-    "Integrations": "integrations",
-    "PaymentPortal": "payment_portal",
-    "AICampaigns": "ai_campaigns",
-    "Agent": "ai_agent",
-    "Utilities": "utilities",
-    "ClientOnboarding": "client_onboarding",
-    "Workflows": "workflows", // NEW: Added Workflows module ID
-    "DuplicateContacts": null,
-    "DuplicateAccounts": null,
-    "DuplicateLeads": null,
-    "Tenants": null,
-    "Settings": null,
-    "Documentation": null,
-    "AuditLog": null,
-    "UnitTests": null,
-    "WorkflowGuide": null,
-    "ClientRequirements": null, // NEW: Added ClientRequirements
+    Dashboard: 'Dashboard',
+    Contacts: 'Contact Management',
+    Accounts: 'Account Management',
+    Leads: 'Lead Management',
+    Opportunities: 'Opportunities',
+    Activities: 'Activity Tracking',
+    Calendar: 'Calendar',
+    BizDevSources: 'BizDev Sources',
+    CashFlow: 'Cash Flow Management',
+    DocumentProcessing: 'Document Processing & Management',
+    DocumentManagement: 'Document Processing & Management',
+    Employees: 'Employee Management',
+    Reports: 'Analytics & Reports',
+    Integrations: 'Integrations',
+    PaymentPortal: 'Payment Portal',
+    AICampaigns: 'AI Campaigns',
+    Agent: 'AI Agent',
+    Utilities: 'Utilities',
+    ClientOnboarding: 'Client Onboarding',
+    Workflows: 'Workflows',
+    ConstructionProjects: 'Construction Projects',
+    Workers: 'Workers',
+    DuplicateContacts: null,
+    DuplicateAccounts: null,
+    DuplicateLeads: null,
+    Tenants: null,
+    Settings: null,
+    Documentation: null,
+    AuditLog: null,
+    UnitTests: null,
+    ClientRequirements: null,
   };
 
-  // CRITICAL: ModuleSettings check FIRST - if module is disabled, hide immediately
   const requiredModuleId = moduleMapping[pageName];
   if (requiredModuleId && moduleSettings.length > 0) {
-    const moduleSetting = moduleSettings.find((m) =>
-      m.module_id === requiredModuleId
-    );
-    if (moduleSetting && moduleSetting.is_active === false) {
-      return false;
-    }
+    const moduleSetting = moduleSettings.find(m => m.module_name === requiredModuleId);
+    if (moduleSetting && moduleSetting.is_enabled === false) return false;
   }
 
-  // CRITICAL FIX: Check user-specific navigation_permissions FIRST before any defaults
-  // Read from TOP LEVEL user.navigation_permissions (not nested in user.permissions.navigation_permissions)
-  if (
-    user.navigation_permissions &&
-    typeof user.navigation_permissions === "object"
-  ) {
-    const hasCustomPermission = Object.prototype.hasOwnProperty.call(
-      user.navigation_permissions,
-      pageName,
-    );
+  // Settings page is always accessible to authenticated users (for profile settings)
+  // Admin tabs within Settings are controlled by the Settings page itself
+  if (pageName === 'Settings') return true;
 
+  if (user.navigation_permissions && typeof user.navigation_permissions === 'object') {
+    if (pageName === 'Dashboard') {
+      logDev('[hasPageAccess] User navigation_permissions:', {
+        userEmail: user.email,
+        role: user.role,
+        permissions: user.navigation_permissions,
+        pageName,
+      });
+    }
+    const hasCustomPermission = Object.prototype.hasOwnProperty.call(user.navigation_permissions, pageName);
     if (hasCustomPermission) {
-      // Explicit setting takes precedence - return immediately
-      return user.navigation_permissions[pageName] === true;
+      const explicit = user.navigation_permissions[pageName];
+      logDev(`[hasPageAccess] Explicit permission for ${pageName}:`, explicit);
+      if (explicit === false) return false;
+      if (explicit === true) return true;
     }
   }
 
-  // For system pages, admins and superadmins have access (only if no explicit permission set above)
-  // Settings: ONLY superadmin and admin roles
-  // Documentation, AuditLog, Agent, etc.: admin and superadmin
-  if (
-    pageName === "Settings" &&
-    (user.role === "superadmin" || user.role === "admin")
-  ) {
-    return true;
-  }
+  if ((user.role === 'admin' || user.role === 'superadmin') && (
+      pageName === 'Documentation' || pageName === 'AuditLog' || pageName === 'Tenants' || pageName === 'Agent' ||
+    pageName === 'UnitTests' || pageName === 'ClientRequirements' || pageName === 'ConstructionProjects')) return true;
+  if ((user.role === 'superadmin' || user.role === 'admin') && !selectedTenantId) return true;
 
-  if (
-    (user.role === "admin" || user.role === "superadmin") &&
-    (pageName === "Documentation" || pageName === "AuditLog" ||
-      pageName === "Tenants" || pageName === "Agent" ||
-      pageName === "UnitTests" || pageName === "WorkflowGuide" ||
-      pageName === "ClientRequirements" || pageName === "Workflows")
-  ) { // NEW: Added ClientRequirements, Workflows
-    return true;
-  }
-
-  // For superadmins not managing a specific tenant, they have full access
-  if (
-    (user.role === "superadmin" || user.role === "admin") && !selectedTenantId
-  ) {
-    return true;
-  }
-
-  // Fall back to default role-based permissions only if no explicit permission was set
   const defaultPermissions = getDefaultNavigationPermissions(user.role);
   return defaultPermissions[pageName] || false;
 }
@@ -307,16 +318,16 @@ function getDefaultNavigationPermissions(role) {
       PaymentPortal: true,
       AICampaigns: true,
       Agent: true,
-      Workflows: true, // NEW: Added Workflows for superadmin
       Tenants: true,
       Settings: true,
       Documentation: true,
       AuditLog: true,
       Utilities: true,
       UnitTests: true,
-      WorkflowGuide: true,
       ClientOnboarding: true,
       ClientRequirements: true, // NEW
+      ConstructionProjects: true, // Construction staffing module
+      Workers: true, // Worker/contractor management
       DuplicateContacts: true,
       DuplicateAccounts: true,
       DuplicateLeads: true,
@@ -340,16 +351,16 @@ function getDefaultNavigationPermissions(role) {
       PaymentPortal: true,
       AICampaigns: true,
       Agent: true,
-      Workflows: true, // NEW: Added Workflows for admin
       Tenants: true,
       Settings: true,
       Documentation: true,
       AuditLog: true,
       Utilities: true,
       UnitTests: true,
-      WorkflowGuide: true,
       ClientOnboarding: true,
       ClientRequirements: true, // NEW
+      ConstructionProjects: true, // Construction staffing module
+      Workers: true, // Worker/contractor management
       DuplicateContacts: true,
       DuplicateAccounts: true,
       DuplicateLeads: true,
@@ -373,16 +384,16 @@ function getDefaultNavigationPermissions(role) {
       PaymentPortal: false,
       AICampaigns: true,
       Agent: true,
-      Workflows: true,
       Tenants: false,
       Settings: true,
       Documentation: true,
       AuditLog: true,
       Utilities: true,
       UnitTests: false,
-      WorkflowGuide: true,
       ClientOnboarding: true,
       ClientRequirements: false,
+      ConstructionProjects: true, // Construction staffing module
+      Workers: true, // Worker/contractor management
       DuplicateContacts: true,
       DuplicateAccounts: true,
       DuplicateLeads: true,
@@ -397,25 +408,24 @@ function getDefaultNavigationPermissions(role) {
       Calendar: true,
       Documentation: true,
       Agent: true,
-      WorkflowGuide: true,
+      Settings: true, // All users need access to their profile settings
       ClientOnboarding: false,
       ClientRequirements: false,
-      Workflows: false,
+      ConstructionProjects: true, // Construction staffing module - workers need access
+      Workers: true, // Worker/contractor management - workers need access
     },
   };
 
   // Merge the basePermissions with role-specific permissions, ensuring role-specific explicit 'true's override 'false'
   const rolePermissions = { ...(defaults[role] || defaults.employee) };
 
-  // Explicitly ensure 'Settings', 'Documentation', 'Agent', 'WorkflowGuide' are accessible for all roles if CRM access is true
+  // Explicitly ensure 'Settings', 'Documentation', 'Agent' are accessible for all roles if CRM access is true
   // (CRM access check is done in hasPageAccess first)
-  rolePermissions.Settings = rolePermissions.Settings || true;
+  rolePermissions.Settings = true; // Always allow Settings for profile access
   rolePermissions.Documentation = rolePermissions.Documentation || true;
   rolePermissions.Agent = rolePermissions.Agent || true;
-  rolePermissions.WorkflowGuide = rolePermissions.WorkflowGuide || true;
   rolePermissions.ClientRequirements = rolePermissions.ClientRequirements ||
     false; // NEW: Explicitly manage ClientRequirements access
-  rolePermissions.Workflows = rolePermissions.Workflows || false; // NEW: Explicitly manage Workflows access
 
   return rolePermissions;
 }
@@ -475,24 +485,7 @@ const UserNav = ({ user, handleLogout, createPageUrl }) => {
         </DropdownMenuItem>
         {isAdmin && (
           <>
-            <DropdownMenuItem asChild>
-              <Link
-                to={createPageUrl("AuditLog")}
-                className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-              >
-                <Monitor className="mr-2 h-4 w-4" />
-                Audit Log
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link
-                to={createPageUrl("UnitTests")}
-                className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-              >
-                <Wrench className="mr-2 h-4 w-4" />
-                Unit Tests
-              </Link>
-            </DropdownMenuItem>
+            
           </>
         )}
         <DropdownMenuSeparator className="border-slate-700" />
@@ -523,23 +516,22 @@ const SvgDefs = () => (
 let globalTenantCleanupDone = false;
 
 function Layout({ children, currentPageName }) { // Renamed from AppLayout to Layout
-  const [user, setUser] = React.useState(() => {
-    // Initialize with E2E user if in E2E mode (synchronous check before first render)
-    if (typeof window !== 'undefined' && 
-        localStorage.getItem('E2E_TEST_MODE') === 'true' && 
-        window.__e2eUser) {
-      console.log('[Layout] Initializing with E2E mock user:', window.__e2eUser.email);
-      return window.__e2eUser;
-    }
-    return null;
-  });
-  const [userLoading, setUserLoading] = React.useState(true);
+  // Source user from global UserContext to avoid duplicate fetches/logs
+  const { user, loading: userLoading, reloadUser } = useUser();
+  // Ensure we know when auth cookies are available for backend calls
+  const { authCookiesReady } = useAuthCookiesReady();
   const [userError, setUserError] = React.useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
   const [selectedTenant, setSelectedTenant] = React.useState(null);
   const [moduleSettings, setModuleSettings] = React.useState([]);
   const [currentTenantData, setCurrentTenantData] = React.useState(null);
   const [elevenLabsApiKey, setElevenLabsApiKey] = useState(null);
+  const {
+    isOpen: isAiSidebarOpen,
+    openSidebar: openAiSidebar,
+    toggleSidebar: toggleAiSidebar,
+    realtimeMode: isRealtimeSidebarMode,
+  } = useAiSidebarState();
 
   // CRITICAL: Access tenant context safely WITHOUT destructuring
   const tenantContext = useTenant();
@@ -548,6 +540,9 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     () => tenantContext?.setSelectedTenantId || (() => {}),
     [tenantContext?.setSelectedTenantId],
   );
+
+  // Entity labels for custom navigation names
+  const { getNavLabel } = useEntityLabels();
 
   const navigate = useNavigate();
   const [globalDetailRecord, setGlobalDetailRecord] = useState(null);
@@ -583,6 +578,14 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     }
   };
 
+  const handleAssistantLauncherClick = React.useCallback(() => {
+    if (isAiSidebarOpen) {
+      toggleAiSidebar();
+      return;
+    }
+    openAiSidebar();
+  }, [isAiSidebarOpen, openAiSidebar, toggleAiSidebar]);
+
   // NEW: ensure theme class is also applied to document.body so Radix Portals inherit light styles
   React.useEffect(() => {
     const cls = theme === "light" ? "theme-light" : "theme-dark";
@@ -601,6 +604,21 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       document.body.classList.remove("theme-light", "theme-dark");
     };
   }, [theme]);
+
+  // DEV: Keyboard shortcut to clear cache (Ctrl+Shift+K or Cmd+Shift+K)
+  React.useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'K') {
+        e.preventDefault();
+        clearCache();
+        console.log('✅ API cache cleared (Ctrl+Shift+K)');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [clearCache]);
+
   // Ref to track if module settings have been loaded for the current user
   const moduleSettingsLoadedRef = useRef(false);
   // Ref to store the ID of the user for whom module settings were last loaded
@@ -629,14 +647,14 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         // No UI selection - check user's assigned tenant_id
         if (user?.tenant_id) {
           // Super Admin or Admin has an assigned tenant - default to it
-          console.log(
+          logDev(
             "[Layout] Admin defaulting to assigned tenant:",
             user.tenant_id,
           );
           nextTenantId = user.tenant_id;
         } else if (superAdmin) {
           // Super Admin with NO assigned tenant = global access to ALL tenants
-          console.log(
+          logDev(
             "[Layout] SuperAdmin global access - viewing ALL tenants",
           );
           return null; // null = "all tenants" for superadmins without tenant assignment
@@ -653,10 +671,45 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       ? nextTenantId
       : null;
     if (validTenantId) {
-      console.log("[Layout] Filtering data for tenant:", validTenantId);
+      logDev("[Layout] Filtering data for tenant:", validTenantId);
     }
     return validTenantId;
   }, [user, selectedTenantId]);
+
+  const effectiveModuleTenantId = React.useMemo(() => {
+    if (selectedTenantId !== null && selectedTenantId !== undefined) {
+      return selectedTenantId;
+    }
+    if (user?.tenant_id) {
+      return user.tenant_id;
+    }
+    if (currentTenantData?.id) {
+      return currentTenantData.id;
+    }
+    return null;
+  }, [currentTenantData?.id, selectedTenantId, user?.tenant_id]);
+
+  const realtimeVoiceModuleEnabled = React.useMemo(() => {
+    if (!Array.isArray(moduleSettings) || moduleSettings.length === 0) {
+      return true;
+    }
+    const moduleName = "Realtime Voice";
+    const matchingEntries = moduleSettings.filter((setting) => setting.module_name === moduleName);
+    if (matchingEntries.length === 0) {
+      return true;
+    }
+    if (effectiveModuleTenantId) {
+      const tenantMatch = matchingEntries.find((setting) => setting.tenant_id === effectiveModuleTenantId);
+      if (tenantMatch) {
+        return tenantMatch.is_enabled !== false;
+      }
+    }
+    const defaultMatch = matchingEntries.find((setting) => !setting.tenant_id);
+    if (defaultMatch) {
+      return defaultMatch.is_enabled !== false;
+    }
+    return matchingEntries[0].is_enabled !== false;
+  }, [effectiveModuleTenantId, moduleSettings]);
 
   // NEW: One-time cleanup of stale tenant IDs on app initialization
   React.useEffect(() => {
@@ -682,6 +735,18 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       console.warn("Storage access failed during tenant cleanup:", e);
     }
   }, [setSelectedTenantId]);
+
+  // NEW: Auto-select tenant from user profile on login
+  React.useEffect(() => {
+    // Only auto-select if:
+    // 1. User is logged in and has a tenant_id
+    // 2. No tenant is currently selected in context
+    // 3. User is not a global super admin (tenant_id=null for global access)
+    if (user?.tenant_id && selectedTenantId === null && setSelectedTenantId) {
+      logDev("[Layout] Auto-selecting tenant from user profile:", user.tenant_id);
+      setSelectedTenantId(user.tenant_id);
+    }
+  }, [user?.tenant_id, selectedTenantId, setSelectedTenantId]);
 
   // NEW: Reset failed tenants when user changes
   React.useEffect(() => {
@@ -711,6 +776,13 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       ensureLink("dns-prefetch", o);
     });
   }, []);
+
+  // Display Effective client badge in header for clarity (REMOVED per user request)
+  // The tenant identifier should no longer be exposed in the UI.
+  // Keeping the component stub to avoid runtime/JSX reference changes elsewhere.
+  const EffectiveClientBadge = () => null;
+
+  // Inject badge just before returning main layout (search for the primary return below)
 
   // NEW: Auto-apply loading="lazy" to images and observe future inserts
   React.useEffect(() => {
@@ -855,22 +927,88 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   //   }
   // };
 
+  // Navigation order management with drag-and-drop (tenant-scoped)
+  const [isDragMode, setIsDragMode] = useState(false);
+  const { orderedItems: orderedNavItems, setOrder: setNavOrder, resetOrder: resetNavOrder, hasCustomOrder: hasCustomNavOrder } = usePrimaryNavOrder(navItems, effectiveTenantId);
+  const { orderedItems: orderedSecondaryItems, setOrder: setSecondaryOrder, resetOrder: resetSecondaryOrder, hasCustomOrder: hasCustomSecondaryOrder } = useSecondaryNavOrder(secondaryNavItems, effectiveTenantId);
+
+  // Debug navigation order persistence
+  React.useEffect(() => {
+    console.log("[Layout] effectiveTenantId changed:", effectiveTenantId, "user:", user?.email);
+  }, [effectiveTenantId, user?.email]);
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Minimum drag distance before activation
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // Handle drag end for primary nav
+  const handleNavDragEnd = useCallback((event) => {
+    const { active, over } = event;
+    if (active.id !== over?.id) {
+      const oldIndex = orderedNavItems.findIndex((item) => item.href === active.id);
+      const newIndex = orderedNavItems.findIndex((item) => item.href === over?.id);
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newOrder = arrayMove(orderedNavItems, oldIndex, newIndex);
+        setNavOrder(newOrder);
+      }
+    }
+  }, [orderedNavItems, setNavOrder]);
+
+  // Handle drag end for secondary nav
+  const handleSecondaryDragEnd = useCallback((event) => {
+    const { active, over } = event;
+    if (active.id !== over?.id) {
+      const oldIndex = orderedSecondaryItems.findIndex((item) => item.href === active.id);
+      const newIndex = orderedSecondaryItems.findIndex((item) => item.href === over?.id);
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newOrder = arrayMove(orderedSecondaryItems, oldIndex, newIndex);
+        setSecondaryOrder(newOrder);
+      }
+    }
+  }, [orderedSecondaryItems, setSecondaryOrder]);
+
+  // Reset all nav order to default
+  const handleResetNavOrder = useCallback(() => {
+    resetNavOrder();
+    resetSecondaryOrder();
+    setIsDragMode(false);
+  }, [resetNavOrder, resetSecondaryOrder]);
+
   const filteredNavItems = React.useMemo(() => {
     if (!user) return [];
     // Filter out items with parentMenu if you want to implement a nested menu structure
     // For now, they are treated as top-level items for simplicity as per existing structure
-    return navItems
+    return orderedNavItems
       .filter((item) =>
         hasPageAccess(user, item.href, selectedTenantId, moduleSettings)
-      );
-  }, [user, selectedTenantId, moduleSettings]);
+    )
+      .map((item) => {
+        // Apply custom entity labels if available
+        const customLabel = getNavLabel(item.href);
+        return customLabel ? { ...item, label: customLabel } : item;
+      });
+  }, [user, selectedTenantId, moduleSettings, orderedNavItems, getNavLabel]);
 
   const filteredSecondaryNavItems = React.useMemo(() => {
     if (!user) return [];
-    return secondaryNavItems.filter((item) =>
-      hasPageAccess(user, item.href, selectedTenantId, moduleSettings)
-    );
-  }, [user, selectedTenantId, moduleSettings]);
+    return orderedSecondaryItems
+      .filter((item) =>
+        hasPageAccess(user, item.href, selectedTenantId, moduleSettings)
+    )
+      .map((item) => {
+        // Apply custom entity labels if available
+        const customLabel = getNavLabel(item.href);
+        return customLabel ? { ...item, label: customLabel } : item;
+      });
+  }, [user, selectedTenantId, moduleSettings, orderedSecondaryItems, getNavLabel]);
 
   React.useEffect(() => {
     const originalConsoleError = console.error;
@@ -920,58 +1058,58 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   // This was adding overhead to every single network request
 
   const refetchUser = React.useCallback(async () => {
-    const loadUser = async () => {
-      setUserLoading(true);
+    try {
       setUserError(null);
+      await reloadUser();
+      // Fetch AI API key silently for the (new) current user context
+      // Only in dev mode to avoid production warnings
+      if (import.meta.env.DEV) {
+        getOrCreateUserApiKey()
+          .then((response) => {
+            if (response?.data?.apiKey) {
+              setElevenLabsApiKey(response.data.apiKey);
+            }
+          })
+          .catch((err) => {
+            console.debug("AI API key fetch skipped:", err.message);
+          });
+      }
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.debug("User reload error (ignored):", error?.message || error);
+      }
+      setUserError(error?.message || "Failed to reload user");
+    }
+  }, [reloadUser]);
+
+  // NOTE: Removed redundant refetchUser() call on mount - UserContext already loads user
+  // The refetchUser callback is still available for explicit refresh (e.g., after profile update)
+
+  // Warm backend dashboard cache after auth cookies and user/tenant ready
+  // Consolidated into single effect to prevent duplicate calls
+  const lastWarmedTenantRef = React.useRef(null);
+  React.useEffect(() => {
+    const warmCache = async () => {
+      if (!authCookiesReady || !user) return;
+      
+      const tenantId = selectedTenantId || user?.tenant_id || null;
+      
+      // Skip if we already warmed this tenant
+      if (tenantId && lastWarmedTenantRef.current === tenantId) {
+        return;
+      }
+      
       try {
-        // Check for E2E test mode first
-        if (typeof window !== 'undefined' && 
-            localStorage.getItem('E2E_TEST_MODE') === 'true' && 
-            window.__e2eUser) {
-          console.log('[Layout] Using E2E mock user:', window.__e2eUser.email);
-          setUser(window.__e2eUser);
-          setUserLoading(false);
-          return;
+        await getDashboardBundleFast({ tenant_id: tenantId, include_test_data: true });
+        lastWarmedTenantRef.current = tenantId;
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          console.debug('[WarmCache] skipped:', err?.message || err);
         }
-        
-        const currentUser = await User.me();
-        setUser(currentUser);
-
-        if (currentUser) {
-          // MAKE API KEY FETCHING SILENT - don't crash if it fails
-          getOrCreateUserApiKey()
-            .then((response) => {
-              if (response.data?.apiKey) {
-                setElevenLabsApiKey(response.data.apiKey);
-              }
-            })
-            .catch((err) => {
-              // SILENT FAILURE - just log, don't show to user
-              if (import.meta.env.DEV) {
-                console.debug("AI API key fetch skipped:", err.message);
-              }
-              // This is non-critical, user can still use the app without it
-            });
-
-          // Note: last_login is now handled automatically by:
-          // 1. Backend /api/users/login endpoint on login
-          // 2. UserPresenceHeartbeat component for session updates
-        }
-      } catch (error) {
-        console.error("User load failed:", error);
-        setUserError(error.message);
-        setUser(null);
-      } finally {
-        setUserLoading(false);
       }
     };
-    await loadUser();
-  }, []);
-
-  React.useEffect(() => {
-    // initial load
-    refetchUser();
-  }, [refetchUser]);
+    warmCache();
+  }, [authCookiesReady, user, selectedTenantId]);
 
   // Refresh user when profile data changes in-app (Employee/User updates)
   React.useEffect(() => {
@@ -1080,7 +1218,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     const loadCurrentTenant = async () => {
       // ALWAYS log effect entry in dev
       if (import.meta.env.DEV) {
-        console.log("[Layout] loadCurrentTenant EFFECT RUNNING:", {
+        logDev("[Layout] loadCurrentTenant EFFECT RUNNING:", {
           user: !!user,
           effectiveTenantId,
           selectedTenantId,
@@ -1103,7 +1241,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         const tenantIdToFetch = effectiveTenantId;
 
         if (import.meta.env.DEV) {
-          console.log("[Layout] loadCurrentTenant FETCHING:", {
+          logDev("[Layout] loadCurrentTenant FETCHING:", {
             effectiveTenantId: tenantIdToFetch,
             selectedTenantId,
             lastRequest: lastTenantRequestIdRef.current,
@@ -1142,7 +1280,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         // Dedupe by id to prevent redundant Tenant.get calls
         if (lastTenantRequestIdRef.current === tenantIdToFetch) {
           if (import.meta.env.DEV) {
-            console.log(
+            logDev(
               "[Layout] loadCurrentTenant SKIPPED (dedupe):",
               tenantIdToFetch,
             );
@@ -1285,7 +1423,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
 
     (async () => {
       try {
-        const res = await getMyTenantBranding();
+        const res = await getTenantBrandingFast();
         if (res?.status === 200 && res?.data?.tenant) {
           const t = res.data.tenant;
           setCurrentTenantData(t);
@@ -1622,7 +1760,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   // Debug: log branding in dev
   React.useEffect(() => {
     if (import.meta.env.DEV) {
-      console.log("[Layout] Branding:", {
+      logDev("[Layout] Branding:", {
         companyName,
         logoUrl,
         user: user?.email,
@@ -1795,6 +1933,27 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         }
       }
 
+      // Clear ApiManager cache to prevent stale data on next login
+      try {
+        if (clearCache) {
+          clearCache(); // Clear all cached API requests
+        }
+      } catch (e) {
+        console.warn("API cache clear failed on logout:", e);
+      }
+
+      // Explicitly sign out from Supabase Auth (clears local auth session & tokens)
+      try {
+        // Prefer centralized User entity method for consistency
+        if (User && typeof User.signOut === 'function') {
+          await User.signOut();
+        } else if (supabase?.auth?.signOut) {
+          await supabase.auth.signOut();
+        }
+      } catch (e) {
+        console.warn("Supabase signOut failed (continuing logout):", e);
+      }
+
       // NEW: Clear chat/session context before logging out
       try {
         // Notify chat UI to clean up (e.g., stop TTS playback)
@@ -1808,11 +1967,21 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         localStorage.removeItem("ai_sdk_api_key");
         localStorage.removeItem("force_chat_fallback");
 
+        // FIX: Prevent auto-login as mock user after explicit logout
+        // This ensures that isLocalDevMode() returns false on the next load,
+        // preventing UserContext from automatically signing in the mock user.
+        localStorage.setItem('DISABLE_MOCK_USER', 'true');
+
         // Remove any chat/agent-related keys by prefix
+        // PRESERVE: Navigation order preferences across logout (aisha_crm_nav_order_*)
         const toRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
           if (!k) continue;
+          // Skip navigation order keys - preserve user preferences
+          if (k.startsWith("aisha_crm_nav_order") || k.startsWith("aisha_crm_secondary_nav_order")) {
+            continue;
+          }
           if (
             k.startsWith("chat_") ||
             k.startsWith("agent_") ||
@@ -1835,7 +2004,15 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         console.warn("Agent guard reset failed on logout:", e);
       }
 
-      await User.logout();
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        });
+      } catch {
+        // ignore network errors, still navigate out
+      }
       window.location.href = "/";
     } catch (error) {
       console.error("User logout failed:", error);
@@ -1887,81 +2064,6 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
     );
   }, [user]);
 
-  // NEW: Hard-remove any legacy green "Chat" launcher (e.g., node 8887240F246926E4F1729CB77247BF71:787)
-  React.useEffect(() => {
-    const GREEN_REGEX =
-      /#0f0|#00ff00|rgb\(\s*0\s*,\s*128\s*,\s*0\s*\)|rgba\(\s*0\s*,\s*128\s*,\s*0/i;
-
-    const purgeInRoot = (root) => {
-      const nodes = Array.from(
-        root.querySelectorAll('button, a, div[role="button"], div, span'),
-      );
-      nodes.forEach((el) => {
-        try {
-          const text = (el.textContent || "").trim().toLowerCase();
-          const aria = (el.getAttribute("aria-label") || "").trim()
-            .toLowerCase();
-          const style = window.getComputedStyle(el);
-          const rect = el.getBoundingClientRect();
-
-          const isFixedLike = style.position === "fixed" ||
-            style.position === "sticky" || style.position === "absolute";
-          const nearBottomRight = isFixedLike &&
-            rect.right >= (window.innerWidth - 160) &&
-            rect.bottom >= (window.innerHeight - 160);
-
-          const looksGreenBG = GREEN_REGEX.test(style.backgroundColor) ||
-            /green/i.test(style.backgroundColor);
-          const looksGreenColor = GREEN_REGEX.test(style.color);
-
-          const likelyChat = aria === "chat" ||
-            aria === "open chat" ||
-            text === "chat" ||
-            text === "open chat" ||
-            text.includes("chat");
-
-          // Avoid touching our avatar launcher
-          const isOurAvatar = el.id === "ai-avatar-launcher" ||
-            el.closest("#ai-avatar-launcher");
-
-          if (
-            !isOurAvatar && nearBottomRight &&
-            (likelyChat || looksGreenBG || looksGreenColor)
-          ) {
-            el.remove();
-          }
-        } catch {
-          // ignore
-        }
-      });
-    };
-
-    const purgeAll = () => {
-      purgeInRoot(document);
-      // Also inspect shadow roots if present
-      const all = document.querySelectorAll("*");
-      all.forEach((el) => {
-        if (el.shadowRoot) {
-          purgeInRoot(el.shadowRoot);
-        }
-      });
-    };
-
-    // Initial purge + observe future injections
-    purgeAll();
-    const mo = new MutationObserver(() => purgeAll());
-    mo.observe(document.body, { childList: true, subtree: true });
-
-    // Safety periodic sweep (handles elements injected outside body mutations)
-    const interval = setInterval(purgeAll, 1200);
-
-    return () => {
-      try {
-        mo.disconnect();
-      } catch { /* ignore */ }
-      clearInterval(interval);
-    };
-  }, []);
 
   // NEW: Reposition any softphone/call widgets so they sit to the left of the Avatar launcher
   React.useEffect(() => {
@@ -2239,6 +2341,45 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               Welcome to AI-SHA CRM
             </h2>
             <p className="text-slate-600">Sign in to access your account</p>
+            
+            {/* Environment indicator on login page */}
+            {(() => {
+              // Use runtime window._env_ (injected by entrypoint) with fallback to build-time import.meta.env
+              const backendUrl = window._env_?.VITE_AISHACRM_BACKEND_URL || import.meta.env.VITE_AISHACRM_BACKEND_URL || '';
+              const supabaseUrl = window._env_?.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '';
+              const isDev = backendUrl.includes('localhost') || backendUrl.includes('127.0.0.1');
+              const isDevDb = supabaseUrl.includes('efzqxjpfewkrgpdootte');
+              const isProdDb = supabaseUrl.includes('ehjlenywplgyiahgxkfj');
+              
+              let envLabel = null;
+              let bgColor = '';
+              
+              if (isDev && isDevDb) {
+                envLabel = '🔵 DEVELOPMENT ENVIRONMENT';
+                bgColor = 'bg-blue-100 border-blue-300 text-blue-800';
+              } else if (isDev && isProdDb) {
+                envLabel = '⚠️ LOCAL + PRODUCTION DATABASE';
+                bgColor = 'bg-orange-100 border-orange-300 text-orange-800';
+              } else if (!isDev && isDevDb) {
+                envLabel = '🟡 STAGING ENVIRONMENT';
+                bgColor = 'bg-yellow-100 border-yellow-300 text-yellow-800';
+              }
+              
+              return envLabel ? (
+                <div className={`mt-4 p-3 border rounded-md ${bgColor}`}>
+                  <p className="text-sm font-bold text-center">{envLabel}</p>
+                </div>
+              ) : null;
+            })()}
+            
+            {/* Password reset success message */}
+            {new URLSearchParams(window.location.search).get('reset') === 'success' && (
+              <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
+                <p className="text-sm text-green-700 text-center">
+                  ✓ Password updated successfully! Please sign in with your new password.
+                </p>
+              </div>
+            )}
           </div>
 
           <form
@@ -2248,13 +2389,62 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               const password = e.target.password.value;
 
               try {
-                console.log("[Login] Attempting sign in with:", email);
-                await User.signIn(email, password);
-                console.log("[Login] Sign in successful, reloading...");
-                window.location.reload(); // Reload to update app state
+                logDev("[Login] Attempting Supabase auth login:", email);
+                const { error } = await supabase.auth.signInWithPassword({
+                  email,
+                  password,
+                });
+                if (error) {
+                  throw error;
+                }
+                logDev("[Login] Supabase auth successful, calling backend login...");
+                
+                // Call backend /api/auth/login to get JWT cookies
+                // Use runtime env (window._env_) with fallback to build-time env
+                const backendUrl = window._env_?.VITE_AISHACRM_BACKEND_URL || import.meta.env.VITE_AISHACRM_BACKEND_URL || '';
+                const loginResponse = await fetch(`${backendUrl}/api/auth/login`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include', // Important: include cookies
+                  body: JSON.stringify({ email, password })
+                });
+                
+                if (!loginResponse.ok) {
+                  throw new Error(`Backend login failed: ${loginResponse.status}`);
+                }
+                
+                const loginData = await loginResponse.json();
+                const tenant_id = loginData.data?.user?.tenant_id;
+                
+                logDev("[Login] Login response data:", { 
+                  tenant_id, 
+                  hasUser: !!loginData.data?.user,
+                  userKeys: Object.keys(loginData.data?.user || {})
+                });
+                
+                // Clear backend dashboard cache to ensure fresh data after login
+                if (tenant_id) {
+                  try {
+                    const cacheResponse = await fetch(`${backendUrl}/api/reports/clear-cache`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      credentials: 'include',
+                      body: JSON.stringify({ tenant_id })
+                    });
+                    const cacheResult = await cacheResponse.json();
+                    logDev("[Login] Dashboard cache cleared:", cacheResult);
+                  } catch (cacheErr) {
+                    console.warn("[Login] Failed to clear cache (non-critical):", cacheErr);
+                  }
+                } else {
+                  console.warn("[Login] No tenant_id found in login response, skipping cache clear");
+                }
+                
+                logDev("[Login] Backend login successful, reloading...");
+                window.location.reload();
               } catch (error) {
-                console.error("[Login] Sign in failed:", error);
-                alert("Login failed: " + error.message);
+                console.error("[Login] Login failed:", error);
+                alert("Login failed: " + (error?.message || "Unknown error"));
               }
             }}
           >
@@ -2278,7 +2468,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               />
             </div>
 
-            <div className="mb-6">
+            <div className="mb-4">
               <label
                 className="block text-slate-800 text-sm font-semibold mb-2"
                 htmlFor="password"
@@ -2306,12 +2496,53 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             >
               Sign In
             </button>
-          </form>
 
-          {/* Hint: Users should be created via Supabase Auth. Removed demo credentials. */}
-          <div className="mt-6 text-center text-xs text-slate-500">
-            <p>Create users in Supabase Dashboard → Authentication</p>
-          </div>
+            <div className="mt-3 text-center">
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.preventDefault();
+                  const emailInput = document.getElementById('email');
+                  const email = emailInput?.value?.trim();
+                  if (!email) {
+                    alert('Enter your email above first.');
+                    emailInput?.focus();
+                    return;
+                  }
+                  try {
+                    // Use backend proxy to avoid CORS issues
+                    // Get backend URL from runtime config (window._env_) or build-time env
+                    const backendUrl = getBackendUrl();
+                    const response = await fetch(`${backendUrl}/api/users/reset-password`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ email }),
+                    });
+                    const result = await response.json();
+                    if (!response.ok) {
+                      // Detect Supabase rate limit error (429 or rate_limit in message)
+                      const isRateLimit = response.status === 429 ||
+                        (result.message && (
+                          result.message.includes('rate limit') ||
+                          result.message.includes('over_email_send_rate_limit')
+                        ));
+
+                      if (isRateLimit) {
+                        throw new Error('Too many password reset attempts. Please wait 60 seconds and try again.');
+                      }
+                      throw new Error(result.message || 'Failed to send reset email');
+                    }
+                    alert('Reset email sent. Check your inbox (and spam).');
+                  } catch (err) {
+                    alert('Failed to send reset email: ' + (err?.message || 'Unknown error'));
+                  }
+                }}
+                className="text-xs font-medium text-slate-600 hover:text-slate-800 hover:underline"
+              >
+                Forgot password?
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     );
@@ -2321,10 +2552,11 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   if (user && user.user_metadata?.password_change_required) {
     return (
       <>
+        <EffectiveClientBadge />
         <PasswordChangeModal
           user={user}
           onPasswordChanged={() => {
-            console.log(
+            logDev(
               "[Password Change] Password changed successfully, reloading...",
             );
             window.location.reload(); // Reload to refresh user data
@@ -2353,10 +2585,15 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               onError={(e) => {
                 // Hard fallback to global app logo so branding is always visible
                 try {
-                  const fallbackSrc = "/assets/Ai-SHA-logo-2.png?v=" + Date.now();
-                  if (e?.target && e.target.src !== fallbackSrc) {
-                    e.target.src = fallbackSrc;
-                    e.target.style.display = ""; // ensure it's visible
+                  const img = e?.currentTarget || e?.target;
+                  if (!img) return;
+
+                  // Prevent infinite retry loop by only attempting fallback once
+                  if (!img.dataset.fallbackApplied) {
+                    img.dataset.fallbackApplied = "1";
+                    const fallbackSrc = "/assets/Ai-SHA-logo-2.png"; // stable URL; no cache-busting here
+                    img.src = fallbackSrc;
+                    img.style.display = ""; // ensure it's visible
                     if (import.meta.env.DEV) {
                       console.debug("Logo failed to load, swapped to default:", {
                         raw: logoUrl,
@@ -2368,14 +2605,20 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
                   }
                 } catch (err) {
                   if (import.meta.env.DEV) {
-                    console.debug("Logo fallback swap error (safe to ignore):", err?.message || err);
+                    console.debug(
+                      "Logo fallback swap error (safe to ignore):",
+                      err?.message || err,
+                    );
                   }
                 }
 
                 // If even the fallback fails, show the text-based placeholder
-                e.target.style.display = "none";
-                if (e.target.nextElementSibling) {
-                  e.target.nextElementSibling.style.display = "flex";
+                const img = e?.currentTarget || e?.target;
+                if (img) {
+                  img.style.display = "none";
+                  if (img.nextElementSibling) {
+                    img.nextElementSibling.style.display = "flex";
+                  }
                 }
               }}
               onLoad={(e) => {
@@ -2427,122 +2670,147 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         <Clock />
       </div>
 
-      <p className="px-4 text-xs text-slate-500 font-semibold uppercase tracking-wider">
-        Navigation
-      </p>
+      <div className="px-4 flex items-center justify-between">
+        <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
+          Navigation
+        </p>
+        <div className="flex items-center gap-1">
+          {(hasCustomNavOrder || hasCustomSecondaryOrder) && (
+            <button
+              type="button"
+              onClick={handleResetNavOrder}
+              className="p-1 text-slate-500 hover:text-slate-300 transition-colors"
+              title="Reset to default order"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsDragMode(!isDragMode)}
+            className={`p-1 transition-colors ${isDragMode ? 'text-blue-400' : 'text-slate-500 hover:text-slate-300'}`}
+            title={isDragMode ? "Exit reorder mode" : "Reorder navigation items"}
+          >
+            <GripVertical className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
       <nav
         className="flex-1 px-4 py-2 overflow-y-auto"
         data-testid="main-navigation"
       >
-        <ul className="space-y-1">
-          {filteredNavItems.map((item) => (
-            <li key={item.href}>
-              <Link
-                to={createPageUrl(item.href)}
-                data-testid={`nav-${item.href.toLowerCase()}`}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-base font-medium ${
-                  currentPageName === item.href
-                    ? "shadow-lg nav-active"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-300"
-                }`}
-                onClick={onNavClick}
-                style={currentPageName === item.href
-                  ? {
-                    backgroundColor: "var(--primary-color)",
-                    color: "var(--on-primary-text)",
-                  }
-                  : {}}
-              >
-                <item.icon
-                  className={`w-5 h-5 ${
-                    currentPageName === item.href ? "" : "text-slate-400"
-                  }`}
-                  style={currentPageName === item.href
-                    ? {
-                      color: "var(--on-primary-text)",
-                    }
-                    : {}}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleNavDragEnd}
+        >
+          <SortableContext
+            items={filteredNavItems.map(item => item.href)}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className="space-y-1">
+              {filteredNavItems.map((item) => (
+                <SortableNavItem
+                  key={item.href}
+                  item={item}
+                  isActive={currentPageName === item.href}
+                  createPageUrl={createPageUrl}
+                  onNavClick={onNavClick}
+                  isDragMode={isDragMode}
                 />
-                <span className="text-lg">{item.label}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       </nav>
 
       <div className="mt-auto p-4 border-t border-slate-800">
-        <ul className="space-y-1">
-          {filteredSecondaryNavItems.map((item) => (
-            <li key={item.href}>
-              <Link
-                to={createPageUrl(item.href)}
-                data-testid={`nav-${item.href.toLowerCase()}`}
-                className={`flex items-center ${
-                  item.isAvatar ? "justify-center" : "gap-3"
-                } px-3 py-2.5 rounded-lg transition-all text-base font-medium ${
-                  currentPageName === item.href
-                    ? (item.isAvatar
-                      ? "bg-transparent"
-                      : "shadow-lg nav-active")
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-300"
-                }`}
-                onClick={onNavClick}
-                style={currentPageName === item.href && !item.isAvatar
-                  ? {
-                    backgroundColor: "var(--primary-color)",
-                    color: "var(--on-primary-text)",
-                  }
-                  : {}}
-              >
-                {item.isAvatar
-                  ? (
-                    <div
-                      className="relative"
-                      style={{
-                        borderRadius: "50%",
-                        padding: "3px",
-                        background: currentPageName === item.href
-                          ? `linear-gradient(135deg, ${primaryColor}, ${accentColor})`
-                          : "transparent",
-                        boxShadow: currentPageName === item.href
-                          ? `0 0 15px ${primaryColor}, 0 0 30px ${accentColor}`
-                          : "none",
-                      }}
-                    >
-                      <img
-                        src={item.avatarUrl}
-                        alt="AI Assistant"
-                        style={{
-                          width: "0.75in",
-                          height: "0.75in",
-                          borderRadius: "50%",
-                        }}
-                        className={`object-cover sidebar-avatar-border ${
-                          currentPageName === item.href
-                            ? "opacity-100"
-                            : "opacity-90 hover:opacity-100"
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleSecondaryDragEnd}
+        >
+          <SortableContext
+            items={filteredSecondaryNavItems.map(item => item.href)}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className="space-y-1">
+              {filteredSecondaryNavItems.map((item) => (
+                <li key={item.href}>
+                  <div className="flex items-center">
+                    {isDragMode && !item.isAvatar && (
+                      <div className="p-1 mr-1 text-slate-500">
+                        <GripVertical className="w-4 h-4" />
+                      </div>
+                    )}
+                    <Link
+                      to={createPageUrl(item.href)}
+                      data-testid={`nav-${item.href.toLowerCase()}`}
+                      className={`flex-1 flex items-center ${item.isAvatar ? "justify-center" : "gap-3"
+                        } px-3 py-2.5 rounded-lg transition-all text-base font-medium ${currentPageName === item.href
+                          ? (item.isAvatar
+                            ? "bg-transparent"
+                            : "shadow-lg nav-active")
+                          : "text-slate-400 hover:bg-slate-800 hover:text-slate-300"
                         }`}
-                      />
-                    </div>
-                  )
-                  : (
-                    <item.icon
-                      className={`w-5 h-5 ${
-                        currentPageName === item.href ? "" : "text-slate-400"
-                      }`}
-                      style={currentPageName === item.href
+                      onClick={onNavClick}
+                      style={currentPageName === item.href && !item.isAvatar
                         ? {
+                          backgroundColor: "var(--primary-color)",
                           color: "var(--on-primary-text)",
                         }
                         : {}}
-                    />
-                  )}
+                    >
+                      {item.isAvatar
+                        ? (
+                          <div
+                            className="relative"
+                            style={{
+                              borderRadius: "50%",
+                              padding: "3px",
+                              background: currentPageName === item.href
+                                ? `linear-gradient(135deg, ${primaryColor}, ${accentColor})`
+                                : "transparent",
+                              boxShadow: currentPageName === item.href
+                                ? `0 0 15px ${primaryColor}, 0 0 30px ${accentColor}`
+                                : "none",
+                            }}
+                          >
+                            <img
+                              src={item.avatarUrl}
+                              alt="AI Assistant"
+                              style={{
+                                width: "0.75in",
+                                height: "0.75in",
+                                borderRadius: "50%",
+                              }}
+                              className={`object-cover sidebar-avatar-border ${currentPageName === item.href
+                                  ? "opacity-100"
+                                  : "opacity-90 hover:opacity-100"
+                                }`}
+                            />
+                          </div>
+                        )
+                        : (
+                          <item.icon
+                            className={`w-5 h-5 ${currentPageName === item.href ? "" : "text-slate-400"
+                              }`}
+                            style={currentPageName === item.href
+                              ? {
+                                color: "var(--on-primary-text)",
+                              }
+                              : {}}
+                          />
+                        )}
 
-                {!item.isAvatar && <span>{item.label}</span>}
-              </Link>
-            </li>
-          ))}
-        </ul>
+                      {!item.isAvatar && <span>{item.label}</span>}
+                    </Link>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       </div>
     </div>
   );
@@ -2801,6 +3069,48 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             --chatbox-bg: rgba(255, 255, 255, 0) !important; /* fully transparent in light theme */
             --chatbox-border: rgba(226, 232, 240, 0.75); /* slate-200 @ 75% */
           }
+
+          /* BUTTONS - Make blue buttons MUCH more visible in light theme */
+          .theme-light .bg-blue-600,
+          .theme-light button.bg-blue-600,
+          .theme-light a.bg-blue-600,
+          .theme-light [role="button"].bg-blue-600,
+          .theme-light [class*="bg-blue-600"] {
+            background-color: #1e40af !important; /* blue-800 - very dark */
+            color: #ffffff !important;
+            border: 1px solid #1e3a8a !important; /* blue-900 border */
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.2) !important;
+          }
+          .theme-light .bg-blue-600:hover,
+          .theme-light button.bg-blue-600:hover,
+          .theme-light a.bg-blue-600:hover,
+          .theme-light [role="button"].bg-blue-600:hover,
+          .theme-light [class*="bg-blue-600"]:hover {
+            background-color: #1e3a8a !important; /* blue-900 - even darker on hover */
+            box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.3) !important;
+          }
+          .theme-light .hover\\:bg-blue-700:hover,
+          .theme-light .bg-blue-700 {
+            background-color: #1e3a8a !important; /* blue-900 */
+          }
+
+          /* Action icon buttons - make them MUCH more visible in light theme */
+          .theme-light .text-slate-400,
+          .theme-light button.text-slate-400,
+          .theme-light [class*="text-slate-400"] {
+            color: #64748b !important; /* slate-500 - darker gray */
+          }
+          .theme-light .hover\\:text-slate-300:hover,
+          .theme-light button:hover.hover\\:text-slate-300,
+          .theme-light [class*="hover:text-slate-300"]:hover {
+            color: #1e40af !important; /* blue-800 - dark blue on hover */
+          }
+          .theme-light .hover\\:bg-slate-700:hover,
+          .theme-light button:hover.hover\\:bg-slate-700,
+          .theme-light [class*="hover:bg-slate-700"]:hover {
+            background-color: #e2e8f0 !important; /* slate-200 - light gray background */
+          }
+
           .theme-light .bg-slate-900 { background-color: #f8fafc !important; } /* page bg */
           .theme-light .bg-slate-800 { background-color: #ffffff !important; } /* cards/dialogs */
           .theme-light .bg-slate-700 { background-color: #f1f5f9 !important; }
@@ -3244,6 +3554,10 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
         }
       `}
       </style>
+      {/* Environment Banner - Shows dev/staging indicators */}
+      <EnvironmentBanner />
+      {/* Always-visible effective tenant badge in the top-right */}
+      <EffectiveClientBadge />
       {/* Light Theme Alert Background Lightening Styles */}
       <style>
         {`
@@ -3336,7 +3650,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       </aside>
 
       <div className="lg:pl-64">
-        <header data-testid="app-header" className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-slate-800 bg-slate-900 px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
+        <header data-testid="app-header" className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-x-4 border-b border-slate-800 bg-slate-900 px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
           {/* Removed AI Command brain button */}
           {/* THEME TOGGLE BUTTON */}
           <TooltipProvider>
@@ -3362,22 +3676,35 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
             </Tooltip>
           </TooltipProvider>
 
-          {/* NEW: Clear prior chat button */}
-          <ClearChatButton />
-
-          <div className="flex flex-1 items-center justify-end gap-x-4 lg:gap-x-6">
-            {/* SystemStatusIndicator removed from here, now at AppLayout root */}
-            {/* Only superadmins can switch tenants - admins are locked to their assigned tenant */}
-            {user?.role === "superadmin" &&
-              <TenantSwitcher user={user} />}
-            {/* REMOVED: TenantBrandingChip debug component */}
-
-            {showEmployeeScope && (
-              <EmployeeScopeFilter
-                user={user}
-                selectedTenantId={selectedTenantId}
+          <div className="flex flex-1 items-center justify-end gap-3 lg:gap-4">
+            <div className="flex max-w-[520px] items-center justify-center gap-2 rounded-2xl border border-white/10 bg-slate-900/70 px-2.5 py-1 shadow-inner shadow-slate-950/30">
+              <AiAssistantLauncher
+                isOpen={isAiSidebarOpen}
+                onToggle={handleAssistantLauncherClick}
+                isRealtimeActive={Boolean(isRealtimeSidebarMode)}
+                realtimeModuleEnabled={realtimeVoiceModuleEnabled}
               />
-            )}
+              {/* Only superadmins can switch tenants - admins are locked to their assigned tenant */}
+              {user?.role === "superadmin" && (
+                <div className="flex items-center">
+                  <TenantSwitcher user={user} />
+                </div>
+              )}
+
+              {showEmployeeScope && (
+                <div className="flex items-center">
+                  <EmployeeScopeFilter
+                    user={user}
+                    selectedTenantId={selectedTenantId}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* AI Suggestions Badge - Phase 3 Autonomous Operations */}
+            {showNotificationsWidget && selectedTenantId ? (
+              <SuggestionBadge tenantId={selectedTenantId} />
+            ) : null}
 
             {/* DEFERRED: mount notifications after initial load to reduce rate-limit hits */}
             {showNotificationsWidget ? <NotificationPanel user={user} /> : null}
@@ -3435,8 +3762,8 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       {/* Removed ElevenLabs floating brain widget */}
       {null}
 
-      {/* Avatar Widget removed per user request */}
-      {null}
+      <AiSidebar realtimeVoiceEnabled={realtimeVoiceModuleEnabled} />
+      <AiShaActionHandler />
     </div>
   );
 }
@@ -3452,6 +3779,17 @@ const queryClient = new QueryClient({
   },
 });
 
+// Wrapper to inject tenantId into EntityLabelsProvider from TenantContext
+function EntityLabelsWrapper({ children }) {
+  const tenantContext = useTenant();
+  const tenantId = tenantContext?.selectedTenantId || null;
+  return (
+    <EntityLabelsProvider tenantId={tenantId}>
+      {children}
+    </EntityLabelsProvider>
+  );
+}
+
 export default function LayoutWrapper({ children, currentPageName }) {
   // Disable loading of ElevenLabs ConvAI script (brain widget)
   React.useEffect(() => {
@@ -3464,17 +3802,21 @@ export default function LayoutWrapper({ children, currentPageName }) {
       <QueryClientProvider client={queryClient}>
         <ApiOptimizerProvider>
           <TenantProvider>
-            <ApiProvider>
-              <TimezoneProvider>
-                <EmployeeScopeProvider>
-                  <LoggerProvider>
-                    <Layout currentPageName={currentPageName}>
-                      {children}
-                    </Layout>
-                  </LoggerProvider>
-                </EmployeeScopeProvider>
-              </TimezoneProvider>
-            </ApiProvider>
+            <EntityLabelsWrapper>
+              <ApiProvider>
+                <TimezoneProvider>
+                  <EmployeeScopeProvider>
+                    <LoggerProvider>
+                      <AiSidebarProvider>
+                        <Layout currentPageName={currentPageName}>
+                          {children}
+                        </Layout>
+                      </AiSidebarProvider>
+                    </LoggerProvider>
+                  </EmployeeScopeProvider>
+                </TimezoneProvider>
+              </ApiProvider>
+            </EntityLabelsWrapper>
           </TenantProvider>
         </ApiOptimizerProvider>
       </QueryClientProvider>

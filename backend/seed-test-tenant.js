@@ -16,11 +16,11 @@ async function seedTestTenant() {
     // Check if tenant exists
     const existingTenant = await pool.query(
       'SELECT * FROM tenant WHERE tenant_id = $1',
-      ['local-tenant-001']
+      ['a11dfb63-4b18-4eb8-872e-747af2e37c46']
     );
     
     if (existingTenant.rows.length > 0) {
-      console.log('✓ Tenant "local-tenant-001" already exists');
+      console.log('✓ Tenant "a11dfb63-4b18-4eb8-872e-747af2e37c46" already exists');
       console.log('  ID:', existingTenant.rows[0].id);
       console.log('  Name:', existingTenant.rows[0].name);
       return;
@@ -32,7 +32,7 @@ async function seedTestTenant() {
       VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *
     `, [
-      'local-tenant-001',
+      'a11dfb63-4b18-4eb8-872e-747af2e37c46',
       'Local Development Tenant',
       'active',
       'free',
@@ -72,7 +72,7 @@ async function seedTestTenant() {
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id, email, role
       `, [
-        'local-tenant-001',
+        'a11dfb63-4b18-4eb8-872e-747af2e37c46',
         'dev@localhost',
         'Dev',
         'User',

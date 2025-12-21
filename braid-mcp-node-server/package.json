@@ -1,0 +1,31 @@
+{
+  "name": "braid-mcp-node-server",
+  "version": "0.1.0",
+  "description": "Dockerized Node.js MCP-style server for Braid v0 AI-business interaction framework",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "ts-node src/server.ts",
+    "lint": "echo \"no lint configured\"",
+    "test-audit": "node ./scripts/test-mcp-audit.js"
+  },
+  "author": "Dre' + ChatGPT",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "bullmq": "^5.66.2",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "node-fetch": "^2.7.0",
+    "redis": "^4.6.13"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/node": "^22.0.0",
+    "dotenv": "^16.4.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.0"
+  }
+}

@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
+import { useAiSidebarState } from './useAiSidebarState.jsx'
+
+const EXEC_AVATAR_SRC = '/assets/aisha-executive-portrait.jpg';
 
 export default function AvatarWidget({
   agentId: _agentId,
@@ -9,6 +12,8 @@ export default function AvatarWidget({
   const [_isReady, _setIsReady] = useState(false); // isReady state added as per outline
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const { toggleSidebar } = useAiSidebarState();
+  const { isOpen } = useAiSidebarState();
 
   const widgetRef = useRef(null);
 
@@ -37,17 +42,38 @@ export default function AvatarWidget({
     };
   }, []);
 
+  // Hide avatar when the sidebar is open to avoid overlap
+  if (isOpen) return null;
+
   return (
     <div
       id="ai-avatar-launcher"
       ref={widgetRef}
-      className="fixed bottom-4 right-24 z-[10005]"
+      className="aisha-avatar-widget fixed cursor-pointer outline-none"
+      role="button"
+      tabIndex={0}
+      aria-label="Toggle AiSHA assistant"
+      title="Open AiSHA assistant"
+      onClick={toggleSidebar}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          toggleSidebar();
+        }
+      }}
       style={{
         width: '80px',
         height: '80px',
         borderRadius: '50%',
+        right: '24px',
+        bottom: '96px',
+        zIndex: 2100,
       }}
     >
+      <style>{`
+        .aisha-avatar-widget { position: fixed; }
+        @media (max-width: 640px) { .aisha-avatar-widget { right: 16px; bottom: 88px; } }
+      `}</style>
       {/* Animated Glow Ring - BEHIND everything */}
       <div
         className={`absolute inset-0 transition-all duration-300 ${
@@ -98,8 +124,8 @@ export default function AvatarWidget({
         }}
       >
         <img
-          src="/assets/Ai-SHA-logo-2.png"
-          alt="AI Assistant"
+          src={EXEC_AVATAR_SRC}
+          alt="AiSHA executive assistant"
           style={{
             width: '100%',
             height: '100%',

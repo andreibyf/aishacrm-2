@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { BizDevSource } from "@/api/entities";
 import { Account } from "@/api/entities";
-import { User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,13 +33,15 @@ import CsvImportDialog from "../components/shared/CsvImportDialog";
 import CsvExportButton from "../components/shared/CsvExportButton";
 import Pagination from "../components/shared/Pagination";
 import RefreshButton from "../components/shared/RefreshButton";
-import { promoteBizDevSourceToAccount } from "@/api/functions";
 import BulkArchiveDialog from "../components/bizdev/BulkArchiveDialog";
 import ArchiveIndexViewer from "../components/bizdev/ArchiveIndexViewer";
 import BulkDeleteDialog from "../components/bizdev/BulkDeleteDialog";
 import StatusHelper from "../components/shared/StatusHelper";
+import { useUser } from "../components/shared/useUser.js";
+import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 
 export default function BizDevSourcesPage() {
+  const { plural: bizdevLabel, singular: bizdevSourceLabel } = useEntityLabel('bizdev_sources');
   const [sources, setSources] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,22 +64,22 @@ export default function BizDevSourcesPage() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
   const [bizdevSchema, setBizdevSchema] = useState(null);
 
   const { selectedTenantId } = useTenant();
-  const { cachedRequest, clearCache } = useApiManager();
+  const { cachedRequest, clearCache, clearCacheByKey } = useApiManager();
   const { logError } = useErrorLog();
   const loadingRef = useRef(false);
 
+  // DEBUG: Log what tenant ID we're getting
   useEffect(() => {
-    User.me()
-      .then(setUser)
-      .catch((error) => {
-        console.error("Failed to load user:", error);
-        toast.error("Failed to load user data");
-      });
-  }, []);
+    console.log('🏢 BizDevSources tenant values:', {
+      selectedTenantId,
+      userTenantId: user?.tenant_id,
+      effectiveTenant: selectedTenantId || user?.tenant_id
+    });
+  }, [selectedTenantId, user?.tenant_id]);
 
   useEffect(() => {
     const loadSchema = async () => {
@@ -104,7 +105,9 @@ export default function BizDevSourcesPage() {
     setSelectedSources([]);
 
     try {
-      const filter = { tenant_id: user.tenant_id || selectedTenantId };
+      // Use selectedTenantId if explicitly set (for multi-tenant view), otherwise use user's primary tenant
+      const tenantId = selectedTenantId || user.tenant_id;
+      const filter = { tenant_id: tenantId };
       if (!filter.tenant_id) {
         setSources([]);
         setAccounts([]);
@@ -154,16 +157,40 @@ export default function BizDevSourcesPage() {
       setLoading(false);
       loadingRef.current = false;
     }
-  }, [user, selectedTenantId, cachedRequest, logError]);
+  }, [user, selectedTenantId, cachedRequest, logError, selectedTenantId]);
 
+  // Track current tenant to detect switches and clear cache
+  const prevTenantRef = useRef(null);
+  
   useEffect(() => {
+    // Use selectedTenantId first (dropdown override), then fall back to user's primary tenant
+    const currentTenant = selectedTenantId || user?.tenant_id;
+    if (!currentTenant) return;
+    
+    const tenantSwitched = prevTenantRef.current && prevTenantRef.current !== currentTenant;
+    
+    if (tenantSwitched) {
+      console.log('🔄 Tenant switched from', prevTenantRef.current, 'to', currentTenant);
+      // Tenant switched - clear cache and reload immediately
+      // Cache clear is synchronous, so no delay needed
+      clearCache();
+      prevTenantRef.current = currentTenant;
+      if (user) {
+        loadSources();
+      }
+      return;
+    }
+    
+    prevTenantRef.current = currentTenant;
+    
     if (user) {
       loadSources();
     }
-  }, [user, loadSources]);
+  }, [user, selectedTenantId, loadSources, clearCache]);
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     clearCache();
+    // Immediately reload - cache clear is synchronous
     loadSources();
   };
 
@@ -177,26 +204,25 @@ export default function BizDevSourcesPage() {
     setShowForm(true);
   };
 
-  const handleFormSubmit = async (data) => {
+  // Updated to unified form contract: form now persists record directly and passes result
+  const handleFormSubmit = async (result) => {
     try {
-      if (editingSource) {
-        await BizDevSource.update(editingSource.id, data);
-        toast.success("BizDev source updated successfully");
-      } else {
-        await BizDevSource.create({
-          ...data,
-          tenant_id: user.tenant_id || selectedTenantId,
+      // Optimistically update sources list (both creates and edits)
+      if (result?.id) {
+        setSources(prev => {
+          const exists = prev.some(s => s.id === result.id);
+          // For new creates, add to top of list; for edits, replace existing
+          return exists ? prev.map(s => s.id === result.id ? result : s) : [result, ...prev];
         });
-        toast.success("BizDev source created successfully");
       }
+      toast.success(`BizDev source ${editingSource ? 'updated' : 'created'} successfully`);
+    } catch (error) {
+      if (logError) logError(handleApiError('BizDev Source Form (post-submit)', error));
+    } finally {
       setShowForm(false);
       setEditingSource(null);
-      handleRefresh();
-    } catch (error) {
-      if (logError) {
-        logError(handleApiError('BizDev Source Form', error));
-      }
-      toast.error(`Failed to ${editingSource ? 'update' : 'create'} BizDev source`);
+      // Invalidate cache but don't wait for reload - UI already updated optimistically
+      clearCache();
     }
   };
 
@@ -245,22 +271,75 @@ export default function BizDevSourcesPage() {
   };
 
   const handlePromote = async (sourceToPromote) => {
-    if (!confirm(`Are you sure you want to promote "${sourceToPromote.company_name}" to an Account?`)) {
-      return;
+    const sourceName = sourceToPromote?.company_name || sourceToPromote?.dba_name || sourceToPromote?.contact_person || sourceToPromote?.source || 'this source';
+    if (!confirm(`Are you sure you want to promote "${sourceName}" to a Lead?`)) {
+      return null;
     }
 
+    // Use the source's tenant_id as primary, fallback to selected tenant
+    const tenantId = sourceToPromote.tenant_id || selectedTenantId || user?.tenant_id;
+    
+    if (!tenantId) {
+      toast.error('Cannot promote: No tenant context available');
+      throw new Error('No tenant_id available');
+    }
+
+    console.log('[BizDevSources] Promoting source:', {
+      id: sourceToPromote.id,
+      company_name: sourceToPromote.company_name,
+      tenant_id: tenantId
+    });
+
     try {
-      const { data } = await promoteBizDevSourceToAccount({ bizdev_source_id: sourceToPromote.id });
+      console.log('[BizDevSources] About to call BizDevSource.promote with:', { id: sourceToPromote.id, tenantId });
+      const result = await BizDevSource.promote(sourceToPromote.id, tenantId);
+      console.log('[BizDevSources] Promotion result:', result);
 
-      toast.success(data.message);
+      // Optimistically update local state so stats reflect immediately
+      setSources(prev => prev.map(s =>
+        s.id === sourceToPromote.id
+          ? {
+              ...s,
+              status: 'Promoted',
+              metadata: {
+                ...(s.metadata || {}),
+                promoted_to_lead_id: result?.lead?.id,
+                promoted_to_lead_type: result?.lead_type,
+                promoted_account_id: result?.account_id,
+                promoted_person_id: result?.person_id,
+              },
+            }
+          : s
+      ));
+      if (selectedSource?.id === sourceToPromote.id) {
+        setSelectedSource(prev => prev ? {
+          ...prev,
+          status: 'Promoted',
+          metadata: {
+            ...(prev.metadata || {}),
+            promoted_to_lead_id: result?.lead?.id,
+            promoted_to_lead_type: result?.lead_type,
+            promoted_account_id: result?.account_id,
+            promoted_person_id: result?.person_id,
+          },
+        } : prev);
+      }
 
-      handleRefresh();
+      toast.success('BizDev source promoted to lead', {
+        description: `Created lead from: ${sourceToPromote.company_name || sourceToPromote.contact_person || 'prospect'}`
+      });
+
+      // Clear only the BizDevSource cache to prevent stale data, but don't reload
+      // The optimistic update above already shows the correct state
+      clearCacheByKey('BizDevSource');
       setShowDetailPanel(false);
+      return result;
     } catch (error) {
       if (logError) {
         logError(handleApiError('BizDev Source Promotion', error));
       }
-      toast.error(`Failed to promote BizDev source to Account.`);
+      toast.error(`Failed to promote BizDev source to Lead.`);
+      throw error;
     }
   };
 
@@ -298,11 +377,45 @@ export default function BizDevSourcesPage() {
   };
 
   const handleDeleteComplete = (result) => {
-    setSelectedSources([]);
-    handleRefresh();
+    // Remove deleted sources from local state optimistically
+    if (result && result.successful > 0) {
+      const deletedIds = sources
+        .filter(s => selectedSources.includes(s.id))
+        .slice(0, result.successful)
+        .map(s => s.id);
+      
+      setSources(prevSources => 
+        prevSources.filter(source => !deletedIds.includes(source.id))
+      );
+    }
 
-    if (result && result.deleted > 0) {
-      toast.success(`Deleted ${result.deleted} BizDev Source(s)`);
+    setSelectedSources([]);
+    
+    // Refresh in background to sync with backend
+    setTimeout(() => {
+      clearCache();
+      loadSources();
+    }, 500);
+
+    if (result && result.successful > 0) {
+      toast.success(`Deleted ${result.successful} BizDev Source(s)`);
+    }
+  };
+
+  const handleDeleteSingle = async (source) => {
+    if (!window.confirm(`Are you sure you want to delete "${source.company_name || source.source || 'this source'}"?`)) {
+      return;
+    }
+
+    try {
+      await BizDevSource.delete(source.id);
+      toast.success('BizDev source deleted successfully');
+      handleRefresh();
+    } catch (error) {
+      if (logError) {
+        logError(handleApiError('Delete BizDev Source', error));
+      }
+      toast.error('Failed to delete BizDev source');
     }
   };
 
@@ -316,6 +429,7 @@ export default function BizDevSourcesPage() {
     const matchesSearch = !searchTerm ||
       source.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       source.dba_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      source.contact_person?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       source.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       source.phone_number?.includes(searchTerm) ||
       source.city?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -339,6 +453,20 @@ export default function BizDevSourcesPage() {
 
   const totalPages = Math.ceil(filteredSources.length / pageSize);
 
+  // Select all functionality - must be after paginatedSources
+  const handleSelectAll = () => {
+    if (selectedSources.length === paginatedSources.length) {
+      // Deselect all on current page
+      setSelectedSources([]);
+    } else {
+      // Select all on current page
+      setSelectedSources(paginatedSources.map(s => s.id));
+    }
+  };
+
+  const isAllSelected = paginatedSources.length > 0 && selectedSources.length === paginatedSources.length;
+  const isSomeSelected = selectedSources.length > 0 && selectedSources.length < paginatedSources.length;
+
   const handlePageChange = (page) => {
     setCurrentPage(page);
     setSelectedSources([]);
@@ -357,7 +485,7 @@ export default function BizDevSourcesPage() {
   const stats = {
     total: sources.length,
     active: sources.filter(s => s.status === "Active").length,
-    promoted: sources.filter(s => s.status === "Promoted").length,
+    promoted: sources.filter(s => s.status === "Promoted" || s.status === 'converted').length,
     archived: sources.filter(s => s.status === "Archived").length,
   };
 
@@ -377,9 +505,9 @@ export default function BizDevSourcesPage() {
             <Building2 className="w-7 h-7 text-blue-400" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-slate-100">BizDev Sources</h1>
+            <h1 className="text-3xl font-bold text-slate-100">{bizdevLabel}</h1>
             <p className="text-slate-400">
-              Manage business development leads and prospects
+              Manage business development {bizdevLabel.toLowerCase()} and prospects
               {sources.length > 0 && (
                 <span className="ml-2 text-slate-500">
                   • Showing {filteredSources.length.toLocaleString()} of {sources.length.toLocaleString()} total
@@ -413,18 +541,23 @@ export default function BizDevSourcesPage() {
           />
           <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
             <Plus className="w-4 h-4 mr-2" />
-            Add Source
+            Add {bizdevSourceLabel}
           </Button>
         </div>
       </div>
 
-      {/* Stats Cards - Matching other pages with semi-transparent backgrounds */}
+      {/* Stats Cards - Clickable for filtering */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-slate-800 border-slate-700 border rounded-lg p-4">
+        <div 
+          className={`bg-slate-800 border-slate-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+            statusFilter === 'all' ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900' : ''
+          }`}
+          onClick={() => setStatusFilter('all')}
+        >
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <p className="text-sm text-slate-400">Total Sources</p>
+                <p className="text-sm text-slate-400">Total {bizdevLabel}</p>
                 <StatusHelper statusKey="bizdev_total" />
               </div>
               <p className="text-2xl font-bold text-slate-100">{stats.total}</p>
@@ -433,7 +566,12 @@ export default function BizDevSourcesPage() {
           </div>
         </div>
         
-        <div className="bg-green-900/20 border-green-700 border rounded-lg p-4">
+        <div 
+          className={`bg-green-900/20 border-green-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+            statusFilter === 'Active' ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900' : ''
+          }`}
+          onClick={() => setStatusFilter('Active')}
+        >
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -446,7 +584,12 @@ export default function BizDevSourcesPage() {
           </div>
         </div>
         
-        <div className="bg-blue-900/20 border-blue-700 border rounded-lg p-4">
+        <div 
+          className={`bg-blue-900/20 border-blue-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+            statusFilter === 'Promoted' ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900' : ''
+          }`}
+          onClick={() => setStatusFilter('Promoted')}
+        >
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -459,7 +602,12 @@ export default function BizDevSourcesPage() {
           </div>
         </div>
         
-        <div className="bg-slate-900/20 border-slate-700 border rounded-lg p-4">
+        <div 
+          className={`bg-slate-900/20 border-slate-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
+            statusFilter === 'Archived' ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900' : ''
+          }`}
+          onClick={() => setStatusFilter('Archived')}
+        >
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -565,6 +713,24 @@ export default function BizDevSourcesPage() {
         <CardContent className="p-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-2">
+              {/* Select All Checkbox */}
+              <div className="flex items-center gap-2 pr-4 border-r border-slate-700">
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  ref={(el) => {
+                    if (el) {
+                      el.indeterminate = isSomeSelected;
+                    }
+                  }}
+                  onChange={handleSelectAll}
+                  className="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm text-slate-400">
+                  {isAllSelected ? 'Deselect All' : isSomeSelected ? `${selectedSources.length} Selected` : 'Select All'}
+                </span>
+              </div>
+              
               {selectedSources.length > 0 && (
                 <>
                   <Badge variant="outline" className="border-blue-600 text-blue-400">
@@ -613,17 +779,17 @@ export default function BizDevSourcesPage() {
             <div className="text-center py-12">
               <Building2 className="w-16 h-16 text-slate-600 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-slate-300 mb-2">
-                No BizDev sources found
+                No {bizdevLabel.toLowerCase()} found
               </h3>
               <p className="text-slate-400 mb-4">
                 {sources.length === 0
-                  ? "Get started by adding your first business development source."
+                  ? `Get started by adding your first ${bizdevSourceLabel.toLowerCase()}.`
                   : "Try adjusting your filters or search term."}
               </p>
               {sources.length === 0 && (
                 <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
                   <Plus className="w-4 h-4 mr-2" />
-                  Add First Source
+                  Add First {bizdevSourceLabel}
                 </Button>
               )}
             </div>
@@ -633,10 +799,13 @@ export default function BizDevSourcesPage() {
                 <BizDevSourceCard
                   key={source.id}
                   source={source}
+                  tenantId={user?.tenant_id || selectedTenantId}
                   onClick={handleViewDetails}
                   isSelected={selectedSources.includes(source.id)}
                   onSelect={handleSelectSource}
                   onEdit={handleEdit}
+                  onDelete={handleDeleteSingle}
+                  onUpdate={handleUpdate}
                 />
               ))}
             </div>
@@ -660,12 +829,13 @@ export default function BizDevSourcesPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <BizDevSourceForm
-              source={editingSource}
+              initialData={editingSource}
               onSubmit={handleFormSubmit}
               onCancel={() => {
                 setShowForm(false);
                 setEditingSource(null);
               }}
+              sourceFieldLabel={bizdevSourceLabel}
             />
           </div>
         </div>

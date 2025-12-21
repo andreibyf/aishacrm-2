@@ -1,0 +1,278 @@
+name: Docker Release (GHCR)
+
+on:
+  push:
+    tags:
+      - 'v*'   # Trigger on version tags like v1.2.3
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - service: frontend
+            context: .
+            dockerfile: Dockerfile
+            image: ghcr.io/${{ github.repository }}-frontend
+          - service: backend
+            context: .
+            dockerfile: backend/Dockerfile
+            image: ghcr.io/${{ github.repository }}-backend
+          - service: mcp
+            context: ./braid-mcp-node-server
+            dockerfile: braid-mcp-node-server/Dockerfile
+            image: ghcr.io/${{ github.repository }}-mcp
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=ref,event=tag
+            type=sha
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.description=Aisha CRM ${{ matrix.service }}
+            org.opencontainers.image.licenses=MIT
+
+      - name: Build and push ${{ matrix.service }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VITE_APP_BUILD_VERSION=${{ github.ref_name }}
+            VITE_CURRENT_BRANCH=${{ github.ref_name }}
+            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
+            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
+            VITE_AISHACRM_BACKEND_URL=${{ secrets.VITE_AISHACRM_BACKEND_URL }}
+            PUPPETEER_SKIP_DOWNLOAD=1
+            USE_SYSTEM_CHROMIUM=false
+
+      - name: Image summary
+        run: |
+          echo "### 🐳 Published ${{ matrix.service }} images" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  deploy-production:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy Compose File to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PROD_VPS_HOST }}
+          username: ${{ secrets.PROD_VPS_USER }}
+          key: ${{ secrets.PROD_VPS_SSH_KEY }}
+          port: ${{ secrets.PROD_VPS_PORT || 22 }}
+          source: "docker-compose.prod.yml,nginx-n8n.conf,nginx-proxy/nginx.conf,braid-mcp-node-server/docker-compose.prod.yml,braid-mcp-node-server/.env.example"
+          target: "/opt/aishacrm/"
+          strip_components: 0
+
+      - name: Deploy to Production VPS
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          VERSION_TAG: ${{ github.ref_name }}
+          MCP_GITHUB_TOKEN: ${{ secrets.PROD_MCP_GITHUB_TOKEN }}
+        with:
+          host: ${{ secrets.PROD_VPS_HOST }}
+          username: ${{ secrets.PROD_VPS_USER }}
+          key: ${{ secrets.PROD_VPS_SSH_KEY }}
+          port: ${{ secrets.PROD_VPS_PORT || 22 }}
+          envs: VERSION_TAG,MCP_GITHUB_TOKEN
+          script: |
+            set -e  # Exit on any error
+            cd /opt/aishacrm
+            echo "Deploying version: $VERSION_TAG"
+            
+            # === FULL CLEANUP: Remove orphaned containers and broken references ===
+            echo "Cleaning up orphaned containers and broken Docker state..."
+            docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
+            docker container prune -f 2>/dev/null || true
+            # Remove any containers with broken dependencies
+            docker ps -aq --filter "status=exited" | xargs -r docker rm -f 2>/dev/null || true
+            docker ps -aq --filter "status=dead" | xargs -r docker rm -f 2>/dev/null || true
+            
+            # Ensure aishanet network exists
+            docker network inspect aishanet >/dev/null 2>&1 || docker network create aishanet
+            
+            # Pull specific version tags
+            docker pull ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG
+            docker pull ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG
+            docker pull ghcr.io/andreibyf/aishacrm-2-mcp:$VERSION_TAG
+            # Tag as latest locally
+            docker tag ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-frontend:latest
+            docker tag ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-backend:latest
+            docker tag ghcr.io/andreibyf/aishacrm-2-mcp:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-mcp:latest
+            
+            # Remove VITE_APP_BUILD_VERSION from .env so container uses baked-in /app/VERSION
+            # (Version is already baked into Docker image during build via Dockerfile)
+            sed -i '/^VITE_APP_BUILD_VERSION=/d' .env 2>/dev/null || true
+            
+            # Ensure n8n URL is set for iframe embedding
+            if ! grep -q "^VITE_N8N_URL=" .env 2>/dev/null; then
+              echo "VITE_N8N_URL=http://147.189.173.237:5679" >> .env
+            fi
+            # Optionally inject GitHub token for MCP GitHub adapter
+            if [ -n "$MCP_GITHUB_TOKEN" ]; then
+              if grep -q "^GITHUB_TOKEN=" .env 2>/dev/null; then
+                sed -i "s/^GITHUB_TOKEN=.*/GITHUB_TOKEN=$MCP_GITHUB_TOKEN/" .env
+              else
+                echo "GITHUB_TOKEN=$MCP_GITHUB_TOKEN" >> .env
+              fi
+            fi
+            # Restart main services with version info (force recreate to detect :latest image changes)
+            # NOTE: n8n is optional - use --profile workflows to include it
+            # Frontend and backend run directly on ports 4000 and 4001 (no proxy)
+            docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend
+            
+            # Deploy MCP server (separate compose file with 3 containers)
+            echo "Deploying MCP server cluster (1 server + 2 nodes)..."
+            
+            # Ensure MCP directory exists
+            mkdir -p /opt/aishacrm/braid-mcp-node-server
+            cd /opt/aishacrm/braid-mcp-node-server
+            
+            # Create .env from example if it doesn't exist, or create minimal one
+            if [ ! -f .env ]; then
+              if [ -f .env.example ]; then
+                cp .env.example .env
+                echo "Created .env from .env.example"
+              else
+                echo "NODE_ENV=production" > .env
+                echo "Created minimal .env"
+              fi
+            fi
+            
+            # Update MCP .env with critical runtime variables
+            # These must be set for MCP server to function properly
+            
+            # Environment
+            grep -q "^NODE_ENV=" .env || echo "NODE_ENV=production" >> .env
+            grep -q "^PORT=" .env || echo "PORT=8000" >> .env
+            
+            # Database (read from main .env)
+            if [ -f /opt/aishacrm/.env ]; then
+              SUPABASE_URL=$(grep "^SUPABASE_URL=" /opt/aishacrm/.env | cut -d'=' -f2-)
+              SUPABASE_KEY=$(grep "^SUPABASE_SERVICE_ROLE_KEY=" /opt/aishacrm/.env | cut -d'=' -f2-)
+              [ -n "$SUPABASE_URL" ] && sed -i "s|^SUPABASE_URL=.*|SUPABASE_URL=$SUPABASE_URL|" .env || echo "SUPABASE_URL=$SUPABASE_URL" >> .env
+              [ -n "$SUPABASE_KEY" ] && sed -i "s|^SUPABASE_SERVICE_ROLE_KEY=.*|SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_KEY|" .env || echo "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_KEY" >> .env
+            fi
+            grep -q "^USE_SUPABASE_PROD=" .env || echo "USE_SUPABASE_PROD=true" >> .env
+            
+            # Redis
+            grep -q "^REDIS_URL=" .env || echo "REDIS_URL=redis://aishacrm-redis-memory:6379" >> .env
+            
+            # OpenAI (read from main .env)
+            if [ -f /opt/aishacrm/.env ]; then
+              OPENAI_KEY=$(grep "^OPENAI_API_KEY=" /opt/aishacrm/.env | cut -d'=' -f2-)
+              [ -n "$OPENAI_KEY" ] && sed -i "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=$OPENAI_KEY|" .env || echo "OPENAI_API_KEY=$OPENAI_KEY" >> .env
+              # Sync JWT_SECRET for MCP → Backend authentication
+              JWT_KEY=$(grep "^JWT_SECRET=" /opt/aishacrm/.env | cut -d'=' -f2-)
+              if [ -n "$JWT_KEY" ]; then
+                if grep -q "^JWT_SECRET=" .env 2>/dev/null; then
+                  sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$JWT_KEY|" .env
+                else
+                  echo "JWT_SECRET=$JWT_KEY" >> .env
+                fi
+              fi
+            fi
+            grep -q "^DEFAULT_OPENAI_MODEL=" .env || echo "DEFAULT_OPENAI_MODEL=gpt-4o" >> .env
+            
+            # CRM Backend
+            grep -q "^CRM_BACKEND_URL=" .env || echo "CRM_BACKEND_URL=http://aishacrm-backend:3001" >> .env
+            
+            # Tenant Context
+            grep -q "^DEFAULT_TENANT_ID=" .env || echo "DEFAULT_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46" >> .env
+            
+            # GitHub Token (from workflow secret)
+            if [ -n "$MCP_GITHUB_TOKEN" ]; then
+              if grep -q "^GITHUB_TOKEN=" .env 2>/dev/null; then
+                sed -i "s/^GITHUB_TOKEN=.*/GITHUB_TOKEN=$MCP_GITHUB_TOKEN/" .env
+              else
+                echo "GITHUB_TOKEN=$MCP_GITHUB_TOKEN" >> .env
+              fi
+            fi
+            
+            # Optional: Direct Supabase access
+            grep -q "^USE_DIRECT_SUPABASE_ACCESS=" .env || echo "USE_DIRECT_SUPABASE_ACCESS=false" >> .env
+            
+            echo "MCP .env configuration updated"
+            
+            # Check if docker-compose.prod.yml exists
+            if [ ! -f docker-compose.prod.yml ]; then
+              echo "ERROR: docker-compose.prod.yml not found in /opt/aishacrm/braid-mcp-node-server/"
+              echo "SCP may have failed. Listing directory contents:"
+              ls -la /opt/aishacrm/braid-mcp-node-server/
+              exit 1
+            fi
+            
+            # Clean up any orphaned/conflicting MCP containers before starting
+            echo "Cleaning up orphaned MCP containers..."
+            docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
+            docker rm -f braid-mcp-1 braid-mcp-2 braid-mcp-node-server 2>/dev/null || true
+            
+            # Start MCP services using production compose (uses GHCR images)
+            echo "Starting MCP containers..."
+            docker compose -f docker-compose.prod.yml up -d --force-recreate
+            
+            # Verify MCP deployment
+            echo "Verifying MCP deployment..."
+            sleep 5
+            docker ps --filter "name=braid-mcp" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+            
+            cd /opt/aishacrm
+            echo "Deployment completed: $VERSION_TAG"
+            
+            # Final verification - all containers
+            echo "=== All AishaCRM containers ==="
+            docker ps --filter "name=aishacrm" --format "table {{.Names}}\t{{.Status}}"
+            docker ps --filter "name=braid-mcp" --format "table {{.Names}}\t{{.Status}}"
+            
+            # Verify frontend version
+            docker exec aishacrm-frontend cat /app/dist/env-config.js | grep VITE_APP_BUILD_VERSION || true
+      
+      - name: Deployment summary
+        run: |
+          echo "### 🚀 Deployed to Production VPS" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Host**: ${{ secrets.PROD_VPS_HOST }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Time**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY

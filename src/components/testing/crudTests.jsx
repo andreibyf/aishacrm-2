@@ -1,5 +1,6 @@
 import { assert } from './testUtils';
 import { getBackendUrl } from '@/api/backendUrl';
+import { supabase } from '@/lib/supabase';
 
 /**
  * CRUD Tests for CRM Entities
@@ -26,7 +27,21 @@ import { getBackendUrl } from '@/api/backendUrl';
  */
 
 const BACKEND_URL = getBackendUrl();
-const TEST_TENANT_ID = 'unit-test-tenant';
+const TEST_TENANT_ID = import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+
+// Helper to get authenticated headers for API requests
+const getAuthHeaders = async () => {
+  const headers = { 'Content-Type': 'application/json' };
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+  } catch (e) {
+    console.warn('[CRUD Tests] Auth token unavailable:', e.message);
+  }
+  return headers;
+};
 
 // Helper to generate unique test data
 const generateTestData = () => {
@@ -122,10 +137,12 @@ export const crudTests = {
       name: 'Contact: Create',
       fn: async () => {
         const testData = generateTestData();
+        const headers = await getAuthHeaders();
         
         const response = await fetch(`${BACKEND_URL}/api/contacts`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
+          credentials: 'include',
           body: JSON.stringify(testData.contact)
         });
         
@@ -134,13 +151,16 @@ export const crudTests = {
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
         assert.exists(result.data, 'Response should contain created contact data');
-        assert.exists(result.data.id, 'Created contact should have an ID');
-        assert.equal(result.data.email, testData.contact.email, 'Email should match');
         
-        console.log(`✅ Created contact: ${result.data.first_name} ${result.data.last_name} (ID: ${result.data.id})`);
+        // Handle wrapped response: { data: { contact: {...} } } or direct { data: {...} }
+        const contact = result.data.contact || result.data;
+        assert.exists(contact.id, 'Created contact should have an ID');
+        assert.equal(contact.email, testData.contact.email, 'Email should match');
+        
+        console.log(`✅ Created contact: ${contact.first_name} ${contact.last_name} (ID: ${contact.id})`);
         
         // Store ID for next tests
-        window.__test_contact_id = result.data.id;
+        window.__test_contact_id = contact.id;
       }
     },
     {
@@ -148,10 +168,12 @@ export const crudTests = {
       fn: async () => {
         const contactId = window.__test_contact_id;
         assert.exists(contactId, 'Contact ID from create test should exist');
+        const headers = await getAuthHeaders();
         
         const response = await fetch(`${BACKEND_URL}/api/contacts/${contactId}?tenant_id=${TEST_TENANT_ID}`, {
           method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
+          headers,
+          credentials: 'include'
         });
         
         assert.truthy(response.ok, `Read should succeed (status: ${response.status})`);
@@ -159,9 +181,12 @@ export const crudTests = {
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
         assert.exists(result.data, 'Response should contain contact data');
-        assert.equal(result.data.id, contactId, 'Contact ID should match');
         
-        console.log(`✅ Read contact: ${result.data.first_name} ${result.data.last_name}`);
+        // Handle wrapped response
+        const contact = result.data.contact || result.data;
+        assert.equal(contact.id, contactId, 'Contact ID should match');
+        
+        console.log(`✅ Read contact: ${contact.first_name} ${contact.last_name}`);
       }
     },
     {
@@ -169,6 +194,7 @@ export const crudTests = {
       fn: async () => {
         const contactId = window.__test_contact_id;
         assert.exists(contactId, 'Contact ID from create test should exist');
+        const headers = await getAuthHeaders();
         
         const updateData = {
           tenant_id: TEST_TENANT_ID,
@@ -178,7 +204,8 @@ export const crudTests = {
         
         const response = await fetch(`${BACKEND_URL}/api/contacts/${contactId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
+          credentials: 'include',
           body: JSON.stringify(updateData)
         });
         
@@ -186,10 +213,13 @@ export const crudTests = {
         
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
-        assert.equal(result.data.phone, '555-9999', 'Phone should be updated');
-        assert.equal(result.data.status, 'inactive', 'Status should be updated');
         
-        console.log(`✅ Updated contact: phone=${result.data.phone}, status=${result.data.status}`);
+        // Handle wrapped response
+        const contact = result.data.contact || result.data;
+        assert.equal(contact.phone, '555-9999', 'Phone should be updated');
+        assert.equal(contact.status, 'inactive', 'Status should be updated');
+        
+        console.log(`✅ Updated contact: phone=${contact.phone}, status=${contact.status}`);
       }
     },
     {
@@ -197,10 +227,12 @@ export const crudTests = {
       fn: async () => {
         const contactId = window.__test_contact_id;
         assert.exists(contactId, 'Contact ID from create test should exist');
+        const headers = await getAuthHeaders();
         
         const response = await fetch(`${BACKEND_URL}/api/contacts/${contactId}?tenant_id=${TEST_TENANT_ID}`, {
           method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' }
+          headers,
+          credentials: 'include'
         });
         
         assert.truthy(response.ok, `Delete should succeed (status: ${response.status})`);
@@ -209,7 +241,11 @@ export const crudTests = {
         assert.equal(result.status, 'success', 'Response status should be success');
         
         // Verify deletion by trying to read
-        const readResponse = await fetch(`${BACKEND_URL}/api/contacts/${contactId}?tenant_id=${TEST_TENANT_ID}`);
+        const verifyHeaders = await getAuthHeaders();
+        const readResponse = await fetch(`${BACKEND_URL}/api/contacts/${contactId}?tenant_id=${TEST_TENANT_ID}`, {
+          headers: verifyHeaders,
+          credentials: 'include'
+        });
         const readResult = await readResponse.json();
         
         assert.truthy(
@@ -227,10 +263,12 @@ export const crudTests = {
       name: 'Lead: Create',
       fn: async () => {
         const testData = generateTestData();
+        const headers = await getAuthHeaders();
         
         const response = await fetch(`${BACKEND_URL}/api/leads`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
+          credentials: 'include',
           body: JSON.stringify(testData.lead)
         });
         
@@ -239,12 +277,15 @@ export const crudTests = {
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
         assert.exists(result.data, 'Response should contain created lead data');
-        assert.exists(result.data.id, 'Created lead should have an ID');
-        assert.equal(result.data.email, testData.lead.email, 'Email should match');
         
-        console.log(`✅ Created lead: ${result.data.first_name} ${result.data.last_name} (ID: ${result.data.id})`);
+        // Handle wrapped response: { data: { lead: {...} } } or direct { data: {...} }
+        const lead = result.data.lead || result.data;
+        assert.exists(lead.id, 'Created lead should have an ID');
+        assert.equal(lead.email, testData.lead.email, 'Email should match');
         
-        window.__test_lead_id = result.data.id;
+        console.log(`✅ Created lead: ${lead.first_name} ${lead.last_name} (ID: ${lead.id})`);
+        
+        window.__test_lead_id = lead.id;
       }
     },
     {
@@ -252,10 +293,12 @@ export const crudTests = {
       fn: async () => {
         const leadId = window.__test_lead_id;
         assert.exists(leadId, 'Lead ID from create test should exist');
+        const headers = await getAuthHeaders();
         
         const response = await fetch(`${BACKEND_URL}/api/leads/${leadId}?tenant_id=${TEST_TENANT_ID}`, {
           method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
+          headers,
+          credentials: 'include'
         });
         
         assert.truthy(response.ok, `Read should succeed (status: ${response.status})`);
@@ -263,9 +306,12 @@ export const crudTests = {
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
         assert.exists(result.data, 'Response should contain lead data');
-        assert.equal(result.data.id, leadId, 'Lead ID should match');
         
-        console.log(`✅ Read lead: ${result.data.first_name} ${result.data.last_name}`);
+        // Handle wrapped response
+        const lead = result.data.lead || result.data;
+        assert.equal(lead.id, leadId, 'Lead ID should match');
+        
+        console.log(`✅ Read lead: ${lead.first_name} ${lead.last_name}`);
       }
     },
     {
@@ -273,6 +319,7 @@ export const crudTests = {
       fn: async () => {
         const leadId = window.__test_lead_id;
         assert.exists(leadId, 'Lead ID from create test should exist');
+        const headers = await getAuthHeaders();
         
         const updateData = {
           tenant_id: TEST_TENANT_ID,
@@ -282,7 +329,8 @@ export const crudTests = {
         
         const response = await fetch(`${BACKEND_URL}/api/leads/${leadId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
+          credentials: 'include',
           body: JSON.stringify(updateData)
         });
         
@@ -290,9 +338,12 @@ export const crudTests = {
         
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
-        assert.equal(result.data.status, 'qualified', 'Status should be updated');
         
-        console.log(`✅ Updated lead: status=${result.data.status}`);
+        // Handle wrapped response
+        const lead = result.data.lead || result.data;
+        assert.equal(lead.status, 'qualified', 'Status should be updated');
+        
+        console.log(`✅ Updated lead: status=${lead.status}`);
       }
     },
     {
@@ -300,10 +351,12 @@ export const crudTests = {
       fn: async () => {
         const leadId = window.__test_lead_id;
         assert.exists(leadId, 'Lead ID from create test should exist');
+        const headers = await getAuthHeaders();
         
         const response = await fetch(`${BACKEND_URL}/api/leads/${leadId}?tenant_id=${TEST_TENANT_ID}`, {
           method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' }
+          headers,
+          credentials: 'include'
         });
         
         assert.truthy(response.ok, `Delete should succeed (status: ${response.status})`);
@@ -321,10 +374,12 @@ export const crudTests = {
       name: 'Account: Create',
       fn: async () => {
         const testData = generateTestData();
+        const headers = await getAuthHeaders();
         
         const response = await fetch(`${BACKEND_URL}/api/accounts`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
+          credentials: 'include',
           body: JSON.stringify(testData.account)
         });
         
@@ -333,12 +388,15 @@ export const crudTests = {
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
         assert.exists(result.data, 'Response should contain created account data');
-        assert.exists(result.data.id, 'Created account should have an ID');
-        assert.equal(result.data.name, testData.account.name, 'Name should match');
         
-        console.log(`✅ Created account: ${result.data.name} (ID: ${result.data.id})`);
+        // Handle wrapped response: { data: { account: {...} } } or direct { data: {...} }
+        const account = result.data.account || result.data;
+        assert.exists(account.id, 'Created account should have an ID');
+        assert.equal(account.name, testData.account.name, 'Name should match');
         
-        window.__test_account_id = result.data.id;
+        console.log(`✅ Created account: ${account.name} (ID: ${account.id})`);
+        
+        window.__test_account_id = account.id;
       }
     },
     {
@@ -346,10 +404,12 @@ export const crudTests = {
       fn: async () => {
         const accountId = window.__test_account_id;
         assert.exists(accountId, 'Account ID from create test should exist');
+        const headers = await getAuthHeaders();
         
         const response = await fetch(`${BACKEND_URL}/api/accounts/${accountId}?tenant_id=${TEST_TENANT_ID}`, {
           method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
+          headers,
+          credentials: 'include'
         });
         
         assert.truthy(response.ok, `Read should succeed (status: ${response.status})`);
@@ -357,9 +417,12 @@ export const crudTests = {
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
         assert.exists(result.data, 'Response should contain account data');
-        assert.equal(result.data.id, accountId, 'Account ID should match');
         
-        console.log(`✅ Read account: ${result.data.name}`);
+        // Handle wrapped response
+        const account = result.data.account || result.data;
+        assert.equal(account.id, accountId, 'Account ID should match');
+        
+        console.log(`✅ Read account: ${account.name}`);
       }
     },
     {
@@ -367,6 +430,7 @@ export const crudTests = {
       fn: async () => {
         const accountId = window.__test_account_id;
         assert.exists(accountId, 'Account ID from create test should exist');
+        const headers = await getAuthHeaders();
         
         const updateData = {
           tenant_id: TEST_TENANT_ID,
@@ -376,7 +440,8 @@ export const crudTests = {
         
         const response = await fetch(`${BACKEND_URL}/api/accounts/${accountId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
+          credentials: 'include',
           body: JSON.stringify(updateData)
         });
         
@@ -384,10 +449,13 @@ export const crudTests = {
         
         const result = await response.json();
         assert.equal(result.status, 'success', 'Response status should be success');
-        assert.equal(result.data.industry, 'finance', 'Industry should be updated');
-        assert.equal(result.data.type, 'partner', 'Type should be updated');
         
-        console.log(`✅ Updated account: industry=${result.data.industry}, type=${result.data.type}`);
+        // Handle wrapped response
+        const account = result.data.account || result.data;
+        assert.equal(account.industry, 'finance', 'Industry should be updated');
+        assert.equal(account.type, 'partner', 'Type should be updated');
+        
+        console.log(`✅ Updated account: industry=${account.industry}, type=${account.type}`);
       }
     },
     {
@@ -395,10 +463,12 @@ export const crudTests = {
       fn: async () => {
         const accountId = window.__test_account_id;
         assert.exists(accountId, 'Account ID from create test should exist');
+        const headers = await getAuthHeaders();
         
         const response = await fetch(`${BACKEND_URL}/api/accounts/${accountId}?tenant_id=${TEST_TENANT_ID}`, {
           method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' }
+          headers,
+          credentials: 'include'
         });
         
         assert.truthy(response.ok, `Delete should succeed (status: ${response.status})`);
@@ -416,9 +486,11 @@ export const crudTests = {
       name: 'List with Filters',
       fn: async () => {
         // Test that GET endpoints support filtering
+        const headers = await getAuthHeaders();
         const response = await fetch(`${BACKEND_URL}/api/contacts?tenant_id=${TEST_TENANT_ID}&limit=10`, {
           method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
+          headers,
+          credentials: 'include'
         });
         
         assert.truthy(response.ok, `List should succeed (status: ${response.status})`);

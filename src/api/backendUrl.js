@@ -1,24 +1,30 @@
 // Centralized backend URL resolver for browser code
 // Order of precedence:
-// 1) window.__ENV.VITE_AISHACRM_BACKEND_URL (runtime env.js, e.g., Docker)
+// 1) window._env_.VITE_AISHACRM_BACKEND_URL (runtime - Docker production)
 // 2) import.meta.env.VITE_AISHACRM_BACKEND_URL (build-time Vite env)
-// 3) default http://localhost:3001 (local dev backend port)
+// 3) http://localhost:4001 (development fallback only)
 
 export function getBackendUrl() {
-  try {
-    if (typeof window !== "undefined" && window.__ENV && window.__ENV.VITE_AISHACRM_BACKEND_URL) {
-      return window.__ENV.VITE_AISHACRM_BACKEND_URL;
-    }
-  } catch {
-    // ignore
+  // 1) Check runtime window._env_ (set by Docker entrypoint in production)
+  if (typeof window !== "undefined" && window._env_?.VITE_AISHACRM_BACKEND_URL) {
+    return window._env_.VITE_AISHACRM_BACKEND_URL;
   }
+  
+  // 2) Build-time env (Vite dev mode)
   try {
-    // import.meta is available in Vite/ESM builds
-    if (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_AISHACRM_BACKEND_URL) {
+    if (typeof import.meta !== "undefined" && import.meta.env?.VITE_AISHACRM_BACKEND_URL) {
       return import.meta.env.VITE_AISHACRM_BACKEND_URL;
     }
   } catch {
     // ignore
   }
-  return "http://localhost:3001";
+  
+  // 3) Development fallback only
+  if (typeof import.meta !== "undefined" && import.meta.env?.DEV) {
+    console.warn('⚠️  VITE_AISHACRM_BACKEND_URL not set, using dev default: http://localhost:4001');
+    return 'http://localhost:4001';
+  }
+  
+  // 4) Fail in production
+  throw new Error('VITE_AISHACRM_BACKEND_URL not configured - check .env and frontend-entrypoint.sh');
 }

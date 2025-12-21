@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext } from "react";
-import { SystemLog } from "@/api/entities";
-import { User } from "@/api/entities";
+import { enqueueSystemLog, flushSystemLogs } from "@/utils/systemLogBatcher.js";
+import { useUser } from "@/components/shared/useUser.js";
 
 const LoggerContext = createContext(null);
 
@@ -11,31 +11,23 @@ const LOG_LEVELS = {
   ERROR: "ERROR",
 };
 
-// In-memory buffer to batch logs
+// DEPRECATED: In-memory buffer no longer used - we now delegate to systemLogBatcher.js
+// These are kept for backward compatibility but the batcher handles buffering
 let logBuffer = [];
 let flushTimeout = null;
-const FLUSH_INTERVAL = 5000; // Flush every 5 seconds
+const FLUSH_INTERVAL = 5000; // Flush every 5 seconds (handled by batcher)
 const MAX_BUFFER_SIZE = 50;
 
 async function flushLogs() {
-  if (logBuffer.length === 0) return;
-
-  const logsToSend = [...logBuffer];
-  logBuffer = [];
-
-  try {
-    // Bulk create logs
-    await SystemLog.bulkCreate(logsToSend);
-  } catch (error) {
-    console.error("Failed to flush logs to database:", error);
-  }
+  // Delegate to central batcher
+  await flushSystemLogs();
 }
 
 function scheduleFlush() {
+  // No longer needed - batcher handles its own timer
   if (flushTimeout) {
     clearTimeout(flushTimeout);
   }
-  flushTimeout = setTimeout(flushLogs, FLUSH_INTERVAL);
 }
 
 // Raw logger that does not depend on React context/hooks.
@@ -51,8 +43,8 @@ async function rawLog(level, message, source, metadata = {}) {
     : "INFO";
 
   try {
-    const user = await User.me().catch(() => null);
-
+    // Prefer global user injected via window when available (non-React consumers may set window.__currentUser)
+    const user = (typeof window !== 'undefined' && window.__currentUser) ? window.__currentUser : null;
     const logEntry = {
       level: safeLevel,
       message: String(message),
@@ -69,13 +61,8 @@ async function rawLog(level, message, source, metadata = {}) {
         : null,
     };
 
-    // Buffer and schedule flush
-    logBuffer.push(logEntry);
-    if (logBuffer.length >= MAX_BUFFER_SIZE) {
-      await flushLogs();
-    } else {
-      scheduleFlush();
-    }
+    // Use centralized batcher - handles buffering, bulk POST, and immediate flush for ERROR
+    await enqueueSystemLog(logEntry);
 
     // Console echo in dev
     try {
@@ -106,9 +93,9 @@ async function rawLog(level, message, source, metadata = {}) {
       }
     }
   } catch {
-    // As a last resort, try to store a single log entry without buffering
+    // As a last resort, try to enqueue a single log entry
     try {
-      await SystemLog.create({
+      await enqueueSystemLog({
         level: safeLevel,
         message: String(message),
         source,
@@ -128,6 +115,7 @@ async function rawLog(level, message, source, metadata = {}) {
 }
 
 export const LoggerProvider = ({ children }) => {
+  const { user: contextUser } = useUser();
   const log = useCallback(async (level, message, source, metadata = {}) => {
     // Validate level parameter
     const validLevels = ["DEBUG", "INFO", "WARNING", "ERROR"];
@@ -139,8 +127,7 @@ export const LoggerProvider = ({ children }) => {
       : "INFO";
 
     try {
-      const user = await User.me().catch(() => null);
-
+      const user = contextUser || (typeof window !== 'undefined' && window.__currentUser) || null;
       const logEntry = {
         level: safeLevel,
         message: String(message),
@@ -195,7 +182,7 @@ export const LoggerProvider = ({ children }) => {
     } catch (error) {
       console.error("Logging failed:", error);
     }
-  }, []);
+  }, [contextUser]);
 
   const debug = useCallback((message, source, metadata) => {
     return log(LOG_LEVELS.DEBUG, message, source, metadata);
@@ -264,9 +251,14 @@ if (typeof window !== "undefined") {
       return String(arg);
     }).join(" ");
 
-    // Don't log if it's our own logging system
-    if (!message.includes("[ERROR]") && !message.includes("Logging failed")) {
-      SystemLog.create({
+    // Don't log if it's our own logging system or Supabase auth errors
+    const isSupabaseAuthError = message.includes("Auth session missing") || 
+                                 message.includes("AuthSessionMissingError");
+    
+    if (!message.includes("[ERROR]") && 
+        !message.includes("Logging failed") && 
+        !isSupabaseAuthError) {
+      enqueueSystemLog({
         level: "ERROR",
         message,
         source: "console.error",
@@ -291,7 +283,7 @@ if (typeof window !== "undefined") {
       !message.includes("Storage access failed") &&
       !message.includes("Failed to save")
     ) {
-      SystemLog.create({
+      enqueueSystemLog({
         level: "WARNING",
         message,
         source: "console.warn",

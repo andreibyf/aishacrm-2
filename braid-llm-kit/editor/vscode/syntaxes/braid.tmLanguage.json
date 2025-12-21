@@ -1,0 +1,26 @@
+{
+  "scopeName": "source.braid",
+  "patterns": [
+    {
+      "name": "comment.line.double-slash.braid",
+      "match": "//.*$"
+    },
+    {
+      "name": "keyword.control.braid",
+      "match": "\\b(fn|type|enum|trait|impl|match|actor|async|await|let|mut|requires|ensures|Ok|Err)\\b"
+    },
+    {
+      "name": "storage.type.braid",
+      "match": "\\b(Result|Option|String|Bool|i32|i64|u64)\\b"
+    },
+    {
+      "name": "constant.numeric.braid",
+      "match": "\\b\\d+\\b"
+    },
+    {
+      "name": "string.quoted.double.braid",
+      "begin": "\\\"",
+      "end": "\\\""
+    }
+  ]
+}

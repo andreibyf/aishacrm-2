@@ -1,4 +1,6 @@
-import { User, Employee } from "@/api/entities";
+import { logDev } from "@/utils/devLogger";
+import { Employee } from "@/api/entities";
+import { useUser } from "../components/shared/useUser.js";
 import { useTenant } from "../components/shared/tenantContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +16,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import EmployeeForm from "../components/employees/EmployeeForm";
 import EmployeeDetailPanel from "../components/employees/EmployeeDetailPanel";
@@ -34,7 +37,8 @@ export default function Employees() {
   const [totalItems, setTotalItems] = useState(0);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
+  // User now provided by global context (eliminates duplicate User.me() calls)
+  const { user: currentUser, loading: userLoading } = useUser();
   const [isPermissionsOpen, setIsPermissionsOpen] = useState(false);
   const [permissionsEmployee, setPermissionsEmployee] = useState(null);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
@@ -42,18 +46,16 @@ export default function Employees() {
 
   const { selectedTenantId } = useTenant();
 
+  // Debug: Log user state
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const user = await User.me();
-        console.log('[Employees] Current user loaded:', user);
-        setCurrentUser(user);
-      } catch (error) {
-        console.error("Failed to load current user:", error);
-      }
-    };
-    fetchUser();
-  }, []);
+    logDev('[Employees] User state changed:', { currentUser: currentUser?.email, userLoading });
+  }, [currentUser, userLoading]);
+
+  useEffect(() => {
+    logDev('[Employees] isFormOpen changed:', isFormOpen);
+  }, [isFormOpen]);
+
+  // Removed local User.me() fetch; currentUser provided by context
 
   const loadEmployees = useCallback(async () => {
     setLoading(true);
@@ -81,9 +83,9 @@ export default function Employees() {
                        currentUser.role === 'superadmin' || 
                        currentUser.employee_role === 'manager';
       
-      console.log('[Employees] Effective tenant ID:', effectiveTenantId);
-      console.log('[Employees] Loading with filter:', filter);
-      console.log('[Employees] canSeeAll:', canSeeAll);
+      logDev('[Employees] Effective tenant ID:', effectiveTenantId);
+      logDev('[Employees] Loading with filter:', filter);
+      logDev('[Employees] canSeeAll:', canSeeAll);
       
       let allEmployees;
       if (canSeeAll) {
@@ -98,8 +100,8 @@ export default function Employees() {
         }, "-created_date");
       }
       
-      console.log('[Employees] Loaded employees:', allEmployees?.length || 0);
-      console.log('[Employees] Sample employee tenant IDs:', allEmployees?.slice(0, 3).map(e => e.tenant_id));
+      logDev('[Employees] Loaded employees:', allEmployees?.length || 0);
+      logDev('[Employees] Sample employee tenant IDs:', allEmployees?.slice(0, 3).map(e => e.tenant_id));
       
       const filtered = allEmployees.filter(emp => 
         (emp.first_name + ' ' + emp.last_name).toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -119,15 +121,15 @@ export default function Employees() {
   }, [selectedTenantId, searchTerm, currentPage, pageSize, currentUser]);
 
   useEffect(() => {
-    if (currentUser) {
+    if (!userLoading && currentUser) {
       loadEmployees();
     }
-  }, [loadEmployees, currentUser]);
+  }, [loadEmployees, currentUser, userLoading]);
 
   const handleSave = async () => {
     setIsFormOpen(false);
     setEditingEmployee(null);
-    console.log('[Employees] Reloading after save...');
+    logDev('[Employees] Reloading after save...');
     await loadEmployees();
     toast.success('Employee list refreshed');
   };
@@ -151,12 +153,12 @@ export default function Employees() {
         await loadEmployees();
       } catch (error) {
         if (import.meta.env.DEV) {
-          console.log('[DELETE DEBUG] Error object:', error);
-          console.log('[DELETE DEBUG] Error type:', typeof error);
-          console.log('[DELETE DEBUG] Error is null?', error === null);
-          console.log('[DELETE DEBUG] Error is undefined?', error === undefined);
-          console.log('[DELETE DEBUG] Error.response:', error?.response);
-          console.log('[DELETE DEBUG] Error.message:', error?.message);
+          logDev('[DELETE DEBUG] Error object:', error);
+          logDev('[DELETE DEBUG] Error type:', typeof error);
+          logDev('[DELETE DEBUG] Error is null?', error === null);
+          logDev('[DELETE DEBUG] Error is undefined?', error === undefined);
+          logDev('[DELETE DEBUG] Error.response:', error?.response);
+          logDev('[DELETE DEBUG] Error.message:', error?.message);
         }
         
         let errorMessage = "Failed to delete employee";
@@ -188,7 +190,7 @@ export default function Employees() {
       }
       
       if (currentUser?.role === 'superadmin' && selectedTenantId) {
-          console.log('[Employees] Using selected tenant for form:', selectedTenantId);
+          logDev('[Employees] Using selected tenant for form:', selectedTenantId);
           return selectedTenantId;
       }
       
@@ -201,7 +203,7 @@ export default function Employees() {
           return null;
       }
       
-      console.log('[Employees] Using user tenant for form:', tenantId);
+      logDev('[Employees] Using user tenant for form:', tenantId);
       return tenantId;
   };
 
@@ -223,6 +225,9 @@ export default function Employees() {
         <DialogContent className="max-w-4xl bg-slate-800 border-slate-700 text-slate-200">
           <DialogHeader>
             <DialogTitle className="text-slate-100">{editingEmployee ? 'Edit Employee' : 'Add New Employee'}</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              {editingEmployee ? 'Update employee information' : 'Add a new employee to your team'}
+            </DialogDescription>
           </DialogHeader>
           <EmployeeForm
             employee={editingEmployee}
@@ -316,10 +321,14 @@ export default function Employees() {
               className="pl-10 bg-slate-800 border-slate-700 text-slate-200"
             />
           </div>
-          <Button 
-            onClick={() => { setEditingEmployee(null); setIsFormOpen(true); }} 
+          <Button
+            onClick={() => { 
+              logDev('[Employees] Add Employee clicked', { currentUser, userLoading, isFormOpen });
+              setEditingEmployee(null); 
+              setIsFormOpen(true); 
+            }}
             className="bg-blue-600 hover:bg-blue-700"
-            disabled={!currentUser}
+            disabled={!currentUser || userLoading}
           >
             <Plus className="mr-2 h-4 w-4" /> Add Employee
           </Button>
@@ -357,7 +366,7 @@ export default function Employees() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                {loading || userLoading ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-10">
                       <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500" />
@@ -451,11 +460,11 @@ export default function Employees() {
                                     loadEmployees();
                                   } catch (err) {
                                     if (import.meta.env.DEV) {
-                                      console.log('[DROPDOWN DELETE DEBUG] Error object:', err);
-                                      console.log('[DROPDOWN DELETE DEBUG] Error type:', typeof err);
-                                      console.log('[DROPDOWN DELETE DEBUG] Error.response:', err?.response);
-                                      console.log('[DROPDOWN DELETE DEBUG] Error.message:', err?.message);
-                                      console.log('[DROPDOWN DELETE DEBUG] Error keys:', err ? Object.keys(err) : 'null/undefined');
+                                      logDev('[DROPDOWN DELETE DEBUG] Error object:', err);
+                                      logDev('[DROPDOWN DELETE DEBUG] Error type:', typeof err);
+                                      logDev('[DROPDOWN DELETE DEBUG] Error.response:', err?.response);
+                                      logDev('[DROPDOWN DELETE DEBUG] Error.message:', err?.message);
+                                      logDev('[DROPDOWN DELETE DEBUG] Error keys:', err ? Object.keys(err) : 'null/undefined');
                                     }
                                     
                                     let msg = "Failed to delete employee";

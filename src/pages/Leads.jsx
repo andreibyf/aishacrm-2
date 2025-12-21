@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { Lead } from "@/api/entities";
 import { Account } from "@/api/entities";
-import { User } from "@/api/entities";
+// User entity no longer needed here; user comes from context
+import { useUser } from "@/components/shared/useUser.js";
 import { Employee } from "@/api/entities";
 import { useApiManager } from "../components/shared/ApiManager";
 import LeadCard from "../components/leads/LeadCard";
-import LeadForm from "../components/leads/LeadForm";
-import LeadDetailPanel from "../components/leads/LeadDetailPanel";
-import LeadConversionDialog from "../components/leads/LeadConversionDialog";
+const LeadForm = lazy(() => import("../components/leads/LeadForm"));
+const LeadDetailPanel = lazy(() => import("../components/leads/LeadDetailPanel"));
+const LeadConversionDialog = lazy(() => import("../components/leads/LeadConversionDialog"));
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -25,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import {
   AlertCircle,
+  Building2,
   Edit,
   Eye,
   Grid,
@@ -39,7 +41,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import CsvExportButton from "../components/shared/CsvExportButton";
-import CsvImportDialog from "../components/shared/CsvImportDialog";
+const CsvImportDialog = lazy(() => import("../components/shared/CsvImportDialog"));
 import { useTenant } from "../components/shared/tenantContext";
 import Pagination from "../components/shared/Pagination";
 import { toast } from "sonner";
@@ -55,18 +57,29 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import BulkActionsMenu from "../components/leads/BulkActionsMenu";
+import { Globe } from "lucide-react";
+// Switch to internal profile page; stop using mintLeadLink
 import StatusHelper from "../components/shared/StatusHelper";
 import { loadUsersSafely } from "../components/shared/userLoader";
+import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 import { useConfirmDialog } from "../components/shared/ConfirmDialog";
+import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 
 // Helper function for delays
 const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
+
 export default function LeadsPage() {
+  const { user } = useUser();
+  const { plural: leadsLabel, singular: leadLabel } = useEntityLabel('leads');
+  const { getCardLabel, isCardVisible } = useStatusCardPreferences();
   const [leads, setLeads] = useState([]);
   const [users, setUsers] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [, setAccounts] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  // Supporting data is now non-blocking since API returns denormalized names
+  const [supportingDataReady, setSupportingDataReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -77,7 +90,7 @@ export default function LeadsPage() {
   const [selectedLeads, setSelectedLeads] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [user, setUser] = useState(null);
+  // Removed local user state; using global context
   const { selectedTenantId } = useTenant();
   const [detailLead, setDetailLead] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -150,10 +163,10 @@ export default function LeadsPage() {
       user.employee_role === "manager";
   }, [user]);
 
-  // Derived state for admin role for controlling test data visibility
-  const isAdmin = useMemo(() => {
+  // Derived state for Superadmin role for controlling test data visibility
+  const isSuperadmin = useMemo(() => {
     if (!user) return false;
-    return user.role === "admin" || user.role === "superadmin";
+    return user.role === "superadmin";
   }, [user]);
 
   // Stats for ALL leads (not just current page)
@@ -180,30 +193,15 @@ export default function LeadsPage() {
   const supportingDataLoaded = useRef(false);
 
   // Load user once
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        // In E2E mode, use injected mock user to avoid failed User.me() calls
-        if (localStorage.getItem('E2E_TEST_MODE') === 'true' && window.__e2eUser) {
-          setUser(window.__e2eUser);
-          return;
-        }
-        
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Failed to load user:", error);
-        toast.error("Failed to load user information");
-      }
-    };
-    loadUser();
-  }, []);
+  // Removed per-page user fetch; user comes from global context
 
   // New getTenantFilter function, moved here from tenantContext
   const getTenantFilter = useCallback(() => {
+    // console.log('[Leads] getTenantFilter called with:', { selectedEmail, employeesCount: employees.length });
     if (!user) return {};
 
     let filter = {};
+    const filterObj = {}; // Object to hold complex filters (like $or) for JSON packing
 
     // Tenant filtering
     if (user.role === "superadmin" || user.role === "admin") {
@@ -215,11 +213,32 @@ export default function LeadsPage() {
     }
 
     // Employee scope filtering from context
+    // Note: selectedEmail can contain either an email address or an employee ID
     if (selectedEmail && selectedEmail !== "all") {
       if (selectedEmail === "unassigned") {
-        filter.$or = [{ assigned_to: null }, { assigned_to: "" }];
+        // Only filter by null
+        filterObj.$or = [{ assigned_to: null }];
       } else {
-        filter.assigned_to = selectedEmail;
+        // Robust filtering: Match by ID or Email
+        let emailToUse = selectedEmail;
+        // Check if selectedEmail looks like a UUID (it often is from LazyEmployeeSelector)
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedEmail);
+
+        if (isUuid && employees && employees.length > 0) {
+          const emp = employees.find(e => e.id === selectedEmail);
+          if (emp && emp.email) {
+            emailToUse = emp.email;
+            // Match either ID OR Email
+            filterObj.$or = [
+              { assigned_to: selectedEmail },
+              { assigned_to: emailToUse }
+            ];
+          } else {
+            filter.assigned_to = selectedEmail;
+          }
+        } else {
+          filter.assigned_to = selectedEmail;
+        }
       }
     } else if (
       user.employee_role === "employee" && user.role !== "admin" &&
@@ -231,11 +250,16 @@ export default function LeadsPage() {
 
     // Test data filtering
     if (!showTestData) {
-      filter.is_test_data = { $ne: true };
+      filter.is_test_data = false; // Simple boolean, not complex operator
+    }
+
+    // Package the complex filterObj into the 'filter' parameter
+    if (Object.keys(filterObj).length > 0) {
+      filter.filter = JSON.stringify(filterObj);
     }
 
     return filter;
-  }, [user, selectedTenantId, showTestData, selectedEmail]);
+  }, [user, selectedTenantId, showTestData, selectedEmail, employees]);
 
   // Load supporting data (accounts, users, employees) ONCE with delays and error handling
   useEffect(() => {
@@ -253,40 +277,49 @@ export default function LeadsPage() {
           baseTenantFilter.tenant_id = user.tenant_id;
         }
 
-        // Load accounts
-        const accountsData = await cachedRequest("Account", "filter", {
-          filter: baseTenantFilter,
-        }, () => Account.filter(baseTenantFilter));
+        // Guard: Don't load if no tenant_id for superadmin (must select a tenant first)
+        if ((user.role === 'superadmin' || user.role === 'admin') && !baseTenantFilter.tenant_id) {
+          if (import.meta.env.DEV) {
+            console.log("[Leads] Skipping data load - no tenant selected");
+          }
+          supportingDataLoaded.current = true;
+          return;
+        }
+
+        // Load all supporting data in parallel (instead of sequential) for faster load time
+        const [accountsData, usersData, employeesData] = await Promise.all([
+          cachedRequest("Account", "filter", {
+            filter: baseTenantFilter,
+          }, () => Account.filter(baseTenantFilter)),
+          loadUsersSafely(
+            user,
+            selectedTenantId,
+            cachedRequest,
+            1000
+          ),
+          cachedRequest("Employee", "filter", {
+            filter: baseTenantFilter,
+            limit: 1000
+          }, () => Employee.filter(baseTenantFilter, 'created_at', 1000))
+        ]);
+
         setAccounts(accountsData || []);
-
-        await delay(300);
-
-        // Load users safely
-        const usersData = await loadUsersSafely(
-          user,
-          selectedTenantId,
-          cachedRequest,
-        );
         setUsers(usersData || []);
-
-        await delay(300);
-
-        // Load employees
-        const employeesData = await cachedRequest("Employee", "filter", {
-          filter: baseTenantFilter,
-        }, () => Employee.filter(baseTenantFilter));
         setEmployees(employeesData || []);
 
         supportingDataLoaded.current = true; // Mark as loaded
+        setSupportingDataReady(true);
       } catch (error) {
         console.error("[Leads] Failed to load supporting data:", error);
+        // Even on error, allow leads to load
+        setSupportingDataReady(true);
       }
     };
 
     loadSupportingData();
   }, [user, selectedTenantId, cachedRequest]);
 
-  // Load total stats for ALL leads (separate from paginated data)
+  // Load total stats for ALL leads using fast stats endpoint
   const loadTotalStats = useCallback(async () => {
     if (!user) return;
 
@@ -294,29 +327,39 @@ export default function LeadsPage() {
       // Use the new getTenantFilter which includes employee scope and test data filter
       let filter = getTenantFilter();
 
-      // Get up to 10000 leads for stats calculation
-      const allLeads = await Lead.filter(filter, "id", 10000);
+      // Guard: Don't load stats if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !filter.tenant_id) {
+        setTotalStats({
+          total: 0,
+          new: 0,
+          contacted: 0,
+          qualified: 0,
+          unqualified: 0,
+          converted: 0,
+          lost: 0,
+        });
+        return;
+      }
 
-      const stats = {
-        total: allLeads?.length || 0,
-        new: allLeads?.filter((l) => l.status === "new").length || 0,
-        contacted: allLeads?.filter((l) => l.status === "contacted").length ||
-          0,
-        qualified: allLeads?.filter((l) => l.status === "qualified").length ||
-          0,
-        unqualified: allLeads?.filter((l) =>
-          l.status === "unqualified"
-        ).length || 0,
-        converted: allLeads?.filter((l) => l.status === "converted").length ||
-          0,
-        lost: allLeads?.filter((l) => l.status === "lost").length || 0,
-      };
+      // Use optimized stats endpoint instead of fetching all leads
+      const stats = await Lead.getStats({
+        tenant_id: filter.tenant_id,
+        is_test_data: showTestData ? undefined : false,
+      });
 
-      setTotalStats(stats);
+      setTotalStats({
+        total: stats?.total || 0,
+        new: stats?.new || 0,
+        contacted: stats?.contacted || 0,
+        qualified: stats?.qualified || 0,
+        unqualified: stats?.unqualified || 0,
+        converted: stats?.converted || 0,
+        lost: stats?.lost || 0,
+      });
     } catch (error) {
       console.error("Failed to load total stats:", error);
     }
-  }, [user, getTenantFilter]);
+  }, [user, getTenantFilter, showTestData]);
 
   // Load total stats when dependencies change
   useEffect(() => {
@@ -332,74 +375,117 @@ export default function LeadsPage() {
     setLoading(true);
     try {
       let currentFilter = getTenantFilter();
+      let searchFilter = null;
+
+      // Guard: Don't load leads if no tenant_id for superadmin
+      if ((user.role === 'superadmin' || user.role === 'admin') && !currentFilter.tenant_id) {
+        setLeads([]);
+        setTotalItems(0);
+        setLoading(false);
+        return;
+      }
 
       if (statusFilter !== "all") {
         currentFilter = { ...currentFilter, status: statusFilter };
       }
 
       if (searchTerm) {
-        const searchRegex = { $regex: searchTerm, $options: "i" };
-        currentFilter = {
-          ...currentFilter,
+        // Separate search filter to be passed as 'filter' query param
+        searchFilter = {
           $or: [
-            { first_name: searchRegex },
-            { last_name: searchRegex },
-            { email: searchRegex },
-            { phone: searchRegex },
-            { company: searchRegex },
-            { job_title: searchRegex },
+            { first_name: { $icontains: searchTerm } },
+            { last_name: { $icontains: searchTerm } },
+            { email: { $icontains: searchTerm } },
+            { phone: { $icontains: searchTerm } },
+            { company: { $icontains: searchTerm } },
+            { job_title: { $icontains: searchTerm } },
           ],
         };
+        currentFilter = { ...currentFilter, filter: JSON.stringify(searchFilter) };
       }
 
       if (selectedTags.length > 0) {
         currentFilter = { ...currentFilter, tags: { $all: selectedTags } };
       }
 
-      // 1. Fetch all leads matching server-side filters (up to a limit)
-      // We fetch a larger number (e.g., 10000) to accurately determine total count after client-side filtering.
-      const allLeadsMatchingServerFilter = await Lead.filter(
+      // Determine pagination strategy:
+      // - If age filter is "all": Use true backend pagination (efficient)
+      // - If age filter is specific: Fetch larger batch for client-side age filtering
+      const useBackendPagination = ageFilter === "all";
+      const fetchLimit = useBackendPagination ? size : Math.min(500, size * 5);
+      const fetchOffset = useBackendPagination ? (page - 1) * size : 0;
+
+      // Add pagination parameters to the filter
+      currentFilter = { 
+        ...currentFilter, 
+        limit: fetchLimit,
+        offset: fetchOffset
+      };
+
+      // Fetch leads with server-side pagination
+      const response = await Lead.filter(
         currentFilter,
         "-created_date",
-        10000,
       );
 
-      // 2. Apply client-side age filter to the full set to determine true total count and to prepare for pagination
-      let ageFilteredAllLeads = allLeadsMatchingServerFilter;
+      // Apply client-side age filter if needed
+      let allFilteredLeads = response || [];
       if (ageFilter !== "all") {
         const selectedBucket = ageBuckets.find((b) => b.value === ageFilter);
         if (selectedBucket) {
-          ageFilteredAllLeads = allLeadsMatchingServerFilter.filter((lead) => {
+          allFilteredLeads = allFilteredLeads.filter((lead) => {
             const age = calculateLeadAge(lead.created_date);
             return age >= selectedBucket.min && age <= selectedBucket.max;
           });
         }
       }
-      const totalCount = ageFilteredAllLeads.length;
 
-      // 3. Apply pagination to the age-filtered set
-      const skip = (page - 1) * size;
-      const paginatedLeads = ageFilteredAllLeads.slice(skip, skip + size);
+      // Apply client-side pagination if age filtering was used
+      let paginatedLeads = allFilteredLeads;
+      let estimatedTotal = allFilteredLeads.length;
+      
+      if (!useBackendPagination) {
+        // Age filter active: paginate client-side after filtering
+        const skip = (page - 1) * size;
+        paginatedLeads = allFilteredLeads.slice(skip, skip + size);
+        // Estimate total based on whether we fetched a full batch
+        estimatedTotal = response.length >= fetchLimit && paginatedLeads.length === size 
+          ? (page * size) + 1 // More pages might exist
+          : skip + paginatedLeads.length; // Final page
+      } else {
+        // Backend pagination: estimate based on current page results
+        estimatedTotal = paginatedLeads.length < size 
+          ? (page - 1) * size + paginatedLeads.length 
+          : page * size + 1;
+      }
 
       console.log(
         "[Leads] Loading page:",
         page,
         "size:",
         size,
-        "skip:",
-        skip,
+        "ageFilter:",
+        ageFilter,
+        "fetchLimit:",
+        fetchLimit,
+        "fetchOffset:",
+        fetchOffset,
         "filter:",
         currentFilter,
       );
       console.log(
-        "[Leads] Loaded (after client filter):",
+        "[Leads] Fetched:",
+        response?.length,
+        "After age filter:",
+        allFilteredLeads?.length,
+        "Paginated:",
         paginatedLeads?.length,
-        "Total (after client filter):",
-        totalCount,
+        "Estimated total:",
+        estimatedTotal,
       );
 
-      setLeads(paginatedLeads || []);
-      setTotalItems(totalCount);
+      setLeads(paginatedLeads);
+      setTotalItems(estimatedTotal);
       setCurrentPage(page);
       initialLoadDone.current = true;
     } catch (error) {
@@ -420,23 +506,31 @@ export default function LeadsPage() {
     ageBuckets,
   ]); // Removed unused pageSize, showTestData deps
 
-  // Load leads when dependencies change
+  // Load leads when dependencies change - no longer blocked by supportingDataReady
+  // since API now returns denormalized assigned_to_name directly
   useEffect(() => {
     if (user) {
       loadLeads(currentPage, pageSize);
     }
   }, [
     user,
-    selectedTenantId,
-    selectedEmail,
-    currentPage,
-    pageSize,
     searchTerm,
     statusFilter,
-    selectedTags,
     ageFilter,
+    selectedTags,
+    currentPage,
+    pageSize,
     loadLeads,
+    selectedEmail,
+    selectedTenantId,
   ]);
+
+  // Clear cache when employee filter changes to force fresh data
+  useEffect(() => {
+    if (selectedEmail !== null) {
+      clearCache("Lead");
+    }
+  }, [selectedEmail, clearCache]);
 
   // Handle page change
   const handlePageChange = useCallback((newPage) => {
@@ -474,80 +568,65 @@ export default function LeadsPage() {
   const usersMap = useMemo(() => {
     return users.reduce((acc, user) => {
       acc[user.email] = user.full_name || user.email;
+      if (user.id) acc[user.id] = user.full_name || user.email; // Index by ID
       return acc;
     }, {});
   }, [users]);
 
   const employeesMap = useMemo(() => {
     return employees.reduce((acc, employee) => {
+      const fullName = `${employee.first_name} ${employee.last_name}`.trim();
+      // Map by both ID and email for backwards compatibility
+      if (employee.id) {
+        acc[employee.id] = fullName;
+      }
       if (employee.email) {
-        acc[employee.email] = `${employee.first_name} ${employee.last_name}`;
+        acc[employee.email] = fullName;
       }
       return acc;
     }, {});
   }, [employees]);
 
-  const handleSave = async (leadData) => {
-    console.log("[Leads.handleSave] Starting save with data:", leadData);
+  const accountsMap = useMemo(() => {
+    return accounts.reduce((acc, account) => {
+      if (account?.id) {
+        acc[account.id] = account.name || account.company || '';
+      }
+      return acc;
+    }, {});
+  }, [accounts]);
 
+  const getAssociatedAccountName = useCallback((leadRecord) => {
+    if (!leadRecord) return '';
+    const accountId = leadRecord.account_id || leadRecord.metadata?.account_id;
+    return accountsMap[accountId] || leadRecord.account_name || '';
+  }, [accountsMap]);
+
+  const handleSave = async (result) => {
     try {
-      // Guard: Ensure user is available
-      if (!user) {
-        console.error("[Leads.handleSave] User is undefined");
-        toast.error(
-          "Cannot save lead: User not loaded. Please refresh the page.",
-        );
-        return;
-      }
-
-      // Ensure tenant_id is set based on user
-      const dataWithTenant = {
-        ...leadData,
-        tenant_id: user.role === "superadmin" && selectedTenantId
-          ? selectedTenantId
-          : user.tenant_id,
-      };
-
-      console.log("[Leads.handleSave] Data with tenant:", dataWithTenant);
-
-      if (editingLead) {
-        console.log("[Leads.handleSave] Updating lead:", editingLead.id);
-        await Lead.update(editingLead.id, dataWithTenant);
-        toast.success("Lead updated successfully");
-      } else {
-        console.log("[Leads.handleSave] Creating new lead");
-        const result = await Lead.create(dataWithTenant);
-        console.log("[Leads.handleSave] Lead created:", result);
-        toast.success("Lead created successfully");
-      }
-
-      // Close form and clear editing state
-      setIsFormOpen(false);
-      setEditingLead(null);
-
       // Reset to page 1 to show the newly created/updated lead
       setCurrentPage(1);
 
-      // Clear cache
+      // Clear cache and reload BEFORE closing the dialog
       clearCache("Lead");
 
       // Reload leads and stats
-      console.log("[Leads.handleSave] Reloading data...");
       await Promise.all([
         loadLeads(1, pageSize), // Always load page 1 to show the lead
         loadTotalStats(),
       ]);
+      
+      // Now close the dialog after data is fresh
+      setIsFormOpen(false);
+      setEditingLead(null);
       console.log("[Leads.handleSave] Data reloaded successfully");
     } catch (error) {
-      console.error("[Leads.handleSave] Failed to save lead:", {
+      console.error("[Leads.handleSave] Failed to reload data after save:", {
         error,
         message: error?.message,
         stack: error?.stack,
-        leadData,
+        result,
       });
-      toast.error(
-        editingLead ? "Failed to update lead" : "Failed to create lead",
-      );
     }
   };
 
@@ -562,20 +641,20 @@ export default function LeadsPage() {
     if (!confirmed) return;
 
     try {
-      await Lead.delete(id);
+      const tenantId = getTenantFilter().tenant_id || user.tenant_id;
+      if (!tenantId) {
+        throw new Error('Cannot delete: tenant_id is not available');
+      }
+      await Lead.delete(id, { tenant_id: tenantId });
       // Optimistically update UI
       setLeads((prev) => prev.filter((l) => l.id !== id));
       setTotalItems((prev) => (prev > 0 ? prev - 1 : 0));
       toast.success("Lead deleted successfully");
 
-      // Small delay to let optimistic update settle
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
+      // Clear cache and refresh in background - don't block UI
       clearCache("Lead");
-      await Promise.all([
-        loadLeads(currentPage, pageSize),
-        loadTotalStats(),
-      ]);
+      loadLeads(currentPage, pageSize);
+      loadTotalStats();
     } catch (error) {
       console.error("Failed to delete lead:", error);
       toast.error("Failed to delete lead");
@@ -642,9 +721,13 @@ export default function LeadsPage() {
 
         // Delete in batches to avoid overwhelming the system
         const BATCH_SIZE = 50;
+        const tenantId = getTenantFilter().tenant_id || user.tenant_id;
+        if (!tenantId) {
+          throw new Error('Cannot delete: tenant_id is not available');
+        }
         for (let i = 0; i < allLeadsToDelete.length; i += BATCH_SIZE) {
           const batch = allLeadsToDelete.slice(i, i + BATCH_SIZE);
-          await Promise.all(batch.map((l) => Lead.delete(l.id)));
+          await Promise.all(batch.map((l) => Lead.delete(l.id, { tenant_id: tenantId })));
         }
 
         setSelectedLeads(new Set());
@@ -675,7 +758,11 @@ export default function LeadsPage() {
       if (!confirmed) return;
 
       try {
-        await Promise.all([...selectedLeads].map((id) => Lead.delete(id)));
+        const tenantId = getTenantFilter().tenant_id || user.tenant_id;
+        if (!tenantId) {
+          throw new Error('Cannot delete: tenant_id is not available');
+        }
+        await Promise.all([...selectedLeads].map((id) => Lead.delete(id, { tenant_id: tenantId })));
         setSelectedLeads(new Set());
         clearCache("Lead");
         await Promise.all([
@@ -939,16 +1026,30 @@ export default function LeadsPage() {
     setIsConversionDialogOpen(true);
   };
 
-  const handleConversionSuccess = async () => {
+  const handleConversionSuccess = async (result) => {
+    // Optimistically update the lead status in the local state
+    if (convertingLead) {
+      setLeads(prevLeads => 
+        prevLeads.map(l => 
+          l.id === convertingLead.id 
+            ? { ...l, status: 'converted', converted_contact_id: result?.contact?.id, converted_account_id: result?.accountId }
+            : l
+        )
+      );
+    }
+    
+    toast.success("Lead converted successfully");
     setIsConversionDialogOpen(false);
     setConvertingLead(null);
+    
+    // Clear cache and refresh in background - don't block UI
     clearCache("Lead");
     clearCache("Contact");
     clearCache("Account");
-    await Promise.all([
-      loadLeads(currentPage, pageSize),
-      loadTotalStats(),
-    ]);
+    clearCache("Opportunity");
+    // Fire and forget - UI is already updated optimistically
+    loadLeads(currentPage, pageSize);
+    loadTotalStats();
   };
 
   const handleRefresh = async () => {
@@ -978,6 +1079,39 @@ export default function LeadsPage() {
     handleClearSelection();
   };
 
+  // AiSHA events listener - allows AI to trigger page actions
+  useAiShaEvents({
+    entityType: 'leads',
+    onOpenEdit: ({ id }) => {
+      const lead = leads.find(l => l.id === id);
+      if (lead) {
+        setEditingLead(lead);
+        setIsFormOpen(true);
+      } else {
+        // Lead not in current page, try to fetch it
+        Lead.filter({ id }).then(result => {
+          if (result && result.length > 0) {
+            setEditingLead(result[0]);
+            setIsFormOpen(true);
+          }
+        });
+      }
+    },
+    onSelectRow: ({ id }) => {
+      // Highlight the row and open detail panel
+      const lead = leads.find(l => l.id === id);
+      if (lead) {
+        setDetailLead(lead);
+        setIsDetailOpen(true);
+      }
+    },
+    onOpenForm: () => {
+      setEditingLead(null);
+      setIsFormOpen(true);
+    },
+    onRefresh: handleRefresh,
+  });
+
   const hasActiveFilters = useMemo(() => {
     return searchTerm !== "" || statusFilter !== "all" || ageFilter !== "all" ||
       selectedTags.length > 0;
@@ -1003,82 +1137,92 @@ export default function LeadsPage() {
 
   return (
     <TooltipProvider>
-      <div className="min-h-screen bg-slate-900 p-4 sm:p-6">
+      <div className="space-y-6">
         <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-800 border-slate-700 text-slate-200">
             <DialogHeader>
               <DialogTitle className="text-slate-100">
-                {editingLead ? "Edit Lead" : "Add New Lead"}
+                {editingLead ? `Edit ${leadLabel}` : `Add New ${leadLabel}`}
               </DialogTitle>
             </DialogHeader>
-            <LeadForm
-              lead={editingLead}
-              onSave={handleSave}
-              onCancel={() => {
-                setIsFormOpen(false);
-                setEditingLead(null);
-              }}
-              user={user}
-              employees={employees}
-              isManager={isManager}
-            />
+            <Suspense fallback={<div className="p-4"><Loader2 className="w-4 h-4 animate-spin" /></div>}>
+              <LeadForm
+                lead={editingLead}
+                onSave={handleSave}
+                onCancel={() => {
+                  setIsFormOpen(false);
+                  setEditingLead(null);
+                }}
+                user={user}
+                employees={employees}
+                isManager={isManager}
+              />
+            </Suspense>
           </DialogContent>
         </Dialog>
 
-        <CsvImportDialog
-          open={isImportOpen}
-          onOpenChange={setIsImportOpen}
-          schema={Lead.schema ? Lead.schema() : null}
-          onSuccess={async () => {
-            clearCache("Lead");
-            await Promise.all([
-              loadLeads(1, pageSize),
-              loadTotalStats(),
-            ]);
-          }}
-        />
+        <Suspense fallback={null}>
+          <CsvImportDialog
+            open={isImportOpen}
+            onOpenChange={setIsImportOpen}
+            schema={Lead.schema ? Lead.schema() : null}
+            onSuccess={async () => {
+              clearCache("Lead");
+              await Promise.all([
+                loadLeads(1, pageSize),
+                loadTotalStats(),
+              ]);
+            }}
+          />
+        </Suspense>
 
-        <LeadConversionDialog
-          lead={convertingLead}
-          open={isConversionDialogOpen}
-          onOpenChange={setIsConversionDialogOpen}
-          onSuccess={handleConversionSuccess}
-        />
+        <Suspense fallback={null}>
+          <LeadConversionDialog
+            lead={convertingLead}
+            accounts={accounts}
+            open={isConversionDialogOpen}
+            onClose={() => setIsConversionDialogOpen(false)}
+            onConvert={handleConversionSuccess}
+          />
+        </Suspense>
 
-        <LeadDetailPanel
-          lead={detailLead}
-          assignedUserName={employeesMap[detailLead?.assigned_to] ||
-            usersMap[detailLead?.assigned_to] || detailLead?.assigned_to_name}
-          open={isDetailOpen}
-          onOpenChange={() => {
-            setIsDetailOpen(false);
-            setDetailLead(null);
-          }}
-          onEdit={(lead) => {
-            setEditingLead(lead);
-            setIsFormOpen(true);
-            setIsDetailOpen(false);
-          }}
-          onDelete={async (id) => {
-            await handleDelete(id);
-            setIsDetailOpen(false);
-          }}
-          onConvert={(lead) => {
-            setIsDetailOpen(false);
-            handleConvert(lead);
-          }}
-          user={user}
-        />
+        <Suspense fallback={null}>
+          <LeadDetailPanel
+            lead={detailLead}
+            assignedUserName={detailLead?.assigned_to_name ||
+              employeesMap[detailLead?.assigned_to] || usersMap[detailLead?.assigned_to]}
+            open={isDetailOpen}
+            onOpenChange={() => {
+              setIsDetailOpen(false);
+              setDetailLead(null);
+            }}
+            onEdit={(lead) => {
+              setEditingLead(lead);
+              setIsFormOpen(true);
+              setIsDetailOpen(false);
+            }}
+            onDelete={async (id) => {
+              await handleDelete(id);
+              setIsDetailOpen(false);
+            }}
+            onConvert={(lead) => {
+              setIsDetailOpen(false);
+              handleConvert(lead);
+            }}
+            user={user}
+            associatedAccountName={getAssociatedAccountName(detailLead)}
+          />
+        </Suspense>
 
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-100 mb-2">Leads</h1>
-            <p className="text-slate-400">
-              Track and manage your sales leads and prospects.
+            <h1 className="text-3xl font-bold text-slate-100">{leadsLabel}</h1>
+            <p className="text-slate-400 mt-1">
+              Track and manage your sales {leadsLabel.toLowerCase()} and prospects.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {isAdmin && (
+            {isSuperadmin && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -1176,21 +1320,21 @@ export default function LeadsPage() {
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Lead
+                  Add {leadLabel}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Create new lead</p>
+                <p>Create new {leadLabel.toLowerCase()}</p>
               </TooltipContent>
             </Tooltip>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-7 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-7 gap-4">
           {[
             {
-              label: "Total Leads",
+              label: `Total ${leadsLabel}`,
               value: totalStats.total,
               filter: "all",
               bgColor: "bg-slate-800",
@@ -1244,7 +1388,9 @@ export default function LeadsPage() {
               borderColor: "border-red-700",
               tooltip: "lead_lost",
             },
-          ].map((stat) => (
+          ]
+            .filter(stat => isCardVisible(stat.tooltip))
+            .map((stat) => (
             <div
               key={stat.label}
               className={`${stat.bgColor} ${
@@ -1257,7 +1403,7 @@ export default function LeadsPage() {
               onClick={() => handleStatusFilterClick(stat.filter)}
             >
               <div className="flex items-center justify-between mb-1">
-                <p className="text-sm text-slate-400">{stat.label}</p>
+                <p className="text-sm text-slate-400">{getCardLabel(stat.tooltip) || stat.label}</p>
                 <StatusHelper statusKey={stat.tooltip} />
               </div>
               <p className="text-2xl font-bold text-slate-100">{stat.value}</p>
@@ -1265,7 +1411,7 @@ export default function LeadsPage() {
           ))}
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-3 w-5 h-5 text-slate-500" />
             <Input
@@ -1337,7 +1483,7 @@ export default function LeadsPage() {
         {/* Select All Banner */}
         {selectedLeads.size === leads.length && leads.length > 0 &&
           !selectAllMode && totalItems > leads.length && (
-          <div className="mb-4 bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
+          <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-blue-400" />
               <span className="text-blue-200">
@@ -1363,7 +1509,7 @@ export default function LeadsPage() {
         )}
 
         {selectAllMode && (
-          <div className="mb-4 bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
+          <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-blue-400" />
               <span className="text-blue-200 font-semibold">
@@ -1395,12 +1541,12 @@ export default function LeadsPage() {
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-12 text-center">
               <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-slate-300 mb-2">
-                No leads found
+                No {leadsLabel.toLowerCase()} found
               </h3>
               <p className="text-slate-500 mb-6">
                 {hasActiveFilters
                   ? "Try adjusting your filters or search term"
-                  : "Get started by adding your first lead"}
+                  : `Get started by adding your first ${leadLabel.toLowerCase()}`}
               </p>
               {!hasActiveFilters && (
                 <Button
@@ -1408,7 +1554,7 @@ export default function LeadsPage() {
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Your First Lead
+                  Add Your First {leadLabel}
                 </Button>
               )}
             </div>
@@ -1463,12 +1609,13 @@ export default function LeadsPage() {
                       {leads.map((lead) => {
                         const age = calculateLeadAge(lead.created_date);
                         const ageBucket = getLeadAgeBucket(lead);
+                        const isConverted = lead.status === 'converted';
 
                         return (
                           <tr
                             key={lead.id}
                             data-testid={`lead-row-${lead.email}`}
-                            className="hover:bg-slate-700/30 transition-colors"
+                            className={`hover:bg-slate-700/30 transition-colors ${isConverted ? 'opacity-70' : ''}`}
                           >
                             <td className="px-4 py-3">
                               <Checkbox
@@ -1479,7 +1626,29 @@ export default function LeadsPage() {
                               />
                             </td>
                             <td className="px-4 py-3 text-sm text-slate-300">
-                              {lead.first_name} {lead.last_name}
+                              {(() => {
+                                const isB2B = lead.lead_type === 'b2b' || lead.lead_type === 'B2B';
+                                const personName = `${lead.first_name || ''} ${lead.last_name || ''}`.trim();
+                                const companyName = lead.company;
+                                
+                                if (isB2B && companyName) {
+                                  // B2B: Show company name prominently, contact person below
+                                  return (
+                                    <div className={isConverted ? 'line-through' : ''}>
+                                      <span className="font-medium text-slate-200">{companyName}</span>
+                                      {personName && (
+                                        <div className="text-xs text-slate-400">{personName}</div>
+                                      )}
+                                    </div>
+                                  );
+                                }
+                                // B2C or no company: Show person name
+                                return (
+                                  <span className={isConverted ? 'line-through' : ''}>
+                                    {personName || <span className="text-slate-500">—</span>}
+                                  </span>
+                                );
+                              })()}
                             </td>
                             <td
                               className="px-4 py-3 text-sm text-slate-300"
@@ -1509,9 +1678,26 @@ export default function LeadsPage() {
                               </div>
                             </td>
                             <td className="px-4 py-3 text-sm text-slate-300">
-                              {lead.company || (
-                                <span className="text-slate-500">—</span>
-                              )}
+                              {(() => {
+                                const associatedAccountName = getAssociatedAccountName(lead);
+                                const companyLabel = associatedAccountName || lead.company;
+
+                                if (!companyLabel) {
+                                  return <span className="text-slate-500">—</span>;
+                                }
+
+                                return (
+                                  <div className="space-y-1">
+                                    <span className="font-medium text-slate-200 flex items-center gap-2">
+                                      <Building2 className="w-3 h-3 text-slate-500" />
+                                      {companyLabel}
+                                    </span>
+                                    {associatedAccountName && lead.company && lead.company !== associatedAccountName && (
+                                      <span className="text-xs text-slate-500">Company: {lead.company}</span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </td>
                             <td
                               className="px-4 py-3 text-sm text-slate-300"
@@ -1533,9 +1719,9 @@ export default function LeadsPage() {
                               </span>
                             </td>
                             <td className="px-4 py-3 text-sm text-slate-300">
-                              {employeesMap[lead.assigned_to] ||
-                                usersMap[lead.assigned_to] ||
-                                lead.assigned_to_name || (
+                              {lead.assigned_to_name ||
+                                employeesMap[lead.assigned_to] ||
+                                usersMap[lead.assigned_to] || (
                                 <span className="text-slate-500">
                                   Unassigned
                                 </span>
@@ -1582,16 +1768,40 @@ export default function LeadsPage() {
                                       size="icon"
                                       onClick={(e) => {
                                         e.stopPropagation();
+                                        try {
+                                          const href = `/leads/${lead.id}`;
+                                          window.open(href, '_blank', 'noopener,noreferrer');
+                                        } catch (err) {
+                                          console.error('Failed to open lead:', err);
+                                        }
+                                      }}
+                                      className="h-8 w-8 text-slate-400 hover:text-blue-400"
+                                    >
+                                      <Globe className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Open web profile</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         setEditingLead(lead);
                                         setIsFormOpen(true);
                                       }}
                                       className="h-8 w-8 text-slate-400 hover:text-blue-400"
+                                      disabled={isConverted}
                                     >
                                       <Edit className="w-4 h-4" />
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p>Edit lead</p>
+                                    <p>Edit {leadLabel.toLowerCase()}</p>
                                   </TooltipContent>
                                 </Tooltip>
                                 {lead.status !== "converted" && (
@@ -1624,6 +1834,7 @@ export default function LeadsPage() {
                                         handleDelete(lead.id);
                                       }}
                                       className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                                      disabled={isConverted}
                                     >
                                       <Trash2 className="w-4 h-4" />
                                     </Button>
@@ -1662,6 +1873,7 @@ export default function LeadsPage() {
                     <LeadCard
                       key={lead.id}
                       lead={lead}
+                      accountName={getAssociatedAccountName(lead)}
                       onEdit={(l) => {
                         setEditingLead(l);
                         setIsFormOpen(true);

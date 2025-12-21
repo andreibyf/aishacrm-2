@@ -1,0 +1,83 @@
+name: MCP Audit Test
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'braid-mcp-node-server/**'
+      - '.github/workflows/mcp-audit-test.yml'
+
+jobs:
+  run-audit-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'  # Required by supabase-js and joi
+
+      - name: Install dependencies (braid-mcp-node-server)
+        working-directory: braid-mcp-node-server
+        run: npm ci
+
+      - name: Apply DB migrations (optional)
+        working-directory: .
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RUN_MIGRATIONS: ${{ secrets.RUN_MIGRATIONS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ] || [ "${RUN_MIGRATIONS:-}" != "true" ]; then
+            echo "Skipping migrations: set secrets.DATABASE_URL and RUN_MIGRATIONS=true to enable."
+            exit 0
+          fi
+          echo "Applying migration backend/migrations/053_add_audit_log_request_id.sql against DATABASE_URL"
+          apt-get update && apt-get install -y postgresql-client
+          psql "${DATABASE_URL}" -f backend/migrations/053_add_audit_log_request_id.sql
+
+      - name: Start MCP server and run audit test
+        working-directory: braid-mcp-node-server
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TENANT_ID: ${{ secrets.TENANT_ID }}
+          MCP_URL: http://localhost:8000
+          # Provide dummy values for env check warnings
+          CRM_BACKEND_URL: http://localhost:3001
+          JWT_SECRET: test-jwt-secret-for-ci
+          # CI mode: Script will auto-detect missing secrets and run in health-check mode
+          CI: 'true'
+        run: |
+          set -euo pipefail
+          # Start server in background
+          npm run dev &
+          SERVER_PID=$!
+          
+          # Wait for server with timeout (60s max, check every 2s)
+          echo "Waiting for MCP server to be ready..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+              echo "Server is ready!"
+              break
+            fi
+            if ! kill -0 $SERVER_PID 2>/dev/null; then
+              echo "Server process died unexpectedly"
+              exit 1
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
+          
+          # Verify server is responding
+          curl -sf http://localhost:8000/health || (echo 'Server did not become ready in time' && exit 2)
+          
+          # Run the audit test script (now CI-friendly)
+          node ./scripts/test-mcp-audit.js
+          
+          # Cleanup
+          kill $SERVER_PID 2>/dev/null || true

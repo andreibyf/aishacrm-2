@@ -76,7 +76,7 @@ export const ActivitySchema = {
       "type": "string",
       "description": "Due time (HH:MM format)"
     },
-    "duration": {
+    "duration_minutes": {
       "type": "number",
       "description": "Duration in minutes"
     },

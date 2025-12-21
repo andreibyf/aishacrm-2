@@ -19,7 +19,8 @@ import {
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Contact, Lead, Activity } from "@/api/entities"; // Added Activity import
-import { User } from "@/api/entities";
+// Replaced direct User.me() usage with global user context hook
+import { useUser } from "@/components/shared/useUser.js";
 import { getTenantFilter } from "../shared/tenantUtils";
 import { useTenant } from "../shared/tenantContext";
 
@@ -64,20 +65,21 @@ export default function AICallActivityForm({ activity, onSubmit, onCancel }) {
   });
 
   const [selectedDate, setSelectedDate] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  // Global user context (replaces prior local fetch via User.me())
+  const { user: currentUser } = useUser();
   const [availableContacts, setAvailableContacts] = useState([]);
   const [previewPrompt, setPreviewPrompt] = useState("");
   const [loading, setLoading] = useState(false); // New loading state
   const { selectedTenantId } = useTenant();
 
   useEffect(() => {
+    // Wait until user context is available
+    if (!currentUser) return;
+
     const loadData = async () => {
       try {
-        const user = await User.me();
-        setCurrentUser(user);
-
         // Load contacts and leads
-        const tenantFilter = getTenantFilter(user, selectedTenantId);
+        const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
 
         const contactsData = await Contact.filter(tenantFilter);
         const leadsData = await Lead.filter(tenantFilter);
@@ -129,7 +131,7 @@ export default function AICallActivityForm({ activity, onSubmit, onCancel }) {
     };
 
     loadData();
-  }, [activity, selectedTenantId]);
+  }, [activity, selectedTenantId, currentUser]);
 
   useEffect(() => {
     // Update preview when prompt or contact changes

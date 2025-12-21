@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { DragDropContext, Droppable } from '@hello-pangea/dnd';
 import OpportunityKanbanCard from './OpportunityKanbanCard';
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,28 +9,65 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import OpportunityForm from './OpportunityForm';
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 import { toast } from "sonner";
 
 const stageConfig = {
-  prospecting: { title: 'Prospecting', color: "border-t-blue-500" },
-  qualification: { title: 'Qualification', color: "border-t-yellow-500" },
-  proposal: { title: 'Proposal', color: "border-t-orange-500" },
-  negotiation: { title: 'Negotiation', color: "border-t-purple-500" },
-  closed_won: { title: 'Closed Won', color: "border-t-emerald-500" },
-  closed_lost: { title: 'Closed Lost', color: "border-t-red-500" },
+  prospecting: { title: 'Prospecting', color: "border-t-blue-500", cardId: 'opportunity_prospecting' },
+  qualification: { title: 'Qualification', color: "border-t-yellow-500", cardId: 'opportunity_qualification' },
+  proposal: { title: 'Proposal', color: "border-t-orange-500", cardId: 'opportunity_proposal' },
+  negotiation: { title: 'Negotiation', color: "border-t-purple-500", cardId: 'opportunity_negotiation' },
+  closed_won: { title: 'Closed Won', color: "border-t-emerald-500", cardId: 'opportunity_won' },
+  closed_lost: { title: 'Closed Lost', color: "border-t-red-500", cardId: 'opportunity_lost' },
 };
-
-const stages = Object.keys(stageConfig);
 
 export default function OpportunityKanbanBoard({ opportunities, accounts, contacts, users, leads, onStageChange, onDelete, onView, onDataRefresh }) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingOpportunity, setEditingOpportunity] = useState(null);
   const [localOpportunities, setLocalOpportunities] = useState(opportunities);
+  // Track ids with an in-flight stage update to prevent premature reversion from parent prop sync
+  const [pendingStageIds, setPendingStageIds] = useState(new Set());
+  
+  // Get visibility preferences from status cards
+  const { isCardVisible, getCardLabel } = useStatusCardPreferences();
+  
+  // Filter stages based on visibility preferences
+  const visibleStages = useMemo(() => {
+    return Object.keys(stageConfig)
+      .filter(stage => isCardVisible(stageConfig[stage].cardId))
+      .map(stage => ({
+        id: stage,
+        title: getCardLabel(stageConfig[stage].cardId) || stageConfig[stage].title,
+        color: stageConfig[stage].color,
+      }));
+  }, [isCardVisible, getCardLabel]);
 
-  // Sync local state with props
+  // Sync local state with props unless an optimistic stage change is pending for specific ids.
   React.useEffect(() => {
-    setLocalOpportunities(opportunities);
-  }, [opportunities]);
+    console.log('[Kanban] Prop sync triggered. Pending IDs:', Array.from(pendingStageIds));
+    console.log('[Kanban] Incoming opportunities count:', opportunities.length);
+    
+    if (!pendingStageIds.size) {
+      console.log('[Kanban] No pending - replacing all local state with props');
+      setLocalOpportunities(opportunities);
+      return;
+    }
+    
+    // Merge: keep optimistic versions for pending ids, use fresh data for the rest
+    setLocalOpportunities(prev => {
+      const prevById = new Map(prev.map(o => [String(o.id), o]));
+      const merged = opportunities.map(o => {
+        const idStr = String(o.id);
+        if (pendingStageIds.has(idStr) && prevById.has(idStr)) {
+          console.log('[Kanban] Preserving optimistic stage for ID:', idStr, 'stage:', prevById.get(idStr).stage);
+          return prevById.get(idStr);
+        }
+        return o;
+      });
+      console.log('[Kanban] Merged opportunities count:', merged.length);
+      return merged;
+    });
+  }, [opportunities, pendingStageIds]);
 
   const getDisplayInfo = (opp) => {
     if (opp.account_id) {
@@ -56,37 +93,83 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
 
   const onDragEnd = async (result) => {
     const { destination, source, draggableId } = result;
-    
     if (!destination) return;
+
+    console.log('[Kanban] Drag ended:', { draggableId, from: source.droppableId, to: destination.droppableId });
+
+    // If moving within same column and position changed, reorder locally (no persistence server-side)
+    if (destination.droppableId === source.droppableId && destination.index !== source.index) {
+      setLocalOpportunities(prev => {
+        const stageId = source.droppableId;
+        const stageItems = prev.filter(o => o.stage === stageId);
+        const otherItems = prev.filter(o => o.stage !== stageId);
+
+        // Remove dragged item from stage list
+        const fromIndex = source.index;
+        const [moved] = stageItems.splice(fromIndex, 1);
+        // Insert at new index
+        stageItems.splice(destination.index, 0, moved);
+
+        // Rebuild list preserving order inside the stage
+        return [
+          ...otherItems,
+          ...stageItems
+        ];
+      });
+      return; // Done - no backend call for ordering yet
+    }
+
+    // If dropped back to original spot, do nothing
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
-    
-    // Stage changed - optimistic update
+
+    // Moving to a different stage
     if (destination.droppableId !== source.droppableId) {
       const newStage = destination.droppableId;
-      
-      // OPTIMISTIC UPDATE: Update UI immediately
-      setLocalOpportunities(prev => 
-        prev.map(opp => 
-          opp.id === draggableId 
+      const idStr = String(draggableId);
+
+      console.log('[Kanban] Stage change:', { id: idStr, oldStage: source.droppableId, newStage });
+
+      // Mark id as pending so parent prop sync won't overwrite optimistic state
+      setPendingStageIds(prev => {
+        const next = new Set(prev).add(idStr);
+        console.log('[Kanban] Pending IDs after add:', Array.from(next));
+        return next;
+      });
+
+      // OPTIMISTIC UPDATE
+      setLocalOpportunities(prev => {
+        const updated = prev.map(opp => (
+          String(opp.id) === idStr
             ? { ...opp, stage: newStage }
             : opp
-        )
-      );
-      
+        ));
+        console.log('[Kanban] Optimistic update applied for', idStr);
+        return updated;
+      });
+
       try {
-        // Make the API call in the background
-        await onStageChange(draggableId, newStage);
+        console.log('[Kanban] Calling onStageChange...');
+        const result = await onStageChange(draggableId, newStage);
+        console.log('[Kanban] onStageChange result:', result);
         
-        // Refresh to ensure data is in sync
+        // Refresh (optional) - keep small delay to let backend commit fully
         if (onDataRefresh) {
+          console.log('[Kanban] Calling onDataRefresh...');
           await onDataRefresh();
+          console.log('[Kanban] onDataRefresh complete');
         }
       } catch (error) {
         console.error('[Kanban] Error updating stage:', error);
         toast.error('Failed to move opportunity');
-        
-        // REVERT on error: restore original data
-        setLocalOpportunities(opportunities);
+        setLocalOpportunities(opportunities); // revert
+      } finally {
+        // Remove id from pending so future prop syncs include updated record
+        setPendingStageIds(prev => {
+          const next = new Set(prev);
+          next.delete(idStr);
+          console.log('[Kanban] Pending IDs after remove:', Array.from(next));
+          return next;
+        });
       }
     }
   };
@@ -138,19 +221,25 @@ export default function OpportunityKanbanBoard({ opportunities, accounts, contac
       </div>
       
       <DragDropContext onDragEnd={onDragEnd}>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 p-4">
-          {stages.map(stageId => {
-            const stageOpportunities = localOpportunities.filter(opp => opp.stage === stageId);
+        <div className={`grid gap-6 p-4 ${
+          visibleStages.length === 2 ? 'grid-cols-1 md:grid-cols-2' :
+          visibleStages.length === 3 ? 'grid-cols-1 md:grid-cols-3' :
+          visibleStages.length === 4 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4' :
+          visibleStages.length === 5 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5' :
+          'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6'
+        }`}>
+          {visibleStages.map(stage => {
+            const stageOpportunities = localOpportunities.filter(opp => opp.stage === stage.id);
             return (
-              <div key={stageId} className="flex flex-col h-full">
-                <Card className={`kanban-stage-card bg-slate-800 border border-t-4 border-l-slate-700 border-r-slate-700 border-b-slate-700 ${stageConfig[stageId].color} shadow-md mb-4 rounded-lg`}>
+              <div key={stage.id} className="flex flex-col h-full">
+                <Card className={`kanban-stage-card bg-slate-800 border border-t-4 border-l-slate-700 border-r-slate-700 border-b-slate-700 ${stage.color} shadow-md mb-4 rounded-lg`}>
                   <CardHeader className="py-3 px-4">
                     <CardTitle className="text-base font-semibold text-slate-100">
-                      {stageConfig[stageId].title} ({stageOpportunities.length})
+                      {stage.title} ({stageOpportunities.length})
                     </CardTitle>
                   </CardHeader>
                 </Card>
-                <Droppable droppableId={stageId}>
+                <Droppable droppableId={stage.id}>
                   {(provided, snapshot) => (
                     <div
                       {...provided.droppableProps}

@@ -3,10 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Mail, Phone, Building2, Edit, Trash2, MoreHorizontal, Eye, UserCheck, TrendingUp } from "lucide-react";
+import { Mail, Phone, Building2, Edit, Trash2, MoreHorizontal, Eye, UserCheck, TrendingUp, Globe } from "lucide-react";
 import { motion } from "framer-motion";
 import PhoneDisplay from "../shared/PhoneDisplay";
 import StatusHelper from "../shared/StatusHelper";
+// Minted link deprecated for globe/Profile; use internal view instead
 
 // Matching the stat card colors - semi-transparent backgrounds
 const statusColors = {
@@ -18,7 +19,9 @@ const statusColors = {
   lost: 'bg-red-900/20 text-red-300 border-red-700'
 };
 
-export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClick, isSelected, onSelect, onConvert, user }) {
+export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDetails, onClick, isSelected, onSelect, onConvert, user }) {
+  const isConverted = lead.status === 'converted';
+  
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -26,6 +29,7 @@ export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClic
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.2 }}
       data-testid={`lead-card-${lead.email}`}
+      className={isConverted ? 'opacity-70' : ''}
     >
       <Card 
         className={`hover:shadow-lg transition-all duration-200 cursor-pointer bg-slate-800 border-slate-700 ${
@@ -43,18 +47,46 @@ export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClic
                 className="border-slate-600 data-[state=checked]:bg-blue-600"
               />
               <div className="flex-1">
-                <h3 className="font-semibold text-lg text-slate-100">
-                  {lead.first_name} {lead.last_name}
-                </h3>
+                {(() => {
+                  const isB2B = lead.lead_type === 'b2b' || lead.lead_type === 'B2B';
+                  const personName = `${lead.first_name || ''} ${lead.last_name || ''}`.trim();
+                  const companyName = accountName || lead.company;
+                  
+                  if (isB2B && companyName) {
+                    // B2B: Show company name prominently
+                    return (
+                      <>
+                        <h3 className={`font-semibold text-lg text-slate-100 ${isConverted ? 'line-through' : ''}`}>
+                          {companyName}
+                        </h3>
+                        {personName && (
+                          <p className="text-sm text-slate-300 mt-1">
+                            Contact: {personName}
+                          </p>
+                        )}
+                      </>
+                    );
+                  }
+                  // B2C: Show person name prominently
+                  return (
+                    <>
+                      <h3 className={`font-semibold text-lg text-slate-100 ${isConverted ? 'line-through' : ''}`}>
+                        {personName || '—'}
+                      </h3>
+                      {companyName && (
+                        <div className="text-sm text-slate-400 mt-1">
+                          <p className="flex items-center gap-1">
+                            <Building2 className="w-3 h-3" />
+                            {companyName}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
                 {lead.job_title && (
                   <p className="text-sm text-slate-300 mt-1" data-testid="lead-job-title">
                     {lead.job_title}
-                  </p>
-                )}
-                {lead.company && (
-                  <p className="text-sm text-slate-400 flex items-center gap-1 mt-1">
-                    <Building2 className="w-3 h-3" />
-                    {lead.company}
                   </p>
                 )}
               </div>
@@ -66,7 +98,11 @@ export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClic
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700 text-slate-200">
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(lead); }} className="hover:bg-slate-700">
+                <DropdownMenuItem 
+                  onClick={(e) => { e.stopPropagation(); onEdit(lead); }} 
+                  className="hover:bg-slate-700"
+                  disabled={isConverted}
+                >
                   <Edit className="w-4 h-4 mr-2" />
                   Edit
                 </DropdownMenuItem>
@@ -80,7 +116,11 @@ export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClic
                     Convert to Contact
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(lead.id); }} className="text-red-400 hover:bg-slate-700 focus:text-red-400">
+                <DropdownMenuItem 
+                  onClick={(e) => { e.stopPropagation(); onDelete(lead.id); }} 
+                  className="text-red-400 hover:bg-slate-700 focus:text-red-400"
+                  disabled={isConverted}
+                >
                   <Trash2 className="w-4 h-4 mr-2" />
                   Delete
                 </DropdownMenuItem>
@@ -171,6 +211,7 @@ export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClic
               size="sm"
               onClick={(e) => { e.stopPropagation(); onEdit(lead); }}
               className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
+              disabled={isConverted}
             >
               <Edit className="w-3 h-3 mr-1" />
               Edit
@@ -184,12 +225,30 @@ export default function LeadCard({ lead, onEdit, onDelete, onViewDetails, onClic
               <Eye className="w-3 h-3 mr-1" />
               View
             </Button>
+            {/* Web Profile actions: globe + text (navigate to internal Lead Profile page) */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => { e.stopPropagation(); onViewDetails(lead); }}
+              className="text-slate-400 hover:text-blue-400"
+            >
+              <Globe className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="link"
+              size="sm"
+              onClick={(e) => { e.stopPropagation(); onViewDetails(lead); }}
+              className="text-blue-400 hover:text-blue-300 px-1"
+            >
+              Profile
+            </Button>
           </div>
           <Button
             variant="ghost"
             size="icon"
             onClick={(e) => { e.stopPropagation(); onDelete(lead.id); }}
             className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
+            disabled={isConverted}
           >
             <Trash2 className="w-4 h-4" />
           </Button>

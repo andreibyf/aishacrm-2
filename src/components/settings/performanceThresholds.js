@@ -17,8 +17,8 @@ export const THRESHOLDS = {
   errorRate: {
     // Percentage of failed API calls
     excellent: 1,     // 🟢 < 1% = Healthy system
-    warning: 5,       // 🟡 1-5% = Some issues, investigate
-    critical: 5       // 🔴 > 5% = Serious problems, immediate action
+    warning: 10,      // 🟡 1-10% = Some issues, investigate
+    critical: 10      // 🔴 > 10% = Serious problems, immediate action
   },
   apiCalls: {
     // Total volume indicators

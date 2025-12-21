@@ -1,5 +1,6 @@
 
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -7,10 +8,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Trash2, ShieldCheck, Edit, Search, RefreshCw, Plus, X, Copy } from "lucide-react";
+import { Loader2, Trash2, ShieldCheck, Edit, Search, RefreshCw, Plus, X, Copy, Mail } from "lucide-react";
 // Reserved for future use: Users, AlertTriangle
 import { User as _UserEntity } from "@/api/entities";
-import { User } from "@/api/entities";
+import { User, ModuleSettings } from "@/api/entities";
 import { Tenant } from "@/api/entities";
 import { Employee } from "@/api/entities";
 import { toast } from "sonner";
@@ -21,37 +22,56 @@ import InviteUserDialog from './InviteUserDialog';
 import { Switch } from "@/components/ui/switch";
 import { format } from 'date-fns';
 import { updateEmployeeSecure } from "@/api/functions";
-import { deleteUser } from "@/functions/users/deleteUser";
 import { canDeleteUser } from "@/utils/permissions";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { useUser } from '@/components/shared/useUser.js';
+import { getBackendUrl } from "@/api/backendUrl";
 
-const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
+// Backend API URL
+const BACKEND_URL = getBackendUrl();
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Lock } from "lucide-react";
+
+const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSettings = [] }) => {
+// moduleName: matches modulesettings table module_name for disabling when module is off
     const navigationPages = [
-        { key: 'Dashboard', label: 'Dashboard' },
-        { key: 'Contacts', label: 'Contacts' },
-        { key: 'Accounts', label: 'Accounts' },
-        { key: 'Leads', label: 'Leads' },
-        { key: 'Opportunities', label: 'Opportunities' },
-        { key: 'Activities', label: 'Activities' },
-        { key: 'Calendar', label: 'Calendar' },
-        { key: 'BizDevSources', label: 'BizDev Sources' },
-        { key: 'CashFlow', label: 'Cash Flow' },
-        { key: 'DocumentProcessing', label: 'Document Processing' },
-        { key: 'DocumentManagement', label: 'Document Management' },
-        { key: 'AICampaigns', label: 'AI Campaigns' },
-        { key: 'Employees', label: 'Employees' },
-        { key: 'Reports', label: 'Reports' },
-        { key: 'Integrations', label: 'Integrations' },
-        { key: 'Documentation', label: 'Documentation' },
-        { key: 'Settings', label: 'Settings' },
-        { key: 'Agent', label: 'AI Agent (Avatar)' },
-        { key: 'PaymentPortal', label: 'Payment Portal' },
-        { key: 'Utilities', label: 'Utilities' },
-        { key: 'ClientOnboarding', label: 'Client Onboarding' },
-        { key: 'WorkflowGuide', label: 'Workflow Guide' },
-        { key: 'ClientRequirements', label: 'Client Requirements' },
-        { key: 'Workflows', label: 'Workflows (Experimental)' },
+        { key: 'Dashboard', label: 'Dashboard', moduleName: 'Dashboard' },
+        { key: 'Contacts', label: 'Contacts', moduleName: 'Contact Management' },
+        { key: 'Accounts', label: 'Accounts', moduleName: 'Account Management' },
+        { key: 'Leads', label: 'Leads', moduleName: 'Lead Management' },
+        { key: 'Opportunities', label: 'Opportunities', moduleName: 'Opportunities' },
+        { key: 'Activities', label: 'Activities', moduleName: 'Activity Tracking' },
+        { key: 'Calendar', label: 'Calendar', moduleName: 'Calendar' },
+        { key: 'BizDevSources', label: 'BizDev Sources', moduleName: 'BizDev Sources' },
+        { key: 'CashFlow', label: 'Cash Flow', moduleName: 'Cash Flow Management' },
+        { key: 'DocumentProcessing', label: 'Document Processing', moduleName: 'Document Processing & Management' },
+        { key: 'DocumentManagement', label: 'Document Management', moduleName: 'Document Processing & Management' },
+        { key: 'AICampaigns', label: 'AI Campaigns', moduleName: 'AI Campaigns' },
+        { key: 'Employees', label: 'Employees', moduleName: 'Employee Management' },
+        { key: 'Reports', label: 'Reports', moduleName: 'Analytics & Reports' },
+        { key: 'Integrations', label: 'Integrations', moduleName: 'Integrations' },
+        { key: 'Documentation', label: 'Documentation', moduleName: null },
+        { key: 'Settings', label: 'Settings', moduleName: null },
+        { key: 'Agent', label: 'AI Agent (Avatar)', moduleName: 'AI Agent' },
+        { key: 'PaymentPortal', label: 'Payment Portal', moduleName: 'Payment Portal' },
+        { key: 'ConstructionProjects', label: 'Construction Projects', moduleName: 'Construction Projects' },
+        { key: 'Utilities', label: 'Utilities', moduleName: 'Utilities' },
+        { key: 'ClientOnboarding', label: 'Client Onboarding', moduleName: 'Client Onboarding' },
+        { key: 'WorkflowGuide', label: 'Workflow Guide', moduleName: null },
+        { key: 'ClientRequirements', label: 'Client Requirements', moduleName: null },
+        { key: 'Workflows', label: 'Workflows (Experimental)', moduleName: 'Workflows' },
     ];
+
+    // Build a set of disabled module names from module settings
+    const disabledModules = useMemo(() => {
+        const disabled = new Set();
+        moduleSettings.forEach((ms) => {
+            if (ms.is_enabled === false) {
+                disabled.add(ms.module_name);
+            }
+        });
+        return disabled;
+    }, [moduleSettings]);
 
     const initNavPerms = () => {
         const existing = user?.navigation_permissions || {};
@@ -152,6 +172,12 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        
+        // Prevent double-submission
+        if (saving) {
+            return;
+        }
+        
         setSaving(true);
         try {
             // 1) Persist employee manager relationship
@@ -252,25 +278,27 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
                         </p>
                     </div>
 
-                    {/* Client */}
-                    <div>
-                        <Label htmlFor="tenant_id" className="text-slate-200">Client</Label>
-                        <Select
-                            value={formData.tenant_id}
-                            onValueChange={(value) => setFormData(prev => ({ ...prev, tenant_id: value }))}
-                        >
-                            <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
-                                <SelectValue placeholder="Select client" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                                {tenants.map(tenant => (
-                                    <SelectItem key={tenant.id} value={tenant.tenant_id}>
-                                        {tenant.name}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
+                    {/* Client - Only superadmins can change tenant assignment */}
+                    {currentUser?.role === 'superadmin' && (
+                        <div>
+                            <Label htmlFor="tenant_id" className="text-slate-200">Client</Label>
+                            <Select
+                                value={formData.tenant_id}
+                                onValueChange={(value) => setFormData(prev => ({ ...prev, tenant_id: value }))}
+                            >
+                                <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
+                                    <SelectValue placeholder="Select client" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                                    {tenants.map(tenant => (
+                                        <SelectItem key={tenant.id} value={tenant.tenant_id}>
+                                            {tenant.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
 
                     {/* SIMPLIFIED: Only Employee Role - No confusing "Role/Status" field */}
                     {/* Hide CRM Role for Admins/SuperAdmins - they have full access automatically */}
@@ -460,16 +488,36 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
                     <div className="mt-2">
                         <Label className="mb-2 block text-slate-200">Navigation Permissions</Label>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto rounded-md border border-slate-600 p-2 bg-slate-800/40">
-                            {navigationPages.map((p) => (
-                                <div key={p.key} className="flex items-center justify-between px-2 py-1 rounded-md bg-slate-700/40 border border-slate-600">
-                                    <span className="text-sm text-slate-200">{p.label}</span>
-                                    <Switch
-                                        checked={!!formData.navigation_permissions?.[p.key]}
-                                        onCheckedChange={(v) => toggleNav(p.key, v)}
-                                        disabled={!canEditPermissions}
-                                    />
-                                </div>
-                            ))}
+                            {navigationPages.map((p) => {
+                                const isModuleDisabled = p.moduleName && disabledModules.has(p.moduleName);
+                                return (
+                                    <TooltipProvider key={p.key}>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <div className={`flex items-center justify-between px-2 py-1 rounded-md border ${isModuleDisabled
+                                                        ? 'bg-slate-800/60 border-slate-700 opacity-50'
+                                                        : 'bg-slate-700/40 border-slate-600'
+                                                    }`}>
+                                                    <span className={`text-sm flex items-center gap-1.5 ${isModuleDisabled ? 'text-slate-400' : 'text-slate-200'}`}>
+                                                        {p.label}
+                                                        {isModuleDisabled && <Lock className="w-3 h-3" />}
+                                                    </span>
+                                                    <Switch
+                                                        checked={isModuleDisabled ? false : !!formData.navigation_permissions?.[p.key]}
+                                                        onCheckedChange={(v) => toggleNav(p.key, v)}
+                                                        disabled={!canEditPermissions || isModuleDisabled}
+                                                    />
+                                                </div>
+                                            </TooltipTrigger>
+                                            {isModuleDisabled && (
+                                                <TooltipContent>
+                                                    <p>Module disabled for this tenant</p>
+                                                </TooltipContent>
+                                            )}
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                );
+                            })}
                         </div>
                         {!canEditPermissions && (
                             <p className="text-xs text-slate-500 mt-1">
@@ -495,7 +543,7 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel }) => {
 export default function EnhancedUserManagement() {
     const [users, setUsers] = useState([]);
     const [allTenants, setAllTenants] = useState([]);
-    const [currentUser, setCurrentUser] = useState(null);
+    const [moduleSettings, setModuleSettings] = useState([]);
     const [loading, setLoading] = useState(true);
     const [editingUser, setEditingUser] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -503,22 +551,47 @@ export default function EnhancedUserManagement() {
     const [isInviteModalOpen, setInviteModalOpen] = useState(false);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [userToDelete, setUserToDelete] = useState(null);
+    
+    // Use global user context instead of local User.me()
+    const { user: currentUser } = useUser();
+    const [searchParams] = useSearchParams();
+    const urlTenantId = searchParams.get('tenant');
 
     useEffect(() => {
+        if (!currentUser) return;
         loadData();
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentUser, urlTenantId]);
 
     const loadData = async () => {
+        if (!currentUser) return;
         setLoading(true);
         try {
-            const [usersData, tenantsData, userData] = await Promise.all([
-                User.list({ tenant_id: null }), // Pass null to get ALL users across all tenants
-                Tenant.list(),
-                User.me()
+            // Use User.listProfiles which queries user_profile_view
+            // This returns users (login accounts) with their linked employee records (if any)
+            // Superadmins can see ALL users or filter by a specific tenant
+            let userFilter = {};
+            if (currentUser.role === 'superadmin') {
+                // Superadmins: if URL has tenant, filter by it; otherwise show ALL users
+                if (urlTenantId) {
+                    userFilter.tenant_id = urlTenantId;
+                }
+            } else {
+                // Regular admins only see their own tenant
+                userFilter.tenant_id = currentUser.tenant_id;
+            }
+            
+            const [usersData, tenantsData, moduleData] = await Promise.all([
+                User.listProfiles(userFilter),
+                currentUser.role === 'superadmin' ? Tenant.list() : Promise.resolve([]),
+                // Load module settings for the current/selected tenant
+                (urlTenantId || currentUser.tenant_id) ? ModuleSettings.filter({ tenant_id: urlTenantId || currentUser.tenant_id }) : Promise.resolve([])
             ]);
+            
+            console.log('[EnhancedUserManagement] Loaded users from user_profile_view:', usersData?.length || 0);
             setUsers(usersData);
             setAllTenants(tenantsData);
-            setCurrentUser(userData);
+            setModuleSettings(moduleData || []);
         } catch (error) {
             console.error("Failed to load data:", error);
             toast.error("Failed to load user and tenant data.");
@@ -622,19 +695,46 @@ export default function EnhancedUserManagement() {
         if (!userToDelete) return;
 
         try {
-            const response = await deleteUser(userToDelete.id, userToDelete.tenant_id, currentUser);
+            const response = await fetch(`${BACKEND_URL}/api/users/${userToDelete.id}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ tenant_id: userToDelete.tenant_id })
+            });
             
-            if (response.status === 200) {
+            if (response.ok) {
                 toast.success(`User ${userToDelete.email} has been deleted`);
                 setDeleteConfirmOpen(false);
                 setUserToDelete(null);
                 await loadData(); // Refresh user list
             } else {
-                toast.error(`Failed to delete user: ${response.data?.error || 'Unknown error'}`);
+                const data = await response.json();
+                toast.error(`Failed to delete user: ${data?.error || 'Unknown error'}`);
             }
         } catch (error) {
             console.error("Error deleting user:", error);
             toast.error(`Failed to delete user: ${error.message}`);
+        }
+    };
+
+    // Handler for resending invite
+    const handleResendInvite = async (user) => {
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/users/${user.id}/resend-invite`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include'
+            });
+            const result = await response.json();
+            
+            if (response.ok && result.success) {
+                toast.success(`Invitation email sent to ${user.email}`);
+            } else {
+                toast.error(result.message || "Failed to resend invitation");
+            }
+        } catch (error) {
+            console.error("Error resending invite:", error);
+            toast.error(`Failed to resend invitation: ${error.message}`);
         }
     };
 
@@ -657,10 +757,8 @@ export default function EnhancedUserManagement() {
     };
 
     const filteredUsers = users.filter(user => {
-        // Only show global users (from users table), not employees
-        if (user.user_type !== 'global') {
-            return false;
-        }
+        // user_profile_view only returns login accounts (users table)
+        // No need to filter by user_type anymore since we don't mix employees
 
         const matchesSearch = searchTerm === '' ||
             user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -675,11 +773,11 @@ export default function EnhancedUserManagement() {
             } else if (roleFilter === 'admin') {
                 matchesRoleFilter = userRole === 'admin';
             } else if (roleFilter === 'power-user') {
-                // Map 'power-user' filter to 'manager' employee_role for non-admins
+                // Users with manager employee_role linked
                 matchesRoleFilter = user.employee_role === 'manager' && userRole !== 'admin' && userRole !== 'superadmin';
             } else if (roleFilter === 'user') {
-                // Map 'user' filter to 'employee' employee_role for non-admins
-                matchesRoleFilter = user.employee_role === 'employee' && userRole !== 'admin' && userRole !== 'superadmin';
+                // Regular users (employee role or no role)
+                matchesRoleFilter = userRole !== 'admin' && userRole !== 'superadmin' && user.employee_role !== 'manager';
             }
         }
         return matchesSearch && matchesRoleFilter;
@@ -778,7 +876,7 @@ export default function EnhancedUserManagement() {
                                     </TableRow>
                                 ) : (
                                     filteredUsers.map((user) => {
-                                        const tenant = allTenants.find(t => t.tenant_id === user.tenant_id);
+                                        const tenant = allTenants.find(t => t.id === user.tenant_id);
                                         const isCreator = currentUser && user.id === currentUser.id && user.role === 'superadmin';
                                         
                                         // managerCanEdit now only checks for admin role to edit specific permissions
@@ -890,6 +988,17 @@ export default function EnhancedUserManagement() {
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     <div className="flex gap-2 justify-end">
+                                                        {statusText === 'Invited' && (
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() => handleResendInvite(user)}
+                                                                className="bg-blue-700 border-blue-600 text-blue-100 hover:bg-blue-600"
+                                                            >
+                                                                <Mail className="w-4 h-4 mr-1" />
+                                                                Resend Invite
+                                                            </Button>
+                                                        )}
                                                         <Button
                                                             variant="outline"
                                                             size="sm"
@@ -927,6 +1036,7 @@ export default function EnhancedUserManagement() {
                     user={editingUser}
                     tenants={allTenants}
                     currentUser={currentUser}
+                    moduleSettings={moduleSettings}
                     onSave={handleSaveUser}
                     onCancel={() => setEditingUser(null)}
                 />

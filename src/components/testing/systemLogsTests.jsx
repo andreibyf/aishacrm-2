@@ -2,7 +2,7 @@ import { assert } from './testUtils';
 import { getBackendUrl } from '@/api/backendUrl';
 
 const BACKEND_URL = getBackendUrl();
-const TEST_TENANT_ID = 'unit-test-tenant';
+const TEST_TENANT_ID = import.meta.env.VITE_SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 
 // Generate a unique message for this run to find it reliably in listings
 const uniqueSuffix = () => new Date().toISOString().replace(/[:.]/g, '-');
@@ -87,7 +87,7 @@ export const systemLogsTests = {
       fn: async () => {
         const id = window.__test_log_id;
         assert.exists(id, 'Created log id should be available');
-        const resp = await fetch(`${BACKEND_URL}/api/system-logs/${id}`, { method: 'DELETE' });
+        const resp = await fetch(`${BACKEND_URL}/api/system-logs/${id}?tenant_id=${encodeURIComponent(TEST_TENANT_ID)}`, { method: 'DELETE' });
         assert.truthy(resp.ok, `DELETE /api/system-logs/:id should succeed (status ${resp.status})`);
         const json = await resp.json();
         assert.equal(json.status, 'success', 'Response status should be success');

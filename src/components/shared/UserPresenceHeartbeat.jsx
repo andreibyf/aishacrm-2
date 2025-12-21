@@ -2,7 +2,9 @@ import { useEffect, useRef } from "react";
 import { BACKEND_URL } from '@/api/entities';
 
 // Pings backend to update last_seen/live_status for current user
-export default function UserPresenceHeartbeat({ currentUser, intervalMs = 60000 }) {
+const DEFAULT_INTERVAL = parseInt(import.meta.env.VITE_USER_HEARTBEAT_INTERVAL_MS || '180000', 10);
+
+export default function UserPresenceHeartbeat({ currentUser, intervalMs = DEFAULT_INTERVAL }) {
   const timerRef = useRef(null);
 
   useEffect(() => {
@@ -10,6 +12,8 @@ export default function UserPresenceHeartbeat({ currentUser, intervalMs = 60000 
     if (!email) return;
 
     const ping = async () => {
+      // Pause when tab not visible to reduce load
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       try {
         await fetch(`${BACKEND_URL}/api/users/heartbeat`, {
           method: "POST",
@@ -25,7 +29,7 @@ export default function UserPresenceHeartbeat({ currentUser, intervalMs = 60000 
 
     // immediate ping then interval
     ping();
-    timerRef.current = setInterval(ping, intervalMs);
+    timerRef.current = setInterval(ping, Math.max(15000, intervalMs));
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);

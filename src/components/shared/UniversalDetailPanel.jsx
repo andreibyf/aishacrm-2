@@ -88,18 +88,19 @@ export default function UniversalDetailPanel({
   const loadNotes = useCallback(async () => {
     if (!entity) return;
     try {
-      const relatedTo = entityType.toLowerCase();
-      // Assuming Note.filter supports ordering and related_to/related_id
-      const notesData = await Note.filter({ 
-        related_to: relatedTo, 
-        related_id: entity.id 
-      }, '-created_date'); // Assuming '-created_date' sorts descending
+      const relatedType = entityType.toLowerCase();
+      // Backend expects related_type. Include tenant_id for RLS.
+      const notesData = await Note.filter({
+        tenant_id: user?.tenant_id || entity.tenant_id,
+        related_type: relatedType,
+        related_id: entity.id
+      }, '-created_date');
       setNotes(notesData || []);
     } catch (error) {
       console.error("Failed to load notes:", error);
       toast.error("Failed to load notes");
     }
-  }, [entity, entityType]);
+  }, [entity, entityType, user?.tenant_id]);
 
   const loadActivities = useCallback(async () => {
     if (!entity) return;
@@ -187,16 +188,20 @@ export default function UniversalDetailPanel({
     try {
       const relatedTo = entityType.toLowerCase();
       const entityName = getEntityName(entity); // Pre-calculate for activity
+      // For SuperAdmin users, tenant_id may be null; use entity's tenant_id as fallback
+      const effectiveTenantId = user?.tenant_id || entity.tenant_id;
 
       const noteData = {
-        related_to: relatedTo,
+        related_type: relatedTo,
         related_id: entity.id,
         title: newNoteTitle || `${newNoteType.charAt(0).toUpperCase() + newNoteType.slice(1)} Note`,
         content: newNoteContent,
-        type: newNoteType,
-        tenant_id: user.tenant_id,
-        created_by: user.email // Assuming user.email for created_by
+        tenant_id: effectiveTenantId,
+        created_by: user?.email // Assuming user.email for created_by
       };
+
+      // Persist note type inside metadata (backend has no 'type' column for notes)
+      noteData.metadata = { type: newNoteType };
 
       // Create or update note
       if (editingNote) {
@@ -205,6 +210,30 @@ export default function UniversalDetailPanel({
       } else {
         await Note.create(noteData);
         toast.success("Note added successfully");
+        
+        // If this is an Activity with a related record, also create a note on the related record
+        if (entityType === 'activity' && entity.related_to && entity.related_id) {
+          try {
+            const relatedNoteData = {
+              related_type: entity.related_to, // e.g., 'contact', 'account', 'lead', 'opportunity'
+              related_id: entity.related_id,
+              title: newNoteTitle || `Note from Activity: ${entity.subject || 'Activity'}`,
+              content: newNoteContent,
+              tenant_id: effectiveTenantId,
+              created_by: user?.email,
+              metadata: { 
+                type: newNoteType,
+                source_activity_id: entity.id,
+                source_activity_subject: entity.subject
+              }
+            };
+            await Note.create(relatedNoteData);
+            toast.success(`Note also added to related ${entity.related_to}`);
+          } catch (relatedNoteError) {
+            console.error("Failed to create note on related record:", relatedNoteError);
+            // Don't block - the primary note was saved successfully
+          }
+        }
       }
 
       // If type is NOT general, also create an Activity
@@ -213,24 +242,33 @@ export default function UniversalDetailPanel({
         
         // Determine activity status and due date based on note type
         const isScheduledActivity = ['follow_up', 'call_log', 'meeting', 'email'].includes(newNoteType);
+        
+        // Get entity email for denormalized activity fields (entityName already calculated above)
+        const entityEmail = entity.email || null;
 
         const activityData = {
-          tenant_id: user.tenant_id,
+          tenant_id: effectiveTenantId,
           type: activityType,
           subject: newNoteTitle || newNoteContent.substring(0, 50), // Use newNoteTitle, or first 50 chars of content
           description: newNoteContent,
           status: isScheduledActivity ? 'scheduled' : 'completed', // Updated status logic
           related_to: relatedTo,
           related_id: entity.id,
-          related_name: entityName, // Use pre-calculated entityName
-          related_email: entity.email || null, // New field
-          assigned_to: entity.assigned_to || user.email, // Use entity's assigned_to or current user
-          due_date: isScheduledActivity ? new Date().toISOString().split('T')[0] : null // Updated due_date logic
+          related_name: entityName, // Denormalized entity name for display
+          related_email: entityEmail, // Denormalized entity email for display
+          assigned_to: entity.assigned_to || null, // Use entity's assigned_to (UUID) or null
+          due_date: new Date().toISOString().split('T')[0] // Always set due_date so activity shows on calendar
         };
 
-        await Activity.create(activityData);
-        toast.success(`Activity created for this ${newNoteType}`);
-        window.dispatchEvent(new CustomEvent('entity-modified', { detail: { entity: 'Activity' } })); // Dispatch event for activities list refresh
+        try {
+          await Activity.create(activityData);
+          toast.success(`Activity created for this ${newNoteType}`);
+          window.dispatchEvent(new CustomEvent('entity-modified', { detail: { entity: 'Activity' } })); // Dispatch event for activities list refresh
+        } catch (activityError) {
+          console.error("Failed to create activity from note:", activityError);
+          // Don't block note save if activity creation fails
+          toast.error("Note saved, but failed to create related activity");
+        }
       }
 
       // Reset form
@@ -317,8 +355,16 @@ export default function UniversalDetailPanel({
   const getTitle = () => {
     switch (entityType) {
       case 'contact':
-      case 'lead':
         return `${entity.first_name || ''} ${entity.last_name || ''}`.trim();
+      case 'lead': {
+        // B2B leads: Show company name prominently
+        const isB2B = entity.lead_type === 'b2b' || entity.lead_type === 'B2B';
+        const personName = `${entity.first_name || ''} ${entity.last_name || ''}`.trim();
+        if (isB2B && entity.company) {
+          return entity.company;
+        }
+        return personName || entity.company || 'Lead';
+      }
       case 'account':
         return entity.name;
       case 'opportunity':
@@ -328,6 +374,18 @@ export default function UniversalDetailPanel({
       default:
         return 'Details';
     }
+  };
+
+  // Get subtitle for B2B leads (contact person)
+  const getSubtitle = () => {
+    if (entityType === 'lead') {
+      const isB2B = entity.lead_type === 'b2b' || entity.lead_type === 'B2B';
+      const personName = `${entity.first_name || ''} ${entity.last_name || ''}`.trim();
+      if (isB2B && entity.company && personName) {
+        return `Contact: ${personName}`;
+      }
+    }
+    return null;
   };
 
   // Helper function for badge colors (example, adjust as needed)
@@ -427,8 +485,9 @@ export default function UniversalDetailPanel({
       });
     }
 
-    // Standard fields to show in details
+    // Standard fields to show in details - comprehensive list for all entity types
     const standardFields = [
+      // Common fields
       { key: 'status', label: 'Status' },
       { key: 'stage', label: 'Stage' },
       { key: 'source', label: 'Source' },
@@ -436,31 +495,65 @@ export default function UniversalDetailPanel({
       { key: 'priority', label: 'Priority' },
       { key: 'type', label: 'Type' },
       { key: 'industry', label: 'Industry' },
-      { key: 'amount', label: 'Amount' },
-      { key: 'probability', label: 'Probability' },
-      { key: 'close_date', label: 'Close Date' },
-      { key: 'due_date', label: 'Due Date' },
-      { key: 'created_date', label: 'Created' },
-      // assignedUserName from displayData should be handled by displayData loop
+
+      // Account-specific fields
+      { key: 'website', label: 'Website', isLink: true },
+      { key: 'annual_revenue', label: 'Annual Revenue', isCurrency: true },
+      { key: 'employee_count', label: 'Employees' },
+
+      // Contact/Lead-specific fields
+      { key: 'company', label: 'Company' },
+      { key: 'job_title', label: 'Job Title' },
+      { key: 'department', label: 'Department' },
+      { key: 'linkedin_url', label: 'LinkedIn', isLink: true },
+      { key: 'score', label: 'Lead Score' },
+
+      // Opportunity-specific fields
+      { key: 'amount', label: 'Amount', isCurrency: true },
+      { key: 'probability', label: 'Probability', isPercent: true },
+      { key: 'expected_revenue', label: 'Expected Revenue', isCurrency: true },
+      { key: 'close_date', label: 'Close Date', isDate: true },
+      { key: 'next_step', label: 'Next Step' },
+
+      // Activity-specific fields
+      { key: 'due_date', label: 'Due Date', isDate: true },
+      { key: 'start_date', label: 'Start Date', isDate: true },
+      { key: 'end_date', label: 'End Date', isDate: true },
+      { key: 'completed_date', label: 'Completed', isDate: true },
+      { key: 'location', label: 'Location' },
+      { key: 'duration', label: 'Duration' },
+
+      // Common metadata
+      { key: 'created_date', label: 'Created', isDate: true },
+      { key: 'updated_date', label: 'Last Updated', isDate: true },
+      { key: 'unique_id', label: 'Reference ID' },
     ];
 
-    standardFields.forEach(({ key, label }) => {
+    standardFields.forEach(({ key, label, isLink, isCurrency, isPercent, isDate }) => {
       // Check if the entity has the key and its value is not null/undefined
       // Also, ensure displayData doesn't already provide a custom field for this label
-      if (entity[key] !== undefined && entity[key] !== null && !Object.keys(displayData).includes(label)) {
+      if (entity[key] !== undefined && entity[key] !== null && entity[key] !== '' && !Object.keys(displayData).includes(label)) {
         let value = entity[key];
         
-        // Format specific fields
-        if (key === 'amount' && typeof value === 'number') {
-          value = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
-        } else if ((key === 'probability' || key === 'score') && typeof value === 'number') {
+        // Format specific fields based on metadata
+        if (isCurrency && (typeof value === 'number' || !isNaN(parseFloat(value)))) {
+          const numValue = typeof value === 'number' ? value : parseFloat(value);
+          value = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(numValue);
+        } else if (isPercent && (typeof value === 'number' || !isNaN(parseFloat(value)))) {
           value = `${value}%`;
-        } else if (key.includes('date')) {
+        } else if (isDate) {
           try {
-            value = format(new Date(value), 'MMM d, yyyy'); // Using date-fns for consistent formatting
+            value = format(new Date(value), 'MMM d, yyyy');
           } catch {
-            value = String(value); // Fallback if date is invalid
+            value = String(value);
           }
+        } else if (isLink && typeof value === 'string') {
+          const href = value.startsWith('http') ? value : `https://${value}`;
+          value = (
+            <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 hover:underline">
+              {value}
+            </a>
+          );
         } else if (['status', 'stage', 'priority', 'type'].includes(key)) {
           value = (
             <Badge className={getStatusColor(value)}>
@@ -468,7 +561,7 @@ export default function UniversalDetailPanel({
             </Badge>
           );
         } else if (typeof value === 'string') {
-          value = String(value).replace(/_/g, ' '); // Replace underscores for general strings
+          value = String(value).replace(/_/g, ' ');
         }
 
         detailFields.push(
@@ -499,7 +592,8 @@ export default function UniversalDetailPanel({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent 
         side="right" 
-        className="w-full sm:max-w-2xl bg-slate-900 text-slate-100 border-l border-slate-700 overflow-y-auto"
+        className="!w-1/2 !max-w-none bg-slate-900 text-slate-100 border-l border-slate-700 overflow-y-auto"
+        style={{ width: '50%' }}
       >
         <SheetHeader className="border-b border-slate-700 pb-4">
           <div className="flex items-start justify-between">
@@ -509,10 +603,14 @@ export default function UniversalDetailPanel({
               </div>
               <div>
                 <SheetTitle className="text-2xl font-bold text-slate-100">{getTitle()}</SheetTitle>
+                {getSubtitle() && (
+                  <p className="text-sm text-slate-300 mt-1">{getSubtitle()}</p>
+                )}
                 {entity.job_title && (
                   <p className="text-sm text-slate-400 mt-1">{entity.job_title}</p>
                 )}
-                {entity.company && (
+                {/* For B2C leads or contacts, show company. For B2B leads, company is already in title */}
+                {entity.company && !(entityType === 'lead' && (entity.lead_type === 'b2b' || entity.lead_type === 'B2B')) && (
                   <p className="text-sm text-slate-400 mt-1">{entity.company}</p>
                 )}
                 {entity.unique_id && !entity.job_title && !entity.company && (
@@ -597,6 +695,21 @@ export default function UniversalDetailPanel({
                     {tag}
                   </Badge>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Description Section */}
+          {entity.description && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <h3 className="text-sm font-semibold text-slate-400 uppercase">
+                  Description
+                </h3>
+                <span className="text-xs text-slate-500 italic">— What is this about?</span>
+              </div>
+              <div className="text-sm text-slate-300 bg-slate-800 rounded-lg p-4 border border-slate-700 whitespace-pre-wrap">
+                {entity.description}
               </div>
             </div>
           )}
@@ -781,7 +894,10 @@ export default function UniversalDetailPanel({
           {/* Notes & Activity Section - Replaced old NotesSection with new implementation */}
           {showNotes && (
             <div>
-              <h3 className="text-sm font-semibold text-slate-400 uppercase mb-4">Notes & Activity</h3>
+              <div className="flex items-center gap-2 mb-4">
+                <h3 className="text-sm font-semibold text-slate-400 uppercase">Notes & Activity</h3>
+                <span className="text-xs text-slate-500 italic">— What happened?</span>
+              </div>
               
               {/* Add Note Form */}
               <div className="space-y-3 mb-4 p-4 border border-slate-700 rounded-lg bg-slate-800">
@@ -905,10 +1021,10 @@ export default function UniversalDetailPanel({
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          {getNoteTypeIcon(note.type)}
+                          {getNoteTypeIcon(note.type || note.metadata?.type || 'general')}
                           <span className="font-medium text-slate-200">{note.title}</span>
                           <Badge variant="secondary" className="text-xs bg-slate-700 text-slate-300 border-slate-600">
-                            {note.type.replace(/_/g, ' ')}
+                            {(note.type || note.metadata?.type || 'general').replace(/_/g, ' ')}
                           </Badge>
                         </div>
                         <DropdownMenu>
@@ -921,9 +1037,9 @@ export default function UniversalDetailPanel({
                             <DropdownMenuItem
                               onClick={() => {
                                 setEditingNote(note);
-                                setNewNoteTitle(note.title);
-                                setNewNoteContent(note.content);
-                                setNewNoteType(note.type);
+                                setNewNoteTitle(note.title || '');
+                                setNewNoteContent(note.content || '');
+                                setNewNoteType(note.type || note.metadata?.type || 'general');
                               }}
                               className="text-slate-200 hover:bg-slate-700 cursor-pointer"
                             >

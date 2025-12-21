@@ -1,0 +1,195 @@
+name: API Schema Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'tests/api-schema-validation.spec.js'
+      - 'backend/routes/**'
+      - 'backend/migrations/**'
+      - '.github/workflows/api-schema-tests.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'tests/api-schema-validation.spec.js'
+      - 'backend/routes/**'
+      - 'backend/migrations/**'
+  workflow_dispatch:
+    inputs:
+      backend_url:
+        description: "Backend URL to test (default: http://localhost:3001)"
+        required: false
+        type: string
+      use_supabase:
+        description: "Use Supabase production database"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pull-requests: write  # For commenting on PRs with test results
+
+jobs:
+  api-schema-validation:
+    name: API Schema Validation Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: aishacrm_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/aishacrm_test
+      PORT: 3001
+      NODE_ENV: test
+      USE_SUPABASE_PROD: ${{ inputs.use_supabase && 'true' || 'false' }}
+      ALLOWED_ORIGINS: http://localhost:3000,http://localhost:5173
+      PLAYWRIGHT_BACKEND_URL: ${{ inputs.backend_url || 'http://localhost:3001' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Setup test database schema
+        if: ${{ !inputs.use_supabase }}
+        working-directory: backend
+        run: |
+          # Run migrations to set up test database
+          node -e "
+          const fs = require('fs');
+          const { Client } = require('pg');
+          const client = new Client({ connectionString: process.env.DATABASE_URL });
+          
+          async function runMigrations() {
+            await client.connect();
+            const migrations = fs.readdirSync('./migrations')
+              .filter(f => f.endsWith('.sql'))
+              .sort();
+            
+            for (const file of migrations) {
+              console.log('Running migration:', file);
+              const sql = fs.readFileSync(\`./migrations/\${file}\`, 'utf8');
+              await client.query(sql);
+            }
+            await client.end();
+          }
+          
+          runMigrations().catch(console.error);
+          "
+
+      - name: Start backend server
+        working-directory: backend
+        run: |
+          npm run dev &
+          echo $! > backend.pid
+          # Wait for backend to be ready
+          for i in {1..30}; do
+            if curl -sSf http://localhost:3001/health > /dev/null 2>&1; then
+              echo "Backend is ready"
+              break
+            fi
+            echo "Waiting for backend... ($i/30)"
+            sleep 2
+          done
+          curl -v http://localhost:3001/health || exit 1
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+
+      - name: Run API schema validation tests
+        run: npx playwright test tests/api-schema-validation.spec.js --reporter=list
+        env:
+          CI: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-schema-test-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+      - name: Comment PR with results
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Read test results if available
+            let summary = '## 🧪 API Schema Validation Results\n\n';
+            
+            try {
+              const results = fs.readFileSync('test-results/.last-run.json', 'utf8');
+              const data = JSON.parse(results);
+              const passed = data.stats?.expected || 0;
+              const failed = data.stats?.unexpected || 0;
+              const total = passed + failed;
+              
+              if (failed === 0) {
+                summary += '✅ **All tests passed!** (' + total + ' tests)\n\n';
+              } else {
+                summary += '❌ **Some tests failed**\n\n';
+                summary += '- ✅ Passed: ' + passed + '\n';
+                summary += '- ❌ Failed: ' + failed + '\n';
+                summary += '- 📊 Total: ' + total + '\n\n';
+              }
+              
+              summary += '### Coverage\n';
+              summary += '- ✅ Employees (7 tests)\n';
+              summary += '- ✅ Accounts (3 tests)\n';
+              summary += '- ✅ Contacts (4 tests)\n';
+              summary += '- ✅ Leads (4 tests)\n';
+              summary += '- ✅ Opportunities (4 tests)\n';
+              summary += '- ✅ Email Uniqueness (3 tests)\n';
+            } catch (e) {
+              summary += '⚠️ Could not read test results\n';
+            }
+            
+            summary += '\n[View full report in artifacts](../actions/runs/' + context.runId + ')';
+            
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });
+
+      - name: Stop backend server
+        if: always()
+        working-directory: backend
+        run: |
+          if [ -f backend.pid ]; then
+            kill $(cat backend.pid) || true
+          fi
+
+      - name: Fail if tests failed
+        if: failure()
+        run: exit 1

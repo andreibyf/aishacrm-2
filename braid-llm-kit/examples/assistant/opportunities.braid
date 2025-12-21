@@ -1,0 +1,163 @@
+// Executive Assistant Tools - Opportunities Management
+// Track sales pipeline, update stages, forecast revenue
+
+import { Result, Opportunity, CRMError } from "../../spec/types.braid"
+
+fn createOpportunity(
+  tenant: String,
+  name: String,
+  account_id: String,
+  amount: Number,
+  stage: String,
+  close_date: String,
+  probability: Number,
+  assigned_to: String
+) -> Result<Opportunity, CRMError> !net {
+  let url = "/api/v2/opportunities";
+  let body = {
+    tenant_id: tenant,
+    name: name,
+    account_id: account_id,
+    amount: amount,
+    stage: stage,
+    close_date: close_date,
+    probability: probability,
+  assigned_to: assigned_to,
+    metadata: {}
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn deleteOpportunity(
+  tenant: String,
+  opportunity_id: String
+) -> Result<Boolean, CRMError> !net {
+  let url = "/api/v2/opportunities/" + opportunity_id;
+  let response = http.delete(url, {});
+  return match response {
+    Ok{value} => Ok(true),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn updateOpportunity(
+  tenant: String,
+  opportunity_id: String,
+  updates: Object
+) -> Result<Opportunity, CRMError> !net {
+  let url = "/api/v2/opportunities/" + opportunity_id;
+  
+  let response = http.put(url, { body: updates });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn listOpportunitiesByStage(
+  tenant: String,
+  stage: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/v2/opportunities";
+  let params = {
+    tenant_id: tenant,
+    stage: stage,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getOpportunityDetails(
+  tenant: String,
+  opportunity_id: String
+) -> Result<Opportunity, CRMError> !net {
+  let url = "/api/v2/opportunities/" + opportunity_id;
+  let params = { tenant_id: tenant };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn searchOpportunities(
+  tenant: String,
+  query: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/v2/opportunities/search";
+  let params = {
+    tenant_id: tenant,
+    q: query,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getOpportunityForecast(
+  tenant: String,
+  assigned_to: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/reports/forecast";
+  let params = {
+    tenant_id: tenant,
+  assigned_to: assigned_to
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn markOpportunityWon(
+  tenant: String,
+  opportunity_id: String,
+  close_date: String
+) -> Result<Opportunity, CRMError> !net {
+  let url = "/api/v2/opportunities/" + opportunity_id;
+  let updates = {
+    stage: "closed-won",
+    probability: 100,
+    close_date: close_date
+  };
+  
+  let response = http.put(url, { body: updates });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

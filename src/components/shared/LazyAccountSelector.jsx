@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import {
   Select,
   SelectContent,
@@ -6,7 +6,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Account, User } from "@/api/entities";
+import { Account } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import { Loader2, Plus } from "lucide-react";
 import { useApiManager } from "./ApiManager";
 import { Input } from "@/components/ui/input";
@@ -14,23 +15,40 @@ import { Button } from "@/components/ui/button";
 
 export default function LazyAccountSelector({
   value,
-  onValueChange,
+  onChange,
+  onValueChange, // Support both prop names for backward compatibility
   onCreateNew,
   placeholder = "Select account...",
   className = "",
   contentClassName = "",
   itemClassName = "",
-  disabled = false
+  disabled = false,
+  tenantFilter = null,
 }) {
+  // Use onChange if provided, otherwise fall back to onValueChange (memoized to prevent race conditions)
+  const handleChange = useMemo(() => onChange || onValueChange, [onChange, onValueChange]);
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [open, setOpen] = useState(false);
+  const [selectedAccountLabel, setSelectedAccountLabel] = useState("");
   const { cachedRequest } = useApiManager();
 
   // Only load when dropdown opens
+  const { user: contextUser } = useUser();
+
+  const resolvedTenantFilter = useMemo(() => {
+    if (tenantFilter && typeof tenantFilter === 'object' && Object.keys(tenantFilter).length > 0) {
+      return tenantFilter;
+    }
+    if (contextUser?.tenant_id) {
+      return { tenant_id: contextUser.tenant_id };
+    }
+    return null;
+  }, [tenantFilter, contextUser?.tenant_id]);
+
   const loadAccounts = useCallback(async () => {
     if (loaded) return; // Already loaded
     
@@ -38,21 +56,20 @@ export default function LazyAccountSelector({
     setError(null);
 
     try {
-      const user = await cachedRequest('User', 'me', {}, () => User.me());
-      
-      if (!user?.tenant_id) {
-        setError("No tenant assigned");
+      if (!resolvedTenantFilter || !resolvedTenantFilter.tenant_id) {
+        setError("No tenant selected");
         setAccounts([]);
         setLoaded(true);
         return;
       }
 
       // Load only first 50 accounts, sorted by name
+      const accountFilter = { ...resolvedTenantFilter, limit: 50, orderBy: 'name' };
       const accData = await cachedRequest(
         'Account',
         'filter',
-        { filter: { tenant_id: user.tenant_id }, sort: 'name', limit: 50 },
-        () => Account.filter({ tenant_id: user.tenant_id }, 'name', 50)
+        { filter: accountFilter },
+        () => Account.filter(accountFilter)
       );
 
       setAccounts(accData || []);
@@ -65,7 +82,64 @@ export default function LazyAccountSelector({
     } finally {
       setLoading(false);
     }
-  }, [loaded, cachedRequest]);
+  }, [loaded, cachedRequest, resolvedTenantFilter]);
+
+  // Ensure we always have the currently selected account hydrated so the trigger shows a label
+  useEffect(() => {
+    let isMounted = true;
+
+    const ensureSelectedAccountLoaded = async () => {
+      if (!value) {
+        setSelectedAccountLabel("");
+        return;
+      }
+
+      const existing = accounts.find((acc) => acc.id === value);
+      if (existing) {
+        setSelectedAccountLabel(existing.name || "Unknown Account");
+        return;
+      }
+
+      if (!resolvedTenantFilter || !resolvedTenantFilter.tenant_id) {
+        setSelectedAccountLabel("Unknown Account");
+        return;
+      }
+
+      try {
+        const singleFilter = { ...resolvedTenantFilter, id: value, limit: 1 };
+        const fetched = await cachedRequest(
+          'Account',
+          `by-id-${value}`,
+          { filter: singleFilter },
+          () => Account.filter(singleFilter)
+        );
+
+        const record = Array.isArray(fetched) ? fetched[0] : fetched;
+        if (!isMounted) return;
+
+        if (record && record.id === value) {
+          setAccounts((prev) => {
+            if (prev.some((acc) => acc.id === record.id)) return prev;
+            return [...prev, record];
+          });
+          setSelectedAccountLabel(record.name || "Unknown Account");
+        } else {
+          setSelectedAccountLabel("Unknown Account");
+        }
+      } catch (err) {
+        if (isMounted) {
+          console.warn("Failed to load selected account", err);
+          setSelectedAccountLabel("Unknown Account");
+        }
+      }
+    };
+
+    ensureSelectedAccountLoaded();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [value, accounts, cachedRequest, resolvedTenantFilter]);
 
   const handleOpenChange = (isOpen) => {
     setOpen(isOpen);
@@ -81,13 +155,19 @@ export default function LazyAccountSelector({
     : accounts;
 
   const displayValue = value 
-    ? accounts.find(a => a.id === value)?.name || "Unknown Account"
+    ? (accounts.find(a => a.id === value)?.name || selectedAccountLabel || "Unknown Account")
     : placeholder;
+
+  // Handle value changes - convert "__CLEAR__" sentinel to null
+  const handleValueChange = useCallback((newValue) => {
+    const actualValue = newValue === "__CLEAR__" ? null : newValue;
+    handleChange?.(actualValue);
+  }, [handleChange]);
 
   return (
     <Select
-      value={value || ''}
-      onValueChange={onValueChange}
+      value={value || "__CLEAR__"}
+      onValueChange={handleValueChange}
       disabled={disabled}
       open={open}
       onOpenChange={handleOpenChange}
@@ -141,7 +221,7 @@ export default function LazyAccountSelector({
 
             {/* Accounts List */}
             <div className="max-h-[300px] overflow-y-auto">
-              <SelectItem value={null} className={itemClassName}>
+              <SelectItem value="__CLEAR__" className={itemClassName}>
                 <span className="italic text-slate-500">No account</span>
               </SelectItem>
               

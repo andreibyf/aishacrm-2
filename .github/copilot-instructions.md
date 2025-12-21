@@ -1,147 +1,258 @@
-# Copilot Instructions for AI Agents
+# Copilot Instructions for Aisha CRM
 
-## Project Overview
-- Aisha CRM: Independent CRM system transitioning from Base44 to your own infrastructure.
-- Frontend: Vite + React app with domain-organized components (accounts, activities, ai, etc.).
-- Backend: Node.js Express server with 197 API endpoints across 26 categories, using PostgreSQL (Supabase).
-- Focus: Zero vendor dependency with automatic Base44 → local backend failover.
+## ⚠️ Before Making ANY Changes
 
-## Architecture & Data Flow
-- **Frontend:** Components in `src/components/` by domain; pages in `src/pages/`; API clients in `src/api/` with fallback logic.
-- **Backend:** Express server in `backend/server.js`; routes in `backend/routes/` (26 categories); database via Supabase PostgreSQL.
-- **Data Flow:** API calls auto-failover from Base44 SDK to local backend; local functions in `src/functions/` for browser-side fallbacks.
-- **Why Independent:** Prevents downtime when Base44 is unavailable; full control over data and functions.
+1. **Read `orchestra/PLAN.md`** - Only work on tasks marked "Active"
+2. **Default mode is BUGFIX-FIRST** - No new features unless explicitly authorized
+3. **Keep changes minimal and surgical** - See `orchestra/CONVENTIONS.md`
 
-## Developer Workflows
+## Architecture Overview
 
-### 🚨 CRITICAL: Terminal & Directory Rules
-**MUST FOLLOW EVERY TIME - NO EXCEPTIONS:**
+**Aisha CRM** = React 18 + Vite frontend → Node.js 22 Express backend → Supabase PostgreSQL
 
-1. **Directory Verification (MANDATORY):**
-   - ALWAYS run `Get-Location` (PowerShell) or `pwd` (bash) BEFORE executing ANY terminal command
-   - NEVER assume your current directory
-   - Verify you're in the correct location before running scripts or commands
+```
+Frontend (4000)  →  Backend (4001)  →  Supabase (RLS enabled)
+     ↓                   ↓
+src/api/          backend/routes/     50+ tables, UUID PKs
+fallbackFunctions.js   (60+ route files)
+```
 
-2. **Terminal Management (MANDATORY):**
-   - Frontend and backend MUST run in SEPARATE terminals
-   - After starting services with `.\start-all.ps1`, you MUST open a NEW terminal for subsequent commands
-   - Background processes occupy the terminal - always spawn a new one for additional work
+### Key Architectural Decisions
+- **Automatic Failover:** `src/api/fallbackFunctions.js` switches from Base44 cloud → local backend if unhealthy (5s timeout, 30s cache)
+- **UUID-First Multi-Tenancy:** Always use `tenant_id` (UUID) for foreign keys and RLS, referencing `tenant(id)`. Legacy `tenant_id_text` is deprecated.
+- **Dual Redis:** Memory (6379) for ephemeral/sessions, Cache (6380) for persistent/aggregations
+- **Braid SDK:** 27+ AI tools in `braid-llm-kit/` with MCP server integration
+- **Multi-Provider AI Engine:** `backend/lib/aiEngine/` with automatic failover (OpenAI → Anthropic → Groq)
 
-3. **Command Execution Pattern:**
-   ```powershell
-   # ALWAYS do this first:
-   Get-Location  # Verify current directory
-   
-   # Then navigate if needed:
-   cd c:\Users\andre\Documents\GitHub\ai-sha-crm-copy-c872be53
-   
-   # Then execute your command:
-   .\your-script.ps1
-   ```
+### Tenant UUID Migration (CRITICAL)
 
-### Standard Workflows
-- **Setup:** `npm install` (root & backend); copy `.env.example` to `.env`; configure `VITE_AISHACRM_BACKEND_URL` and database credentials.
-- **Dev Server:** `.\start-all.ps1` (starts both in background) OR `npm run dev` (frontend); `cd backend && npm run dev` (backend) in separate terminals.
-- **Build:** `npm run build` (frontend); backend runs via `npm start`.
-- **Linting:** `npm run lint` (frontend); check `eslint-results.json` for issues.
-- **Database:** Use Supabase; run migrations from `backend/migrations/`; seed with `npm run seed`.
-- **Testing:** Custom tests in `src/pages/UnitTests.jsx`; backend tests via `npm test`.
-- **Backend Issues:** If server exits immediately, see `backend/TROUBLESHOOTING_NODE_ESM.md` for ESM-specific debugging.
+**Schema overview:**
+- `tenant` table: `id` (UUID PK), `tenant_id` (TEXT unique slug for legacy/human-readable)
+- Domain tables (`accounts`, `contacts`, `leads`, etc.): `tenant_id` (UUID FK → `tenant(id)`)
+- `users` table: `tenant_uuid` (UUID FK → `tenant(id)`), legacy `tenant_id` (TEXT) still present
 
-## Project-Specific Conventions
-- Components: Function-based React, domain-grouped; use `ConfirmDialog` instead of `window.confirm()`.
-- API Integration: Use `src/api/fallbackFunctions.js` for Base44 → local backend auto-failover.
-- Local Functions: Browser-side fallbacks in `src/functions/`; export via `index.js`; avoid Node.js APIs.
-- Logging: Wrap debug logs with `import.meta.env.DEV`; error boundaries at root and component-level.
-- UI Patterns: AI widgets in `src/components/ai/`; bulk actions/detail panels common; Tailwind utility classes.
-- Performance: Use `performanceCache` from `src/components/shared/PerformanceCache.jsx`.
+**Rules for new code:**
+1. **Always use `tenant_id` (UUID)** for queries, inserts, joins, RLS
+2. **Never use `tenant_id_text`** - it's deprecated and read-only
+3. **RLS policies** must use `tenant_uuid` from users table: `SELECT tenant_uuid FROM users WHERE id = auth.uid()`
+4. **FKs reference `tenant(id)`** not `tenants` (table is singular)
+5. **Index `tenant_id`** on any new table for RLS performance
 
-## Code Style and Formatting
-- **Linting:** Run `npm run lint` before committing; fix all errors and warnings when possible.
-- **Formatting:** Use Prettier for consistent formatting; run `npm run format` or enable format-on-save.
-- **React:** Functional components only; use hooks for state and effects; PropTypes or TypeScript for type safety.
-- **Naming:** camelCase for variables/functions, PascalCase for components, UPPER_SNAKE_CASE for constants.
-- **Files:** One component per file; co-locate tests, styles if applicable; max ~300 lines per file.
-- **Imports:** Group by: React → external libs → internal modules → styles; sort alphabetically within groups.
+**Migration rules:**
+- Do NOT drop columns until confirmed cutover
+- Add/keep indexes on `tenant_id` used by RLS and joins
+- Create policies using `tenant_id` (UUID) and auth context
+- Avoid DROP/ALTER of extensions; only `CREATE EXTENSION IF NOT EXISTS` in schema `extensions`
 
-## Git and PR Conventions
-- **Branches:** Use descriptive names like `feature/add-export` or `fix/login-bug`.
-- **Commits:** Write clear, concise messages in present tense: "Add export feature" not "Added export feature".
-- **PRs:** Reference issue numbers; describe what changed and why; keep PRs focused and small.
-- **Reviews:** Address all comments; use GitHub suggestions when applicable; ask for clarification if needed.
-- **Merging:** Squash commits for cleaner history; delete branch after merge.
+### API Route Versioning (V1 vs V2)
+Routes have two versions - **prefer V2 for new development:**
 
-## Integration Points
-- **Database:** Supabase PostgreSQL; configure via `DATABASE_URL` or Supabase prod settings; see `backend/DATABASE_UUID_vs_TENANT_ID.md` for critical UUID vs tenant_id distinction.
-- **External API:** Base44 SDK for migration/sync; local backend for independence.
-- **AI Features:** Custom assistants in `src/components/ai/`; MCP server example in `src/functions/mcpServer.js`.
-- **Security:** Helmet.js, CORS, rate limiting in backend; never commit `.env`.
+| Version | Path | Purpose | When to Use |
+|---------|------|---------|-------------|
+| **V2** | `/api/v2/accounts` | AI Agent-ready, flattened metadata | ✅ New features, AI integrations |
+| **V1** | `/api/accounts` | Legacy compatibility | Fallback only, existing integrations |
 
-## Testing Best Practices
-- **Frontend:** Custom tests in `src/pages/UnitTests.jsx`; add tests for new components when possible.
-- **Backend:** Run `npm test` in backend directory; test API endpoints and business logic.
-- **E2E:** Use Playwright for end-to-end tests; run with `npm run test:e2e`.
-- **Coverage:** Aim for critical paths; don't let perfect be the enemy of good.
-- **CI/CD:** All tests must pass before merging; check GitHub Actions workflows.
+**V2 differences:**
+- Flattens `metadata` JSON into top-level fields (address_1, tags, etc.)
+- Includes `buildAccountAiContext()` for AI agent consumption
+- Streamlined response shape for autonomous AI actions
 
-## Common Pitfalls and Solutions
-- **Backend exits immediately:** Check ESM syntax errors; see `backend/TROUBLESHOOTING_NODE_ESM.md`.
-- **Database connection fails:** Verify `.env` credentials; check Supabase console for issues.
-- **Frontend shows "undefined" errors:** Check for null/undefined values; add optional chaining (`?.`).
-- **API failover not working:** Verify `VITE_AISHACRM_BACKEND_URL` is set; check `fallbackFunctions.js` logic.
-- **Git conflicts:** See `GIT_SOLUTION_SUMMARY.md`; run `.\cleanup-branches.ps1` or `./cleanup-branches.sh`.
-- **Terminal issues:** ALWAYS verify directory with `Get-Location` or `pwd` before commands.
-- **Dependencies:** Run `npm install` in both root and `backend/` after pulling changes.
+**Files:** `accounts.v2.js`, `leads.v2.js`, `contacts.v2.js`, `opportunities.v2.js`, `activities.v2.js`
 
-## Backend Route Categories
-The backend exposes 197 API endpoints across 26 categories:
-- **accounts** - Account management operations
-- **activities** - Activity logging and tracking
-- **ai** - AI-powered features and assistants
-- **announcements** - System announcements and notifications
-- **apikeys** - API key management
-- **billing** - Billing and payment operations
-- **bizdev** - Business development tools
-- **bizdevsources** - Business development data sources
-- **cashflow** - Cash flow analysis and reporting
-- **clients** - Client relationship management
-- **contacts** - Contact information handling
-- **cron** - Scheduled job management
-- **database** - Database operations (sync, archive, cleanup)
-- **documents** - Document storage and retrieval
-- **employees** - Employee management
-- **integrations** - Third-party integrations
-- **leads** - Lead generation and management
-- **mcp** - Model Context Protocol server
-- **metrics** - Performance metrics and analytics
-- **modulesettings** - Module configuration
-- **notes** - Note-taking and comments
-- **notifications** - User notifications
-- **opportunities** - Sales opportunity tracking
-- **permissions** - Access control and permissions
-- **reports** - Dashboard stats and data exports
-- **storage** - File storage operations
-- **system-logs** - System logging and auditing
-- **system** - Health checks, diagnostics, status
-- **telephony** - Phone and communication features
-- **tenant-integrations** - Multi-tenant integrations
-- **tenants** - Multi-tenant management
-- **testing** - Testing utilities and endpoints
-- **users** - User account management
-- **utils** - Utility functions
-- **validation** - Data validation and duplicate detection
-- **webhooks** - Webhook handling
-- **workflows** - Workflow automation
+## 🐳 Docker Environment (CRITICAL)
 
-## Key Files & Directories
-- `src/api/` — API clients with Base44 → local failover (`fallbackFunctions.js`)
-- `src/functions/` — 197 browser-side functions; export via `index.js`
-- `backend/server.js` — Express server with 197 endpoints
-- `backend/routes/` — 26 route categories (accounts.js, leads.js, etc.)
-- `backend/migrations/` — Supabase schema migrations
-- `src/components/` — Domain-specific React components
-- `src/pages/` — Route/view components
-- `vite.config.js`, `tailwind.config.js`, `eslint.config.js` — Build, style, lint config
+**Ports are FIXED - do not change:**
+| Service | Host Port | Access |
+|---------|-----------|--------|
+| Frontend | 4000 | http://localhost:4000 |
+| Backend | 4001 | http://localhost:4001 |
+
+```bash
+# Development
+docker compose up -d --build          # Start all
+docker compose up -d --build frontend # Rebuild frontend only
+docker logs aishacrm-backend -f       # Debug backend
+
+# Inter-container: use service names (redis, backend), not localhost
+```
+
+**Common mistakes:**
+- ❌ Assuming Vite runs on 5173 (it's 4000 in Docker)
+- ❌ Using `localhost` between containers (use service names)
+- ❌ Suggesting `npm run dev` without Docker context
+
+## 🔐 Doppler (Secrets Management)
+
+**All environment variables are managed through Doppler** - never use `.env` files directly.
+
+```bash
+# Run any command with secrets injected
+doppler run -- node script.js
+doppler run -- npm test
+
+# View available secrets
+doppler run -- printenv | grep SUPABASE
+
+# Key env var names
+SUPABASE_URL              # Supabase project URL
+SUPABASE_SERVICE_ROLE_KEY # Service role key (not SUPABASE_SERVICE_KEY)
+SUPABASE_ANON_KEY         # Anonymous/publishable key
+DATABASE_URL              # Direct PostgreSQL connection string
+```
+
+**Important:** Docker containers get secrets via `docker-compose.yml` environment mapping, not Doppler directly.
+
+## Production Deployment
+
+**FULLY AUTOMATED - never suggest `git pull` on production:**
+1. Push version tag: `git push origin v1.0.76`
+2. GitHub Actions builds + pushes to GHCR
+3. Workflow SSHs to VPS, deploys new images
+
+Production server has NO source code, only `docker-compose.prod.yml` + `.env`.
+
+## Code Patterns
+
+### Frontend
+```javascript
+// Always use @/ alias (resolves to src/)
+import { Component } from '@/components/shared/Component';
+
+// API calls go through fallbackFunctions
+import { createAccount } from '@/api/fallbackFunctions';
+
+// Debug logging
+if (import.meta.env.DEV) console.log('debug info');
+
+// Cache invalidation after mutations
+const { clearCacheByKey } = useApiManager();
+await deleteAccount(id);
+clearCacheByKey("Account");
+```
+
+### Backend
+```javascript
+// All routes use Supabase client, never raw pgPool
+const { data, error } = await supabase
+  .from('accounts')
+  .select('*')
+  .eq('tenant_id', req.tenant.id);  // Always UUID!
+
+// Middleware for tenant isolation
+import { validateTenantAccess } from '../middleware/validateTenant.js';
+router.use(validateTenantAccess);
+```
+
+### Database (UUID Critical!)
+```sql
+-- CORRECT: Use UUID tenant_id for all queries
+SELECT * FROM accounts WHERE tenant_id = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+
+-- CORRECT: Join through tenant table
+SELECT a.* FROM accounts a
+JOIN tenant t ON a.tenant_id = t.id
+WHERE t.tenant_id = 'my-tenant-slug';  -- tenant.tenant_id is the TEXT slug
+
+-- WRONG: Never use deprecated tenant_id_text
+SELECT * FROM accounts WHERE tenant_id_text = 'local-tenant-001';  -- Deprecated!
+
+-- RLS Policy pattern (uses tenant_uuid from users table)
+CREATE POLICY example_policy ON my_table
+  FOR SELECT TO authenticated
+  USING (tenant_id IN (SELECT tenant_uuid FROM users WHERE id = auth.uid()));
+```
+
+## Essential Commands
+
+```bash
+# Docker workflows
+docker compose up -d --build      # Start/rebuild
+docker ps                         # Check status
+docker logs aishacrm-backend -f   # Debug
+
+# Testing
+npm run lint                      # Frontend linting
+cd backend && npm test            # Backend tests
+npm run test:e2e                  # Playwright E2E
+
+# Database
+cd backend && npm run seed        # Seed data
+# Migrations in backend/migrations/
+```
+
+## Test Structure
+
+**Backend tests** are organized by feature in `backend/__tests__/`:
+
+| Directory | Tests For |
+|-----------|-----------|
+| `__tests__/routes/` | Route handlers (accounts, leads, etc.) |
+| `__tests__/ai/` | AI tools, suggestions, triggers |
+| `__tests__/auth/` | Authentication middleware |
+| `__tests__/phase3/` | AI autonomy features |
+| `__tests__/integration/` | MCP, external integrations |
+| `__tests__/system/` | Health checks, server startup |
+
+**Frontend tests** use Vitest with files alongside source:
+- `src/api/entities.test.js` → tests `src/api/entities.js`
+- `src/ai/engine/*.test.ts` → tests AI engine modules
+
+**Test framework:**
+- Backend: Node.js built-in `node:test`
+- Frontend: Vitest with jsdom
+
+**Running tests:**
+```bash
+# Backend (run in Docker)
+docker exec aishacrm-backend sh -c "cd /app/backend && node --test __tests__/**/*.test.js"
+
+# Frontend
+npm run test
+```
+
+## Key Files
+
+| Purpose | Location |
+|---------|----------|
+| API failover logic | `src/api/fallbackFunctions.js` |
+| Backend routes | `backend/routes/*.js` (60+ files) |
+| AI engine | `backend/lib/aiEngine/` |
+| Braid SDK tools | `braid-llm-kit/` |
+| Tenant middleware | `backend/middleware/validateTenant.js` |
+| Docker config | `docker-compose.yml` |
+
+## AI Engine (Multi-Provider LLM)
+
+The `backend/lib/aiEngine/` provides unified AI infrastructure with automatic failover:
+
+```javascript
+import { selectLLMConfigForTenant, resolveLLMApiKey, callLLMWithFailover } from '../lib/aiEngine/index.js';
+
+// 1. Get provider+model for a capability
+const config = await selectLLMConfigForTenant('chat_tools', tenantId);
+// → { provider: 'openai', model: 'gpt-4o', failoverChain: ['openai', 'anthropic', 'groq'] }
+
+// 2. Resolve API key (tenant → user → system → env)
+const apiKey = await resolveLLMApiKey({ tenantSlugOrId, provider: config.provider });
+
+// 3. Call with automatic failover
+const result = await callLLMWithFailover({ messages, capability: 'chat_tools', tenantId });
+```
+
+**Capabilities:** `chat_tools`, `chat_light`, `json_strict`, `brain_read_only`, `brain_plan_actions`, `realtime_voice`
+
+**Providers:** OpenAI (gpt-4o), Anthropic (claude-3-5-sonnet), Groq (llama-3.3-70b), Local LLMs
+
+**Per-tenant override:** Set `LLM_PROVIDER__TENANT_<id>=anthropic` in env to route specific tenants
+
+## Common Issues
+
+| Problem | Solution |
+|---------|----------|
+| `invalid input syntax for type uuid` | Using text slug instead of UUID for tenant_id |
+| Backend exits immediately | ESM error - see `backend/TROUBLESHOOTING_NODE_ESM.md` |
+| CORS errors | Check `ALLOWED_ORIGINS` in `backend/.env` |
+| Stale frontend data | Call `clearCacheByKey()` after mutations |
 
 ---
-**For questions, review README.md or backend/README.md. Contact Base44 at app@base44.com for legacy issues.**
+**Detailed docs:** `README.md`, `CLAUDE.md`, `docs/AISHA_CRM_DEVELOPER_MANUAL.md`

@@ -1,12 +1,12 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, RefreshCw, Send } from "lucide-react";
-import { User } from "@/api/entities";
 import { Employee } from "@/api/entities";
 import { requestUserInvite } from "@/api/functions";
 import { inviteUser } from "@/api/functions";
 import { userExistsByEmail } from "@/api/functions";
 import { SendEmail } from "@/api/integrations";
+import { useUser } from "@/components/shared/useUser.js";
 
 export default function ResendInviteButton({
   employeeId,
@@ -18,6 +18,7 @@ export default function ResendInviteButton({
   onDone
 }) {
   const [sending, setSending] = React.useState(false);
+  const { user: currentUser } = useUser();
 
   const handleResend = async () => {
     if (!email || !fullName || !tier || !role || !employeeId) {
@@ -41,7 +42,7 @@ export default function ResendInviteButton({
         return;
       }
 
-      const me = await User.me();
+      const me = currentUser;
       const payload = {
         email,
         full_name: fullName,

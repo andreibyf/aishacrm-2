@@ -6,7 +6,7 @@ export default function createWorkflowExecutionRoutes(pgPool) {
   // GET /api/workflowexecutions - List executions with optional filters
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, workflow_id, limit = 50, offset = 0, order = '-created_date' } = req.query;
+      const { tenant_id, workflow_id, limit = 50, offset = 0, order = '-created_at' } = req.query;
 
       if (!pgPool) {
         return res.status(503).json({ status: 'error', message: 'Database not configured' });

@@ -1,48 +1,97 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Target, AlertTriangle, Loader2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from "recharts";
 import { useApiManager } from "@/components/shared/ApiManager";
 import { Opportunity } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser";
+import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
+import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 import { Link } from "react-router-dom"; // Added import
 import { createPageUrl } from "@/utils"; // Added import
 import { Button } from "@/components/ui/button"; // Added import for Button component
 
-export default function SalesPipeline(props) {
+function SalesPipeline(props) {
   const [pipelineData, setPipelineData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
   const { cachedRequest } = useApiManager();
+  const { loading: userLoading } = useUser();
+  const { authCookiesReady } = useAuthCookiesReady();
+  const { getVisibleCardsForEntity } = useStatusCardPreferences();
+  const { plural: opportunitiesLabel } = useEntityLabel('opportunities');
+
+  // Get visible opportunity stages from preferences
+  const visibleOpportunityCards = useMemo(() => getVisibleCardsForEntity('opportunities'), [getVisibleCardsForEntity]);
 
   React.useEffect(() => {
+        // Wait for user to be loaded before fetching data
+        if (userLoading || !authCookiesReady) {
+          return;
+        }
+
     let mounted = true; // Flag to prevent state updates on unmounted component
+
+    // Map status card IDs to stage keys
+    const stageKeyMap = {
+      'prospecting': 'prospecting',
+      'qualification': 'qualification',
+      'proposal': 'proposal',
+      'negotiation': 'negotiation',
+      'won': 'closed_won',
+      'lost': 'closed_lost',
+    };
+
+    // Build visible stages from preferences
+    const visibleStageKeys = new Set(
+      visibleOpportunityCards.map(card => stageKeyMap[card.statusKey] || card.statusKey)
+    );
 
     // Helper function to compute pipeline data from a list of opportunities
     const computeFromOpps = (opps) => {
+      // Canonical stage buckets (include legacy mappings for won/lost)
       const stages = {
-        prospecting: { name: "Prospecting", count: 0, value: 0 },
-        qualification: { name: "Qualification", count: 0, value: 0 },
-        proposal: { name: "Proposal", count: 0, value: 0 },
-        negotiation: { name: "Negotiation", count: 0, value: 0 },
-        closed_won: { name: "Closed Won", count: 0, value: 0 },
-        closed_lost: { name: "Closed Lost", count: 0, value: 0 }
+        prospecting: { name: "Prospecting", count: 0, value: 0, key: 'prospecting' },
+        qualification: { name: "Qualification", count: 0, value: 0, key: 'qualification' },
+        proposal: { name: "Proposal", count: 0, value: 0, key: 'proposal' },
+        negotiation: { name: "Negotiation", count: 0, value: 0, key: 'negotiation' },
+        closed_won: { name: "Closed Won", count: 0, value: 0, key: 'closed_won' },
+        closed_lost: { name: "Closed Lost", count: 0, value: 0, key: 'closed_lost' },
       };
 
-      (opps || []).forEach(opp => { // Ensure opps is an array
-        if (stages[opp.stage]) {
-          stages[opp.stage].count++;
-          // Parse amount as float to handle string values from database
+      const stageAliasMap = {
+        won: "closed_won",
+        lost: "closed_lost",
+        closedwon: "closed_won",
+        closedlost: "closed_lost",
+      };
+
+      (opps || []).forEach((opp) => {
+        let stageKey = opp.stage;
+        if (stageAliasMap[stageKey]) stageKey = stageAliasMap[stageKey];
+        if (stages[stageKey]) {
+          stages[stageKey].count++;
           const amount = parseFloat(opp.amount) || 0;
-          stages[opp.stage].value += amount;
+          stages[stageKey].value += amount;
         }
       });
 
-      // Renamed 'name' to 'stage' to match the dataKey in the BarChart
-      const processedData = Object.values(stages).map(stage => ({
-        stage: stage.name, // Use 'stage' as dataKey for XAxis
-        value: stage.value // Use the raw value
-      }));
+      // Filter to only visible stages based on preferences
+      const processedData = Object.entries(stages)
+        .filter(([key]) => visibleStageKeys.has(key))
+        .map(([, stage]) => ({
+          stage: stage.name,
+          value: stage.value,
+          count: stage.count,
+        }));
+
+      // If all values are zero but there are counts, fall back to using counts
+      const allValuesZero = processedData.every((s) => s.value === 0);
+      if (allValuesZero && processedData.some((s) => s.count > 0)) {
+        return processedData.map((s) => ({ stage: s.stage, value: s.count, isCount: true }));
+      }
       return processedData;
     };
 
@@ -57,16 +106,43 @@ export default function SalesPipeline(props) {
             setPipelineData(computeFromOpps(props.prefetchedOpportunities));
             setLoading(false);
           }
+          // Background refresh to hydrate with full data silently
+          (async () => {
+            try {
+              const tenantFilter = props?.tenantFilter || {};
+              if (!tenantFilter.tenant_id) return;
+              const showTestData = props?.showTestData;
+              const effectiveFilter = showTestData ? { ...tenantFilter } : { ...tenantFilter, is_test_data: false };
+              const hasFilter = Object.keys(effectiveFilter).length > 0;
+              const methodName = hasFilter ? "filter" : "list";
+              const methodParams = hasFilter ? { filter: effectiveFilter } : {};
+              const dataFetcher = () => hasFilter ? Opportunity.filter(effectiveFilter) : Opportunity.list();
+              const oppsFull = await cachedRequest("Opportunity", methodName, methodParams, dataFetcher);
+              if (mounted) {
+                setPipelineData(computeFromOpps(oppsFull));
+              }
+            } catch { /* ignore background errors */ }
+          })();
           return; // Exit if preloaded data is used
         }
 
         const tenantFilter = props?.tenantFilter || {};
+        
+        // Guard: Don't fetch if no tenant_id is present
+        if (!tenantFilter.tenant_id) {
+          if (mounted) {
+            setPipelineData([]);
+            setLoading(false);
+          }
+          return;
+        }
+        
         const showTestData = props?.showTestData; // Access showTestData from props
 
         // Re-introduce the effectiveFilter logic from original code, now using props.showTestData
         const effectiveFilter = showTestData
           ? { ...tenantFilter }
-          : { ...tenantFilter, is_test_data: { $ne: true } };
+          : { ...tenantFilter, is_test_data: false };
         
         // Determine if we need to call filter or list based on effectiveFilter
         const hasFilter = Object.keys(effectiveFilter).length > 0;
@@ -98,7 +174,7 @@ export default function SalesPipeline(props) {
     load(); // Execute the async load function
     return () => { mounted = false; }; // Cleanup function for unmounting
      
-  }, [props?.tenantFilter, props?.showTestData, props?.prefetchedOpportunities, cachedRequest]); // Include all relevant props and cachedRequest in dependencies
+  }, [props?.tenantFilter, props?.showTestData, props?.prefetchedOpportunities, cachedRequest, userLoading, authCookiesReady, visibleOpportunityCards]); // Include all relevant props and cachedRequest in dependencies
 
   return (
     <Card className="bg-slate-800 border-slate-700 h-full">
@@ -149,15 +225,22 @@ export default function SalesPipeline(props) {
                       borderRadius: '8px',
                       color: '#f1f5f9'
                     }}
-                    formatter={(value) => `$${value.toLocaleString()}`}
+                    formatter={(value, _name, props) => {
+                      // If we fell back to counts (isCount flag), show count formatting
+                      if (props?.payload?.isCount) return [`${value}`, 'Opportunities'];
+                      return [`$${value.toLocaleString()}`, 'Pipeline Value'];
+                    }}
                     labelFormatter={(label) => `Stage: ${label}`}
                   />
-                  <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]}>
-                    <LabelList 
-                      dataKey="value" 
-                      position="top" 
+                  <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+                    <LabelList
+                      dataKey="value"
+                      position="top"
                       style={{ fill: '#94a3b8', fontSize: '12px' }}
-                      formatter={(value) => `$${value.toLocaleString()}`}
+                      formatter={(value, _name, props) => {
+                        if (props?.payload?.isCount) return `${value}`;
+                        return `$${value.toLocaleString()}`;
+                      }}
                     />
                   </Bar>
                 </BarChart>
@@ -167,7 +250,7 @@ export default function SalesPipeline(props) {
             <div className="text-center pt-4 border-t border-slate-700 mt-4">
               <Button variant="outline" size="sm" asChild className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
                 <Link to={createPageUrl("Opportunities")}>
-                  View All Opportunities
+                  View All {opportunitiesLabel}
                 </Link>
               </Button>
             </div>
@@ -177,3 +260,5 @@ export default function SalesPipeline(props) {
     </Card>
   );
 }
+
+export default React.memo(SalesPipeline);

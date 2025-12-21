@@ -64,13 +64,13 @@ export default function createTestingRoutes(_pgPool) {
   //   backend_url?: 'https://public-backend.example.com',  // Optional: override for public/Tailscale URLs
   //   frontend_url?: 'https://public-frontend.example.com' // Optional: override for public/Tailscale URLs
   // }
-  router.post('/run-playwright', async (req, res) => {
+  router.post('/trigger-e2e', async (req, res) => {
     try {
       const {
-        GITHUB_TOKEN,
-        GITHUB_REPO_OWNER = process.env.GITHUB_REPOSITORY_OWNER || 'andreibyf',
-        GITHUB_REPO_NAME = process.env.GITHUB_REPOSITORY_NAME || 'aishacrm-2',
-        GITHUB_WORKFLOW_FILE = process.env.GITHUB_WORKFLOW_FILE || 'e2e.yml',
+        GITHUB_TOKEN = process.env.GH_TOKEN,
+        GITHUB_REPO_OWNER = process.env.REPO_OWNER || process.env.GITHUB_REPOSITORY_OWNER || 'andreibyf',
+        GITHUB_REPO_NAME = process.env.REPO_NAME || process.env.GITHUB_REPOSITORY_NAME || 'aishacrm-2',
+        GITHUB_WORKFLOW_FILE = process.env.WORKFLOW_FILE || process.env.GITHUB_WORKFLOW_FILE || 'e2e.yml',
       } = process.env;
 
       if (!GITHUB_TOKEN) {
@@ -132,6 +132,12 @@ export default function createTestingRoutes(_pgPool) {
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }
+  });
+
+  // Alias for backward compatibility - QaConsole.jsx uses this path
+  router.post('/run-playwright', (req, res, next) => {
+    req.url = '/trigger-e2e';
+    router.handle(req, res, next);
   });
 
   // GET /api/testing/workflow-status - Get recent workflow runs with status
@@ -303,14 +309,14 @@ export default function createTestingRoutes(_pgPool) {
               const count = Array.isArray(data) ? data.length : 0;
               results[`${table}_unflagged`] = { deleted: count, success: true, window_days: windowDays };
               totalDeleted += count;
-            } catch (err) {
-              console.error(`Unflagged cleanup error for ${table}:`, err);
-              results[`${table}_unflagged`] = { deleted: 0, success: false, error: err.message };
+            } catch (unflaggedErr) {
+              console.error(`Unflagged cleanup error for ${table}:`, unflaggedErr);
+              results[`${table}_unflagged`] = { deleted: 0, success: false, error: unflaggedErr.message };
             }
           }
-        } catch (err) {
-          console.error('Unflagged cleanup block error:', err);
-          results['unflagged_cleanup'] = { success: false, error: err.message };
+        } catch (unflaggedBlockErr) {
+          console.error('Unflagged cleanup block error:', unflaggedBlockErr);
+          results['unflagged_cleanup'] = { success: false, error: unflaggedBlockErr.message };
         }
       }
 
@@ -325,6 +331,269 @@ export default function createTestingRoutes(_pgPool) {
       });
     } catch (error) {
       console.error('Cleanup test data error:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // GET /api/testing/full-scan - Run comprehensive endpoint availability scan
+  // Query params:
+  //   tenant_id=<uuid or test placeholder>
+  //   base_url=internal|http://override   (internal maps to docker service hostname backend:3001)
+  //   expected_statuses=200,201,204        (comma-separated list; default OK statuses)
+  // Returns: { status: 'success', data: { summary: { total, passed, failed, warn, avg_latency_ms, max_latency_ms }, results: [...] } }
+  router.get('/full-scan', async (req, res) => {
+    try {
+      const tenantId = req.query.tenant_id || process.env.SYSTEM_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+      const explicitBase = req.query.base_url;
+      let baseUrl = explicitBase || process.env.INTERNAL_BASE_URL || 'http://localhost:4001';
+      if (baseUrl === 'internal') baseUrl = 'http://backend:3001';
+      if (/localhost:4001$/i.test(baseUrl)) baseUrl = 'http://backend:3001';
+      if (!/^https?:\/\//i.test(baseUrl)) baseUrl = `http://${baseUrl}`;
+
+      // Expected OK statuses (classification PASS); allow query override
+      // Default: treat all 2xx as success
+      const expectedStatusesParam = req.query.expected_statuses;
+      let expectedStatuses = [];
+      if (expectedStatusesParam) {
+        expectedStatuses = String(expectedStatusesParam)
+          .split(',')
+          .map(s => parseInt(s.trim(), 10))
+          .filter(n => !isNaN(n));
+      } else {
+        // Default: all 2xx codes are PASS
+        for (let i = 200; i < 300; i++) expectedStatuses.push(i);
+      }
+
+      // Optional health probe to validate reachability
+      let probeOk = false;
+      try {
+        const probeResp = await fetch(`${baseUrl}/api/testing/ping`, { method: 'GET' });
+        probeOk = probeResp.ok;
+      } catch {
+        // Leave probeOk false; will record as network failures later
+      }
+
+      // Define endpoints (method + path); {TENANT_ID} placeholder replaced
+      const endpoints = [
+        // Core health/system
+        { method: 'GET', path: '/' },
+        { method: 'GET', path: '/health' },
+        { method: 'GET', path: '/api/status' },
+        { method: 'GET', path: '/api/system/status' },
+        { method: 'GET', path: '/api/system/runtime' },
+        { method: 'GET', path: `/api/system/logs?tenant_id={TENANT_ID}` },
+        
+        // Reports & Analytics
+        { method: 'GET', path: `/api/reports/dashboard-stats?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/reports/dashboard-bundle?tenant_id={TENANT_ID}` },
+        // NOTE: Following report endpoints disabled - require database views not yet created
+        // { method: 'GET', path: `/api/reports/pipeline?tenant_id={TENANT_ID}` },
+        // { method: 'GET', path: `/api/reports/lead-status?tenant_id={TENANT_ID}` },
+        // { method: 'GET', path: `/api/reports/calendar?tenant_id={TENANT_ID}` },
+        // { method: 'GET', path: `/api/reports/data-quality?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/metrics/performance?tenant_id={TENANT_ID}` },
+        
+        // Core CRM Entities (v1)
+        { method: 'GET', path: `/api/accounts?tenant_id={TENANT_ID}` },
+        { method: 'POST', path: '/api/accounts', body: { tenant_id: tenantId, name: `Scan Account ${Date.now()}` } },
+        { method: 'GET', path: `/api/contacts?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/leads?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/opportunities?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/activities?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/notes?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/clients?tenant_id={TENANT_ID}` },
+        
+        // Core CRM Entities (v2 - flattened metadata)
+        { method: 'GET', path: `/api/v2/accounts?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/v2/contacts?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/v2/opportunities?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/v2/activities?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/v2/leads?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/v2/reports/dashboard-bundle?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/v2/reports/health-summary?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/v2/workflows?tenant_id={TENANT_ID}` },
+
+        // Users & Employees
+        { method: 'GET', path: `/api/users?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/employees?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: '/api/tenants' },
+        
+        // AI Features
+        { method: 'GET', path: `/api/ai/assistants?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/aicampaigns?tenant_id={TENANT_ID}` },
+        // NOTE: Memory endpoints disabled - Redis connection validation issues
+        // { method: 'GET', path: `/api/memory/sessions?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/memory/search?tenant_id={TENANT_ID}&query=test` },
+        { method: 'GET', path: `/api/mcp/servers` },
+        
+        // Workflows & Automation
+        { method: 'GET', path: `/api/workflows?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/workflowexecutions?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/workflow-templates?tenant_id={TENANT_ID}` },
+        
+        // Business Development
+        { method: 'GET', path: `/api/bizdev?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/bizdevsources?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/cashflow?tenant_id={TENANT_ID}` },
+        
+        // Settings & Configuration
+        { method: 'GET', path: `/api/permissions?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/modulesettings?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: '/api/systembrandings' },
+        { method: 'GET', path: '/api/system-settings' },
+        
+        // Integrations
+        { method: 'GET', path: `/api/integrations?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/tenantintegrations?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/synchealths?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/database/check-volume` },
+        
+        // Telephony
+        { method: 'GET', path: `/api/telephony/status?tenant_id={TENANT_ID}` },
+        { method: 'POST', path: '/api/telephony/test-webhook', body: { tenant_id: tenantId, test: true } },
+        
+        // Logging & Audit
+        { method: 'GET', path: `/api/system-logs?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/audit-logs?tenant_id={TENANT_ID}` },
+        
+        // Storage & Documents
+        { method: 'GET', path: '/api/storage/bucket' },
+        { method: 'GET', path: `/api/documents?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/documentationfiles?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/documentation?tenant_id={TENANT_ID}` },
+        
+        // Notifications & Announcements
+        { method: 'GET', path: `/api/notifications?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/announcements?tenant_id={TENANT_ID}` },
+        
+        // Security & Auth
+        { method: 'GET', path: `/api/apikeys?tenant_id={TENANT_ID}` },
+        { method: 'POST', path: '/api/auth/verify-token', body: { token: 'test' } },
+        { method: 'GET', path: '/api/security/policies' },
+        { method: 'GET', path: '/api/security/status' },
+        
+        // Utilities & Tools
+        { method: 'GET', path: '/api/testing/ping' },
+        { method: 'GET', path: '/api/utils/health' },
+        { method: 'GET', path: `/api/webhooks?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: '/api/cron/jobs' },
+        // NOTE: Validation endpoint disabled - error handling issues
+        // { method: 'GET', path: `/api/validation/check-duplicate?tenant_id={TENANT_ID}&type=account&name=test` },
+        
+        // Billing (if enabled)
+        { method: 'GET', path: `/api/billing/usage?tenant_id={TENANT_ID}` },
+        { method: 'GET', path: `/api/billing/invoices?tenant_id={TENANT_ID}` },
+      ];
+
+      const results = [];
+      let passed = 0; let failed = 0; let warn = 0; let protectedCount = 0;
+      let networkFailures = 0;
+      let totalLatency = 0; let maxLatency = 0;
+
+      // Throttle requests to prevent connection pool exhaustion
+      // Process endpoints in batches with delay between batches
+      const BATCH_SIZE = 5;
+      const BATCH_DELAY_MS = 100; // 100ms delay between batches
+
+      for (let i = 0; i < endpoints.length; i += BATCH_SIZE) {
+        const batch = endpoints.slice(i, i + BATCH_SIZE);
+        
+        // Process batch in parallel
+        const batchPromises = batch.map(async (ep) => {
+          const fullPath = ep.path.replace('{TENANT_ID}', tenantId);
+          const url = `${baseUrl}${fullPath}`;
+          let statusCode = 0;
+          const start = performance.now ? performance.now() : Date.now();
+          try {
+            const fetchOpts = { 
+              method: ep.method, 
+              headers: { 'Content-Type': 'application/json' },
+              signal: AbortSignal.timeout(5000) // 5s timeout per request
+            };
+            if (ep.body) fetchOpts.body = JSON.stringify(ep.body);
+            const resp = await fetch(url, fetchOpts);
+            statusCode = resp.status;
+          } catch (err) {
+            // Check if timeout or network error
+            statusCode = 0;
+            if (err.name === 'AbortError' || err.name === 'TimeoutError') {
+              console.warn(`[Full Scan] Timeout on ${ep.method} ${fullPath}`);
+            }
+          }
+          const end = performance.now ? performance.now() : Date.now();
+          const latencyMs = Math.round(end - start);
+
+          let classification = 'FAIL';
+          if (statusCode === 0) {
+            classification = 'FAIL';
+            networkFailures++;
+            failed++;
+          } else if (expectedStatuses.includes(statusCode)) {
+            classification = 'PASS';
+            passed++;
+          } else if (statusCode === 401 || statusCode === 403) {
+            // Auth-required endpoints (not failures - they exist and are protected)
+            classification = 'PROTECTED';
+            protectedCount++;
+          } else if (statusCode >= 200 && statusCode < 600) {
+            // Responsive but unexpected status (e.g., 404, 400, 500)
+            classification = 'WARN';
+            warn++;
+          } else {
+            classification = 'FAIL';
+            failed++;
+          }
+
+          return {
+            method: ep.method,
+            path: fullPath,
+            status: statusCode,
+            classification,
+            latency_ms: latencyMs,
+            expected: expectedStatuses.includes(statusCode),
+            network_failure: statusCode === 0
+          };
+        });
+
+        // Wait for batch to complete
+        const batchResults = await Promise.all(batchPromises);
+        results.push(...batchResults);
+
+        // Update latency stats
+        for (const r of batchResults) {
+          totalLatency += r.latency_ms;
+          if (r.latency_ms > maxLatency) maxLatency = r.latency_ms;
+        }
+
+        // Delay before next batch (except for last batch)
+        if (i + BATCH_SIZE < endpoints.length) {
+          await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+        }
+      }
+
+      res.json({
+        status: 'success',
+        data: {
+          summary: {
+            total: results.length,
+            passed,
+            warn,
+            failed,
+            protected: protectedCount,
+            network_failures: networkFailures,
+            probe_ok: probeOk,
+            avg_latency_ms: results.length ? Math.round(totalLatency / results.length) : 0,
+            max_latency_ms: maxLatency,
+            expected_statuses: expectedStatuses
+          },
+          tenant_id: tenantId,
+          base_url: baseUrl,
+          results,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      console.error('Full scan error:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

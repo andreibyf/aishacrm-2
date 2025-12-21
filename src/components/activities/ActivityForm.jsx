@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Activity } from '@/api/entities';
-import { Contact, Account, Lead, Opportunity, User } from '@/api/entities';
+import { Contact, Account, Lead, Opportunity } from '@/api/entities';
+import { useUser } from '@/components/shared/useUser.js';
+import { useEntityLabel } from '@/components/shared/EntityLabelsContext';
 import { Note } from "@/api/entities"; // NEW: Import Note entity
 import { useTimezone } from '../shared/TimezoneContext';
 import { localToUtc, utcToLocal, getCurrentTimezoneOffset } from '../shared/timezoneUtils';
@@ -14,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon, Mail, Phone, Loader2, FileText } from "lucide-react"; // NEW: Add FileText icon
 import { toast } from "sonner";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 
 // Helper to generate time options with 15-minute increments
 const generateTimeOptions = () => {
@@ -32,6 +35,7 @@ const timeOptions = generateTimeOptions();
 
 export default function ActivityForm({ activity, relatedTo, relatedId, onSave, onCancel, tenantId, user: propsUser }) {
   const { selectedTimezone } = useTimezone();
+  const { singular: activityLabel } = useEntityLabel('activities');
   const offsetMinutes = getCurrentTimezoneOffset(selectedTimezone);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [contacts, setContacts] = useState([]);
@@ -39,13 +43,13 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
   const [leads, setLeads] = useState([]);
   const [opportunities, setOpportunities] = useState([]);
   const [relatedRecords, setRelatedRecords] = useState([]);
-  const [, setLoadingUser] = useState(false);
+  // Removed local loading state; rely on global user context
   const [, setSelectedRelatedRecord] = useState(null);
 
-  // NEW: User state and loading for admin check
-  const [user, setUser] = useState(null);
+  // NEW: Use global user context with optional prop override
+  const { user } = useUser();
   const effectiveUser = propsUser || user;
-  const isAdmin = effectiveUser?.role === 'admin' || effectiveUser?.role === 'superadmin';
+  const isSuperadmin = effectiveUser?.role === 'superadmin';
 
   // NEW: State for notes section
   const [notes, setNotes] = useState([]);
@@ -146,23 +150,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
     setFormData(getInitialFormData());
   }, [activity, relatedTo, relatedId, getInitialFormData]);
 
-  // NEW: Load user for admin check (only if not provided via props)
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await User.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error('Failed to load current user:', error);
-        toast.error('Failed to load user information.');
-      } finally {
-        setLoadingUser(false);
-      }
-    };
-    if (!propsUser && !user && tenantId) { // Only load if not provided via props and tenantId is available
-      loadUser();
-    }
-  }, [propsUser, user, tenantId]);
+  // Remove local User.me fetch; rely on global context
 
 
   // Load related data
@@ -564,17 +552,41 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
 
   const statusOptions = [
     { value: 'scheduled', label: 'Scheduled' },
+    { value: 'in-progress', label: 'In Progress' },
+    { value: 'overdue', label: 'Overdue' },
     { value: 'completed', label: 'Completed' },
     { value: 'cancelled', label: 'Cancelled' },
-    { value: 'in-progress', label: 'In Progress' },
   ];
+
+  const { isCardVisible, getCardLabel } = useStatusCardPreferences();
+
+  // Filter activity status options based on card visibility and apply custom labels
+  // Keep hidden statuses if the current activity has them
+  const filteredStatusOptions = useMemo(() => {
+    const statusCardMap = {
+      'scheduled': 'activity_scheduled',
+      'in-progress': 'activity_in_progress',
+      'overdue': 'activity_overdue',
+      'completed': 'activity_completed',
+      'cancelled': 'activity_cancelled',
+    };
+    
+    return statusOptions
+      .filter(option => 
+        isCardVisible(statusCardMap[option.value]) || formData.status === option.value
+      )
+      .map(option => ({
+        ...option,
+        label: getCardLabel(statusCardMap[option.value]) || option.label
+      }));
+  }, [isCardVisible, getCardLabel, formData.status]);
 
   return (
       <div className="p-1 bg-slate-800 max-h-[85vh] overflow-y-auto">
         <form onSubmit={handleSubmit} className="space-y-6" data-testid="activity-form">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="type" className="text-slate-200">Activity Type *</Label>
+              <Label htmlFor="type" className="text-slate-200">{activityLabel} Type *</Label>
               <Select value={formData.type} onValueChange={(value) => handleChange('type', value)}>
                 <SelectTrigger className="mt-1 bg-slate-700 border-slate-600 text-slate-200" data-testid="activity-type-select">
                   <SelectValue placeholder="Select type..." />
@@ -670,7 +682,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
                   <SelectValue placeholder="Select status..." />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700 z-[2147483010]">
-                  {statusOptions.map((option) => (
+                  {filteredStatusOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value} className="text-slate-200 hover:bg-slate-700">
                       {option.label}
                     </SelectItem>
@@ -940,8 +952,8 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
             </div>
           )}
 
-          {/* ONLY show test data toggle to admins */}
-          {isAdmin && (
+          {/* ONLY show test data toggle to Superadmin */}
+          {isSuperadmin && (
             <div className="flex items-center space-x-2 p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
               <Switch
                 id="is_test_data"
@@ -954,7 +966,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
                 Mark as Test Data
               </Label>
               <span className="text-xs text-amber-400 ml-2">
-                (For admin cleanup purposes)
+                (For Superadmin cleanup purposes)
               </span>
             </div>
           )}

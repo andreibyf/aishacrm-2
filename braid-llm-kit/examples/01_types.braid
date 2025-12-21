@@ -1,0 +1,9 @@
+type Email = String
+type User = { id: u64, name: String, email: Email }
+
+fn greet(u: User) -> String {
+  match u.name {
+    "" => "Hello",
+    n  => "Hello, " + n
+  }
+}

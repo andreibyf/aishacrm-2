@@ -1,3 +1,4 @@
+import { logDev } from "@/utils/devLogger";
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Mic, MicOff } from "lucide-react";
@@ -28,7 +29,7 @@ export default function MicButton({ className = "" }) {
       try {
         isStartingRef.current = true;
         recog.start();
-        console.log('[MicButton] Restarted recognition after delay');
+        logDev('[MicButton] Restarted recognition after delay');
       } catch (err) {
         console.warn('[MicButton] Restart failed:', err);
         isStartingRef.current = false;
@@ -42,14 +43,14 @@ export default function MicButton({ className = "" }) {
   }, []);
 
   React.useEffect(() => {
-    console.log('[MicButton] Initializing...');
+    logDev('[MicButton] Initializing...');
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
       console.warn('[MicButton] Speech Recognition not supported in this browser');
       return;
     }
 
-    console.log('[MicButton] Speech Recognition supported!');
+    logDev('[MicButton] Speech Recognition supported!');
     setSupported(true);
     const recog = new SR();
     recog.lang = "en-US";
@@ -58,7 +59,7 @@ export default function MicButton({ className = "" }) {
     recog.maxAlternatives = 1;
 
     recog.onstart = () => {
-      console.log('[MicButton] Recognition started');
+      logDev('[MicButton] Recognition started');
       lastStartRef.current = performance.now();
       setListening(true);
       window.dispatchEvent(new CustomEvent("chat:mic-active", { detail: { active: true } }));
@@ -69,18 +70,18 @@ export default function MicButton({ className = "" }) {
     recog.onresult = (e) => {
       // Ignore results while audio is playing
       if (audioPlayingRef.current) {
-        console.log('[MicButton] Ignoring speech during audio playback');
+        logDev('[MicButton] Ignoring speech during audio playback');
         return;
       }
       
-      console.log('[MicButton] Got speech result:', e);
+      logDev('[MicButton] Got speech result:', e);
       const parts = [];
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
         if (r.isFinal && r[0]?.transcript) parts.push(r[0].transcript);
       }
       const transcript = parts.join(" ").trim();
-      console.log('[MicButton] Final transcript:', transcript);
+      logDev('[MicButton] Final transcript:', transcript);
       if (transcript) {
         window.dispatchEvent(new CustomEvent("chat:voice-result", { detail: { transcript } }));
       }
@@ -88,7 +89,7 @@ export default function MicButton({ className = "" }) {
     };
 
     recog.onspeechend = () => {
-      console.log('[MicButton] Speech ended');
+      logDev('[MicButton] Speech ended');
       scheduleSilenceCheck();
     };
 
@@ -99,7 +100,7 @@ export default function MicButton({ className = "" }) {
         ["no-speech", "aborted", "network", "audio-capture", "service-not-allowed"].includes(error) ||
         /busy|in use|invalid-state/i.test(error);
       if (keepAliveRef.current && recoverable && !audioPlayingRef.current) {
-        console.log('[MicButton] Recoverable error, restarting...');
+        logDev('[MicButton] Recoverable error, restarting...');
         restartWithDelay(error === "invalid-state" ? 1500 : 1000);
         return;
       }
@@ -109,9 +110,9 @@ export default function MicButton({ className = "" }) {
     };
 
     recog.onend = () => {
-      console.log('[MicButton] Recognition ended');
+      logDev('[MicButton] Recognition ended');
       if (keepAliveRef.current && !audioPlayingRef.current) {
-        console.log('[MicButton] Keep-alive is true, restarting...');
+        logDev('[MicButton] Keep-alive is true, restarting...');
         restartWithDelay(1200);
         return;
       }
@@ -120,11 +121,11 @@ export default function MicButton({ className = "" }) {
     };
 
     recognitionRef.current = recog;
-    console.log('[MicButton] Recognition object created');
+    logDev('[MicButton] Recognition object created');
 
     // NEW: Listen for audio lock/unlock events
     const handleLockOpen = () => {
-      console.log('[MicButton] Audio playback started - pausing recognition');
+      logDev('[MicButton] Audio playback started - pausing recognition');
       audioPlayingRef.current = true;
       try {
         if (recognitionRef.current) {
@@ -136,7 +137,7 @@ export default function MicButton({ className = "" }) {
     };
 
     const handleUnlockOpen = () => {
-      console.log('[MicButton] Audio playback ended - resuming recognition');
+      logDev('[MicButton] Audio playback ended - resuming recognition');
       audioPlayingRef.current = false;
       if (keepAliveRef.current) {
         restartWithDelay(800); // Short delay before restarting
@@ -150,7 +151,7 @@ export default function MicButton({ className = "" }) {
     const silenceTimerId = silenceTimerRef.current;
 
     return () => {
-      console.log('[MicButton] Cleaning up...');
+      logDev('[MicButton] Cleaning up...');
       keepAliveRef.current = false;
       clearTimeout(restartTimerId);
       clearTimeout(silenceTimerId);
@@ -163,7 +164,7 @@ export default function MicButton({ className = "" }) {
   }, [restartWithDelay, scheduleSilenceCheck]);
 
   const start = () => {
-    console.log('[MicButton] Start button clicked');
+    logDev('[MicButton] Start button clicked');
     const recog = recognitionRef.current;
     if (!recog) {
       console.error('[MicButton] No recognition object');
@@ -178,12 +179,12 @@ export default function MicButton({ className = "" }) {
       return;
     }
     
-    console.log('[MicButton] Starting recognition...');
+    logDev('[MicButton] Starting recognition...');
     keepAliveRef.current = true;
     try {
       isStartingRef.current = true;
       recog.start();
-      console.log('[MicButton] Recognition.start() called');
+      logDev('[MicButton] Recognition.start() called');
     } catch (err) {
       console.error('[MicButton] Failed to start:', err);
       isStartingRef.current = false;
@@ -192,21 +193,21 @@ export default function MicButton({ className = "" }) {
   };
 
   const stop = () => {
-    console.log('[MicButton] Stop button clicked');
+    logDev('[MicButton] Stop button clicked');
     keepAliveRef.current = false;
     audioPlayingRef.current = false;
     clearTimeout(restartTimerRef.current);
     clearTimeout(silenceTimerRef.current);
     try { 
       recognitionRef.current?.stop();
-      console.log('[MicButton] Recognition stopped');
+      logDev('[MicButton] Recognition stopped');
     } catch (err) {
       console.error('[MicButton] Error stopping:', err);
     }
   };
 
   const toggle = () => {
-    console.log('[MicButton] Toggle clicked, current state:', { 
+    logDev('[MicButton] Toggle clicked, current state:', { 
       supported, 
       listening, 
       keepAlive: keepAliveRef.current,
@@ -226,7 +227,7 @@ export default function MicButton({ className = "" }) {
     }
   };
 
-  console.log('[MicButton] Rendering, supported:', supported);
+  logDev('[MicButton] Rendering, supported:', supported);
 
   if (!supported) {
     return (

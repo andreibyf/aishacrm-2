@@ -1,28 +1,334 @@
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 
-export default function createOpportunityRoutes(pgPool) {
+export default function createOpportunityRoutes(_pgPool) {
   const router = express.Router();
+  /**
+   * @openapi
+   * /api/opportunities:
+   *   get:
+   *     summary: List opportunities
+   *     tags: [opportunities]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Opportunities list
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     opportunities:
+   *                       type: array
+   *                       items:
+   *                         type: object
+   *                         properties:
+   *                           id:
+   *                             type: string
+   *                           tenant_id:
+   *                             type: string
+   *                             format: uuid
+   *                           name:
+   *                             type: string
+   *                           account_id:
+   *                             type: string
+   *                             nullable: true
+   *                           contact_id:
+   *                             type: string
+   *                             nullable: true
+   *                           stage:
+   *                             type: string
+   *                             example: prospecting
+   *                           amount:
+   *                             type: number
+   *                             format: float
+   *                           probability:
+   *                             type: integer
+   *                             minimum: 0
+   *                             maximum: 100
+   *                           close_date:
+   *                             type: string
+   *                             format: date
+   *                           created_at:
+   *                             type: string
+   *                             format: date-time
+   *   post:
+   *     summary: Create opportunity
+   *     tags: [opportunities]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id]
+   *           example:
+   *             tenant_id: "550e8400-e29b-41d4-a716-446655440000"
+   *             name: "Enterprise Software License"
+   *             account_id: "acc_12345"
+   *             stage: "prospecting"
+   *             amount: 50000
+   *             probability: 25
+   *             close_date: "2025-12-31"
+   *     responses:
+   *       201:
+   *         description: Opportunity created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                   example: success
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     id:
+   *                       type: string
+   *                     tenant_id:
+   *                       type: string
+   *                       format: uuid
+   *                     name:
+   *                       type: string
+   *                     account_id:
+   *                       type: string
+   *                     stage:
+   *                       type: string
+   *                     amount:
+   *                       type: number
+   *                     probability:
+   *                       type: integer
+   *                     close_date:
+   *                       type: string
+   *                       format: date
+   *                     created_at:
+   *                       type: string
+   *                       format: date-time
+   */
 
   // Apply tenant validation and employee data scope to all routes
   router.use(validateTenantAccess);
   router.use(enforceEmployeeDataScope);
 
-// Helper function to expand metadata fields to top-level properties
+  const toNullableString = (value) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    }
+    if (value === null) return null;
+    return value === undefined ? undefined : String(value);
+  };
+
+  const toInteger = (value) => {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const toNumeric = (value) => {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = Number.parseFloat(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const toTagArray = (value) => {
+    if (!Array.isArray(value)) return null;
+    return value
+      .map((tag) => (typeof tag === 'string' ? tag.trim() : ''))
+      .filter(Boolean);
+  };
+
+  const MIRRORED_METADATA_KEYS = [
+    'lead_id',
+    'lead_source',
+    'type',
+    'tags',
+    'amount',
+    'stage',
+    'probability',
+    'close_date',
+    'name',
+    'account_id',
+    'contact_id',
+  ];
+
+  const sanitizeMetadataPayload = (...sources) => {
+    const merged = sources.reduce((acc, src) => {
+      if (src && typeof src === 'object' && !Array.isArray(src)) {
+        Object.assign(acc, src);
+      }
+      return acc;
+    }, {});
+
+    MIRRORED_METADATA_KEYS.forEach((key) => {
+      if (key in merged) {
+        delete merged[key];
+      }
+    });
+
+    return merged;
+  };
+
+  const assignStringField = (target, key, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target[key] = null;
+      return;
+    }
+    target[key] = toNullableString(value);
+  };
+
+  const _assignIntegerField = (target, key, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target[key] = null;
+      return;
+    }
+    const parsed = toInteger(value);
+    if (parsed !== null) {
+      target[key] = parsed;
+    }
+  };
+
+  const _assignNumericField = (target, key, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target[key] = null;
+      return;
+    }
+    const parsed = toNumeric(value);
+    if (parsed !== null) {
+      target[key] = parsed;
+    }
+  };
+
+  const assignTagsField = (target, value) => {
+    if (value === undefined) return;
+    if (value === null) {
+      target.tags = null;
+      return;
+    }
+    const parsed = toTagArray(value);
+    if (parsed !== null) {
+      target.tags = parsed;
+    }
+  };
+
+  const clampProbability = (value) => {
+    const parsed = toInteger(value);
+    if (parsed === null) return null;
+    return Math.min(100, Math.max(0, parsed));
+  };
+
+  // Helper function to expand metadata fields to top-level properties
+  // IMPORTANT: Do not let metadata keys override persisted columns (e.g., stage, amount)
   const expandMetadata = (record) => {
     if (!record) return record;
-    const { metadata = {}, ...rest } = record;
+    const { metadata, ...rest } = record;
+    const metadataObj = metadata && typeof metadata === 'object' ? metadata : {};
     return {
+      ...metadataObj,
       ...rest,
-      ...metadata,
-      metadata,
+      metadata: metadataObj,
     };
   };
+
+  // GET /api/opportunities/search - Search opportunities by name or account
+  /**
+   * @openapi
+   * /api/opportunities/search:
+   *   get:
+   *     summary: Search opportunities by name
+   *     tags: [opportunities]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: q
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 25 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Search results
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
+  router.get('/search', async (req, res) => {
+    try {
+      let { tenant_id, q = '' } = req.query;
+      const limit = parseInt(req.query.limit || '25', 10);
+      const offset = parseInt(req.query.offset || '0', 10);
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      if (!q || !q.trim()) {
+        return res.status(400).json({ status: 'error', message: 'q is required' });
+      }
+
+      const like = `%${q}%`;
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error, count } = await supabase
+        .from('opportunities')
+        .select('*', { count: 'exact' })
+        .eq('tenant_id', tenant_id)
+        .or(`name.ilike.${like},description.ilike.${like}`)
+        .order('updated_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (error) throw new Error(error.message);
+
+      const opportunities = (data || []).map(expandMetadata);
+
+      res.json({
+        status: 'success',
+        data: {
+          opportunities,
+          total: count || 0,
+          limit,
+          offset,
+        },
+      });
+    } catch (error) {
+      console.error('Error searching opportunities:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
 
   // GET /api/opportunities - List opportunities with filtering
   router.get('/', async (req, res) => {
     try {
-      const { tenant_id, limit = 50, offset = 0 } = req.query;
+      let { tenant_id, filter, stage } = req.query;
+      const limit = parseInt(req.query.limit || '50', 10);
+      const offset = parseInt(req.query.offset || '0', 10);
 
       if (!tenant_id) {
         return res.status(400).json({
@@ -31,27 +337,87 @@ export default function createOpportunityRoutes(pgPool) {
         });
       }
 
-      const query = `
-        SELECT * FROM opportunities 
-        WHERE tenant_id = $1 
-        ORDER BY created_date DESC 
-        LIMIT $2 OFFSET $3
-      `;
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      let q = supabase
+        .from('opportunities')
+        .select('*', { count: 'exact' })
+        .eq('tenant_id', tenant_id);
+
+      // Stage filter (ignore 'all', 'any', '', 'undefined' as they mean no filter)
+      if (stage && stage !== 'all' && stage !== 'any' && stage !== '' && stage !== 'undefined') {
+        q = q.eq('stage', stage.toLowerCase());
+      }
+
+      // Handle filter for assigned_to and dynamic search
+      if (filter) {
+        let parsedFilter = filter;
+        if (typeof filter === 'string' && filter.startsWith('{')) {
+          try {
+            parsedFilter = JSON.parse(filter);
+          } catch {
+            // treat as literal
+          }
+        }
+        
+        // Handle assigned_to filter (supports UUID, null, or email)
+        if (typeof parsedFilter === 'object' && parsedFilter.assigned_to !== undefined) {
+          q = q.eq('assigned_to', parsedFilter.assigned_to);
+        }
+
+        // Handle is_test_data filter
+        if (typeof parsedFilter === 'object' && parsedFilter.is_test_data !== undefined) {
+          q = q.eq('is_test_data', parsedFilter.is_test_data);
+        }
+
+        // Handle $or for unassigned or dynamic search
+        if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
+          // Check if this is an "unassigned" filter
+          const isUnassignedFilter = parsedFilter.$or.some(cond => 
+            cond.assigned_to === null || cond.assigned_to === ''
+          );
+
+          if (isUnassignedFilter) {
+            // For unassigned, check for null or empty string
+            q = q.or('assigned_to.is.null,assigned_to.eq.');
+          } else {
+            // Handle other $or conditions (like search)
+            const orConditions = parsedFilter.$or.map(condition => {
+              const [field, opObj] = Object.entries(condition)[0];
+              if (opObj && opObj.$icontains) {
+                return `${field}.ilike.%${opObj.$icontains}%`;
+              }
+              return null;
+            }).filter(Boolean);
+
+            if (orConditions.length > 0) {
+              q = q.or(orConditions.join(','));
+            }
+          }
+        }
+      }
       
-      const result = await pgPool.query(query, [tenant_id, parseInt(limit), parseInt(offset)]);
+      q = q.order('created_date', { ascending: false })
+        .range(offset, offset + limit - 1);
       
-      const countQuery = 'SELECT COUNT(*) FROM opportunities WHERE tenant_id = $1';
-      const countResult = await pgPool.query(countQuery, [tenant_id]);
+      const { data, error, count } = await q;
+      if (error) throw new Error(error.message);
       
-      const opportunities = result.rows.map(expandMetadata);
+      const opportunities = (data || []).map(expandMetadata);
       
+      // Disable caching for dynamic list to avoid stale 304 during rapid updates
+      res.set({
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      });
       res.json({
         status: 'success',
         data: {
           opportunities,
-          total: parseInt(countResult.rows[0].count),
-          limit: parseInt(limit),
-          offset: parseInt(offset)
+          total: count || 0,
+          limit,
+          offset
         }
       });
     } catch (error) {
@@ -63,26 +429,98 @@ export default function createOpportunityRoutes(pgPool) {
     }
   });
 
-  // GET /api/opportunities/:id - Get single opportunity (tenant scoped when tenant_id provided)
+  // GET /api/opportunities/:id - Get single opportunity (tenant required)
+  /**
+   * @openapi
+   * /api/opportunities/{id}:
+   *   get:
+   *     summary: Get opportunity by ID
+   *     tags: [opportunities]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Opportunity details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   put:
+   *     summary: Update opportunity
+   *     tags: [opportunities]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *     responses:
+   *       200:
+   *         description: Opportunity updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   delete:
+   *     summary: Delete opportunity
+   *     tags: [opportunities]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Opportunity deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.get('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.query || {};
-      let result;
-      if (tenant_id) {
-        result = await pgPool.query('SELECT * FROM opportunities WHERE id = $1 AND tenant_id = $2', [id, tenant_id]);
-      } else {
-        result = await pgPool.query('SELECT * FROM opportunities WHERE id = $1', [id]);
+      let { tenant_id } = req.query || {};
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
-      
-      if (result.rows.length === 0) {
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('opportunities')
+        .select('*')
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .single();
+      if (error?.code === 'PGRST116') {
         return res.status(404).json({
           status: 'error',
           message: 'Opportunity not found'
         });
       }
-      
-      const opportunity = expandMetadata(result.rows[0]);
+      if (error) throw new Error(error.message);
+
+      // Disable caching for single record as well
+      res.set({
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      });
+      const opportunity = expandMetadata(data);
       
       res.json({
         status: 'success',
@@ -100,7 +538,27 @@ export default function createOpportunityRoutes(pgPool) {
   // POST /api/opportunities - Create new opportunity
   router.post('/', async (req, res) => {
     try {
-      const { tenant_id, name, account_id, contact_id, amount, stage, probability, close_date, metadata, ...otherFields } = req.body;
+      const {
+        tenant_id,
+        name,
+        description,
+        expected_revenue,
+        next_step,
+        account_id,
+        contact_id,
+        amount,
+        stage,
+        probability,
+        close_date,
+        metadata = {},
+        lead_id,
+        lead_source,
+        type: opportunityType,
+        tags,
+        assigned_to,
+        assigned_to_name,
+        ...otherFields
+      } = req.body || {};
       
       if (!tenant_id) {
         return res.status(400).json({
@@ -109,36 +567,47 @@ export default function createOpportunityRoutes(pgPool) {
         });
       }
 
-      // Merge metadata with unknown fields
-      const combinedMetadata = {
-        ...(metadata || {}),
-        ...otherFields
+      const metadataExtras = {};
+      if (description !== undefined && description !== null) metadataExtras.description = description;
+      if (expected_revenue !== undefined && expected_revenue !== null) metadataExtras.expected_revenue = expected_revenue;
+      if (next_step !== undefined && next_step !== null) metadataExtras.next_step = next_step;
+      if (lead_id !== undefined && lead_id !== null) metadataExtras.lead_id = lead_id;
+      if (lead_source !== undefined && lead_source !== null) metadataExtras.lead_source = lead_source;
+      if (opportunityType !== undefined && opportunityType !== null) metadataExtras.type = opportunityType;
+      const combinedMetadata = sanitizeMetadataPayload(metadata, otherFields, metadataExtras);
+
+      const nowIso = new Date().toISOString();
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const normalizedStage = typeof stage === 'string' && stage.trim() ? stage.trim().toLowerCase() : 'prospecting';
+      const parsedAmount = toNumeric(amount);
+      const parsedProbability = clampProbability(probability);
+      const opportunityPayload = {
+        tenant_id,
+        name: name?.trim?.() || null,
+        account_id: account_id || null,
+        contact_id: contact_id || null,
+        lead_id: lead_id || null,
+        stage: normalizedStage,
+        metadata: combinedMetadata,
+        created_at: nowIso,
       };
 
-      const query = `
-        INSERT INTO opportunities (
-          tenant_id, name, account_id, contact_id, amount, stage, 
-          probability, close_date, metadata, created_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()
-        ) RETURNING *
-      `;
+      opportunityPayload.amount = parsedAmount !== null ? parsedAmount : 0;
+      opportunityPayload.probability = parsedProbability !== null ? parsedProbability : 0;
+      assignStringField(opportunityPayload, 'close_date', close_date);
+      assignTagsField(opportunityPayload, tags);
+      if (assigned_to !== undefined) opportunityPayload.assigned_to = assigned_to || null;
+      if (assigned_to_name !== undefined) opportunityPayload.assigned_to_name = assigned_to_name || null;
+
+      const { data, error } = await supabase
+        .from('opportunities')
+        .insert([opportunityPayload])
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
       
-      const values = [
-        tenant_id,
-        name,
-        account_id || null,
-        contact_id || null,
-        amount || 0,
-        stage || 'prospecting',
-        probability || 0,
-        close_date || null,
-        combinedMetadata
-      ];
-      
-      const result = await pgPool.query(query, values);
-      
-      const opportunity = expandMetadata(result.rows[0]);
+      const opportunity = expandMetadata(data);
       
       res.status(201).json({
         status: 'success',
@@ -157,63 +626,101 @@ export default function createOpportunityRoutes(pgPool) {
   router.put('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, account_id, contact_id, amount, stage, probability, close_date, metadata, ...otherFields } = req.body;
-      
-      // Fetch current metadata
-      const currentOpp = await pgPool.query('SELECT metadata FROM opportunities WHERE id = $1', [id]);
-      
-      if (currentOpp.rows.length === 0) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'Opportunity not found'
-        });
-      }
-
-      // Merge metadata
-      const currentMetadata = currentOpp.rows[0].metadata || {};
-      const updatedMetadata = {
-        ...currentMetadata,
-        ...(metadata || {}),
-        ...otherFields,
-      };
-      
-      const query = `
-        UPDATE opportunities SET
-          name = COALESCE($1, name),
-          account_id = COALESCE($2, account_id),
-          contact_id = COALESCE($3, contact_id),
-          amount = COALESCE($4, amount),
-          stage = COALESCE($5, stage),
-          probability = COALESCE($6, probability),
-          close_date = COALESCE($7, close_date),
-          metadata = $8,
-          updated_at = NOW()
-        WHERE id = $9
-        RETURNING *
-      `;
-      
-      const values = [
+      const {
         name,
+        description,
+        expected_revenue,
+        next_step,
         account_id,
         contact_id,
         amount,
         stage,
         probability,
         close_date,
-        updatedMetadata,
-        id
-      ];
+        metadata = {},
+        lead_id,
+        lead_source,
+        type: opportunityType,
+        tags,
+        assigned_to,
+        assigned_to_name,
+        ...otherFields
+      } = req.body || {};
+      let requestedTenantId = req.body?.tenant_id || req.query?.tenant_id || null;
+
+      if (!requestedTenantId) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required for update' });
+      }
       
-      const result = await pgPool.query(query, values);
-      
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data: before, error: fetchErr } = await supabase
+        .from('opportunities')
+        .select('id, tenant_id, stage, metadata')
+        .eq('id', id)
+        .eq('tenant_id', requestedTenantId)
+        .single();
+      if (fetchErr?.code === 'PGRST116') {
         return res.status(404).json({
           status: 'error',
           message: 'Opportunity not found'
         });
       }
+      if (fetchErr) throw new Error(fetchErr.message);
+
+      const metadataExtras = {};
+      if (description !== undefined) metadataExtras.description = description;
+      if (expected_revenue !== undefined) metadataExtras.expected_revenue = expected_revenue;
+      if (next_step !== undefined) metadataExtras.next_step = next_step;
+      if (lead_id !== undefined) metadataExtras.lead_id = lead_id;
+      if (lead_source !== undefined) metadataExtras.lead_source = lead_source;
+      if (opportunityType !== undefined) metadataExtras.type = opportunityType;
+      const updatedMetadata = sanitizeMetadataPayload(before?.metadata, metadata, otherFields, metadataExtras);
+      const normalizedStage = typeof stage === 'string' ? stage.trim().toLowerCase() : null;
       
-      const updatedOpportunity = expandMetadata(result.rows[0]);
+      const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
+      if (name !== undefined) payload.name = name?.trim?.() || null;
+      if (account_id !== undefined) payload.account_id = account_id || null;
+      if (contact_id !== undefined) payload.contact_id = contact_id || null;
+      if (lead_id !== undefined) payload.lead_id = lead_id || null;
+      if (amount !== undefined) {
+        const parsedAmount = toNumeric(amount);
+        payload.amount = parsedAmount !== null ? parsedAmount : null;
+      }
+      if (normalizedStage !== null) payload.stage = normalizedStage;
+      if (probability !== undefined) {
+        const clamped = clampProbability(probability);
+        payload.probability = clamped !== null ? clamped : null;
+      }
+      assignStringField(payload, 'close_date', close_date);
+      assignTagsField(payload, tags);
+      if (assigned_to !== undefined) payload.assigned_to = assigned_to || null;
+      if (assigned_to_name !== undefined) payload.assigned_to_name = assigned_to_name || null;
+
+      const { data, error } = await supabase
+        .from('opportunities')
+        .update(payload)
+        .eq('id', id)
+        .eq('tenant_id', requestedTenantId)
+        .select('*')
+        .single();
+      if (error?.code === 'PGRST116') {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Opportunity not found for tenant'
+        });
+      }
+      if (error) throw new Error(error.message);
+
+      if (normalizedStage !== null && data.stage !== normalizedStage) {
+        console.warn('[Opportunities PUT] ⚠️  Stage mismatch', {
+          expected: normalizedStage,
+          persisted: data.stage,
+          id: data.id
+        });
+      }
+
+      const updatedOpportunity = expandMetadata(data);
       
       res.json({
         status: 'success',
@@ -232,9 +739,16 @@ export default function createOpportunityRoutes(pgPool) {
   router.delete('/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const result = await pgPool.query('DELETE FROM opportunities WHERE id = $1 RETURNING *', [id]);
-      
-      if (result.rows.length === 0) {
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('opportunities')
+        .delete()
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') throw new Error(error.message);
+      if (!data) {
         return res.status(404).json({
           status: 'error',
           message: 'Opportunity not found'

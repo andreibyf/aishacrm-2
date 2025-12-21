@@ -28,6 +28,9 @@ dist-ssr
 .env.local
 .env.production
 .env.*.local
+.env.docker
+.doppler-token
+*.backup
 backend/.env
 
 # Test artifacts (Playwright reports, coverage, etc.)
@@ -57,3 +60,37 @@ test-results/
 *.tmp
 *.temp
 .cache/
+
+# Local knowledge-base/editor backups
+logseq/
+
+# Local development scripts (one-off migrations, testing, etc.)
+add-tenant-columns.js
+add-tenant-columns.sql
+copy-auth-direct.js
+copy-auth-mapped.js
+copy-auth-tables.js
+copy-prod-to-dev*.js
+copy-prod-to-dev*.sh
+copy-prod-to-dev*.ps1
+copy-tenant-minimal.js
+test-dev-setup.js
+setup-dev-db.sh
+test-dashboard-endpoints.ps1
+dashboard-endpoint-test-results.json
+tmp-check-user.mjs
+
+# Production database dumps (NEVER COMMIT)
+prod_data.sql
+prod_dump*.sql
+
+# Deployment helper scripts (version-specific)
+deploy-v*.ps1
+deploy-v*.sh
+
+# Temporary documentation (one-off notes)
+DEPLOY_V1.*.md
+ENVIRONMENT_INDICATORS.md
+ENVIRONMENT_QUICK_REFERENCE.md
+ENVIRONMENT_VARIABLES_AUDIT.md
+RATE_LIMIT_MANAGEMENT.md

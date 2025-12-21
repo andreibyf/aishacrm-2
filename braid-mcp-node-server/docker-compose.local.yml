@@ -1,0 +1,76 @@
+services:
+  # MCP Server - coordinates requests
+  braid-mcp-server:
+    build: .
+    container_name: braid-mcp-server
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      MCP_ROLE: server
+      MCP_NODE_ID: "braid-mcp-server"
+      # Docker-specific overrides (connect to other containers via aishanet)
+      CRM_BACKEND_URL: http://aishacrm-backend:3001
+      REDIS_URL: redis://aishacrm-redis-memory:6379
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    networks:
+      - aishanet
+
+  # MCP Node 1 - worker node
+  braid-mcp-1:
+    build: .
+    container_name: braid-mcp-1
+    restart: unless-stopped
+    depends_on:
+      - braid-mcp-server
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      MCP_ROLE: node
+      MCP_NODE_ID: "braid-mcp-1"
+      # Docker-specific overrides (connect to other containers via aishanet)
+      CRM_BACKEND_URL: http://aishacrm-backend:3001
+      REDIS_URL: redis://aishacrm-redis-memory:6379
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    networks:
+      - aishanet
+
+  # MCP Node 2 - additional capacity for multi-tenant scaling
+  braid-mcp-2:
+    build: .
+    container_name: braid-mcp-2
+    restart: unless-stopped
+    depends_on:
+      - braid-mcp-server
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      MCP_ROLE: node
+      MCP_NODE_ID: "braid-mcp-2"
+      # Docker-specific overrides (connect to other containers via aishanet)
+      CRM_BACKEND_URL: http://aishacrm-backend:3001
+      REDIS_URL: redis://aishacrm-redis-memory:6379
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    networks:
+      - aishanet
+
+networks:
+  aishanet:
+    external: true

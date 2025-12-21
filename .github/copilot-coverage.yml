@@ -1,0 +1,96 @@
+# GitHub Copilot Code Coverage Configuration
+# This file configures how Copilot identifies test files and their corresponding source files.
+
+# IMPORTANT: Backend tests use Node.js assert module (node:assert/strict)
+# Assertions use: assert.equal(), assert.ok(), assert.strictEqual(), assert.deepEqual()
+# NOT expect() - this is valid and should not be flagged as "no assertions"
+
+# Test file patterns - tells Copilot where to find tests
+test_patterns:
+  # Backend tests (node:test framework)
+  - pattern: "backend/__tests__/**/*.test.js"
+    source_patterns:
+      # Route tests map to routes directory
+      - "backend/routes/{name}.js"
+      - "backend/routes/{name}.v2.js"
+      # AI tests map to lib directory
+      - "backend/lib/{name}.js"
+      - "backend/lib/ai*.js"
+      # Middleware tests
+      - "backend/middleware/{name}.js"
+      - "backend/middleware/auth*.js"
+  
+  # Frontend tests (vitest)
+  - pattern: "src/**/*.test.{js,jsx,ts,tsx}"
+    source_patterns:
+      - "src/**/{name}.{js,jsx,ts,tsx}"
+
+# Files that don't need tests (configuration, types, etc.)
+excluded_from_coverage:
+  # Configuration files
+  - "*.config.js"
+  - "*.config.ts"
+  - "vite.config.js"
+  - "vitest.config.js"
+  - "tailwind.config.js"
+  - "postcss.config.js"
+  
+  # Type definitions
+  - "**/*.d.ts"
+  - "**/types.ts"
+  - "**/types/*.ts"
+  
+  # Entry points
+  - "src/main.jsx"
+  - "src/index.jsx"
+  - "backend/server.js"
+  
+  # Mock data and test utilities
+  - "**/mockData.js"
+  - "**/test/**"
+  - "**/__mocks__/**"
+  
+  # Generated files
+  - "**/dist/**"
+  - "**/build/**"
+  
+  # Migration and script files
+  - "backend/migrations/**"
+  - "backend/scripts/**"
+  - "backend/seed-*.js"
+  - "backend/run-*.js"
+  - "backend/verify-*.js"
+  
+  # Utilities that are tested via integration
+  - "src/lib/supabase.js"
+  - "src/api/backendUrl.js"
+
+# Test directory mappings for orphan detection
+test_directories:
+  # Backend uses __tests__ directory with subdirectories by feature
+  - tests: "backend/__tests__/routes"
+    sources: "backend/routes"
+  - tests: "backend/__tests__/ai"
+    sources: 
+      - "backend/lib"
+      - "backend/routes/suggestions.js"
+      - "backend/routes/ai.js"
+  - tests: "backend/__tests__/auth"
+    sources: 
+      - "backend/middleware"
+      - "backend/lib/auth*.js"
+  - tests: "backend/__tests__/phase3"
+    sources:
+      - "backend/lib/ai*.js"
+      - "backend/routes/suggestions.js"
+      - "src/components/ai"
+  - tests: "backend/__tests__/integration"
+    sources:
+      - "backend/routes/mcp.js"
+      - "backend/lib/mcp*.js"
+  - tests: "backend/__tests__/system"
+    sources: "backend/server.js"
+    
+  # Frontend tests alongside source files
+  - tests: "src/**/__tests__"
+    sources: "src"

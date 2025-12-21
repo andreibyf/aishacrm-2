@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { formatIndustry } from "@/utils/industryUtils";
 import {
   Mail,
   Phone,
@@ -48,7 +49,7 @@ export default function AccountCard({ account, assignedUserName, onEdit, onDelet
                 {account.name}
               </CardTitle>
               <p className="text-sm font-normal text-slate-400 mt-1">
-                {account.industry?.replace(/_/g, ' ')}
+                {formatIndustry(account.industry)}
               </p>
             </div>
           </div>

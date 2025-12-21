@@ -13,7 +13,7 @@
 export const navItems = [
   { href: "Dashboard", label: "Dashboard" },
   { href: "Contacts", label: "Contacts" },
-  { href: "Accounts", label: "Accounts" },
+  { href: "Customers", label: "Customers" },
   { href: "Leads", label: "Leads" },
   { href: "Opportunities", label: "Opportunities" },
   { href: "Activities", label: "Activities" },
@@ -49,7 +49,7 @@ export const secondaryNavItems = [
 export const moduleMapping = {
   Dashboard: "dashboard",
   Contacts: "contacts",
-  Accounts: "accounts",
+  Customers: "accounts",
   Leads: "leads",
   Opportunities: "opportunities",
   Activities: "activities",
@@ -68,7 +68,7 @@ export const moduleMapping = {
   ClientOnboarding: "client_onboarding",
   Workflows: "workflows",
   DuplicateContacts: null,
-  DuplicateAccounts: null,
+  DuplicateCustomers: null,
   DuplicateLeads: null,
   Tenants: null,
   Settings: null,
@@ -124,7 +124,7 @@ export function getAllPageNames() {
     "DataDiagnostics",
     "TenantDataDebug",
     "DuplicateContacts",
-    "DuplicateAccounts",
+    "DuplicateCustomers",
     "DuplicateLeads",
     "DataQualityReport",
   ];

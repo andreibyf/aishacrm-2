@@ -10,10 +10,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Upload, File, CheckCircle, AlertCircle, AlertTriangle, XCircle, CheckCircle2, Link2 } from "lucide-react";
-import { User, Employee } from "@/api/entities";
+import { Employee } from "@/api/entities";
 import { validateAndImport } from "@/api/functions";
 import { toast } from "@/components/ui/use-toast";
 import { Progress } from "@/components/ui/progress"; // NEW: Import Progress component
+import { useUser } from '@/components/shared/useUser.js';
 
 const formatPhoneNumber = (phoneNumber) => {
   if (!phoneNumber || typeof phoneNumber !== 'string') return phoneNumber;
@@ -30,6 +31,7 @@ const formatPhoneNumber = (phoneNumber) => {
 
 // Adjusted props based on user's original component structure
 export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess }) {
+  const { user: currentUser } = useUser();
   const [file, setFile] = useState(null);
   const [step, setStep] = useState('upload');
   const [headers, setHeaders] = useState([]);
@@ -40,7 +42,6 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
   const [assignedTo, setAssignedTo] = useState('');
   const [employees, setEmployees] = useState([]);
   const [accountLinkColumn, setAccountLinkColumn] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
   const [previewData, setPreviewData] = useState([]);
   const [showDetailedResults, setShowDetailedResults] = useState(false); // New state for the detailed results dialog
   
@@ -52,10 +53,9 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
 
   useEffect(() => {
     const loadData = async () => {
+      if (!currentUser) return;
       try {
-        const user = await User.me();
-        setCurrentUser(user);
-        const empList = await Employee.filter({ tenant_id: user.tenant_id });
+        const empList = await Employee.filter({ tenant_id: currentUser.tenant_id });
         setEmployees(empList);
       } catch (error) {
         console.error("Failed to load data:", error);
@@ -70,7 +70,7 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
     if (open) {
       loadData();
     }
-  }, [open]);
+  }, [open, currentUser]);
 
   useEffect(() => {
     if (schema?.properties) {
@@ -107,7 +107,6 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
     setAssignedTo('');
     setEmployees([]); // Reset employees
     setAccountLinkColumn(null);
-    setCurrentUser(null); // Reset current user
     setPreviewData([]);
     setShowDetailedResults(false);
     // Reset batching state
@@ -325,6 +324,7 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
           title: "No Valid Records",
           description: "No records found with mapped data to import. Please check your mapping.",
           variant: "destructive",
+          duration: 6000,
         });
         setStep('map'); // Go back to map step if no valid records
         setImporting(false);
@@ -350,29 +350,49 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
         const batch = batches[i];
         
         try {
-          const response = await validateAndImport({
+          let response;
+          try {
+            response = await validateAndImport({
               records: batch,
               entityType: schema?.name,
               mapping: mapping, // This mapping is for the whole CSV, not just the batch headers
               fileName: file.name,
-              accountLinkColumn: accountLinkColumn
-          });
+              accountLinkColumn: accountLinkColumn,
+              tenant_id: currentUser?.tenant_id
+            });
+          } catch (lowLevelErr) {
+            // Immediate transport error (network/fetch reject) - push and continue
+            allResults.failCount += batch.length;
+            allResults.errors.push({ row_number: `Batch ${i + 1}`, error: lowLevelErr?.message || 'Transport error calling import endpoint.' });
+            continue;
+          }
 
-          if (response.data) {
-            allResults.successCount += response.data.successCount || 0;
-            allResults.failCount += response.data.failCount || 0;
-            allResults.errors.push(...(response.data.errors || []));
-            allResults.accountsLinked += response.data.accountsLinked || 0;
-            allResults.accountsNotFound += response.data.accountsNotFound || 0;
-            allResults.matchingDetails.push(...(response.data.matchingDetails || []));
+          // Defensive: support either { data: {...} } or raw {...}
+          const payload = response?.data ?? response;
+
+          // If backend returned an error wrapper, surface details
+          if (payload && payload.status === 'error' && (payload.error || payload.message)) {
+            allResults.failCount += batch.length;
+            allResults.errors.push({ row_number: `Batch ${i + 1}`, error: payload.error || payload.message || 'Backend reported error status.' });
+            continue;
+          }
+
+          if (payload && (payload.successCount !== undefined || payload.failCount !== undefined || Array.isArray(payload.errors))) {
+            allResults.successCount += payload.successCount || 0;
+            allResults.failCount += payload.failCount || 0;
+            allResults.errors.push(...(payload.errors || []));
+            allResults.accountsLinked += payload.accountsLinked || 0;
+            allResults.accountsNotFound += payload.accountsNotFound || 0;
+            allResults.matchingDetails.push(...(payload.matchingDetails || []));
             
             // Update progress
             setImportProgress(prev => ({ ...prev, itemsImported: allResults.successCount }));
-          } else {
-              // Handle case where function returns no data but no throw
-              allResults.failCount += batch.length;
-              allResults.errors.push({ row_number: `Batch ${i + 1} (no data)`, error: "Batch failed, no response data received." });
-          }
+      } else {
+        // Capture unexpected shape; include a diagnostic snapshot of keys
+        const keys = payload ? Object.keys(payload).join(',') : 'null';
+        allResults.failCount += batch.length;
+        allResults.errors.push({ row_number: `Batch ${i + 1} (unexpected shape)`, error: `Import response missing expected fields. Keys: ${keys}` });
+      }
           
           // Removed client-side delay: `ApiOptimizer` is assumed to handle rate limiting internally.
         } catch (batchError) {
@@ -410,6 +430,7 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
         toast({
           title: "Import Successful",
           description: `${allResults.successCount} ${schema.name.toLowerCase()}(s) imported successfully${allResults.accountsLinked ? `. ${allResults.accountsLinked} linked to accounts.` : ''}`,
+          duration: 5000,
         });
         if (onSuccess) onSuccess();
         handleDialogClose(false);
@@ -418,6 +439,7 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
           title: "Import Completed with Issues",
           description: `${allResults.successCount} records imported, but ${allResults.failCount} failed. See detailed results.`,
           variant: "warning",
+          duration: 8000,
         });
         setShowDetailedResults(true);
         setStep('done');
@@ -429,6 +451,7 @@ export default function CsvImportDialog({ open, onOpenChange, schema, onSuccess 
         title: "Import Error",
         description: error.message || "An unexpected error occurred during import.",
         variant: "destructive",
+        duration: 8000,
       });
       setImportResults({ // Ensure importResults is populated even on general error
         successCount: 0,

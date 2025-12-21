@@ -1,0 +1,168 @@
+// Executive Assistant Tools - BizDev Source Management (v3.0.0)
+// Create, update, promote BizDev sources to leads
+
+import { Result, BizDevSource, CRMError } from "../../spec/types.braid"
+
+fn createBizDevSource(
+  tenant: String,
+  source_name: String,
+  source_type: String,
+  company_name: String,
+  contact_name: String,
+  email: String,
+  phone: String,
+  priority: String
+) -> Result<BizDevSource, CRMError> !net {
+  let url = "/api/bizdevsources";
+  let body = {
+    tenant_id: tenant,
+    source_name: source_name,
+    source_type: source_type,
+    company_name: company_name,
+    contact_name: contact_name,
+    email: email,
+    phone: phone,
+    priority: priority,
+    status: "active",
+    metadata: {}
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn updateBizDevSource(
+  tenant: String,
+  source_id: String,
+  updates: Object
+) -> Result<BizDevSource, CRMError> !net {
+  let url = "/api/bizdevsources/" + source_id;
+  
+  let response = http.put(url, { body: updates });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getBizDevSourceDetails(
+  tenant: String,
+  source_id: String
+) -> Result<BizDevSource, CRMError> !net {
+  let url = "/api/bizdevsources/" + source_id;
+  let params = { tenant_id: tenant };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NotFound", message: "BizDev source not found" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn listBizDevSources(
+  tenant: String,
+  status: String,
+  priority: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/bizdevsources";
+  
+  let params = {
+    tenant_id: tenant,
+    status: status,
+    priority: priority,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn searchBizDevSources(
+  tenant: String,
+  query: String,
+  source_type: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/bizdevsources";
+  
+  let params = {
+    tenant_id: tenant,
+    q: query,
+    source_type: source_type,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn promoteBizDevSourceToLead(
+  tenant: String,
+  source_id: String,
+  options: Object
+) -> Result<Object, CRMError> !net {
+  // This is the key v3.0.0 workflow transition:
+  // BizDev Source → Lead
+  let url = "/api/bizdevsources/" + source_id + "/promote";
+  let body = options;
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "PromotionError", source_id: source_id, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn deleteBizDevSource(
+  tenant: String,
+  source_id: String
+) -> Result<Boolean, CRMError> !net {
+  let url = "/api/bizdevsources/" + source_id;
+  let response = http.delete(url, {});
+  return match response {
+    Ok{value} => Ok(true),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn archiveBizDevSources(
+  tenant: String,
+  source_ids: Array
+) -> Result<Object, CRMError> !net {
+  let url = "/api/bizdevsources/archive";
+  let body = {
+    tenant_id: tenant,
+    ids: source_ids
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

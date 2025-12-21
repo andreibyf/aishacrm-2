@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
  * @param {number} delay - Delay before loading (ms)
  * @param {object} props - Props to pass to the widget
  */
-export default function LazyWidgetLoader({ component: Component, delay = 0, ...props }) {
+function LazyWidgetLoader({ component: Component, delay = 0, ...props }) {
   const [shouldLoad, setShouldLoad] = useState(delay === 0);
   const [isVisible, setIsVisible] = useState(false);
   const ref = useRef(null);
@@ -56,3 +56,5 @@ export default function LazyWidgetLoader({ component: Component, delay = 0, ...p
 
   return <Component {...props} />;
 }
+
+export default memo(LazyWidgetLoader);

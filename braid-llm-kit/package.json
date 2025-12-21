@@ -1,0 +1,49 @@
+{
+  "name": "@braid/sdk",
+  "version": "0.2.0",
+  "description": "Braid - AI-native DSL for LLM tool development with capability enforcement and tenant isolation",
+  "type": "module",
+  "main": "./sdk/index.js",
+  "types": "./sdk/index.d.ts",
+  "exports": {
+    ".": "./sdk/index.js",
+    "./runtime": "./tools/braid-rt.js",
+    "./adapter": "./tools/braid-adapter.js",
+    "./parser": "./tools/braid-parse.js",
+    "./transpiler": "./tools/braid-transpile.js",
+    "./types": "./spec/types.braid"
+  },
+  "files": [
+    "sdk/",
+    "tools/braid-rt.js",
+    "tools/braid-adapter.js",
+    "tools/braid-parse.js",
+    "tools/braid-transpile.js",
+    "spec/types.braid",
+    "examples/assistant/",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "echo 'No build step required - pure ESM'",
+    "test": "node tools/braid-test.js"
+  },
+  "keywords": [
+    "ai",
+    "llm",
+    "dsl",
+    "tools",
+    "capability",
+    "security",
+    "tenant-isolation",
+    "executive-assistant",
+    "crm"
+  ],
+  "author": "Braid Contributors",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "peerDependencies": {
+    "@supabase/supabase-js": "^2.x"
+  }
+}

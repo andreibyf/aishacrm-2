@@ -4,11 +4,33 @@
  */
 
 import express from 'express';
+import workflowQueue from '../services/workflowQueue.js';
+import { initiateOutboundCall } from '../lib/outboundCallService.js';
 
 // Helper: lift workflow fields from metadata and align shape with frontend expectations
 function normalizeWorkflow(row) {
   if (!row) return row;
-  const meta = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+
+  let meta = row.metadata;
+
+  // Handle stringified JSON (common with some DB drivers or text columns)
+  if (typeof meta === 'string') {
+    try {
+      meta = JSON.parse(meta);
+    } catch (e) {
+      console.warn('[normalizeWorkflow] Failed to parse metadata string:', e);
+      meta = {};
+    }
+  }
+
+  // Ensure meta is an object
+  meta = meta && typeof meta === 'object' ? meta : {};
+
+  // Log if nodes are missing but expected (debugging)
+  if ((!meta.nodes || meta.nodes.length === 0) && row.name) {
+    console.log(`[normalizeWorkflow] Workflow "${row.name}" (id: ${row.id}) has no nodes in metadata. Raw metadata type: ${typeof row.metadata}`);
+  }
+
   return {
     ...row,
     // Frontend expects trigger object
@@ -26,8 +48,52 @@ function normalizeWorkflow(row) {
 
 export default function createWorkflowRoutes(pgPool) {
   const router = express.Router();
-  
-  // Internal executor used by both /execute and /:id/test to avoid SSRF via internal HTTP
+  /**
+   * @openapi
+   * /api/workflows:
+   *   get:
+   *     summary: List workflows
+   *     tags: [workflows]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, nullable: true }
+   *       - in: query
+   *         name: is_active
+   *         schema: { type: boolean, nullable: true }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Workflows list
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   post:
+   *     summary: Create workflow
+   *     tags: [workflows]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, name]
+   *     responses:
+   *       201:
+   *         description: Workflow created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
+
+  // Exported executor used by queue processor and test endpoint
   async function executeWorkflowById(workflow_id, triggerPayload) {
     const startTime = Date.now();
     const executionLog = [];
@@ -103,6 +169,89 @@ export default function createWorkflowRoutes(pgPool) {
           switch (node.type) {
             case 'webhook_trigger': {
               log.output = { payload: context.payload };
+              break;
+            }
+            case 'http_request': {
+              const method = (cfg.method || 'POST').toUpperCase();
+              const url = replaceVariables(cfg.url || '');
+              
+              if (!url || url === cfg.url) {
+                log.status = 'error';
+                log.error = 'URL is required and must be properly configured';
+                break;
+              }
+
+              // Build headers
+              const headers = { 'Content-Type': 'application/json' };
+              if (cfg.headers && Array.isArray(cfg.headers)) {
+                for (const h of cfg.headers) {
+                  if (h.key && h.value) {
+                    headers[h.key] = replaceVariables(h.value);
+                  }
+                }
+              }
+
+              // Build body based on configuration
+              let requestBody = null;
+              if (method !== 'GET' && method !== 'HEAD') {
+                if (cfg.body_type === 'raw') {
+                  requestBody = replaceVariables(cfg.body || '{}');
+                  // Try to parse as JSON if it looks like JSON
+                  try {
+                    requestBody = JSON.parse(requestBody);
+                  } catch {
+                    // Keep as string if not valid JSON
+                  }
+                } else if (cfg.body_mappings && Array.isArray(cfg.body_mappings)) {
+                  requestBody = {};
+                  for (const mapping of cfg.body_mappings) {
+                    if (mapping.key && mapping.value) {
+                      const value = replaceVariables(`{{${mapping.value}}}`);
+                      // Don't include unresolved template variables
+                      if (value !== `{{${mapping.value}}}`) {
+                        requestBody[mapping.key] = value;
+                      }
+                    }
+                  }
+                }
+              }
+
+              try {
+                const fetchOptions = {
+                  method,
+                  headers,
+                  ...(requestBody && { body: typeof requestBody === 'string' ? requestBody : JSON.stringify(requestBody) })
+                };
+
+                const response = await fetch(url, fetchOptions);
+                const contentType = response.headers.get('content-type');
+                let responseData;
+                
+                if (contentType && contentType.includes('application/json')) {
+                  responseData = await response.json().catch(() => null);
+                } else {
+                  responseData = await response.text();
+                }
+
+                log.output = {
+                  status_code: response.status,
+                  status_text: response.statusText,
+                  headers: Object.fromEntries(response.headers.entries()),
+                  data: responseData
+                };
+                
+                context.variables.last_http_response = responseData;
+                context.variables.last_http_status = response.status;
+
+                // Mark as error if HTTP status >= 400
+                if (response.status >= 400) {
+                  log.status = 'error';
+                  log.error = `HTTP ${response.status}: ${response.statusText}`;
+                }
+              } catch (err) {
+                log.status = 'error';
+                log.error = `HTTP request failed: ${err.message}`;
+              }
               break;
             }
             case 'send_email': {
@@ -246,14 +395,95 @@ export default function createWorkflowRoutes(pgPool) {
               log.output = { updatedContact: r.rows[0], applied_updates: Object.fromEntries(sets.map((s, i) => [s.split('=')[0].trim(), vals[i]])) };
               break;
             }
+            case 'find_account': {
+              const field = cfg.search_field || 'company';
+              let value = replaceVariables(cfg.search_value || '{{company}}');
+              if (typeof value === 'string') value = value.replace(/^["']|["']$/g, '').trim();
+              const q = `SELECT * FROM accounts WHERE tenant_id = $1 AND ${field} = $2 LIMIT 1`;
+              const r = await pgPool.query(q, [workflow.tenant_id, value]);
+              if (r.rows.length) {
+                log.output = { account: r.rows[0] };
+                context.variables.found_account = r.rows[0];
+              } else {
+                log.status = 'error';
+                log.error = `No account found with ${field} = ${value}`;
+              }
+              break;
+            }
+            case 'update_account': {
+              const account = context.variables.found_account;
+              if (!account) { log.status = 'error'; log.error = 'No account found in context'; break; }
+              const mappings = cfg.field_mappings || [];
+              const sets = [];
+              const vals = [];
+              let idx = 1;
+              for (const m of mappings) {
+                if (m.account_field && m.webhook_field) {
+                  const v = replaceVariables(`{{${m.webhook_field}}}`);
+                  if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) { sets.push(`${m.account_field} = $${idx++}`); vals.push(v); }
+                }
+              }
+              if (!sets.length) { log.status = 'error'; log.error = 'No field mappings configured or no values to update'; break; }
+              vals.push(account.id);
+              const q = `UPDATE accounts SET ${sets.join(', ')}, updated_date = NOW() WHERE id = $${idx} RETURNING *`;
+              const r = await pgPool.query(q, vals);
+              log.output = { updatedAccount: r.rows[0], applied_updates: Object.fromEntries(sets.map((s, i) => [s.split('=')[0].trim(), vals[i]])) };
+              break;
+            }
+            case 'create_opportunity': {
+              const mappings = cfg.field_mappings || [];
+              if (!mappings.length) { log.status = 'error'; log.error = 'No field mappings configured'; break; }
+              const cols = ['tenant_id'];
+              const vals = [workflow.tenant_id];
+              const ph = ['$1'];
+              let idx = 2;
+              for (const m of mappings) {
+                if (m.opportunity_field && m.webhook_field) {
+                  const v = replaceVariables(`{{${m.webhook_field}}}`);
+                  if (v !== null && v !== undefined && v !== '') { cols.push(m.opportunity_field); vals.push(v); ph.push(`$${idx++}`); }
+                }
+              }
+              // Try to associate to an account or lead if present
+              const account = context.variables.found_account;
+              const lead = context.variables.found_lead;
+              if (account) { cols.push('account_id'); vals.push(account.id); ph.push(`$${idx++}`); }
+              if (lead) { cols.push('lead_id'); vals.push(lead.id); ph.push(`$${idx++}`); }
+              const q = `INSERT INTO opportunities (${cols.join(',')}) VALUES (${ph.join(',')}) RETURNING *`;
+              const r = await pgPool.query(q, vals);
+              log.output = { opportunity: r.rows[0] };
+              context.variables.found_opportunity = r.rows[0];
+              break;
+            }
+            case 'update_opportunity': {
+              const opportunity = context.variables.found_opportunity;
+              if (!opportunity) { log.status = 'error'; log.error = 'No opportunity found in context'; break; }
+              const mappings = cfg.field_mappings || [];
+              const sets = [];
+              const vals = [];
+              let idx = 1;
+              for (const m of mappings) {
+                if (m.opportunity_field && m.webhook_field) {
+                  const v = replaceVariables(`{{${m.webhook_field}}}`);
+                  if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) { sets.push(`${m.opportunity_field} = $${idx++}`); vals.push(v); }
+                }
+              }
+              if (!sets.length) { log.status = 'error'; log.error = 'No field mappings configured'; break; }
+              vals.push(opportunity.id);
+              const q = `UPDATE opportunities SET ${sets.join(', ')}, updated_date = NOW() WHERE id = $${idx} RETURNING *`;
+              const r = await pgPool.query(q, vals);
+              log.output = { updatedOpportunity: r.rows[0], applied_updates: Object.fromEntries(sets.map((s, i) => [s.split('=')[0].trim(), vals[i]])) };
+              break;
+            }
             case 'create_activity': {
               const activityType = cfg.type || 'task';
-              const subject = replaceVariables(cfg.subject || 'Workflow activity');
-              const description = replaceVariables(cfg.description || '');
+              const subject = replaceVariables(cfg.title || cfg.subject || 'Workflow activity');
+              const description = replaceVariables(cfg.details || cfg.description || '');
               const lead = context.variables.found_lead;
               const contact = context.variables.found_contact;
-              const related_to = lead ? 'lead' : (contact ? 'contact' : null);
-              const related_id = lead ? lead.id : (contact ? contact.id : null);
+              const account = context.variables.found_account;
+              const opportunity = context.variables.found_opportunity;
+              const related_to = lead ? 'lead' : (contact ? 'contact' : (account ? 'account' : (opportunity ? 'opportunity' : null)));
+              const related_id = lead ? lead.id : (contact ? contact.id : (account ? account.id : (opportunity ? opportunity.id : null)));
               const metadata = { created_by_workflow: workflow.id };
               const q = `
                 INSERT INTO activities (
@@ -298,6 +528,150 @@ export default function createWorkflowRoutes(pgPool) {
               }
               context.last_condition_result = result;
               log.output = { condition_result: result, field_template: fieldTemplate, actual_value: actualValue, compare_value: compareValue, operator };
+              break;
+            }
+            // AI nodes via MCP-first, provider stubs
+            case 'ai_classify_opportunity_stage': {
+              const provider = (cfg.provider || 'mcp').toLowerCase();
+              const _model = cfg.model || 'default';
+              const text = String(replaceVariables(cfg.text || ''));
+              let output = { stage: 'unknown', confidence: 0.0, provider };
+              try {
+                if (provider === 'mcp') {
+                  // Placeholder: call MCP classification tool via internal adapter
+                  // For now, use simple heuristics
+                  const t = text.toLowerCase();
+                  if (t.includes('closed won') || t.includes('signed')) output = { stage: 'Closed Won', confidence: 0.9, provider };
+                  else if (t.includes('negotiation') || t.includes('proposal')) output = { stage: 'Negotiation', confidence: 0.7, provider };
+                  else if (t.includes('qualified') || t.includes('meeting')) output = { stage: 'Qualified', confidence: 0.6, provider };
+                  else if (t.includes('discovery') || t.includes('intro')) output = { stage: 'Discovery', confidence: 0.5, provider };
+                } else {
+                  // stubs for openai/anthropic/google
+                  output = { stage: 'Qualified', confidence: 0.5, provider };
+                }
+                log.output = { ai_stage: output };
+                context.variables.ai_stage = output;
+              } catch (e) {
+                log.status = 'error';
+                log.error = `AI classify failed: ${e.message}`;
+              }
+              break;
+            }
+            case 'ai_generate_email': {
+              const provider = (cfg.provider || 'mcp').toLowerCase();
+              const prompt = String(replaceVariables(cfg.prompt || ''));
+              let email = { subject: 'Hello', body: '...', provider };
+              try {
+                if (provider === 'mcp') {
+                  // Placeholder generation
+                  email = {
+                    subject: 'Follow-up on our conversation',
+                    body: `Hi there,\n\n${prompt}\n\nBest regards,\nAisha CRM`,
+                    provider
+                  };
+                } else {
+                  email = { subject: 'Follow-up', body: prompt || 'Draft body', provider };
+                }
+                log.output = { ai_email: email };
+                context.variables.ai_email = email;
+              } catch (e) {
+                log.status = 'error';
+                log.error = `AI email generation failed: ${e.message}`;
+              }
+              break;
+            }
+            case 'ai_enrich_account': {
+              const provider = (cfg.provider || 'mcp').toLowerCase();
+              const input = String(replaceVariables(cfg.input || ''));
+              let enrichment = { company: input || null, website: null, industry: null, size: null, provider };
+              try {
+                if (provider === 'mcp') {
+                  enrichment.website = input && input.includes('.') ? `https://${input}` : null;
+                  enrichment.industry = 'Software';
+                  enrichment.size = '51-200';
+                } else {
+                  enrichment.industry = 'Unknown';
+                }
+                log.output = { ai_enrichment: enrichment };
+                context.variables.ai_enrichment = enrichment;
+              } catch (e) {
+                log.status = 'error';
+                log.error = `AI enrichment failed: ${e.message}`;
+              }
+              break;
+            }
+            case 'ai_route_activity': {
+              const provider = (cfg.provider || 'mcp').toLowerCase();
+              const contextText = String(replaceVariables(cfg.context || ''));
+              let route = { type: 'task', title: 'Next best action', details: contextText, priority: 'medium', provider };
+              try {
+                if (provider === 'mcp') {
+                  const t = contextText.toLowerCase();
+                  if (t.includes('call')) route = { ...route, type: 'call', title: 'Call the contact', priority: 'high' };
+                  else if (t.includes('email')) route = { ...route, type: 'email', title: 'Send an email', priority: 'medium' };
+                  else if (t.includes('meeting')) route = { ...route, type: 'task', title: 'Schedule a meeting', priority: 'high' };
+                }
+                log.output = { ai_route: route };
+                context.variables.ai_route = route;
+              } catch (e) {
+                log.status = 'error';
+                log.error = `AI routing failed: ${e.message}`;
+              }
+              break;
+            }
+            case 'initiate_call': {
+              // Initiate outbound AI call via CallFluent or Thoughtly
+              const provider = cfg.provider || 'callfluent';
+              let phoneNumber = replaceVariables(cfg.phone_number || '{{phone}}');
+              const purpose = replaceVariables(cfg.purpose || 'Follow-up call');
+              const talkingPointsRaw = cfg.talking_points || [];
+              const talkingPoints = talkingPointsRaw.map(tp => replaceVariables(tp));
+
+              // Get contact info from context
+              const lead = context.variables.found_lead;
+              const contact = context.variables.found_contact;
+              const entity = lead || contact;
+
+              if (!phoneNumber || phoneNumber === '{{phone}}') {
+                phoneNumber = entity?.phone;
+              }
+
+              if (!phoneNumber) {
+                log.status = 'error';
+                log.error = 'No phone number available for call';
+                break;
+              }
+
+              try {
+                const callResult = await initiateOutboundCall({
+                  tenant_id: workflow.tenant_id,
+                  provider,
+                  phone_number: phoneNumber,
+                  contact_id: entity?.id,
+                  contact_name: entity?.first_name ? `${entity.first_name} ${entity.last_name || ''}`.trim() : entity?.name,
+                  contact_email: entity?.email,
+                  company: entity?.company,
+                  purpose,
+                  talking_points: talkingPoints,
+                  agent_id: cfg.agent_id,
+                  metadata: {
+                    workflow_id: workflow.id,
+                    workflow_name: workflow.name
+                  }
+                });
+
+                log.output = {
+                  call_initiated: callResult.success,
+                  provider,
+                  call_id: callResult.call_id,
+                  phone_number: phoneNumber,
+                  status: callResult.status
+                };
+                context.variables.call_result = callResult;
+              } catch (callError) {
+                log.status = 'error';
+                log.error = `Call initiation failed: ${callError.message}`;
+              }
               break;
             }
             default:
@@ -422,22 +796,415 @@ export default function createWorkflowRoutes(pgPool) {
     }
   });
 
+  // POST /api/workflows - Create new workflow
+  router.post('/', async (req, res) => {
+    try {
+      const { tenant_id, name, description, trigger, nodes, connections, is_active } = req.body;
+
+      console.log('[Workflows POST] Received nodes:', nodes);
+      console.log('[Workflows POST] Received connections:', connections);
+
+      if (!tenant_id || !name) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'tenant_id and name are required' 
+        });
+      }
+
+      // Build metadata object containing nodes and connections
+      const metadata = {
+        nodes: nodes || [],
+        connections: connections || [],
+        webhook_url: null, // Will be set after creation
+        execution_count: 0,
+        last_executed: null
+      };
+
+      console.log('[Workflows POST] Metadata to store:', metadata);
+
+      // Extract trigger type and config
+      const trigger_type = trigger?.type || 'webhook';
+      const trigger_config = trigger?.config || {};
+
+      const query = `
+        INSERT INTO workflow (tenant_id, name, description, trigger_type, trigger_config, is_active, metadata)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *
+      `;
+
+      const values = [
+        tenant_id,
+        name,
+        description || null,
+        trigger_type,
+        trigger_config,
+        is_active !== undefined ? is_active : true,
+        metadata
+      ];
+
+      const result = await pgPool.query(query, values);
+      const workflow = normalizeWorkflow(result.rows[0]);
+
+      // Update webhook URL in metadata now that we have the ID
+      if (trigger_type === 'webhook') {
+        const webhookUrl = `/api/workflows/${workflow.id}/webhook`;
+        await pgPool.query(
+          `UPDATE workflow SET metadata = metadata || $1 WHERE id = $2`,
+          [JSON.stringify({ webhook_url: webhookUrl }), workflow.id]
+        );
+        workflow.webhook_url = webhookUrl;
+      }
+
+      res.status(201).json({
+        status: 'success',
+        data: workflow
+      });
+    } catch (error) {
+      console.error('Error creating workflow:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // PUT /api/workflows/:id - Update existing workflow
+  /**
+   * @openapi
+   * /api/workflows/{id}:
+   *   put:
+   *     summary: Update workflow
+   *     tags: [workflows]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *     responses:
+   *       200:
+   *         description: Workflow updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   *   delete:
+   *     summary: Delete workflow
+   *     tags: [workflows]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Workflow deleted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
+  router.put('/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { tenant_id, name, description, trigger, nodes, connections, is_active } = req.body;
+
+      console.log('[Workflows PUT] Received nodes:', nodes);
+      console.log('[Workflows PUT] Received connections:', connections);
+
+      if (!tenant_id) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'tenant_id is required' 
+        });
+      }
+
+      // Verify workflow exists and belongs to tenant
+      const checkResult = await pgPool.query(
+        'SELECT * FROM workflow WHERE id = $1 AND tenant_id = $2',
+        [id, tenant_id]
+      );
+
+      if (checkResult.rows.length === 0) {
+        return res.status(404).json({ 
+          status: 'error', 
+          message: 'Workflow not found or access denied' 
+        });
+      }
+
+      const existingWorkflow = checkResult.rows[0];
+      let existingMetadata = existingWorkflow.metadata || {};
+
+      console.log('[Workflows PUT] Existing metadata type:', typeof existingMetadata);
+      console.log('[Workflows PUT] Existing metadata value:', JSON.stringify(existingMetadata));
+
+      // Handle stringified JSON in database
+      if (typeof existingMetadata === 'string') {
+        try {
+          existingMetadata = JSON.parse(existingMetadata);
+        } catch (e) {
+          console.warn('[Workflows PUT] Failed to parse existing metadata:', e);
+          existingMetadata = {};
+        }
+      }
+
+      console.log('[Workflows PUT] Parsed existing metadata:', existingMetadata);
+      console.log('[Workflows PUT] Incoming nodes:', nodes ? `Array(${nodes.length})` : 'undefined');
+
+      // Build updated metadata - use explicit property assignment to avoid TDZ issues
+      const updatedNodes = nodes !== undefined ? nodes : (existingMetadata.nodes || []);
+      const updatedConnections = connections !== undefined ? connections : (existingMetadata.connections || []);
+
+      const metadata = {
+        ...existingMetadata,
+        nodes: updatedNodes,
+        connections: updatedConnections
+      };
+
+      console.log('[Workflows PUT] Final merged metadata:', JSON.stringify(metadata));
+
+      console.log('[Workflows PUT] Metadata to store:', metadata);
+
+      // Extract trigger type and config if provided
+      const trigger_type = trigger?.type || existingWorkflow.trigger_type;
+      const trigger_config = trigger?.config || existingWorkflow.trigger_config;
+
+      const query = `
+        UPDATE workflow 
+        SET name = $1, 
+            description = $2, 
+            trigger_type = $3, 
+            trigger_config = $4, 
+            is_active = $5, 
+            metadata = $6,
+            updated_at = NOW()
+        WHERE id = $7 AND tenant_id = $8
+        RETURNING *
+      `;
+
+      const values = [
+        name !== undefined ? name : existingWorkflow.name,
+        description !== undefined ? description : existingWorkflow.description,
+        trigger_type,
+        trigger_config,
+        is_active !== undefined ? is_active : existingWorkflow.is_active,
+        metadata,
+        id,
+        tenant_id
+      ];
+
+      const result = await pgPool.query(query, values);
+      const workflow = normalizeWorkflow(result.rows[0]);
+
+      res.json({
+        status: 'success',
+        data: workflow
+      });
+    } catch (error) {
+      console.error('Error updating workflow:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // DELETE /api/workflows/:id - Delete workflow
+  router.delete('/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { tenant_id } = req.query;
+
+      if (!tenant_id) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'tenant_id is required' 
+        });
+      }
+
+      const result = await pgPool.query(
+        'DELETE FROM workflow WHERE id = $1 AND tenant_id = $2 RETURNING id',
+        [id, tenant_id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ 
+          status: 'error', 
+          message: 'Workflow not found or access denied' 
+        });
+      }
+
+      res.json({
+        status: 'success',
+        data: { id: result.rows[0].id, deleted: true }
+      });
+    } catch (error) {
+      console.error('Error deleting workflow:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // PATCH /api/workflows/:id/status - Toggle workflow active status
+  /**
+   * @openapi
+   * /api/workflows/{id}/status:
+   *   patch:
+   *     summary: Toggle workflow active status
+   *     tags: [workflows]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, is_active]
+   *             properties:
+   *               tenant_id: { type: string }
+   *               is_active: { type: boolean }
+   *     responses:
+   *       200:
+   *         description: Workflow status updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
+  router.patch('/:id/status', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { tenant_id, is_active } = req.body;
+
+      if (!tenant_id) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'tenant_id is required' 
+        });
+      }
+
+      if (typeof is_active !== 'boolean') {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'is_active must be a boolean' 
+        });
+      }
+
+      const result = await pgPool.query(
+        `UPDATE workflow 
+         SET is_active = $1, updated_at = NOW() 
+         WHERE id = $2 AND tenant_id = $3 
+         RETURNING id, name, is_active`,
+        [is_active, id, tenant_id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ 
+          status: 'error', 
+          message: 'Workflow not found or access denied' 
+        });
+      }
+
+      res.json({
+        status: 'success',
+        message: `Workflow ${is_active ? 'activated' : 'deactivated'}`,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      console.error('Error updating workflow status:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // Execute workflow by ID (no internal HTTP)
+  /**
+   * @openapi
+   * /api/workflows/execute:
+   *   post:
+   *     summary: Execute workflow by ID
+   *     tags: [workflows]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               workflow_id: { type: string }
+   *               payload: { type: object }
+   *     responses:
+   *       200:
+   *         description: Execution result
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.post('/execute', async (req, res) => {
     try {
       const { workflow_id, payload, input_data } = req.body || {};
       const triggerPayload = payload ?? input_data ?? {};
+
       if (!workflow_id) {
         return res.status(400).json({ status: 'error', message: 'workflow_id is required' });
       }
-      const result = await executeWorkflowById(workflow_id, triggerPayload);
-      return res.status(result.httpStatus).json({ status: result.status, data: result.data });
+
+      // Queue the workflow for async execution
+      const job = await workflowQueue.add({
+        workflow_id,
+        trigger_data: triggerPayload
+      });
+
+      // Return immediately with 202 Accepted
+      return res.status(202).json({
+        status: 'queued',
+        data: {
+          job_id: job.id,
+          workflow_id,
+          message: 'Workflow queued for execution',
+          check_status_at: `/api/workflows/executions?workflow_id=${workflow_id}`
+        }
+      });
     } catch (error) {
+      console.error('[Workflow Execute] Error queuing workflow:', error);
       return res.status(500).json({ status: 'error', message: error.message });
     }
   });
 
   // POST /api/workflows/:id/test - Convenience endpoint to execute a workflow by ID with payload
+  /**
+   * @openapi
+   * /api/workflows/{id}/test:
+   *   post:
+   *     summary: Test-execute a workflow
+   *     tags: [workflows]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               payload: { type: object }
+   *     responses:
+   *       200:
+   *         description: Execution result
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Success'
+   */
   router.post('/:id/test', async (req, res) => {
     try {
       const { id } = req.params;

@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { User } from "@/api/entities";
+import { useUser } from "@/components/shared/useUser.js";
 import { Lead } from "@/api/entities";
 import { Contact } from "@/api/entities";
 import { Opportunity } from "@/api/entities";
@@ -32,13 +32,12 @@ import HistoricalTrends from "../components/reports/HistoricalTrends";
 import ForecastingDashboard from "../components/reports/ForecastingDashboard";
 import AIMarketInsights from "../components/reports/AIMarketInsights";
 import DataQualityReport from "../components/reports/DataQualityReport";
-import { exportReportToPDF } from "@/api/functions";
 import { exportReportToCSV } from "@/api/functions";
+import { getBackendUrl } from "@/api/backendUrl";
 
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState("overview");
-  const [currentUser, setCurrentUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { user: currentUser, loading: userLoading } = useUser();
   const [loadingStats, setLoadingStats] = useState(false);
   const [stats, setStats] = useState(null);
   const { selectedTenantId } = useTenant();
@@ -46,24 +45,7 @@ export default function ReportsPage() {
   const [isExporting, setIsExporting] = useState(false);
   const { cachedRequest } = useApiManager();
   const [currentTenantData, setCurrentTenantData] = useState(null);
-
-  useEffect(() => {
-    const loadUser = async () => {
-      setLoading(true);
-      try {
-        const user = await User.me();
-        setCurrentUser(user);
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.error('Reports: Failed to load user:', error);
-        }
-        setCurrentUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadUser();
-  }, []);
+  // User provided by global context
 
   // NEW: Load current tenant data
   useEffect(() => {
@@ -116,6 +98,11 @@ export default function ReportsPage() {
       baseFilter.tenant_id = currentUser.tenant_id;
     }
 
+    // Guard: For superadmin/admin without a selected tenant, do not load data
+    if ((currentUser.role === 'superadmin' || currentUser.role === 'admin') && !baseFilter.tenant_id) {
+      return {};
+    }
+
     let filter = {};
     if (canViewAllRecords) {
       filter = { ...baseFilter };
@@ -123,8 +110,9 @@ export default function ReportsPage() {
       filter = getFilter(baseFilter);
     }
 
+    // Use boolean filter instead of Mongo-style operators
     if (!('is_test_data' in filter)) {
-      filter.is_test_data = { $ne: true };
+      filter.is_test_data = false;
     }
     return filter;
   }, [currentUser, selectedTenantId, canViewAllRecords, getFilter]);
@@ -188,7 +176,7 @@ export default function ReportsPage() {
     loadStats();
   }, [currentUser, currentScopedFilter, cachedRequest]);
 
-  if (loading) {
+  if (userLoading) {
     return (
       <div className="p-4 lg:p-8 text-center text-slate-400 bg-slate-900 min-h-screen">
         <div className="flex items-center justify-center h-[50vh]">
@@ -226,28 +214,89 @@ export default function ReportsPage() {
   const handleExport = async (format) => {
     setIsExporting(true);
     try {
-      const tenantName = currentUser?.branding_settings?.companyName || "Ai-SHA CRM";
-
-      let aiInsightsData = null;
-      
-      const aiInsightsElement = document.querySelector('[data-ai-insights]');
-      if (aiInsightsElement && aiInsightsElement.dataset.aiInsights) {
-        try {
-          aiInsightsData = JSON.parse(aiInsightsElement.dataset.aiInsights);
-        } catch {
-          console.warn('Could not parse AI insights data for export');
+      if (format === 'pdf') {
+        const BACKEND_URL = getBackendUrl();
+        
+        // Special handling for AI Insights - use POST with insights data
+        if (activeTab === 'insights') {
+          // Try to get insights data from the component's data attribute
+          const insightsElement = document.querySelector('[data-ai-insights]');
+          const insightsData = insightsElement?.getAttribute('data-ai-insights');
+          
+          if (!insightsData || insightsData === 'null') {
+            toast.error('Please generate insights first before exporting');
+            setIsExporting(false);
+            return;
+          }
+          
+          try {
+            const insights = JSON.parse(insightsData);
+            const response = await fetch(`${BACKEND_URL}/api/reports/export-insights-pdf`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                tenant_id: currentScopedFilter?.tenant_id,
+                tenant_name: currentTenantData?.name || 'Unknown Tenant',
+                industry: currentTenantData?.industry || 'Not specified',
+                business_model: currentTenantData?.business_model || 'B2B',
+                geographic_focus: currentTenantData?.geographic_focus || 'North America',
+                insights
+              })
+            });
+            
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.message || 'Failed to generate PDF');
+            }
+            
+            // Download the PDF
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `ai_insights_report_${Date.now()}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            
+            toast.success('AI Insights PDF downloaded successfully!');
+            setIsExporting(false);
+            return;
+          } catch (parseError) {
+            console.error('Error parsing insights data:', parseError);
+            toast.error('Failed to export insights. Please try regenerating them.');
+            setIsExporting(false);
+            return;
+          }
         }
+        
+        // Standard PDF export for other report types
+        const params = new URLSearchParams();
+        if (currentScopedFilter?.tenant_id) {
+          params.append('tenant_id', currentScopedFilter.tenant_id);
+        }
+        params.append('report_type', activeTab);
+        
+        const url = `${BACKEND_URL}/api/reports/export-pdf?${params.toString()}`;
+        
+        // Open in new tab to download
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${activeTab}_report_${Date.now()}.pdf`;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        toast.success('PDF report is being generated...');
+        setIsExporting(false);
+        return;
       }
 
+      // For CSV export
       let response;
-      if (format === 'pdf') {
-        response = await exportReportToPDF({ 
-          reportType: activeTab, 
-          tenantFilter: currentScopedFilter,
-          tenantName,
-          aiInsightsData
-        });
-      } else if (format === 'csv') {
+      if (format === 'csv') {
         response = await exportReportToCSV({ reportType: activeTab, tenantFilter: currentScopedFilter });
       }
 
@@ -272,7 +321,7 @@ export default function ReportsPage() {
         window.URL.revokeObjectURL(url);
       } else if (response && response.error) {
         console.error('Export failed with API error:', response.error);
-        alert(`Export failed: ${response.error}`);
+        toast.error(`Export failed: ${response.error}`);
       } else {
         const errorData = response?.data ? JSON.parse(new TextDecoder().decode(response.data)) : { error: "Unknown export error" };
         throw new Error(errorData.error || "Export failed, no data received.");
@@ -280,7 +329,7 @@ export default function ReportsPage() {
 
     } catch (error) {
       console.error(`Error exporting to ${format}:`, error);
-      alert(`Failed to export report: ${error.message}`);
+      toast.error(`Failed to export report: ${error.message}`);
     } finally {
       setIsExporting(false);
     }

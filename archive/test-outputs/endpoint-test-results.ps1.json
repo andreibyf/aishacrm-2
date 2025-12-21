@@ -1,0 +1,340 @@
+{
+  "timestamp": "2025-11-18T17:03:09.4162139Z",
+  "base_url": "http://localhost:4001",
+  "tenant_id": "test-tenant-001",
+  "summary": {
+    "total": 41,
+    "failed": 0,
+    "passed": 41
+  },
+  "results": [
+    {
+      "method": "GET",
+      "path": "/",
+      "url": "http://localhost:4001/",
+      "status": 200,
+      "description": "Root API info",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "url": "http://localhost:4001/health",
+      "status": 200,
+      "description": "Health check",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/status",
+      "url": "http://localhost:4001/api/status",
+      "status": 200,
+      "description": "API status",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/system/status",
+      "url": "http://localhost:4001/api/system/status",
+      "status": 200,
+      "description": "System status",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/system/runtime",
+      "url": "http://localhost:4001/api/system/runtime",
+      "status": 200,
+      "description": "Runtime diagnostics",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/system/logs?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/system/logs?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "System logs",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/reports/dashboard-stats?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/reports/dashboard-stats?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "Dashboard stats",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/accounts?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/accounts?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List accounts",
+      "result": "PASS"
+    },
+    {
+      "method": "POST",
+      "path": "/api/accounts",
+      "url": "http://localhost:4001/api/accounts",
+      "status": 200,
+      "description": "Create account (empty)",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/contacts?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/contacts?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List contacts",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/leads?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/leads?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List leads",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/opportunities?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/opportunities?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List opportunities",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/activities?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/activities?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List activities",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/notes?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/notes?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List notes",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/users?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/users?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List users",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/employees?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/employees?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List employees",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tenants",
+      "url": "http://localhost:4001/api/tenants",
+      "status": 200,
+      "description": "List tenants",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/aicampaigns?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/aicampaigns?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List AI campaigns",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workflows?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/workflows?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List workflows",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cashflow?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/cashflow?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List cashflow",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/bizdev?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/bizdev?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List bizdev",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/bizdevsources?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/bizdevsources?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List bizdev sources",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/permissions?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/permissions?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List permissions",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/modulesettings?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/modulesettings?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List module settings",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/systembrandings",
+      "url": "http://localhost:4001/api/systembrandings",
+      "status": 200,
+      "description": "List system brandings",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/integrations?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/integrations?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List integrations",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tenantintegrations?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/tenantintegrations?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List tenant integrations",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/system-logs?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/system-logs?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List system logs",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/audit-logs?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/audit-logs?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List audit logs",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/metrics/performance?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/metrics/performance?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "Performance metrics",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/synchealths?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/synchealths?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "Sync healths",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/storage/bucket",
+      "url": "http://localhost:4001/api/storage/bucket",
+      "status": 200,
+      "description": "Get bucket info",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/documents?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List documents",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/documentationfiles?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/documentationfiles?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List documentation files",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/notifications?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List notifications",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/announcements?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/announcements?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List announcements",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/testing/ping",
+      "url": "http://localhost:4001/api/testing/ping",
+      "status": 200,
+      "description": "Ping test",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/utils/health",
+      "url": "http://localhost:4001/api/utils/health",
+      "status": 200,
+      "description": "Utils health",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/webhooks?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/webhooks?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List webhooks",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cron/jobs",
+      "url": "http://localhost:4001/api/cron/jobs",
+      "status": 200,
+      "description": "List cron jobs",
+      "result": "PASS"
+    },
+    {
+      "method": "GET",
+      "path": "/api/apikeys?tenant_id=test-tenant-001",
+      "url": "http://localhost:4001/api/apikeys?tenant_id=test-tenant-001",
+      "status": 200,
+      "description": "List API keys",
+      "result": "PASS"
+    }
+  ]
+}
