@@ -10,8 +10,8 @@ export const ApiProvider = ({ children }) => {
   const cachedRequest = useCallback(async (entityName, methodName, params, fetcher) => {
     const cacheKey = `${entityName}.${methodName}:${JSON.stringify(params)}`;
     
-    // Cache timeout: 5 seconds in dev, 30 seconds in production for better responsiveness
-    const CACHE_TIMEOUT = import.meta.env.DEV ? 5000 : 30000;
+    // Cache timeout: 2 seconds in dev, 5 seconds in production for faster updates
+    const CACHE_TIMEOUT = import.meta.env.DEV ? 2000 : 5000;
     
     if (cacheRef.current.has(cacheKey)) {
       const cached = cacheRef.current.get(cacheKey);

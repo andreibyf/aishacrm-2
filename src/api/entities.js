@@ -285,6 +285,8 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     method: method,
     headers: {
       "Content-Type": "application/json",
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      "Pragma": "no-cache",
     },
     credentials: 'include', // Use cookies for auth, not bearer tokens
   };
