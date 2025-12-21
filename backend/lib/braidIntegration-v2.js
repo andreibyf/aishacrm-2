@@ -6,7 +6,52 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { executeBraid, loadToolSchema, createBackendDeps, CRM_POLICIES } from '../../braid-llm-kit/sdk/index.js';
+import cacheManager from './cacheManager.js';
+
+// Cache TTLs for different tool types (in seconds)
+const TOOL_CACHE_TTL = {
+  fetch_tenant_snapshot: 60,    // 1 minute - high-value, frequently accessed
+  list_leads: 120,              // 2 minutes - list operations
+  list_accounts: 120,
+  list_opportunities_by_stage: 120,
+  list_activities: 120,
+  list_contacts_for_account: 120,
+  list_bizdev_sources: 120,
+  get_upcoming_activities: 60,  // 1 minute - time-sensitive
+  search_leads: 60,             // 1 minute - search results
+  search_accounts: 60,
+  search_contacts: 60,
+  search_opportunities: 60,
+  search_activities: 60,
+  get_lead_details: 180,        // 3 minutes - detail views
+  get_account_details: 180,
+  get_contact_details: 180,
+  get_activity_details: 180,
+  get_opportunity_details: 180,
+  get_opportunity_forecast: 300, // 5 minutes - aggregations
+  get_current_page: 10,         // 10 seconds - navigation context
+  DEFAULT: 90                   // 1.5 minutes default
+};
+
+/**
+ * Generate a cache key for a Braid tool execution
+ * @param {string} toolName - Name of the tool
+ * @param {string} tenantId - Tenant UUID
+ * @param {Object} args - Tool arguments (normalized)
+ * @returns {string} Cache key
+ */
+function generateBraidCacheKey(toolName, tenantId, args) {
+  // Create a hash of the args to keep key length manageable
+  const argsHash = crypto
+    .createHash('md5')
+    .update(JSON.stringify(args))
+    .digest('hex')
+    .substring(0, 12);
+
+  return `braid:${tenantId}:${toolName}:${argsHash}`;
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TOOLS_DIR = path.join(__dirname, '..', '..', 'braid-llm-kit', 'examples', 'assistant');
@@ -147,14 +192,15 @@ const TOOL_DESCRIPTIONS = {
 
   // Activities
   create_activity: 'Create a new Activity (task, meeting, call, email) in the CRM.',
-  update_activity: 'Update an existing Activity record by its ID.',
-  mark_activity_complete: 'Mark an Activity as completed.',
+  update_activity: 'Update/reschedule an existing Activity by its ID. Use this for rescheduling - pass activity_id and updates object with new due_date (ISO format like "2025-12-20T13:00:00"). IMPORTANT: Use the activity ID from the previous list/search result - you do NOT need to query again.',
+  mark_activity_complete: 'Mark an Activity as completed by its ID. Use the ID from previous list/search results.',
   get_upcoming_activities: 'Get upcoming activities for a SPECIFIC user by their email. Requires assigned_to as the user\'s email address. Use list_activities instead for general calendar queries.',
   schedule_meeting: 'Schedule a new meeting with attendees. Creates a meeting-type activity with date, time, duration, and attendee list.',
-  list_activities: 'List all Activities in the CRM. Use this for calendar/schedule queries. Pass status="planned" for upcoming/pending activities, status="completed" for past activities, or status="all" for everything. Returns activities across the tenant.',
-  search_activities: 'Search for Activities by subject, body, or type. ALWAYS use this first when user asks about an activity by name or keyword.',
-  get_activity_details: 'Get the full details of a specific Activity by its UUID. Only use when you already have the activity_id.',
+  list_activities: 'List all Activities in the CRM. Use this for calendar/schedule queries. Pass status="planned" for upcoming/pending, status="overdue" for overdue, status="completed" for past, or status="all" for everything. IMPORTANT: Results include activity IDs - remember these for follow-up actions like update or complete.',
+  search_activities: 'Search for Activities by subject, body, or type. ALWAYS use this first when user asks about an activity by name or keyword. Results include IDs for follow-up actions.',
+  get_activity_details: 'Get the full details of a specific Activity by its UUID. Only use when you already have the activity_id from a previous list or search.',
   delete_activity: 'Delete an Activity by its ID. Use with caution - this permanently removes the activity.',
+
 
 
 
@@ -319,6 +365,28 @@ When creating a workflow, ALWAYS use list_workflow_templates first to see availa
 - Supported providers: 'callfluent', 'thoughtly'
 - Always provide a clear purpose and talking points for the AI agent
 
+**UPDATING RECORDS (CRITICAL):**
+- You CAN and SHOULD update CRM records when users request changes
+- Use update_activity, update_lead, update_account, update_contact, update_opportunity tools
+- When user says "set time to", "change to", "update", "reschedule" - USE the appropriate update tool
+- For activity updates: pass activity_id and updates object with fields to change (e.g., {due_date: "2025-12-20T13:00:00"})
+- Use the record ID from your previous query - you remember IDs from earlier in the conversation
+- NEVER say you are "read-only" or cannot make updates - you HAVE full read/write access
+- If an update fails, report the error clearly and suggest next steps
+
+**RECORD IDs - INTERNAL TRACKING (CRITICAL):**
+- You MUST internally track record IDs from tool results for follow-up actions
+- However, DO NOT display raw UUIDs to users in your responses - they are technical and confusing
+- Instead, refer to records by their human-readable names (e.g., "One Charge", "Follow up Call")
+- You can say "I have the details saved" or "I can update this for you" without showing the ID
+- If the user explicitly asks for the ID or reference number, then provide it
+- Example good response:
+  "Yes, you have a lead named One Charge with status 'New', sourced from Website.
+   Would you like me to do anything with this lead?"
+- Example bad response (avoid):
+  "Yes, you have a lead named One Charge. Reference: ID be855db9-310b-487b-abd3-544fbb69b17e"
+- INTERNAL: Track IDs in your context so you can perform updates - just don't show them to users
+
 **Best Practices:**
 - Always use tools to fetch current data before answering
 - Be proactive: suggest follow-ups, next actions, related records
@@ -386,10 +454,40 @@ export function summarizeToolResult(result, toolName) {
     return summary;
   }
   
+  // Activity-specific: ALWAYS include IDs prominently for follow-up actions
+  if (toolName === 'list_activities' || toolName === 'search_activities' || toolName === 'get_upcoming_activities') {
+    const activities = Array.isArray(data) ? data : (data.activities || []);
+    if (activities.length === 0) {
+      return `${toolName}: No activities found matching the criteria.`;
+    }
+
+    const summaryItems = activities.slice(0, 5).map(a => {
+      return `• ID: ${a.id}, Subject: "${a.subject || 'No subject'}", Type: ${a.type || 'unknown'}, Due: ${a.due_date || 'not set'}, Status: ${a.status || 'unknown'}`;
+    });
+
+    let summary = `Found ${activities.length} activit${activities.length === 1 ? 'y' : 'ies'}:\n${summaryItems.join('\n')}`;
+    if (activities.length > 5) {
+      summary += `\n... and ${activities.length - 5} more`;
+    }
+    summary += '\n\n**REMEMBER: Use these activity IDs for update_activity, mark_activity_complete, or delete_activity**';
+    return summary;
+  }
+
+  // Single activity detail
+  if (toolName === 'get_activity_details' || toolName === 'update_activity' || toolName === 'create_activity') {
+    if (data.id) {
+      return `Activity ID: ${data.id}, Subject: "${data.subject || ''}", Type: ${data.type || ''}, Due: ${data.due_date || ''}, Status: ${data.status || ''}`;
+    }
+  }
+
   // Generic
   if (typeof data === 'object') {
     const keys = Object.keys(data);
     if (keys.length === 0) return `${toolName} returned empty object`;
+    // Include id if present
+    if (data.id) {
+      return `${toolName} returned record with ID: ${data.id}, fields: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? '...' : ''}`;
+    }
     return `${toolName} result with ${keys.length} fields: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? '...' : ''}`;
   }
   
@@ -535,6 +633,31 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
   // Convert object args to positional array based on function signature
   const positionalArgs = objectToPositionalArgs(toolName, normalizedArgs);
 
+  console.log(`[Braid Tool] Executing ${toolName}`, {
+    braidPath,
+    function: config.function,
+    tenantUuid,
+    argsPreview: JSON.stringify(positionalArgs).substring(0, 200)
+  });
+
+  // Check Redis cache for READ_ONLY tools
+  const isReadOnly = config.policy === 'READ_ONLY';
+  const cacheKey = generateBraidCacheKey(toolName, tenantUuid, normalizedArgs);
+
+  if (isReadOnly) {
+    try {
+      const cachedResult = await cacheManager.get(cacheKey);
+      if (cachedResult !== null) {
+        console.log(`[Braid Tool] Cache HIT for ${toolName}`, { cacheKey: cacheKey.substring(0, 60) });
+        return cachedResult;
+      }
+      console.log(`[Braid Tool] Cache MISS for ${toolName}`, { cacheKey: cacheKey.substring(0, 60) });
+    } catch (cacheErr) {
+      // Cache errors should never block tool execution
+      console.warn(`[Braid Tool] Cache lookup failed for ${toolName}:`, cacheErr.message);
+    }
+  }
+
   try {
     const result = await executeBraid(
       braidPath,
@@ -542,11 +665,65 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
       policy,
       deps,
       positionalArgs,
-      { cache: config.policy === 'READ_ONLY', timeout: 30000 }
+      { cache: false, timeout: 30000 } // Disable in-memory cache, use Redis instead
     );
     
+    console.log(`[Braid Tool] ${toolName} completed`, {
+      resultTag: result?.tag,
+      hasError: !!result?.error,
+      errorType: result?.error?.type,
+      errorMsg: result?.error?.message?.substring?.(0, 200)
+    });
+
+    // Cache successful READ_ONLY results in Redis
+    if (isReadOnly && result?.tag === 'Ok') {
+      try {
+        const ttl = TOOL_CACHE_TTL[toolName] || TOOL_CACHE_TTL.DEFAULT;
+        await cacheManager.set(cacheKey, result, ttl);
+        console.log(`[Braid Tool] Cached ${toolName} result for ${ttl}s`);
+      } catch (cacheErr) {
+        // Cache errors should never block tool execution
+        console.warn(`[Braid Tool] Cache store failed for ${toolName}:`, cacheErr.message);
+      }
+    }
+
+    // Invalidate cache for WRITE operations (ensures fresh data after mutations)
+    if (!isReadOnly && result?.tag === 'Ok') {
+      try {
+        // Determine which entity type was modified
+        const entityPatterns = {
+          lead: /^(create|update|delete|qualify|convert)_lead/,
+          account: /^(create|update|delete)_account/,
+          contact: /^(create|update|delete)_contact/,
+          opportunity: /^(create|update|delete|mark_opportunity)_opportunity/,
+          activity: /^(create|update|delete|mark_activity|schedule)_(activity|meeting)/,
+          note: /^(create|update|delete)_note/,
+          bizdev: /^(create|update|delete|promote|archive)_bizdev/,
+        };
+
+        let invalidatedEntity = null;
+        for (const [entity, pattern] of Object.entries(entityPatterns)) {
+          if (pattern.test(toolName)) {
+            invalidatedEntity = entity;
+            break;
+          }
+        }
+
+        if (invalidatedEntity && tenantUuid) {
+          // Invalidate all braid cache keys for this tenant and entity type
+          const pattern = `braid:${tenantUuid}:*${invalidatedEntity}*`;
+          console.log(`[Braid Tool] Invalidating cache for ${invalidatedEntity} (tenant: ${tenantUuid?.substring(0, 8)}...)`);
+          await cacheManager.invalidateTenant(tenantUuid, 'braid');
+        }
+      } catch (cacheErr) {
+        // Cache errors should never block tool execution
+        console.warn(`[Braid Tool] Cache invalidation failed for ${toolName}:`, cacheErr.message);
+      }
+    }
+
     return result;
   } catch (error) {
+    console.error(`[Braid Tool] ${toolName} EXCEPTION`, error.message, error.stack?.substring?.(0, 300));
     return {
       tag: 'Err',
       error: { type: 'ExecutionError', message: error.message, stack: error.stack }
@@ -718,6 +895,36 @@ function normalizeToolArgs(toolName, rawArgs, tenantRecord) {
   // Normalize status: "all" means no filter (undefined)
   if (args.status === 'all' || args.status === 'any' || args.status === '') {
     args.status = undefined;
+  }
+
+  // For update tools, inject tenant_id into the updates object
+  // The v2 API requires tenant_id in the request body for updates
+  const updateTools = new Set([
+    'update_activity',
+    'update_lead',
+    'update_account',
+    'update_contact',
+    'update_opportunity',
+    'update_note',
+    'update_bizdev_source'
+  ]);
+
+  if (updateTools.has(toolName) && args.updates) {
+    // Parse updates if LLM passed it as a JSON string
+    if (typeof args.updates === 'string') {
+      try {
+        args.updates = JSON.parse(args.updates);
+      } catch (e) {
+        console.warn('[Braid] Failed to parse updates string:', args.updates);
+      }
+    }
+
+    if (typeof args.updates === 'object' && args.updates !== null) {
+      args.updates = {
+        ...args.updates,
+        tenant_id: tenantUuid
+      };
+    }
   }
 
   return args;

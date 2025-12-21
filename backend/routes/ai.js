@@ -17,6 +17,7 @@ import { resolveLLMApiKey, pickModel, getTenantIdFromRequest, selectLLMConfigFor
 import { logLLMActivity } from '../lib/aiEngine/activityLogger.js';
 import { enhanceSystemPromptWithLabels, enhanceSystemPromptWithFullContext, fetchEntityLabels, updateToolSchemasWithLabels } from '../lib/entityLabelInjector.js';
 import { buildTenantContextDictionary, generateContextDictionaryPrompt } from '../lib/tenantContextDictionary.js';
+import { developerChat, isSuperadmin } from '../lib/developerAI.js';
 
 /**
  * Create provider-specific OpenAI-compatible client for tool calling.
@@ -585,6 +586,8 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
               parsedArgs = {};
             }
 
+            console.log('[AI Tool Call]', toolName, 'with args:', JSON.stringify(parsedArgs));
+
             let toolResult;
             try {
               toolResult = await executeToolCall({
@@ -620,6 +623,32 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
               tool_call_id: call.id,
               content: enhancedContent,
             });
+          }
+
+          // PERSIST TOOL CONTEXT: Save a hidden context message so follow-up turns can reference tool results
+          // This allows the AI to remember activity IDs, record IDs, etc. from previous tool calls
+          const toolContextSummary = executedTools.map(t => {
+            const preview = t.result_preview || '';
+            return `[${t.name}] ${preview.substring(0, 300)}`;
+          }).join('\n');
+
+          if (toolContextSummary) {
+            try {
+              await supa
+                .from('conversation_messages')
+                .insert({
+                  conversation_id: conversationId,
+                  role: 'assistant',
+                  content: `[TOOL_CONTEXT] The following tool results are available for reference:\n${toolContextSummary}`,
+                  metadata: {
+                    type: 'tool_context',
+                    tool_results: executedTools,
+                    hidden: true // UI should hide these messages
+                  }
+                });
+            } catch (contextErr) {
+              console.warn('[AI] Failed to persist tool context:', contextErr.message);
+            }
           }
 
           continue;
@@ -1597,6 +1626,14 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       const tenantIdentifier = getTenantId(req);
       const tenantRecord = await resolveTenantRecord(tenantIdentifier);
 
+      console.log('[AI Chat] Tenant resolution:', {
+        fromHeader: req.headers['x-tenant-id'],
+        fromQuery: req.query?.tenant_id,
+        identifier: tenantIdentifier,
+        resolvedId: tenantRecord?.id,
+        resolvedSlug: tenantRecord?.tenant_id
+      });
+
       // Enforce tenant context for any chat (tools require tenant isolation)
       if (!tenantRecord?.id) {
         return res.status(400).json({
@@ -2107,6 +2144,197 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
         status: 'error',
         message: error.message,
         durationMs: Date.now() - startedAt
+      });
+    }
+  });
+
+  // ============================================
+  // DEVELOPER AI - Superadmin-only Claude-powered code assistant
+  // ============================================
+  router.post('/developer', async (req, res) => {
+    const startedAt = Date.now();
+
+    try {
+      const { messages = [] } = req.body || {};
+
+      // Get user from request (should be set by auth middleware)
+      // FALLBACK: Also check x-user-role header for cases where auth middleware doesn't populate req.user
+      let user = req.user;
+      if (!user) {
+        const headerRole = req.headers['x-user-role'];
+        const headerEmail = req.headers['x-user-email'];
+        if (headerRole === 'superadmin') {
+          user = { role: headerRole, email: headerEmail || 'unknown' };
+          console.log('[Developer AI] Using header-based auth:', headerEmail);
+        }
+      }
+
+      // SECURITY: Superadmin-only access
+      if (!isSuperadmin(user)) {
+        console.warn('[Developer AI] Access denied - user is not superadmin:', user?.email, 'role:', user?.role);
+        return res.status(403).json({
+          status: 'error',
+          message: 'Developer AI is restricted to superadmin users only',
+        });
+      }
+
+      if (!Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'messages array is required',
+        });
+      }
+
+      // Check if Anthropic API key is configured
+      if (!process.env.ANTHROPIC_API_KEY) {
+        return res.status(503).json({
+          status: 'error',
+          message: 'Developer AI is not configured. ANTHROPIC_API_KEY is missing.',
+        });
+      }
+
+      console.log('[Developer AI] Request from superadmin:', user?.email, 'messages:', messages.length);
+
+      const result = await developerChat(messages, user?.id);
+
+      console.log('[Developer AI] Response generated in', Date.now() - startedAt, 'ms');
+
+      res.json({
+        status: 'success',
+        response: result.response,
+        model: result.model,
+        usage: result.usage,
+        durationMs: Date.now() - startedAt,
+      });
+
+    } catch (error) {
+      console.error('[Developer AI] Error:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message,
+        durationMs: Date.now() - startedAt,
+      });
+    }
+  });
+
+  // ============================================
+  // DEVELOPER AI - Approve pending action
+  // ============================================
+  router.post('/developer/approve/:actionId', async (req, res) => {
+    const startedAt = Date.now();
+
+    try {
+      // Import action functions dynamically to avoid circular deps
+      const { executeApprovedAction, getPendingAction, isSuperadmin: checkSuperadmin } = await import('../lib/developerAI.js');
+
+      // Get user from request
+      let user = req.user;
+      if (!user) {
+        const headerRole = req.headers['x-user-role'];
+        const headerEmail = req.headers['x-user-email'];
+        if (headerRole === 'superadmin') {
+          user = { role: headerRole, email: headerEmail || 'unknown' };
+        }
+      }
+
+      // SECURITY: Superadmin-only access
+      if (!checkSuperadmin(user)) {
+        console.warn('[Developer AI Approve] Access denied - user is not superadmin:', user?.email);
+        return res.status(403).json({
+          status: 'error',
+          message: 'Developer AI actions are restricted to superadmin users only',
+        });
+      }
+
+      const { actionId } = req.params;
+
+      // Verify action exists
+      const pendingAction = getPendingAction(actionId);
+      if (!pendingAction) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Action not found or already executed',
+        });
+      }
+
+      console.log('[Developer AI] Approving action:', actionId, pendingAction.type, 'by', user?.email);
+
+      const result = await executeApprovedAction(actionId);
+
+      console.log('[Developer AI] Action executed in', Date.now() - startedAt, 'ms');
+
+      res.json({
+        status: result.success ? 'success' : 'error',
+        ...result,
+        durationMs: Date.now() - startedAt,
+      });
+
+    } catch (error) {
+      console.error('[Developer AI Approve] Error:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message,
+        durationMs: Date.now() - startedAt,
+      });
+    }
+  });
+
+  // ============================================
+  // DEVELOPER AI - Reject pending action
+  // ============================================
+  router.post('/developer/reject/:actionId', async (req, res) => {
+    const startedAt = Date.now();
+
+    try {
+      // Import action functions dynamically
+      const { rejectAction, getPendingAction, isSuperadmin: checkSuperadmin } = await import('../lib/developerAI.js');
+
+      // Get user from request
+      let user = req.user;
+      if (!user) {
+        const headerRole = req.headers['x-user-role'];
+        const headerEmail = req.headers['x-user-email'];
+        if (headerRole === 'superadmin') {
+          user = { role: headerRole, email: headerEmail || 'unknown' };
+        }
+      }
+
+      // SECURITY: Superadmin-only access
+      if (!checkSuperadmin(user)) {
+        console.warn('[Developer AI Reject] Access denied - user is not superadmin:', user?.email);
+        return res.status(403).json({
+          status: 'error',
+          message: 'Developer AI actions are restricted to superadmin users only',
+        });
+      }
+
+      const { actionId } = req.params;
+
+      // Verify action exists
+      const pendingAction = getPendingAction(actionId);
+      if (!pendingAction) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Action not found or already processed',
+        });
+      }
+
+      console.log('[Developer AI] Rejecting action:', actionId, pendingAction.type, 'by', user?.email);
+
+      const result = rejectAction(actionId);
+
+      res.json({
+        status: 'success',
+        ...result,
+        durationMs: Date.now() - startedAt,
+      });
+
+    } catch (error) {
+      console.error('[Developer AI Reject] Error:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message,
+        durationMs: Date.now() - startedAt,
       });
     }
   });

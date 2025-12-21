@@ -82,3 +82,24 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* AiSHA UI Action Animations */
+@keyframes aisha-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.2);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+.aisha-highlight {
+  animation: aisha-pulse 0.6s ease-out 3;
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+

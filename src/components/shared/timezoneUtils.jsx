@@ -197,9 +197,14 @@ export function formatActivityDateTime(activity, offsetMinutes = null) {
   }
 
   try {
-    // If no offset provided, try to get from system/user settings
-    if (offsetMinutes === null) {
-      offsetMinutes = new Date().getTimezoneOffset();
+    const dateParts = datePart.split('-');
+    const year = parseInt(dateParts[0]);
+    const month = parseInt(dateParts[1]) - 1; // JS months are 0-indexed
+    const day = parseInt(dateParts[2]);
+
+    // Validate parsed date parts
+    if (isNaN(year) || isNaN(month) || isNaN(day)) {
+      return 'Invalid date';
     }
 
     if (activity.due_time) {
@@ -208,26 +213,22 @@ export function formatActivityDateTime(activity, offsetMinutes = null) {
         return 'Invalid time';
       }
 
-      // Normalize time to HH:mm:ss and create UTC datetime string
-      const normalizedTime = normalizeTimeString(activity.due_time);
-      const utcString = `${datePart}T${normalizedTime}.000Z`;
+      // FIXED: due_time is stored as LOCAL time, not UTC
+      // Just display it directly without timezone conversion
+      const timeParts = activity.due_time.split(':');
+      const hours = parseInt(timeParts[0]);
+      const minutes = parseInt(timeParts[1] || '0');
+
+      const displayDate = new Date(year, month, day, hours, minutes);
       
-      // Convert to local time using user's timezone offset
-      const displayDate = utcToLocal(utcString, offsetMinutes);
-      
-      return format(displayDate, 'PPP p'); // e.g., "September 26, 2025 at 5:00 AM"
-    } else {
-      // Date only - treat as local date without time conversion
-      const dateParts = datePart.split('-');
-      const year = parseInt(dateParts[0]);
-      const month = parseInt(dateParts[1]) - 1; // JS months are 0-indexed
-      const day = parseInt(dateParts[2]);
-      
-      // Validate parsed date parts
-      if (isNaN(year) || isNaN(month) || isNaN(day)) {
-        return 'Invalid date';
+      // Check if constructed date is valid
+      if (isNaN(displayDate.getTime())) {
+        return 'Invalid date/time';
       }
       
+      return format(displayDate, 'PPP p'); // e.g., "September 26, 2025 at 5:00 PM"
+    } else {
+      // Date only - treat as local date without time conversion
       const dateOnly = new Date(year, month, day);
       
       // Check if constructed date is valid

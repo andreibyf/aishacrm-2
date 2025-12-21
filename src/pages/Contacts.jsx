@@ -57,6 +57,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 import { useUser } from "@/components/shared/useUser.js";
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
+import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 
 export default function ContactsPage() {
   const { plural: contactsLabel, singular: contactLabel } = useEntityLabel('contacts');
@@ -829,6 +830,37 @@ export default function ContactsPage() {
   const formatNumber = (num) => {
     return num.toLocaleString("en-US");
   };
+
+  // AiSHA events listener - allows AI to trigger page actions
+  useAiShaEvents({
+    entityType: 'contacts',
+    onOpenEdit: ({ id }) => {
+      const contact = contacts.find(c => c.id === id);
+      if (contact) {
+        setEditingContact(contact);
+        setIsFormOpen(true);
+      } else {
+        Contact.get(id).then(result => {
+          if (result) {
+            setEditingContact(result);
+            setIsFormOpen(true);
+          }
+        });
+      }
+    },
+    onSelectRow: ({ id }) => {
+      const contact = contacts.find(c => c.id === id);
+      if (contact) {
+        setDetailContact(contact);
+        setIsDetailOpen(true);
+      }
+    },
+    onOpenForm: () => {
+      setEditingContact(null);
+      setIsFormOpen(true);
+    },
+    onRefresh: handleRefresh,
+  });
 
   if (loading && !initialLoadDone.current) {
     return (

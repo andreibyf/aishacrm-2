@@ -1,6 +1,6 @@
 # AiSHA Assistant User Guide
 
-_Last updated: December 6, 2025_
+_Last updated: December 20, 2025_
 
 AiSHA (AI Super Hi-performing Assistant) is the executive-assistant layer that runs inside the CRM sidebar. This guide explains how end users, product, and support teams should interact with the Phase 4-ready assistant experience, including layout, quick actions, guided forms, voice controls, and natural language commands.
 
@@ -207,16 +207,33 @@ AiSHA understands natural language and recognizes keywords associated with diffe
 - **Use Time References**: Say "tomorrow", "next Monday", or "at 3pm" for scheduling.
 - **Mention the Entity**: Include words like "lead", "account", "deal", or "task" so AiSHA knows what you're referring to.
 
-### 6.2 Conversation Flow
+### 6.2 Conversation Flow & Session Context
 
-AiSHA maintains conversation context within a session. You can have multi-turn conversations:
+AiSHA maintains **conversation context** within a session. This means you can have natural multi-turn conversations without repeating yourself:
 
 1. **You:** "Show me my leads"
-2. **AiSHA:** "Here are your leads: Jennifer Martinez (qualified), ..."
+2. **AiSHA:** "Here are your leads: Jennifer Martinez (qualified), One Charge (new), ..."
 3. **You:** "Tell me more about Jennifer"
 4. **AiSHA:** "Jennifer Martinez is a qualified lead from Innovate Marketing Group..."
 5. **You:** "Schedule a call with her for tomorrow"
 6. **AiSHA:** "I'll schedule a call with Jennifer Martinez for tomorrow. What time works best?"
+7. **You:** "Add a phone number 555-1234"
+8. **AiSHA:** "Done! I've added phone number 555-1234 to Jennifer Martinez's record."
+
+**How It Works:**
+- When AiSHA retrieves records (leads, accounts, contacts, etc.), it remembers them for the session
+- You can refer to records by name in follow-up questions
+- Actions like "update", "add a note", or "schedule a call" apply to the referenced record
+- The context resets when you clear the chat (trash button)
+
+**Supported Entity Types:**
+| Entity | Tracked By |
+|--------|------------|
+| Leads | first_name, last_name, email, company |
+| Contacts | first_name, last_name, email |
+| Accounts | name, company_name |
+| Opportunities | name |
+| Activities | subject |
 
 ### 6.3 Confirmation for Actions
 
@@ -227,6 +244,23 @@ AiSHA will ask for confirmation before:
 - Assigning records to team members
 
 Always review the proposed action before confirming.
+
+### 6.4 Clean User Responses (No Technical IDs)
+
+AiSHA keeps technical details (like UUIDs) behind the scenes. You'll see clean, natural responses:
+
+**What You See:**
+> "Yes, you have a lead named One Charge with status 'New', sourced from Website. Would you like me to do anything with this lead?"
+
+**What AiSHA Tracks Internally:**
+- Record UUID for follow-up actions
+- Entity type and metadata
+- Last-queried context
+
+**When You Need the ID:**
+Simply ask: "What's the reference ID for One Charge?" and AiSHA will provide it.
+
+This keeps conversations natural while maintaining full ability to perform updates, deletes, and other operations.
 
 ---
 
@@ -1112,8 +1146,8 @@ If you notice consistent hallucination patterns:
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** December 5, 2025  
+**Document Version:** 1.1  
+**Last Updated:** December 20, 2025  
 **Maintainer:** Aisha CRM Team
 
 For questions or feedback, contact your system administrator.

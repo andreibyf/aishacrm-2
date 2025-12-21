@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { processChatCommand } from '@/ai/engine/processChatCommand';
+import { processDeveloperCommand } from '@/api/functions';
 import { addHistoryEntry, getRecentHistory, getSuggestions } from '@/lib/suggestionEngine';
 import { useUser } from '@/components/shared/useUser';
 
@@ -98,11 +99,16 @@ export function AiSidebarProvider({ children }) {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState(null);
   const [realtimeMode, setRealtimeMode] = useState(false);
+  const [isDeveloperMode, setIsDeveloperMode] = useState(false); // Developer Mode for superadmins
   const [suggestions, setSuggestions] = useState([]);
+  // Session entity context: maps entity names/references to their IDs for follow-up questions
+  // Format: { "jack lemon": { id: "uuid", type: "lead", data: {...} }, ... }
+  const [sessionEntityContext, setSessionEntityContext] = useState({});
   const messagesRef = useRef(messages);
   const userRef = useRef(user);
   const suggestionContextRef = useRef(buildSuggestionContext());
   const suggestionIndexRef = useRef(new Map());
+  const sessionContextRef = useRef({});
 
   // Keep userRef updated for use in sendMessage
   useEffect(() => {
@@ -112,6 +118,99 @@ export function AiSidebarProvider({ children }) {
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  // Keep sessionContextRef in sync
+  useEffect(() => {
+    sessionContextRef.current = sessionEntityContext;
+  }, [sessionEntityContext]);
+
+  // Extract entities from AI response data and add to session context
+  const extractAndStoreEntities = useCallback((data, entityType) => {
+    if (!data) return;
+
+    const newContext = { ...sessionContextRef.current };
+    const items = Array.isArray(data) ? data : (data.items || data.records || [data]);
+
+    for (const item of items) {
+      if (!item?.id) continue;
+
+      // Build searchable keys from the entity
+      const keys = [];
+
+      // Full name for leads/contacts
+      if (item.first_name || item.last_name) {
+        const fullName = [item.first_name, item.last_name].filter(Boolean).join(' ').trim().toLowerCase();
+        if (fullName) keys.push(fullName);
+      }
+
+      // Name field (accounts, opportunities)
+      if (item.name) {
+        keys.push(item.name.toLowerCase());
+      }
+
+      // Company name
+      if (item.company_name) {
+        keys.push(item.company_name.toLowerCase());
+      }
+
+      // Email
+      if (item.email) {
+        keys.push(item.email.toLowerCase());
+      }
+
+      // Subject for activities
+      if (item.subject) {
+        keys.push(item.subject.toLowerCase());
+      }
+
+      // Store each key pointing to the entity
+      for (const key of keys) {
+        if (key && key.length > 1) {
+          newContext[key] = {
+            id: item.id,
+            type: entityType || item.type || 'unknown',
+            name: item.name || [item.first_name, item.last_name].filter(Boolean).join(' ') || item.subject || key,
+            data: item
+          };
+        }
+      }
+    }
+
+    setSessionEntityContext(newContext);
+    if (import.meta.env?.DEV) {
+      console.log('[SessionContext] Updated with', Object.keys(newContext).length, 'entity references');
+    }
+  }, []);
+
+  // Resolve a mention to an entity from session context
+  const resolveEntityFromContext = useCallback((mention) => {
+    if (!mention) return null;
+    const normalized = mention.toLowerCase().trim();
+    return sessionContextRef.current[normalized] || null;
+  }, []);
+
+  // Build context summary for AI (names -> IDs)
+  const buildSessionContextSummary = useCallback(() => {
+    const ctx = sessionContextRef.current;
+    if (!ctx || Object.keys(ctx).length === 0) return null;
+
+    // Dedupe by ID and create a summary
+    const byId = {};
+    for (const [key, value] of Object.entries(ctx)) {
+      if (!byId[value.id]) {
+        byId[value.id] = { ...value, aliases: [key] };
+      } else {
+        byId[value.id].aliases.push(key);
+      }
+    }
+
+    return Object.values(byId).map(e => ({
+      id: e.id,
+      type: e.type,
+      name: e.name,
+      aliases: e.aliases.slice(0, 3) // Limit aliases
+    }));
+  }, []);
 
   const refreshSuggestions = useCallback(() => {
     const context = buildSuggestionContext();
@@ -133,6 +232,7 @@ export function AiSidebarProvider({ children }) {
   const resetThread = useCallback(() => {
     setMessages([{ ...welcomeMessage, id: createMessageId(), timestamp: Date.now() }]);
     setError(null);
+    setSessionEntityContext({}); // Clear session context on reset
     refreshSuggestions();
   }, [refreshSuggestions]);
 
@@ -170,7 +270,39 @@ export function AiSidebarProvider({ children }) {
     const context = resolveTenantContext(userRef.current);
 
     try {
-      const result = await processChatCommand({ text, history: chatHistory, context });
+      let result;
+
+      // Use Developer AI (Claude) when in developer mode
+      if (isDeveloperMode && userRef.current?.role === 'superadmin') {
+        const devResponse = await processDeveloperCommand({
+          message: text,
+          userRole: userRef.current?.role,
+          userEmail: userRef.current?.email
+        });
+        if (devResponse?.data?.status === 'success') {
+          result = {
+            assistantMessage: {
+              content: devResponse.data.response || 'No response from Developer AI.',
+              actions: [],
+              data: null,
+              mode: 'developer'
+            },
+            route: 'developer',
+            classification: { intent: 'developer', entity: 'code' }
+          };
+        } else {
+          throw new Error(devResponse?.data?.message || 'Developer AI request failed');
+        }
+      } else {
+        // Include session context for entity resolution in follow-up questions
+        const sessionContext = buildSessionContextSummary();
+        result = await processChatCommand({
+          text,
+          history: chatHistory,
+          context,
+          sessionEntities: sessionContext
+        });
+      }
 
       const assistantMessage = {
         id: createMessageId(),
@@ -205,6 +337,14 @@ export function AiSidebarProvider({ children }) {
         refreshSuggestions();
       }
 
+      // Extract entities from response data for session context
+      if (result.assistantMessage?.data) {
+        const entityType = result.classification?.parserResult?.entity ||
+          result.classification?.effectiveParser?.entity ||
+          result.route;
+        extractAndStoreEntities(result.assistantMessage.data, entityType);
+      }
+
       setMessages((prev) => {
         const next = [...prev, assistantMessage];
         messagesRef.current = next;
@@ -225,7 +365,7 @@ export function AiSidebarProvider({ children }) {
     } finally {
       setIsSending(false);
     }
-  }, [refreshSuggestions]);
+  }, [refreshSuggestions, isDeveloperMode, buildSessionContextSummary, extractAndStoreEntities]);
 
   const addRealtimeMessage = useCallback((message) => {
     const content = (message?.content || '').toString();
@@ -270,7 +410,9 @@ export function AiSidebarProvider({ children }) {
       setRealtimeMode,
       addRealtimeMessage,
       suggestions,
-      applySuggestion
+      applySuggestion,
+      isDeveloperMode,
+      setIsDeveloperMode
     }),
     [
       isOpen,
@@ -287,7 +429,9 @@ export function AiSidebarProvider({ children }) {
       setRealtimeMode,
       addRealtimeMessage,
       suggestions,
-      applySuggestion
+      applySuggestion,
+      isDeveloperMode,
+      setIsDeveloperMode
     ]
   );
 

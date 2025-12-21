@@ -105,6 +105,7 @@ import AiSidebar from "@/components/ai/AiSidebar";
 import AiAssistantLauncher from "@/components/ai/AiAssistantLauncher.jsx";
 import { AiSidebarProvider, useAiSidebarState } from "@/components/ai/useAiSidebarState.jsx";
 import SuggestionBadge from "@/components/ai/SuggestionBadge";
+import AiShaActionHandler from "@/components/ai/AiShaActionHandler";
 import CronHeartbeat from "../components/shared/CronHeartbeat";
 import UserPresenceHeartbeat from "../components/shared/UserPresenceHeartbeat";
 import GlobalDomPatches from "../components/shared/GlobalDomPatches";
@@ -3762,6 +3763,7 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
       {null}
 
       <AiSidebar realtimeVoiceEnabled={realtimeVoiceModuleEnabled} />
+      <AiShaActionHandler />
     </div>
   );
 }

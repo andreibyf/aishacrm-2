@@ -136,6 +136,98 @@ export default function createLeadsV2Routes() {
 
   /**
    * @openapi
+   * /api/v2/leads/search:
+   *   get:
+   *     summary: Search leads by name, email, or company
+   *     tags: [leads-v2]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: q
+   *         required: true
+   *         schema: { type: string }
+   *         description: Search query (name, email, or company)
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 10 }
+   *     responses:
+   *       200:
+   *         description: Search results
+   */
+  router.get('/search', async (req, res) => {
+    try {
+      const { tenant_id, q, limit = 10 } = req.query;
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+      if (!q || !q.trim()) {
+        return res.status(400).json({ status: 'error', message: 'Search query (q) is required' });
+      }
+
+      const searchTerm = q.trim();
+      const maxResults = Math.min(parseInt(limit, 10) || 10, 50);
+
+      console.log('[Leads v2 GET /search] Searching for:', searchTerm, 'tenant:', tenant_id);
+
+      const supabase = getSupabaseClient();
+
+      // Split multi-word queries and search each term
+      // "One Charge" -> search for "One" OR "Charge" in all fields
+      const searchTerms = searchTerm.split(/\s+/).filter(t => t.length > 0);
+
+      // Build OR conditions for each term across all searchable fields
+      const orConditions = searchTerms.flatMap(term => [
+        `first_name.ilike.%${term}%`,
+        `last_name.ilike.%${term}%`,
+        `email.ilike.%${term}%`,
+        `company.ilike.%${term}%`
+      ]);
+
+      console.log('[Leads v2 GET /search] Search terms:', searchTerms, 'conditions:', orConditions.length);
+
+      // Search across first_name, last_name, email, company using ilike (case-insensitive)
+      const { data, error } = await supabase
+        .from('leads')
+        .select('id, first_name, last_name, email, phone, company, job_title, status, source, created_at')
+        .eq('tenant_id', tenant_id)
+        .or(orConditions.join(','))
+        .order('created_at', { ascending: false })
+        .limit(maxResults);
+
+      if (error) {
+        console.error('[Leads v2 GET /search] Query error:', error.message);
+        throw new Error(error.message);
+      }
+
+      console.log('[Leads v2 GET /search] Found', data?.length || 0, 'results');
+
+      // Transform results for AI consumption
+      const leads = (data || []).map(lead => ({
+        ...expandMetadata(lead),
+        // Construct display name from available fields
+        display_name: [lead.first_name, lead.last_name].filter(Boolean).join(' ').trim() || lead.company || 'Unknown'
+      }));
+
+      res.json({
+        status: 'success',
+        data: {
+          leads,
+          total: leads.length,
+          query: q
+        },
+      });
+    } catch (err) {
+      console.error('[Leads v2 GET /search] Error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  /**
+   * @openapi
    * /api/v2/leads:
    *   get:
    *     summary: List leads with flattened metadata

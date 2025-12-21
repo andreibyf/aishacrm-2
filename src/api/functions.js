@@ -97,6 +97,65 @@ const createFunctionProxy = (functionName) => {
       }
     }
 
+    // Developer AI handler: superadmin-only Claude-powered code assistant
+    if (functionName === 'processDeveloperCommand') {
+      try {
+        const BACKEND_URL = getBackendUrl();
+        const opts = args[0] || {};
+
+        if (import.meta.env.DEV) {
+          logDev(`[processDeveloperCommand] Developer AI request`);
+        }
+
+        const messages = Array.isArray(opts.messages)
+          ? opts.messages
+          : [{ role: 'user', content: String(opts.message || '').trim() }].filter(m => m.content);
+
+        const body = { messages };
+
+        // Get user role - prefer passed values (from React context), fallback to localStorage
+        let userRole = opts.userRole || '';
+        let userEmail = opts.userEmail || '';
+
+        // Fallback to localStorage if not passed
+        if (!userRole) {
+          try {
+            const userDataStr = localStorage.getItem('user_data');
+            if (userDataStr) {
+              const userData = JSON.parse(userDataStr);
+              userRole = userData?.role || '';
+              userEmail = userData?.email || '';
+            }
+          } catch {
+            // Fallback to direct role storage
+            userRole = localStorage.getItem('user_role') || '';
+            userEmail = localStorage.getItem('user_email') || '';
+          }
+        }
+
+        if (import.meta.env.DEV) {
+          logDev(`[processDeveloperCommand] userRole=${userRole}, userEmail=${userEmail}`);
+        }
+
+        const headers = {
+          'Content-Type': 'application/json',
+          'x-user-role': userRole,
+          'x-user-email': userEmail
+        };
+
+        const resp = await fetch(`${BACKEND_URL}/api/ai/developer`, {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify(body)
+        });
+        const json = await resp.json().catch(() => ({}));
+        return { status: resp.status, data: json };
+      } catch (err) {
+        return { status: 500, data: { status: 'error', message: err?.message || String(err) } };
+      }
+    }
+
     if (isLocalDevMode()) {
             // ========================================
             // Dashboard Stats & Bundle (Local Dev -> call backend directly)
@@ -900,6 +959,7 @@ export const n8nCreateLead = functionsProxy.n8nCreateLead;
 export const n8nCreateContact = functionsProxy.n8nCreateContact;
 export const n8nGetData = functionsProxy.n8nGetData;
 export const processChatCommand = functionsProxy.processChatCommand;
+export const processDeveloperCommand = functionsProxy.processDeveloperCommand;
 
 export const makeCall = functionsProxy.makeCall;
 

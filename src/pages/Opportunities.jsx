@@ -61,6 +61,7 @@ import { loadUsersSafely } from "../components/shared/userLoader";
 import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 import { useUser } from "@/components/shared/useUser.js";
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 
 const stageColors = {
   prospecting: "bg-blue-900/20 text-blue-300 border-blue-700",
@@ -1044,6 +1045,37 @@ export default function OpportunitiesPage() {
     return searchTerm !== "" || stageFilter !== "all" ||
       selectedTags.length > 0;
   }, [searchTerm, stageFilter, selectedTags]);
+
+  // AiSHA events listener - allows AI to trigger page actions
+  useAiShaEvents({
+    entityType: 'opportunities',
+    onOpenEdit: ({ id }) => {
+      const opportunity = opportunities.find(o => o.id === id);
+      if (opportunity) {
+        setEditingOpportunity(opportunity);
+        setIsFormOpen(true);
+      } else {
+        Opportunity.get(id).then(result => {
+          if (result) {
+            setEditingOpportunity(result);
+            setIsFormOpen(true);
+          }
+        });
+      }
+    },
+    onSelectRow: ({ id }) => {
+      const opportunity = opportunities.find(o => o.id === id);
+      if (opportunity) {
+        setDetailOpportunity(opportunity);
+        setIsDetailOpen(true);
+      }
+    },
+    onOpenForm: () => {
+      setEditingOpportunity(null);
+      setIsFormOpen(true);
+    },
+    onRefresh: handleRefresh,
+  });
 
   const handleStageChange = async (opportunityId, newStage) => {
     try {

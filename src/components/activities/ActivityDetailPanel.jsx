@@ -89,6 +89,8 @@ const ActivityDetailPanel = ({
         {formattedDueDate !== 'Not set' ? `${formattedDueDate} (${timezoneDisplay})` : formattedDueDate}
       </p>
     ),
+    // Suppress the standard "Due Date" field since we show "Due Date & Time" above
+    "Due Date": null,
     "Assigned To": (
       <p className="text-slate-200 font-medium mt-1">
         {assignedUserName || 'Unassigned'}

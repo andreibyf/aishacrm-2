@@ -39,6 +39,7 @@ import { utcToLocal, getCurrentTimezoneOffset } from '../components/shared/timez
 import { useTimezone } from '../components/shared/TimezoneContext';
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
+import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 
 const statusColors = {
   scheduled: "bg-blue-900/20 text-blue-300 border-blue-700",
@@ -304,9 +305,22 @@ export default function ActivitiesPage() {
         const status = a.status;
         const dueDate = normalizeDate(a.due_date);
         const dueDateTime = normalizeDate(a.due_datetime);
-        const dueMoment = dueDateTime || dueDate;
         const isPending = status === 'scheduled' || status === 'in_progress';
-        const isPastDue = dueMoment ? (dueMoment.getTime() < nowLocal.getTime()) : false;
+
+        // Calculate if the activity is past due
+        // For date-only comparison (no time), compare just the date parts to avoid timezone issues
+        let isPastDue = false;
+        if (dueDateTime) {
+          // If we have a specific datetime, use full comparison
+          isPastDue = dueDateTime.getTime() < nowLocal.getTime();
+        } else if (dueDate) {
+          // For date-only, compare just the date (year-month-day)
+          // Extract just the date portion to avoid timezone confusion
+          const todayDateOnly = new Date(nowLocal.getFullYear(), nowLocal.getMonth(), nowLocal.getDate());
+          const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+          isPastDue = dueDateOnly.getTime() < todayDateOnly.getTime();
+        }
+
         if (isPending && isPastDue) {
           return { ...a, status: 'overdue' };
         }
@@ -752,6 +766,37 @@ export default function ActivitiesPage() {
       || showTestData;
   }, [searchTerm, statusFilter, typeFilter, selectedTags, dateRange, showTestData]);
 
+  // AiSHA events listener - allows AI to trigger page actions
+  useAiShaEvents({
+    entityType: 'activities',
+    onOpenEdit: ({ id }) => {
+      const activity = activities.find(a => a.id === id);
+      if (activity) {
+        setEditingActivity(activity);
+        setIsFormOpen(true);
+      } else {
+        Activity.filter({ id }).then(result => {
+          if (result && result.length > 0) {
+            setEditingActivity(result[0]);
+            setIsFormOpen(true);
+          }
+        });
+      }
+    },
+    onSelectRow: ({ id }) => {
+      const activity = activities.find(a => a.id === id);
+      if (activity) {
+        setDetailActivity(activity);
+        setIsDetailOpen(true);
+      }
+    },
+    onOpenForm: () => {
+      setEditingActivity(null);
+      setIsFormOpen(true);
+    },
+    onRefresh: handleRefresh,
+  });
+
   const getRelatedEntityLink = (activity) => {
     if (!activity.related_to || !activity.related_id) return null;
 
@@ -791,11 +836,14 @@ export default function ActivitiesPage() {
     try {
       if (activity.due_time) {
         const datePart = activity.due_date.split('T')[0];
-        // Normalize time to HH:mm:ss format (database returns HH:mm:ss, form submits HH:mm)
+        // Normalize time to HH:mm format
         const parts = activity.due_time.split(':');
-        const timePart = parts.length === 2 ? `${parts[0]}:${parts[1]}:00` : activity.due_time;
-        const utcString = `${datePart}T${timePart}.000Z`;
-        const localDate = utcToLocal(utcString, offsetMinutes);
+        const hours = parseInt(parts[0], 10);
+        const minutes = parseInt(parts[1] || '0', 10);
+
+        // due_time is stored as LOCAL time, not UTC - just display it directly
+        const [year, month, day] = datePart.split('-').map(Number);
+        const localDate = new Date(year, month - 1, day, hours, minutes);
         return format(localDate, 'MMM d, yyyy h:mm a');
       } else {
         const parts = activity.due_date.split('-').map(Number);

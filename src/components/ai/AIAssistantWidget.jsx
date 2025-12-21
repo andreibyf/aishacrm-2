@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { MessageCircle, X, Mic, MicOff, Volume2, VolumeX, Loader2 } from 'lucide-react';
+import { MessageCircle, X, Mic, MicOff, Volume2, VolumeX, Loader2, Code } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { generateDailyBriefing } from "@/api/functions";
 import { generateElevenLabsSpeech } from "@/api/functions";
-import { processChatCommand } from "@/api/functions";
+import { processChatCommand, processDeveloperCommand } from "@/api/functions";
 import { logDev } from "@/utils/devLogger";
 
 const EXEC_AVATAR_SRC = '/assets/aisha-executive-portrait.jpg';
@@ -30,6 +30,7 @@ export default function AIAssistantWidget({ user }) {
   const [isDetectingVoice, setIsDetectingVoice] = useState(false);
   const [currentTranscript, setCurrentTranscript] = useState('');
   const [isProcessing, setIsProcessing] = useState(false); // Add processing state to prevent loops
+  const [isDeveloperMode, setIsDeveloperMode] = useState(false); // Developer Mode for superadmins
 
   const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -307,9 +308,12 @@ export default function AIAssistantWidget({ user }) {
     setIsLoading(true);
 
     try {
-      logDev('🤖 Sending voice message to AI:', messageText);
-      
-      const response = await processChatCommand({
+      logDev('🤖 Sending voice message to AI:', messageText, isDeveloperMode ? '(Developer Mode)' : '');
+
+      // Use Developer AI (Claude) when in developer mode, otherwise use regular chat
+      const chatFunction = isDeveloperMode ? processDeveloperCommand : processChatCommand;
+
+      const response = await chatFunction({
         message: messageText,
         user_context: {
           email: user.email,
@@ -369,7 +373,7 @@ export default function AIAssistantWidget({ user }) {
       setIsLoading(false);
       setIsProcessing(false);
     }
-  }, [user, voiceEnabled, speakText]);
+  }, [user, voiceEnabled, speakText, isDeveloperMode]);
 
   // Update processVoiceMessageRef whenever processVoiceMessage changes
   useEffect(() => { processVoiceMessageRef.current = processVoiceMessage; }, [processVoiceMessage]);
@@ -769,10 +773,10 @@ export default function AIAssistantWidget({ user }) {
                   <img
                     src={EXEC_AVATAR_SRC}
                     alt="AiSHA assistant"
-                    className="h-8 w-8 rounded-xl object-cover ring-2 ring-white/40"
+                    className={`h-8 w-8 rounded-xl object-cover ring-2 ${isDeveloperMode ? 'ring-green-400' : 'ring-white/40'}`}
                     loading="lazy"
                   />
-                  <span>AiSHA Executive Assistant</span>
+                  <span>{isDeveloperMode ? 'Developer AI (Claude)' : 'AiSHA Executive Assistant'}</span>
                 </span>
               </CardTitle>
               <div className="flex items-center gap-2">
@@ -795,6 +799,21 @@ export default function AIAssistantWidget({ user }) {
                 >
                   {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
                 </Button>
+                {/* Developer Mode Toggle - Superadmin Only */}
+                {user?.role === 'superadmin' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setIsDeveloperMode(!isDeveloperMode);
+                      toast.success(isDeveloperMode ? '🤖 AiSHA Mode' : '💻 Developer Mode (Claude)');
+                    }}
+                    className={`text-white hover:bg-white/20 ${isDeveloperMode ? 'bg-green-600/50 ring-1 ring-green-300' : ''}`}
+                    title={isDeveloperMode ? 'Developer Mode ON (using Claude)' : 'Enable Developer Mode'}
+                  >
+                    <Code className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
             </div>
             

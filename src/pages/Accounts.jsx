@@ -51,6 +51,7 @@ import { ComponentHelp } from "../components/shared/ComponentHelp";
 import { formatIndustry } from "@/utils/industryUtils";
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
+import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 
 // Helper to add delay between API calls
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -906,6 +907,39 @@ export default function AccountsPage() {
   const hasActiveFilters = useMemo(() => {
     return searchTerm !== "" || typeFilter !== "all" || selectedTags.length > 0;
   }, [searchTerm, typeFilter, selectedTags]);
+
+  // AiSHA events listener - allows AI to trigger page actions
+  useAiShaEvents({
+    entityType: 'accounts',
+    onOpenEdit: ({ id }) => {
+      const account = accounts.find(a => a.id === id);
+      if (account) {
+        setEditingAccount(account);
+        setIsFormOpen(true);
+      } else {
+        // Account not in current page, try to fetch it
+        Account.get(id).then(result => {
+          if (result) {
+            setEditingAccount(result);
+            setIsFormOpen(true);
+          }
+        });
+      }
+    },
+    onSelectRow: ({ id }) => {
+      // Highlight the row and open detail panel
+      const account = accounts.find(a => a.id === id);
+      if (account) {
+        setDetailAccount(account);
+        setIsDetailOpen(true);
+      }
+    },
+    onOpenForm: () => {
+      setEditingAccount(null);
+      setIsFormOpen(true);
+    },
+    onRefresh: handleRefresh,
+  });
 
   if (!user) {
     return (

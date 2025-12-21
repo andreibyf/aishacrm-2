@@ -100,8 +100,13 @@ export function createBackendDeps(baseUrl, tenantId, userId = null, authToken = 
       
       async put(url, options = {}) {
         const body = options.body || {};
+        body.tenant_id = tenantId; // Inject tenant_id like POST does
+
         const params = new URLSearchParams(options.params || {});
         const fullUrl = params.toString() ? `${baseUrl}${url}?${params}` : `${baseUrl}${url}`;
+
+        console.log('[Braid HTTP] PUT', fullUrl, JSON.stringify(body).substring(0, 200));
+
         const response = await fetch(fullUrl, {
           method: 'PUT',
           headers: buildAuthHeaders(),
@@ -109,12 +114,14 @@ export function createBackendDeps(baseUrl, tenantId, userId = null, authToken = 
         });
         
         if (!response.ok) {
+          const errText = await response.text();
+          console.error('[Braid HTTP] PUT error', response.status, errText.substring(0, 200));
           return {
             tag: 'Err',
             error: {
               type: 'NetworkError',
               status: response.status,
-              message: await response.text()
+              message: errText
             }
           };
         }

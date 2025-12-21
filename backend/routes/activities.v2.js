@@ -55,9 +55,8 @@ export default function createActivityV2Routes(_pgPool) {
       const supabase = getSupabaseClient();
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
-      // OPTIMIZATION: Disable stats for list view - they cause double query (444ms).
-      // Stats should be fetched from dedicated /stats endpoint if needed (detail view only).
-      const includeStats = false; // req.query.include_stats === 'true' || req.query.include_stats === '1';
+      // Enable stats when explicitly requested via query param
+      const includeStats = req.query.include_stats === 'true' || req.query.include_stats === '1';
 
       let q = supabase
         .from('activities')
@@ -320,6 +319,22 @@ export default function createActivityV2Routes(_pgPool) {
         ...(Array.isArray(tags) ? { tags } : {}),
         ...(metadata && typeof metadata === 'object' ? { metadata } : {}),
       };
+
+      // Smart handling: Extract time from due_date if it contains a time component
+      // AI often passes due_date as "2025-12-20T15:00:00" instead of separate due_date + due_time
+      if (updatePayload.due_date && updatePayload.due_date.includes('T')) {
+        const [datePart, timePart] = updatePayload.due_date.split('T');
+        updatePayload.due_date = datePart;
+
+        // Extract time (HH:mm:ss or HH:mm) from the datetime
+        const timeMatch = timePart.match(/^(\d{2}:\d{2}(:\d{2})?)/);
+        if (timeMatch) {
+          const extractedTime = timeMatch[1];
+          // Normalize to HH:mm:ss format
+          updatePayload.due_time = extractedTime.length === 5 ? `${extractedTime}:00` : extractedTime;
+          console.log('[Activities V2] Extracted time from due_date:', { due_date: datePart, due_time: updatePayload.due_time });
+        }
+      }
 
       const { data: current, error: fetchErr } = await supabase
         .from('activities')

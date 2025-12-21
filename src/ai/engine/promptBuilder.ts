@@ -17,6 +17,7 @@ export interface PromptPayload {
   mode: 'read_only' | 'propose_actions';
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
   summary: string;
+  entityContext?: { id: string; type: string; name: string }; // Resolved entity from session context
 }
 
 interface PromptBuilderOptions {

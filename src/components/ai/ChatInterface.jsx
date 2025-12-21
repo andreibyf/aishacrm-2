@@ -2,11 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Send, Loader2, Phone, FileText, Headphones, ExternalLink } from "lucide-react";
+import { Send, Loader2, Phone, FileText, Headphones, ExternalLink, Code } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import toast from 'react-hot-toast';
 
-import { processChatCommand } from '@/api/functions';
+import { processChatCommand, processDeveloperCommand } from '@/api/functions';
 
 export default function ChatInterface({ user }) {
   const navigate = useNavigate();
@@ -21,6 +21,7 @@ export default function ChatInterface({ user }) {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isDeveloperMode, setIsDeveloperMode] = useState(false); // Developer Mode for superadmins
   const messagesEndRef = useRef(null);
 
   // Helper to detect and execute navigation commands from AI tool responses
@@ -85,7 +86,10 @@ export default function ChatInterface({ user }) {
         .filter(m => m.role === 'user' || m.role === 'assistant')
         .map(m => ({ role: m.role, content: m.content }));
 
-      const response = await processChatCommand({
+      // Use Developer AI (Claude) when in developer mode, otherwise use regular chat
+      const chatFunction = isDeveloperMode ? processDeveloperCommand : processChatCommand;
+
+      const response = await chatFunction({
         messages: conversationHistory,
         tenantId: user?.tenant_id || user?.tenant?.id,
       });
@@ -257,10 +261,26 @@ export default function ChatInterface({ user }) {
 
       <div className="p-4 border-t bg-white">
         <form onSubmit={handleSubmit} className="flex gap-2">
+          {/* Developer Mode Toggle - Superadmin Only */}
+          {user?.role === 'superadmin' && (
+            <Button
+              type="button"
+              variant={isDeveloperMode ? 'default' : 'outline'}
+              size="icon"
+              onClick={() => {
+                setIsDeveloperMode(!isDeveloperMode);
+                toast.success(isDeveloperMode ? '🤖 AiSHA Mode' : '💻 Developer Mode (Claude)');
+              }}
+              className={isDeveloperMode ? 'bg-green-600 hover:bg-green-700' : ''}
+              title={isDeveloperMode ? 'Developer Mode ON (Claude)' : 'Enable Developer Mode'}
+            >
+              <Code className="w-4 h-4" />
+            </Button>
+          )}
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask me anything about your CRM..."
+            placeholder={isDeveloperMode ? "Ask about the codebase..." : "Ask me anything about your CRM..."}
             className="flex-1"
             disabled={isLoading}
           />

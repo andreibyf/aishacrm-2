@@ -63,6 +63,7 @@ import StatusHelper from "../components/shared/StatusHelper";
 import { loadUsersSafely } from "../components/shared/userLoader";
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 import { useConfirmDialog } from "../components/shared/ConfirmDialog";
+import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 
 // Helper function for delays
 const delay = (ms) => new Promise((res) => setTimeout(res, ms));
@@ -1077,6 +1078,39 @@ export default function LeadsPage() {
     setCurrentPage(1);
     handleClearSelection();
   };
+
+  // AiSHA events listener - allows AI to trigger page actions
+  useAiShaEvents({
+    entityType: 'leads',
+    onOpenEdit: ({ id }) => {
+      const lead = leads.find(l => l.id === id);
+      if (lead) {
+        setEditingLead(lead);
+        setIsFormOpen(true);
+      } else {
+        // Lead not in current page, try to fetch it
+        Lead.filter({ id }).then(result => {
+          if (result && result.length > 0) {
+            setEditingLead(result[0]);
+            setIsFormOpen(true);
+          }
+        });
+      }
+    },
+    onSelectRow: ({ id }) => {
+      // Highlight the row and open detail panel
+      const lead = leads.find(l => l.id === id);
+      if (lead) {
+        setDetailLead(lead);
+        setIsDetailOpen(true);
+      }
+    },
+    onOpenForm: () => {
+      setEditingLead(null);
+      setIsFormOpen(true);
+    },
+    onRefresh: handleRefresh,
+  });
 
   const hasActiveFilters = useMemo(() => {
     return searchTerm !== "" || statusFilter !== "all" || ageFilter !== "all" ||

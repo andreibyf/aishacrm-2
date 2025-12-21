@@ -8,12 +8,20 @@ import type { ParsedIntent, ConversationalIntent, ConversationalEntity } from '@
 import { enforceParserSafety, legacyIntentFromParser, parseIntent } from '@/lib/intentParser';
 import { resolveAmbiguity, getContextualExamples, buildFallbackMessage, type ClarificationRequest } from '@/lib/ambiguityResolver';
 
+interface SessionEntity {
+  id: string;
+  type: string;
+  name: string;
+  aliases?: string[];
+}
+
 interface ProcessChatCommandOptions {
   text: string;
   history?: { role: 'user' | 'assistant'; content: string }[];
   context?: PromptContext;
   origin?: 'text' | 'voice';
   consecutiveFailures?: number;
+  sessionEntities?: SessionEntity[] | null; // Entity context from previous queries
 }
 
 interface AssistantMessagePayload {
@@ -207,10 +215,28 @@ export async function processChatCommand({
   history = [],
   context,
   origin = 'text',
-  consecutiveFailures = 0
+  consecutiveFailures = 0,
+  sessionEntities = null
 }: ProcessChatCommandOptions): Promise<ProcessChatCommandResult> {
   const sanitizedHistory = ensureHistoryFormat(history);
   let parserResult: ParsedIntent | null = null;
+
+  // Check if text references a known entity from session context
+  let resolvedEntityContext: { id: string; type: string; name: string } | null = null;
+  if (sessionEntities && sessionEntities.length > 0) {
+    const normalizedText = text.toLowerCase();
+    for (const entity of sessionEntities) {
+      // Check if the text mentions the entity name or any alias
+      const namesToCheck = [entity.name, ...(entity.aliases || [])].map(n => n.toLowerCase());
+      for (const name of namesToCheck) {
+        if (normalizedText.includes(name)) {
+          resolvedEntityContext = { id: entity.id, type: entity.type, name: entity.name };
+          break;
+        }
+      }
+      if (resolvedEntityContext) break;
+    }
+  }
 
   try {
     parserResult = parseIntent(text);
@@ -276,6 +302,26 @@ export async function processChatCommand({
   let prompt = buildPrompt({ text, classification, history: sanitizedHistory, context });
   if (parserResult.isPotentiallyDestructive && prompt.mode !== 'propose_actions') {
     prompt = { ...prompt, mode: 'propose_actions' };
+  }
+  
+  // Inject resolved entity context into the prompt for follow-up questions
+  if (resolvedEntityContext) {
+    // Add a context note to help the AI understand what entity the user is referring to
+    const contextNote = `[Context: The user is asking about a ${resolvedEntityContext.type} named "${resolvedEntityContext.name}" with ID ${resolvedEntityContext.id}]`;
+    
+    // Inject context into the last user message
+    const enhancedMessages = prompt.messages.map((msg, idx) => {
+      if (idx === prompt.messages.length - 1 && msg.role === 'user') {
+        return { ...msg, content: `${contextNote}\n\n${msg.content}` };
+      }
+      return msg;
+    });
+    
+    prompt = {
+      ...prompt,
+      messages: enhancedMessages,
+      entityContext: resolvedEntityContext
+    };
   }
 
   const routeResult = await routeCommand({ text, classification, prompt, context });

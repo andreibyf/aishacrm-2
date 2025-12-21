@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { AlertCircle, Building2, CheckSquare, Loader2, Send, Sparkles, Target, TrendingUp, Users, X, Mic, Volume2, Trash2, ClipboardList, BarChart3, ListTodo, Ear, Briefcase } from 'lucide-react';
+import { AlertCircle, Building2, CheckSquare, Loader2, Send, Sparkles, Target, TrendingUp, Users, X, Mic, Volume2, Trash2, ClipboardList, BarChart3, ListTodo, Ear, Briefcase, Code } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useAiSidebarState } from './useAiSidebarState.jsx';
@@ -391,7 +391,9 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     addRealtimeMessage,
     setRealtimeMode,
     suggestions,
-    applySuggestion
+    applySuggestion,
+    isDeveloperMode,
+    setIsDeveloperMode
   } = useAiSidebarState();
   const [draft, setDraft] = useState('');
   const [draftOrigin, setDraftOrigin] = useState('text');
@@ -1360,8 +1362,8 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                 <Sparkles className="h-4.5 w-4.5 text-white" />
             </div>
               <div className="space-y-0.5">
-                <p className="text-[15px] font-semibold leading-tight">AiSHA Assistant</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Read-only / propose actions</p>
+                <p className="text-[15px] font-semibold leading-tight">{isDeveloperMode ? 'Developer AI' : 'AiSHA Assistant'}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{isDeveloperMode ? 'Claude • Code analysis' : 'Read-only / propose actions'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -1376,6 +1378,23 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
             >
               <Trash2 className="h-4 w-4" />
             </Button>
+              {/* Developer Mode Toggle - Superadmin Only */}
+              {user?.role === 'superadmin' && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setIsDeveloperMode(!isDeveloperMode);
+                    toast.success(isDeveloperMode ? '🤖 AiSHA Mode' : '💻 Developer Mode (Claude)');
+                  }}
+                  className={`${isDeveloperMode ? 'text-green-500 bg-green-500/10 hover:bg-green-500/20' : 'text-slate-500 hover:text-slate-900 dark:text-slate-300'}`}
+                  title={isDeveloperMode ? 'Developer Mode ON' : 'Enable Developer Mode'}
+                  aria-label="Toggle Developer Mode"
+                  type="button"
+                >
+                  <Code className="h-4 w-4" />
+                </Button>
+              )}
             <Button
               variant="ghost"
               size="icon"

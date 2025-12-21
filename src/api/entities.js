@@ -226,19 +226,14 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       return explicit;
     }
     
-    // 2) URL/localStorage selection (user selected a tenant)
+    // 2) URL/localStorage selection (user's assigned tenant, set on login)
+    // For regular users, this is their assigned tenant from their profile
+    // For superadmins, this is the tenant they selected in the UI
     const clientSelected = getSelectedTenantFromClient();
     if (clientSelected) return clientSelected;
     
-    // 3) Cached effective user tenant
-    try {
-      if (typeof window !== 'undefined') {
-        const cached = localStorage.getItem('effective_user_tenant_id');
-        if (cached && cached !== '') return cached;
-      }
-    } catch { /* noop */ }
-
-    // 4) Supabase user profile lookup - get user's assigned tenant
+    // 3) Supabase user profile lookup - get user's assigned tenant from database
+    // This is the authoritative source of the user's tenant
     if (isSupabaseConfigured()) {
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -255,9 +250,10 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
               throw new Error(`SECURITY: User ${user.email} has no tenant assigned. Database access requires tenant context.`);
             }
             
+            // Set selected_tenant_id so future calls don't need to look up again
             try {
-              if (typeof window !== 'undefined') {
-                localStorage.setItem('effective_user_tenant_id', tenant);
+              if (typeof window !== 'undefined' && !localStorage.getItem('selected_tenant_id')) {
+                localStorage.setItem('selected_tenant_id', tenant);
               }
             } catch { /* noop */ }
             return tenant;

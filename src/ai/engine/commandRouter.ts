@@ -94,10 +94,12 @@ export async function routeCommand({
   }
 
   // Pass tenantId from context to API call for proper tenant isolation
+  // Include entityContext for follow-up question resolution
   const response = await callChat({
     messages: prompt.messages,
     temperature: 0.2,
-    tenantId: context?.tenantId
+    tenantId: context?.tenantId,
+    entityContext: prompt.entityContext // Session context for follow-up questions
   });
   return { type: 'ai_chat', response };
 }
