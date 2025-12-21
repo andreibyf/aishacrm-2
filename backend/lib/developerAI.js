@@ -327,14 +327,14 @@ async function listDirectory({ dir_path, recursive }) {
         try {
           const stats = await fs.stat(path.join(fullPath, entry.name));
           item.size = stats.size;
-        } catch {}
+        } catch { /* ignore stat errors */ }
       }
       
       if (recursive && entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
         try {
           const subEntries = await fs.readdir(path.join(fullPath, entry.name));
           item.children_count = subEntries.length;
-        } catch {}
+        } catch { /* ignore readdir errors */ }
       }
       
       result.push(item);
