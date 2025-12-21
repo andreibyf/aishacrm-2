@@ -4,10 +4,14 @@ on:
   workflow_dispatch: {}
   pull_request:
     branches: [ main ]
+    paths:
+      - 'braid-mcp-node-server/**'
+      - '.github/workflows/mcp-audit-test.yml'
 
 jobs:
   run-audit-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -15,7 +19,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'  # Required by supabase-js and joi
 
       - name: Install dependencies (braid-mcp-node-server)
         working-directory: braid-mcp-node-server
@@ -41,15 +45,37 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          # Optional: set TENANT_ID to a known tenant UUID or slug. If not provided,
-          # the test will attempt to auto-detect a tenant in the Supabase project.
           TENANT_ID: ${{ secrets.TENANT_ID }}
           MCP_URL: http://localhost:8000
+          # Provide dummy values for env check warnings
+          CRM_BACKEND_URL: http://localhost:3001
+          JWT_SECRET: test-jwt-secret-for-ci
         run: |
           set -euo pipefail
           # Start server in background
           npm run dev &
-          # Wait for local server to accept connections (wait up to 30s)
-          npx wait-on http://localhost:8000 || (echo 'Server did not become ready in time' && exit 2)
+          SERVER_PID=$!
+          
+          # Wait for server with timeout (60s max, check every 2s)
+          echo "Waiting for MCP server to be ready..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+              echo "Server is ready!"
+              break
+            fi
+            if ! kill -0 $SERVER_PID 2>/dev/null; then
+              echo "Server process died unexpectedly"
+              exit 1
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
+          
+          # Verify server is responding
+          curl -sf http://localhost:8000/health || (echo 'Server did not become ready in time' && exit 2)
+          
           # Run the audit test script (exits non-zero on failure)
           node ./scripts/test-mcp-audit.js
+          
+          # Cleanup
+          kill $SERVER_PID 2>/dev/null || true
