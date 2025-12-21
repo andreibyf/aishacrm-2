@@ -90,8 +90,8 @@ fn advanceToAccount(
       step: "convert",
       contact_id: value.data.contact.id,
       contact_status: "prospect",
-      account_id: value.data.account?.id,
-      opportunity_id: value.data.opportunity?.id,
+      account_id: value.data.account.id,
+      opportunity_id: value.data.opportunity.id,
       opportunity_stage: "prospecting"
     }),
     Err{error} => Err({ tag: "ConversionError", code: error.status }),
@@ -190,8 +190,8 @@ fn fullLifecycleAdvance(
       source_id: bizdev_source_id,
       lead_id: leadId,
       contact_id: value.data.contact.id,
-      account_id: value.data.account?.id,
-      opportunity_id: value.data.opportunity?.id
+      account_id: value.data.account.id,
+      opportunity_id: value.data.opportunity.id
     }),
     Err{error} => Err({ tag: "ConversionError", step: 3, code: error.status }),
     _ => Err({ tag: "NetworkError", step: 3, url: convertUrl, code: 500 })
