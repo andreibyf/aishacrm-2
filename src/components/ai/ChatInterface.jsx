@@ -23,6 +23,7 @@ export default function ChatInterface({ user }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isDeveloperMode, setIsDeveloperMode] = useState(false); // Developer Mode for superadmins
   const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
 
   // Helper to detect and execute navigation commands from AI tool responses
   const handleNavigationFromToolResult = (toolInteractions) => {
@@ -149,6 +150,8 @@ export default function ChatInterface({ user }) {
       }]);
     } finally {
       setIsLoading(false);
+      // Refocus the input after message is sent
+      setTimeout(() => inputRef.current?.focus(), 100);
     }
   };
 
@@ -278,11 +281,13 @@ export default function ChatInterface({ user }) {
             </Button>
           )}
           <Input
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={isDeveloperMode ? "Ask about the codebase..." : "Ask me anything about your CRM..."}
             className="flex-1"
             disabled={isLoading}
+            autoFocus
           />
           <Button type="submit" disabled={isLoading || !input.trim()}>
             <Send className="w-4 h-4" />
