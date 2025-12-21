@@ -50,6 +50,8 @@ jobs:
           # Provide dummy values for env check warnings
           CRM_BACKEND_URL: http://localhost:3001
           JWT_SECRET: test-jwt-secret-for-ci
+          # CI mode: Script will auto-detect missing secrets and run in health-check mode
+          CI: 'true'
         run: |
           set -euo pipefail
           # Start server in background
@@ -74,7 +76,7 @@ jobs:
           # Verify server is responding
           curl -sf http://localhost:8000/health || (echo 'Server did not become ready in time' && exit 2)
           
-          # Run the audit test script (exits non-zero on failure)
+          # Run the audit test script (now CI-friendly)
           node ./scripts/test-mcp-audit.js
           
           # Cleanup
