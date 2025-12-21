@@ -180,6 +180,36 @@ cd backend && npm run seed        # Seed data
 # Migrations in backend/migrations/
 ```
 
+## Test Structure
+
+**Backend tests** are organized by feature in `backend/__tests__/`:
+
+| Directory | Tests For |
+|-----------|-----------|
+| `__tests__/routes/` | Route handlers (accounts, leads, etc.) |
+| `__tests__/ai/` | AI tools, suggestions, triggers |
+| `__tests__/auth/` | Authentication middleware |
+| `__tests__/phase3/` | AI autonomy features |
+| `__tests__/integration/` | MCP, external integrations |
+| `__tests__/system/` | Health checks, server startup |
+
+**Frontend tests** use Vitest with files alongside source:
+- `src/api/entities.test.js` → tests `src/api/entities.js`
+- `src/ai/engine/*.test.ts` → tests AI engine modules
+
+**Test framework:**
+- Backend: Node.js built-in `node:test`
+- Frontend: Vitest with jsdom
+
+**Running tests:**
+```bash
+# Backend (run in Docker)
+docker exec aishacrm-backend sh -c "cd /app/backend && node --test __tests__/**/*.test.js"
+
+# Frontend
+npm run test
+```
+
 ## Key Files
 
 | Purpose | Location |
