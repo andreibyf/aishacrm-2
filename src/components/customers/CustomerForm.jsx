@@ -214,6 +214,9 @@ export default function CustomerForm({
         result = await Account.create(payload);
       }
 
+      // Show success toast
+      toast.success(customer?.id ? 'Customer updated successfully' : 'Customer created successfully');
+
       // Defensive: verify onSubmit is still valid before calling
       if (onSubmit && typeof onSubmit === 'function') {
         await onSubmit(result);

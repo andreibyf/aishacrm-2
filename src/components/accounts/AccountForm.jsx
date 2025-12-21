@@ -227,6 +227,9 @@ export default function AccountForm({
 
       console.log('[AccountForm] Save result:', result);
 
+      // Show success toast
+      toast.success(account?.id ? 'Account updated successfully' : 'Account created successfully');
+
       // Defensive: verify onSubmit is still valid before calling
       if (onSubmit && typeof onSubmit === 'function') {
         console.log('[AccountForm] Calling onSubmit...');
