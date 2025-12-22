@@ -77,26 +77,27 @@ CREATE POLICY "braid_audit_log_service_role_all" ON public.braid_audit_log
     WITH CHECK (true);
 
 -- Superadmin read access within their tenant
+-- users.tenant_id is UUID, tenant_id_text is legacy TEXT
 CREATE POLICY "braid_audit_log_superadmin_select" ON public.braid_audit_log
     FOR SELECT
     TO authenticated
     USING (
         tenant_id IN (
-            SELECT tenant_uuid FROM public.users 
-            WHERE id = auth.uid() AND role = 'superadmin'
+            SELECT u.tenant_id FROM public.users u
+            WHERE u.id = auth.uid() AND u.role = 'superadmin'
         )
     );
 
--- Admin read access within their tenant (limited)
+-- Admin read access within their tenant (limited to 30 days)
 CREATE POLICY "braid_audit_log_admin_select" ON public.braid_audit_log
     FOR SELECT
     TO authenticated
     USING (
         tenant_id IN (
-            SELECT tenant_uuid FROM public.users 
-            WHERE id = auth.uid() AND role IN ('admin', 'superadmin')
+            SELECT u.tenant_id FROM public.users u
+            WHERE u.id = auth.uid() AND u.role IN ('admin', 'superadmin')
         )
-        AND created_at > now() - INTERVAL '30 days' -- Admins only see last 30 days
+        AND created_at > now() - INTERVAL '30 days'
     );
 
 -- Grant permissions
