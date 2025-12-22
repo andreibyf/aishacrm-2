@@ -30,6 +30,7 @@ import {
   ExternalLink, // Added for External Tools
   BookOpen, // Added for API Documentation
   Brain, // Added for LLM Activity Monitor
+  GitBranch, // Added for Braid SDK Monitor
   Tags, // Added for Entity Labels
   Search,
   ArrowLeft,
@@ -102,6 +103,7 @@ const SystemHealthDashboard = lazy(() => import("../components/settings/SystemHe
 const QaConsole = lazy(() => import("../components/settings/QaConsole"));
 const TenantResolveCacheMonitor = lazy(() => import("../components/settings/TenantResolveCacheMonitor"));
 const LLMActivityMonitor = lazy(() => import("../components/settings/LLMActivityMonitor"));
+const BraidSDKMonitor = lazy(() => import("../components/settings/BraidSDKMonitor"));
 
 export default function SettingsPage() { // Renamed from Settings to SettingsPage as per outline
   const [currentUser, setCurrentUser] = useState(null);
@@ -220,6 +222,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
         { id: 'performance', label: 'Performance', description: 'System performance metrics', icon: Activity, category: 'monitoring', roles: ['superadmin'] },
         { id: 'cache-monitor', label: 'Cache Monitor', description: 'Tenant cache statistics', icon: Database, category: 'monitoring', roles: ['superadmin'] },
         { id: 'llm-monitor', label: 'LLM Monitor', description: 'AI model usage and costs', icon: Brain, category: 'monitoring', roles: ['superadmin'] },
+        { id: 'braid-monitor', label: 'AI Tools Monitor', description: 'Tool execution metrics and dependency graph', icon: GitBranch, category: 'monitoring', roles: ['superadmin'] },
         { id: 'sync-health', label: 'Sync Health', description: 'Data synchronization status', icon: RefreshCw, category: 'monitoring', roles: ['superadmin'] },
         { id: 'mcp-monitor', label: 'MCP Monitor', description: 'MCP server connections', icon: Server, category: 'monitoring', roles: ['superadmin'] },
         { id: 'system-health', label: 'System Health', description: 'Overall system status', icon: Activity, category: 'monitoring', roles: ['superadmin'] },
@@ -703,6 +706,23 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                     </CardHeader>
                     <CardContent>
                       <LLMActivityMonitor />
+                    </CardContent>
+                  </Card>
+                )}
+
+                {activeTab === 'braid-monitor' && isSuperadmin && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <GitBranch className="w-5 h-5 text-green-400" />
+                        AI Tools Monitor
+                      </CardTitle>
+                      <CardDescription>
+                        Real-time metrics, tool health scores, and dependency graph for Braid SDK tools
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <BraidSDKMonitor />
                     </CardContent>
                   </Card>
                 )}
