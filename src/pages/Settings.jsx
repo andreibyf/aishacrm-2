@@ -222,7 +222,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
         { id: 'performance', label: 'Performance', description: 'System performance metrics', icon: Activity, category: 'monitoring', roles: ['superadmin'] },
         { id: 'cache-monitor', label: 'Cache Monitor', description: 'Tenant cache statistics', icon: Database, category: 'monitoring', roles: ['superadmin'] },
         { id: 'llm-monitor', label: 'LLM Monitor', description: 'AI model usage and costs', icon: Brain, category: 'monitoring', roles: ['superadmin'] },
-        { id: 'braid-monitor', label: 'AI Tools Monitor', description: 'Tool execution metrics and dependency graph', icon: GitBranch, category: 'monitoring', roles: ['superadmin'] },
+        { id: 'braid-monitor', label: 'AI Tools Monitor', description: 'Tool metrics and dependency graph', icon: GitBranch, category: 'monitoring', roles: ['superadmin'] },
         { id: 'sync-health', label: 'Sync Health', description: 'Data synchronization status', icon: RefreshCw, category: 'monitoring', roles: ['superadmin'] },
         { id: 'mcp-monitor', label: 'MCP Monitor', description: 'MCP server connections', icon: Server, category: 'monitoring', roles: ['superadmin'] },
         { id: 'system-health', label: 'System Health', description: 'Overall system status', icon: Activity, category: 'monitoring', roles: ['superadmin'] },
