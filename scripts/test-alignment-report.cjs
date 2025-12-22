@@ -160,10 +160,26 @@ function findSourceForTest(testFile) {
   const nameWithoutExt = basename.replace(/\.(test|spec)\.(js|jsx|ts|tsx)$/, '');
   const dir = path.dirname(testFile);
   
-  // If test is in __tests__ directory, look in parent
-  const searchDirs = dir.includes('__tests__') 
-    ? [dir, path.join(dir, '..')] 
-    : [dir];
+  // Special cases for directories where sources are in different locations
+  const specialCases = {
+    'backend/__tests__/ai': 'backend/lib',
+    'backend/__tests__/auth': 'backend/routes',
+    'backend/__tests__/braid': 'backend/lib',  // braidIntegration-v2.js or similar
+    'backend/__tests__/integration': 'backend/routes',  // mcp.js
+  };
+  
+  let searchDirs = [];
+  if (dir.includes('__tests__')) {
+    searchDirs = [dir, path.join(dir, '..')];
+    // Add special case dirs
+    for (const [testDir, sourceDir] of Object.entries(specialCases)) {
+      if (dir.startsWith(testDir)) {
+        searchDirs.push(sourceDir);
+      }
+    }
+  } else {
+    searchDirs = [dir];
+  }
   
   for (const searchDir of searchDirs) {
     const patterns = [
@@ -174,10 +190,17 @@ function findSourceForTest(testFile) {
     ];
     
     for (const sourcePath of patterns) {
-      if (fs.existsSync(sourcePath)) {
-        return sourcePath;
+      const fullPath = path.join(ROOT_DIR, sourcePath);
+      if (fs.existsSync(fullPath)) {
+        return sourcePath;  // Return relative path
       }
     }
+  }
+  
+  // Additional special mappings
+  if (testFile === 'backend/__tests__/goalRouter.test.js') {
+    // No source file, it's orphaned
+    return null;
   }
   
   return null;
@@ -190,7 +213,7 @@ function hasAssertions(testFile) {
   try {
     const content = fs.readFileSync(testFile, 'utf8');
     // Look for common assertion patterns
-    return /\b(expect|assert|should)\s*\(/.test(content);
+    return /\b(expect|assert|should)(\.|\s*\()/.test(content);
   } catch (error) {
     return false;
   }
