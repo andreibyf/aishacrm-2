@@ -9,7 +9,7 @@
 
 import express from 'express';
 import { getRealtimeMetrics } from '../lib/braidIntegration-v2.js';
-import { getToolMetrics, getMetricsTimeSeries, getErrorAnalysis, getAuditStats } from 'braid-llm-kit/tools/braid-rt.js';
+import { getToolMetrics, getMetricsTimeSeries, getErrorAnalysis, getAuditStats } from '../../braid-llm-kit/tools/braid-rt.js';
 
 const router = express.Router();
 
