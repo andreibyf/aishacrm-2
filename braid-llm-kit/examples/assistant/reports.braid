@@ -1,0 +1,167 @@
+// Executive Assistant Tools - Reports & Analytics
+// Generate dashboards, analytics, and business intelligence
+
+import { Result, Report, CRMError } from "../../spec/types.braid"
+
+// Reports V2 API endpoints: /api/v2/reports
+// Supports: dashboard-bundle, health-summary, clear-cache
+
+fn getDashboardBundle(
+  tenant: String,
+  time_range: String,
+  include_forecasts: Boolean
+) -> Result<Object, CRMError> !net {
+  let url = "/api/v2/reports/dashboard-bundle";
+  let params = {
+    tenant_id: tenant,
+    time_range: time_range,
+    include_forecasts: include_forecasts
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_dashboard_bundle" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getHealthSummary(
+  tenant: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/v2/reports/health-summary";
+  let params = { tenant_id: tenant };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_health_summary" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getSalesReport(
+  tenant: String,
+  start_date: String,
+  end_date: String,
+  group_by: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/reports/sales";
+  let params = {
+    tenant_id: tenant,
+    start_date: start_date,
+    end_date: end_date,
+    group_by: group_by
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_sales_report" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getPipelineReport(
+  tenant: String,
+  include_history: Boolean
+) -> Result<Object, CRMError> !net {
+  let url = "/api/reports/pipeline";
+  let params = {
+    tenant_id: tenant,
+    include_history: include_history
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_pipeline_report" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getActivityReport(
+  tenant: String,
+  start_date: String,
+  end_date: String,
+  employee_id: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/reports/activities";
+  let params = {
+    tenant_id: tenant,
+    start_date: start_date,
+    end_date: end_date,
+    employee_id: employee_id
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_activity_report" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getLeadConversionReport(
+  tenant: String,
+  start_date: String,
+  end_date: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/reports/lead-conversion";
+  let params = {
+    tenant_id: tenant,
+    start_date: start_date,
+    end_date: end_date
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_lead_conversion_report" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getRevenueForecasts(
+  tenant: String,
+  months_ahead: Number
+) -> Result<Object, CRMError> !net {
+  let url = "/api/reports/forecasts";
+  let params = {
+    tenant_id: tenant,
+    months_ahead: months_ahead
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_revenue_forecasts" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn clearReportCache(
+  tenant: String,
+  report_type: String
+) -> Result<Boolean, CRMError> !net {
+  let url = "/api/v2/reports/clear-cache";
+  let body = {
+    tenant_id: tenant,
+    report_type: report_type
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(true),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "clear_report_cache" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

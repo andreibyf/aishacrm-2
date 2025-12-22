@@ -1,0 +1,153 @@
+// Executive Assistant Tools - Employees Management
+// Manage employee records, roles, and assignments
+
+import { Result, Employee, CRMError } from "../../spec/types.braid"
+
+// Employees API endpoints: /api/employees
+// Supports: list, get, create, update, delete
+
+fn listEmployees(
+  tenant: String,
+  role: String,
+  department: String,
+  active_only: Boolean
+) -> Result<Array, CRMError> !net {
+  let url = "/api/employees";
+  let params = {
+    tenant_id: tenant,
+    role: role,
+    department: department,
+    active_only: active_only
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_employees" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getEmployeeDetails(
+  tenant: String,
+  employee_id: String
+) -> Result<Employee, CRMError> !net {
+  let url = "/api/employees/" + employee_id;
+  let params = { tenant_id: tenant };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NotFound", entity: "Employee", id: employee_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn createEmployee(
+  tenant: String,
+  first_name: String,
+  last_name: String,
+  email: String,
+  role: String,
+  department: String,
+  phone: String
+) -> Result<Employee, CRMError> !net {
+  let url = "/api/employees";
+  let body = {
+    tenant_id: tenant,
+    first_name: first_name,
+    last_name: last_name,
+    email: email,
+    role: role,
+    department: department,
+    phone: phone,
+    metadata: {}
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "create_employee" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn updateEmployee(
+  tenant: String,
+  employee_id: String,
+  updates: Object
+) -> Result<Employee, CRMError> !net {
+  let url = "/api/employees/" + employee_id;
+  
+  let response = http.put(url, { body: updates });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "update_employee", entity: "Employee", id: employee_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn deleteEmployee(
+  tenant: String,
+  employee_id: String
+) -> Result<Boolean, CRMError> !net {
+  let url = "/api/employees/" + employee_id;
+  let params = { tenant_id: tenant };
+  
+  let response = http.delete(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(true),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "delete_employee", entity: "Employee", id: employee_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn searchEmployees(
+  tenant: String,
+  query: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/employees";
+  let params = {
+    tenant_id: tenant,
+    search: query,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_employees", query: query }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getEmployeeAssignments(
+  tenant: String,
+  employee_id: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/employees/" + employee_id;
+  let params = { 
+    tenant_id: tenant,
+    include_assignments: true
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok({
+      employee: value.data,
+      accounts: value.data.assigned_accounts,
+      leads: value.data.assigned_leads,
+      activities: value.data.assigned_activities
+    }),
+    Err{error} => Err({ tag: "NotFound", entity: "Employee", id: employee_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

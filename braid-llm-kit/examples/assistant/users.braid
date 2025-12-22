@@ -1,0 +1,176 @@
+// Executive Assistant Tools - Users Management
+// Manage user accounts, profiles, and permissions
+// NOTE: Sensitive operations - most are ADMIN_ONLY policy
+
+import { Result, User, CRMError } from "../../spec/types.braid"
+
+// Users API endpoints: /api/users
+// Supports: list, get, create, update, delete, profiles
+
+fn listUsers(
+  tenant: String,
+  role: String,
+  active_only: Boolean
+) -> Result<Array, CRMError> !net {
+  let url = "/api/users";
+  let params = {
+    tenant_id: tenant,
+    role: role,
+    active_only: active_only
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_users" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getUserDetails(
+  tenant: String,
+  user_id: String
+) -> Result<User, CRMError> !net {
+  let url = "/api/users/" + user_id;
+  let params = { tenant_id: tenant };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NotFound", entity: "User", id: user_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getCurrentUserProfile(
+  tenant: String
+) -> Result<User, CRMError> !net {
+  let url = "/api/users/profile";
+  let params = { tenant_id: tenant };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_profile" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getUserProfiles(
+  tenant: String
+) -> Result<Array, CRMError> !net {
+  let url = "/api/users/profiles";
+  let params = { tenant_id: tenant };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_user_profiles" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn createUser(
+  tenant: String,
+  email: String,
+  first_name: String,
+  last_name: String,
+  role: String,
+  password: String
+) -> Result<User, CRMError> !net {
+  let url = "/api/users";
+  let body = {
+    tenant_id: tenant,
+    email: email,
+    first_name: first_name,
+    last_name: last_name,
+    role: role,
+    password: password,
+    metadata: {}
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "create_user" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn updateUser(
+  tenant: String,
+  user_id: String,
+  updates: Object
+) -> Result<User, CRMError> !net {
+  let url = "/api/users/" + user_id;
+  
+  let response = http.put(url, { body: updates });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "update_user", entity: "User", id: user_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn deleteUser(
+  tenant: String,
+  user_id: String
+) -> Result<Boolean, CRMError> !net {
+  let url = "/api/users/" + user_id;
+  let params = { tenant_id: tenant };
+  
+  let response = http.delete(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(true),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "delete_user", entity: "User", id: user_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn searchUsers(
+  tenant: String,
+  query: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/users";
+  let params = {
+    tenant_id: tenant,
+    search: query,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_users", query: query }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn inviteUser(
+  tenant: String,
+  user_id: String,
+  invitation_message: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/users/" + user_id + "/invite";
+  let body = {
+    tenant_id: tenant,
+    message: invitation_message
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "invite_user" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

@@ -25,13 +25,32 @@ const TOOL_CACHE_TTL = {
   search_contacts: 60,
   search_opportunities: 60,
   search_activities: 60,
+  search_documents: 60,
+  search_employees: 60,
+  search_users: 60,
   get_lead_details: 180,        // 3 minutes - detail views
   get_account_details: 180,
   get_contact_details: 180,
   get_activity_details: 180,
   get_opportunity_details: 180,
+  get_document_details: 180,
+  get_employee_details: 180,
+  get_user_details: 180,
   get_opportunity_forecast: 300, // 5 minutes - aggregations
+  get_dashboard_bundle: 300,
+  get_health_summary: 300,
+  get_sales_report: 300,
+  get_pipeline_report: 300,
+  get_activity_report: 300,
+  get_lead_conversion_report: 300,
+  get_revenue_forecasts: 300,
+  get_employee_assignments: 180,
   get_current_page: 10,         // 10 seconds - navigation context
+  list_documents: 120,
+  list_employees: 120,
+  list_users: 120,
+  get_current_user_profile: 300,
+  get_user_profiles: 300,
   DEFAULT: 90                   // 1.5 minutes default
 };
 
@@ -163,7 +182,46 @@ export const TOOL_REGISTRY = {
 
   // CRM Navigation (v3.0.0 - allows AI to navigate user to pages)
   navigate_to_page: { file: 'navigation.braid', function: 'navigateTo', policy: 'READ_ONLY' },
-  get_current_page: { file: 'navigation.braid', function: 'getCurrentPage', policy: 'READ_ONLY' }
+  get_current_page: { file: 'navigation.braid', function: 'getCurrentPage', policy: 'READ_ONLY' },
+
+  // Documents Management
+  list_documents: { file: 'documents.braid', function: 'listDocuments', policy: 'READ_ONLY' },
+  get_document_details: { file: 'documents.braid', function: 'getDocumentDetails', policy: 'READ_ONLY' },
+  create_document: { file: 'documents.braid', function: 'createDocument', policy: 'WRITE_OPERATIONS' },
+  update_document: { file: 'documents.braid', function: 'updateDocument', policy: 'WRITE_OPERATIONS' },
+  delete_document: { file: 'documents.braid', function: 'deleteDocument', policy: 'WRITE_OPERATIONS' },
+  analyze_document: { file: 'documents.braid', function: 'analyzeDocument', policy: 'READ_ONLY' },
+  search_documents: { file: 'documents.braid', function: 'searchDocuments', policy: 'READ_ONLY' },
+
+  // Employees Management
+  list_employees: { file: 'employees.braid', function: 'listEmployees', policy: 'READ_ONLY' },
+  get_employee_details: { file: 'employees.braid', function: 'getEmployeeDetails', policy: 'READ_ONLY' },
+  create_employee: { file: 'employees.braid', function: 'createEmployee', policy: 'WRITE_OPERATIONS' },
+  update_employee: { file: 'employees.braid', function: 'updateEmployee', policy: 'WRITE_OPERATIONS' },
+  delete_employee: { file: 'employees.braid', function: 'deleteEmployee', policy: 'WRITE_OPERATIONS' },
+  search_employees: { file: 'employees.braid', function: 'searchEmployees', policy: 'READ_ONLY' },
+  get_employee_assignments: { file: 'employees.braid', function: 'getEmployeeAssignments', policy: 'READ_ONLY' },
+
+  // Users Management (Admin operations)
+  list_users: { file: 'users.braid', function: 'listUsers', policy: 'READ_ONLY' },
+  get_user_details: { file: 'users.braid', function: 'getUserDetails', policy: 'READ_ONLY' },
+  get_current_user_profile: { file: 'users.braid', function: 'getCurrentUserProfile', policy: 'READ_ONLY' },
+  get_user_profiles: { file: 'users.braid', function: 'getUserProfiles', policy: 'READ_ONLY' },
+  create_user: { file: 'users.braid', function: 'createUser', policy: 'ADMIN_ONLY' },
+  update_user: { file: 'users.braid', function: 'updateUser', policy: 'ADMIN_ONLY' },
+  delete_user: { file: 'users.braid', function: 'deleteUser', policy: 'ADMIN_ONLY' },
+  search_users: { file: 'users.braid', function: 'searchUsers', policy: 'READ_ONLY' },
+  invite_user: { file: 'users.braid', function: 'inviteUser', policy: 'ADMIN_ONLY' },
+
+  // Reports & Analytics
+  get_dashboard_bundle: { file: 'reports.braid', function: 'getDashboardBundle', policy: 'READ_ONLY' },
+  get_health_summary: { file: 'reports.braid', function: 'getHealthSummary', policy: 'READ_ONLY' },
+  get_sales_report: { file: 'reports.braid', function: 'getSalesReport', policy: 'READ_ONLY' },
+  get_pipeline_report: { file: 'reports.braid', function: 'getPipelineReport', policy: 'READ_ONLY' },
+  get_activity_report: { file: 'reports.braid', function: 'getActivityReport', policy: 'READ_ONLY' },
+  get_lead_conversion_report: { file: 'reports.braid', function: 'getLeadConversionReport', policy: 'READ_ONLY' },
+  get_revenue_forecasts: { file: 'reports.braid', function: 'getRevenueForecasts', policy: 'READ_ONLY' },
+  clear_report_cache: { file: 'reports.braid', function: 'clearReportCache', policy: 'ADMIN_ONLY' }
 };
 
 /**
@@ -271,7 +329,46 @@ const TOOL_DESCRIPTIONS = {
 
   // CRM Navigation (v3.0.0 - allows AI to navigate user to pages)
   navigate_to_page: 'Navigate the user to a specific CRM page. Use this when the user says "take me to", "go to", "show me", or "open" a page. Valid pages: dashboard, leads, contacts, accounts, opportunities, activities, calendar, settings, workflows, reports, bizdev-sources, projects, workers, user-management. Optionally pass a record_id to go directly to a specific record.',
-  get_current_page: 'Get information about the current page the user is viewing. Useful for context-aware responses.'
+  get_current_page: 'Get information about the current page the user is viewing. Useful for context-aware responses.',
+
+  // Documents Management
+  list_documents: 'List documents attached to an entity (account, lead, contact, etc.). Pass entity_type and entity_id to filter.',
+  get_document_details: 'Get full details of a specific document by its ID.',
+  create_document: 'Create a new document record with file metadata. Attach to an entity via entity_type and entity_id.',
+  update_document: 'Update document metadata like name, description, or entity assignment.',
+  delete_document: 'Delete a document by its ID. The actual file storage may be handled separately.',
+  analyze_document: 'Run AI analysis on a document. Pass analysis_type for specific analysis (summary, extract, classify).',
+  search_documents: 'Search documents by name or content query.',
+
+  // Employees Management
+  list_employees: 'List employees in the organization. Filter by role, department, or active status.',
+  get_employee_details: 'Get full details of a specific employee by their ID.',
+  create_employee: 'Create a new employee record with name, email, role, and department.',
+  update_employee: 'Update employee information like role, department, or contact details.',
+  delete_employee: 'Deactivate or delete an employee record.',
+  search_employees: 'Search employees by name, email, or role.',
+  get_employee_assignments: 'Get all accounts, leads, and activities assigned to an employee.',
+
+  // Users Management (Admin operations)
+  list_users: 'List user accounts. Filter by role or active status. Use for user management dashboards.',
+  get_user_details: 'Get full details of a specific user by their ID.',
+  get_current_user_profile: 'Get the current authenticated user\'s profile.',
+  get_user_profiles: 'Get all user profiles for the tenant. Useful for assignment dropdowns.',
+  create_user: 'Create a new user account. Requires admin privileges.',
+  update_user: 'Update user information like role, email, or permissions. Requires admin privileges.',
+  delete_user: 'Delete or deactivate a user account. Requires admin privileges.',
+  search_users: 'Search users by name or email.',
+  invite_user: 'Send an invitation to a user to join the CRM. Requires admin privileges.',
+
+  // Reports & Analytics
+  get_dashboard_bundle: 'Get the complete dashboard data bundle with all metrics, charts, and KPIs.',
+  get_health_summary: 'Get a health summary of the CRM data quality and system status.',
+  get_sales_report: 'Generate a sales report for a date range. Group by day, week, month, or quarter.',
+  get_pipeline_report: 'Get pipeline analysis with opportunity stages, values, and conversion rates.',
+  get_activity_report: 'Generate an activity report for a date range. Optionally filter by employee.',
+  get_lead_conversion_report: 'Get lead conversion metrics showing funnel stages and conversion rates.',
+  get_revenue_forecasts: 'Get revenue forecasts based on pipeline opportunities. Specify months_ahead.',
+  clear_report_cache: 'Clear cached report data to force regeneration. Requires admin privileges.'
 };
 
 /**

@@ -1,0 +1,150 @@
+// Executive Assistant Tools - Documents Management
+// Manage document metadata, attachments, and analysis
+
+import { Result, Document, CRMError } from "../../spec/types.braid"
+
+// Documents V2 API endpoints: /api/v2/documents
+// Supports: list, get, create, update, delete, analyze
+
+fn listDocuments(
+  tenant: String,
+  entity_type: String,
+  entity_id: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/v2/documents";
+  let params = {
+    tenant_id: tenant,
+    entity_type: entity_type,
+    entity_id: entity_id,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_documents" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn getDocumentDetails(
+  tenant: String,
+  document_id: String
+) -> Result<Document, CRMError> !net {
+  let url = "/api/v2/documents/" + document_id;
+  let params = { tenant_id: tenant };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "NotFound", entity: "Document", id: document_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn createDocument(
+  tenant: String,
+  name: String,
+  description: String,
+  entity_type: String,
+  entity_id: String,
+  file_url: String,
+  file_type: String
+) -> Result<Document, CRMError> !net {
+  let url = "/api/v2/documents";
+  let body = {
+    tenant_id: tenant,
+    name: name,
+    description: description,
+    entity_type: entity_type,
+    entity_id: entity_id,
+    file_url: file_url,
+    file_type: file_type,
+    metadata: {}
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "create_document" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn updateDocument(
+  tenant: String,
+  document_id: String,
+  updates: Object
+) -> Result<Document, CRMError> !net {
+  let url = "/api/v2/documents/" + document_id;
+  
+  let response = http.put(url, { body: updates });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "update_document", entity: "Document", id: document_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn deleteDocument(
+  tenant: String,
+  document_id: String
+) -> Result<Boolean, CRMError> !net {
+  let url = "/api/v2/documents/" + document_id;
+  let params = { tenant_id: tenant };
+  
+  let response = http.delete(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(true),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "delete_document", entity: "Document", id: document_id }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn analyzeDocument(
+  tenant: String,
+  document_id: String,
+  analysis_type: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/v2/documents/analyze";
+  let body = {
+    tenant_id: tenant,
+    document_id: document_id,
+    analysis_type: analysis_type
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "analyze_document" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}
+
+fn searchDocuments(
+  tenant: String,
+  query: String,
+  limit: Number
+) -> Result<Array, CRMError> !net {
+  let url = "/api/v2/documents";
+  let params = {
+    tenant_id: tenant,
+    search: query,
+    limit: limit
+  };
+  
+  let response = http.get(url, { params: params });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_documents", query: query }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

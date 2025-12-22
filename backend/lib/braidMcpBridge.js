@@ -69,6 +69,45 @@ const MCP_TO_BRAID_MAP = {
   'crm.advance_to_qualified': 'advance_to_qualified',
   'crm.advance_to_account': 'advance_to_account',
   'crm.full_lifecycle_advance': 'full_lifecycle_advance',
+  
+  // Documents
+  'crm.list_documents': 'list_documents',
+  'crm.get_document_details': 'get_document_details',
+  'crm.create_document': 'create_document',
+  'crm.update_document': 'update_document',
+  'crm.delete_document': 'delete_document',
+  'crm.analyze_document': 'analyze_document',
+  'crm.search_documents': 'search_documents',
+  
+  // Employees
+  'crm.list_employees': 'list_employees',
+  'crm.get_employee_details': 'get_employee_details',
+  'crm.create_employee': 'create_employee',
+  'crm.update_employee': 'update_employee',
+  'crm.delete_employee': 'delete_employee',
+  'crm.search_employees': 'search_employees',
+  'crm.get_employee_assignments': 'get_employee_assignments',
+  
+  // Users
+  'crm.list_users': 'list_users',
+  'crm.get_user_details': 'get_user_details',
+  'crm.get_current_user_profile': 'get_current_user_profile',
+  'crm.get_user_profiles': 'get_user_profiles',
+  'crm.create_user': 'create_user',
+  'crm.update_user': 'update_user',
+  'crm.delete_user': 'delete_user',
+  'crm.search_users': 'search_users',
+  'crm.invite_user': 'invite_user',
+  
+  // Reports & Analytics
+  'crm.get_dashboard_bundle': 'get_dashboard_bundle',
+  'crm.get_health_summary': 'get_health_summary',
+  'crm.get_sales_report': 'get_sales_report',
+  'crm.get_pipeline_report': 'get_pipeline_report',
+  'crm.get_activity_report': 'get_activity_report',
+  'crm.get_lead_conversion_report': 'get_lead_conversion_report',
+  'crm.get_revenue_forecasts': 'get_revenue_forecasts',
+  'crm.clear_report_cache': 'clear_report_cache',
 };
 
 /**
