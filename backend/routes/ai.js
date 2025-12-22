@@ -48,7 +48,8 @@ export default function createAIRoutes(pgPool) {
   const DEFAULT_STT_MODEL = process.env.OPENAI_STT_MODEL || 'whisper-1';
   const MAX_STT_AUDIO_BYTES = parseInt(process.env.MAX_STT_AUDIO_BYTES || '6000000', 10);
   const MAX_TOOL_ITERATIONS = 3;
-  const supa = getSupabaseClient();
+  // Lazy-load Supabase client to avoid initialization errors during startup
+  const getSupa = () => getSupabaseClient();
 
   const sttUpload = multer({
     storage: multer.memoryStorage(),
@@ -891,7 +892,7 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
         stack_trace: stackTrace,
         created_at: new Date().toISOString(),
       };
-      const { error } = await supa.from('system_logs').insert(insertPayload);
+      const { error } = await getSupa().from('system_logs').insert(insertPayload);
       if (error) throw error;
     } catch (logError) {
       console.error('[AI Routes] Failed to record system log:', logError.message || logError);
@@ -1335,7 +1336,7 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
       }
 
       // Verify conversation belongs to tenant before deleting
-      const { data: conv, error } = await supa
+      const { data: conv, error } = await getSupa()
         .from('conversations')
         .select('id')
         .eq('id', id)
@@ -1346,9 +1347,9 @@ ${BRAID_SYSTEM_PROMPT}${userContext}
         return res.status(404).json({ status: 'error', message: 'Conversation not found' });
       }
       // Delete messages first (foreign key constraint)
-      await supa.from('conversation_messages').delete().eq('conversation_id', id);
+      await getSupa().from('conversation_messages').delete().eq('conversation_id', id);
       // Delete conversation
-      await supa.from('conversations').delete().eq('id', id).eq('tenant_id', tenantRecord.id);
+      await getSupa().from('conversations').delete().eq('id', id).eq('tenant_id', tenantRecord.id);
 
       await logAiEvent({
         message: 'Conversation deleted',

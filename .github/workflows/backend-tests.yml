@@ -124,6 +124,7 @@ jobs:
         env:
           PORT: 3001
           NODE_ENV: test
+          USE_SUPABASE_API: 'true'
           JWT_SECRET: test-jwt-secret-for-ci
           SESSION_SECRET: test-session-secret-for-ci
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
