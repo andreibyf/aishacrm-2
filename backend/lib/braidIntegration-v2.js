@@ -2140,6 +2140,9 @@ export function getToolImpactAnalysis(toolName) {
   // Find affected chains
   const affectedChains = [];
   for (const [chainName, chain] of Object.entries(TOOL_CHAINS)) {
+    // Skip dynamic chains that don't have static steps
+    if (!chain.steps || chain.dynamic) continue;
+
     const chainTools = chain.steps.map(s => s.tool);
     if (chainTools.includes(toolName)) {
       affectedChains.push({
