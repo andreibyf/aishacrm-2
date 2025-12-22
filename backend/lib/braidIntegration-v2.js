@@ -1517,6 +1517,677 @@ export const TOOL_CHAINS = {
   }
 };
 
+// ============================================================================
+// TOOL DEPENDENCY GRAPH
+// Maps tool relationships, categories, and dependencies for visualization
+// ============================================================================
+
+/**
+ * Tool categories for grouping in visualizations
+ */
+export const TOOL_CATEGORIES = {
+  ACCOUNTS: {
+    name: 'Accounts',
+    color: '#3B82F6', // blue
+    icon: 'building'
+  },
+  CONTACTS: {
+    name: 'Contacts',
+    color: '#10B981', // green
+    icon: 'users'
+  },
+  LEADS: {
+    name: 'Leads',
+    color: '#F59E0B', // amber
+    icon: 'target'
+  },
+  OPPORTUNITIES: {
+    name: 'Opportunities',
+    color: '#8B5CF6', // purple
+    icon: 'trending-up'
+  },
+  ACTIVITIES: {
+    name: 'Activities',
+    color: '#EC4899', // pink
+    icon: 'calendar'
+  },
+  REPORTS: {
+    name: 'Reports',
+    color: '#6366F1', // indigo
+    icon: 'bar-chart'
+  },
+  SYSTEM: {
+    name: 'System',
+    color: '#6B7280', // gray
+    icon: 'settings'
+  },
+  AI: {
+    name: 'AI/Intelligence',
+    color: '#14B8A6', // teal
+    icon: 'brain'
+  }
+};
+
+/**
+ * Tool Dependency Graph
+ * 
+ * Each tool entry contains:
+ * - category: Which category this tool belongs to
+ * - dependencies: Tools this tool commonly calls or requires data from
+ * - dependents: Tools that commonly call this tool (computed)
+ * - inputs: Required input entities
+ * - outputs: Entities this tool creates or modifies
+ * - effects: Side effects (create, update, delete, read)
+ * - description: Human-readable description
+ */
+export const TOOL_GRAPH = {
+  // ========== ACCOUNTS ==========
+  create_account: {
+    category: 'ACCOUNTS',
+    dependencies: [],
+    inputs: [],
+    outputs: ['account'],
+    effects: ['create'],
+    description: 'Create a new account/company record'
+  },
+  get_account: {
+    category: 'ACCOUNTS',
+    dependencies: [],
+    inputs: ['account_id'],
+    outputs: ['account'],
+    effects: ['read'],
+    description: 'Retrieve account details by ID'
+  },
+  search_accounts: {
+    category: 'ACCOUNTS',
+    dependencies: [],
+    inputs: [],
+    outputs: ['accounts[]'],
+    effects: ['read'],
+    description: 'Search accounts with filters'
+  },
+  update_account: {
+    category: 'ACCOUNTS',
+    dependencies: ['get_account'],
+    inputs: ['account_id'],
+    outputs: ['account'],
+    effects: ['update'],
+    description: 'Update account fields'
+  },
+  delete_account: {
+    category: 'ACCOUNTS',
+    dependencies: ['get_account'],
+    inputs: ['account_id'],
+    outputs: [],
+    effects: ['delete'],
+    description: 'Delete an account (cascades to related records)'
+  },
+
+  // ========== CONTACTS ==========
+  create_contact: {
+    category: 'CONTACTS',
+    dependencies: ['get_account'],
+    inputs: ['account_id'],
+    outputs: ['contact'],
+    effects: ['create'],
+    description: 'Create a contact linked to an account'
+  },
+  get_contact: {
+    category: 'CONTACTS',
+    dependencies: [],
+    inputs: ['contact_id'],
+    outputs: ['contact'],
+    effects: ['read'],
+    description: 'Retrieve contact details by ID'
+  },
+  search_contacts: {
+    category: 'CONTACTS',
+    dependencies: [],
+    inputs: [],
+    outputs: ['contacts[]'],
+    effects: ['read'],
+    description: 'Search contacts with filters'
+  },
+  update_contact: {
+    category: 'CONTACTS',
+    dependencies: ['get_contact'],
+    inputs: ['contact_id'],
+    outputs: ['contact'],
+    effects: ['update'],
+    description: 'Update contact fields'
+  },
+  delete_contact: {
+    category: 'CONTACTS',
+    dependencies: ['get_contact'],
+    inputs: ['contact_id'],
+    outputs: [],
+    effects: ['delete'],
+    description: 'Delete a contact'
+  },
+
+  // ========== LEADS ==========
+  create_lead: {
+    category: 'LEADS',
+    dependencies: [],
+    inputs: [],
+    outputs: ['lead'],
+    effects: ['create'],
+    description: 'Create a new lead'
+  },
+  get_lead: {
+    category: 'LEADS',
+    dependencies: [],
+    inputs: ['lead_id'],
+    outputs: ['lead'],
+    effects: ['read'],
+    description: 'Retrieve lead details by ID'
+  },
+  search_leads: {
+    category: 'LEADS',
+    dependencies: [],
+    inputs: [],
+    outputs: ['leads[]'],
+    effects: ['read'],
+    description: 'Search leads with filters'
+  },
+  update_lead: {
+    category: 'LEADS',
+    dependencies: ['get_lead'],
+    inputs: ['lead_id'],
+    outputs: ['lead'],
+    effects: ['update'],
+    description: 'Update lead fields'
+  },
+  qualify_lead: {
+    category: 'LEADS',
+    dependencies: ['get_lead'],
+    inputs: ['lead_id'],
+    outputs: ['lead'],
+    effects: ['update'],
+    description: 'Mark lead as qualified'
+  },
+  convert_lead_to_account: {
+    category: 'LEADS',
+    dependencies: ['get_lead', 'qualify_lead'],
+    inputs: ['lead_id'],
+    outputs: ['account', 'contact', 'opportunity'],
+    effects: ['create', 'update'],
+    description: 'Convert qualified lead to account with optional contact and opportunity'
+  },
+  delete_lead: {
+    category: 'LEADS',
+    dependencies: ['get_lead'],
+    inputs: ['lead_id'],
+    outputs: [],
+    effects: ['delete'],
+    description: 'Delete a lead'
+  },
+
+  // ========== OPPORTUNITIES ==========
+  create_opportunity: {
+    category: 'OPPORTUNITIES',
+    dependencies: ['get_account'],
+    inputs: ['account_id'],
+    outputs: ['opportunity'],
+    effects: ['create'],
+    description: 'Create an opportunity for an account'
+  },
+  get_opportunity: {
+    category: 'OPPORTUNITIES',
+    dependencies: [],
+    inputs: ['opportunity_id'],
+    outputs: ['opportunity'],
+    effects: ['read'],
+    description: 'Retrieve opportunity details by ID'
+  },
+  search_opportunities: {
+    category: 'OPPORTUNITIES',
+    dependencies: [],
+    inputs: [],
+    outputs: ['opportunities[]'],
+    effects: ['read'],
+    description: 'Search opportunities with filters'
+  },
+  update_opportunity: {
+    category: 'OPPORTUNITIES',
+    dependencies: ['get_opportunity'],
+    inputs: ['opportunity_id'],
+    outputs: ['opportunity'],
+    effects: ['update'],
+    description: 'Update opportunity fields'
+  },
+  advance_opportunity_stage: {
+    category: 'OPPORTUNITIES',
+    dependencies: ['get_opportunity'],
+    inputs: ['opportunity_id'],
+    outputs: ['opportunity'],
+    effects: ['update'],
+    description: 'Move opportunity to next pipeline stage'
+  },
+  delete_opportunity: {
+    category: 'OPPORTUNITIES',
+    dependencies: ['get_opportunity'],
+    inputs: ['opportunity_id'],
+    outputs: [],
+    effects: ['delete'],
+    description: 'Delete an opportunity'
+  },
+
+  // ========== ACTIVITIES ==========
+  create_activity: {
+    category: 'ACTIVITIES',
+    dependencies: [],
+    inputs: ['entity_type', 'entity_id'],
+    outputs: ['activity'],
+    effects: ['create'],
+    description: 'Schedule an activity (call, meeting, task, email)'
+  },
+  get_activity: {
+    category: 'ACTIVITIES',
+    dependencies: [],
+    inputs: ['activity_id'],
+    outputs: ['activity'],
+    effects: ['read'],
+    description: 'Retrieve activity details by ID'
+  },
+  search_activities: {
+    category: 'ACTIVITIES',
+    dependencies: [],
+    inputs: [],
+    outputs: ['activities[]'],
+    effects: ['read'],
+    description: 'Search activities with filters'
+  },
+  update_activity: {
+    category: 'ACTIVITIES',
+    dependencies: ['get_activity'],
+    inputs: ['activity_id'],
+    outputs: ['activity'],
+    effects: ['update'],
+    description: 'Update activity fields'
+  },
+  complete_activity: {
+    category: 'ACTIVITIES',
+    dependencies: ['get_activity'],
+    inputs: ['activity_id'],
+    outputs: ['activity'],
+    effects: ['update'],
+    description: 'Mark activity as completed'
+  },
+  delete_activity: {
+    category: 'ACTIVITIES',
+    dependencies: ['get_activity'],
+    inputs: ['activity_id'],
+    outputs: [],
+    effects: ['delete'],
+    description: 'Delete an activity'
+  },
+
+  // ========== REPORTS ==========
+  get_pipeline_report: {
+    category: 'REPORTS',
+    dependencies: ['search_opportunities'],
+    inputs: [],
+    outputs: ['report'],
+    effects: ['read'],
+    description: 'Generate pipeline summary report'
+  },
+  get_activity_report: {
+    category: 'REPORTS',
+    dependencies: ['search_activities'],
+    inputs: [],
+    outputs: ['report'],
+    effects: ['read'],
+    description: 'Generate activity metrics report'
+  },
+  get_lead_conversion_report: {
+    category: 'REPORTS',
+    dependencies: ['search_leads'],
+    inputs: [],
+    outputs: ['report'],
+    effects: ['read'],
+    description: 'Generate lead conversion funnel report'
+  },
+  get_dashboard_metrics: {
+    category: 'REPORTS',
+    dependencies: ['search_accounts', 'search_leads', 'search_opportunities', 'search_activities'],
+    inputs: [],
+    outputs: ['metrics'],
+    effects: ['read'],
+    description: 'Aggregate dashboard KPIs'
+  },
+
+  // ========== AI/INTELLIGENCE ==========
+  ai_suggest_next_action: {
+    category: 'AI',
+    dependencies: ['get_account', 'search_activities', 'search_opportunities'],
+    inputs: ['entity_type', 'entity_id'],
+    outputs: ['suggestions[]'],
+    effects: ['read'],
+    description: 'AI-powered next best action recommendations'
+  },
+  ai_score_lead: {
+    category: 'AI',
+    dependencies: ['get_lead', 'search_leads'],
+    inputs: ['lead_id'],
+    outputs: ['score', 'factors'],
+    effects: ['read', 'update'],
+    description: 'AI-powered lead scoring'
+  },
+  ai_summarize_account: {
+    category: 'AI',
+    dependencies: ['get_account', 'search_contacts', 'search_opportunities', 'search_activities'],
+    inputs: ['account_id'],
+    outputs: ['summary'],
+    effects: ['read'],
+    description: 'AI-generated account summary and insights'
+  },
+  web_research: {
+    category: 'AI',
+    dependencies: [],
+    inputs: ['company_name', 'domain'],
+    outputs: ['research_data'],
+    effects: ['read'],
+    description: 'Research company information from web sources'
+  },
+
+  // ========== SYSTEM ==========
+  get_current_user: {
+    category: 'SYSTEM',
+    dependencies: [],
+    inputs: [],
+    outputs: ['user'],
+    effects: ['read'],
+    description: 'Get current authenticated user info'
+  },
+  get_tenant_config: {
+    category: 'SYSTEM',
+    dependencies: [],
+    inputs: [],
+    outputs: ['config'],
+    effects: ['read'],
+    description: 'Get tenant configuration and settings'
+  }
+};
+
+/**
+ * Get dependencies for a tool (what it needs)
+ * @param {string} toolName - Tool to get dependencies for
+ * @returns {{ direct: string[], transitive: string[] }}
+ */
+export function getToolDependencies(toolName) {
+  const tool = TOOL_GRAPH[toolName];
+  if (!tool) {
+    return { direct: [], transitive: [], error: `Unknown tool: ${toolName}` };
+  }
+
+  const direct = tool.dependencies || [];
+  const transitive = new Set();
+  const visited = new Set([toolName]);
+
+  function collectTransitive(deps) {
+    for (const dep of deps) {
+      if (visited.has(dep)) continue;
+      visited.add(dep);
+      transitive.add(dep);
+      
+      const depTool = TOOL_GRAPH[dep];
+      if (depTool?.dependencies) {
+        collectTransitive(depTool.dependencies);
+      }
+    }
+  }
+
+  collectTransitive(direct);
+
+  return {
+    direct,
+    transitive: Array.from(transitive).filter(t => !direct.includes(t))
+  };
+}
+
+/**
+ * Get dependents for a tool (what depends on it)
+ * @param {string} toolName - Tool to get dependents for
+ * @returns {{ direct: string[], transitive: string[] }}
+ */
+export function getToolDependents(toolName) {
+  if (!TOOL_GRAPH[toolName]) {
+    return { direct: [], transitive: [], error: `Unknown tool: ${toolName}` };
+  }
+
+  // Build reverse dependency map
+  const directDependents = [];
+  for (const [name, config] of Object.entries(TOOL_GRAPH)) {
+    if (config.dependencies?.includes(toolName)) {
+      directDependents.push(name);
+    }
+  }
+
+  // Collect transitive dependents
+  const transitive = new Set();
+  const visited = new Set([toolName]);
+
+  function collectTransitive(deps) {
+    for (const dep of deps) {
+      if (visited.has(dep)) continue;
+      visited.add(dep);
+      transitive.add(dep);
+
+      // Find tools that depend on this dependent
+      for (const [name, config] of Object.entries(TOOL_GRAPH)) {
+        if (config.dependencies?.includes(dep) && !visited.has(name)) {
+          collectTransitive([name]);
+        }
+      }
+    }
+  }
+
+  collectTransitive(directDependents);
+
+  return {
+    direct: directDependents,
+    transitive: Array.from(transitive).filter(t => !directDependents.includes(t))
+  };
+}
+
+/**
+ * Get the full tool graph for visualization
+ * @param {Object} options - Filter options
+ * @returns {Object} Graph data in format suitable for visualization libraries
+ */
+export function getToolGraph(options = {}) {
+  const { category, includeMetadata = true, format = 'nodes-edges' } = options;
+
+  const nodes = [];
+  const edges = [];
+
+  for (const [name, config] of Object.entries(TOOL_GRAPH)) {
+    // Filter by category if specified
+    if (category && config.category !== category) continue;
+
+    const categoryConfig = TOOL_CATEGORIES[config.category] || {};
+
+    // Add node
+    const node = {
+      id: name,
+      label: name.replace(/_/g, ' '),
+      category: config.category,
+      color: categoryConfig.color,
+      icon: categoryConfig.icon
+    };
+
+    if (includeMetadata) {
+      node.inputs = config.inputs;
+      node.outputs = config.outputs;
+      node.effects = config.effects;
+      node.description = config.description;
+    }
+
+    nodes.push(node);
+
+    // Add edges for dependencies
+    for (const dep of (config.dependencies || [])) {
+      // Only add edge if dependency is in filtered set
+      if (!category || TOOL_GRAPH[dep]?.category === category) {
+        edges.push({
+          source: dep,
+          target: name,
+          type: 'dependency'
+        });
+      }
+    }
+  }
+
+  if (format === 'nodes-edges') {
+    return { nodes, edges, categories: TOOL_CATEGORIES };
+  }
+
+  // Adjacency list format
+  if (format === 'adjacency') {
+    const adjacency = {};
+    for (const node of nodes) {
+      adjacency[node.id] = {
+        ...node,
+        dependencies: TOOL_GRAPH[node.id]?.dependencies || [],
+        dependents: edges.filter(e => e.source === node.id).map(e => e.target)
+      };
+    }
+    return { adjacency, categories: TOOL_CATEGORIES };
+  }
+
+  return { nodes, edges, categories: TOOL_CATEGORIES };
+}
+
+/**
+ * Detect circular dependencies in the tool graph
+ * @returns {{ hasCircular: boolean, cycles: string[][] }}
+ */
+export function detectCircularDependencies() {
+  const cycles = [];
+  const visited = new Set();
+  const recursionStack = new Set();
+
+  function dfs(node, path) {
+    if (recursionStack.has(node)) {
+      // Found a cycle - extract it from the path
+      const cycleStart = path.indexOf(node);
+      cycles.push(path.slice(cycleStart));
+      return;
+    }
+
+    if (visited.has(node)) return;
+
+    visited.add(node);
+    recursionStack.add(node);
+
+    const deps = TOOL_GRAPH[node]?.dependencies || [];
+    for (const dep of deps) {
+      if (TOOL_GRAPH[dep]) {
+        dfs(dep, [...path, dep]);
+      }
+    }
+
+    recursionStack.delete(node);
+  }
+
+  for (const toolName of Object.keys(TOOL_GRAPH)) {
+    if (!visited.has(toolName)) {
+      dfs(toolName, [toolName]);
+    }
+  }
+
+  return {
+    hasCircular: cycles.length > 0,
+    cycles
+  };
+}
+
+/**
+ * Get tools by category
+ * @param {string} category - Category name
+ * @returns {Object[]} Tools in that category
+ */
+export function getToolsByCategory(category) {
+  const tools = [];
+  for (const [name, config] of Object.entries(TOOL_GRAPH)) {
+    if (config.category === category) {
+      tools.push({
+        name,
+        ...config,
+        categoryInfo: TOOL_CATEGORIES[category]
+      });
+    }
+  }
+  return tools;
+}
+
+/**
+ * Get impact analysis for a tool
+ * Shows what would be affected if this tool fails or is modified
+ * @param {string} toolName - Tool to analyze
+ * @returns {Object} Impact analysis
+ */
+export function getToolImpactAnalysis(toolName) {
+  const tool = TOOL_GRAPH[toolName];
+  if (!tool) {
+    return { error: `Unknown tool: ${toolName}` };
+  }
+
+  const dependents = getToolDependents(toolName);
+  const dependencies = getToolDependencies(toolName);
+
+  // Find affected chains
+  const affectedChains = [];
+  for (const [chainName, chain] of Object.entries(TOOL_CHAINS)) {
+    const chainTools = chain.steps.map(s => s.tool);
+    if (chainTools.includes(toolName)) {
+      affectedChains.push({
+        name: chainName,
+        displayName: chain.name,
+        stepIndex: chainTools.indexOf(toolName),
+        totalSteps: chainTools.length,
+        isRequired: chain.steps.find(s => s.tool === toolName)?.required ?? true
+      });
+    }
+  }
+
+  return {
+    tool: toolName,
+    category: tool.category,
+    categoryInfo: TOOL_CATEGORIES[tool.category],
+    effects: tool.effects,
+    inputs: tool.inputs,
+    outputs: tool.outputs,
+    dependencies,
+    dependents,
+    affectedChains,
+    impactScore: calculateImpactScore(dependents, affectedChains)
+  };
+}
+
+/**
+ * Calculate impact score (0-100)
+ * Higher score = more critical tool
+ */
+function calculateImpactScore(dependents, affectedChains) {
+  let score = 0;
+
+  // Direct dependents are highly impactful
+  score += dependents.direct.length * 15;
+
+  // Transitive dependents less so
+  score += dependents.transitive.length * 5;
+
+  // Affected chains are critical
+  score += affectedChains.length * 10;
+
+  // Required steps in chains are more critical
+  score += affectedChains.filter(c => c.isRequired).length * 5;
+
+  return Math.min(100, score);
+}
+
 /**
  * Validate a chain definition before execution
  * @param {string} chainName - Name of the chain
