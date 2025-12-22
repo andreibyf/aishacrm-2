@@ -242,6 +242,7 @@ import createConstructionAssignmentsRoutes from "./routes/construction-assignmen
 import createWorkersRoutes from "./routes/workers.js";
 import braidAuditRoutes from "./routes/braidAudit.js";
 import braidChainRoutes from "./routes/braidChain.js";
+import braidMetricsRoutes from "./routes/braidMetrics.js";
 import { createDeprecationMiddleware } from "./middleware/deprecation.js";
 
 // Apply v1 deprecation headers middleware (before routes)
@@ -328,6 +329,9 @@ app.use("/api/braid/audit", braidAuditRoutes);
 // Braid SDK Tool Chaining routes
 console.log("✓ Mounting /api/braid/chain routes");
 app.use("/api/braid/chain", braidChainRoutes);
+// Braid SDK Metrics routes
+console.log("✓ Mounting /api/braid/metrics routes");
+app.use("/api/braid/metrics", braidMetricsRoutes);
 // Construction Projects module routes
 console.log("✓ Mounting /api/construction/projects routes");
 app.use("/api/construction/projects", createConstructionProjectsRoutes(measuredPgPool));

@@ -446,3 +446,295 @@ export async function getAuditStats(supabase, tenantId, period = 'day') {
   }
 }
 
+// ============================================================================
+// ENHANCED METRICS & TELEMETRY
+// ============================================================================
+
+/**
+ * Get detailed tool-level metrics with health scoring
+ * @param {Object} supabase - Supabase client
+ * @param {string} tenantId - Tenant UUID
+ * @param {string} period - Time period
+ * @returns {Promise<Object>} Tool metrics with health scores
+ */
+export async function getToolMetrics(supabase, tenantId, period = 'day') {
+  const periodMs = {
+    hour: 3600000,
+    day: 86400000,
+    week: 604800000,
+    month: 2592000000
+  };
+  
+  const since = new Date(Date.now() - (periodMs[period] || periodMs.day)).toISOString();
+  
+  try {
+    const { data: logs, error } = await supabase
+      .from('braid_audit_log')
+      .select('tool_name, policy, result_tag, execution_time_ms, cache_hit, error_type, created_at')
+      .eq('tenant_id', tenantId)
+      .gte('created_at', since)
+      .order('created_at', { ascending: false });
+    
+    if (error) return { error: error.message };
+    if (!logs || logs.length === 0) return { tools: [], summary: {} };
+
+    // Aggregate by tool
+    const toolStats = {};
+    logs.forEach(log => {
+      const tool = log.tool_name;
+      if (!toolStats[tool]) {
+        toolStats[tool] = {
+          name: tool,
+          policy: log.policy,
+          calls: 0,
+          successes: 0,
+          errors: 0,
+          cacheHits: 0,
+          totalLatency: 0,
+          latencies: [],
+          errorTypes: {},
+          lastUsed: null
+        };
+      }
+      const t = toolStats[tool];
+      t.calls++;
+      if (log.result_tag === 'Ok') t.successes++;
+      if (log.result_tag === 'Err') {
+        t.errors++;
+        t.errorTypes[log.error_type || 'Unknown'] = (t.errorTypes[log.error_type || 'Unknown'] || 0) + 1;
+      }
+      if (log.cache_hit) t.cacheHits++;
+      if (log.execution_time_ms) {
+        t.totalLatency += log.execution_time_ms;
+        t.latencies.push(log.execution_time_ms);
+      }
+      if (!t.lastUsed || log.created_at > t.lastUsed) t.lastUsed = log.created_at;
+    });
+
+    // Calculate derived metrics and health score for each tool
+    const tools = Object.values(toolStats).map(t => {
+      const avgLatency = t.calls > 0 ? Math.round(t.totalLatency / t.calls) : 0;
+      const successRate = t.calls > 0 ? (t.successes / t.calls) * 100 : 100;
+      const cacheHitRate = t.calls > 0 ? (t.cacheHits / t.calls) * 100 : 0;
+      
+      // Calculate P95 latency
+      const sortedLatencies = t.latencies.sort((a, b) => a - b);
+      const p95Index = Math.floor(sortedLatencies.length * 0.95);
+      const p95Latency = sortedLatencies[p95Index] || avgLatency;
+      
+      // Health score: 100 = perfect, lower = worse
+      // -20 for each 10% below 100% success rate
+      // -10 for each 100ms above 500ms avg latency
+      let healthScore = 100;
+      healthScore -= Math.max(0, (100 - successRate) * 2);
+      healthScore -= Math.max(0, Math.floor((avgLatency - 500) / 100) * 10);
+      healthScore = Math.max(0, Math.min(100, Math.round(healthScore)));
+      
+      const healthStatus = healthScore >= 90 ? 'healthy' 
+        : healthScore >= 70 ? 'degraded' 
+        : healthScore >= 50 ? 'warning' 
+        : 'critical';
+
+      return {
+        name: t.name,
+        policy: t.policy,
+        calls: t.calls,
+        successRate: Math.round(successRate * 10) / 10,
+        errorRate: Math.round((100 - successRate) * 10) / 10,
+        cacheHitRate: Math.round(cacheHitRate * 10) / 10,
+        avgLatencyMs: avgLatency,
+        p95LatencyMs: p95Latency,
+        errorTypes: t.errorTypes,
+        lastUsed: t.lastUsed,
+        healthScore,
+        healthStatus
+      };
+    }).sort((a, b) => b.calls - a.calls);
+
+    // Summary stats
+    const totalCalls = logs.length;
+    const totalErrors = logs.filter(l => l.result_tag === 'Err').length;
+    const avgSystemLatency = logs.length > 0
+      ? Math.round(logs.reduce((s, l) => s + (l.execution_time_ms || 0), 0) / logs.length)
+      : 0;
+
+    return {
+      period,
+      generatedAt: new Date().toISOString(),
+      summary: {
+        totalCalls,
+        totalErrors,
+        systemSuccessRate: totalCalls > 0 ? Math.round(((totalCalls - totalErrors) / totalCalls) * 100) : 100,
+        avgSystemLatencyMs: avgSystemLatency,
+        uniqueTools: tools.length,
+        healthyTools: tools.filter(t => t.healthStatus === 'healthy').length,
+        degradedTools: tools.filter(t => t.healthStatus !== 'healthy').length
+      },
+      tools
+    };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+/**
+ * Get time-series metrics for charting
+ * @param {Object} supabase - Supabase client
+ * @param {string} tenantId - Tenant UUID
+ * @param {string} granularity - 'minute', 'hour', 'day'
+ * @param {number} points - Number of data points
+ * @returns {Promise<Object>} Time-series data
+ */
+export async function getMetricsTimeSeries(supabase, tenantId, granularity = 'hour', points = 24) {
+  const granularityMs = {
+    minute: 60000,
+    hour: 3600000,
+    day: 86400000
+  };
+  
+  const interval = granularityMs[granularity] || granularityMs.hour;
+  const since = new Date(Date.now() - (interval * points)).toISOString();
+  
+  try {
+    const { data: logs, error } = await supabase
+      .from('braid_audit_log')
+      .select('result_tag, execution_time_ms, cache_hit, created_at')
+      .eq('tenant_id', tenantId)
+      .gte('created_at', since)
+      .order('created_at', { ascending: true });
+    
+    if (error) return { error: error.message };
+
+    // Bucket logs into time intervals
+    const buckets = {};
+    const now = Date.now();
+    
+    // Initialize buckets
+    for (let i = 0; i < points; i++) {
+      const bucketTime = new Date(now - (interval * (points - 1 - i)));
+      const key = bucketTime.toISOString();
+      buckets[key] = { 
+        timestamp: key, 
+        calls: 0, 
+        errors: 0, 
+        cacheHits: 0, 
+        totalLatency: 0 
+      };
+    }
+    
+    // Assign logs to buckets
+    (logs || []).forEach(log => {
+      const logTime = new Date(log.created_at).getTime();
+      const bucketIndex = Math.floor((logTime - (now - interval * points)) / interval);
+      const bucketKeys = Object.keys(buckets);
+      const key = bucketKeys[Math.min(Math.max(0, bucketIndex), bucketKeys.length - 1)];
+      
+      if (buckets[key]) {
+        buckets[key].calls++;
+        if (log.result_tag === 'Err') buckets[key].errors++;
+        if (log.cache_hit) buckets[key].cacheHits++;
+        buckets[key].totalLatency += log.execution_time_ms || 0;
+      }
+    });
+    
+    // Convert to array with calculated rates
+    const series = Object.values(buckets).map(b => ({
+      timestamp: b.timestamp,
+      calls: b.calls,
+      errors: b.errors,
+      cacheHits: b.cacheHits,
+      avgLatencyMs: b.calls > 0 ? Math.round(b.totalLatency / b.calls) : 0,
+      successRate: b.calls > 0 ? Math.round(((b.calls - b.errors) / b.calls) * 100) : 100
+    }));
+
+    return {
+      granularity,
+      points,
+      generatedAt: new Date().toISOString(),
+      series
+    };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+/**
+ * Get error breakdown for debugging
+ * @param {Object} supabase - Supabase client
+ * @param {string} tenantId - Tenant UUID
+ * @param {string} period - Time period
+ * @returns {Promise<Object>} Error analysis
+ */
+export async function getErrorAnalysis(supabase, tenantId, period = 'day') {
+  const periodMs = {
+    hour: 3600000,
+    day: 86400000,
+    week: 604800000,
+    month: 2592000000
+  };
+  
+  const since = new Date(Date.now() - (periodMs[period] || periodMs.day)).toISOString();
+  
+  try {
+    const { data: errors, error } = await supabase
+      .from('braid_audit_log')
+      .select('tool_name, policy, error_type, error_message, user_email, created_at')
+      .eq('tenant_id', tenantId)
+      .eq('result_tag', 'Err')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    
+    if (error) return { error: error.message };
+    
+    // Group by error type
+    const byType = {};
+    const byTool = {};
+    
+    (errors || []).forEach(e => {
+      const type = e.error_type || 'Unknown';
+      const tool = e.tool_name;
+      
+      if (!byType[type]) byType[type] = { count: 0, tools: new Set(), examples: [] };
+      byType[type].count++;
+      byType[type].tools.add(tool);
+      if (byType[type].examples.length < 3) {
+        byType[type].examples.push({
+          tool,
+          message: e.error_message?.substring(0, 200),
+          timestamp: e.created_at
+        });
+      }
+      
+      if (!byTool[tool]) byTool[tool] = { count: 0, types: {} };
+      byTool[tool].count++;
+      byTool[tool].types[type] = (byTool[tool].types[type] || 0) + 1;
+    });
+    
+    // Convert Sets to arrays
+    Object.values(byType).forEach(v => {
+      v.tools = Array.from(v.tools);
+    });
+
+    return {
+      period,
+      totalErrors: errors?.length || 0,
+      byType: Object.entries(byType)
+        .map(([type, data]) => ({ type, ...data }))
+        .sort((a, b) => b.count - a.count),
+      byTool: Object.entries(byTool)
+        .map(([tool, data]) => ({ tool, ...data }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10),
+      recentErrors: (errors || []).slice(0, 10).map(e => ({
+        tool: e.tool_name,
+        type: e.error_type,
+        message: e.error_message?.substring(0, 200),
+        user: e.user_email,
+        timestamp: e.created_at
+      }))
+    };
+  } catch (err) {
+    return { error: err.message };
+  }
+}

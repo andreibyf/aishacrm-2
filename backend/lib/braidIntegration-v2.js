@@ -10,6 +10,110 @@ import crypto from 'crypto';
 import { executeBraid, loadToolSchema, createBackendDeps, CRM_POLICIES, filterSensitiveFields, createAuditEntry, logToolExecution } from '../../braid-llm-kit/sdk/index.js';
 import cacheManager from './cacheManager.js';
 
+// ============================================================================
+// REAL-TIME METRICS TRACKING (Redis-backed)
+// ============================================================================
+
+/**
+ * Increment real-time metrics counters (fire-and-forget)
+ * @param {string} tenantId - Tenant UUID
+ * @param {string} toolName - Tool name
+ * @param {boolean} success - Whether the call succeeded
+ * @param {boolean} cacheHit - Whether it was a cache hit
+ * @param {number} latencyMs - Execution time in ms
+ */
+function trackRealtimeMetrics(tenantId, toolName, success, cacheHit, latencyMs) {
+  setImmediate(async () => {
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const minute = Math.floor(now / 60) * 60; // Round to minute
+      const hour = Math.floor(now / 3600) * 3600; // Round to hour
+      
+      // Keys with 5-minute and 2-hour TTLs respectively
+      const minuteKey = `braid:metrics:${tenantId}:min:${minute}`;
+      const hourKey = `braid:metrics:${tenantId}:hour:${hour}`;
+      const toolKey = `braid:metrics:${tenantId}:tool:${toolName}:${hour}`;
+      
+      // Increment counters
+      await Promise.all([
+        // Per-minute counters (5 min TTL)
+        cacheManager.increment(`${minuteKey}:calls`, 300),
+        success ? null : cacheManager.increment(`${minuteKey}:errors`, 300),
+        cacheHit ? cacheManager.increment(`${minuteKey}:cache_hits`, 300) : null,
+        
+        // Per-hour counters (2 hour TTL)
+        cacheManager.increment(`${hourKey}:calls`, 7200),
+        success ? null : cacheManager.increment(`${hourKey}:errors`, 7200),
+        cacheHit ? cacheManager.increment(`${hourKey}:cache_hits`, 7200) : null,
+        
+        // Per-tool per-hour counters (2 hour TTL)
+        cacheManager.increment(`${toolKey}:calls`, 7200),
+        success ? null : cacheManager.increment(`${toolKey}:errors`, 7200),
+        
+        // Latency tracking (store as list, 2 hour TTL)
+        latencyMs ? cacheManager.set(`${hourKey}:latency:${now}`, latencyMs, 7200) : null
+      ].filter(Boolean));
+    } catch (err) {
+      // Never block on metrics failures
+      console.warn('[Braid Metrics] Failed to track:', err.message);
+    }
+  });
+}
+
+/**
+ * Get real-time metrics from Redis
+ * @param {string} tenantId - Tenant UUID
+ * @param {string} window - 'minute' or 'hour'
+ * @returns {Promise<Object>} Real-time metrics
+ */
+export async function getRealtimeMetrics(tenantId, window = 'minute') {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    
+    if (window === 'minute') {
+      const minute = Math.floor(now / 60) * 60;
+      const key = `braid:metrics:${tenantId}:min:${minute}`;
+      
+      const [calls, errors, cacheHits] = await Promise.all([
+        cacheManager.get(`${key}:calls`) || 0,
+        cacheManager.get(`${key}:errors`) || 0,
+        cacheManager.get(`${key}:cache_hits`) || 0
+      ]);
+      
+      return {
+        window: 'minute',
+        timestamp: new Date(minute * 1000).toISOString(),
+        calls: parseInt(calls) || 0,
+        errors: parseInt(errors) || 0,
+        cacheHits: parseInt(cacheHits) || 0,
+        successRate: calls > 0 ? Math.round(((calls - errors) / calls) * 100) : 100,
+        cacheHitRate: calls > 0 ? Math.round((cacheHits / calls) * 100) : 0
+      };
+    } else {
+      const hour = Math.floor(now / 3600) * 3600;
+      const key = `braid:metrics:${tenantId}:hour:${hour}`;
+      
+      const [calls, errors, cacheHits] = await Promise.all([
+        cacheManager.get(`${key}:calls`) || 0,
+        cacheManager.get(`${key}:errors`) || 0,
+        cacheManager.get(`${key}:cache_hits`) || 0
+      ]);
+      
+      return {
+        window: 'hour',
+        timestamp: new Date(hour * 1000).toISOString(),
+        calls: parseInt(calls) || 0,
+        errors: parseInt(errors) || 0,
+        cacheHits: parseInt(cacheHits) || 0,
+        successRate: calls > 0 ? Math.round(((calls - errors) / calls) * 100) : 100,
+        cacheHitRate: calls > 0 ? Math.round((cacheHits / calls) * 100) : 0
+      };
+    }
+  } catch (err) {
+    return { error: err.message, window, calls: 0, errors: 0, cacheHits: 0 };
+  }
+}
+
 /**
  * Log a Braid tool execution to the audit log (fire-and-forget)
  * @param {Object} params - Audit log parameters
@@ -1070,6 +1174,9 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
       if (cachedResult !== null) {
         console.log(`[Braid Tool] Cache HIT for ${toolName}`, { cacheKey: cacheKey.substring(0, 60) });
         
+        // Track cache hit in real-time metrics
+        trackRealtimeMetrics(tenantUuid, toolName, true, true, 0);
+        
         // Log cache hit to audit (async, don't await)
         logAuditEntry({
           toolName, config, basePolicy, tenantUuid, userId, userEmail, userRole,
@@ -1154,6 +1261,9 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
     // Calculate execution time
     const executionTimeMs = Date.now() - startTime;
 
+    // Track real-time metrics (Redis)
+    trackRealtimeMetrics(tenantUuid, toolName, result?.tag === 'Ok', false, executionTimeMs);
+
     // Log to audit (async, don't await to avoid blocking response)
     logAuditEntry({
       toolName, config, basePolicy, tenantUuid, userId, userEmail, userRole,
@@ -1179,6 +1289,9 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
       error: { type: 'ExecutionError', message: error.message, stack: error.stack }
     };
     
+    // Track error in real-time metrics
+    trackRealtimeMetrics(tenantUuid, toolName, false, false, executionTimeMs);
+
     // Log error to audit (async, don't await)
     logAuditEntry({
       toolName, config, basePolicy, tenantUuid, userId, userEmail, userRole,
