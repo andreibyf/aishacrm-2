@@ -62,9 +62,8 @@ export function parse(src, filename="stdin"){
       else if (pk().type==='ident') {
         const tag = eat('ident').value;
         let fields = null;
-        if (match('{','{')){
+        if (pk().type === '{') {
           fields = parseObjectType().fields;
-          eat('}','}');
         }
         variants.push({ tag, fields });
       }
