@@ -1,0 +1,73 @@
+// Example: Attribute-Based Access Control (ABAC) Policy
+// Demonstrates: Policy declarations, attribute constraints, role-based filtering
+
+import { Result, User, Account, CRMError } from "../spec/types.braid"
+
+// Policy: Define attribute-based access rules
+policy AccountAccessPolicy {
+  // Only allow access to accounts within user's tenant
+  tenant_isolation: true,
+  
+  // Field-level access based on role
+  field_access: {
+    annual_revenue: ["admin", "manager", "sales"],
+    cost_center: ["admin", "finance"],
+    billing_info: ["admin", "finance"],
+    notes: ["admin", "manager", "sales", "support"]
+  },
+  
+  // Sensitive fields that require audit logging
+  audit_fields: ["annual_revenue", "billing_info", "cost_center"]
+}
+
+// Pure function to check attribute access
+fn hasFieldAccess(user: User, field: String) -> Boolean {
+  let policy = AccountAccessPolicy.field_access;
+  let allowedRoles = policy[field] ?? [];
+  return includes(allowedRoles, user.role);
+}
+
+// Function to filter account fields based on user attributes
+fn filterAccountByPolicy(account: Account, user: User) -> Account {
+  let filtered = {
+    id: account.id,
+    name: account.name,
+    industry: account.industry,
+    website: account.website,
+    tenant_id: account.tenant_id
+  };
+  
+  // Add optional fields based on role access
+  if hasFieldAccess(user, "annual_revenue") {
+    filtered.annual_revenue = account.annual_revenue;
+  }
+  
+  if hasFieldAccess(user, "notes") {
+    filtered.notes = account.notes;
+  }
+  
+  if hasFieldAccess(user, "billing_info") {
+    filtered.billing_info = account.billing_info;
+  }
+  
+  return filtered;
+}
+
+// Main tool: Get account with policy enforcement
+@tool(name="get_account_with_policy", category="crm")
+@constraint(tenant_match(user.tenant_id, account.tenant_id))
+fn getAccountWithPolicy(accountId: String, user: User) -> Result<Account, CRMError> !net {
+  let response = http.get("/api/v2/accounts/${accountId}");
+  
+  return match response {
+    Ok{data} => {
+      // Apply ABAC policy filtering
+      let filtered = filterAccountByPolicy(data, user);
+      Ok(filtered)
+    },
+    Err{error} => Err(DatabaseError{
+      query: "SELECT FROM accounts",
+      code: error.status
+    })
+  };
+}

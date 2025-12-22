@@ -1,0 +1,153 @@
+// Example: Forbidden Effects and Safety Constraints
+// Demonstrates: Effect prohibition, dangerous operation prevention, audit requirements
+
+import { Result, Account, CRMError } from "../spec/types.braid"
+
+// Policy: Operations that are NEVER allowed for AI
+policy ForbiddenOperations {
+  // These effects are prohibited for AI tools
+  forbidden_effects: [
+    "db.drop",           // Cannot drop tables
+    "db.truncate",       // Cannot truncate tables
+    "fs.delete_system",  // Cannot delete system files
+    "auth.bypass",       // Cannot bypass authentication
+    "billing.refund",    // Cannot issue refunds without human approval
+    "user.delete"        // Cannot delete user accounts
+  ],
+  
+  // These operations require human approval
+  requires_approval: [
+    "account.delete",
+    "bulk.delete",
+    "data.export_pii",
+    "tenant.deactivate"
+  ]
+}
+
+// Example 1: Safe read-only operation (allowed)
+@tool(name="get_account_summary", category="crm")
+@readonly  // Explicitly marked as read-only
+fn getAccountSummary(accountId: String) -> Result<Account, CRMError> !net {
+  let response = http.get("/api/v2/accounts/${accountId}");
+  
+  return match response {
+    Ok{data} => Ok({
+      id: data.id,
+      name: data.name,
+      industry: data.industry,
+      // Note: annual_revenue excluded for privacy
+      account_count: len(data.contacts ?? [])
+    }),
+    Err{error} => Err(NotFoundError{ entity: "account", id: accountId })
+  };
+}
+
+// Example 2: This would be REJECTED by the Braid validator
+// Uncommenting this would cause a compilation error
+/*
+@tool(name="drop_all_accounts", category="admin")
+@effect(db.drop)  // FORBIDDEN - validator rejects this
+fn dropAllAccounts(tenant: String) -> Result<Boolean, CRMError> !net {
+  // This tool would never compile - db.drop is forbidden
+  return http.post("/api/admin/drop-table", { table: "accounts" });
+}
+*/
+
+// Example 3: Operation requiring human approval
+@tool(name="request_account_deletion", category="crm")
+@effect(db.write)
+@requires_approval("account.delete")  // Flags for human review
+fn requestAccountDeletion(
+  accountId: String, 
+  reason: String,
+  requestedBy: String
+) -> Result<DeletionRequest, CRMError> !net, clock {
+  
+  // Validate reason is provided
+  if len(reason) < 10 {
+    return Err(ValidationError{
+      field: "reason",
+      message: "Deletion reason must be at least 10 characters"
+    });
+  }
+  
+  let timestamp = clock.now();
+  
+  // Create deletion request (does NOT actually delete)
+  let payload = {
+    account_id: accountId,
+    requested_by: requestedBy,
+    reason: reason,
+    status: "pending_approval",
+    created_at: timestamp,
+    expires_at: timestamp + 7 * 24 * 60 * 60 * 1000  // 7 days
+  };
+  
+  let response = http.post("/api/admin/deletion-requests", { body: payload });
+  
+  return match response {
+    Ok{data} => Ok(DeletionRequest{
+      id: data.id,
+      account_id: accountId,
+      status: "pending_approval",
+      message: "Deletion request created. Requires admin approval within 7 days."
+    }),
+    Err{error} => Err(DatabaseError{
+      query: "INSERT INTO deletion_requests",
+      code: error.status
+    })
+  };
+}
+
+// Example 4: Bulk operation with safety limits
+@tool(name="bulk_update_lead_status", category="crm")
+@effect(db.write)
+@constraint(max_affected_rows(100))  // Safety limit
+fn bulkUpdateLeadStatus(
+  leadIds: Array<String>,
+  newStatus: String,
+  tenant: String
+) -> Result<BulkResult, CRMError> !net, clock {
+  
+  // Enforce safety limit
+  if len(leadIds) > 100 {
+    return Err(ValidationError{
+      field: "leadIds",
+      message: "Bulk operations limited to 100 records. Use batching for larger updates."
+    });
+  }
+  
+  // Validate status transition
+  let validStatuses = ["new", "contacted", "qualified", "nurturing", "converted", "lost"];
+  if !includes(validStatuses, newStatus) {
+    return Err(ValidationError{
+      field: "newStatus",
+      message: "Invalid status. Must be one of: ${validStatuses}"
+    });
+  }
+  
+  let timestamp = clock.now();
+  let payload = {
+    ids: leadIds,
+    updates: {
+      status: newStatus,
+      updated_at: timestamp,
+      updated_by: "ai_assistant"
+    },
+    tenant_id: tenant
+  };
+  
+  let response = http.patch("/api/v2/leads/bulk", { body: payload });
+  
+  return match response {
+    Ok{data} => Ok(BulkResult{
+      updated: data.updated_count,
+      failed: data.failed_count,
+      message: "Updated ${data.updated_count} leads to status '${newStatus}'"
+    }),
+    Err{error} => Err(DatabaseError{
+      query: "UPDATE leads WHERE id IN (...)",
+      code: error.status
+    })
+  };
+}

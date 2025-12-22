@@ -1,0 +1,120 @@
+// Example: Team Member Assignment with Validation
+// Demonstrates: Cross-entity operations, capacity checks, notification effects
+
+import { Result, Lead, Employee, Assignment, CRMError } from "../spec/types.braid"
+
+// Maximum leads per sales rep (configurable per tenant)
+const MAX_LEADS_PER_REP = 50;
+
+// Pure function to check if employee can accept more leads
+fn hasCapacity(employee: Employee, currentCount: Number) -> Boolean {
+  let limit = employee.metadata.lead_limit ?? MAX_LEADS_PER_REP;
+  return currentCount < limit;
+}
+
+// Pure function to validate assignment eligibility
+fn canAssignLead(lead: Lead, employee: Employee) -> Result<Boolean, String> {
+  // Check tenant match
+  if lead.tenant_id != employee.tenant_id {
+    return Err("Tenant mismatch: cannot assign across tenants");
+  }
+  
+  // Check employee is active
+  if employee.status != "active" {
+    return Err("Employee is not active");
+  }
+  
+  // Check employee role allows lead assignment
+  let assignableRoles = ["sales", "manager", "business_development"];
+  if !includes(assignableRoles, employee.role) {
+    return Err("Employee role does not allow lead assignments");
+  }
+  
+  return Ok(true);
+}
+
+// Main tool: Assign lead to team member
+@tool(name="assign_lead_to_member", category="crm")
+@effect(db.write)
+@effect(notify)
+@constraint(tenant_match(lead.tenant_id, employee.tenant_id))
+fn assignLeadToMember(
+  leadId: String, 
+  employeeId: String, 
+  tenant: String
+) -> Result<Assignment, CRMError> !net, clock, notify {
+  
+  // Fetch lead and employee in parallel
+  let [leadResult, employeeResult, countResult] = await [
+    http.get("/api/v2/leads/${leadId}"),
+    http.get("/api/employees/${employeeId}"),
+    http.get("/api/employees/${employeeId}/lead-count")
+  ];
+  
+  // Validate both entities exist
+  let lead = match leadResult {
+    Ok{data} => data,
+    Err{error} => return Err(NotFoundError{ entity: "lead", id: leadId })
+  };
+  
+  let employee = match employeeResult {
+    Ok{data} => data,
+    Err{error} => return Err(NotFoundError{ entity: "employee", id: employeeId })
+  };
+  
+  let currentCount = match countResult {
+    Ok{data} => data.count,
+    Err{_} => 0  // Default to 0 if count fails
+  };
+  
+  // Validate assignment eligibility
+  match canAssignLead(lead, employee) {
+    Err{message} => return Err(ValidationError{ field: "assignment", message: message }),
+    Ok{_} => {}
+  };
+  
+  // Check capacity
+  if !hasCapacity(employee, currentCount) {
+    return Err(ValidationError{
+      field: "capacity",
+      message: "Employee has reached maximum lead capacity (${MAX_LEADS_PER_REP})"
+    });
+  }
+  
+  // Perform assignment
+  let timestamp = clock.now();
+  let payload = {
+    assigned_to: employeeId,
+    assigned_at: timestamp,
+    assigned_by: "ai_assistant",
+    previous_assignee: lead.assigned_to
+  };
+  
+  let updateResult = http.patch("/api/v2/leads/${leadId}", { body: payload });
+  
+  match updateResult {
+    Ok{data} => {
+      // Send notification to assigned employee
+      notify.send({
+        to: employee.email,
+        template: "lead_assigned",
+        data: {
+          lead_name: lead.name,
+          lead_id: leadId,
+          assigned_at: timestamp
+        }
+      });
+      
+      return Ok(Assignment{
+        lead_id: leadId,
+        employee_id: employeeId,
+        assigned_at: timestamp,
+        status: "active"
+      });
+    },
+    Err{error} => return Err(DatabaseError{
+      query: "UPDATE leads SET assigned_to",
+      code: error.status
+    })
+  }
+}

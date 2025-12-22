@@ -313,7 +313,7 @@ let x: Number = 42;
 let mut counter: Number = 0;  // Mutable (planned)
 ```
 
-### 6.2 Conditionals (Planned)
+### 6.2 Conditionals
 ```braid
 fn checkStatus(status: String) -> String {
   if status == "active" {
@@ -321,6 +321,24 @@ fn checkStatus(status: String) -> String {
   } else {
     return "User is inactive";
   }
+}
+
+// Early returns for error handling
+fn processResponse(response: Result) -> Result {
+  if response.tag == "Err" {
+    return Err({ message: "Failed" });
+  }
+  
+  let data = response.value.data;
+  return Ok(data);
+}
+
+// Complex conditions with member access
+fn validateLead(lead: Object) -> Boolean {
+  if lead.status == "qualified" && lead.score > 50 {
+    return true;
+  }
+  return false;
 }
 ```
 

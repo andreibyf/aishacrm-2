@@ -150,20 +150,20 @@ fn fullLifecycleAdvance(
   let promoteUrl = "/api/bizdevsources/" + bizdev_source_id + "/promote";
   let promoteResponse = http.post(promoteUrl, { body: { tenant_id: tenant } });
   
-  let leadId = "";
-  match promoteResponse {
-    Ok{value} => { leadId = value.data.lead.id; },
-    Err{error} => { return Err({ tag: "PromotionError", step: 1, code: error.status }); },
-    _ => { return Err({ tag: "NetworkError", step: 1, url: promoteUrl, code: 500 }); }
+  // Check promotion result
+  if promoteResponse.tag == "Err" {
+    return Err({ tag: "PromotionError", step: 1, code: promoteResponse.error.status });
   }
+  
+  let leadId = promoteResponse.value.data.lead.id;
   
   // Step 2: Qualify the Lead
   let qualifyUrl = "/api/v2/leads/" + leadId;
   let qualifyResponse = http.put(qualifyUrl, { body: { tenant_id: tenant, status: "qualified", qualification_notes: qualification_notes } });
   
-  match qualifyResponse {
-    Err{error} => { return Err({ tag: "QualificationError", step: 2, code: error.status }); },
-    _ => {}
+  // Check qualification result
+  if qualifyResponse.tag == "Err" {
+    return Err({ tag: "QualificationError", step: 2, code: qualifyResponse.error.status });
   }
   
   // Step 3: Convert Lead to Contact + Account + Opportunity

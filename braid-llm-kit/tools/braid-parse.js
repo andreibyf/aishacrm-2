@@ -170,19 +170,20 @@ export function parse(src, filename="stdin"){
     let left=parseUnary();
     for(;;){
       const tok=pk();
-      const op = (tok.type==='op' && (tok.value in PREC)) ? tok.value : (['+','-','*','/','%'].includes(tok.type) ? tok.type : null);
+      // Check for two-char operators (from 'op' type) or single-char operators
+      const op = (tok.type==='op' && (tok.value in PREC)) ? tok.value : (['+','-','*','/','%','<','>'].includes(tok.type) ? tok.type : null);
       if (!op) break;
       const bp = PREC[op]; if (bp==null || bp<minBP) break;
       p++; // eat op
       const right = parseBinary(bp+1);
       left = { type:'BinaryExpr', op, left, right };
     }
-    return parsePostfix(left);
+    return left;
   }
   function parseUnary(){
     if (match('-','-')) return { type:'UnaryExpr', op:'-', arg: parseUnary() };
     if (match('!','!')) return { type:'UnaryExpr', op:'!', arg: parseUnary() };
-    return parsePrimary();
+    return parsePostfix(parsePrimary());
   }
   function parsePrimary(){
     const k=pk();

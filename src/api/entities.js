@@ -226,14 +226,19 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
       return explicit;
     }
     
-    // 2) URL/localStorage selection (user's assigned tenant, set on login)
-    // For regular users, this is their assigned tenant from their profile
-    // For superadmins, this is the tenant they selected in the UI
+    // 2) URL/localStorage selection (user selected a tenant)
     const clientSelected = getSelectedTenantFromClient();
     if (clientSelected) return clientSelected;
     
-    // 3) Supabase user profile lookup - get user's assigned tenant from database
-    // This is the authoritative source of the user's tenant
+    // 3) Cached effective user tenant
+    try {
+      if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem('effective_user_tenant_id');
+        if (cached && cached !== '') return cached;
+      }
+    } catch { /* noop */ }
+
+    // 4) Supabase user profile lookup - get user's assigned tenant
     if (isSupabaseConfigured()) {
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -249,11 +254,10 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
             if (!tenant) {
               throw new Error(`SECURITY: User ${user.email} has no tenant assigned. Database access requires tenant context.`);
             }
-            
-            // Set selected_tenant_id so future calls don't need to look up again
+
             try {
-              if (typeof window !== 'undefined' && !localStorage.getItem('selected_tenant_id')) {
-                localStorage.setItem('selected_tenant_id', tenant);
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('effective_user_tenant_id', tenant);
               }
             } catch { /* noop */ }
             return tenant;
@@ -285,8 +289,6 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     method: method,
     headers: {
       "Content-Type": "application/json",
-      "Cache-Control": "no-cache, no-store, must-revalidate",
-      "Pragma": "no-cache",
     },
     credentials: 'include', // Use cookies for auth, not bearer tokens
   };
@@ -1775,32 +1777,6 @@ export const User = {
     // ALWAYS use backend API for listing users (don't mock this - we need real data)
     logDev("[User.list] Fetching users via backend API");
     return callBackendAPI("user", "GET", filters);
-  },
-
-  /**
-   * List user profiles with employee linkage (for User Management UI)
-   * Uses user_profile_view which joins users with their linked employee records
-   */
-  listProfiles: async (filters = {}) => {
-    logDev("[User.listProfiles] Fetching user profiles via backend API");
-    const params = new URLSearchParams();
-    Object.entries(filters).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        params.append(key, value);
-      }
-    });
-    const url = `${BACKEND_URL}/api/users/profiles${params.toString() ? `?${params.toString()}` : ""}`;
-    const response = await fetch(url, {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-    });
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `Failed to list user profiles: ${response.status}`);
-    }
-    const result = await response.json();
-    return result.data?.users || result.data || [];
   },
 
   /**
