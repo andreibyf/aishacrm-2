@@ -86,7 +86,7 @@ test.describe('Basic CRUD Operations', () => {
   });
 
   test('should fetch opportunities from backend', async ({ request }) => {
-    const response = await request.get(`${BACKEND_URL}/api/opportunities?tenant_id=local-tenant-001`);
+    const response = await request.get(`${BACKEND_URL}/api/opportunities?tenant_id=6cb4c008-4847-426a-9a2e-918ad70e7b69`);
     expect(response.ok()).toBe(true);
     
     const data = await response.json();

@@ -12,7 +12,7 @@ const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || process.env.VITE_AISHA
 const SUPERADMIN_EMAIL = 'admin@aishacrm.com';
 const SUPERADMIN_PASSWORD = process.env.SUPERADMIN_PASSWORD || 'SuperAdmin123!';
 // Prefer environment-driven tenant ID for cloud E2E; fallback retained for local dev
-const TENANT_ID = process.env.E2E_TENANT_ID || 'local-tenant-001';
+const TENANT_ID = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 
 // Helper: Wait for backend health
 async function waitForBackendHealth() {

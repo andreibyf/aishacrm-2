@@ -33,7 +33,7 @@ async function verifyTestUser() {
         metadata
       FROM employees 
       WHERE email IN ('test@aishacrm.com', 'admin@aishacrm.com')
-        AND tenant_id = 'local-tenant-001'
+        AND tenant_id = '6cb4c008-4847-426a-9a2e-918ad70e7b69'
       ORDER BY email
     `);
 
@@ -61,7 +61,7 @@ async function verifyTestUser() {
         is_enabled,
         settings
       FROM modulesettings 
-      WHERE tenant_id = 'local-tenant-001'
+      WHERE tenant_id = '6cb4c008-4847-426a-9a2e-918ad70e7b69'
         AND module_name IN ('crm', 'developer')
       ORDER BY module_name
     `);
@@ -78,7 +78,7 @@ async function verifyTestUser() {
     // Check tenant
     console.log('\n🏢 Tenant Info:');
     const tenantResult = await client.query(`
-      SELECT id, name, status FROM tenant WHERE id = 'local-tenant-001'
+      SELECT id, name, status FROM tenant WHERE id = '6cb4c008-4847-426a-9a2e-918ad70e7b69'
     `);
 
     if (tenantResult.rows.length > 0) {

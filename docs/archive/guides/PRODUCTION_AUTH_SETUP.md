@@ -39,7 +39,7 @@ if (import.meta.env.PROD) {
 }
 ```
 
-**Effect:** Production builds will NO LONGER automatically redirect to `?tenant=local-tenant-001`
+**Effect:** Production builds will NO LONGER automatically redirect to `?tenant=6cb4c008-4847-426a-9a2e-918ad70e7b69`
 
 ---
 
@@ -291,7 +291,7 @@ Once everything is configured:
 
 #### ✅ Login Test
 1. Navigate to `https://app.aishacrm.com`
-2. Should see login form (NO auto-redirect to ?tenant=local-tenant-001)
+2. Should see login form (NO auto-redirect to ?tenant=6cb4c008-4847-426a-9a2e-918ad70e7b69)
 3. Enter admin@aishacrm.com and password
 4. Should successfully sign in and load dashboard
 
@@ -444,7 +444,7 @@ https://app.aishacrm.com/reset-password
 # Via CLI or Management API (see step 3)
 ```
 
-### "Auto-redirect to ?tenant=local-tenant-001 still happening"
+### "Auto-redirect to ?tenant=6cb4c008-4847-426a-9a2e-918ad70e7b69 still happening"
 
 **Cause:** Frontend container has old build without production environment check
 

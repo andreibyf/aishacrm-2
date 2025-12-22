@@ -2,8 +2,8 @@ import { Page, APIRequestContext } from '@playwright/test';
 
 export const FRONTEND_URL = process.env.PLAYWRIGHT_FRONTEND_URL || process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:4000';
 export const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
-export const TENANT_ID = 'local-tenant-001';
-export const E2E_TENANT_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+export const TENANT_ID = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
+export const E2E_TENANT_ID = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 
 // ============== BizDev Source Helpers ==============
 
@@ -150,13 +150,13 @@ export async function navigate(page: Page, path: string) {
 export async function initE2EUi(page: Page) {
   await page.context().addInitScript(() => {
     localStorage.setItem('E2E_TEST_MODE', 'true');
-    localStorage.setItem('tenant_id', 'a11dfb63-4b18-4eb8-872e-747af2e37c46');
-    localStorage.setItem('selected_tenant_id', 'a11dfb63-4b18-4eb8-872e-747af2e37c46');
+    localStorage.setItem('tenant_id', '6cb4c008-4847-426a-9a2e-918ad70e7b69');
+    localStorage.setItem('selected_tenant_id', '6cb4c008-4847-426a-9a2e-918ad70e7b69');
     (window as any).__e2eUser = {
       id: 'e2e-test-user',
       email: 'e2e@example.com',
       role: 'superadmin',
-      tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46'
+      tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69'
     };
   });
 }

@@ -82,8 +82,8 @@ router.get('/:id', tenantScopedId(), async (req, res) => {
 - SQL: `SELECT * FROM accounts WHERE id = $1` → `[123]`
 
 **With tenant_id**:
-- Query: `GET /api/accounts/123?tenant_id=tenant-abc`
-- SQL: `SELECT * FROM accounts WHERE id = $1 AND tenant_id = $2` → `[123, 'tenant-abc']`
+- Query: `GET /api/accounts/123?tenant_id=6cb4c008-4847-426a-9a2e-918ad70e7b69`
+- SQL: `SELECT * FROM accounts WHERE id = $1 AND tenant_id = $2` → `[123, '6cb4c008-4847-426a-9a2e-918ad70e7b69']`
 
 ### 📊 Monitoring & Performance
 
@@ -201,9 +201,9 @@ test('tenantScopedId attaches idScope to request', () => {
   
   expect(req.idScope).toEqual({
     id: '123',
-    tenant_id: 'abc',
+    tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
     where: 'id = $1 AND tenant_id = $2',
-    params: ['123', 'abc']
+    params: ['123', '6cb4c008-4847-426a-9a2e-918ad70e7b69']
   });
   expect(next).toHaveBeenCalled();
 });

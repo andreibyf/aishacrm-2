@@ -21,42 +21,42 @@ async function createTestLogs() {
 
     const testLogs = [
       {
-        tenant_id: 'test-tenant',
+        tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
         level: 'INFO',
         source: 'Backend Server',
         message: 'Backend server started successfully',
         user_email: 'system@aishacrm.com'
       },
       {
-        tenant_id: 'test-tenant',
+        tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
         level: 'INFO',
         source: 'Database',
         message: 'Database connection established to Supabase Cloud',
         user_email: 'system@aishacrm.com'
       },
       {
-        tenant_id: 'test-tenant',
+        tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
         level: 'WARNING',
         source: 'API',
         message: 'Slow API response detected (2.5s) for /api/contacts',
         user_email: 'admin@test.com'
       },
       {
-        tenant_id: 'test-tenant',
+        tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
         level: 'ERROR',
         source: 'Validation',
         message: 'Invalid email format provided: not-an-email',
         user_email: 'user@test.com'
       },
       {
-        tenant_id: 'test-tenant',
+        tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
         level: 'DEBUG',
         source: 'Cache',
         message: 'Cache hit for key: contacts_list_test-tenant',
         user_email: 'system@aishacrm.com'
       },
       {
-        tenant_id: 'test-tenant',
+        tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
         level: 'INFO',
         source: 'Authentication',
         message: 'User logged in successfully',

@@ -24,7 +24,7 @@ test.describe('Dashboard/Reports - Metrics smoke', () => {
   });
 
   test('performance metrics returns success (zeros ok)', async ({ request }) => {
-    const tenantId = process.env.E2E_TENANT_ID || 'local-tenant-001';
+    const tenantId = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
     const res = await request.get(`${BACKEND_URL}/api/metrics/performance`, { params: { hours: '24', limit: '100', tenant_id: tenantId } });
     expect(res.ok()).toBeTruthy();
     const body = await res.json();

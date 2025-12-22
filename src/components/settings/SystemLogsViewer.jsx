@@ -27,7 +27,7 @@ export default function SystemLogsViewer() {
   const loadLogs = useCallback(async () => {
     setLoading(true);
     const correlationId = `syslog-load-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
-    const tenantId = selectedTenantId || 'local-tenant-001';
+    const tenantId = selectedTenantId || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
     try {
       const tenantParam = tenantId ? `tenant_id=${encodeURIComponent(tenantId)}&` : '';
       const tenantUrl = `${BACKEND_URL}/api/system-logs?${tenantParam}limit=200&hours=${timeRangeHours}`;
@@ -140,9 +140,9 @@ export default function SystemLogsViewer() {
 
     setClearing(true);
     try {
-      const tenantId = selectedTenantId || 'local-tenant-001';
+      const tenantId = selectedTenantId || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
       const levelQuery = filterLevel !== 'all' ? `&level=${encodeURIComponent(filterLevel)}` : '';
-      const tenantQuery = tenantId && tenantId !== 'local-tenant-001' ? `tenant_id=${encodeURIComponent(tenantId)}&` : '';
+      const tenantQuery = tenantId && tenantId !== '6cb4c008-4847-426a-9a2e-918ad70e7b69' ? `tenant_id=${encodeURIComponent(tenantId)}&` : '';
       
       let totalDeleted = 0;
       
@@ -160,7 +160,7 @@ export default function SystemLogsViewer() {
       }
       
       // Also delete performance logs (API errors) if they exist
-      const perfTenantQuery = tenantId && tenantId !== 'local-tenant-001' ? `&tenant_id=${encodeURIComponent(tenantId)}` : '';
+      const perfTenantQuery = tenantId && tenantId !== '6cb4c008-4847-426a-9a2e-918ad70e7b69' ? `&tenant_id=${encodeURIComponent(tenantId)}` : '';
       const perfUrl = `${BACKEND_URL}/api/metrics/performance?hours=${timeRangeHours}${perfTenantQuery}`;
       console.log('Clearing performance logs with URL:', perfUrl);
       const perfResp = await fetch(perfUrl, {
@@ -189,7 +189,7 @@ export default function SystemLogsViewer() {
   };
 
   const handleAddTestLog = async () => {
-    const tenantId = selectedTenantId || 'local-tenant-001';
+    const tenantId = selectedTenantId || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
     setCreating(true);
     try {
       const payload = {

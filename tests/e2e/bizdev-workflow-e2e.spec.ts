@@ -20,7 +20,7 @@ import { test, expect, Page, APIRequestContext } from '@playwright/test';
 
 const FRONTEND_URL = process.env.PLAYWRIGHT_FRONTEND_URL || process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:4000';
 const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
-const E2E_TENANT_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+const E2E_TENANT_ID = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 
 // ============== API HELPERS ==============
 
@@ -147,8 +147,8 @@ async function getOpportunity(request: APIRequestContext, opportunityId: string)
 async function initE2EUi(page: Page) {
   await page.context().addInitScript(() => {
     localStorage.setItem('E2E_TEST_MODE', 'true');
-    localStorage.setItem('tenant_id', 'a11dfb63-4b18-4eb8-872e-747af2e37c46');
-    localStorage.setItem('selected_tenant_id', 'a11dfb63-4b18-4eb8-872e-747af2e37c46');
+    localStorage.setItem('tenant_id', '6cb4c008-4847-426a-9a2e-918ad70e7b69');
+    localStorage.setItem('selected_tenant_id', '6cb4c008-4847-426a-9a2e-918ad70e7b69');
   });
 }
 

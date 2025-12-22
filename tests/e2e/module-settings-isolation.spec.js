@@ -12,7 +12,7 @@ const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || process.env.VITE_AISHA
 // Note: FRONTEND_URL not used in API-only tests
 
 // Known tenant A (system tenant from copilot-instructions.md)
-const TENANT_A_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+const TENANT_A_ID = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 
 // Module to test with
 const TEST_MODULE = 'Opportunities';

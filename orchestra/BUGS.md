@@ -394,7 +394,7 @@ Resolution (December 1, 2025):
   - Created indexes for frequently queried columns
   - Removed description field from routes (unstructured data in metadata JSONB)
 - **Updated all test data to UUID format** (30+ files):
-  - Changed from legacy slug "local-tenant-001" to UUID "a11dfb63-4b18-4eb8-872e-747af2e37c46"
+  - Changed from legacy slug "6cb4c008-4847-426a-9a2e-918ad70e7b69" to UUID "a11dfb63-4b18-4eb8-872e-747af2e37c46"
   - Ensures consistent tenant isolation across E2E, unit, and integration tests
 
 Verification:

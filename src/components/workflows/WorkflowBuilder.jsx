@@ -1790,7 +1790,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
       } catch { /* noop */ }
       if (!tenantId && import.meta.env.DEV) {
         // Dev fallback to seeded tenant
-        tenantId = 'local-tenant-001';
+        tenantId = '6cb4c008-4847-426a-9a2e-918ad70e7b69';
       }
 
       if (!tenantId) {

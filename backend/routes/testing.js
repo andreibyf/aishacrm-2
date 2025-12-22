@@ -216,7 +216,7 @@ export default function createTestingRoutes(_pgPool) {
   // POST /api/testing/cleanup-test-data - Delete all records with is_test_data = true
   // Optional: also delete recent unflagged test data like example.com emails (contacts/leads)
   // Body: {
-  //   tenant_id?: 'local-tenant-001',             // Optional: clean only specific tenant
+  //   tenant_id?: '6cb4c008-4847-426a-9a2e-918ad70e7b69',             // Optional: clean only specific tenant
   //   confirm?: true,                              // Required: safety confirmation
   //   unflagged_cleanup?: {                        // Optional: additional cleanup for legacy/unflagged data
   //     enabled?: boolean,                         // If true, will run extra passes

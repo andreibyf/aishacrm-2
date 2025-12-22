@@ -149,7 +149,7 @@ Content-Type: application/json
 {
   "logs": [
     {
-      "tenant_id": "local-tenant-001",
+      "tenant_id": "6cb4c008-4847-426a-9a2e-918ad70e7b69",
       "level": "ERROR",
       "source": "MyComponent",
       "message": "Error occurred",

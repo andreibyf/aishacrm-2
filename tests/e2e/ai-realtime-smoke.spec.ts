@@ -12,10 +12,17 @@ const mockPeerInitScript = () => {
   };
 
   if (!navigator.mediaDevices) {
-    navigator.mediaDevices = {} as MediaDevices;
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: {},
+      configurable: true,
+      writable: true
+    });
   }
-
-  navigator.mediaDevices.getUserMedia = async () => mockStream as unknown as MediaStream;
+  Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
+    value: async () => mockStream as unknown as MediaStream,
+    configurable: true,
+    writable: true
+  });
 
   class MockDataChannel {
     readyState: 'connecting' | 'open' | 'closed' = 'connecting';
@@ -85,11 +92,11 @@ const mockPeerInitScript = () => {
 
 const mockSupportInitScript = () => {
   localStorage.setItem('E2E_TEST_MODE', 'true');
-  localStorage.setItem('selected_tenant_id', 'a11dfb63-4b18-4eb8-872e-747af2e37c46');
-  localStorage.setItem('tenant_id', 'a11dfb63-4b18-4eb8-872e-747af2e37c46');
+  localStorage.setItem('selected_tenant_id', '6cb4c008-4847-426a-9a2e-918ad70e7b69');
+  localStorage.setItem('tenant_id', '6cb4c008-4847-426a-9a2e-918ad70e7b69');
   localStorage.setItem('FORCE_MOCK_USER', 'true');
   localStorage.setItem('ENABLE_REALTIME_TELEMETRY_LOGS', 'true');
-  (window as any).__e2eUser = { id: 'realtime-e2e', email: 'realtime@spec.test', role: 'superadmin', tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46' };
+  (window as any).__e2eUser = { id: 'realtime-e2e', email: 'realtime@spec.test', role: 'superadmin', tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69' };
 };
 
 test.describe('@smoke Realtime voice toggle', () => {

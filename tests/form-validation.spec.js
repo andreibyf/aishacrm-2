@@ -18,7 +18,7 @@ test.describe('Form Schema Validation Tests', () => {
         id: 'e2e-test-user-id',
         email: 'e2e-test@aishacrm.com',
         role: 'superadmin',
-        tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+        tenant_id: process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69',
         permissions: ['*']
       };
     });

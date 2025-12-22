@@ -29,7 +29,7 @@ import { db } from "@/db";
 
 // ========= TEST DATA =========
 
-const tenantId = "tenant-123";
+const tenantId = "6cb4c008-4847-426a-9a2e-918ad70e7b69";
 const conversationId = "conv-123";
 
 const lead = {

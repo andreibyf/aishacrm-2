@@ -32,7 +32,7 @@
 
 - Added `import.meta.env.PROD` environment check (line ~271)
 - Auto-tenant selection now ONLY runs in development mode
-- Production builds will NOT redirect to `?tenant=local-tenant-001`
+- Production builds will NOT redirect to `?tenant=6cb4c008-4847-426a-9a2e-918ad70e7b69`
 - Prevents "Dev sign in" issue reported by user
 
 **Before:**
@@ -176,7 +176,7 @@ Complete production authentication guide covering:
 
 7. **Test Auth Flow**
    - Go to https://app.aishacrm.com
-   - Verify NO auto-redirect to `?tenant=local-tenant-001`
+   - Verify NO auto-redirect to `?tenant=6cb4c008-4847-426a-9a2e-918ad70e7b69`
    - Sign in with admin@aishacrm.com and password
    - Test "Forgot Password?" flow
    - Test logout and re-login
@@ -226,7 +226,7 @@ Before deploying to production:
 - [ ] Supabase Site URL updated to `https://app.aishacrm.com`
 - [ ] Supabase redirect URLs include `/reset-password` endpoint
 - [ ] Login page shows "Forgot Password?" button
-- [ ] No auto-redirect to `?tenant=local-tenant-001` occurs
+- [ ] No auto-redirect to `?tenant=6cb4c008-4847-426a-9a2e-918ad70e7b69` occurs
 - [ ] Password reset email received with correct production URL
 - [ ] Can sign in with admin credentials
 - [ ] Can switch tenants (superadmin only)

@@ -31,7 +31,7 @@ This deletes:
 
 ### Clear Specific Tenant
 ```powershell
-.\clear-test-data.ps1 -TenantId "local-tenant-001" -KeepTenants
+.\clear-test-data.ps1 -TenantId "6cb4c008-4847-426a-9a2e-918ad70e7b69" -KeepTenants
 ```
 - ✅ Clears data only for specified tenant
 - ✅ Other tenants remain untouched
@@ -50,7 +50,7 @@ After running `.\clear-test-data.ps1 -KeepTenants`:
 
 **Tenants Available:**
 - Testing Tenant (`testing-tenant`)
-- Local Development Tenant (`local-tenant-001`)
+- Local Development Tenant (`6cb4c008-4847-426a-9a2e-918ad70e7b69`)
 
 **Data Counts:**
 - Contacts: 0
@@ -103,7 +103,7 @@ Then assign it to your user in Settings → User Management.
 ### Quick Contact Entry (via API)
 ```powershell
 $body = @{
-    tenant_id = "local-tenant-001"
+    tenant_id = "6cb4c008-4847-426a-9a2e-918ad70e7b69"
     first_name = "John"
     last_name = "Doe"
     email = "john.doe@example.com"
@@ -145,13 +145,13 @@ Invoke-RestMethod -Uri 'http://localhost:3001/api/contacts' `
 ### Check Data via API
 ```powershell
 # List contacts
-Invoke-RestMethod 'http://localhost:3001/api/contacts?tenant_id=local-tenant-001&limit=10'
+Invoke-RestMethod 'http://localhost:3001/api/contacts?tenant_id=6cb4c008-4847-426a-9a2e-918ad70e7b69&limit=10'
 
 # List leads
-Invoke-RestMethod 'http://localhost:3001/api/leads?tenant_id=local-tenant-001&limit=10'
+Invoke-RestMethod 'http://localhost:3001/api/leads?tenant_id=6cb4c008-4847-426a-9a2e-918ad70e7b69&limit=10'
 
 # List accounts
-Invoke-RestMethod 'http://localhost:3001/api/accounts?tenant_id=local-tenant-001&limit=10'
+Invoke-RestMethod 'http://localhost:3001/api/accounts?tenant_id=6cb4c008-4847-426a-9a2e-918ad70e7b69&limit=10'
 ```
 
 ### Database Direct Query (if needed)

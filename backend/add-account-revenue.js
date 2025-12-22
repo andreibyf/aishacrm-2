@@ -18,7 +18,7 @@ async function addAccountRevenue() {
     const accountsResult = await pgPool.query(`
       SELECT id, name 
       FROM accounts 
-      WHERE tenant_id = 'local-tenant-001'
+      WHERE tenant_id = '6cb4c008-4847-426a-9a2e-918ad70e7b69'
       LIMIT 10
     `);
     
@@ -38,7 +38,7 @@ async function addAccountRevenue() {
         await pgPool.query(`
           INSERT INTO accounts (tenant_id, name, annual_revenue, industry, type, metadata)
           VALUES ($1, $2, $3, $4, $5, $6)
-        `, ['local-tenant-001', account.name, account.revenue, account.industry, 'customer', '{}']);
+        `, ['6cb4c008-4847-426a-9a2e-918ad70e7b69', account.name, account.revenue, account.industry, 'customer', '{}']);
         console.log(`✓ Created: ${account.name} - $${account.revenue.toLocaleString()}`);
       }
     } else {
@@ -66,7 +66,7 @@ async function addAccountRevenue() {
     const topAccountsResult = await pgPool.query(`
       SELECT name, annual_revenue, industry
       FROM accounts
-      WHERE tenant_id = 'local-tenant-001' 
+      WHERE tenant_id = '6cb4c008-4847-426a-9a2e-918ad70e7b69' 
         AND annual_revenue IS NOT NULL
       ORDER BY annual_revenue DESC
       LIMIT 5

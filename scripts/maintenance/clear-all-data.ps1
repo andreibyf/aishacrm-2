@@ -57,7 +57,7 @@ if (-not $Force) {
     Write-Host "  • opportunities"
     Write-Host "  • activities"
     Write-Host ""
-    Write-Host "${Yellow}For ALL tenants (including demo-tenant, local-tenant-001, etc.)${Reset}"
+    Write-Host "${Yellow}For ALL tenants (including demo-tenant, 6cb4c008-4847-426a-9a2e-918ad70e7b69, etc.)${Reset}"
     Write-Host ""
     $confirmation = Read-Host "Type 'DELETE ALL' to confirm"
     

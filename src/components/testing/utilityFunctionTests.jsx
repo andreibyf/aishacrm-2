@@ -86,25 +86,25 @@ export const utilityFunctionTests = {
     {
       name: 'getTenantFilter should return selectedTenantId for superadmin',
       fn: async () => {
-        const user = { role: 'superadmin', tenant_id: 'user-tenant' };
-        const result = getTenantFilter(user, 'selected-tenant');
+        const user = { role: 'superadmin', tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69' };
+        const result = getTenantFilter(user, 'a11dfb63-4b18-4eb8-872e-747af2e37c46');
         
-        assert.deepEqual(result, { tenant_id: 'selected-tenant' });
+        assert.deepEqual(result, { tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46' });
       }
     },
     {
       name: 'getTenantFilter should return user tenant_id for non-superadmin',
       fn: async () => {
-        const user = { role: 'user', tenant_id: 'user-tenant' };
-        const result = getTenantFilter(user, 'selected-tenant');
+        const user = { role: 'user', tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69' };
+        const result = getTenantFilter(user, 'a11dfb63-4b18-4eb8-872e-747af2e37c46');
         
-        assert.deepEqual(result, { tenant_id: 'user-tenant' });
+        assert.deepEqual(result, { tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69' });
       }
     },
     {
       name: 'getTenantFilter should return empty object for superadmin without selection',
       fn: async () => {
-        const user = { role: 'superadmin', tenant_id: 'user-tenant' };
+        const user = { role: 'superadmin', tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69' };
         const result = getTenantFilter(user, null);
         
         assert.deepEqual(result, {});

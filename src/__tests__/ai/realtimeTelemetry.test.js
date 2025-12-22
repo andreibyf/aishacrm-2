@@ -20,7 +20,7 @@ describe('realtimeTelemetry utilities', () => {
         count: 3
       },
       context: {
-        tenantId: 'tenant-123',
+        tenantId: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
         userId: 'user@example.com',
         surface: 'TestSurface'
       }
@@ -30,7 +30,7 @@ describe('realtimeTelemetry utilities', () => {
     expect(snapshot).toHaveLength(1);
     expect(snapshot[0].event).toBe('test.event');
     expect(snapshot[0].payload.message.endsWith('...')).toBe(true);
-    expect(snapshot[0].context.tenantId).toBe('tenant-123');
+    expect(snapshot[0].context.tenantId).toBe('6cb4c008-4847-426a-9a2e-918ad70e7b69');
     expect(snapshot[0].context.userId).toBe('user@example.com');
   });
 

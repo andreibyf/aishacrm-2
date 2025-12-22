@@ -71,7 +71,7 @@ The app should work immediately with mock users. Check console:
 5. User Metadata (JSON):
    ```json
    {
-     "tenant_id": "local-tenant-001",
+     "tenant_id": "6cb4c008-4847-426a-9a2e-918ad70e7b69",
      "name": "Test User"
    }
    ```
@@ -141,10 +141,10 @@ After successful authentication, `User.me()` returns:
 {
   id: "uuid-from-supabase",
   email: "user@example.com",
-  tenant_id: "local-tenant-001",  // from user_metadata
+  tenant_id: "6cb4c008-4847-426a-9a2e-918ad70e7b69",  // from user_metadata
   name: "User Name",              // from user_metadata
   user_metadata: {
-    tenant_id: "local-tenant-001",
+    tenant_id: "6cb4c008-4847-426a-9a2e-918ad70e7b69",
     name: "User Name",
     // ... any other custom fields
   },

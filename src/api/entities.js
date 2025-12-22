@@ -185,7 +185,7 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
   // 2) URL param (?tenant=...)
   // 3) Persisted TenantContext selection (localStorage: selected_tenant_id)
   // 4) Local dev mock user (when isLocalDevMode())
-  // 5) Otherwise: null (do NOT fall back to "local-tenant-001" in production)
+  // 5) Otherwise: null (do NOT fall back to "6cb4c008-4847-426a-9a2e-918ad70e7b69" in production)
 
   const getSelectedTenantFromClient = () => {
     try {

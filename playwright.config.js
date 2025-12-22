@@ -1,4 +1,5 @@
 // @ts-check
+import 'dotenv/config';
 import { defineConfig, devices } from '@playwright/test';
 
 // Normalize runner URLs: prefer explicit PLAYWRIGHT_* envs, then VITE_*, then Docker defaults
@@ -25,6 +26,7 @@ export default defineConfig({
   //   npx playwright test tests/form-validation.spec.js
   // without "No tests found" errors.
   testDir: './tests',
+  testIgnore: '**/components/**',
   
   /* Maximum time one test can run for */
   timeout: 60 * 1000,

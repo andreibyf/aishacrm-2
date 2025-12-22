@@ -315,7 +315,7 @@ POST /api/system-logs
 Content-Type: application/json
 
 {
-  "tenant_id": "local-tenant-001",
+  "tenant_id": "6cb4c008-4847-426a-9a2e-918ad70e7b69",
   "level": "ERROR",
   "source": "MyComponent",
   "message": "Something went wrong",
@@ -334,7 +334,7 @@ Content-Type: application/json
 {
   "logs": [
     {
-      "tenant_id": "local-tenant-001",
+      "tenant_id": "6cb4c008-4847-426a-9a2e-918ad70e7b69",
       "level": "ERROR",
       "source": "MyComponent",
       "message": "Error 1",
@@ -342,7 +342,7 @@ Content-Type: application/json
       "metadata": {}
     },
     {
-      "tenant_id": "local-tenant-001",
+      "tenant_id": "6cb4c008-4847-426a-9a2e-918ad70e7b69",
       "level": "WARN",
       "source": "MyComponent",
       "message": "Warning 2",
@@ -370,12 +370,12 @@ Response:
 
 ### Get Logs
 ```http
-GET /api/system-logs?tenant_id=local-tenant-001&limit=50&level=ERROR
+GET /api/system-logs?tenant_id=6cb4c008-4847-426a-9a2e-918ad70e7b69&limit=50&level=ERROR
 ```
 
 ### Delete All Logs (Bulk)
 ```http
-DELETE /api/system-logs?tenant_id=local-tenant-001&level=ERROR
+DELETE /api/system-logs?tenant_id=6cb4c008-4847-426a-9a2e-918ad70e7b69&level=ERROR
 ```
 
 ### Delete Single Log

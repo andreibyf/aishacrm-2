@@ -35,7 +35,7 @@ export function setE2EMode() {
  * @param {string} role - User role (e.g., 'superadmin', 'admin', 'user')
  * @param {string} tenantId - Tenant ID for the mock user
  */
-export function injectMockUser(email = 'e2e@example.com', role = 'superadmin', tenantId = 'local-tenant-001') {
+export function injectMockUser(email = 'e2e@example.com', role = 'superadmin', tenantId = '6cb4c008-4847-426a-9a2e-918ad70e7b69') {
   window.__e2eUser = {
     id: 'e2e-test-user-id',
     email,
@@ -60,7 +60,7 @@ export async function waitForUserPage(page, email = 'e2e@example.com', tenantId)
   console.log('[waitForUserPage] DOM content loaded');
   
   // CRITICAL: Re-inject E2E user IMMEDIATELY before React mounts
-  const effectiveTenantId = tenantId || process.env.E2E_TENANT_ID || 'local-tenant-001';
+  const effectiveTenantId = tenantId || process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
   await page.evaluate(({ userEmail, tId }) => {
     console.log('[E2E] Setting __e2eUser before React checks for it');
     window.__e2eUser = {

@@ -158,12 +158,18 @@ code braid-llm-kit/examples/patterns.braid
 
 ---
 
-## 📝 Notes
+## � Testing Credentials & E2E Configuration
 
-- Extension folder must be named `publisher.name-version` format
-- Antigravity doesn't load custom extensions (works in regular VS Code)
-- The validator found one parse error in `lifecycle.braid` at line 155:27
-- All 77 tools across 14 .braid files were successfully parsed
+### SuperAdmin Test Account
+This account should be used for testing tenant-specific flows and administrative operations:
+- **Email:** `andrei.byfield@gmail.com`
+- **Password:** `fWks1jq2FStz`
+
+### E2E Execution Strategy
+- E2E tests should ideally run against **Docker** to ensure environment consistency.
+- Credentials and environment variables are managed via **Doppler**.
+- Use `doppler run -- npm run test:e2e` for authenticated runs.
+- **Tenant Isolation:** SuperAdmin is no longer non-tenant specific to maintain isolation fundamentals. Ensure the test user is assigned to the correct tenant context.
 
 ---
 

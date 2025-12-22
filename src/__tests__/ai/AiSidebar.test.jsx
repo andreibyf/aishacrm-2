@@ -19,7 +19,7 @@ function LauncherBridge() {
 
 function TestHarness() {
   const userContextValue = {
-    user: { tenant_id: 'tenant-123', email: 'tester@example.com' },
+    user: { tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69', email: 'tester@example.com' },
     loading: false,
     reloadUser: () => { },
     refetch: () => { }

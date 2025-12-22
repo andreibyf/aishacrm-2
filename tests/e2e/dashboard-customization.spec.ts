@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 const FRONTEND_URL = process.env.PLAYWRIGHT_FRONTEND_URL || process.env.VITE_AISHACRM_FRONTEND_URL || 'http://localhost:4000';
 const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || process.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
-const TENANT_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+const TENANT_ID = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 
 test.describe('Dashboard: stats + basic customization affordances', () => {
   test('@smoke dashboard-stats endpoint returns data', async ({ request }) => {

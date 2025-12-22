@@ -5,7 +5,7 @@
  * This script identifies and removes records created by:
  * - Mock dev user (dev@localhost, local-dev-user-001)
  * - Test email patterns (test@*, *@test.com, *+test@*)
- * - Local tenant references (local-tenant-001)
+ * - Local tenant references (6cb4c008-4847-426a-9a2e-918ad70e7b69)
  * 
  * Usage:
  *   # Dry run (show what would be deleted):

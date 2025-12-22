@@ -75,7 +75,7 @@ test.describe('User Management - Permission System', () => {
 
   test.beforeEach(async ({ page }) => {
       // Inject E2E mock user before any navigation
-      const TENANT_ID = process.env.E2E_TENANT_ID || 'local-tenant-001';
+    const TENANT_ID = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
       await page.addInitScript((tId) => {
         window.__e2eUser = {
           id: 'e2e-test-user-id',
@@ -333,7 +333,7 @@ test.describe('User Management - Permission System', () => {
         email: testEmail,
         full_name: 'API Test User',
         role: 'employee',
-        tenant_id: 'test-tenant',
+        tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
         permissions: {
           crm_access: true,
           access_level: 'read_write',
@@ -386,7 +386,7 @@ test.describe('User Management - Permission System', () => {
           first_name: 'E2E',
           last_name: 'TempUser',
           role: 'employee',
-          tenant_id: 'e2e-test-tenant-001', // Dedicated E2E tenant, NOT global
+          tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69', // Dedicated E2E tenant UUID
           status: 'active',
           metadata: {
             crm_access: true,

@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 // ElevenLabs endpoints may be proxied through functions; we test tenant field presence and graceful failure if no key configured.
 
 const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || 'http://localhost:4001';
-const TENANT_ID = 'local-tenant-001';
+const TENANT_ID = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 
 test.describe('@smoke ElevenLabs', () => {
   test('tenant metadata exposes agent id (may be empty)', async ({ request }) => {

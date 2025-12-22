@@ -14,15 +14,15 @@ Supabase has enforced RLS (Row Level Security) by adding UUID primary keys to al
 ### 2. `tenant_id` Column (TEXT)
 - **Type:** `text`
 - **Purpose:** Business identifier for multi-tenancy
-- **User-defined:** Set by application (e.g., `"local-tenant-001"`)
-- **Example:** `local-tenant-001`, `prod-tenant-abc123`
+- **User-defined:** Set by application (e.g., `"6cb4c008-4847-426a-9a2e-918ad70e7b69"`)
+- **Example:** `6cb4c008-4847-426a-9a2e-918ad70e7b69`, `prod-tenant-abc123`
 - **Used for:** Application-level tenant isolation, API queries
 
 ## Impact on API Routes
 
 ### ❌ WRONG: Query by UUID when expecting tenant_id
 ```javascript
-// This fails when frontend sends "local-tenant-001"
+// This fails when frontend sends "6cb4c008-4847-426a-9a2e-918ad70e7b69"
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
   const query = 'SELECT * FROM tenant WHERE id = $1'; // Expects UUID!
@@ -79,7 +79,7 @@ CREATE TABLE contacts (
 
 ### Pattern 1: List by tenant_id (most common)
 ```javascript
-// GET /api/contacts?tenant_id=local-tenant-001
+// GET /api/contacts?tenant_id=6cb4c008-4847-426a-9a2e-918ad70e7b69
 router.get('/', async (req, res) => {
   const { tenant_id } = req.query;
   const result = await pool.query(
@@ -103,7 +103,7 @@ router.get('/:id', async (req, res) => {
 
 ### Pattern 3: Get by tenant-specific identifier (flexible)
 ```javascript
-// GET /api/tenants/local-tenant-001 (tenant_id)
+// GET /api/tenants/6cb4c008-4847-426a-9a2e-918ad70e7b69 (tenant_id)
 // OR /api/tenants/550e8400-... (UUID)
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
@@ -121,7 +121,7 @@ router.get('/:id', async (req, res) => {
 
 ### Error 1: Invalid UUID Syntax
 ```
-ERROR: invalid input syntax for type uuid: "local-tenant-001"
+ERROR: invalid input syntax for type uuid: "6cb4c008-4847-426a-9a2e-918ad70e7b69"
 ```
 **Cause:** Trying to compare TEXT tenant_id with UUID column
 **Fix:** Use correct column in WHERE clause
@@ -148,11 +148,11 @@ When calling the backend, ensure proper parameters:
 
 ```javascript
 // ✅ CORRECT: Pass tenant_id for filtering
-const contacts = await Contact.list({ tenant_id: 'local-tenant-001' });
+const contacts = await Contact.list({ tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69' });
 
 // ✅ CORRECT: Get by UUID
 const contact = await Contact.get('550e8400-e29b-41d4-a916-446655440000', { 
-  tenant_id: 'local-tenant-001' 
+  tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69' 
 });
 
 // ❌ WRONG: Missing tenant_id for list query
@@ -164,7 +164,7 @@ const employees = await Employee.list({}); // Backend returns 400: tenant_id req
 ```javascript
 // When creating a contact linked to an account:
 const newContact = await Contact.create({
-  tenant_id: 'local-tenant-001',
+  tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
   first_name: 'John',
   last_name: 'Doe',
   account_id: accountRecord.id,  // ✅ Use UUID from account.id
@@ -226,7 +226,7 @@ FROM opportunities WHERE account_id IS NOT NULL
 
 ## Summary
 
-- **Always query LIST endpoints with `tenant_id` (TEXT)**: `?tenant_id=local-tenant-001`
+- **Always query LIST endpoints with `tenant_id` (TEXT)**: `?tenant_id=6cb4c008-4847-426a-9a2e-918ad70e7b69`
 - **Always query GET-by-ID endpoints with `id` (UUID)**: `/api/contacts/{uuid}`
 - **Foreign keys ALWAYS use UUIDs**, never tenant_id strings
 - **Routes should detect UUID vs tenant_id format** for flexibility

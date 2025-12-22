@@ -151,14 +151,14 @@ export const createMockUser = (overrides = {}) => ({
   email: 'test@example.com',
   full_name: 'Test User',
   role: 'user',
-  tenant_id: 'test-tenant-id',
+  tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
   employee_role: 'employee',
   ...overrides
 });
 
 export const createMockContact = (overrides = {}) => ({
   id: 'test-contact-id',
-  tenant_id: 'test-tenant-id',
+  tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
   first_name: 'John',
   last_name: 'Doe',
   email: 'john.doe@example.com',
@@ -170,7 +170,7 @@ export const createMockContact = (overrides = {}) => ({
 
 export const createMockLead = (overrides = {}) => ({
   id: 'test-lead-id',
-  tenant_id: 'test-tenant-id',
+  tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
   first_name: 'Jane',
   last_name: 'Smith',
   email: 'jane.smith@example.com',
@@ -184,7 +184,7 @@ export const createMockLead = (overrides = {}) => ({
 
 export const createMockOpportunity = (overrides = {}) => ({
   id: 'test-opportunity-id',
-  tenant_id: 'test-tenant-id',
+  tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
   name: 'Test Opportunity',
   amount: 10000,
   stage: 'prospecting',
@@ -196,7 +196,7 @@ export const createMockOpportunity = (overrides = {}) => ({
 
 export const createMockAccount = (overrides = {}) => ({
   id: 'test-account-id',
-  tenant_id: 'test-tenant-id',
+  tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
   name: 'Test Account Inc.',
   type: 'customer',
   industry: 'information_technology',

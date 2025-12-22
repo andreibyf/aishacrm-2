@@ -154,7 +154,7 @@ JOIN tenant t ON a.tenant_id = t.id
 WHERE t.tenant_id = 'my-tenant-slug';  -- tenant.tenant_id is the TEXT slug
 
 -- WRONG: Never use deprecated tenant_id_text
-SELECT * FROM accounts WHERE tenant_id_text = 'local-tenant-001';  -- Deprecated!
+SELECT * FROM accounts WHERE tenant_id_text = '6cb4c008-4847-426a-9a2e-918ad70e7b69';  -- Deprecated!
 
 -- RLS Policy pattern (uses tenant_uuid from users table)
 CREATE POLICY example_policy ON my_table

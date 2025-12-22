@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 const BACKEND_URL = process.env.PLAYWRIGHT_BACKEND_URL || 'http://localhost:4001';
-const TENANT_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+const TENANT_ID = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
 const OTHER_TENANT_ID = '00000000-0000-0000-0000-000000000999'; // Non-existent / isolation check
 
 test.describe('@smoke Multitenancy', () => {

@@ -19,7 +19,7 @@ export const userContextTests = {
         const input = {
           id: 'user-123',
           email: 'test@example.com',
-          tenant_id: 'tenant-456',
+          tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
           role: 'Admin',
           first_name: 'John',
           last_name: 'Doe'
@@ -29,7 +29,7 @@ export const userContextTests = {
 
         assert.equal(result.id, 'user-123');
         assert.equal(result.email, 'test@example.com');
-        assert.equal(result.tenant_id, 'tenant-456');
+        assert.equal(result.tenant_id, '6cb4c008-4847-426a-9a2e-918ad70e7b69');
         assert.equal(result.role, 'admin'); // Should be lowercase
         assert.equal(result.first_name, 'John');
         assert.equal(result.last_name, 'Doe');
@@ -122,7 +122,7 @@ export const userContextTests = {
         const input = {
           id: 'user-123',
           email: 'test@example.com',
-          tenant_id: 'tenant-456',
+          tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
           role: 'Admin'
         };
 

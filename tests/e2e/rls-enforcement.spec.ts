@@ -19,8 +19,8 @@ test.describe('RLS Enforcement - Black-box', () => {
   test.beforeAll(async ({ request }) => { await waitForBackendHealth(request); });
 
   test('cannot access another tenant\'s contact by ID', async ({ request }) => {
-    const tenantA = 'unit-test-tenant';
-    const tenantB = process.env.E2E_TENANT_ID || 'local-tenant-001';
+    const tenantA = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
+    const tenantB = '550e8400-e29b-41d4-a716-446655440000'; // Dummy isolation tenant
 
     // Create a contact in tenant A
     const create = await request.post(`${BACKEND_URL}/api/contacts`, {
@@ -40,7 +40,7 @@ test.describe('RLS Enforcement - Black-box', () => {
   });
 
   test('list with explicit tenant should return scoped data', async ({ request }) => {
-    const tenantId = process.env.E2E_TENANT_ID || 'local-tenant-001';
+    const tenantId = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
     const res = await request.get(`${BACKEND_URL}/api/contacts`, { params: { tenant_id: tenantId, limit: '5' } });
     if (!res.ok()) {
       console.error('List contacts failed:', res.status(), await res.text());

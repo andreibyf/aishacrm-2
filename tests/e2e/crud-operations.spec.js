@@ -223,7 +223,7 @@ test.describe('CRUD Operations - End-to-End', () => {
 
     // Set E2E mode flag to suppress background polling/health checks
     await page.addInitScript({ content: `
-      const TENANT_ID = '${process.env.E2E_TENANT_ID || 'local-tenant-001'}';
+      const TENANT_ID = '${process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69'}';
       (${setE2EMode.toString()})();
       (${injectMockUser.toString()})('${TEST_EMAIL || 'e2e@example.com'}', 'superadmin', TENANT_ID);
       try { localStorage.setItem('selected_tenant_id', TENANT_ID); } catch {}
@@ -261,7 +261,7 @@ test.describe('CRUD Operations - End-to-End', () => {
           tenant_id: tId
         };
         try { localStorage.setItem('selected_tenant_id', tId); } catch { /* ignore */ }
-      }, { email: TEST_EMAIL || 'e2e@example.com', tId: process.env.E2E_TENANT_ID || 'local-tenant-001' });
+      }, { email: TEST_EMAIL || 'e2e@example.com', tId: process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69' });
     }
   });  test.describe('Activities CRUD', () => {
     test('should create a new activity', async ({ page }) => {
@@ -398,7 +398,7 @@ test.describe('CRUD Operations - End-to-End', () => {
       }
 
       // Poll the backend until the subject reflects the new value
-      const tenantIdForPoll = process.env.E2E_TENANT_ID || 'local-tenant-001';
+      const tenantIdForPoll = process.env.E2E_TENANT_ID || '6cb4c008-4847-426a-9a2e-918ad70e7b69';
       await expect
         .poll(async () => {
           try {

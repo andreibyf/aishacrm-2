@@ -12,13 +12,13 @@ export const MockTenantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 // Mock user context  
 export const mockUser = {
   email: 'user@example.com',
-  tenant_id: 'tenant-123',
+  tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69',
   role: 'employee',
 };
 
 export const mockManagerUser = {
   email: 'manager@example.com',
-  tenant_id: 'tenant-123', 
+  tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69', 
   role: 'manager',
 };
 

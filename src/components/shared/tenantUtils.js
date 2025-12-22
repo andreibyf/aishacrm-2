@@ -1,10 +1,10 @@
 import { logTenantEvent } from "./loggerUtils"; // Updated import to reference the new loggerUtils.js file
 
-// Flexible ID validation that accepts both MongoDB ObjectIDs and custom IDs
+// UUID-only validation - enforces standardized tenant ID format
 export const isValidId = (id) => {
   if (!id || typeof id !== "string") return false;
-  // Accept MongoDB ObjectIDs (24 hex chars) or custom IDs (alphanumeric with hyphens/underscores)
-  return /^[a-f0-9]{24}$/i.test(id) || /^[a-zA-Z0-9\-_]+$/.test(id);
+  // Only accept UUIDs (8-4-4-4-12 format)
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 };
 
 export const getTenantFilter = (user, selectedTenantId = null) => {
