@@ -240,6 +240,7 @@ import createSuggestionsRoutes from "./routes/suggestions.js";
 import createConstructionProjectsRoutes from "./routes/construction-projects.js";
 import createConstructionAssignmentsRoutes from "./routes/construction-assignments.js";
 import createWorkersRoutes from "./routes/workers.js";
+import braidAuditRoutes from "./routes/braidAudit.js";
 import { createDeprecationMiddleware } from "./middleware/deprecation.js";
 
 // Apply v1 deprecation headers middleware (before routes)
@@ -320,6 +321,9 @@ app.use("/api/systembrandings", createSystemBrandingRoutes(measuredPgPool));
 app.use("/api/synchealths", createSyncHealthRoutes(measuredPgPool));
 app.use("/api/aicampaigns", createAICampaignRoutes(measuredPgPool));
 app.use("/api/security", createSecurityRoutes(measuredPgPool));
+// Braid SDK Audit Log routes
+console.log("✓ Mounting /api/braid/audit routes");
+app.use("/api/braid/audit", braidAuditRoutes);
 // Construction Projects module routes
 console.log("✓ Mounting /api/construction/projects routes");
 app.use("/api/construction/projects", createConstructionProjectsRoutes(measuredPgPool));

@@ -237,6 +237,212 @@ export function filterSensitiveFields(data, entity, role) {
   return filter(data);
 }
 
-// Audit log access
+// Audit log access (in-memory for debugging)
 export const getAuditLog = () => [...auditLog];
 export const clearAuditLog = () => { auditLog.length = 0; };
+
+/**
+ * Create an audit log entry for a Braid tool execution
+ * @param {Object} context - Execution context
+ * @returns {Object} Audit log entry ready for database insert
+ */
+export function createAuditEntry({
+  toolName,
+  braidFunction,
+  braidFile,
+  policy,
+  toolClass,
+  tenantId,
+  userId,
+  userEmail,
+  userRole,
+  inputArgs,
+  resultTag,
+  resultValue,
+  errorType,
+  errorMessage,
+  executionTimeMs,
+  cacheHit = false,
+  rateLimitRemaining,
+  rateLimitWindow,
+  ipAddress,
+  userAgent,
+  requestId,
+  isDryRun = false,
+  requiresConfirmation = false,
+  confirmationProvided = false,
+  entityType,
+  entityId
+}) {
+  return {
+    tenant_id: tenantId,
+    user_id: userId,
+    user_email: userEmail,
+    user_role: userRole,
+    tool_name: toolName,
+    braid_function: braidFunction,
+    braid_file: braidFile,
+    policy: policy,
+    tool_class: toolClass,
+    input_args: inputArgs ? JSON.stringify(inputArgs) : '{}',
+    result_tag: resultTag,
+    result_value: resultValue ? JSON.stringify(resultValue) : null,
+    error_type: errorType,
+    error_message: errorMessage,
+    execution_time_ms: executionTimeMs,
+    cache_hit: cacheHit,
+    rate_limit_remaining: rateLimitRemaining,
+    rate_limit_window: rateLimitWindow,
+    ip_address: ipAddress,
+    user_agent: userAgent,
+    request_id: requestId,
+    is_dry_run: isDryRun,
+    requires_confirmation: requiresConfirmation,
+    confirmation_provided: confirmationProvided,
+    entity_type: entityType,
+    entity_id: entityId,
+    created_at: new Date().toISOString()
+  };
+}
+
+/**
+ * Log a tool execution to the braid_audit_log table
+ * @param {Object} supabase - Supabase client with service role
+ * @param {Object} entry - Audit entry from createAuditEntry()
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function logToolExecution(supabase, entry) {
+  try {
+    const { error } = await supabase
+      .from('braid_audit_log')
+      .insert(entry);
+    
+    if (error) {
+      console.error('[Braid Audit] Failed to log tool execution:', error.message);
+      return { success: false, error: error.message };
+    }
+    
+    return { success: true };
+  } catch (err) {
+    console.error('[Braid Audit] Exception logging tool execution:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Query audit logs with filters
+ * @param {Object} supabase - Supabase client
+ * @param {Object} filters - Query filters
+ * @returns {Promise<{data: Array, error?: string}>}
+ */
+export async function queryAuditLogs(supabase, {
+  tenantId,
+  userId,
+  toolName,
+  policy,
+  resultTag,
+  startDate,
+  endDate,
+  limit = 100,
+  offset = 0,
+  orderBy = 'created_at',
+  orderDir = 'desc'
+}) {
+  try {
+    let query = supabase
+      .from('braid_audit_log')
+      .select('*');
+    
+    if (tenantId) query = query.eq('tenant_id', tenantId);
+    if (userId) query = query.eq('user_id', userId);
+    if (toolName) query = query.eq('tool_name', toolName);
+    if (policy) query = query.eq('policy', policy);
+    if (resultTag) query = query.eq('result_tag', resultTag);
+    if (startDate) query = query.gte('created_at', startDate);
+    if (endDate) query = query.lte('created_at', endDate);
+    
+    query = query
+      .order(orderBy, { ascending: orderDir === 'asc' })
+      .range(offset, offset + limit - 1);
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      return { data: [], error: error.message };
+    }
+    
+    return { data };
+  } catch (err) {
+    return { data: [], error: err.message };
+  }
+}
+
+/**
+ * Get audit statistics for a tenant
+ * @param {Object} supabase - Supabase client
+ * @param {string} tenantId - Tenant UUID
+ * @param {string} period - Time period: 'hour', 'day', 'week', 'month'
+ * @returns {Promise<Object>} Stats object
+ */
+export async function getAuditStats(supabase, tenantId, period = 'day') {
+  const periodMap = {
+    hour: "now() - INTERVAL '1 hour'",
+    day: "now() - INTERVAL '1 day'",
+    week: "now() - INTERVAL '7 days'",
+    month: "now() - INTERVAL '30 days'"
+  };
+  
+  const interval = periodMap[period] || periodMap.day;
+  
+  try {
+    // Get basic counts
+    const { data: logs, error } = await supabase
+      .from('braid_audit_log')
+      .select('tool_name, policy, result_tag, execution_time_ms, cache_hit')
+      .eq('tenant_id', tenantId)
+      .gte('created_at', new Date(Date.now() - (period === 'hour' ? 3600000 : period === 'day' ? 86400000 : period === 'week' ? 604800000 : 2592000000)).toISOString());
+    
+    if (error || !logs) {
+      return { error: error?.message || 'No data' };
+    }
+    
+    // Calculate stats
+    const totalCalls = logs.length;
+    const successCalls = logs.filter(l => l.result_tag === 'Ok').length;
+    const errorCalls = logs.filter(l => l.result_tag === 'Err').length;
+    const cacheHits = logs.filter(l => l.cache_hit).length;
+    const avgExecutionTime = logs.length > 0 
+      ? Math.round(logs.reduce((sum, l) => sum + (l.execution_time_ms || 0), 0) / logs.length)
+      : 0;
+    
+    // Group by tool
+    const byTool = {};
+    logs.forEach(l => {
+      if (!byTool[l.tool_name]) byTool[l.tool_name] = 0;
+      byTool[l.tool_name]++;
+    });
+    
+    // Group by policy
+    const byPolicy = {};
+    logs.forEach(l => {
+      if (!byPolicy[l.policy]) byPolicy[l.policy] = 0;
+      byPolicy[l.policy]++;
+    });
+    
+    return {
+      period,
+      totalCalls,
+      successCalls,
+      errorCalls,
+      successRate: totalCalls > 0 ? Math.round((successCalls / totalCalls) * 100) : 0,
+      cacheHits,
+      cacheHitRate: totalCalls > 0 ? Math.round((cacheHits / totalCalls) * 100) : 0,
+      avgExecutionTimeMs: avgExecutionTime,
+      topTools: Object.entries(byTool).sort((a, b) => b[1] - a[1]).slice(0, 10),
+      byPolicy
+    };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+

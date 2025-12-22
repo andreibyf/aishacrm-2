@@ -7,8 +7,54 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { executeBraid, loadToolSchema, createBackendDeps, CRM_POLICIES, filterSensitiveFields } from '../../braid-llm-kit/sdk/index.js';
+import { executeBraid, loadToolSchema, createBackendDeps, CRM_POLICIES, filterSensitiveFields, createAuditEntry, logToolExecution } from '../../braid-llm-kit/sdk/index.js';
 import cacheManager from './cacheManager.js';
+
+/**
+ * Log a Braid tool execution to the audit log (fire-and-forget)
+ * @param {Object} params - Audit log parameters
+ */
+function logAuditEntry({
+  toolName, config, basePolicy, tenantUuid, userId, userEmail, userRole,
+  normalizedArgs, result, executionTimeMs, cacheHit, supabase
+}) {
+  // Fire and forget - don't block the response
+  setImmediate(async () => {
+    try {
+      const entityType = extractEntityType(toolName);
+      const entityId = normalizedArgs?.account_id || normalizedArgs?.lead_id || 
+                       normalizedArgs?.contact_id || normalizedArgs?.activity_id ||
+                       normalizedArgs?.opportunity_id || normalizedArgs?.document_id ||
+                       normalizedArgs?.employee_id || normalizedArgs?.user_id || null;
+      
+      const entry = createAuditEntry({
+        toolName,
+        braidFunction: config?.function,
+        braidFile: config?.file,
+        policy: config?.policy || 'UNKNOWN',
+        toolClass: basePolicy?.tool_class,
+        tenantId: tenantUuid,
+        userId,
+        userEmail,
+        userRole,
+        inputArgs: normalizedArgs,
+        resultTag: result?.tag,
+        resultValue: result?.tag === 'Err' ? null : (result?.value ? { summary: 'Result logged' } : null), // Don't log full result for privacy
+        errorType: result?.error?.type,
+        errorMessage: result?.error?.message?.substring?.(0, 500),
+        executionTimeMs,
+        cacheHit,
+        entityType,
+        entityId
+      });
+      
+      await logToolExecution(supabase, entry);
+    } catch (auditErr) {
+      // Never let audit logging fail the main operation
+      console.warn('[Braid Audit] Failed to log:', auditErr.message);
+    }
+  });
+}
 
 /**
  * Extract entity type from tool name for field-level permission filtering
@@ -1023,6 +1069,13 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
       const cachedResult = await cacheManager.get(cacheKey);
       if (cachedResult !== null) {
         console.log(`[Braid Tool] Cache HIT for ${toolName}`, { cacheKey: cacheKey.substring(0, 60) });
+        
+        // Log cache hit to audit (async, don't await)
+        logAuditEntry({
+          toolName, config, basePolicy, tenantUuid, userId, userEmail, userRole,
+          normalizedArgs, result: cachedResult, executionTimeMs: 0, cacheHit: true, supabase: deps.supabase
+        });
+        
         return cachedResult;
       }
       console.log(`[Braid Tool] Cache MISS for ${toolName}`, { cacheKey: cacheKey.substring(0, 60) });
@@ -1032,6 +1085,9 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
     }
   }
 
+  // Start timing for audit
+  const startTime = Date.now();
+  
   try {
     const result = await executeBraid(
       braidPath,
@@ -1085,7 +1141,7 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
 
         if (invalidatedEntity && tenantUuid) {
           // Invalidate all braid cache keys for this tenant and entity type
-          const pattern = `braid:${tenantUuid}:*${invalidatedEntity}*`;
+          const _pattern = `braid:${tenantUuid}:*${invalidatedEntity}*`;
           console.log(`[Braid Tool] Invalidating cache for ${invalidatedEntity} (tenant: ${tenantUuid?.substring(0, 8)}...)`);
           await cacheManager.invalidateTenant(tenantUuid, 'braid');
         }
@@ -1094,6 +1150,15 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
         console.warn(`[Braid Tool] Cache invalidation failed for ${toolName}:`, cacheErr.message);
       }
     }
+
+    // Calculate execution time
+    const executionTimeMs = Date.now() - startTime;
+
+    // Log to audit (async, don't await to avoid blocking response)
+    logAuditEntry({
+      toolName, config, basePolicy, tenantUuid, userId, userEmail, userRole,
+      normalizedArgs, result, executionTimeMs, cacheHit: false, supabase: deps.supabase
+    });
 
     // Apply field-level filtering based on user role (mask sensitive data)
     if (result?.tag === 'Ok' && result?.value) {
@@ -1106,11 +1171,21 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
 
     return result;
   } catch (error) {
+    const executionTimeMs = Date.now() - startTime;
     console.error(`[Braid Tool] ${toolName} EXCEPTION`, error.message, error.stack?.substring?.(0, 300));
-    return {
+    
+    const errorResult = {
       tag: 'Err',
       error: { type: 'ExecutionError', message: error.message, stack: error.stack }
     };
+    
+    // Log error to audit (async, don't await)
+    logAuditEntry({
+      toolName, config, basePolicy, tenantUuid, userId, userEmail, userRole,
+      normalizedArgs, result: errorResult, executionTimeMs, cacheHit: false, supabase: deps.supabase
+    });
+    
+    return errorResult;
   }
 }
 
