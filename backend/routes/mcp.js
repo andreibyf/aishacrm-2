@@ -6,8 +6,9 @@
 import express from "express";
 import fetch from "node-fetch";
 import { getSupabaseClient } from "../lib/supabase-db.js";
-import { resolveLLMApiKey, pickModel, generateChatCompletion, selectLLMConfigForTenant } from "../lib/aiEngine/index.js";
+import { resolveLLMApiKey, generateChatCompletion, selectLLMConfigForTenant } from "../lib/aiEngine/index.js";
 import { logLLMActivity } from "../lib/aiEngine/activityLogger.js";
+import { executeMcpToolViaBraid, getExecutionStrategy } from "../lib/braidMcpBridge.js";
 
 /**
  * callLLMWithFailover
@@ -407,6 +408,41 @@ export default function createMCPRoutes(_pgPool) {
 
       // CRM MCP toolset
       if (server_id === "crm") {
+        // ========== BRAID BRIDGE ROUTING ==========
+        // Route eligible CRM tools through Braid for unified policy enforcement,
+        // caching, and audit logging. Native implementations below are kept for
+        // tools not yet migrated to Braid (workflows, templates, etc.)
+        const executionStrategy = getExecutionStrategy(tool_name);
+        
+        if (executionStrategy === 'braid') {
+          const { tenant_id } = parameters || {};
+          if (!tenant_id) {
+            return res.status(400).json({
+              status: "error",
+              message: "tenant_id is required",
+            });
+          }
+          
+          // Build tenant record for Braid execution
+          const tenantRecord = { id: tenant_id, tenant_id };
+          const userId = req.user?.id || req.headers['x-user-id'] || null;
+          
+          console.log('[MCP→Braid] Routing through Braid bridge', {
+            tool: tool_name,
+            strategy: executionStrategy,
+            tenantId: tenant_id?.substring(0, 8),
+          });
+          
+          const result = await executeMcpToolViaBraid(tool_name, parameters, tenantRecord, userId);
+          
+          if (result.status === 'success') {
+            return res.json(result);
+          } else {
+            return res.status(400).json(result);
+          }
+        }
+        // ========== END BRAID BRIDGE ROUTING ==========
+        
         // Workflow template read tools don't require tenant_id (system templates are public)
         if (tool_name === "crm.list_workflow_templates") {
           const { category, include_inactive = false } = parameters || {};

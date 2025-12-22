@@ -22,9 +22,35 @@ const DEFAULT_TOOLS_DIR = path.join(process.cwd(), 'examples', 'assistant');
 const DEFAULT_OUTPUT = path.join(process.cwd(), 'generated', 'registry.js');
 
 /**
- * Convert camelCase to snake_case
+ * Known name overrides for backward compatibility
+ * Maps camelCase function names to their canonical snake_case tool names
+ */
+const NAME_OVERRIDES = {
+  // BizDev tools use "bizdev" not "biz_dev" for consistency with existing AI training
+  'createBizDevSource': 'create_bizdev_source',
+  'updateBizDevSource': 'update_bizdev_source',
+  'getBizDevSourceDetails': 'get_bizdev_source_details',
+  'listBizDevSources': 'list_bizdev_sources',
+  'searchBizDevSources': 'search_bizdev_sources',
+  'promoteBizDevSourceToLead': 'promote_bizdev_source_to_lead',
+  'deleteBizDevSource': 'delete_bizdev_source',
+  'archiveBizDevSources': 'archive_bizdev_sources',
+  
+  // Snapshot tools use specific names
+  'fetchSnapshot': 'fetch_tenant_snapshot',
+  'probe': 'debug_probe',
+  
+  // Navigation uses "navigate_to_page" not "navigate_to"
+  'navigateTo': 'navigate_to_page',
+};
+
+/**
+ * Convert camelCase to snake_case, with overrides
  */
 function toSnakeCase(str) {
+  if (NAME_OVERRIDES[str]) {
+    return NAME_OVERRIDES[str];
+  }
   return str.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
 }
 
