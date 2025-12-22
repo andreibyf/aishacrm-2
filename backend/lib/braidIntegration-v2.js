@@ -7,8 +7,35 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { executeBraid, loadToolSchema, createBackendDeps, CRM_POLICIES } from '../../braid-llm-kit/sdk/index.js';
+import { executeBraid, loadToolSchema, createBackendDeps, CRM_POLICIES, filterSensitiveFields } from '../../braid-llm-kit/sdk/index.js';
 import cacheManager from './cacheManager.js';
+
+/**
+ * Extract entity type from tool name for field-level permission filtering
+ * @param {string} toolName - Name of the tool (e.g., 'get_employee_details')
+ * @returns {string|null} Entity type (e.g., 'employees') or null if not recognized
+ */
+function extractEntityType(toolName) {
+  const entityPatterns = [
+    { pattern: /employee/, entity: 'employees' },
+    { pattern: /user/, entity: 'users' },
+    { pattern: /account/, entity: 'accounts' },
+    { pattern: /contact/, entity: 'contacts' },
+    { pattern: /lead/, entity: 'leads' },
+    { pattern: /opportunity/, entity: 'opportunities' },
+    { pattern: /activity/, entity: 'activities' },
+    { pattern: /document/, entity: 'documents' },
+    { pattern: /bizdev/, entity: 'bizdev_sources' },
+    { pattern: /note/, entity: 'notes' },
+  ];
+  
+  for (const { pattern, entity } of entityPatterns) {
+    if (pattern.test(toolName)) {
+      return entity;
+    }
+  }
+  return null;
+}
 
 // Cache TTLs for different tool types (in seconds)
 const TOOL_CACHE_TTL = {
@@ -89,7 +116,7 @@ export const TOOL_REGISTRY = {
   get_account_details: { file: 'accounts.braid', function: 'getAccountDetails', policy: 'READ_ONLY' },
   list_accounts: { file: 'accounts.braid', function: 'listAccounts', policy: 'READ_ONLY' },
   search_accounts: { file: 'accounts.braid', function: 'searchAccounts', policy: 'READ_ONLY' },
-  delete_account: { file: 'accounts.braid', function: 'deleteAccount', policy: 'WRITE_OPERATIONS' },
+  delete_account: { file: 'accounts.braid', function: 'deleteAccount', policy: 'DELETE_OPERATIONS' },
   
   // Lead Management
   create_lead: { file: 'leads.braid', function: 'createLead', policy: 'WRITE_OPERATIONS' },
@@ -99,7 +126,7 @@ export const TOOL_REGISTRY = {
   list_leads: { file: 'leads.braid', function: 'listLeads', policy: 'READ_ONLY' },
   search_leads: { file: 'leads.braid', function: 'searchLeads', policy: 'READ_ONLY' },
   get_lead_details: { file: 'leads.braid', function: 'getLeadDetails', policy: 'READ_ONLY' },
-  delete_lead: { file: 'leads.braid', function: 'deleteLead', policy: 'WRITE_OPERATIONS' },
+  delete_lead: { file: 'leads.braid', function: 'deleteLead', policy: 'DELETE_OPERATIONS' },
   
   // Activity & Calendar
   create_activity: { file: 'activities.braid', function: 'createActivity', policy: 'WRITE_OPERATIONS' },
@@ -110,7 +137,7 @@ export const TOOL_REGISTRY = {
   search_activities: { file: 'activities.braid', function: 'searchActivities', policy: 'READ_ONLY' },
   get_activity_details: { file: 'activities.braid', function: 'getActivityDetails', policy: 'READ_ONLY' },
   schedule_meeting: { file: 'activities.braid', function: 'scheduleMeeting', policy: 'WRITE_OPERATIONS' },
-  delete_activity: { file: 'activities.braid', function: 'deleteActivity', policy: 'WRITE_OPERATIONS' },
+  delete_activity: { file: 'activities.braid', function: 'deleteActivity', policy: 'DELETE_OPERATIONS' },
   
   // Notes
   create_note: { file: 'notes.braid', function: 'createNote', policy: 'WRITE_OPERATIONS' },
@@ -118,7 +145,7 @@ export const TOOL_REGISTRY = {
   search_notes: { file: 'notes.braid', function: 'searchNotes', policy: 'READ_ONLY' },
   get_notes_for_record: { file: 'notes.braid', function: 'getNotesForRecord', policy: 'READ_ONLY' },
   get_note_details: { file: 'notes.braid', function: 'getNoteDetails', policy: 'READ_ONLY' },
-  delete_note: { file: 'notes.braid', function: 'deleteNote', policy: 'WRITE_OPERATIONS' },
+  delete_note: { file: 'notes.braid', function: 'deleteNote', policy: 'DELETE_OPERATIONS' },
   
   // Opportunities
   create_opportunity: { file: 'opportunities.braid', function: 'createOpportunity', policy: 'WRITE_OPERATIONS' },
@@ -128,7 +155,7 @@ export const TOOL_REGISTRY = {
   get_opportunity_details: { file: 'opportunities.braid', function: 'getOpportunityDetails', policy: 'READ_ONLY' },
   get_opportunity_forecast: { file: 'opportunities.braid', function: 'getOpportunityForecast', policy: 'READ_ONLY' },
   mark_opportunity_won: { file: 'opportunities.braid', function: 'markOpportunityWon', policy: 'WRITE_OPERATIONS' },
-  delete_opportunity: { file: 'opportunities.braid', function: 'deleteOpportunity', policy: 'WRITE_OPERATIONS' },
+  delete_opportunity: { file: 'opportunities.braid', function: 'deleteOpportunity', policy: 'DELETE_OPERATIONS' },
   
   // Contacts
   create_contact: { file: 'contacts.braid', function: 'createContact', policy: 'WRITE_OPERATIONS' },
@@ -136,7 +163,7 @@ export const TOOL_REGISTRY = {
   list_contacts_for_account: { file: 'contacts.braid', function: 'listContactsForAccount', policy: 'READ_ONLY' },
   get_contact_details: { file: 'contacts.braid', function: 'getContactDetails', policy: 'READ_ONLY' },
   search_contacts: { file: 'contacts.braid', function: 'searchContacts', policy: 'READ_ONLY' },
-  delete_contact: { file: 'contacts.braid', function: 'deleteContact', policy: 'WRITE_OPERATIONS' },
+  delete_contact: { file: 'contacts.braid', function: 'deleteContact', policy: 'DELETE_OPERATIONS' },
   
   // Web Research
   search_web: { file: 'web-research.braid', function: 'searchWeb', policy: 'READ_ONLY' },
@@ -161,7 +188,7 @@ export const TOOL_REGISTRY = {
   list_bizdev_sources: { file: 'bizdev-sources.braid', function: 'listBizDevSources', policy: 'READ_ONLY' },
   search_bizdev_sources: { file: 'bizdev-sources.braid', function: 'searchBizDevSources', policy: 'READ_ONLY' },
   promote_bizdev_source_to_lead: { file: 'bizdev-sources.braid', function: 'promoteBizDevSourceToLead', policy: 'WRITE_OPERATIONS' },
-  delete_bizdev_source: { file: 'bizdev-sources.braid', function: 'deleteBizDevSource', policy: 'WRITE_OPERATIONS' },
+  delete_bizdev_source: { file: 'bizdev-sources.braid', function: 'deleteBizDevSource', policy: 'DELETE_OPERATIONS' },
   archive_bizdev_sources: { file: 'bizdev-sources.braid', function: 'archiveBizDevSources', policy: 'WRITE_OPERATIONS' },
 
   // v3.0.0 Lifecycle Orchestration (complete workflow tools)
@@ -189,7 +216,7 @@ export const TOOL_REGISTRY = {
   get_document_details: { file: 'documents.braid', function: 'getDocumentDetails', policy: 'READ_ONLY' },
   create_document: { file: 'documents.braid', function: 'createDocument', policy: 'WRITE_OPERATIONS' },
   update_document: { file: 'documents.braid', function: 'updateDocument', policy: 'WRITE_OPERATIONS' },
-  delete_document: { file: 'documents.braid', function: 'deleteDocument', policy: 'WRITE_OPERATIONS' },
+  delete_document: { file: 'documents.braid', function: 'deleteDocument', policy: 'DELETE_OPERATIONS' },
   analyze_document: { file: 'documents.braid', function: 'analyzeDocument', policy: 'READ_ONLY' },
   search_documents: { file: 'documents.braid', function: 'searchDocuments', policy: 'READ_ONLY' },
 
@@ -198,7 +225,7 @@ export const TOOL_REGISTRY = {
   get_employee_details: { file: 'employees.braid', function: 'getEmployeeDetails', policy: 'READ_ONLY' },
   create_employee: { file: 'employees.braid', function: 'createEmployee', policy: 'WRITE_OPERATIONS' },
   update_employee: { file: 'employees.braid', function: 'updateEmployee', policy: 'WRITE_OPERATIONS' },
-  delete_employee: { file: 'employees.braid', function: 'deleteEmployee', policy: 'WRITE_OPERATIONS' },
+  delete_employee: { file: 'employees.braid', function: 'deleteEmployee', policy: 'DELETE_OPERATIONS' },
   search_employees: { file: 'employees.braid', function: 'searchEmployees', policy: 'READ_ONLY' },
   get_employee_assignments: { file: 'employees.braid', function: 'getEmployeeAssignments', policy: 'READ_ONLY' },
 
@@ -209,7 +236,7 @@ export const TOOL_REGISTRY = {
   get_user_profiles: { file: 'users.braid', function: 'getUserProfiles', policy: 'READ_ONLY' },
   create_user: { file: 'users.braid', function: 'createUser', policy: 'ADMIN_ONLY' },
   update_user: { file: 'users.braid', function: 'updateUser', policy: 'ADMIN_ONLY' },
-  delete_user: { file: 'users.braid', function: 'deleteUser', policy: 'ADMIN_ONLY' },
+  delete_user: { file: 'users.braid', function: 'deleteUser', policy: 'ADMIN_ALL' },
   search_users: { file: 'users.braid', function: 'searchUsers', policy: 'READ_ONLY' },
   invite_user: { file: 'users.braid', function: 'inviteUser', policy: 'ADMIN_ONLY' },
 
@@ -876,6 +903,85 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
   const braidPath = path.join(TOOLS_DIR, config.file);
   // Attach execution context so audit logs include tenant/user and tenant isolation has data
   const basePolicy = CRM_POLICIES[config.policy];
+  
+  // === ROLE-BASED ACCESS CONTROL ===
+  // Check if the tool requires specific roles and verify user has permission
+  if (basePolicy?.required_roles && basePolicy.required_roles.length > 0) {
+    const userRole = accessToken?.user_role || 'user';
+    const hasRequiredRole = basePolicy.required_roles.includes(userRole);
+    
+    if (!hasRequiredRole) {
+      console.warn('[Braid Security] Tool execution DENIED - insufficient role', {
+        toolName,
+        policy: config.policy,
+        requiredRoles: basePolicy.required_roles,
+        userRole,
+        userId,
+        tenantId: tenantRecord?.id
+      });
+      return {
+        tag: 'Err',
+        error: {
+          type: 'InsufficientPermissions',
+          message: `This operation requires ${basePolicy.required_roles.join(' or ')} role. Your current role (${userRole}) does not have permission.`
+        }
+      };
+    }
+  }
+
+  // === RATE LIMITING ===
+  // Check rate limits based on policy tool class
+  if (basePolicy?.rate_limit) {
+    const rateLimitKey = `braid:ratelimit:${tenantRecord?.id}:${userId || 'anonymous'}:${basePolicy.tool_class || 'default'}`;
+    try {
+      const currentCount = await cacheManager.get(rateLimitKey) || 0;
+      const limit = basePolicy.rate_limit.requests_per_minute;
+      
+      if (currentCount >= limit) {
+        console.warn('[Braid Security] Rate limit exceeded', {
+          toolName,
+          toolClass: basePolicy.tool_class,
+          currentCount,
+          limit,
+          userId,
+          tenantId: tenantRecord?.id
+        });
+        return {
+          tag: 'Err',
+          error: {
+            type: 'RateLimitExceeded',
+            message: `Rate limit exceeded for ${basePolicy.tool_class} operations. Please wait a moment before trying again.`,
+            retryAfter: 60
+          }
+        };
+      }
+      
+      // Increment the counter (TTL of 60 seconds for per-minute limiting)
+      await cacheManager.set(rateLimitKey, currentCount + 1, 60);
+    } catch (rateLimitErr) {
+      // Don't block on rate limit errors, just log
+      console.warn('[Braid Security] Rate limit check failed:', rateLimitErr.message);
+    }
+  }
+
+  // === DELETE CONFIRMATION CHECK ===
+  // For DELETE_OPERATIONS policy, require explicit confirmation
+  if (basePolicy?.requires_confirmation && toolName.includes('delete')) {
+    const confirmationProvided = args?.confirmed === true || args?.force === true;
+    if (!confirmationProvided) {
+      console.log('[Braid Security] Delete operation requires confirmation', { toolName, userId });
+      return {
+        tag: 'Err',
+        error: {
+          type: 'ConfirmationRequired',
+          message: `This delete operation requires confirmation. Please provide { confirmed: true } to proceed.`,
+          action: 'confirm_delete',
+          toolName
+        }
+      };
+    }
+  }
+
   const policy = {
     ...basePolicy,
     context: {
@@ -986,6 +1092,15 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
       } catch (cacheErr) {
         // Cache errors should never block tool execution
         console.warn(`[Braid Tool] Cache invalidation failed for ${toolName}:`, cacheErr.message);
+      }
+    }
+
+    // Apply field-level filtering based on user role (mask sensitive data)
+    if (result?.tag === 'Ok' && result?.value) {
+      const entityType = extractEntityType(toolName);
+      if (entityType) {
+        const filteredValue = filterSensitiveFields(result.value, entityType, userRole);
+        return { ...result, value: filteredValue };
       }
     }
 

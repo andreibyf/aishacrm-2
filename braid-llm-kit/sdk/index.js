@@ -5,7 +5,10 @@
 
 // Core runtime with capability enforcement
 export { 
-  CRM_POLICIES, 
+  CRM_POLICIES,
+  FIELD_PERMISSIONS,
+  canAccessField,
+  filterSensitiveFields,
   getAuditLog, 
   clearAuditLog,
   Ok,

@@ -107,23 +107,135 @@ export const CRM_POLICIES = {
     allow_effects: ['net', 'clock'],  // clock needed for timestamps in snapshots
     tenant_isolation: true,
     audit_log: true,
-    max_execution_ms: 5000
+    max_execution_ms: 5000,
+    // Rate limiting: requests per minute per user
+    rate_limit: { requests_per_minute: 120, burst: 20 },
+    // Tool class for rate limit grouping
+    tool_class: 'read'
   },
   
   WRITE_OPERATIONS: {
     allow_effects: ['net', 'clock'],
     tenant_isolation: true,
     audit_log: true,
-    max_execution_ms: 30000
+    max_execution_ms: 30000,
+    // Stricter rate limits for mutations
+    rate_limit: { requests_per_minute: 60, burst: 10 },
+    tool_class: 'write'
+  },
+
+  DELETE_OPERATIONS: {
+    allow_effects: ['net', 'clock'],
+    tenant_isolation: true,
+    audit_log: true,
+    max_execution_ms: 30000,
+    // Very strict rate limits for deletes
+    rate_limit: { requests_per_minute: 20, burst: 5 },
+    tool_class: 'delete',
+    // Require confirmation for destructive operations
+    requires_confirmation: true,
+    // Soft delete by default, hard delete requires explicit flag
+    soft_delete_default: true
   },
   
+  ADMIN_ONLY: {
+    allow_effects: ['net', 'clock'],
+    tenant_isolation: true,
+    audit_log: true,
+    max_execution_ms: 30000,
+    // Very strict rate limits for admin operations
+    rate_limit: { requests_per_minute: 30, burst: 5 },
+    tool_class: 'admin',
+    // Required roles to execute this tool
+    required_roles: ['admin', 'superadmin'],
+    // Log all admin operations to system_logs table
+    system_log: true
+  },
+
   ADMIN_ALL: {
     allow_effects: ['*'],
     tenant_isolation: false,
     audit_log: true,
-    max_execution_ms: 30000
+    max_execution_ms: 30000,
+    rate_limit: { requests_per_minute: 10, burst: 3 },
+    tool_class: 'superadmin',
+    required_roles: ['superadmin'],
+    system_log: true
   }
 };
+
+/**
+ * Field-level permission masks
+ * Defines which fields are hidden/masked based on user role
+ */
+export const FIELD_PERMISSIONS = {
+  // Fields that require specific roles to view
+  sensitive_fields: {
+    users: ['password_hash', 'recovery_token', 'api_keys'],
+    employees: ['salary', 'ssn', 'bank_account', 'tax_id'],
+    contacts: ['private_notes'],
+    accounts: ['internal_rating', 'credit_score']
+  },
+  
+  // Role-based field access
+  role_access: {
+    superadmin: '*',  // Can see all fields
+    admin: ['salary', 'internal_rating', 'credit_score'],  // Can see these sensitive fields
+    manager: ['internal_rating'],  // Limited sensitive access
+    user: []  // No access to sensitive fields
+  }
+};
+
+/**
+ * Check if a user role can access a sensitive field
+ * @param {string} role - User role
+ * @param {string} entity - Entity type (users, employees, etc.)
+ * @param {string} field - Field name
+ * @returns {boolean}
+ */
+export function canAccessField(role, entity, field) {
+  const sensitiveFields = FIELD_PERMISSIONS.sensitive_fields[entity] || [];
+  if (!sensitiveFields.includes(field)) return true; // Not a sensitive field
+  
+  const roleAccess = FIELD_PERMISSIONS.role_access[role];
+  if (roleAccess === '*') return true; // Superadmin sees all
+  return Array.isArray(roleAccess) && roleAccess.includes(field);
+}
+
+/**
+ * Filter sensitive fields from a result based on user role
+ * @param {Object} data - Data to filter
+ * @param {string} entity - Entity type
+ * @param {string} role - User role
+ * @returns {Object} Filtered data
+ */
+export function filterSensitiveFields(data, entity, role) {
+  if (!data || typeof data !== 'object') return data;
+  if (role === 'superadmin') return data; // No filtering for superadmin
+  
+  const sensitiveFields = FIELD_PERMISSIONS.sensitive_fields[entity] || [];
+  const roleAccess = FIELD_PERMISSIONS.role_access[role] || [];
+  
+  const filter = (obj) => {
+    if (Array.isArray(obj)) return obj.map(filter);
+    if (obj && typeof obj === 'object') {
+      const filtered = {};
+      for (const [key, value] of Object.entries(obj)) {
+        if (sensitiveFields.includes(key) && !roleAccess.includes(key)) {
+          filtered[key] = '[REDACTED]';
+        } else if (typeof value === 'object') {
+          filtered[key] = filter(value);
+        } else {
+          filtered[key] = value;
+        }
+      }
+      return filtered;
+    }
+    return obj;
+  };
+  
+  return filter(data);
+}
 
 // Audit log access
 export const getAuditLog = () => [...auditLog];
