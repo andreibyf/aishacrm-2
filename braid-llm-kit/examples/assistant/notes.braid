@@ -52,10 +52,10 @@ fn searchNotes(
   query: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
-  let url = "/api/notes/search";
+  // Use list endpoint - notes doesn't have dedicated search
+  let url = "/api/notes";
   let params = {
     tenant_id: tenant,
-    q: query,
     limit: limit
   };
   

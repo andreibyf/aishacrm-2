@@ -180,10 +180,10 @@ fn searchActivities(
   query: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
-  let url = "/api/v2/activities/search";
+  // Use list endpoint - v2 activities doesn't have dedicated search
+  let url = "/api/v2/activities";
   let params = {
     tenant_id: tenant,
-    q: query,
     limit: limit
   };
   
@@ -191,7 +191,7 @@ fn searchActivities(
   
   // Note: Empty array is a VALID result (no matches found), not an error
   return match response {
-    Ok{value} => Ok(value.data),
+    Ok{value} => Ok(value.data.activities),
     Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_activities", query: query }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };

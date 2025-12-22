@@ -1054,10 +1054,13 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
   // Attach execution context so audit logs include tenant/user and tenant isolation has data
   const basePolicy = CRM_POLICIES[config.policy];
   
+  // Extract user info from access token for audit logging
+  const userRole = accessToken?.user_role || 'user';
+  const userEmail = accessToken?.user_email || null;
+  
   // === ROLE-BASED ACCESS CONTROL ===
   // Check if the tool requires specific roles and verify user has permission
   if (basePolicy?.required_roles && basePolicy.required_roles.length > 0) {
-    const userRole = accessToken?.user_role || 'user';
     const hasRequiredRole = basePolicy.required_roles.includes(userRole);
     
     if (!hasRequiredRole) {
@@ -1149,7 +1152,11 @@ export async function executeBraidTool(toolName, args, tenantRecord, userId = nu
     process.env.JWT_SECRET,
     { expiresIn: '5m' }
   );
-  const deps = createBackendDeps('http://localhost:3001', tenantUuid, userId, internalToken);
+  // Use CRM_BACKEND_URL (set in docker-compose) or BACKEND_URL or sensible default
+  // Inside Docker: CRM_BACKEND_URL=http://backend:3001
+  // Outside Docker: BACKEND_URL=http://localhost:4001
+  const backendUrl = process.env.CRM_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:4001';
+  const deps = createBackendDeps(backendUrl, tenantUuid, userId, internalToken);
 
   // Normalize arguments into a single object for Braid
   const normalizedArgs = normalizeToolArgs(toolName, args, tenantRecord);

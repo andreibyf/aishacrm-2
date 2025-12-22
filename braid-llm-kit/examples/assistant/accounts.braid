@@ -94,10 +94,11 @@ fn searchAccounts(
   query: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
-  let url = "/api/v2/accounts/search";
+  // Use the list endpoint with search parameter instead of a separate search endpoint
+  let url = "/api/v2/accounts";
   let params = {
     tenant_id: tenant,
-    q: query,
+    search: query,
     limit: limit
   };
   
@@ -105,7 +106,7 @@ fn searchAccounts(
   
   // Note: Empty array is a VALID result (no matches found), not an error
   return match response {
-    Ok{value} => Ok(value.data),
+    Ok{value} => Ok(value.data.accounts),
     Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_accounts", query: query }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };

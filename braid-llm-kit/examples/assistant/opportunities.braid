@@ -110,10 +110,10 @@ fn searchOpportunities(
   query: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
-  let url = "/api/v2/opportunities/search";
+  // Use list endpoint - v2 opportunities doesn't have dedicated search
+  let url = "/api/v2/opportunities";
   let params = {
     tenant_id: tenant,
-    q: query,
     limit: limit
   };
   
@@ -121,7 +121,7 @@ fn searchOpportunities(
   
   // Note: Empty array is a VALID result (no matches found), not an error
   return match response {
-    Ok{value} => Ok(value.data),
+    Ok{value} => Ok(value.data.opportunities),
     Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_opportunities", query: query }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
