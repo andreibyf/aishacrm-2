@@ -47,6 +47,22 @@ BizDev Source → promote → Lead → qualify → Lead (qualified) → convert 
 The AI assistant uses **Braid DSL tools** for CRM operations with full tenant isolation.
 Tools are defined in `braid-llm-kit/examples/assistant/` and registered in `backend/lib/braidIntegration-v2.js`.
 
+**Braid Tool API Endpoints (v3.1.6+):**
+| Tool | Endpoint | Notes |
+|------|----------|-------|
+| accounts | `/api/v2/accounts` | List with `?search=` query param |
+| contacts | `/api/v2/contacts` | List endpoint |
+| leads | `/api/v2/leads` | List endpoint |
+| opportunities | `/api/v2/opportunities` | List endpoint |
+| activities | `/api/v2/activities` | List endpoint |
+| notes | `/api/notes` | List endpoint |
+
+**Testing Braid SDK:**
+```bash
+# Run all Braid SDK tests (40 tests)
+docker exec aishacrm-backend sh -c "cd /app/backend && doppler run -- node --test __tests__/ai/braidScenarios.test.js __tests__/ai/braidToolExecution.test.js"
+```
+
 ### Entity Label Customization
 
 Tenants can customize entity names (e.g., "Clients" instead of "Accounts").

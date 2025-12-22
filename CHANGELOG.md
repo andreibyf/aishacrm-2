@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.1.6] - 2025-12-21
+
+### Fixed
+- **Braid SDK Endpoint Configuration:** Fixed all Braid .braid tool files to use correct API endpoints
+  - Replaced non-existent `/search` endpoints with list endpoints using query parameters
+  - Updated accounts.braid: `/api/v2/accounts/search` → `/api/v2/accounts?search=`
+  - Updated contacts.braid: `/api/v2/contacts/search` → `/api/v2/contacts`
+  - Updated leads.braid: `/api/v2/leads/search` → `/api/v2/leads`
+  - Updated opportunities.braid: `/api/v2/opportunities/search` → `/api/v2/opportunities`
+  - Updated activities.braid: `/api/v2/activities/search` → `/api/v2/activities`
+  - Updated notes.braid: `/api/notes/search` → `/api/notes`
+
+- **Braid Integration URL Configuration:** Fixed `braidIntegration-v2.js` to use correct backend URL
+  - Now uses `CRM_BACKEND_URL || BACKEND_URL || 'http://localhost:4001'` for Docker compatibility
+  - Fixed `userRole` and `userEmail` variable scoping issue causing `ReferenceError`
+
+- **Braid Test Configuration:** Fixed `braidToolExecution.test.js` BASE_URL for Docker environment
+  - Tests now use `CRM_BACKEND_URL` when running inside Docker containers
+
+### Added
+- **Braid SDK Scenario Tests:** New comprehensive end-to-end test suite (`braidScenarios.test.js`)
+  - 14 scenario tests covering real CRM data retrieval and updates
+  - Retrieval scenarios: accounts, contacts, leads, opportunities, activities
+  - CRUD scenarios: create, update, multi-entity operations
+  - Security scenarios: tenant isolation, permission validation, injection prevention
+  - Registry scenarios: tool availability, capability verification
+  - Audit scenarios: tool execution logging
+
+### Testing
+- All 40 Braid SDK tests passing (14 scenario + 26 execution)
+
+---
+
 ## [2.3.6] - 2025-12-14
 
 ### Added
