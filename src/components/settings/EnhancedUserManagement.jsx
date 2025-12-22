@@ -62,16 +62,73 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
         { key: 'Workflows', label: 'Workflows (Experimental)', moduleName: 'Workflows' },
     ];
 
-    // Build a set of disabled module names from module settings
+    // State for dynamically loaded module settings for the target user's tenant
+    // null = not yet loaded, [] = loaded but empty
+    const [userModuleSettings, setUserModuleSettings] = useState(null);
+    const [moduleSettingsLoading, setModuleSettingsLoading] = useState(false);
+
+    // Load module settings for the target user's tenant (not the current admin's tenant)
+    useEffect(() => {
+        const loadUserModuleSettings = async () => {
+            const targetTenantId = user?.tenant_id;
+            if (!targetTenantId) {
+                setUserModuleSettings([]);
+                return;
+            }
+            setModuleSettingsLoading(true);
+            try {
+                // Import ModuleSettings if not already available
+                const { ModuleSettings } = await import("@/api/entities");
+                const settings = await ModuleSettings.filter({ tenant_id: targetTenantId });
+                console.log('[UserFormModal] Loaded module settings for tenant:', targetTenantId,
+                    'count:', settings?.length || 0,
+                    'settings:', settings?.map(s => `${s.module_name}=${s.is_enabled}`).join(', '));
+                setUserModuleSettings(settings || []);
+            } catch (error) {
+                console.error('[UserFormModal] Failed to load module settings:', error);
+                setUserModuleSettings([]); // Fallback to empty (all modules enabled by default)
+            } finally {
+                setModuleSettingsLoading(false);
+            }
+        };
+        loadUserModuleSettings();
+    }, [user?.tenant_id]);
+
+    // Build a set of disabled module names from the USER's tenant module settings (not parent's)
+    // Use userModuleSettings if available, fall back to parent moduleSettings
+    // IMPORTANT: A module is ONLY disabled if it exists in settings with is_enabled === false
+    // Modules without a settings entry are treated as ENABLED by default (matching ModuleManager behavior)
     const disabledModules = useMemo(() => {
+        // If userModuleSettings is still loading (null), use parent moduleSettings
+        // If both are empty/null, return empty set (all modules enabled by default)
+        const settingsToUse = (userModuleSettings !== null && userModuleSettings.length > 0)
+            ? userModuleSettings
+            : (moduleSettings || []);
+
         const disabled = new Set();
-        moduleSettings.forEach((ms) => {
-            if (ms.is_enabled === false) {
-                disabled.add(ms.module_name);
+
+        // Create a map of module_name -> is_enabled for quick lookup
+        const moduleStatusMap = new Map();
+        settingsToUse.forEach((ms) => {
+            moduleStatusMap.set(ms.module_name, ms.is_enabled);
+        });
+
+        // Check each navigation page's associated module
+        navigationPages.forEach((page) => {
+            if (page.moduleName) {
+                const moduleStatus = moduleStatusMap.get(page.moduleName);
+                // Only mark as disabled if explicitly set to false
+                // If not in map (undefined), treat as enabled by default
+                if (moduleStatus === false) {
+                    disabled.add(page.moduleName);
+                }
             }
         });
+
+        console.log('[UserFormModal] Module settings loaded:', settingsToUse.length,
+            'Disabled modules for tenant', user?.tenant_id, ':', Array.from(disabled));
         return disabled;
-    }, [moduleSettings]);
+    }, [userModuleSettings, moduleSettings, user?.tenant_id, navigationPages]);
 
     const initNavPerms = () => {
         const existing = user?.navigation_permissions || {};

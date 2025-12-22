@@ -3,6 +3,10 @@
 
 import { Result, Account, CRMError } from "../../spec/types.braid"
 
+// Error handling: HTTP errors return CRMError with APIError tag and status code.
+// The backend interprets status codes to determine error type:
+// - 400 = ValidationError, 401/403 = PermissionDenied, 404 = NotFound, 5xx = NetworkError
+
 fn createAccount(
   tenant: String,
   name: String,
@@ -18,7 +22,7 @@ fn createAccount(
     industry: industry,
     annual_revenue: annual_revenue,
     website: website,
-  assigned_to: assigned_to,
+    assigned_to: assigned_to,
     metadata: {}
   };
   
@@ -26,7 +30,7 @@ fn createAccount(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "create_account" }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
@@ -42,7 +46,7 @@ fn updateAccount(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "update_account", entity: "Account", id: account_id }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
@@ -58,7 +62,7 @@ fn getAccountDetails(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_account", entity: "Account", id: account_id }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
@@ -77,9 +81,10 @@ fn listAccounts(
   
   let response = http.get(url, { params: params });
   
+  // Note: Empty array is a VALID result (no accounts), not an error
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_accounts" }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
@@ -98,9 +103,10 @@ fn searchAccounts(
   
   let response = http.get(url, { params: params });
   
+  // Note: Empty array is a VALID result (no matches found), not an error
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_accounts", query: query }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
@@ -115,7 +121,7 @@ fn deleteAccount(
   
   return match response {
     Ok{value} => Ok(true),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "delete_account", entity: "Account", id: account_id }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }

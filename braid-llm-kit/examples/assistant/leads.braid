@@ -3,6 +3,14 @@
 
 import { Result, Lead, CRMError } from "../../spec/types.braid"
 
+// Error handling note: HTTP errors return CRMError with specific tags based on status code.
+// The backend summarizeToolResult function interprets these error codes to provide
+// appropriate user-facing messages.
+// - 400 = ValidationError
+// - 401/403 = PermissionDenied  
+// - 404 = NotFound
+// - 5xx = NetworkError
+
 fn createLead(
   tenant: String,
   first_name: String,
@@ -29,7 +37,7 @@ fn createLead(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "create_lead" }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
@@ -42,7 +50,7 @@ fn deleteLead(
   let response = http.delete(url, {});
   return match response {
     Ok{value} => Ok(true),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "delete_lead", entity: "Lead", id: lead_id }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
@@ -65,7 +73,7 @@ fn qualifyLead(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "qualify_lead", entity: "Lead", id: lead_id }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
@@ -81,7 +89,7 @@ fn updateLead(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "update_lead", entity: "Lead", id: lead_id }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
@@ -98,7 +106,7 @@ fn convertLeadToAccount(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "convert_lead", entity: "Lead", id: lead_id }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
@@ -119,9 +127,10 @@ fn listLeads(
   
   let response = http.get(url, { params: params });
   
+  // Note: Empty array is a VALID result (no matches), not an error
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_leads" }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
@@ -137,7 +146,7 @@ fn getLeadDetails(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_lead", entity: "Lead", id: lead_id }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
@@ -156,9 +165,11 @@ fn searchLeads(
   
   let response = http.get(url, { params: params });
   
+  // Note: Empty array is a VALID result (no matches found), not an error
+  // The AI should NOT report "network error" for empty search results
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_leads", query: query }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }

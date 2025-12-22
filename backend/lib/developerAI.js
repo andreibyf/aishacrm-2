@@ -252,6 +252,38 @@ const DEVELOPER_TOOLS = [
       required: ['command', 'reason'],
     },
   },
+  {
+    name: 'test_aisha',
+    description: `Test the AiSHA AI assistant by sending a message and observing the response. 
+This tool allows you to:
+- Send test messages to AiSHA
+- See what tools AiSHA calls
+- Observe how AiSHA interprets queries
+- Debug error handling and edge cases
+Use this to troubleshoot AiSHA behavior before users encounter issues.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          description: 'The test message to send to AiSHA (e.g., "Show me all leads" or "Create an activity for John")',
+        },
+        tenant_id: {
+          type: 'string',
+          description: 'Optional: Tenant ID to test with (default: uses a test tenant or first available tenant)',
+        },
+        include_tool_details: {
+          type: 'boolean',
+          description: 'If true, include detailed information about tool calls and their results (default: true)',
+        },
+        conversation_id: {
+          type: 'string',
+          description: 'Optional: Continue a previous conversation by providing its ID',
+        },
+      },
+      required: ['message'],
+    },
+  },
 ];
 
 // Security check for file paths
@@ -790,6 +822,186 @@ export function rejectAction(actionId) {
   };
 }
 
+// Test AiSHA AI by sending a message and observing the response
+async function testAisha(args) {
+  const { message, tenant_id, include_tool_details = true, conversation_id } = args;
+
+  if (!message || message.trim().length === 0) {
+    return { error: 'Message is required' };
+  }
+
+  console.log('[Developer AI] Testing AiSHA with message:', message.substring(0, 100));
+
+  try {
+    // Import the AI processing functions dynamically to avoid circular dependencies
+    const { processMessage, getTenantSnapshot } = await import('./braidIntegration-v2.js');
+    const { supa } = await import('./supabase-db.js');
+
+    // Find a tenant to test with
+    let testTenantId = tenant_id;
+    let tenantName = 'Test Tenant';
+
+    if (!testTenantId) {
+      // Try to find the first available tenant
+      const { data: tenants } = await supa.from('tenants').select('tenant_id, name').limit(1);
+      if (tenants && tenants.length > 0) {
+        testTenantId = tenants[0].tenant_id;
+        tenantName = tenants[0].name;
+      } else {
+        return {
+          error: 'No tenants found in database. Please provide a tenant_id or create a tenant first.',
+          suggestion: 'You can find available tenants by querying: SELECT tenant_id, name FROM tenants LIMIT 10'
+        };
+      }
+    } else {
+      // Verify the tenant exists
+      const { data: tenant } = await supa.from('tenants').select('name').eq('tenant_id', testTenantId).single();
+      if (tenant) {
+        tenantName = tenant.name;
+      }
+    }
+
+    console.log('[Developer AI] Testing with tenant:', testTenantId, tenantName);
+
+    // Create or get a test conversation
+    let conversationIdToUse = conversation_id;
+
+    if (!conversationIdToUse) {
+      // Create a new test conversation
+      const { data: newConv, error: convError } = await supa
+        .from('conversations')
+        .insert({
+          tenant_id: testTenantId,
+          title: `[DEV TEST] ${message.substring(0, 50)}...`,
+          agent_name: 'aisha',
+          metadata: {
+            is_dev_test: true,
+            created_by: 'developer_ai',
+            test_timestamp: new Date().toISOString(),
+          }
+        })
+        .select('id')
+        .single();
+
+      if (convError) {
+        return {
+          error: `Failed to create test conversation: ${convError.message}`,
+          details: convError
+        };
+      }
+      conversationIdToUse = newConv.id;
+    }
+
+    // Insert the user message
+    await supa
+      .from('conversation_messages')
+      .insert({
+        conversation_id: conversationIdToUse,
+        role: 'user',
+        content: message,
+      });
+
+    // Now we need to simulate the AI chat process
+    // We'll call the internal generateAssistantResponse function if available
+    // For now, let's do a direct HTTP call to the API
+
+    const startTime = Date.now();
+
+    // Make internal API call using node-fetch or built-in fetch
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+    const response = await fetch(`${backendUrl}/api/ai/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-tenant-id': testTenantId,
+        'x-user-role': 'superadmin', // Superadmin to bypass restrictions
+        'x-user-email': 'developer-ai@system.local',
+      },
+      body: JSON.stringify({
+        message: message,
+        conversation_id: conversationIdToUse,
+      }),
+    });
+
+    const responseTime = Date.now() - startTime;
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return {
+        error: `AiSHA API returned status ${response.status}`,
+        status: response.status,
+        details: errorText,
+        tenant_id: testTenantId,
+        conversation_id: conversationIdToUse,
+      };
+    }
+
+    const result = await response.json();
+
+    // Get the conversation messages to see what happened
+    const { data: messages } = await supa
+      .from('conversation_messages')
+      .select('role, content, metadata, created_date')
+      .eq('conversation_id', conversationIdToUse)
+      .order('created_date', { ascending: true });
+
+    // Extract tool calls from metadata if present
+    const toolCalls = [];
+    if (include_tool_details) {
+      for (const msg of messages || []) {
+        if (msg.metadata?.tool_results) {
+          toolCalls.push(...msg.metadata.tool_results);
+        }
+        if (msg.metadata?.tool_calls) {
+          toolCalls.push(...msg.metadata.tool_calls);
+        }
+      }
+    }
+
+    // Build the response
+    const testResult = {
+      success: true,
+      tenant: {
+        id: testTenantId,
+        name: tenantName,
+      },
+      conversation_id: conversationIdToUse,
+      response_time_ms: responseTime,
+      user_message: message,
+      assistant_response: result.response || result.text || result.data?.response,
+      model_used: result.model || result.data?.model,
+      messages_in_conversation: messages?.length || 0,
+    };
+
+    if (include_tool_details && toolCalls.length > 0) {
+      testResult.tool_calls = toolCalls.map(tc => ({
+        name: tc.name || tc.tool_name,
+        status: tc.status || (tc.error ? 'error' : 'success'),
+        preview: tc.result_preview?.substring(0, 200) || tc.result?.substring?.(0, 200),
+      }));
+    }
+
+    // Add the full conversation history for context
+    testResult.conversation_history = messages?.map(m => ({
+      role: m.role,
+      content: typeof m.content === 'string' ? m.content.substring(0, 500) : JSON.stringify(m.content).substring(0, 500),
+      has_metadata: !!m.metadata && Object.keys(m.metadata).length > 0,
+    }));
+
+    console.log('[Developer AI] AiSHA test completed in', responseTime, 'ms');
+
+    return testResult;
+
+  } catch (error) {
+    console.error('[Developer AI] Error testing AiSHA:', error);
+    return {
+      error: `AiSHA test failed: ${error.message}`,
+      stack: error.stack?.split('\n').slice(0, 5).join('\n'),
+      suggestion: 'Check if the backend server is running and accessible. You can use read_logs to check for errors.',
+    };
+  }
+}
+
 // Get pending action for verification
 export function getPendingAction(actionId) {
   return pendingActions.get(actionId) || null;
@@ -818,6 +1030,8 @@ async function executeDeveloperTool(toolName, args) {
       return createFile(args);
     case 'run_command':
       return runCommand(args);
+    case 'test_aisha':
+      return testAisha(args);
     default:
       return { error: `Unknown tool: ${toolName}` };
   }
@@ -975,6 +1189,7 @@ AiSHA CRM is a multi-tenant SaaS CRM platform with AI-powered features including
 4. **Review logs** - Use read_logs to diagnose runtime issues
 5. **Get outlines** - Use get_file_outline to understand file structure
 6. **Propose changes** - Use propose_change to suggest code modifications
+7. **Test AiSHA** - Use test_aisha to send test messages to the AiSHA AI assistant and observe responses, tool calls, and errors
 
 ## GUIDELINES
 
@@ -995,40 +1210,111 @@ You are here to help the superadmin understand, debug, and improve the AiSHA CRM
 
 // Main chat function for Developer AI
 export async function developerChat(messages, userId) {
-  const client = getAnthropicClient();
+  let client;
+
+  // Try to get the Anthropic client with user-friendly error handling
+  try {
+    client = getAnthropicClient();
+  } catch (error) {
+    console.error('[Developer AI] Failed to initialize client:', error.message);
+    if (error.message.includes('ANTHROPIC_API_KEY')) {
+      throw new Error('Developer AI is not configured. Please ensure the ANTHROPIC_API_KEY environment variable is set.');
+    }
+    throw new Error('Unable to initialize Developer AI. Please try again later.');
+  }
   
   console.log('[Developer AI] Starting chat with', messages.length, 'messages');
   
-  // Build conversation with tool use
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 16384,
-    system: DEVELOPER_SYSTEM_PROMPT,
-    tools: DEVELOPER_TOOLS,
-    messages: messages.map(m => ({
-      role: m.role,
-      content: m.content,
-    })),
-  });
+  // Helper to make Anthropic API calls with retry logic
+  async function callAnthropic(conversationMessages, retryCount = 0) {
+    const MAX_RETRIES = 1;
+
+    try {
+      return await client.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 16384,
+        system: DEVELOPER_SYSTEM_PROMPT,
+        tools: DEVELOPER_TOOLS,
+        messages: conversationMessages.map(m => ({
+          role: m.role,
+          content: m.content,
+        })),
+      });
+    } catch (error) {
+      console.error(`[Developer AI] API call failed (attempt ${retryCount + 1}):`, error.message);
+
+      // Check for specific error types
+      const errorMessage = error.message || '';
+      const statusCode = error.status || error.statusCode;
+
+      // Rate limit - suggest waiting
+      if (statusCode === 429 || errorMessage.includes('rate_limit') || errorMessage.includes('Rate limit')) {
+        throw new Error('Developer AI is temporarily rate limited. Please wait a moment and try again.');
+      }
+
+      // Authentication issues
+      if (statusCode === 401 || statusCode === 403 || errorMessage.includes('authentication') || errorMessage.includes('unauthorized')) {
+        throw new Error('Developer AI authentication failed. Please verify the API key configuration.');
+      }
+
+      // Network/connection errors - retry once
+      if ((errorMessage.includes('network') || errorMessage.includes('ECONNREFUSED') ||
+        errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT') ||
+        errorMessage.includes('fetch failed') || statusCode >= 500) && retryCount < MAX_RETRIES) {
+        console.log('[Developer AI] Retrying after network error...');
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+        return callAnthropic(conversationMessages, retryCount + 1);
+      }
+
+      // Server errors
+      if (statusCode >= 500) {
+        throw new Error('Developer AI service is temporarily unavailable. Please try again in a few minutes.');
+      }
+
+      // Invalid request
+      if (statusCode === 400) {
+        throw new Error('Developer AI received an invalid request. Please try rephrasing your question.');
+      }
+
+      // Default error message
+      throw new Error(`Developer AI encountered an issue: ${errorMessage || 'Unknown error'}. Please try again.`);
+    }
+  }
+
+  // Initial API call
+  const response = await callAnthropic(messages);
   
   console.log('[Developer AI] Initial response:', response.stop_reason);
   
   // Handle tool use loop
   let currentResponse = response;
   const conversationHistory = [...messages];
+  let toolIterations = 0;
+  const MAX_TOOL_ITERATIONS = 10; // Prevent infinite loops
   
-  while (currentResponse.stop_reason === 'tool_use') {
+  while (currentResponse.stop_reason === 'tool_use' && toolIterations < MAX_TOOL_ITERATIONS) {
+    toolIterations++;
     const toolUseBlocks = currentResponse.content.filter(block => block.type === 'tool_use');
     const toolResults = [];
     
     for (const toolUse of toolUseBlocks) {
       console.log('[Developer AI] Tool call:', toolUse.name);
-      const result = await executeDeveloperTool(toolUse.name, toolUse.input);
-      toolResults.push({
-        type: 'tool_result',
-        tool_use_id: toolUse.id,
-        content: JSON.stringify(result, null, 2),
-      });
+      try {
+        const result = await executeDeveloperTool(toolUse.name, toolUse.input);
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: toolUse.id,
+          content: JSON.stringify(result, null, 2),
+        });
+      } catch (toolError) {
+        console.error('[Developer AI] Tool execution error:', toolError.message);
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: toolUse.id,
+          content: JSON.stringify({ error: toolError.message || 'Tool execution failed' }),
+          is_error: true,
+        });
+      }
     }
     
     // Add assistant message with tool calls
@@ -1044,20 +1330,15 @@ export async function developerChat(messages, userId) {
     });
     
     // Continue conversation
-    currentResponse = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 16384,
-      system: DEVELOPER_SYSTEM_PROMPT,
-      tools: DEVELOPER_TOOLS,
-      messages: conversationHistory.map(m => ({
-        role: m.role,
-        content: m.content,
-      })),
-    });
+    currentResponse = await callAnthropic(conversationHistory);
     
     console.log('[Developer AI] Continued response:', currentResponse.stop_reason);
   }
   
+  if (toolIterations >= MAX_TOOL_ITERATIONS) {
+    console.warn('[Developer AI] Hit max tool iterations limit');
+  }
+
   // Extract final text response
   const textBlocks = currentResponse.content.filter(block => block.type === 'text');
   const responseText = textBlocks.map(b => b.text).join('\n');

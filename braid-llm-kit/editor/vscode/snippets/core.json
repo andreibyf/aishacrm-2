@@ -1,18 +1,205 @@
 {
-  "fn": {
+  "Function": {
     "prefix": "fn",
     "body": [
-      "fn ${1:name}(${2:params}) -> ${3:Type} {",
+      "fn ${1:functionName}(${2:params}) -> ${3:ReturnType} {",
       "  $0",
       "}"
-    ]
+    ],
+    "description": "Define a pure function"
   },
-  "match": {
+  "Function with Net Effect": {
+    "prefix": "fnnet",
+    "body": [
+      "fn ${1:functionName}(${2:params}) -> Result<${3:T}, ${4:CRMError}> !net {",
+      "  let url = \"${5:/api/v2/endpoint}\";",
+      "  let response = http.${6|get,post,put,delete|}(url${7:, { body: payload }});",
+      "  ",
+      "  return match response {",
+      "    Ok{value} => Ok(value.data),",
+      "    Err{error} => Err(NetworkError{ url: url, code: error.status }),",
+      "    _ => Err(NetworkError{ url: url, code: 500 })",
+      "  };",
+      "}"
+    ],
+    "description": "Define a function with network effect"
+  },
+  "Function with Multiple Effects": {
+    "prefix": "fneffects",
+    "body": [
+      "fn ${1:functionName}(${2:params}) -> Result<${3:T}, ${4:CRMError}> !net, clock {",
+      "  let timestamp = clock.now();",
+      "  $0",
+      "}"
+    ],
+    "description": "Define a function with net and clock effects"
+  },
+  "Match Expression": {
     "prefix": "match",
     "body": [
-      "match ${1:expr} {",
-      "  ${2:_} => ${3:expr}",
+      "match ${1:expression} {",
+      "  ${2:Ok{value}} => ${3:value},",
+      "  ${4:Err{error}} => ${5:error},",
+      "  _ => ${6:fallback}",
       "}"
-    ]
+    ],
+    "description": "Pattern match expression"
+  },
+  "Match Result": {
+    "prefix": "matchres",
+    "body": [
+      "match ${1:response} {",
+      "  Ok{value} => Ok(${2:value.data}),",
+      "  Err{error} => Err(${3:NetworkError}{ ${4:url: url, code: error.status} }),",
+      "  _ => Err(${5:NetworkError}{ ${6:url: url, code: 500} })",
+      "}"
+    ],
+    "description": "Pattern match a Result type"
+  },
+  "Type Alias": {
+    "prefix": "type",
+    "body": [
+      "type ${1:TypeName} = ${2:BaseType}"
+    ],
+    "description": "Type alias"
+  },
+  "Record Type": {
+    "prefix": "typerec",
+    "body": [
+      "type ${1:TypeName} = {",
+      "  ${2:field1}: ${3:String},",
+      "  ${4:field2}: ${5:Number}",
+      "}"
+    ],
+    "description": "Record type definition"
+  },
+  "Enum Type": {
+    "prefix": "enum",
+    "body": [
+      "enum ${1:EnumName} {",
+      "  ${2:Variant1},",
+      "  ${3:Variant2}(${4:value}: ${5:String})",
+      "}"
+    ],
+    "description": "Enum type definition"
+  },
+  "Error Type": {
+    "prefix": "error",
+    "body": [
+      "type ${1:ErrorName} = ",
+      "  | ${2:NotFound} { entity: String, id: String }",
+      "  | ${3:ValidationError} { field: String, message: String }",
+      "  | ${4:NetworkError} { url: String, code: Number }"
+    ],
+    "description": "Union error type definition"
+  },
+  "Let Binding": {
+    "prefix": "let",
+    "body": [
+      "let ${1:name}: ${2:Type} = ${3:value};"
+    ],
+    "description": "Let binding"
+  },
+  "HTTP GET": {
+    "prefix": "httpget",
+    "body": [
+      "let response = http.get(${1:url});"
+    ],
+    "description": "HTTP GET request"
+  },
+  "HTTP POST": {
+    "prefix": "httppost",
+    "body": [
+      "let response = http.post(${1:url}, { body: ${2:payload} });"
+    ],
+    "description": "HTTP POST request"
+  },
+  "HTTP PUT": {
+    "prefix": "httpput",
+    "body": [
+      "let response = http.put(${1:url}, { body: ${2:payload} });"
+    ],
+    "description": "HTTP PUT request"
+  },
+  "HTTP DELETE": {
+    "prefix": "httpdel",
+    "body": [
+      "let response = http.delete(${1:url});"
+    ],
+    "description": "HTTP DELETE request"
+  },
+  "Ok Result": {
+    "prefix": "ok",
+    "body": [
+      "Ok(${1:value})"
+    ],
+    "description": "Ok result constructor"
+  },
+  "Err Result": {
+    "prefix": "err",
+    "body": [
+      "Err(${1:ErrorType}{ ${2:field}: ${3:value} })"
+    ],
+    "description": "Err result constructor"
+  },
+  "Import Types": {
+    "prefix": "import",
+    "body": [
+      "import { ${1:Result}, ${2:Lead}, ${3:CRMError} } from \"${4:../../spec/types.braid}\""
+    ],
+    "description": "Import statement"
+  },
+  "CRM Tool Template": {
+    "prefix": "crmtool",
+    "body": [
+      "// ${1:Tool Description}",
+      "// Demonstrates: ${2:HTTP operations, error handling}",
+      "",
+      "import { Result, ${3:Lead}, CRMError } from \"../../spec/types.braid\"",
+      "",
+      "fn ${4:toolName}(tenant_id: String, ${5:params}) -> Result<${6:Lead}, CRMError> !net {",
+      "  let url = \"/api/v2/${7:leads}\";",
+      "  let payload = {",
+      "    tenant_id: tenant_id,",
+      "    $8",
+      "  };",
+      "  ",
+      "  let response = http.post(url, { body: payload });",
+      "  ",
+      "  return match response {",
+      "    Ok{value} => Ok(value.data),",
+      "    Err{error} => Err(NetworkError{ url: url, code: error.status }),",
+      "    _ => Err(NetworkError{ url: url, code: 500 })",
+      "  };",
+      "}"
+    ],
+    "description": "Complete CRM tool template"
+  },
+  "Search Tool Template": {
+    "prefix": "searchtool",
+    "body": [
+      "fn ${1:search}${2:Leads}(query: String) -> Result<Array<${3:Lead}>, CRMError> !net {",
+      "  let url = \"/api/v2/${4:leads}/search?q=\" + query;",
+      "  let response = http.get(url);",
+      "  ",
+      "  return match response {",
+      "    Ok{value} => Ok(value.data),",
+      "    Err{error} => Err(NetworkError{ url: url, code: error.status }),",
+      "    _ => Err(NetworkError{ url: url, code: 500 })",
+      "  };",
+      "}"
+    ],
+    "description": "Search tool template"
+  },
+  "Validation Function": {
+    "prefix": "validate",
+    "body": [
+      "fn validate${1:Email}(${2:email}: String) -> Boolean {",
+      "  let ${3:hasAt} = includes(${4:email}, \"${5:@}\");",
+      "  let ${6:hasDot} = includes(${7:email}, \"${8:.}\");",
+      "  return ${9:hasAt} && ${10:hasDot};",
+      "}"
+    ],
+    "description": "Pure validation function"
   }
 }

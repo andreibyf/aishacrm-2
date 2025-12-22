@@ -412,11 +412,31 @@ Example good response for not found:
 - Keep track of: Lead names, Account names, Activity subjects, IDs from tool results
 - If context is unclear, ASK: "Are you referring to the lead 'John Doe' we just discussed?"
 
-**ERROR HANDLING:**
-- Tool errors with "Err" tag = actual failures (report these)
-- Empty arrays/results = valid response, just no matches (NOT an error)
-- Network issues = temporary, suggest retry
-- NEVER say "network error" when a search simply returned no results
+**ERROR HANDLING (UPDATED - GRANULAR ERROR TYPES):**
+Tool errors now return SPECIFIC error types. Handle each appropriately:
+
+1. **NotFound** (entity: X, id: Y):
+   - Record with that ID does not exist OR was deleted
+   - NEVER say "network error" - this is NOT a network issue
+   - Response: "I couldn't find that [entity]. Can you verify the name or ID?"
+
+2. **ValidationError** (field: X, message: Y):
+   - User input was invalid or malformed
+   - Response: "There was an issue with [field]: [message]. Can you check the input?"
+
+3. **PermissionDenied** (operation: X, reason: Y):
+   - User lacks access or session expired
+   - Response: "Access denied for [operation]. You may need to log in again."
+
+4. **NetworkError** (url: X, code: Y):
+   - ACTUAL network/connectivity issue (rare)
+   - ONLY use "network error" language for THIS error type
+   - Response: "I'm having trouble connecting. Please try again in a moment."
+
+5. **Empty arrays/results** = VALID (no matches found):
+   - This is NOT an error - just zero matching records
+   - Use the "RECORD NOT FOUND - VERIFICATION PROTOCOL" above
+   - NEVER say "network error" for empty search results
 
 **Best Practices:**
 - Always use tools to fetch current data before answering
@@ -427,6 +447,7 @@ Example good response for not found:
 - Before initiating calls, confirm contact has a valid phone number
 - When uncertain about which entity (Account/Lead/Contact) is meant, ASK before acting
 - When user asks to navigate to a page, USE navigate_to_page tool immediately
+- When search returns empty, NEVER assume "network error" - ask user to verify
 `;
 
 /**
@@ -443,7 +464,44 @@ export function summarizeToolResult(result, toolName) {
   }
   
   if (result.tag === 'Err') {
-    return `Error executing ${toolName}: ${result.error?.message || JSON.stringify(result.error)}`;
+    const error = result.error || {};
+    // Provide specific, AI-friendly error messages based on error type
+    // This helps the AI respond appropriately instead of saying "network error" for everything
+    switch (error.tag) {
+      case 'NotFound':
+        return `${toolName}: ${error.entity || 'Record'} with ID "${error.id || 'unknown'}" was NOT FOUND. This is NOT a network error - the record may not exist or the ID may be incorrect. Suggest verifying the name/ID with the user.`;
+      case 'ValidationError':
+        return `${toolName}: Validation error - ${error.message || 'Invalid data provided'}. Field: ${error.field || 'unknown'}. Ask the user to verify the input.`;
+      case 'PermissionDenied':
+        return `${toolName}: Access denied for "${error.operation || 'this operation'}". Reason: ${error.reason || 'insufficient permissions'}. User may need to log in again or contact an administrator.`;
+      case 'NetworkError':
+        // Only this case is an actual network error
+        return `${toolName}: Network error (HTTP ${error.code || 'unknown'}). This may be a temporary connectivity issue. Suggest trying again in a moment.`;
+      case 'DatabaseError':
+        return `${toolName}: Database error - ${error.message || 'query failed'}. This is a server-side issue, not a user error.`;
+      case 'APIError': {
+        // Interpret HTTP status code to provide appropriate error message
+        // This bridges the gap between Braid's simple error structure and user-friendly messages
+        const statusCode = error.code || 500;
+        const operation = error.operation || toolName;
+        const entity = error.entity || 'Record';
+        const entityId = error.id || '';
+
+        if (statusCode === 400) {
+          return `${toolName}: Invalid request for ${operation}. ${error.query ? `Search query: "${error.query}"` : 'Please check the input data.'} Ask user to verify the input.`;
+        } else if (statusCode === 401 || statusCode === 403) {
+          return `${toolName}: Access denied for ${operation}. User may need to log in again or contact an administrator.`;
+        } else if (statusCode === 404) {
+          return `${toolName}: ${entity}${entityId ? ` (ID: ${entityId})` : ''} was NOT FOUND. This is NOT a network error. Suggest verifying the name/ID with the user, or check a different entity type (Lead vs Contact vs Account).`;
+        } else if (statusCode >= 500) {
+          return `${toolName}: Server error (HTTP ${statusCode}). This may be a temporary issue. Suggest trying again in a moment.`;
+        } else {
+          return `${toolName}: API error (HTTP ${statusCode}) for ${operation}. ${entityId ? `Entity: ${entity} ID ${entityId}` : ''}`;
+        }
+      }
+      default:
+        return `Error executing ${toolName}: ${error.message || JSON.stringify(error)}`;
+    }
   }
   
   const data = result.tag === 'Ok' ? result.value : result;
@@ -504,10 +562,92 @@ export function summarizeToolResult(result, toolName) {
     return summary;
   }
 
+  // Lead-specific: Include names and IDs prominently for follow-up actions and context retention
+  if (toolName === 'list_leads' || toolName === 'search_leads') {
+    const leads = Array.isArray(data) ? data : (data.leads || data.data || []);
+    if (leads.length === 0) {
+      return `${toolName}: No leads found matching the criteria. This is a VALID result (no matches), NOT a network error. Consider asking the user to verify the search term or check a different entity type.`;
+    }
+
+    const summaryItems = leads.slice(0, 5).map(l => {
+      const fullName = [l.first_name, l.last_name].filter(Boolean).join(' ') || 'Unnamed';
+      return `• ID: ${l.id}, Name: "${fullName}", Company: "${l.company || 'N/A'}", Status: ${l.status || 'unknown'}, Email: ${l.email || 'N/A'}`;
+    });
+
+    let summary = `Found ${leads.length} lead${leads.length === 1 ? '' : 's'}:\n${summaryItems.join('\n')}`;
+    if (leads.length > 5) {
+      summary += `\n... and ${leads.length - 5} more`;
+    }
+    summary += '\n\n**CONTEXT RETENTION: Remember these lead IDs and names for follow-up actions (update_lead, qualify_lead, get_lead_details)**';
+    return summary;
+  }
+
+  // Single lead detail
+  if (toolName === 'get_lead_details' || toolName === 'update_lead' || toolName === 'create_lead' || toolName === 'qualify_lead') {
+    if (data.id) {
+      const fullName = [data.first_name, data.last_name].filter(Boolean).join(' ') || 'Unnamed';
+      return `Lead ID: ${data.id}, Name: "${fullName}", Company: "${data.company || 'N/A'}", Status: ${data.status || 'unknown'}, Email: ${data.email || 'N/A'}, Phone: ${data.phone || 'N/A'}`;
+    }
+  }
+
   // Single activity detail
   if (toolName === 'get_activity_details' || toolName === 'update_activity' || toolName === 'create_activity') {
     if (data.id) {
       return `Activity ID: ${data.id}, Subject: "${data.subject || ''}", Type: ${data.type || ''}, Due: ${data.due_date || ''}, Status: ${data.status || ''}`;
+    }
+  }
+
+  // Account-specific: Include names and IDs for context retention
+  if (toolName === 'list_accounts' || toolName === 'search_accounts') {
+    const accounts = Array.isArray(data) ? data : (data.accounts || data.data || []);
+    if (accounts.length === 0) {
+      return `${toolName}: No accounts found matching the criteria. This is a VALID result (no matches), NOT a network error.`;
+    }
+
+    const summaryItems = accounts.slice(0, 5).map(a => {
+      return `• ID: ${a.id}, Name: "${a.name || 'Unnamed'}", Industry: "${a.industry || 'N/A'}", Revenue: $${(a.annual_revenue || 0).toLocaleString()}`;
+    });
+
+    let summary = `Found ${accounts.length} account${accounts.length === 1 ? '' : 's'}:\n${summaryItems.join('\n')}`;
+    if (accounts.length > 5) {
+      summary += `\n... and ${accounts.length - 5} more`;
+    }
+    summary += '\n\n**CONTEXT RETENTION: Remember these account IDs and names for follow-up actions**';
+    return summary;
+  }
+
+  // Single account detail
+  if (toolName === 'get_account_details' || toolName === 'update_account' || toolName === 'create_account') {
+    if (data.id) {
+      return `Account ID: ${data.id}, Name: "${data.name || 'Unnamed'}", Industry: "${data.industry || 'N/A'}", Revenue: $${(data.annual_revenue || 0).toLocaleString()}, Website: ${data.website || 'N/A'}`;
+    }
+  }
+
+  // Contact-specific: Include names and IDs for context retention
+  if (toolName === 'list_contacts_for_account' || toolName === 'search_contacts') {
+    const contacts = Array.isArray(data) ? data : (data.contacts || data.data || []);
+    if (contacts.length === 0) {
+      return `${toolName}: No contacts found matching the criteria. This is a VALID result (no matches), NOT a network error.`;
+    }
+
+    const summaryItems = contacts.slice(0, 5).map(c => {
+      const fullName = [c.first_name, c.last_name].filter(Boolean).join(' ') || 'Unnamed';
+      return `• ID: ${c.id}, Name: "${fullName}", Title: "${c.job_title || 'N/A'}", Email: ${c.email || 'N/A'}`;
+    });
+
+    let summary = `Found ${contacts.length} contact${contacts.length === 1 ? '' : 's'}:\n${summaryItems.join('\n')}`;
+    if (contacts.length > 5) {
+      summary += `\n... and ${contacts.length - 5} more`;
+    }
+    summary += '\n\n**CONTEXT RETENTION: Remember these contact IDs and names for follow-up actions**';
+    return summary;
+  }
+
+  // Single contact detail
+  if (toolName === 'get_contact_details' || toolName === 'update_contact' || toolName === 'create_contact') {
+    if (data.id) {
+      const fullName = [data.first_name, data.last_name].filter(Boolean).join(' ') || 'Unnamed';
+      return `Contact ID: ${data.id}, Name: "${fullName}", Title: "${data.job_title || 'N/A'}", Email: ${data.email || 'N/A'}, Phone: ${data.phone || 'N/A'}`;
     }
   }
 

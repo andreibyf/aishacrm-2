@@ -3,6 +3,9 @@
 
 import { Result, Contact, CRMError } from "../../spec/types.braid"
 
+// Error handling: HTTP errors return CRMError with APIError tag and status code.
+// The backend interprets status codes to determine error type.
+
 fn createContact(
   tenant: String,
   first_name: String,
@@ -22,7 +25,7 @@ fn createContact(
     phone: phone,
     job_title: job_title,
     account_id: account_id,
-  assigned_to: assigned_to,
+    assigned_to: assigned_to,
     metadata: {}
   };
   
@@ -30,7 +33,7 @@ fn createContact(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "create_contact" }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
@@ -46,7 +49,7 @@ fn updateContact(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "update_contact", entity: "Contact", id: contact_id }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
@@ -63,9 +66,10 @@ fn listContactsForAccount(
   
   let response = http.get(url, { params: params });
   
+  // Note: Empty array is a VALID result (account has no contacts), not an error
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "list_contacts" }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
@@ -84,9 +88,10 @@ fn searchContacts(
   
   let response = http.get(url, { params: params });
   
+  // Note: Empty array is a VALID result (no matches found), not an error
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "search_contacts", query: query }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
@@ -99,7 +104,7 @@ fn deleteContact(
   let response = http.delete(url, {});
   return match response {
     Ok{value} => Ok(true),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "delete_contact", entity: "Contact", id: contact_id }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }
@@ -115,7 +120,7 @@ fn getContactDetails(
   
   return match response {
     Ok{value} => Ok(value.data),
-    Err{error} => Err({ tag: "NetworkError", url: url, code: error.status }),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "get_contact", entity: "Contact", id: contact_id }),
     _ => Err({ tag: "NetworkError", url: url, code: 500 })
   };
 }

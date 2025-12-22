@@ -1,21 +1,35 @@
 {
-  "name": "braid",
-  "displayName": "Braid",
-  "publisher": "aisha",
-  "version": "0.0.2",
+  "name": "braid-language",
+  "displayName": "Braid - AI-Native DSL",
+  "description": "Syntax highlighting, snippets, and language support for Braid - the type-safe, capability-controlled language for AI tool definitions",
+  "version": "0.3.0",
+  "publisher": "aisha-crm",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-repo/braid-llm-kit"
+  },
   "engines": {
     "vscode": "^1.86.0"
   },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "braid",
+    "ai",
+    "llm",
+    "dsl",
+    "tool-calling",
+    "type-safe"
+  ],
   "contributes": {
     "languages": [
       {
         "id": "braid",
-        "extensions": [
-          ".braid"
-        ],
-        "aliases": [
-          "Braid"
-        ]
+        "extensions": [".braid"],
+        "aliases": ["Braid", "braid"],
+        "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [

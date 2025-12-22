@@ -1,26 +1,183 @@
 {
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Braid",
   "scopeName": "source.braid",
   "patterns": [
-    {
-      "name": "comment.line.double-slash.braid",
-      "match": "//.*$"
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#effects" },
+    { "include": "#functions" },
+    { "include": "#operators" },
+    { "include": "#result-constructors" },
+    { "include": "#annotations" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.braid",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.braid",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
     },
-    {
-      "name": "keyword.control.braid",
-      "match": "\\b(fn|type|enum|trait|impl|match|actor|async|await|let|mut|requires|ensures|Ok|Err)\\b"
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.braid",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.braid",
+              "match": "\\\\."
+            },
+            {
+              "name": "variable.interpolation.braid",
+              "match": "\\$\\{[^}]+\\}"
+            }
+          ]
+        }
+      ]
     },
-    {
-      "name": "storage.type.braid",
-      "match": "\\b(Result|Option|String|Bool|i32|i64|u64)\\b"
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.braid",
+          "match": "\\b\\d+\\.\\d+\\b"
+        },
+        {
+          "name": "constant.numeric.integer.braid",
+          "match": "\\b\\d+(_\\d+)*\\b"
+        }
+      ]
     },
-    {
-      "name": "constant.numeric.braid",
-      "match": "\\b\\d+\\b"
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.braid",
+          "match": "\\b(fn|type|enum|trait|impl|match|if|else|return|let|mut|import|from|as)\\b"
+        },
+        {
+          "name": "keyword.other.braid",
+          "match": "\\b(actor|async|await|requires|ensures|policy)\\b"
+        },
+        {
+          "name": "constant.language.braid",
+          "match": "\\b(true|false)\\b"
+        }
+      ]
     },
-    {
-      "name": "string.quoted.double.braid",
-      "begin": "\\\"",
-      "end": "\\\""
+    "types": {
+      "patterns": [
+        {
+          "name": "support.type.primitive.braid",
+          "match": "\\b(String|Number|Boolean|Bool|JSONB|Array|i32|i64|u64|f32|f64)\\b"
+        },
+        {
+          "name": "support.type.result.braid",
+          "match": "\\b(Result|Option|Some|None)\\b"
+        },
+        {
+          "name": "entity.name.type.braid",
+          "match": "\\b(Account|Lead|Contact|Opportunity|Activity|Note|User|Tenant|Snapshot|Policy|CRMError)\\b"
+        },
+        {
+          "name": "entity.name.type.error.braid",
+          "match": "\\b(NotFound|ValidationError|PermissionDenied|NetworkError|DatabaseError|PolicyViolation)\\b"
+        }
+      ]
+    },
+    "effects": {
+      "patterns": [
+        {
+          "name": "keyword.other.effect.braid",
+          "match": "!(net|clock|fs|db|email|io)\\b"
+        },
+        {
+          "name": "keyword.operator.effect.braid",
+          "match": "!"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "entity.name.function.braid",
+          "match": "\\b(http\\.get|http\\.post|http\\.put|http\\.delete|http\\.patch)\\b"
+        },
+        {
+          "name": "entity.name.function.clock.braid",
+          "match": "\\b(clock\\.now|clock\\.today)\\b"
+        },
+        {
+          "name": "entity.name.function.builtin.braid",
+          "match": "\\b(len|includes|toString|parseInt|parseFloat|reduce|map|filter)\\b"
+        },
+        {
+          "name": "entity.name.function.definition.braid",
+          "match": "(?<=fn\\s+)[a-zA-Z_][a-zA-Z0-9_]*"
+        }
+      ]
+    },
+    "result-constructors": {
+      "patterns": [
+        {
+          "name": "keyword.other.result.ok.braid",
+          "match": "\\bOk\\b"
+        },
+        {
+          "name": "keyword.other.result.err.braid",
+          "match": "\\bErr\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arrow.braid",
+          "match": "->|=>"
+        },
+        {
+          "name": "keyword.operator.comparison.braid",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.logical.braid",
+          "match": "&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.operator.assignment.braid",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.arithmetic.braid",
+          "match": "\\+|-|\\*|/|%"
+        },
+        {
+          "name": "keyword.operator.spread.braid",
+          "match": "\\.\\.\\."
+        },
+        {
+          "name": "keyword.operator.question.braid",
+          "match": "\\?\\?"
+        }
+      ]
+    },
+    "annotations": {
+      "patterns": [
+        {
+          "name": "entity.name.tag.annotation.braid",
+          "match": "@[a-zA-Z_][a-zA-Z0-9_]*"
+        }
+      ]
     }
-  ]
+  }
 }

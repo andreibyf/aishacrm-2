@@ -1,0 +1,345 @@
+// Braid Pattern Examples - Common Templates for CRM Tools
+// Version: 0.3.0
+// These patterns can be copied and adapted for new tools
+
+import { Result, Account, Lead, Contact, Activity, Opportunity, CRMError } from "../../spec/types.braid"
+
+// ============================================================================
+// PATTERN 1: Basic CRUD - Create
+// Use for: Creating new records
+// Effects: !net (for API call)
+// ============================================================================
+
+fn createEntity(
+  tenant_id: String,
+  name: String,
+  email: String
+) -> Result<Lead, CRMError> !net {
+  let url = "/api/v2/leads";
+  let payload = {
+    tenant_id: tenant_id,
+    name: name,
+    email: email,
+    status: "new"
+  };
+  
+  let response = http.post(url, { body: payload });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err(NetworkError{ url: url, code: error.status }),
+    _ => Err(NetworkError{ url: url, code: 500 })
+  };
+}
+
+
+// ============================================================================
+// PATTERN 2: Basic CRUD - Read Single
+// Use for: Getting details of a single record by ID
+// Effects: !net
+// ============================================================================
+
+fn getEntityById(id: String) -> Result<Account, CRMError> !net {
+  let url = "/api/v2/accounts/" + id;
+  let response = http.get(url);
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => match error.status {
+      404 => Err(NotFound{ entity: "Account", id: id }),
+      _ => Err(NetworkError{ url: url, code: error.status })
+    },
+    _ => Err(NetworkError{ url: url, code: 500 })
+  };
+}
+
+
+// ============================================================================
+// PATTERN 3: Basic CRUD - List with Filters
+// Use for: Listing records with optional filters
+// Effects: !net
+// ============================================================================
+
+fn listEntitiesFiltered(
+  tenant_id: String,
+  status: String,
+  limit: Number
+) -> Result<Array<Lead>, CRMError> !net {
+  let url = "/api/v2/leads?tenant_id=" + tenant_id;
+  
+  // Add optional filters
+  if status != "all" {
+    url = url + "&status=" + status;
+  }
+  if limit > 0 {
+    url = url + "&limit=" + toString(limit);
+  }
+  
+  let response = http.get(url);
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err(NetworkError{ url: url, code: error.status }),
+    _ => Err(NetworkError{ url: url, code: 500 })
+  };
+}
+
+
+// ============================================================================
+// PATTERN 4: Basic CRUD - Update
+// Use for: Updating existing records
+// Effects: !net
+// ============================================================================
+
+fn updateEntity(
+  id: String,
+  updates: JSONB
+) -> Result<Contact, CRMError> !net {
+  let url = "/api/v2/contacts/" + id;
+  let response = http.put(url, { body: updates });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => match error.status {
+      404 => Err(NotFound{ entity: "Contact", id: id }),
+      400 => Err(ValidationError{ field: "updates", message: error.message }),
+      _ => Err(NetworkError{ url: url, code: error.status })
+    },
+    _ => Err(NetworkError{ url: url, code: 500 })
+  };
+}
+
+
+// ============================================================================
+// PATTERN 5: Basic CRUD - Delete
+// Use for: Deleting records
+// Effects: !net
+// ============================================================================
+
+fn deleteEntity(id: String) -> Result<Boolean, CRMError> !net {
+  let url = "/api/v2/activities/" + id;
+  let response = http.delete(url);
+  
+  return match response {
+    Ok{value} => Ok(true),
+    Err{error} => match error.status {
+      404 => Err(NotFound{ entity: "Activity", id: id }),
+      _ => Err(NetworkError{ url: url, code: error.status })
+    },
+    _ => Err(NetworkError{ url: url, code: 500 })
+  };
+}
+
+
+// ============================================================================
+// PATTERN 6: Search
+// Use for: Full-text or keyword search
+// Effects: !net
+// ============================================================================
+
+fn searchEntities(query: String) -> Result<Array<Lead>, CRMError> !net {
+  let url = "/api/v2/leads/search?q=" + encodeURIComponent(query);
+  let response = http.get(url);
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err(NetworkError{ url: url, code: error.status }),
+    _ => Err(NetworkError{ url: url, code: 500 })
+  };
+}
+
+
+// ============================================================================
+// PATTERN 7: Timestamped Create
+// Use for: Creating records with automatic timestamp
+// Effects: !net, !clock
+// ============================================================================
+
+fn createWithTimestamp(
+  tenant_id: String,
+  subject: String,
+  due_date: String
+) -> Result<Activity, CRMError> !net, clock {
+  let timestamp = clock.now();
+  
+  let url = "/api/v2/activities";
+  let payload = {
+    tenant_id: tenant_id,
+    subject: subject,
+    due_date: due_date,
+    created_at: timestamp,
+    status: "pending"
+  };
+  
+  let response = http.post(url, { body: payload });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err(NetworkError{ url: url, code: error.status }),
+    _ => Err(NetworkError{ url: url, code: 500 })
+  };
+}
+
+
+// ============================================================================
+// PATTERN 8: Validation Before Create
+// Use for: Validating input before making API call
+// Effects: !net (validation is pure, no effect needed)
+// ============================================================================
+
+fn validateEmail(email: String) -> Boolean {
+  let hasAt = includes(email, "@");
+  let hasDot = includes(email, ".");
+  let hasLength = len(email) > 5;
+  return hasAt && hasDot && hasLength;
+}
+
+fn createWithValidation(
+  tenant_id: String,
+  name: String,
+  email: String
+) -> Result<Lead, CRMError> !net {
+  // Pre-flight validation (pure)
+  if !validateEmail(email) {
+    return Err(ValidationError{ field: "email", message: "Invalid email format" });
+  }
+  
+  if len(name) < 2 {
+    return Err(ValidationError{ field: "name", message: "Name must be at least 2 characters" });
+  }
+  
+  // Proceed with API call
+  let url = "/api/v2/leads";
+  let payload = {
+    tenant_id: tenant_id,
+    name: name,
+    email: email
+  };
+  
+  let response = http.post(url, { body: payload });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err(NetworkError{ url: url, code: error.status }),
+    _ => Err(NetworkError{ url: url, code: 500 })
+  };
+}
+
+
+// ============================================================================
+// PATTERN 9: Status Transition
+// Use for: Changing entity status (qualify, convert, mark complete)
+// Effects: !net
+// ============================================================================
+
+fn transitionStatus(
+  id: String,
+  new_status: String
+) -> Result<Lead, CRMError> !net {
+  let url = "/api/v2/leads/" + id + "/status";
+  let payload = { status: new_status };
+  
+  let response = http.patch(url, { body: payload });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => match error.status {
+      404 => Err(NotFound{ entity: "Lead", id: id }),
+      400 => Err(ValidationError{ field: "status", message: "Invalid status transition" }),
+      _ => Err(NetworkError{ url: url, code: error.status })
+    },
+    _ => Err(NetworkError{ url: url, code: 500 })
+  };
+}
+
+
+// ============================================================================
+// PATTERN 10: Aggregate/Summary Query
+// Use for: Fetching counts, totals, or snapshots
+// Effects: !net
+// ============================================================================
+
+type Summary = {
+  total_count: Number,
+  total_value: Number,
+  by_status: JSONB
+}
+
+fn getAggregateData(tenant_id: String) -> Result<Summary, CRMError> !net {
+  let url = "/api/v2/opportunities/summary?tenant_id=" + tenant_id;
+  let response = http.get(url);
+  
+  return match response {
+    Ok{value} => Ok({
+      total_count: value.data.count,
+      total_value: value.data.total,
+      by_status: value.data.breakdown
+    }),
+    Err{error} => Err(NetworkError{ url: url, code: error.status }),
+    _ => Err(NetworkError{ url: url, code: 500 })
+  };
+}
+
+
+// ============================================================================
+// PATTERN 11: Entity Conversion (Lifecycle)
+// Use for: Converting one entity type to another
+// Effects: !net
+// ============================================================================
+
+type ConversionResult = {
+  contact: Contact,
+  account: Option<Account>,
+  opportunity: Option<Opportunity>
+}
+
+fn convertEntity(
+  lead_id: String,
+  create_account: Boolean,
+  account_name: String,
+  create_opportunity: Boolean
+) -> Result<ConversionResult, CRMError> !net {
+  let url = "/api/v2/leads/" + lead_id + "/convert";
+  let payload = {
+    create_account: create_account,
+    account_name: account_name,
+    create_opportunity: create_opportunity
+  };
+  
+  let response = http.post(url, { body: payload });
+  
+  return match response {
+    Ok{value} => Ok({
+      contact: value.data.contact,
+      account: value.data.account,
+      opportunity: value.data.opportunity
+    }),
+    Err{error} => match error.status {
+      404 => Err(NotFound{ entity: "Lead", id: lead_id }),
+      400 => Err(ValidationError{ field: "lead_id", message: "Lead cannot be converted" }),
+      _ => Err(NetworkError{ url: url, code: error.status })
+    },
+    _ => Err(NetworkError{ url: url, code: 500 })
+  };
+}
+
+
+// ============================================================================
+// PATTERN 12: Related Records Query
+// Use for: Fetching records related to a parent entity
+// Effects: !net
+// ============================================================================
+
+fn getRelatedRecords(
+  parent_type: String,
+  parent_id: String
+) -> Result<Array<Activity>, CRMError> !net {
+  let url = "/api/v2/activities?related_to=" + parent_type + "&related_id=" + parent_id;
+  let response = http.get(url);
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err(NetworkError{ url: url, code: error.status }),
+    _ => Err(NetworkError{ url: url, code: 500 })
+  };
+}
