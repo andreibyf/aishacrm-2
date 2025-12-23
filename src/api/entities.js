@@ -1805,6 +1805,66 @@ export const User = {
   logout: async () => {
     return User.signOut();
   },
+
+  /**
+   * List user profiles with linked employee data
+   * @param {object} filters - Optional filters (tenant_id, role, etc.)
+   */
+  listProfiles: async (filters = {}) => {
+    try {
+      const params = new URLSearchParams();
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params.append(key, value);
+        }
+      });
+
+      const url = `${BACKEND_URL}/api/users${params.toString() ? `?${params.toString()}` : ''}`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.data?.users || result.data || result || [];
+    } catch (error) {
+      console.error('[User.listProfiles] Error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update user record
+   * @param {string} id - User ID
+   * @param {object} data - Update data
+   */
+  update: async (id, data) => {
+    try {
+      const url = `${BACKEND_URL}/api/users/${id}`;
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to update user: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.data || result;
+    } catch (error) {
+      console.error('[User.update] Error:', error);
+      throw error;
+    }
+  },
 };
 
 // ============================================
