@@ -1482,73 +1482,99 @@ Configure automated emails with:
       content: `
 # Business Development Sources
 
-BizDev Sources help you manage large lists of potential prospects from directories, trade shows, or purchased lists before actively pursuing them.
+BizDev Sources are the **top of your sales funnel** - raw prospect data from various channels that feeds into your lead pipeline. This is where you manage large lists of potential customers before active pursuit.
+
+## v3.0 CRM Lifecycle Position
+
+**BizDev Source → Promote to Lead → Qualify → Convert to Contact + Account + Opportunity**
+
+BizDev Sources sit at the very top of your pipeline, representing unqualified prospects from directories, trade shows, purchased lists, web scraping, or partner referrals.
 
 ## What are BizDev Sources?
 
-Think of BizDev Sources as a **staging area** for prospects:
-- Import company lists from directories
-- Store prospect information before qualification
-- Track license status and compliance
-- Promote to Leads for qualification
+**Staging Area for Prospects:**
+- Raw company/contact data from external sources
+- Unqualified prospects requiring initial vetting
+- Industry-specific prospects (e.g., licensed contractors)
+- Trade show attendee lists
+- Directory imports
+- Web-scraped company data
 
-## Workflow
+**Not Yet Leads Because:**
+- Haven't verified contact information
+- No engagement or intent shown
+- May not meet qualification criteria
+- Purchased lists need scrubbing
+- Require compliance checks (license status)
 
-\`\`\`
-BizDev Source → Create Lead → Qualify → Win Deal → Promote to Account
-\`\`\`
+## Creating BizDev Sources
 
-### Step-by-Step Process
+### 1. Manual Entry
+- Click "+ Add BizDev Source"
+- Enter Company Name, Contact Name, Email, Phone, Industry, etc.
+- Assign a "Source Type" (e.g., "Trade Show", "Web Scraping", "Purchased List")
+- Add "Tags" for further categorization (e.g., "Q4 2023", "Construction", "SMB")
 
-1. **Import Source List**
-   - Upload CSV with company data
-   - Include company name, contact info, industry
-   - Add source identifier (e.g., "Construction Directory Q4 2025")
+### 2. Bulk Import (CSV)
+- Prepare a CSV file with prospect data (Company Name, Contact, Email, Phone, Address, Industry, etc.)
+- Navigate to "BizDev Sources" and click "Import"
+- Map your CSV columns to the system fields
+- System automatically creates multiple BizDev Source records
+- Ideal for large lists from directories or purchased data
 
-2. **Create Leads**
-   - Generate leads for companies you want to pursue
-   - Link leads back to BizDev Source
-   - Track which sources generate best leads
+### 3. API / Integration
+- Integrate with external data providers or web scraping tools
+- Automatically push new prospect data into BizDev Sources
+- Ensures a continuous flow of fresh prospects
 
-3. **Pursue Opportunities**
-   - Qualify leads
-   - Create opportunities
-   - Work deals through pipeline
+## Managing BizDev Sources
 
-4. **Promote to Lead**
-   - When ready to pursue, promote BizDev Source to Lead
-   - Creates Lead record with all data carried forward
-   - Preserves all linked history
-   - Lead can then be qualified and converted to Contact/Account
+### Promote to Lead
+- When a BizDev Source shows potential or you're ready to engage:
+  1. Select the BizDev Source(s)
+  2. Click "Promote to Lead"
+- This action creates a new **Lead** record, carrying over all relevant data.
+- The original BizDev Source record is marked as "Promoted" and can be archived.
+
+### Bulk Operations
+- **Archive**: Move old or irrelevant sources to an archive (preserves data for historical analysis).
+- **Delete**: Permanently remove sources (use with caution).
+- **Update Status**: Change status for multiple records (e.g., "Contacted", "Not Interested").
+
+### Filtering & Search
+- **Status**: Filter by Active, Promoted, Archived.
+- **Source Type**: Filter by how the data was acquired (e.g., "Trade Show", "Web Scraping").
+- **Industry**: Target specific market segments.
+- **License Status**: For regulated industries, filter by Active, Suspended, Revoked, Expired, Not Required.
+- **Tags**: Use custom tags for granular filtering (e.g., "High Potential", "Competitor List").
+- **Quick Search**: Search by company name, contact name, or email.
 
 ## Key Features
 
-### Bulk Operations
-- **Archive**: Move old sources to archive (preserves data)
-- **Delete**: Permanently remove sources
-- **Promote**: Convert multiple sources to Accounts
+### License Tracking (v3.0 Enhanced)
+For industries requiring specific certifications or licenses, track their status directly:
+- **Active** - License is current and valid.
+- **Suspended** - Temporarily suspended; requires follow-up.
+- **Revoked** - License permanently removed; disqualify.
+- **Expired** - License has lapsed; needs renewal.
+- **Not Required** - No license needed for this prospect type.
+- **Compliance Alerts**: Set up automated alerts for expiring licenses.
 
-### Filtering
-- Filter by status (Active, Promoted, Archived)
-- Search by company name
-- Filter by industry
-- Filter by license status
+### Source Type Categorization
+- Define custom source types to understand where your raw data originates.
+- Analyze which source types yield the highest quality leads and conversions.
 
-### License Tracking
-Track industry-specific licenses:
-- **Active** - License current
-- **Suspended** - Temporarily suspended
-- **Revoked** - License revoked
-- **Expired** - License expired
-- **Not Required** - No license needed
+### Tags
+- Apply multiple custom tags to BizDev Sources for flexible categorization.
+- Examples: "Enterprise Target", "SMB Focus", "Q1 Campaign", "Cold Outreach".
 
 ## Best Practices
 
-✓ **Use descriptive source names** (e.g., &quot;ABC Directory 2025 Q1&quot;)
-✓ **Regular cleanup** - archive old sources
-✓ **Track conversion rates** - which sources perform best
-✓ **Don't promote prematurely** - wait until deal is won
-✓ **Use tags** for additional categorization
+✓ **Use descriptive source names** (e.g., "Construction Expo 2024", "LinkedIn Scrape Q3")
+✓ **Regular cleanup** - archive or delete old/irrelevant sources to keep your pipeline clean.
+✓ **Track conversion rates** - analyze which BizDev Sources convert best into Leads and Opportunities.
+✓ **Don't promote prematurely** - only promote to Lead when you're ready for active engagement.
+✓ **Use Tags** for additional categorization
       `,
     },
     {
