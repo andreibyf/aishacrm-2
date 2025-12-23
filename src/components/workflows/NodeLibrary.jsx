@@ -1,4 +1,4 @@
-import { Search, Edit, Mail, Plus, GitBranch, UserPlus, Globe, Building2, Briefcase, Activity, Brain, Sparkles, Phone } from 'lucide-react'
+import { Search, Edit, Mail, Plus, GitBranch, UserPlus, Globe, Building2, Briefcase, Activity, Brain, Sparkles, Phone, Clock, MessageSquare, UserCheck, CheckCircle } from 'lucide-react'
 
 const nodeTypes = [
   {
@@ -37,6 +37,13 @@ const nodeTypes = [
     color: 'yellow'
   },
   {
+    type: 'wait',
+    label: 'Wait/Delay',
+    icon: Clock,
+    description: 'Wait for a specified duration before next action',
+    color: 'amber'
+  },
+  {
     type: 'find_contact',
     label: 'Find Contact',
     icon: Search,
@@ -56,6 +63,13 @@ const nodeTypes = [
     icon: Mail,
     description: 'Send an email',
     color: 'purple'
+  },
+  {
+    type: 'send_sms',
+    label: 'Send SMS',
+    icon: MessageSquare,
+    description: 'Send an SMS message',
+    color: 'fuchsia'
   },
   {
     type: 'initiate_call',
@@ -102,6 +116,21 @@ const nodeTypes = [
     icon: Activity,
     description: 'Log an activity (email, call, task)',
     color: 'violet'
+  },
+  // Assignment nodes
+  {
+    type: 'assign_record',
+    label: 'Assign Record',
+    icon: UserCheck,
+    description: 'Assign record to user or round-robin',
+    color: 'lime'
+  },
+  {
+    type: 'update_status',
+    label: 'Update Status',
+    icon: CheckCircle,
+    description: 'Update record status',
+    color: 'sky'
   }
   ,
   // AI-driven nodes
