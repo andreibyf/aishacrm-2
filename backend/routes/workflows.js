@@ -674,6 +674,284 @@ export default function createWorkflowRoutes(pgPool) {
               }
               break;
             }
+            case 'wait': {
+              // Wait/Delay node - pause execution for specified duration
+              const durationValue = cfg.duration_value || 1;
+              const durationUnit = cfg.duration_unit || 'minutes';
+
+              const conversions = {
+                seconds: 1000,
+                minutes: 60000,
+                hours: 3600000,
+                days: 86400000
+              };
+
+              const delayMs = durationValue * (conversions[durationUnit] || 60000);
+              const maxDelay = 7 * 86400000; // 7 days max
+
+              log.output = {
+                duration_value: durationValue,
+                duration_unit: durationUnit,
+                delay_ms: Math.min(delayMs, maxDelay)
+              };
+
+              // Actually wait
+              await new Promise(resolve => setTimeout(resolve, Math.min(delayMs, maxDelay)));
+
+              break;
+            }
+            case 'send_sms': {
+              // Send SMS node - requires SMS provider integration (Twilio, AWS SNS, etc.)
+              const toRaw = cfg.to || '{{phone}}';
+              const messageRaw = cfg.message || '';
+
+              const toValue = String(replaceVariables(toRaw)).replace(/^['\"]|['\"]$/g, '').trim();
+              const message = String(replaceVariables(messageRaw));
+
+              // Validate phone number format
+              if (!toValue || toValue === '{{phone}}') {
+                log.status = 'error';
+                log.error = 'No phone number provided';
+                break;
+              }
+
+              // For now, log SMS as an activity (queued for external processing)
+              const lead = context.variables.found_lead;
+              const contact = context.variables.found_contact;
+              const related_to = lead ? 'lead' : (contact ? 'contact' : null);
+              const related_id = lead ? lead.id : (contact ? contact.id : null);
+
+              const smsMeta = {
+                created_by_workflow: workflow.id,
+                sms: {
+                  to: toValue,
+                  message: message.substring(0, 160) // SMS limit
+                },
+                provider: cfg.provider || 'twilio'
+              };
+
+              const q = `
+                INSERT INTO activities (
+                  tenant_id, type, subject, body, status, related_id,
+                  created_by, location, priority, due_date, due_time,
+                  assigned_to, related_to, metadata, created_date, updated_date
+                ) VALUES (
+                  $1, $2, $3, $4, $5, $6,
+                  NULL, NULL, NULL, NULL, NULL,
+                  NULL, $7, $8, NOW(), NOW()
+                ) RETURNING *
+              `;
+              const vals = [
+                workflow.tenant_id,
+                'sms',
+                'SMS: ' + message.substring(0, 50),
+                message,
+                'queued',
+                related_id,
+                related_to,
+                JSON.stringify(smsMeta)
+              ];
+              const r = await pgPool.query(q, vals);
+              log.output = { sms_queued: true, to: toValue, message_length: message.length, activity_id: r.rows[0]?.id };
+              break;
+            }
+            case 'assign_record': {
+              // Assign Record node - assign leads/contacts/opportunities to users
+              const method = cfg.method || 'specific_user';
+              const lead = context.variables.found_lead;
+              const contact = context.variables.found_contact;
+              const opportunity = context.variables.found_opportunity;
+              const account = context.variables.found_account;
+
+              let targetRecord = null;
+              let targetTable = null;
+
+              // Determine which record to assign
+              if (lead) { targetRecord = lead; targetTable = 'leads'; }
+              else if (contact) { targetRecord = contact; targetTable = 'contacts'; }
+              else if (opportunity) { targetRecord = opportunity; targetTable = 'opportunities'; }
+              else if (account) { targetRecord = account; targetTable = 'accounts'; }
+
+              if (!targetRecord || !targetTable) {
+                log.status = 'error';
+                log.error = 'No record found in context to assign';
+                break;
+              }
+
+              let assigneeId = null;
+
+              switch (method) {
+                case 'specific_user':
+                  assigneeId = replaceVariables(cfg.user_id || '');
+                  break;
+
+                case 'round_robin': {
+                  // Round-robin assignment - get next user in rotation
+                  const group = cfg.group || 'sales_team';
+
+                  // Get all users in tenant (or group if we had that feature)
+                  const usersRes = await pgPool.query(
+                    'SELECT id FROM employees WHERE tenant_id = $1 AND status = $2 ORDER BY id',
+                    [workflow.tenant_id, 'active']
+                  );
+
+                  if (usersRes.rows.length === 0) {
+                    log.status = 'error';
+                    log.error = 'No active users found for round-robin assignment';
+                    break;
+                  }
+
+                  // Get assignment counter from workflow metadata
+                  const currentMeta = workflow.metadata || {};
+                  const assignmentCounters = currentMeta.assignment_counters || {};
+                  const currentIndex = (assignmentCounters[group] || 0) % usersRes.rows.length;
+
+                  assigneeId = usersRes.rows[currentIndex].id;
+
+                  // Update counter
+                  assignmentCounters[group] = currentIndex + 1;
+                  await pgPool.query(
+                    'UPDATE workflow SET metadata = metadata || $1 WHERE id = $2',
+                    [JSON.stringify({ assignment_counters: assignmentCounters }), workflow.id]
+                  );
+
+                  log.output.round_robin_index = currentIndex;
+                  break;
+                }
+
+                case 'least_assigned': {
+                  // Assign to user with fewest assigned records of this type
+                  const countQuery = `
+                    SELECT assigned_to, COUNT(*) as count 
+                    FROM ${targetTable} 
+                    WHERE tenant_id = $1 AND assigned_to IS NOT NULL
+                    GROUP BY assigned_to 
+                    ORDER BY count ASC 
+                    LIMIT 1
+                  `;
+                  const countRes = await pgPool.query(countQuery, [workflow.tenant_id]);
+
+                  if (countRes.rows.length \u003e 0) {
+                    assigneeId = countRes.rows[0].assigned_to;
+                  } else {
+                    // No assignments yet, get first user
+                    const firstUserRes = await pgPool.query(
+                      'SELECT id FROM employees WHERE tenant_id = $1 AND status = $2 LIMIT 1',
+                      [workflow.tenant_id, 'active']
+                    );
+                    if (firstUserRes.rows.length \u003e 0) {
+                      assigneeId = firstUserRes.rows[0].id;
+                    }
+                  }
+                  break;
+                }
+
+                case 'record_owner':
+                  // Keep current owner (no change)
+                  assigneeId = targetRecord.assigned_to || targetRecord.owner_id;
+                  break;
+              }
+
+              if (!assigneeId) {
+                log.status = 'error';
+                log.error = `Could not determine assignee for method: ${method}`;
+                break;
+              }
+
+              // Update the record
+              const updateQuery = `
+                UPDATE ${targetTable} 
+                SET assigned_to = $1, updated_at = NOW() 
+                WHERE id = $2 
+                RETURNING *
+              `;
+              const updateRes = await pgPool.query(updateQuery, [assigneeId, targetRecord.id]);
+
+              log.output = {
+                assignment_method: method,
+                assigned_to: assigneeId,
+                record_type: targetTable,
+                record_id: targetRecord.id,
+                updated_record: updateRes.rows[0]
+              };
+
+              // Update context
+              if (lead) context.variables.found_lead = updateRes.rows[0];
+              else if (contact) context.variables.found_contact = updateRes.rows[0];
+              else if (opportunity) context.variables.found_opportunity = updateRes.rows[0];
+              else if (account) context.variables.found_account = updateRes.rows[0];
+
+              break;
+            }
+            case 'update_status': {
+              // Update Status node - change record status/stage
+              const recordType = cfg.record_type || 'lead';
+              const newStatus = replaceVariables(cfg.new_status || '');
+
+              if (!newStatus) {
+                log.status = 'error';
+                log.error = 'New status value is required';
+                break;
+              }
+
+              const lead = context.variables.found_lead;
+              const contact = context.variables.found_contact;
+              const opportunity = context.variables.found_opportunity;
+              const account = context.variables.found_account;
+
+              let targetRecord = null;
+              switch (recordType) {
+                case 'lead':
+                  targetRecord = lead;
+                  break;
+                case 'contact':
+                  targetRecord = contact;
+                  break;
+                case 'opportunity':
+                  targetRecord = opportunity;
+                  break;
+                case 'account':
+                  targetRecord = account;
+                  break;
+              }
+
+              if (!targetRecord) {
+                log.status = 'error';
+                log.error = `No ${recordType} found in context`;
+                break;
+              }
+
+              // Determine which column to update (different tables use different column names)
+              let statusColumn = 'status';
+              if (recordType === 'opportunity') {
+                statusColumn = 'stage'; // Opportunities use 'stage' instead of 'status'
+              }
+
+              const updateQuery = `
+                UPDATE ${recordType}s 
+                SET ${statusColumn} = $1, updated_at = NOW() 
+                WHERE id = $2 
+                RETURNING *
+              `;
+
+              const updateRes = await pgPool.query(updateQuery, [newStatus, targetRecord.id]);
+
+              log.output = {
+                record_type: recordType,
+                record_id: targetRecord.id,
+                old_status: targetRecord[statusColumn],
+                new_status: newStatus,
+                updated_record: updateRes.rows[0]
+              };
+
+              // Update context
+              if (recordType === 'lead') context.variables.found_lead = updateRes.rows[0];
+              else if (recordType === 'contact') context.variables.found_contact = updateRes.rows[0];
+              else if (recordType === 'opportunity') context.variables.found_opportunity = updateRes.rows[0];
+              else if (recordType === 'account') context.variables.found_account = updateRes.rows[0];
+
+              break;
+            }
             default:
               log.status = 'error';
               log.error = `Unknown node type: ${node.type}`;
