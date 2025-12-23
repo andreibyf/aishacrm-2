@@ -7,9 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Workflow } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
 import { BACKEND_URL } from '@/api/entities';
-import { Webhook, Search, Save, Plus, X, Copy, Check, RefreshCw } from 'lucide-react';
+import { Webhook, Search, Save, Plus, X, Copy, Check, RefreshCw, Sparkles } from 'lucide-react';
 import WorkflowCanvas from './WorkflowCanvas';
 import NodeLibrary from './NodeLibrary';
+import WorkflowTemplatesBrowser from './WorkflowTemplatesBrowser';
 import { toast } from 'sonner';
 import { WorkflowExecution } from '@/api/entities';
 import { Switch } from '@/components/ui/switch';
@@ -36,6 +37,17 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   const [executionOffset, setExecutionOffset] = useState(0);
   
   const [autoConnect, setAutoConnect] = useState(true);
+  const [showTemplates, setShowTemplates] = useState(false);
+
+  // Template handler
+  const handleSelectTemplate = (template) => {
+    setName(template.name);
+    setDescription(template.description);
+    setNodes(template.nodes || []);
+    setConnections(template.connections || []);
+    setShowTemplates(false);
+    toast.success(`Template "${template.name}" loaded successfully!`);
+  };
 
   // Update state when workflow prop changes (for editing)
   useEffect(() => {
@@ -2153,9 +2165,19 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
       </div>
 
       <div className="p-4 border-t border-slate-700 flex justify-between">
-        <Button variant="outline" onClick={onCancel} className="border-slate-600 text-slate-300">
-          Cancel
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowTemplates(!showTemplates)}
+            className="border-purple-600 text-purple-400 hover:bg-purple-600/10"
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            Use Template
+          </Button>
+          <Button variant="outline" onClick={onCancel} className="border-slate-600 text-slate-300">
+            Cancel
+          </Button>
+        </div>
         <div className="flex gap-2 items-center">
           <div className="flex items-center gap-2 mr-4">
             <Switch 
@@ -2177,6 +2199,16 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           </Button>
         </div>
       </div>
+
+      {/* Template Browser */}
+      {showTemplates && (
+        <div className="absolute inset-0 z-50 bg-slate-900">
+          <WorkflowTemplatesBrowser
+            onSelectTemplate={handleSelectTemplate}
+            onClose={() => setShowTemplates(false)}
+          />
+        </div>
+      )}
     </div>
   );
 }
