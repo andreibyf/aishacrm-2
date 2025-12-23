@@ -529,30 +529,93 @@ As admin, you can:
       icon: Info,
       color: "text-purple-400",
       content: `
-# Welcome to Ai-SHA CRM
+# Welcome to Ai-SHA CRM v3.0
 
-Ai-SHA CRM is a comprehensive customer relationship management system designed to streamline your sales, marketing, and customer service operations.
+**AI-SHA CRM (AI Super Hi-performing Assistant)** is an enterprise-grade customer relationship management platform with an integrated Executive AI Assistant. Built on modern cloud architecture with PostgreSQL, React, and Node.js, it provides comprehensive CRM functionality alongside intelligent automation.
 
-## Key Features
+## 🌟 Core Capabilities
 
-- **Contact & Customer Management**: Centralized customer database
-- **Lead Management**: Track and nurture potential customers
-- **Sales Pipeline**: Visualize and manage your opportunities
-- **Activity Tracking**: Log calls, meetings, emails, and tasks
-- **BizDev Sources**: Import and manage business development prospects
-- **AI-Powered Insights**: Get intelligent recommendations and market analysis
-- **Cash Flow Management**: Track income and expenses
-- **Document Processing**: Extract data from business cards and receipts
-- **Reports & Analytics**: Comprehensive business intelligence
-- **Employee Management**: Manage your team with role-based access
+### 🤖 Executive AI Assistant (AiSHA)
+- **Natural Language CRM**: Create leads, update contacts, search records via conversational interface
+- **Calendar & Task Management**: Schedule meetings, set reminders, track activities
+- **Notes & Documentation**: Intelligent note-taking across all entities
+- **AI Telephony**: Automated outbound calling via CallFluent and Thoughtly integrations
+- **Web Research**: Fetch company data, market insights, and competitive intelligence
+- **Workflow Automation**: Build and execute custom workflow templates
+- **CRM Navigation**: Voice-activated navigation to any module
 
-## Getting Started
+### 📊 Complete CRM Modules
+- **Dashboard**: Real-time metrics, tenant-specific analytics, customizable widgets
+- **Contacts**: Individual relationship management with activity timeline
+- **Accounts**: Company/organization management with hierarchy support
+- **Leads**: Lead qualification and nurturing pipeline
+- **Opportunities**: Visual sales pipeline with kanban and table views
+- **Activities**: Task, call, meeting, and email tracking
+- **Calendar**: Integrated scheduling with timeline view
+- **BizDev Sources**: Raw prospect data from multiple channels
+- **Cash Flow**: Financial tracking and revenue forecasting
+- **Document Processing**: Business card scanning and receipt OCR
+- **Document Management**: Centralized file storage and organization
+- **AI Campaigns**: Automated outreach campaigns with AI-generated content
+- **Construction Projects**: Specialized module for construction staffing (industry-specific)
+- **Workers**: Worker/contractor management (industry-specific)
+- **Reports & Analytics**: Pre-built and custom reporting dashboards
+- **Workflows**: Visual workflow builder with trigger-action automation
 
-1. **Complete your profile** in Settings
-2. **Import your contacts** using CSV import
-3. **Set up your pipeline** by creating opportunities
-4. **Start tracking activities** to measure productivity
-5. **Review reports** to gain insights into your business
+### 🏢 Multi-Tenancy & Security
+- **UUID-Based Tenant Isolation**: Enterprise-grade data segregation
+- **Row-Level Security (RLS)**: Database-enforced tenant boundaries
+- **Role-Based Access Control**: SuperAdmin, Admin, Manager, Employee roles
+- **Module-Level Permissions**: Granular feature access control
+- **Audit Logging**: Complete activity trail for compliance
+
+### 🔗 Integrations
+- **AI Services**: OpenAI, CallFluent, Thoughtly
+- **Telephony**: Twilio, SignalWire webhook adapters
+- **Authentication**: Supabase Auth with JWT tokens
+- **File Storage**: Supabase Storage with CDN
+- **Caching**: Redis for performance optimization
+
+## 🚀 Getting Started
+
+### New Users
+1. ✅ **Login** with your credentials (check your email for invitation)
+2. ✅ **Complete your profile** in Settings → User Profile
+3. ✅ **Explore the Dashboard** to see your tenant overview
+4. ✅ **Try the AI Assistant** by clicking the AI icon in the sidebar
+5. ✅ **Create your first contact** to start building relationships
+
+### Sales Teams
+1. ✅ **Import contacts** via CSV (bulk upload in Contacts module)
+2. ✅ **Create leads** from BizDev sources or manually
+3. ✅ **Qualify and convert** leads to opportunities
+4. ✅ **Track activities** to log customer interactions
+5. ✅ **Monitor pipeline** in Opportunities kanban view
+
+### Managers & Admins
+1. ✅ **Invite team members** via Settings → User Management
+2. ✅ **Configure module access** and permissions per user
+3. ✅ **Set up workflows** for common processes
+4. ✅ **Review analytics** in Reports and Dashboard
+5. ✅ **Monitor audit logs** for compliance and security
+
+## 💡 What's New in v3.0
+
+- **Enhanced Tenant System**: Migration to UUID-based tenant identifiers
+- **Improved Multi-Tenancy**: Better data isolation and security
+- **Braid SDK Integration**: Custom AI tool language for safer database operations
+- **Workflow Builder**: Visual workflow creation with template library
+- **Advanced Filtering**: Enhanced search and filter capabilities across all modules
+- **Performance Optimizations**: Redis caching, query optimization, lazy loading
+- **Mobile Responsive**: Improved mobile experience across all pages
+
+## 📖 Documentation Resources
+
+- **This Guide**: Quick reference for common tasks and features
+- **User Guide PDF**: Download comprehensive guide with screenshots (button above)
+- **Admin Guide**: For administrators managing users and settings
+- **AI Assistant Guide**: Learn advanced AiSHA capabilities
+- **Support**: Contact support@ai-sha.com or use the AI Assistant for instant help
       `,
     },
     {
@@ -563,45 +626,128 @@ Ai-SHA CRM is a comprehensive customer relationship management system designed t
       content: `
 # Contact Management
 
-Contacts are individuals you interact with - potential customers, existing clients, partners, or any business relationship.
+Contacts are individuals you interact with - potential customers, existing clients, partners, industry contacts, or any professional relationship. All contact data is automatically isolated by tenant for security and privacy.
 
 ## Creating Contacts
 
-1. Click **"+ Add Contact"** button
+### Manual Creation
+1. Click **"+ Add Contact"** button in the top-right corner
 2. Fill in contact details:
    - **Required**: First Name, Last Name
-   - **Optional**: Email, Phone, Job Title, Department, Account (Company)
-3. Add tags for easy filtering
-4. Assign to a team member
+   - **Recommended**: Email, Phone, Job Title
+   - **Optional**: Department, Account (Company), Birthday, Address
+3. Add custom tags for categorization (e.g., "VIP", "Newsletter", "Event Attendee")
+4. Assign to a team member for follow-up
+5. Add initial notes about the contact
+6. Click **"Create Contact"** to save
+
+### Quick Add
+- Use the AI Assistant to create contacts via natural language
+- Example: *"Create a contact named John Smith with email john@example.com"*
 
 ## Key Features
 
-### Bulk Actions
-- **Import**: Upload CSV files to import multiple contacts
-- **Export**: Download contact data as CSV
-- **Bulk Delete**: Remove multiple contacts at once
-- **Bulk Tag**: Add tags to multiple contacts simultaneously
+### Contact Details View
+- **Activity Timeline**: Chronological view of all interactions (calls, emails, meetings, notes)
+- **Linked Records**: View associated accounts, opportunities, and activities
+- **Custom Fields**: Store additional information specific to your business
+- **Attachments**: Upload and manage documents related to the contact
+- **Engagement Score**: Automatic tracking of interaction frequency and recency
 
-### Contact Details
-- View full contact history and timeline
-- Add notes and track interactions
-- Link to Account (Company)
-- Convert to Lead if needed
-- Track engagement score
+### Bulk Operations
+- **CSV Import**: Upload spreadsheet of contacts (supports Excel/Google Sheets exports)
+  - Automatic duplicate detection
+  - Field mapping assistant
+  - Preview before import
+- **CSV Export**: Download all contacts or filtered subset
+  - Respects current filters and search
+  - Includes all custom fields
+- **Bulk Actions**: Select multiple contacts to:
+  - Assign to team member
+  - Add tags
+  - Update status
+  - Delete (with confirmation)
+  - Merge duplicates
 
-### Filtering & Search
-- Filter by status (Active, Inactive, Prospect, Customer)
-- Search by name, email, or company
-- Filter by tags
-- Filter by assigned user (managers only)
+### Advanced Search & Filtering
+- **Quick Search**: Type to search across name, email, phone, company
+- **Status Filters**: Active, Inactive, Prospect, Customer, Partner
+- **Tag Filters**: Multi-select tag filtering
+- **Assigned To**: Filter by owner (managers see all, employees see own)
+- **Account Filter**: Show contacts from specific company
+- **Date Filters**: Created date, last modified, last contact date
+- **Custom Field Filters**: Filter by any custom field value
+
+### Contact Source Tracking
+- Track where contacts originated:
+  - Website Form
+  - Referral
+  - Event
+  - Cold Outreach
+  - Partner
+  - BizDev Source
+  - Lead Conversion
+  - Import
+
+### Duplicate Management
+- Automatic duplicate detection based on:
+  - Email match
+  - Phone number match
+  - Name + company match
+- Review and merge duplicates via **Utilities → Duplicate Contacts**
+- Preserve activity history when merging
+
+## Integration with Other Modules
+
+### Link to Accounts
+- Associate contacts with their company (Account)
+- View all contacts from an account on the account detail page
+- Automatically inherit account data (industry, size, etc.)
+
+### Convert to Lead
+- Promote a contact to a lead when there's sales opportunity
+- Preserves all contact history
+- Creates bidirectional link between contact and lead
+
+### Activity Tracking
+- Log calls, emails, meetings directly from contact page
+- AI Assistant can log activities via voice command
+- Automatic activity creation from integrations (email, calendar)
+
+### Opportunities
+- Link opportunities to contacts
+- Track which contacts are involved in which deals
+- Decision-maker flagging
+
+## AI Assistant Capabilities
+
+Ask the AI Assistant to help with contacts:
+- *"Show me all VIP contacts"*
+- *"Create a contact for Jane Doe at Acme Corp"*
+- *"Find contacts at Microsoft"*
+- *"Update John's phone number to 555-1234"*
+- *"Show me contacts I haven't contacted in 30 days"*
+- *"Add tag 'webinar-attendee' to contacts from last week's imports"*
 
 ## Best Practices
 
-✓ **Link contacts to accounts** for better organization
-✓ **Use tags** to segment your contacts (e.g., &quot;VIP&quot;, &quot;Newsletter&quot;)
-✓ **Keep notes updated** after each interaction
-✓ **Assign ownership** for accountability
-✓ **Regular cleanup** - mark inactive contacts
+✓ **Always link to account** - Improves data organization and reporting
+✓ **Use consistent tagging** - Create tag naming conventions for your team
+✓ **Log interactions immediately** - Add notes right after calls/meetings
+✓ **Assign ownership** - Ensures accountability and follow-up
+✓ **Regular cleanup** - Quarterly review to mark inactive contacts
+✓ **Enrich profiles** - Add LinkedIn URLs, birthdays, preferences for personalization
+✓ **Track source** - Always record how you acquired the contact for ROI analysis
+✓ **Merge duplicates promptly** - Weekly check via Duplicate Contacts utility
+✓ **Use custom fields** - Capture industry-specific information
+
+## Mobile Access
+
+The Contacts module is fully responsive:
+- Search and view contacts on mobile devices
+- Quick-add new contacts on the go
+- Log activities from mobile
+- Access contact details and history
       `,
     },
     {
@@ -663,60 +809,220 @@ Over 30 industry options including:
       content: `
 # Lead Management
 
-Leads are potential customers who haven't been fully qualified yet. Use leads to capture prospects before converting them to contacts and opportunities.
+Leads represent qualified prospects who show genuine interest in your products or services. In the v3.0 CRM lifecycle, leads sit between raw BizDev Sources and fully qualified Contacts/Opportunities.
 
-## Lead Lifecycle
+## CRM Lifecycle: v3.0
 
-1. **New** - Just captured
-2. **Contacted** - Initial outreach made
-3. **Qualified** - Meets criteria, worth pursuing
-4. **Unqualified** - Not a good fit
-5. **Converted** - Promoted to Contact + Opportunity
-6. **Lost** - No longer interested
+BizDev Source → Promote → Lead → Qualify → Lead (Qualified) → Convert → Contact + Account + Opportunity
+
+- **BizDev Sources**: Raw, unqualified prospect data from various channels
+- **Leads**: Prospects being actively qualified and nurtured
+- **Conversion**: Creates Contact, Account (if needed), and Opportunity simultaneously
+
+## Lead Statuses
+
+### Lead Lifecycle Stages
+1. **New** - Just created or promoted from BizDev source
+2. **Contacted** - Initial outreach completed (call, email, meeting)
+3. **Qualified** - Meets BANT criteria, ready for conversion
+4. **Nurturing** - Needs more education/time before ready to buy
+5. **Unqualified** - Doesn't meet criteria (budget, authority, need, timing)
+6. **Converted** - Successfully promoted to Contact + Opportunity
+7. **Lost** - No longer interested or went with competitor
+
+### Lead Priority
+- **Hot** 🔥 - Immediate opportunity, high intent
+- **Warm** 🌡️ - Interested, needs nurturing
+- **Cold** ❄️ - Low priority, long-term nurture
 
 ## Creating Leads
 
+### From BizDev Sources
+1. Navigate to **BizDev Sources** module
+2. Select promising prospect
+3. Click **"Promote to Lead"** button
+4. System automatically:
+   - Creates lead with all available BizDev data
+   - Sets initial status to "New"
+   - Preserves source tracking
+   - Links back to BizDev source record
+
+### Manual Creation
 1. Click **"+ Add Lead"** button
-2. Fill in lead details:
+2. Fill in lead information:
    - **Required**: First Name, Last Name
-   - **Optional**: Email, Phone, Company, Job Title
-3. Select lead source (Website, Referral, Cold Call, etc.)
-4. Set priority and status
+   - **Recommended**: Email, Phone, Company, Job Title
+   - **Optional**: Source, Industry, Revenue, Employees
+3. Select **Lead Source**:
+   - Website Form
+   - Referral
+   - Cold Call/Email
+   - Event/Trade Show
+   - Partner
+   - Social Media
+   - Advertisement
+   - BizDev Source
+4. Set **Priority** (Hot, Warm, Cold)
+5. Set **Status** (typically "New" for manual entries)
+6. Assign to sales rep
+7. Click **"Create Lead"**
 
-## Lead Scoring
+### AI-Powered Creation
+- Use AI Assistant: *"Create a lead for Jane Smith at Acme Corp with email jane@acme.com"*
+- AI can extract data from natural language descriptions
+- Automatically suggests source and priority based on context
 
-The system automatically scores leads (0-100) based on:
-- Completeness of information
-- Engagement level
-- Company size and industry
-- Source quality
+## Lead Scoring (AI-Powered)
 
-**AI Recommendations** suggest next actions:
-- Follow Up
-- Nurture
-- Qualify
-- Disqualify
+The system automatically scores leads (0-100) based on multiple factors:
+
+### Scoring Criteria
+- **Profile Completeness** (30 points): Email, phone, company, title filled in
+- **Company Fit** (25 points): Industry match, company size, revenue range
+- **Engagement Level** (20 points): Response rate, website visits, email opens
+- **Source Quality** (15 points): Referrals score higher than cold outreach
+- **Recency** (10 points): Recently created/engaged leads score higher
+
+### Score Interpretation
+- **80-100**: Hot Lead 🔥 - Immediate follow-up required
+- **60-79**: Warm Lead 🌡️ - Schedule follow-up within 48 hours
+- **40-59**: Cool Lead - Add to nurture campaign
+- **0-39**: Cold Lead ❄️ - Long-term nurture or disqualify
+
+### AI Recommendations
+Based on lead score, the AI suggests next actions:
+- **"Follow Up Immediately"** - High-value hot lead
+- **"Schedule Discovery Call"** - Qualified but needs conversation
+- **"Add to Nurture Campaign"** - Not ready now, nurture for future
+- **"Qualify Further"** - Missing key information
+- **"Consider Disqualifying"** - Poor fit, low engagement
 
 ## Converting Leads
 
-When a lead is qualified, convert to:
-- **Contact** - Creates a contact record
-- **Account** - Creates or links to company
-- **Opportunity** - Creates a sales opportunity
+When a lead is qualified and ready to become a customer, convert them to create full CRM records:
 
-**Conversion preserves:**
-- Original lead ID (unique_id)
-- Source information
-- All activity history
-- Tags and notes
+### Conversion Process
+1. Open lead detail page
+2. Verify all information is complete and accurate
+3. Click **"Convert Lead"** button
+4. System creates:
+   - **Contact**: Individual person record
+   - **Account**: Company/organization (or links to existing)
+   - **Opportunity**: Sales deal with specified value and close date
+5. Enter opportunity details:
+   - **Amount**: Expected deal value
+   - **Close Date**: Expected close date
+   - **Stage**: Initial stage (typically "Qualification")
+   - **Probability**: Confidence level (typically 20-40% for new opps)
+6. Click **"Complete Conversion"**
+
+### What Gets Preserved
+- ✅ Original lead ID (unique_id field) stored in all new records
+- ✅ Lead source tracked through to opportunity
+- ✅ All lead notes copied to contact
+- ✅ Activity history linked to contact
+- ✅ Tags transferred
+- ✅ Custom fields migrated
+- ✅ Lead status updated to "Converted"
+- ✅ Link maintained for conversion tracking
+
+### After Conversion
+- Lead remains in system with "Converted" status
+- Can view which contact/opportunity it created
+- Preserves data for conversion rate analysis
+- Used in pipeline and ROI reporting
+
+## Key Features
+
+### Lead Management Table
+- **Search**: Type to search name, email, company, phone
+- **Filter by Status**: New, Contacted, Qualified, Nurturing, etc.
+- **Filter by Priority**: Hot, Warm, Cold
+- **Filter by Source**: Track which channels work best
+- **Filter by Assigned To**: See your leads or team's leads
+- **Sort by Score**: Focus on highest-quality leads first
+- **Bulk Actions**: Update, tag, or assign multiple leads
+
+### Lead Detail View
+- **AI Score Badge**: Visual indicator of lead quality
+- **Activity Timeline**: All interactions with this lead
+- **Next Action**: AI-recommended next step
+- **Source Attribution**: How you acquired this lead
+- **Engagement Metrics**: Email opens, website visits, call attempts
+- **Notes Section**: Team collaboration on lead strategy
+- **Related Records**: Link to BizDev source if promoted
+
+### BizDev Source Integration
+- **Bi-directional Linking**: Lead knows its source, source knows its lead(s)
+- **Bulk Promotion**: Select multiple BizDev sources, promote all to leads
+- **Quality Filtering**: Only promote BizDev sources above certain threshold
+- **Data Inheritance**: All available fields flow from BizDev to Lead
+
+## AI Assistant Capabilities
+
+Leverage the AI for lead management:
+- *"Show me all hot leads"*
+- *"Create a lead for John Doe at Microsoft"*
+- *"What leads should I follow up with today?"*
+- *"Convert the lead from Acme Corp to an opportunity"*
+- *"Show me leads from referrals in the last 30 days"*
+- *"Update Sarah's lead status to Qualified"*
+- *"Find leads in the technology industry with scores over 70"*
+
+## Lead Nurturing
+
+### Automated Campaigns
+- Create AI-powered email nurture sequences
+- Trigger campaigns based on lead score or source
+- Track opens, clicks, and engagement
+- Automatically update lead status based on engagement
+
+### Manual Follow-Up
+- Set reminders for follow-up calls
+- Log all call attempts and outcomes
+- Add detailed notes on conversations
+- Track objections and interests
+
+## Analytics & Reporting
+
+### Lead Metrics
+- **Conversion Rate**: % of leads that become opportunities
+- **Time to Convert**: Average days from lead creation to conversion
+- **Lead Source ROI**: Which sources generate best leads
+- **Rep Performance**: Conversion rates by sales rep
+- **Lead Velocity**: Speed of leads moving through stages
+- **Score Distribution**: How many leads in each score range
+
+### Lead Funnel
+Track leads through stages:
+1. BizDev Source pool
+2. Promoted to Lead
+3. Contacted
+4. Qualified
+5. Converted to Opportunity
 
 ## Best Practices
 
-✓ **Qualify quickly** - don&apos;t let leads stagnate
-✓ **Use lead scoring** to prioritize outreach
-✓ **Track lead sources** for ROI analysis
-✓ **Add notes** at each touchpoint
-✓ **Convert when ready** - don't wait too long
+✓ **Qualify quickly** - Don't let leads stagnate; decision within 1 week
+✓ **Use lead scoring** - Prioritize high-score leads for best ROI
+✓ **Track all sources** - Essential for marketing attribution
+✓ **Add notes immediately** - Document each touchpoint in real-time
+✓ **Set follow-up reminders** - Never let a hot lead go cold
+✓ **Convert when ready** - Don't wait for "perfect" information
+✓ **Nurture cold leads** - Keep them warm with educational content
+✓ **Clean up regularly** - Disqualify dead leads to keep pipeline accurate
+✓ **Promote from BizDev** - Leverage BizDev sources for lead gen pipeline
+✓ **Review weekly** - Sales team sync on lead status and strategy
+
+## Integration with Other Modules
+
+- **BizDev Sources**: Upstream feed of raw prospects
+- **Contacts**: Downstream record after conversion
+- **Accounts**: Created or linked during conversion
+- **Opportunities**: Primary output of lead conversion
+- **Activities**: Track all interactions with leads
+- **AI Campaigns**: Automated outreach to warm leads
+- **Reports**: Conversion funnels and source attribution
       `,
     },
     {
@@ -727,49 +1033,190 @@ When a lead is qualified, convert to:
       content: `
 # Sales Pipeline Management
 
-Opportunities represent potential deals in your sales pipeline. Track them from initial interest through closed-won or closed-lost.
+Opportunities represent potential revenue deals in your sales pipeline. Track them from initial interest through closed-won or closed-lost, with full visibility into deal progress, probability, and forecasted revenue.
 
 ## Sales Stages
 
-1. **Prospecting** - Initial interest identified
-2. **Qualification** - Budget, authority, need, timeline confirmed
-3. **Proposal** - Solution presented
-4. **Negotiation** - Terms and pricing discussed
-5. **Closed Won** 🎉 - Deal won!
-6. **Closed Lost** - Deal lost
+The standard sales pipeline includes six stages:
+
+1. **Prospecting** (0-20% probability) - Initial interest identified, qualifying needs
+2. **Qualification** (20-40% probability) - Budget, authority, need, timeline (BANT) confirmed
+3. **Proposal** (40-60% probability) - Solution presented, pricing discussed
+4. **Negotiation** (60-80% probability) - Terms finalized, contracts reviewed
+5. **Closed Won** (100% probability) 🎉 - Deal won! Revenue recognized
+6. **Closed Lost** (0% probability) - Deal lost, reason documented for learning
 
 ## Creating Opportunities
 
+### Manual Creation
 1. Click **"+ Add Opportunity"** button
 2. Fill in opportunity details:
-   - **Required**: Name, Amount, Close Date
-   - **Recommended**: Account, Contact, Stage, Probability
-3. Set probability (0-100%)
-4. Add description and next steps
+   - **Required**: Name, Amount, Close Date, Stage
+   - **Recommended**: Account, Primary Contact, Probability, Source
+   - **Optional**: Description, Next Steps, Competitors, Product/Service
+3. Set realistic **probability** (0-100%) based on stage
+4. Add **forecast category**: Pipeline, Best Case, Commit, Closed
+5. Assign to **account executive** or sales rep
+6. Click **"Create Opportunity"**
 
-## Kanban Board
+### From Lead Conversion
+- Convert qualified leads to opportunities automatically
+- Carries forward lead data: source, notes, contact info
+- Links to account and primary contact
+- Preserves lead ID for tracking conversion rates
 
-**Drag-and-drop interface** for visual pipeline management:
-- Move opportunities between stages
-- Quick-edit cards
-- Color-coded by stage
-- Shows total value per stage
+### AI-Powered Creation
+- Use AI Assistant: *"Create an opportunity for Acme Corp worth $50,000 closing in Q1"*
+- Assistant can create opportunity and link to existing account/contact
 
-## Key Metrics
+## View Modes
 
-- **Pipeline Value**: Sum of all open opportunities
-- **Win Rate**: Percentage of won deals
+The Opportunities page offers three visualization options:
+
+### 📊 Kanban Board (Default)
+- **Drag-and-drop** opportunities between stages
+- **Visual pipeline** with column totals
+- **Quick-edit cards** with inline updates
+- **Color-coded** by stage for at-a-glance status
+- **Status summary cards** at top showing count per stage
+- **Tenant-filtered** - only shows opportunities for your selected tenant
+
+**Using Kanban:**
+- Drag opportunity cards left/right to update stage
+- Click card to open detail view
+- Status cards show real-time counts matching the board
+- Filter by account, assigned to, close date, or amount
+
+### 📋 Table View
+- **Sortable columns**: Click headers to sort
+- **Bulk selection**: Select multiple opportunities for mass updates
+- **Inline actions**: Quick edit, delete, or view details
+- **Export ready**: Respects current filters
+- **Pagination**: 25 records per page with navigation
+
+### 🎴 Grid View
+- **Card-based layout** with key metrics visible
+- **Responsive** - adjusts to screen size
+- **Quick filtering** with visual cards
+- **Perfect for presentations** and high-level overviews
+
+Toggle between views using the **view mode selector** in the top-right corner.
+
+## Key Features
+
+### Opportunity Details
+- **Full activity timeline**: All calls, emails, meetings related to the deal
+- **Contact roles**: Track decision makers, influencers, champions
+- **Competitive intel**: Note competitors and differentiators
+- **Documents**: Attach proposals, contracts, presentations
+- **Custom fields**: Industry-specific data capture
+- **Change history**: Audit trail of all modifications
+
+### Revenue Forecasting
+- **Weighted pipeline**: Amount × Probability = Weighted Value
+- **Forecast categories**:
+  - **Pipeline**: Early-stage opportunities (under 60%)
+  - **Best Case**: Optimistic forecast (60-80%)
+  - **Commit**: High-confidence forecast (80-99%)
+  - **Closed**: Won deals (100%)
+- **Trending**: Track how forecast changes over time
+
+### Sales Metrics
+Dashboard and reports show:
+- **Total Pipeline Value**: Sum of all open opportunity amounts
+- **Weighted Pipeline**: Sum of (amount × probability)
+- **Win Rate**: Percentage of deals closed-won vs. total closed
 - **Average Deal Size**: Mean opportunity value
-- **Sales Velocity**: Speed of deals through pipeline
+- **Sales Velocity**: Average days from create to close
+- **Conversion Rates**: By stage, source, and sales rep
+
+### Team Collaboration
+- **Assigned ownership**: Each opportunity has a primary owner
+- **Team access**: Managers see all opportunities, employees see assigned
+- **Activity sharing**: Team members can log activities on any opportunity
+- **@ Mentions**: Tag team members in notes for collaboration
+- **Pipeline reviews**: Weekly sync using kanban board
+
+## Filtering & Search
+
+**Advanced filters available:**
+- **Stage**: Filter by single or multiple stages
+- **Amount Range**: Min/max deal size
+- **Close Date**: This month, this quarter, custom range
+- **Account**: Show opportunities for specific company
+- **Assigned To**: Filter by sales rep (or "Unassigned")
+- **Probability Range**: Show only high-confidence deals
+- **Source**: Track which channels drive best opportunities
+- **Tags**: Custom categorization
+
+**Quick Search:**
+- Type to search across opportunity name, account name, contact name
+- Fast, real-time filtering as you type
+
+## AI Assistant Capabilities
+
+Leverage the AI Assistant for opportunity management:
+- *"Show me all opportunities over $10,000"*
+- *"Create an opportunity for Acme Corp worth $25,000"*
+- *"Move the Acme deal to Negotiation stage"*
+- *"Show me opportunities closing this month"*
+- *"What's my total pipeline value?"*
+- *"show me deals stuck in Proposal for over 30 days"*
+- *"Update the probability on the Microsoft deal to 75%"*
+
+## Integration with Other Modules
+
+### Linked to Accounts
+- Every opportunity should link to an account
+- View all opportunities for an account on the account detail page
+- Account-level metrics: total pipeline, win rate
+
+### Linked to Contacts
+- Assign primary contact (decision maker)
+- Add additional contacts with roles (Champion, Influencer, Blocker)
+- Track contact engagement throughout deal cycle
+
+### Activities
+- Log calls, meetings, emails directly from opportunity
+- AI automatically creates follow-up tasks based on stage
+- Activity reminders tied to close date
+
+### Documents
+- Attach proposals, contracts, pricing sheets
+- Version control for document iterations
+- Share via secure links
+
+## Recent Improvements (v3.0)
+
+✨ **What's New:**
+- **Status card synchronization**: Top status cards now accurately reflect kanban column counts
+- **Tenant-specific filtering**: All views properly scoped to selected tenant
+- **Enhanced UUID support**: Seamless handling of tenant IDs across the system
+- **Performance optimizations**: Faster loading with redis caching
+- **Mobile responsive**: Full kanban functionality on tablets and phones
 
 ## Best Practices
 
-✓ **Update regularly** - keep stages current
-✓ **Set realistic close dates** - avoid over-optimism
-✓ **Adjust probability** as deals progress
-✓ **Document next steps** for accountability
-✓ **Review pipeline weekly** in team meetings
-✓ **Clean up old opps** - close or disqualify stale deals
+✓ **Update stages regularly** - Keep pipeline current for accurate forecasting
+✓ **Set realistic close dates** - Avoid pipeline bloat from overly optimistic dates
+✓ **Adjust probability** - Update as deal progresses through stages
+✓ **Document next steps** - Always know what action is needed to advance the deal
+✓ **Log all activities** - Maintain complete interaction history
+✓ **Review pipeline weekly** - Team sync to discuss deals and remove stale opportunities
+✓ **Clean up old opportunities** - Close or disqualify stale deals (90+ days no activity)
+✓ **Use forecast categories** - Helps sales leadership plan resources and quotas
+✓ **Link all supporting data** - Attach proposals, link contacts, note competitors
+✓ **Celebrate wins** 🎉 - Move to Closed Won and analyze what worked
+
+## Reporting
+
+Access opportunity reports via **Reports** module:
+- **Pipeline funnel**: Conversion rates by stage
+- **Win/Loss analysis**: Why deals are won or lost
+- **Sales rep performance**: Individual quota attainment
+- **Source ROI**: Which channels generate best opportunities
+- **Forecast accuracy**: Compare predicted vs. actual close dates
+- **Deal age**: Identify deals stuck in stages
       `,
     },
     {
@@ -2071,7 +2518,7 @@ If you're integrating with external tools:
             
             {/* Version Badge */}
             <Badge variant="outline" className="text-xs">
-              v2.0 - Updated {new Date().toLocaleDateString()}
+              v3.0 - Updated {new Date().toLocaleDateString()}
             </Badge>
           </div>
         </div>
