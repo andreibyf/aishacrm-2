@@ -25,6 +25,7 @@ import {
   Target,
   Users,
   Wrench,
+  Zap,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import UserContext from "@/components/shared/UserContext";
@@ -1575,6 +1576,266 @@ For industries requiring specific certifications or licenses, track their status
 ✓ **Track conversion rates** - analyze which BizDev Sources convert best into Leads and Opportunities.
 ✓ **Don't promote prematurely** - only promote to Lead when you're ready for active engagement.
 ✓ **Use Tags** for additional categorization
+      `,
+    },
+    {
+      id: "workflows",
+      title: "Workflows & Automation",
+      icon: Zap,
+      color: "text-yellow-400",
+      content: `
+# Workflows & Automation
+
+Workflows automate repetitive tasks and ensure consistent processes across your team. Build custom workflows to trigger actions based on CRM events, saving time and reducing human error.
+
+## What are Workflows?
+
+**Workflows** are automated sequences of actions triggered by specific events in the CRM. They enable you to:
+- Automate follow-up tasks when leads are created
+- Send notifications when opportunities reach certain stages
+- Auto-assign records based on criteria
+- Update fields automatically based on conditions
+- Create activities and reminders
+- Send emails or SMS messages
+- Execute custom logic
+
+## Workflow Components
+
+### 1. Triggers (When)
+**What starts the workflow:**
+- **Record Created** - New contact, lead, opportunity, account, or activity
+- **Record Updated** - Specific field changes (e.g., opportunity stage changed)
+- **Record Deleted** - Record removal (use for cleanup tasks)
+- **Scheduled** - Time-based triggers (daily, weekly, monthly, specific date/time)
+- **Manual** - User-initiated workflows via button click
+- **Webhook** - External system triggers via API call
+
+**Examples:**
+- Trigger: "Lead created with source = 'Website'"
+- Trigger: "Opportunity stage changed to 'Closed Won'"
+- Trigger: "Contact not contacted in 30 days"
+- Trigger: "Every Monday at 9 AM"
+
+### 2. Conditions (If)
+**Filter when the workflow runs:**
+- **Field Comparisons** - Check if field equals, contains, is greater than, etc.
+- **Date Comparisons** - Before, after, within last X days
+- **Boolean Logic** - AND, OR, NOT conditions
+- **User/Team** - Assigned to specific user or team
+- **Custom Formula** - Advanced conditional logic
+
+**Examples:**
+- Condition: "If opportunity amount > $10,000"
+- Condition: "If lead score >= 70 AND industry = 'Technology'"
+- Condition: "If contact email domain contains 'gmail.com'"
+
+### 3. Actions (Then)
+**What happens when triggered:**
+- **Create Record** - Create new task, note, opportunity
+- **Update Record** - Change field values, status, owner
+- **Send Email** - Automated email to contact or team member
+- **Send SMS** - Text message notification
+- **Assign Record** - Auto-assign to user or round-robin
+- **Add Tag** - Apply tags for categorization
+- **Create Activity** - Schedule call, meeting, or follow-up task
+- **Call Webhook** - Trigger external system integration
+- **Run AI Tool** - Execute AiSHA AI action (send AI call, generate content)
+- **Wait** - Delay before next action (e.g., wait 2 days)
+
+**Examples:**
+- Action: "Create follow-up task assigned to owner, due in 3 days"
+- Action: "Send email template 'Welcome Email' to new lead"
+- Action: "Update lead score to 80"
+- Action: "Assign to user with least open leads (round-robin)"
+
+## Creating Workflows
+
+### Using the Visual Workflow Builder
+
+1. Navigate to **Workflows** module
+2. Click **"+ Create Workflow"**
+3. Enter workflow details:
+   - **Name**: Descriptive name (e.g., "Auto-qualify hot leads")
+   - **Description**: What the workflow does
+   - **Active Status**: Enable/disable workflow
+4. Configure **Trigger**:
+   - Select trigger type (Record Created, Updated, Scheduled, etc.)
+   - Choose entity (Lead, Opportunity, Contact, etc.)
+   - Set trigger conditions
+5. Add **Conditions** (optional):
+   - Click "+ Add Condition"
+   - Select field to check
+   - Choose operator (equals, contains, greater than, etc.)
+   - Enter comparison value
+   - Use AND/OR logic for multiple conditions
+6. Add **Actions**:
+   - Click "+ Add Action"
+   - Select action type
+   - Configure action parameters
+   - Chain multiple actions in sequence
+7. Test workflow with sample data
+8. Click **"Save \u0026 Activate"**
+
+### Workflow Templates
+
+Pre-built workflows you can customize:
+
+**Lead Management:**
+- **Auto-qualify hot leads** - Score leads and auto-assign to sales reps
+- **Lead nurture sequence** - Automated email drip campaign for cold leads
+- **Stale lead cleanup** - Archive leads with no activity in 90 days
+
+**Opportunity Management:**
+- **Deal stage notifications** - Alert manager when deal reaches Negotiation
+- **Win/loss follow-up** - Create tasks based on closed opportunity outcome
+- **Stalled deal alerts** - Notify owner if deal stuck in stage for 14+ days
+
+**Activity Automation:**
+- **Follow-up reminders** - Auto-create tasks after calls or meetings
+- **Overdue task escalation** - Notify manager of overdue tasks
+- **Meeting prep workflow** - Send reminder with account history 1 day before meeting
+
+**Account Management:**
+- **Welcome new customers** - Send onboarding email when account becomes customer
+- **Quarterly business review** - Schedule QBR tasks for all enterprise accounts
+- **Renewal reminders** - Alert team 90 days before contract renewal
+
+**Contact Engagement:**
+- **Birthday greetings** - Send personalized email on contact birthday
+- **Engagement scoring** - Update contact score based on activity frequency
+- **Re-engagement campaign** - Target contacts with no activity in 6 months
+
+## Workflow Execution
+
+### Execution Modes
+- **Real-Time** - Actions execute immediately when triggered (default)
+- **Scheduled** - Actions execute at specific time (for batch processing)
+- **Queue** - Actions queued for asynchronous processing (high-volume)
+
+### Execution Logs
+- View workflow execution history
+- See which records triggered workflow
+- Check action results (success/failure)
+- Debug failed workflows with error messages
+- Monitor performance metrics
+
+### Workflow Metrics
+- **Execution Count** - How many times workflow has run
+- **Success Rate** - Percentage of successful executions
+- **Average Duration** - How long workflow takes to complete
+- **Error Rate** - Failed executions requiring attention
+
+## Advanced Features
+
+### Multi-Step Workflows
+Chain multiple actions with conditional branching:
+- IF opportunity won
+  - THEN create thank-you task
+  - AND send congratulations email
+  - AND update account status to "Customer"
+- ELSE IF opportunity lost
+  - THEN create follow-up task in 90 days
+  - AND add tag "Lost - Competitor"
+
+### Wait/Delay Actions
+Introduce delays between actions:
+- Wait 3 days, then send follow-up email
+- Wait until specific date/time
+- Wait for field value to change
+
+### Round-Robin Assignment
+Distribute records evenly across team:
+- Assign new leads to sales reps in rotation
+- Balance workload automatically
+- Skip users who are out of office
+
+### Webhook Integration
+Connect external systems:
+- Trigger workflows from external apps via API
+- Call external webhooks when CRM events occur
+- Sync data bidirectionally
+
+### AI-Powered Actions
+Leverage AiSHA AI in workflows:
+- **AI Call** - Automated outbound calls via CallFluent/Thoughtly
+- **AI Email** - Generate personalized email content
+- **AI Scoring** - Use AI to score lead quality
+- **AI Enrichment** - Auto-fill company data from web
+
+## Best Practices
+
+✓ **Start simple** - Begin with single-action workflows, add complexity gradually
+✓ **Test thoroughly** - Use test records before activating on live data
+✓ **Name descriptively** - "Auto-assign hot leads to Sarah" vs "Lead workflow 1"
+✓ **Document logic** - Add descriptions explaining workflow purpose and conditions
+✓ **Monitor regularly** - Check execution logs weekly for errors
+✓ **Avoid loops** - Be careful with update triggers to prevent infinite loops
+✓ **Use conditions** - Don't trigger on every update, filter to relevant changes
+✓ **Version control** - Duplicate workflow before making major changes
+✓ **Deactivate unused** - Turn off workflows no longer needed
+✓ **Limit actions** - Keep workflows focused (5-7 actions max per workflow)
+
+## Common Use Cases
+
+**Sales Team Automation:**
+- Auto-create demo tasks when lead status = "Qualified"
+- Notify manager when deal > $50k enters pipeline
+- Round-robin assign new leads to available reps
+- Send automated follow-up sequence to cold leads
+
+**Marketing Automation:**
+- Tag contacts by engagement level
+- Add website visitors to nurture campaigns
+- Score leads based on activity and profile
+- Sync with marketing automation platforms
+
+**Customer Success:**
+- Create onboarding tasks when deal closes
+- Schedule quarterly check-ins for all customers
+- Alert CSM when support tickets > 5 in 30 days
+- Send NPS surveys 90 days after purchase
+
+**Data Quality:**
+- Auto-archive stale records
+- Standardize formatting (phone numbers, addresses)
+- De-duplicate records based on email/phone
+- Enrich records with missing data
+
+## AI Assistant Integration
+
+Use the AI Assistant to help with workflows:
+- *"Create a workflow to auto-assign new leads to sales team"*
+- *"Show me all active workflows"*
+- *"Why did the email workflow fail for contact ID 12345?"*
+- *"Activate the lead nurture workflow"*
+- *"Create a workflow to notify me when deals stall for 2 weeks"*
+
+## Workflow Templates Library
+
+Access 50+ pre-built workflow templates:
+1. Navigate to **Workflows** → **Templates**
+2. Browse by category or search
+3. Click **"Use Template"**
+4. Customize trigger, conditions, actions
+5. Test and activate
+
+Popular templates updated monthly based on user feedback and industry best practices.
+
+## Mobile Access
+
+- View active workflows on mobile
+- Check execution logs
+- Enable/disable workflows
+- Trigger manual workflows via mobile
+- Receive workflow notifications via push
+
+## Security & Permissions
+
+- **Workflow Creators** - Create and edit own workflows
+- **Workflow Admins** - Manage all workflows across tenant
+- **Viewers** - View workflow configs and logs (read-only)
+- **Execution Permissions** - Workflows run with creator's permissions
+- **Audit Trail** - All workflow changes logged for compliance
       `,
     },
     {
