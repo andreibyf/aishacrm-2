@@ -758,47 +758,217 @@ The Contacts module is fully responsive:
       content: `
 # Account Management
 
-Accounts represent companies or organizations you do business with. They serve as the parent record for contacts and opportunities.
+Accounts represent companies or organizations you do business with. In B2B scenarios, accounts are the parent record for contacts and opportunities. In B2C scenarios, accounts can represent individual customers. All account data is automatically isolated by tenant.
 
 ## Creating Accounts
 
+### Manual Creation
 1. Click **"+ Add Account"** button
 2. Fill in company details:
    - **Required**: Company Name
-   - **Optional**: Website, Phone, Industry, Revenue, Employee Count
-3. Add address information
-4. Assign to a team member
+   - **Recommended**: Industry, Website, Phone
+   - **Optional**: Revenue, Employee Count, Address, Parent Account
+3. Select **Account Type**:
+   - Prospect - Potential customer
+   - Customer - Active client
+   - Partner - Business partner
+   - Competitor - Competitive intelligence
+   - Vendor - Supplier relationship
+4. Choose **Industry** from 30+ options
+5. Set **Annual Revenue** and **Employee Count** ranges
+6. Assign to account owner
+7. Click **"Create Account"**
+
+### From Lead Conversion
+- When converting a lead, system automatically:
+  - Creates new account from company name
+  - OR links to existing account if name matches
+  - Preserves lead source attribution
+  - Links contact and opportunity to account
+
+### AI-Powered Creation
+- Use AI Assistant: *"Create an account for Acme Corporation in the Technology industry"*
+- AI can enrich with publicly available data
+
+## Account Types
+
+### Primary Types
+- **Prospect**: Potential customer, not yet engaged
+- **Customer**: Active client with revenue relationship
+- **Partner**: Strategic partner, reseller, or affiliate
+- **Competitor**: Track for competitive intelligence
+- **Vendor**: Supplier or service provider to your company
+
+### Status Tracking
+- **Active**: Currently engaged
+- **Inactive**: No recent activity
+- **Churned**: Former customer, lost business
+- **Dormant**: Past customer, potential re-engagement
+
+## Industry Categories
+
+Over **30 industry options** including:
+- Technology & Software
+- Healthcare & Medical
+- Financial Services
+- Construction & Engineering
+- Manufacturing & Industrial
+- Professional Services
+- Retail & E-commerce
+- Real Estate
+- Education
+- Hospitality & Tourism
+- Transportation & Logistics
+- Energy & Utilities
+- Agriculture
+- Media & Entertainment
+- Non-Profit
+- Government
+- And many more...
+
+## Account Hierarchy
+
+### Parent-Child Relationships
+- **Parent Account**: Corporate headquarters or main entity
+- **Child Accounts**: Subsidiaries, divisions, or branch locations
+- **Hierarchical Reporting**: Roll up opportunities and revenue
+- **Territory Management**: Assign different reps to different locations
+
+**Use Cases:**
+- Enterprise accounts with multiple divisions
+- Franchise organizations
+- Holding companies with multiple brands
+- Multi-location businesses
+
+### Setting Up Hierarchy
+1. Create parent account first (e.g., "Acme Corp HQ")
+2. Create child accounts (e.g., "Acme Corp - West Coast Division")
+3. Set **Parent Account** field on child to link
+4. View hierarchy tree on parent account detail page
 
 ## Key Features
 
-### Account Types
-- **Prospect**: Potential customer
-- **Customer**: Active client
-- **Partner**: Business partner
-- **Competitor**: Competitive intelligence
-- **Vendor**: Supplier relationship
+### Account Overview
+- **Contact List**: All people associated with this account
+- **Opportunity Pipeline**: All deals with this account
+- **Activity Timeline**: Complete interaction history
+- **Revenue Summary**: Total value, won deals, open pipeline
+- **Key Metrics**: Win rate, average deal size, sales cycle length
+- **Related Records**: Linked leads, BizDev sources
 
-### Industry Categories
-Over 30 industry options including:
-- Technology & Software
-- Healthcare & Medical
-- Construction & Engineering
-- Manufacturing & Industrial
-- Financial Services
-- And many more...
+### Account Enrichment
+- **Website Scraping**: AI can extract company info from website
+- **Social Profiles**: LinkedIn, Twitter, Facebook links
+- **News & Events**: Track company news, funding rounds, acquisitions
+- **Financial Data**: Revenue estimates, growth rate, funding status
+- **Technology Stack**: Tools and platforms they use (for B2B tech sales)
 
-### Account Hierarchy
-- Link multiple contacts to one account
-- Associate opportunities with accounts
-- Track all activities related to the account
+### Account Segmentation
+- **Revenue Tiers**: Enterprise, Mid-Market, SMB, Startup
+- **Geographic Region**: Americas, EMEA, APAC, etc.
+- **Industry Vertical**: Technology, Healthcare, Finance, etc.
+- **Customer Lifecycle**: Prospect → Customer → Champion → At-Risk → Churned
+- **Strategic Value**: Key Account, Growth Account, Sustaining Account
+
+### Bulk Operations
+- **CSV Import**: Upload company lists with auto-matching
+- **CSV Export**: Download account data with filters
+- **Bulk Update**: Change owner, status, or custom fields
+- **Bulk Tag**: Apply tags to multiple accounts
+- **Merge Duplicates**: Combine duplicate account records
+
+## Advanced Search & Filtering
+
+- **Quick Search**: Type to search name, website, phone
+- **Account Type**: Filter by Prospect, Customer, Partner, etc.
+- **Industry**: Multi-select industry filtering
+- **Revenue Range**: Min/max annual revenue
+- **Employee Count**: Company size ranges
+- **Owner**: Filter by assigned account executive
+- **Status**: Active, Inactive, Churned
+- **Tags**: Custom categorization
+- **Has Opportunities**: Accounts with active deals
+- **Pipeline Value**: Accounts with pipeline above threshold
+
+## Integration with Other Modules
+
+### Linked to Contacts
+- **One-to-Many**: Multiple contacts per account
+- **Decision Maker Tracking**: Flag key contacts
+- **Org Chart**: Build account organization structure
+- **Contact Roles**: Identify champions, blockers, influencers
+
+### Linked to Opportunities
+- **Account Pipeline**: View all deals with this company
+- **Revenue Forecasting**: Aggregate forecast by account
+- **Cross-Sell/Upsell**: Track multiple products/services
+- **Account Health Score**: Based on pipeline activity and engagement
+
+### Linked to Activities
+- **Account-Level Activities**: Calls, meetings, emails with anyone at account
+- **Activity Roll-Up**: See all team interactions across all contacts
+- **Engagement Tracking**: Last contact date, touch frequency
+
+### Linked to Leads
+- **Lead Source**: See which leads converted to this account
+- **Conversion History**: Track lead-to-account conversion rate
+- **Multi-Touch Attribution**: Credit all touchpoints in conversion
+
+## AI Assistant Capabilities
+
+Leverage the AI for account management:
+- *"Show me all Technology accounts with revenue over $1M"*
+- *"Create an account for Microsoft in the Technology industry"*
+- *"Find accounts with no activity in the last 90 days"*
+- *"Show me all Customer accounts assigned to me"*
+- *"What's the total pipeline value for Acme Corp?"*
+- *"Add tag 'Target 2025' to all Enterprise accounts in California"*
+- *"Find competitor accounts we should be tracking"*
+
+## Account Health & Risk
+
+### Health Scoring
+- **Green**: High engagement, growing pipeline, regular activity
+- **Yellow**: Reduced activity, stalled deals, needs attention
+- **Red**: At-risk, no recent contact, declining pipeline
+
+### Risk Indicators
+- No activity in 60+ days
+- Declining opportunity count
+- Lost last 2+ opportunities
+- Key contact departed
+- Competitor mentioned in notes
+- Contract renewal approaching
+
+### Retention Strategies
+- Proactive outreach campaigns
+- Executive business reviews (EBRs)
+- Success planning sessions
+- Upsell/cross-sell opportunities
+- Customer advocacy programs
 
 ## Best Practices
 
-✓ **One account per company** - avoid duplicates
-✓ **Link all contacts** from that company
-✓ **Update regularly** - revenue, employee count
-✓ **Track competitors** for market intelligence
-✓ **Use custom tags** for segmentation
+✓ **One account per company** - Avoid duplicates, use hierarchy for divisions
+✓ **Link all contacts** - Build complete org chart
+✓ **Update regularly** - Keep revenue and employee data current
+✓ **Track all accounts** - Include prospects, customers, AND competitors
+✓ **Use hierarchy** - For enterprise accounts with multiple locations
+✓ **Enrich profiles** - Add LinkedIn, website, news, technologies
+✓ **Assign clear ownership** - Each account has one primary owner
+✓ **Set account tiers** - Enterprise, Mid-Market, SMB, Startup
+✓ **Monitor health** - Regular account reviews, especially top accounts
+✓ **Document strategies** - Use notes for account plans and strategies
+
+## Reporting & Analytics
+
+Access account reports via **Reports** module:
+- **Account Distribution**: By industry, size, type, region
+- **Account Pipeline**: Revenue by account, forecast by account
+- **Account Health**: At-risk accounts, churn prediction
+- **Owner Performance**: Accounts per rep, pipeline per rep
+- **Account Growth**: New accounts added, conversion rates
+- **Win/Loss by Account**: Success rate with different account types
       `,
     },
     {
@@ -1225,61 +1395,67 @@ Access opportunity reports via **Reports** module:
       icon: Calendar,
       color: "text-indigo-400",
       content: `
-# Activity Tracking
+# Activity Tracking & Task Management
 
-Activities are the actions you take to move deals forward - calls, emails, meetings, tasks, and more.
+Activities are the actions you take to move deals forward and build relationships. Track calls, emails, meetings, tasks, notes, and more. All activities are automatically linked to contacts, accounts, leads, or opportunities for complete relationship history.
 
 ## Activity Types
 
-- **Call** - Phone conversations
+### Core Activity Types
+- **Call** - Phone conversations (inbound or outbound)
 - **Email** - Email correspondence
 - **Meeting** - In-person or virtual meetings
-- **Task** - To-do items
+- **Task** - To-do items and action items
 - **Note** - Quick notes and observations
-- **Demo** - Product demonstrations
+- **Demo** - Product or service demonstrations
 - **Proposal** - Proposal submissions
-- **Scheduled AI Call** - Automated AI-powered calls
-- **Scheduled AI Email** - Automated AI-generated emails
+- **Follow-Up** - Scheduled follow-up actions
+
+### AI-Powered Activities
+- **Scheduled AI Call** - Automated AI-powered outbound calls via Call Fluent or Thoughtly
+- **Scheduled AI Email** - AI-generated email outreach
+- **AI Campaign Activity** - Activities created by AI campaigns
+
+### Integration Activities
+- **Webhook Event** - Activities triggered by integrations (calendar sync, email sync)
+- **System Generated** - Auto-created activities from workflows
 
 ## Creating Activities
 
-1. Click **"+ Add Activity"** button
-2. Fill in details:
-   - **Required**: Type, Subject
-   - **Optional**: Description, Due Date, Priority
-3. Link to Contact, Account, Lead, or Opportunity
-4. Set status (Scheduled, In Progress, Completed)
+### Manual Creation
+1. Navigate to **Activities** module OR open a Contact/Account/Lead/Opportunity
+2. Click **"+ Add Activity"** button
+3. Fill in details:
+   - **Required**: Activity Type, Subject/Title
+   - **Required for scheduled**: Due Date & Time
+   - **Recommended**: Link to Contact, Account, Lead, or Opportunity
+   - **Optional**: Priority, Description, Duration, Location
+4. Set **Priority**:
+   - High 🔴 - Urgent, needs immediate attention
+   - Medium 🟡 - Normal priority
+   - Low 🟢 - Can be deferred
+5. Set **Status**:
+   - Planned - Not yet started
+   - In Progress - Currently working on it
+   - Completed - Finished
+   - Cancelled - No longer needed
+6. Assign to team member (defaults to you)
+7. Click **"Create Activity"**
 
-## Activity Management
+### Quick Log from Records
+- From any Contact, Account, Lead, or Opportunity page
+- Click **"Log Activity"** button
+- Activity automatically links to that record
+- Quick-log completed activities retroactively
 
-### Priority Levels
-- **Low** - Nice to have
-- **Normal** - Standard priority
-- **High** - Important
-- **Urgent** - Drop everything
+### AI-Powered Creation
+- Use AI Assistant: *"Schedule a call with John Smith tomorrow at 2pm"*
+- AI creates activity, links to contact, sets reminder
+- Voice command: *"Log a meeting with Acme Corp for today"*
 
-### Status Tracking
-- **Scheduled** - Planned for future
-- **Overdue** - Past due date
-- **In Progress** - Currently working on it
-- **Completed** - Finished
-- **Cancelled** - No longer needed
-- **Failed** - Did not complete successfully
+## Activity Scheduling
 
 ### Calendar Integration
-- View activities in calendar format (Month/Week/Day)
-- Drag-and-drop to reschedule
-- Quick-add from calendar
-- Filter by activity type
-
-## AI-Powered Activities
-
-### Scheduled AI Calls
-Configure automated calls with:
-- Custom AI prompt/script
-- Contact phone number
-- Call objective (Follow-up, Qualification, etc.)
-- Retry settings
 
 ### Scheduled AI Emails
 Configure automated emails with:
@@ -2727,6 +2903,16 @@ If you're integrating with external tools:
                 </AlertDescription>
               </Alert>
             )}
+
+            {/* Last Updated Footer */}
+            <div className="mt-8 pt-6 border-t border-slate-700">
+              <p className="text-center text-sm text-slate-400">
+                <strong>Last Updated:</strong> December 22, 2025 (v3.0)
+              </p>
+              <p className="text-center text-xs text-slate-500 mt-2">
+                Documentation reflects the current production state of Ai-SHA CRM v3.0
+              </p>
+            </div>
           </div>
         </div>
       </div>
