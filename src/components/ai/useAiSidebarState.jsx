@@ -276,6 +276,7 @@ export function AiSidebarProvider({ children }) {
       if (isDeveloperMode && userRef.current?.role === 'superadmin') {
         const devResponse = await processDeveloperCommand({
           message: text,
+          messages: chatHistory, // ADD CONVERSATION HISTORY FOR CONTEXT
           userRole: userRef.current?.role,
           userEmail: userRef.current?.email
         });
