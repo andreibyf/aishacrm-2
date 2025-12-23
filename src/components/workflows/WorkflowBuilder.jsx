@@ -1753,6 +1753,235 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           </div>
         );
 
+      case 'wait':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Wait Duration</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  min="1"
+                  value={node.config?.duration_value || 1}
+                  onChange={(e) => {
+                    updateNodeConfig(node.id, { ...node.config, duration_value: parseInt(e.target.value) || 1 });
+                  }}
+                  placeholder="1"
+                  className="bg-slate-800 border-slate-700 text-slate-200 flex-1"
+                />
+                <Select
+                  value={node.config?.duration_unit || 'minutes'}
+                  onValueChange={(value) => {
+                    updateNodeConfig(node.id, { ...node.config, duration_unit: value });
+                  }}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200 w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    <SelectItem value="seconds">Seconds</SelectItem>
+                    <SelectItem value="minutes">Minutes</SelectItem>
+                    <SelectItem value="hours">Hours</SelectItem>
+                    <SelectItem value="days">Days</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Workflow will pause execution for the specified duration
+              </p>
+            </div>
+            <div className="bg-amber-900/20 border border-amber-700 rounded-lg p-3">
+              <p className="text-sm text-amber-300 font-semibold mb-2">
+                ⚠️ Important Notes:
+              </p>
+              <ul className="text-xs text-amber-400 space-y-1 ml-4 list-disc">
+                <li>Use for follow-up delays (e.g., wait 3 days then send email)</li>
+                <li>Workflow execution continues after delay completes</li>
+                <li>Maximum recommended: 7 days</li>
+              </ul>
+            </div>
+          </div>
+        );
+
+      case 'send_sms':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">To (Phone Number)</Label>
+              {getAvailableFields().length > 0 ? (
+                <Select
+                  value={node.config?.to || ''}
+                  onValueChange={(value) => {
+                    updateNodeConfig(node.id, { ...node.config, to: `{{${value}}}` });
+                  }}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                    <SelectValue placeholder="Select phone field" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    {getAvailableFields().map(field => (
+                      <SelectItem key={field} value={field}>
+                        {'{{' + field + '}}'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={node.config?.to || ''}
+                  onChange={(e) => {
+                    updateNodeConfig(node.id, { ...node.config, to: e.target.value });
+                  }}
+                  placeholder="{{phone}} or +1234567890"
+                  className="bg-slate-800 border-slate-700 text-slate-200"
+                />
+              )}
+              <p className="text-xs text-slate-500 mt-1">
+                Use {'{{field_name}}'} to reference webhook data
+              </p>
+            </div>
+            <div>
+              <Label className="text-slate-200">Message</Label>
+              <textarea
+                value={node.config?.message || ''}
+                onChange={(e) => {
+                  updateNodeConfig(node.id, { ...node.config, message: e.target.value });
+                }}
+                maxLength={160}
+                placeholder="SMS message. Use {{field_name}} for dynamic content."
+                className="w-full min-h-[120px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                {(node.config?.message || '').length}/160 characters
+              </p>
+            </div>
+            <div className="bg-fuchsia-900/20 border border-fuchsia-700 rounded-lg p-3">
+              <p className="text-sm text-fuchsia-300 font-semibold mb-2">
+                📱 SMS Integration:
+              </p>
+              <ul className="text-xs text-fuchsia-400 space-y-1 ml-4 list-disc">
+                <li>Requires Twilio or SMS provider configuration</li>
+                <li>Phone numbers must include country code (+1 for US)</li>
+                <li>Keep messages under 160 characters to avoid splitting</li>
+              </ul>
+            </div>
+          </div>
+        );
+
+      case 'assign_record':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Assignment Method</Label>
+              <Select
+                value={node.config?.method || 'specific_user'}
+                onValueChange={(value) => {
+                  updateNodeConfig(node.id, { ...node.config, method: value });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="specific_user">Specific User</SelectItem>
+                  <SelectItem value="round_robin">Round Robin</SelectItem>
+                  <SelectItem value="least_assigned">Least Assigned</SelectItem>
+                  <SelectItem value="record_owner">Record Owner</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {node.config?.method === 'specific_user' && (
+              <div>
+                <Label className="text-slate-200">User ID</Label>
+                <Input
+                  value={node.config?.user_id || ''}
+                  onChange={(e) => {
+                    updateNodeConfig(node.id, { ...node.config, user_id: e.target.value });
+                  }}
+                  placeholder="User UUID or {{webhook_field}}"
+                  className="bg-slate-800 border-slate-700 text-slate-200"
+                />
+              </div>
+            )}
+            {node.config?.method === 'round_robin' && (
+              <div>
+                <Label className="text-slate-200">Round Robin Group</Label>
+                <Input
+                  value={node.config?.group || 'sales_team'}
+                  onChange={(e) => {
+                    updateNodeConfig(node.id, { ...node.config, group: e.target.value });
+                  }}
+                  placeholder="Team name (e.g., sales_team, support)"
+                  className="bg-slate-800 border-slate-700 text-slate-200"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Distributes records evenly among users in the specified group
+                </p>
+              </div>
+            )}
+            <div className="bg-lime-900/20 border border-lime-700 rounded-lg p-3">
+              <p className="text-sm text-lime-300 font-semibold mb-2">
+                👥 Assignment Methods:
+              </p>
+              <ul className="text-xs text-lime-400 space-y-1 ml-4 list-disc">
+                <li>**Specific User**: Assign to a designated user ID</li>
+                <li>**Round Robin**: Rotate assignments evenly across team</li>
+                <li>**Least Assigned**: Assign to user with fewest active records</li>
+                <li>**Record Owner**: Keep current owner (useful in update flows)</li>
+              </ul>
+            </div>
+          </div>
+        );
+
+      case 'update_status':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-slate-200">Record Type</Label>
+              <Select
+                value={node.config?.record_type || 'lead'}
+                onValueChange={(value) => {
+                  updateNodeConfig(node.id, { ...node.config, record_type: value });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="lead">Lead</SelectItem>
+                  <SelectItem value="contact">Contact</SelectItem>
+                  <SelectItem value="opportunity">Opportunity</SelectItem>
+                  <SelectItem value="account">Account</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-slate-200">New Status</Label>
+              <Input
+                value={node.config?.new_status || ''}
+                onChange={(e) => {
+                  updateNodeConfig(node.id, { ...node.config, new_status: e.target.value });
+                }}
+                placeholder="e.g., 'qualified', 'contacted', 'closed won'"
+                className="bg-slate-800 border-slate-700 text-slate-200"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Use exact status values from your CRM
+              </p>
+            </div>
+            <div className="bg-sky-900/20 border border-sky-700 rounded-lg p-3">
+              <p className="text-sm text-sky-300 font-semibold mb-2">
+                📊 Common Status Updates:
+              </p>
+              <ul className="text-xs text-sky-400 space-y-1 ml-4 list-disc">
+                <li>**Leads**: new, contacted, qualified, disqualified, converted</li>
+                <li>**Opportunities**: prospecting, qualification, proposal, negotiation, closed won, closed lost</li>
+                <li>**Contacts**: active, inactive, churned</li>
+              </ul>
+            </div>
+          </div>
+        );
+
       default:
         return (
           <div className="text-slate-400 text-sm">
