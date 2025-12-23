@@ -705,7 +705,7 @@ export default function createWorkflowRoutes(pgPool) {
               const toRaw = cfg.to || '{{phone}}';
               const messageRaw = cfg.message || '';
 
-              const toValue = String(replaceVariables(toRaw)).replace(/^['\"]|['\"]$/g, '').trim();
+              const toValue = String(replaceVariables(toRaw)).replace(/^['"']|['"']$/g, '').trim();
               const message = String(replaceVariables(messageRaw));
 
               // Validate phone number format

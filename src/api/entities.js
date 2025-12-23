@@ -1839,11 +1839,11 @@ export const User = {
   },
 
   /**
-   * Update user record
+   * Update user profile
    * @param {string} id - User ID
    * @param {object} data - Update data
    */
-  update: async (id, data) => {
+  updateProfile: async (id, data) => {
     try {
       const url = `${BACKEND_URL}/api/users/${id}`;
       const response = await fetch(url, {

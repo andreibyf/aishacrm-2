@@ -121,8 +121,29 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   };
 
   const handleConnect = (fromId, toId) => {
-    const filteredConnections = connections.filter(conn => conn.from !== fromId);
-    setConnections([...filteredConnections, { from: fromId, to: toId }]);
+    // Check if the source node is a condition node
+    const fromNode = nodes.find(n => n.id === fromId);
+    const isCondition = fromNode?.type === 'condition';
+    
+    if (isCondition) {
+      // For condition nodes, allow up to 2 outgoing connections (TRUE and FALSE)
+      const existingConnections = connections.filter(conn => conn.from === fromId);
+      
+      // If already has 2 connections, remove the oldest one
+      if (existingConnections.length >= 2) {
+        const filteredConnections = connections.filter(conn => 
+          conn.from !== fromId || conn.to !== existingConnections[0].to
+        );
+        setConnections([...filteredConnections, { from: fromId, to: toId }]);
+      } else {
+        // Just add the new connection
+        setConnections([...connections, { from: fromId, to: toId }]);
+      }
+    } else {
+      // For non-condition nodes, replace existing connection (only one allowed)
+      const filteredConnections = connections.filter(conn => conn.from !== fromId);
+      setConnections([...filteredConnections, { from: fromId, to: toId }]);
+    }
   };
 
   const handleSelectNode = (nodeId) => {
