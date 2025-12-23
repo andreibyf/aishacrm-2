@@ -80,13 +80,12 @@ export default function WorkflowNode({ node, isSelected, isConnecting, onClick, 
   // Special diamond rendering for condition node
   if (node.type === 'condition') {
     return (
-      <div className={`relative select-none w-40 mx-auto ${isSelected ? 'ring-2 ring-purple-500 ring-offset-2 ring-offset-slate-950' : ''} ${isConnecting ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-950' : ''}`} onClick={onClick}>
-        <div className="relative w-32 h-32 mx-auto">
+      <div className={`relative select-none mx-auto flex flex-col items-center ${isSelected ? 'ring-2 ring-purple-500 ring-offset-2 ring-offset-slate-950' : ''} ${isConnecting ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-950' : ''}`} onClick={onClick}>
+        {/* Diamond container */}
+        <div className="relative w-32 h-32 flex items-center justify-center">
           {/* Main diamond shape */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-28 h-28 rotate-45 bg-amber-500 rounded-lg shadow-xl border-2 border-amber-400 flex items-center justify-center">
-              <span className="-rotate-45 text-white font-bold text-lg drop-shadow-md">IF</span>
-            </div>
+          <div className="w-28 h-28 rotate-45 bg-amber-500 rounded-lg shadow-xl border-2 border-amber-400 flex items-center justify-center">
+            <span className="-rotate-45 text-white font-bold text-lg drop-shadow-md">IF</span>
           </div>
         </div>
 
