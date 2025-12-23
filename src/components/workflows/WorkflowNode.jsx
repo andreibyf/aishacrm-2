@@ -80,44 +80,62 @@ export default function WorkflowNode({ node, isSelected, isConnecting, onClick, 
   // Special diamond rendering for condition node
   if (node.type === 'condition') {
     return (
-      <div className={`relative mx-auto my-1 select-none ${isSelected ? 'ring-2 ring-purple-500' : ''} ${isConnecting ? 'ring-2 ring-yellow-500' : ''}`} onClick={onClick}>
-        <div className="relative w-28 h-28 mx-auto">
-          <div className="absolute inset-0 rotate-45 bg-yellow-600 rounded-sm shadow-lg flex items-center justify-center">
-            <span className="-rotate-45 text-white font-semibold text-sm">IF</span>
+      <div className={`relative mx-auto my-1 select-none ${isSelected ? 'ring-2 ring-purple-500 ring-offset-2 ring-offset-slate-950' : ''} ${isConnecting ? 'ring-2 ring-yellow-500 ring-offset-2 ring-offset-slate-950' : ''}`} onClick={onClick}>
+        <div className="relative w-32 h-32 mx-auto">
+          {/* Main diamond shape */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-28 h-28 rotate-45 bg-yellow-600 rounded-lg shadow-xl border-2 border-yellow-500 flex items-center justify-center">
+              <span className="-rotate-45 text-white font-bold text-lg">IF</span>
+            </div>
           </div>
         </div>
+
         {/* Overlay controls */}
-        <div className="absolute -top-2 right-1 flex gap-1">
+        <div className="absolute -top-2 right-0 flex gap-1 z-10">
           {/* Drag Handle for Condition Node */}
           <div 
             {...dragHandleProps}
-            className="h-6 w-6 flex items-center justify-center text-white bg-slate-700/50 hover:bg-slate-700 rounded cursor-grab active:cursor-grabbing"
+            className="h-6 w-6 flex items-center justify-center text-white bg-slate-700 hover:bg-slate-600 rounded cursor-grab active:cursor-grabbing shadow-md"
             onClick={(e) => e.stopPropagation()}
-            title="Drag to reorder"
+            title="Drag to reposition"
           >
             <GripVertical className="w-3 h-3" />
           </div>
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 text-white bg-yellow-600/70 hover:bg-yellow-600"
+            className="h-6 w-6 text-white bg-yellow-600 hover:bg-yellow-500 shadow-md"
             onClick={(e) => { e.stopPropagation(); onStartConnect(); }}
-            title="Connect"
+            title="Connect to next node"
           >
             <LinkIcon className="w-3 h-3" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 text-white bg-red-600/70 hover:bg-red-600"
+            className="h-6 w-6 text-white bg-red-600 hover:bg-red-500 shadow-md"
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            title="Delete"
+            title="Delete node"
           >
             <Trash2 className="w-3 h-3" />
           </Button>
         </div>
-        <div className="text-center mt-1 text-xs text-slate-400">
-          Branch: <span className="text-green-400">TRUE</span> ↓ • <span className="text-red-400">FALSE</span> →
+
+        {/* Branch indicators below */}
+        <div className="flex justify-center gap-4 mt-2 text-xs font-medium">
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-full bg-green-400"></div>
+            <span className="text-green-400">TRUE</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-full bg-red-400"></div>
+            <span className="text-red-400">FALSE</span>
+          </div>
+        </div>
+
+        {/* Visual hint for connection order */}
+        <div className="text-center text-[10px] text-slate-500 mt-1">
+          First connection = TRUE • Second = FALSE
         </div>
       </div>
     );
