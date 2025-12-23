@@ -831,7 +831,7 @@ export default function createWorkflowRoutes(pgPool) {
                   `;
                   const countRes = await pgPool.query(countQuery, [workflow.tenant_id]);
 
-                  if (countRes.rows.length \u003e 0) {
+                  if (countRes.rows.length > 0) {
                     assigneeId = countRes.rows[0].assigned_to;
                   } else {
                     // No assignments yet, get first user
@@ -839,7 +839,7 @@ export default function createWorkflowRoutes(pgPool) {
                       'SELECT id FROM employees WHERE tenant_id = $1 AND status = $2 LIMIT 1',
                       [workflow.tenant_id, 'active']
                     );
-                    if (firstUserRes.rows.length \u003e 0) {
+                    if (firstUserRes.rows.length > 0) {
                       assigneeId = firstUserRes.rows[0].id;
                     }
                   }
