@@ -385,6 +385,61 @@ export const CRM_KEYWORD_CATEGORIES = {
 // Flatten all keywords for quick CRM-entity detection
 const ALL_CRM_KEYWORDS = Object.values(CRM_KEYWORD_CATEGORIES).flat();
 
+/**
+ * Calculate Levenshtein distance between two strings (fuzzy matching)
+ * Returns the minimum number of single-character edits needed to change one string to another
+ */
+const levenshteinDistance = (str1: string, str2: string): number => {
+  const len1 = str1.length;
+  const len2 = str2.length;
+  
+  // Create a 2D array for dynamic programming
+  const dp: number[][] = Array(len1 + 1).fill(null).map(() => Array(len2 + 1).fill(0));
+  
+  // Initialize base cases
+  for (let i = 0; i <= len1; i++) dp[i][0] = i;
+  for (let j = 0; j <= len2; j++) dp[0][j] = j;
+  
+  // Fill the matrix
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      if (str1[i - 1] === str2[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1]; // Match, no cost
+      } else {
+        dp[i][j] = Math.min(
+          dp[i - 1][j] + 1,      // Deletion
+          dp[i][j - 1] + 1,      // Insertion
+          dp[i - 1][j - 1] + 1   // Substitution
+        );
+      }
+    }
+  }
+  
+  return dp[len1][len2];
+};
+
+/**
+ * Check if a word fuzzy-matches a keyword (tolerates typos)
+ * Returns true if the word is close enough to the keyword
+ */
+const fuzzyMatches = (word: string, keyword: string): boolean => {
+  const wordLower = word.toLowerCase();
+  const keywordLower = keyword.toLowerCase();
+  
+  // Exact match
+  if (wordLower === keywordLower) return true;
+  
+  // For short words (< 4 chars), require exact match to avoid false positives
+  if (keywordLower.length < 4) return false;
+  
+  // Calculate acceptable edit distance based on keyword length
+  // Tolerance: 1 edit for 4-7 chars, 2 edits for 8-12 chars, 3 edits for 13+ chars
+  const maxDistance = keywordLower.length < 8 ? 1 : (keywordLower.length < 13 ? 2 : 3);
+  
+  const distance = levenshteinDistance(wordLower, keywordLower);
+  return distance <= maxDistance;
+};
+
 // Helper to detect which category a message relates to
 export const detectCrmCategory = (text: string): string | null => {
   const lowerText = text.toLowerCase();
@@ -408,7 +463,11 @@ export const resolveAmbiguity = (
 
   // If the message mentions CRM entities or actions, let the AI handle it
   // This allows natural language queries like "schedule a call for Monday" to pass through
-  const mentionsCrmEntity = ALL_CRM_KEYWORDS.some(keyword => lowerText.includes(keyword));
+  // Now with fuzzy matching to handle typos like "opprtunities" → "opportunities"
+  const words = lowerText.split(/\s+/);
+  const mentionsCrmEntity = words.some(word => 
+    ALL_CRM_KEYWORDS.some(keyword => fuzzyMatches(word, keyword))
+  );
   
   if (mentionsCrmEntity && text.length >= 8) {
     // Let the backend AI handle CRM-related queries
