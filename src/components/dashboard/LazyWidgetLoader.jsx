@@ -32,7 +32,7 @@ function LazyWidgetLoader({ component: Component, delay = 0, ...props }) {
           observer.disconnect();
         }
       },
-      { rootMargin: '100px' } // Start loading 100px before entering viewport
+      { rootMargin: '800px' } // Start loading 800px before entering viewport (preload aggressively)
     );
 
     if (ref.current) {

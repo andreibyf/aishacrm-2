@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Target, AlertTriangle, Loader2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from "recharts";
@@ -18,6 +18,7 @@ function SalesPipeline(props) {
   const [pipelineData, setPipelineData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
+  const loadingRef = useRef(false);
   const { cachedRequest } = useApiManager();
   const { loading: userLoading } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
@@ -32,6 +33,11 @@ function SalesPipeline(props) {
         if (userLoading || !authCookiesReady) {
           return;
         }
+
+    // Prevent duplicate simultaneous requests
+    if (loadingRef.current) {
+      return;
+    }
 
     let mounted = true; // Flag to prevent state updates on unmounted component
 
@@ -97,6 +103,7 @@ function SalesPipeline(props) {
     };
 
     const load = async () => {
+      loadingRef.current = true;
       setLoading(true); // Start loading
       setErrorMessage(null); // Clear any previous errors
 
@@ -208,20 +215,25 @@ function SalesPipeline(props) {
         if (mounted) { // Only update state if component is still mounted
           setPipelineData(computeFromOpps(opps)); // Use the new helper function
           setLoading(false); // End loading
+          loadingRef.current = false;
         }
       } catch (error) {
         if (mounted) { // Only set error if component is still mounted
           console.warn("SalesPipeline: failed to load via cachedRequest:", error); // Use console.warn as in outline
           setErrorMessage("Failed to load pipeline data"); // Keep user-friendly error message
           setLoading(false); // End loading even on error
+          loadingRef.current = false;
         }
       }
     };
 
     load(); // Execute the async load function
-    return () => { mounted = false; }; // Cleanup function for unmounting
+    return () => { 
+      mounted = false;
+      loadingRef.current = false;
+    }; // Cleanup function for unmounting
      
-  }, [props?.tenantFilter, props?.showTestData, props?.prefetchedOpportunities, cachedRequest, userLoading, authCookiesReady, visibleOpportunityCards]); // Include all relevant props and cachedRequest in dependencies
+  }, [props?.tenantFilter?.tenant_id, props?.showTestData, props?.prefetchedOpportunities, cachedRequest, userLoading, authCookiesReady, visibleOpportunityCards]); // Include all relevant props and cachedRequest in dependencies
 
   return (
     <Card className="bg-slate-800 border-slate-700 h-full">

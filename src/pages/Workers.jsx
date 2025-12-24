@@ -8,6 +8,7 @@ import { Worker } from "@/api/entities";
 import { useTenant } from "@/components/shared/tenantContext";
 import { useUser } from "@/components/shared/useUser";
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
+import { useLoadingToast } from "@/hooks/useLoadingToast";
 import {
   Card,
   CardContent,
@@ -73,6 +74,7 @@ const workerTypeColors = {
 
 export default function WorkersPage() {
   const { plural: workersLabel, singular: workerLabel } = useEntityLabel('workers');
+  const loadingToast = useLoadingToast();
   const { selectedTenantId, currentTenantData } = useTenant();
   const { user } = useUser();
   const { ConfirmDialog: ConfirmDialogPortal, confirm: confirmDialog } = useConfirmDialog();
@@ -115,17 +117,20 @@ export default function WorkersPage() {
   // Load workers
   const loadWorkers = useCallback(async () => {
     if (!effectiveTenantId) return;
+    loadingToast.showLoading();
     setLoading(true);
     try {
       const data = await Worker.list({ tenant_id: effectiveTenantId });
       setWorkers(data || []);
+      loadingToast.showSuccess(`${workersLabel} loaded! ✨`);
     } catch (error) {
       console.error("Failed to load workers:", error);
+      loadingToast.showError(`Failed to load ${workersLabel.toLowerCase()}`);
       toast.error("Failed to load workers");
     } finally {
       setLoading(false);
     }
-  }, [effectiveTenantId]);
+  }, [effectiveTenantId, loadingToast]);
 
   useEffect(() => {
     loadWorkers();

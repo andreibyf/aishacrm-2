@@ -37,6 +37,7 @@ import Pagination from "../components/shared/Pagination";
 import { toast } from "sonner";
 import TagFilter from "../components/shared/TagFilter";
 import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
+import { useLoadingToast } from "@/hooks/useLoadingToast";
 import RefreshButton from "../components/shared/RefreshButton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -97,6 +98,7 @@ export default function AccountsPage() {
 
   const { cachedRequest, clearCacheByKey } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
+  const loadingToast = useLoadingToast();
 
   // Ref to track if initial load is done
   const initialLoadDone = useRef(false);
@@ -343,6 +345,7 @@ export default function AccountsPage() {
   const loadAccounts = useCallback(async () => {
     if (!user) return;
 
+    loadingToast.showLoading();
     setLoading(true);
     try {
       const currentTenantFilter = getTenantFilter();
@@ -405,9 +408,10 @@ export default function AccountsPage() {
       const paginatedAccounts = filtered.slice(startIndex, endIndex);
 
       setAccounts(paginatedAccounts);
+      loadingToast.showSuccess(`${accountsLabel} loaded! ✨`);
     } catch (error) {
       console.error("[Accounts] Failed to load accounts:", error);
-      toast.error("Failed to load accounts");
+      loadingToast.showError(`Failed to load ${accountsLabel.toLowerCase()}`);
       setAccounts([]);
     } finally {
       setLoading(false);

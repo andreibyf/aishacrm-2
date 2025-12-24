@@ -41,6 +41,7 @@ import { toast } from "sonner";
 import { useUser } from "@/components/shared/useUser.js";
 import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
 import { useLogger } from "../components/shared/Logger";
+import { useLoadingToast } from "@/hooks/useLoadingToast";
 
 const ALL_WIDGETS = [
   {
@@ -120,6 +121,7 @@ export default function DashboardPage() {
   const { cachedRequest } = useApiManager();
   const { selectedEmail } = useEmployeeScope();
   const logger = useLogger();
+  const loadingToast = useLoadingToast();
 
   // DnD sensors for drag-and-drop
   const sensors = useSensors(
@@ -308,6 +310,9 @@ export default function DashboardPage() {
           return;
         }
 
+        // Show a fun loading toast (before any data loading)
+        loadingToast.showLoading();
+
         // OPTIMIZATION: Try browser cache first (unless forcing refresh)
         if (!forceRefresh) {
           const cached = getCachedDashboardData(tenantFilter.tenant_id || null, !!showTestData);
@@ -331,6 +336,9 @@ export default function DashboardPage() {
             setBundleLists(cached.data.lists);
             setLastUpdated(cached.cachedAt);
             setLoading(false);
+            
+            // Dismiss loading toast since we have cached data
+            loadingToast.showSuccess("Dashboard loaded! 📊");
 
             // Fetch fresh data in background (don't block UI)
             (async () => {
@@ -534,10 +542,18 @@ export default function DashboardPage() {
           opportunitiesCount: opportunities?.length || 0,
           activitiesCount: activities?.length || 0,
         });
+        
+        // Dismiss loading toast and show success
+        if (!forceRefresh) {
+          loadingToast.showSuccess("Dashboard loaded! 📊");
+        } else {
+          loadingToast.dismiss();
+        }
       } catch (error) {
         // Retry logic for early auth race (cookies not yet processed)
         const isAuthRace = /Authentication required/i.test(error?.message || "") || /Authentication required/i.test(String(error));
         if (isAuthRace && attempt < 2) {
+          loadingToast.dismiss(); // Dismiss before retry
           setTimeout(() => loadStats(attempt + 1), 350);
           return; // Defer error handling until retries exhausted
         }
@@ -549,7 +565,7 @@ export default function DashboardPage() {
           selectedEmployeeId: selectedEmail,
         });
         console.error("Failed to load dashboard stats:", error);
-        toast.error("Failed to load dashboard data");
+        loadingToast.showError("Failed to load dashboard data");
       } finally {
         setLoading(false);
         setRefreshing(false);

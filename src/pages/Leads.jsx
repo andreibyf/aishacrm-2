@@ -48,6 +48,7 @@ import { toast } from "sonner";
 import TagFilter from "../components/shared/TagFilter";
 import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
 import RefreshButton from "../components/shared/RefreshButton";
+import { useLoadingToast } from "@/hooks/useLoadingToast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -74,6 +75,7 @@ export default function LeadsPage() {
   const { user } = useUser();
   const { plural: leadsLabel, singular: leadLabel } = useEntityLabel('leads');
   const { getCardLabel, isCardVisible } = useStatusCardPreferences();
+  const loadingToast = useLoadingToast();
   const [leads, setLeads] = useState([]);
   const [users, setUsers] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -378,6 +380,7 @@ export default function LeadsPage() {
   const loadLeads = useCallback(async (page = 1, size = 25) => {
     if (!user) return;
 
+    loadingToast.showLoading();
     setLoading(true);
     try {
       let currentFilter = getTenantFilter();
@@ -494,8 +497,10 @@ export default function LeadsPage() {
       setTotalItems(estimatedTotal);
       setCurrentPage(page);
       initialLoadDone.current = true;
+      loadingToast.showSuccess(`${leadsLabel} loaded! ✨`);
     } catch (error) {
       console.error("Failed to load leads:", error);
+      loadingToast.showError(`Failed to load ${leadsLabel.toLowerCase()}`);
       toast.error("Failed to load leads");
       setLeads([]);
       setTotalItems(0);
@@ -510,6 +515,7 @@ export default function LeadsPage() {
     selectedTags,
     ageFilter,
     ageBuckets,
+    loadingToast,
   ]); // Removed unused pageSize, showTestData deps
 
   // Load leads when dependencies change - no longer blocked by supportingDataReady

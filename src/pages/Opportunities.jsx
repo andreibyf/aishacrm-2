@@ -37,6 +37,7 @@ import { toast } from "sonner";
 import TagFilter from "../components/shared/TagFilter";
 import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
 import RefreshButton from "../components/shared/RefreshButton";
+import { useLoadingToast } from "@/hooks/useLoadingToast";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -84,6 +85,7 @@ const stageToCardId = {
 
 export default function OpportunitiesPage() {
   const { plural: opportunitiesLabel, singular: opportunityLabel } = useEntityLabel('opportunities');
+  const loadingToast = useLoadingToast();
   const [opportunities, setOpportunities] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [contacts, setContacts] = useState([]);
@@ -327,6 +329,7 @@ export default function OpportunitiesPage() {
   const loadOpportunities = useCallback(async (page = 1, size = 25) => {
     if (!user) return;
 
+    loadingToast.showLoading();
     setLoading(true);
     try {
       let effectiveFilter = getTenantFilter();
@@ -450,15 +453,17 @@ export default function OpportunitiesPage() {
       setTotalItems(totalCount);
       setCurrentPage(page);
       initialLoadDone.current = true;
+      loadingToast.showSuccess(`${opportunitiesLabel} loaded! ✨`);
     } catch (error) {
       console.error("Failed to load opportunities:", error);
+      loadingToast.showError(`Failed to load ${opportunitiesLabel.toLowerCase()}`);
       toast.error("Failed to load opportunities");
       setOpportunities([]);
       setTotalItems(0);
     } finally {
       setLoading(false);
     }
-  }, [user, searchTerm, stageFilter, selectedTags, getTenantFilter, viewMode]); // Added viewMode dependency
+  }, [user, searchTerm, stageFilter, selectedTags, getTenantFilter, viewMode, loadingToast]); // Added viewMode dependency
 
   // Load opportunities when dependencies change
   useEffect(() => {

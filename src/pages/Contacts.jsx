@@ -38,6 +38,7 @@ import ContactToLeadDialog from "../components/contacts/ContactToLeadDialog";
 import TagFilter from "../components/shared/TagFilter";
 import { useEmployeeScope } from "../components/shared/EmployeeScopeContext";
 import RefreshButton from "../components/shared/RefreshButton";
+import { useLoadingToast } from "@/hooks/useLoadingToast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -62,6 +63,7 @@ import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 export default function ContactsPage() {
   const { plural: contactsLabel, singular: contactLabel } = useEntityLabel('contacts');
   const { getCardLabel, isCardVisible } = useStatusCardPreferences();
+  const loadingToast = useLoadingToast();
   const [contacts, setContacts] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [users, setUsers] = useState([]);
@@ -282,6 +284,7 @@ export default function ContactsPage() {
       return;
     }
 
+    loadingToast.showLoading();
     setLoading(true);
     logger.info("Loading contacts with applied filters", "ContactsPage", {
       searchTerm,
@@ -398,8 +401,10 @@ export default function ContactsPage() {
           selectedTags,
         },
       );
+      loadingToast.showSuccess(`${contactsLabel} loaded! ✨`);
     } catch (error) {
       console.error("[Contacts] Failed to load contacts:", error);
+      loadingToast.showError(`Failed to load ${contactsLabel.toLowerCase()}`);
       toast.error("Failed to load contacts");
       setContacts([]);
       logger.error("Failed to load contacts", "ContactsPage", {
@@ -432,6 +437,7 @@ export default function ContactsPage() {
     getTenantFilter,
     selectedEmail,
     logger,
+    loadingToast,
   ]);
 
   useEffect(() => {
