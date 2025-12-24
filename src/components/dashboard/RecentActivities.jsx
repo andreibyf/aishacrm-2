@@ -112,8 +112,8 @@ function RecentActivities(props) {
       }
 
       const effectiveFilter = memoShowTestData
-        ? { ...memoTenantFilter }
-        : { ...memoTenantFilter, is_test_data: false };
+        ? { ...memoTenantFilter, limit: 1000 }
+        : { ...memoTenantFilter, is_test_data: false, limit: 1000 };
       
       const recentActivities = await cachedRequest(
         "Activity",
@@ -121,9 +121,9 @@ function RecentActivities(props) {
         {
           filter: effectiveFilter,
           sort: "-created_date",
-          limit: 200
+          limit: 1000
         },
-        () => Activity.filter(effectiveFilter, "-created_date", 200)
+        () => Activity.filter(effectiveFilter, "-created_date", 1000)
       );
 
       const now = new Date();

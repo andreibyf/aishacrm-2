@@ -213,26 +213,23 @@ export default function LeadsPage() {
     }
 
     // Employee scope filtering from context
-    // Note: selectedEmail can contain either an email address or an employee ID
+    // Note: assigned_to is a UUID field, only use UUIDs for filtering
     if (selectedEmail && selectedEmail !== "all") {
       if (selectedEmail === "unassigned") {
         // Only filter by null
         filterObj.$or = [{ assigned_to: null }];
       } else {
-        // Robust filtering: Match by ID or Email
-        let emailToUse = selectedEmail;
-        // Check if selectedEmail looks like a UUID (it often is from LazyEmployeeSelector)
+        // assigned_to is a UUID field, so only use UUID for filtering
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedEmail);
 
-        if (isUuid && employees && employees.length > 0) {
-          const emp = employees.find(e => e.id === selectedEmail);
-          if (emp && emp.email) {
-            emailToUse = emp.email;
-            // Match either ID OR Email
-            filterObj.$or = [
-              { assigned_to: selectedEmail },
-              { assigned_to: emailToUse }
-            ];
+        if (isUuid) {
+          // Use the UUID directly
+          filter.assigned_to = selectedEmail;
+        } else if (employees && employees.length > 0) {
+          // Find employee by email and use their ID (UUID)
+          const emp = employees.find(e => e.email === selectedEmail);
+          if (emp && emp.id) {
+            filter.assigned_to = emp.id;
           } else {
             filter.assigned_to = selectedEmail;
           }
@@ -244,8 +241,17 @@ export default function LeadsPage() {
       user.employee_role === "employee" && user.role !== "admin" &&
       user.role !== "superadmin"
     ) {
-      // Regular employees only see their own data
-      filter.assigned_to = user.email;
+      // Regular employees: lookup user's UUID from employees list
+      if (employees && employees.length > 0) {
+        const currentEmp = employees.find(e => e.email === user.email);
+        if (currentEmp && currentEmp.id) {
+          filter.assigned_to = currentEmp.id;
+        } else {
+          filter.assigned_to = user.email; // Fallback
+        }
+      } else {
+        filter.assigned_to = user.email; // Fallback
+      }
     }
 
     // Test data filtering

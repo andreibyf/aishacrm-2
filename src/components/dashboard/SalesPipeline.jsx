@@ -12,6 +12,7 @@ import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 import { Link } from "react-router-dom"; // Added import
 import { createPageUrl } from "@/utils"; // Added import
 import { Button } from "@/components/ui/button"; // Added import for Button component
+import { getDashboardFunnelCounts } from '@/api/fallbackFunctions';
 
 function SalesPipeline(props) {
   const [pipelineData, setPipelineData] = useState([]);
@@ -146,6 +147,52 @@ function SalesPipeline(props) {
         
         // Determine if we need to call filter or list based on effectiveFilter
         const hasFilter = Object.keys(effectiveFilter).length > 0;
+
+        // Use pre-computed pipeline counts (90%+ faster) if no special filtering
+        if (!hasFilter || (Object.keys(effectiveFilter).length === 1 && effectiveFilter.tenant_id)) {
+          try {
+            const dashboardData = await getDashboardFunnelCounts({ 
+              tenant_id: tenantFilter?.tenant_id,
+              include_test_data: showTestData 
+            });
+            if (mounted && dashboardData?.pipeline) {
+              // Map pre-computed pipeline data to chart format
+              const suffix = showTestData ? 'total' : 'real';
+              const stages = {
+                prospecting: { name: "Prospecting", value: dashboardData.pipeline.find(s => s.stage === 'prospecting')?.[`value_${suffix}`] || 0, count: dashboardData.pipeline.find(s => s.stage === 'prospecting')?.[`count_${suffix}`] || 0, key: 'prospecting' },
+                qualification: { name: "Qualification", value: dashboardData.pipeline.find(s => s.stage === 'qualification')?.[`value_${suffix}`] || 0, count: dashboardData.pipeline.find(s => s.stage === 'qualification')?.[`count_${suffix}`] || 0, key: 'qualification' },
+                proposal: { name: "Proposal", value: dashboardData.pipeline.find(s => s.stage === 'proposal')?.[`value_${suffix}`] || 0, count: dashboardData.pipeline.find(s => s.stage === 'proposal')?.[`count_${suffix}`] || 0, key: 'proposal' },
+                negotiation: { name: "Negotiation", value: dashboardData.pipeline.find(s => s.stage === 'negotiation')?.[`value_${suffix}`] || 0, count: dashboardData.pipeline.find(s => s.stage === 'negotiation')?.[`count_${suffix}`] || 0, key: 'negotiation' },
+                closed_won: { name: "Closed Won", value: dashboardData.pipeline.find(s => s.stage === 'closed_won')?.[`value_${suffix}`] || 0, count: dashboardData.pipeline.find(s => s.stage === 'closed_won')?.[`count_${suffix}`] || 0, key: 'closed_won' },
+                closed_lost: { name: "Closed Lost", value: dashboardData.pipeline.find(s => s.stage === 'closed_lost')?.[`value_${suffix}`] || 0, count: dashboardData.pipeline.find(s => s.stage === 'closed_lost')?.[`count_${suffix}`] || 0, key: 'closed_lost' },
+              };
+
+              // Filter to only visible stages based on preferences
+              const processedData = Object.entries(stages)
+                .filter(([key]) => visibleStageKeys.has(key))
+                .map(([, stage]) => ({
+                  stage: stage.name,
+                  value: stage.value,
+                  count: stage.count,
+                }));
+
+              // If all values are zero but there are counts, fall back to using counts
+              const allValuesZero = processedData.every((s) => s.value === 0);
+              if (allValuesZero && processedData.some((s) => s.count > 0)) {
+                setPipelineData(processedData.map((s) => ({ stage: s.stage, value: s.count, isCount: true })));
+              } else {
+                setPipelineData(processedData);
+              }
+              setLoading(false);
+              return; // Exit early - we got the data
+            }
+          } catch (error) {
+            console.warn('[SalesPipeline] Fast path failed, falling back to full fetch:', error);
+            // Fall through to slow path below
+          }
+        }
+
+        // Fallback: Use slow path for complex filters
         const methodName = hasFilter ? "filter" : "list";
         const methodParams = hasFilter ? { filter: effectiveFilter } : {};
         const dataFetcher = () => hasFilter ? Opportunity.filter(effectiveFilter) : Opportunity.list();

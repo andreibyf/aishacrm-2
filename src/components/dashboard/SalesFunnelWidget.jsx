@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BizDevSource, Lead, Contact, Account } from '@/api/entities';
 import FunnelChart3D from './FunnelChart3D';
 import { useEntityLabel } from '@/components/shared/EntityLabelsContext';
 import { useUser } from '@/components/shared/useUser';
 import { useAuthCookiesReady } from '@/components/shared/useAuthCookiesReady';
 import { Loader2 } from 'lucide-react';
+import { getDashboardFunnelCounts } from '@/api/fallbackFunctions';
 
 /**
  * Sales Funnel Widget - Displays 3D cone funnel with real counts.
@@ -51,26 +51,21 @@ export default function SalesFunnelWidget({ tenantFilter = {}, showTestData = tr
 
       setLoading(true);
       try {
-        // Build filter with test data handling
-        const filter = { ...tenantFilter };
-        if (!showTestData) {
-          filter.is_test_data = false;
-        }
-
-        // Fetch counts in parallel
-        const [sourcesData, leadsData, contactsData, accountsData] = await Promise.all([
-          BizDevSource.filter(filter, 'id', 10000).catch(() => []),
-          Lead.filter(filter, 'id', 10000).catch(() => []),
-          Contact.filter(filter, 'id', 10000).catch(() => []),
-          Account.filter(filter, 'id', 10000).catch(() => []),
-        ]);
-
-        setCounts({
-          sources: Array.isArray(sourcesData) ? sourcesData.length : 0,
-          leads: Array.isArray(leadsData) ? leadsData.length : 0,
-          contacts: Array.isArray(contactsData) ? contactsData.length : 0,
-          accounts: Array.isArray(accountsData) ? accountsData.length : 0,
+        // Use the new pre-computed dashboard funnel counts (90%+ faster)
+        const data = await getDashboardFunnelCounts({ 
+          tenant_id: tenantFilter.tenant_id,
+          include_test_data: showTestData 
         });
+
+        if (data?.funnel) {
+          const suffix = showTestData ? 'total' : 'real';
+          setCounts({
+            sources: data.funnel[`sources_${suffix}`] || 0,
+            leads: data.funnel[`leads_${suffix}`] || 0,
+            contacts: data.funnel[`contacts_${suffix}`] || 0,
+            accounts: data.funnel[`accounts_${suffix}`] || 0,
+          });
+        }
       } catch (error) {
         console.error('[SalesFunnelWidget] Failed to load counts:', error);
       } finally {

@@ -240,6 +240,7 @@ import createSuggestionsRoutes from "./routes/suggestions.js";
 import createConstructionProjectsRoutes from "./routes/construction-projects.js";
 import createConstructionAssignmentsRoutes from "./routes/construction-assignments.js";
 import createWorkersRoutes from "./routes/workers.js";
+import createDashboardFunnelRoutes from "./routes/dashboard-funnel.js";
 import braidAuditRoutes from "./routes/braidAudit.js";
 import braidChainRoutes from "./routes/braidChain.js";
 import braidMetricsRoutes from "./routes/braidMetrics.js";
@@ -324,6 +325,9 @@ app.use("/api/systembrandings", createSystemBrandingRoutes(measuredPgPool));
 app.use("/api/synchealths", createSyncHealthRoutes(measuredPgPool));
 app.use("/api/aicampaigns", createAICampaignRoutes(measuredPgPool));
 app.use("/api/security", createSecurityRoutes(measuredPgPool));
+// Dashboard funnel counts (materialized view for fast dashboard loading)
+console.log("✓ Mounting /api/dashboard/funnel-counts routes");
+app.use("/api/dashboard", createDashboardFunnelRoutes(measuredPgPool));
 // Braid SDK Audit Log routes
 console.log("✓ Mounting /api/braid/audit routes");
 app.use("/api/braid/audit", braidAuditRoutes);

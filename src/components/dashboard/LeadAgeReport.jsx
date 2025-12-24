@@ -78,7 +78,8 @@ function LeadAgeReport(props) {
             try {
               let effectiveFilter = { 
                 ...tenantFilter, 
-                status: { $nin: ['converted', 'lost'] } 
+                status: { $nin: ['converted', 'lost'] },
+                limit: 10000  // Fetch all leads, not just default 50
               };
               const activeLeadsFull = await cachedRequest('Lead', 'filter', { filter: effectiveFilter }, function () { return Lead.filter(effectiveFilter); });
 
@@ -99,7 +100,8 @@ function LeadAgeReport(props) {
         // Base filter for active leads (not converted or lost)
         let effectiveFilter = { 
           ...tenantFilter, 
-          status: { $nin: ['converted', 'lost'] } 
+          status: { $nin: ['converted', 'lost'] },
+          limit: 10000  // Fetch all leads, not just default 50
         };
         
         console.log('LeadAgeReport: Using effective filter:', effectiveFilter);

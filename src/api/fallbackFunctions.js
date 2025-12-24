@@ -178,8 +178,33 @@ export function getCurrentHealthStatus() {
   };
 }
 
+/**
+ * Get pre-computed dashboard funnel and pipeline counts
+ * @param {Object} options - Query options
+ * @param {string} options.tenant_id - Tenant ID for filtering
+ * @param {boolean} options.include_test_data - Include test data (default: true)
+ * @returns {Promise<{funnel: Object, pipeline: Array}>}
+ */
+export async function getDashboardFunnelCounts({ tenant_id, include_test_data = true } = {}) {
+  const params = new URLSearchParams({ include_test_data: String(include_test_data) });
+  if (tenant_id) {
+    params.append('tenant_id', tenant_id);
+  }
+  const response = await fetch(`${localFunctions.getBaseUrl()}/api/dashboard/funnel-counts?${params}`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Dashboard funnel counts failed: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
 export default {
   checkHealth,
   getCurrentHealthStatus,
+  getDashboardFunnelCounts,
   isBase44Healthy
 };

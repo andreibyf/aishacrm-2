@@ -233,11 +233,13 @@ export default function ContactsPage() {
     try {
       const scopedFilter = getTenantFilter();
 
+      // Include limit parameter to fetch all contacts (not just default 50)
+      const filterWithLimit = { ...scopedFilter, limit: 10000 };
       const allContacts = await cachedRequest(
         "Contact",
         "filter",
-        { filter: scopedFilter },
-        () => Contact.filter(scopedFilter),
+        { filter: filterWithLimit },
+        () => Contact.filter(filterWithLimit),
       );
 
       const stats = {
