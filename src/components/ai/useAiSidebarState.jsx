@@ -345,6 +345,35 @@ export function AiSidebarProvider({ children }) {
           result.route;
         extractAndStoreEntities(result.assistantMessage.data, entityType);
       }
+      
+      // ALSO extract entities from tool interactions (for search_leads, get_lead, etc.)
+      if (result.tool_interactions && Array.isArray(result.tool_interactions)) {
+        for (const toolCall of result.tool_interactions) {
+          const toolName = toolCall.tool || toolCall.name || '';
+          const toolResult = toolCall.result;
+          
+          if (!toolResult || typeof toolResult !== 'object') continue;
+          
+          // Map tool names to entity types
+          const entityTypeMap = {
+            'search_leads': 'lead',
+            'get_lead': 'lead',
+            'search_contacts': 'contact',
+            'get_contact': 'contact',
+            'search_accounts': 'account',
+            'get_account': 'account',
+            'search_opportunities': 'opportunity',
+            'get_opportunity': 'opportunity'
+          };
+          
+          const entityType = entityTypeMap[toolName];
+          if (entityType && (toolResult.data || toolResult.records || toolResult.items || toolResult.id)) {
+            // Extract entities from tool result
+            const dataToExtract = toolResult.data || toolResult.records || toolResult.items || toolResult;
+            extractAndStoreEntities(dataToExtract, entityType);
+          }
+        }
+      }
 
       setMessages((prev) => {
         const next = [...prev, assistantMessage];
