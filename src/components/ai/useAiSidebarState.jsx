@@ -356,14 +356,55 @@ export function AiSidebarProvider({ children }) {
           
           // Map tool names to entity types
           const entityTypeMap = {
+            // Leads
             'search_leads': 'lead',
             'get_lead': 'lead',
+            'create_lead': 'lead',
+            'update_lead': 'lead',
+            
+            // Contacts
             'search_contacts': 'contact',
             'get_contact': 'contact',
+            'create_contact': 'contact',
+            'update_contact': 'contact',
+            
+            // Accounts
             'search_accounts': 'account',
             'get_account': 'account',
+            'create_account': 'account',
+            'update_account': 'account',
+            
+            // Opportunities
             'search_opportunities': 'opportunity',
-            'get_opportunity': 'opportunity'
+            'get_opportunity': 'opportunity',
+            'create_opportunity': 'opportunity',
+            'update_opportunity': 'opportunity',
+            
+            // Activities ⭐ CRITICAL GAP - now tracked
+            'search_activities': 'activity',
+            'get_activity': 'activity',
+            'list_activities': 'activity',
+            'get_activity_details': 'activity',
+            'create_activity': 'activity',
+            'update_activity': 'activity',
+            'mark_activity_complete': 'activity',
+            'get_upcoming_activities': 'activity',
+            
+            // Notes ⭐ CRITICAL GAP - now tracked
+            'search_notes': 'note',
+            'get_note': 'note',
+            'get_note_details': 'note',
+            'create_note': 'note',
+            'update_note': 'note',
+            'get_notes_for_record': 'note',
+            
+            // BizDev Sources (v3.0.0 workflow)
+            'search_bizdev_sources': 'bizdev_source',
+            'get_bizdev_source': 'bizdev_source',
+            'get_bizdev_source_details': 'bizdev_source',
+            'create_bizdev_source': 'bizdev_source',
+            'update_bizdev_source': 'bizdev_source',
+            'list_bizdev_sources': 'bizdev_source'
           };
           
           const entityType = entityTypeMap[toolName];

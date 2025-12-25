@@ -592,7 +592,21 @@ ${memoryContext}
         type: 'function',
         function: {
           name: 'suggest_next_actions',
-          description: 'CRITICAL: Call this when user asks "what should I do next?", "what do you think?", "how should I proceed?", or similar open-ended questions. Analyzes entity state (notes, activities, stage) using AI memory to suggest 2-3 specific next actions with reasoning.',
+          description: `**MANDATORY TOOL - USE IMMEDIATELY FOR NEXT STEPS QUESTIONS**
+
+Trigger patterns (call this tool for ALL of these):
+- "What should I do next?"
+- "What do you think?"
+- "What are my next steps?"
+- "What do you recommend?"
+- "How should I proceed?"
+- "What's the next step?"
+
+**CRITICAL: Extract entity_id from SESSION ENTITY CONTEXT in system prompt above**
+Example: If system prompt shows "Jack Russel (lead, ID: abc-123)", use entity_id="abc-123"
+
+DO NOT ask user for entity_id. DO NOT respond with "I'm not sure".
+This tool analyzes entity state (notes, activities, stage, temperature) and provides intelligent next actions.`,
           parameters: {
             type: 'object',
             properties: {
@@ -603,7 +617,7 @@ ${memoryContext}
               },
               entity_id: { 
                 type: 'string', 
-                description: 'UUID of the entity' 
+                description: 'UUID of the entity (extract from SESSION ENTITY CONTEXT in system prompt)' 
               },
               limit: { 
                 type: 'integer', 
@@ -1732,6 +1746,17 @@ ${memoryContext}
         return res.status(400).json({ status: 'error', message: 'messages array is required' });
       }
 
+      // Debug logging for session context
+      if (sessionEntities && sessionEntities.length > 0) {
+        console.log('[AI Chat] Session entities received:', {
+          count: sessionEntities.length,
+          types: [...new Set(sessionEntities.map(e => e.type))],
+          entities: sessionEntities.map(e => `${e.name} (${e.type})`)
+        });
+      } else {
+        console.log('[AI Chat] WARNING: No session entities provided');
+      }
+
       const tenantIdentifier = getTenantId(req);
       const tenantRecord = await resolveTenantRecord(tenantIdentifier);
 
@@ -1866,11 +1891,27 @@ ${memoryContext}
       }
       
       // Inject session entity context (background entity tracking for follow-up questions)
+      // CRITICAL: Place MANDATORY directive FIRST for highest priority
       if (sessionEntities && Array.isArray(sessionEntities) && sessionEntities.length > 0) {
         const entityContext = sessionEntities
           .map(e => `- "${e.name}" (${e.type}, ID: ${e.id})${e.aliases?.length > 0 ? ` [also: ${e.aliases.join(', ')}]` : ''}`)
           .join('\n');
-        systemPrompt += `${conversationSummary}\n\n**SESSION ENTITY CONTEXT (Background - CRITICAL FOR NEXT ACTIONS):**\nThe user is currently discussing these entities:\n${entityContext}\n\n**MANDATORY TOOL USAGE:**\nWhen user asks ANY of these questions:\n- "What should I do next?"\n- "What do you think?"\n- "What are my next steps?"\n- "What do you recommend?"\n- "How should I proceed?"\n- "What's the next step?"\n- ANY variation asking about recommendations or guidance\n\nYou MUST call suggest_next_actions tool with entity_id from the context above.\nDO NOT respond with "I'm not sure what action you want to take" - ALWAYS use the tool to analyze and suggest intelligent actions based on entity state.`;
+        
+        // MANDATORY directive comes BEFORE conversation summary for highest priority
+        systemPrompt += `\n\n**🚨 CRITICAL DIRECTIVE - HIGHEST PRIORITY 🚨**
+
+When the user asks about "next steps", "what should I do", "recommendations", or ANY guidance question:
+1. IMMEDIATELY extract entity_id from SESSION ENTITY CONTEXT below
+2. CALL suggest_next_actions tool with that entity_id
+3. NEVER RESPOND with "I'm not sure" or any generic fallback
+
+This is NON-NEGOTIABLE and MANDATORY for user experience.
+
+**SESSION ENTITY CONTEXT (Background - USE THIS FOR NEXT ACTIONS):**
+The user is currently discussing these entities:
+${entityContext}
+
+${conversationSummary}`;
       } else if (conversationSummary) {
         // Add conversation summary even if no session entities
         systemPrompt += conversationSummary;
@@ -1891,7 +1932,21 @@ ${memoryContext}
         type: 'function',
         function: {
           name: 'suggest_next_actions',
-          description: 'CRITICAL: Call this when user asks "what should I do next?", "what do you think?", "how should I proceed?", or similar open-ended questions. Analyzes entity state (notes, activities, stage) using AI memory to suggest 2-3 specific next actions with reasoning.',
+          description: `**MANDATORY TOOL - USE IMMEDIATELY FOR NEXT STEPS QUESTIONS**
+
+Trigger patterns (call this tool for ALL of these):
+- "What should I do next?"
+- "What do you think?"
+- "What are my next steps?"
+- "What do you recommend?"
+- "How should I proceed?"
+- "What's the next step?"
+
+**CRITICAL: Extract entity_id from SESSION ENTITY CONTEXT in system prompt above**
+Example: If system prompt shows "Jack Russel (lead, ID: abc-123)", use entity_id="abc-123"
+
+DO NOT ask user for entity_id. DO NOT respond with "I'm not sure".
+This tool analyzes entity state (notes, activities, stage, temperature) and provides intelligent next actions.`,
           parameters: {
             type: 'object',
             properties: {
@@ -1902,7 +1957,7 @@ ${memoryContext}
               },
               entity_id: { 
                 type: 'string', 
-                description: 'UUID of the entity' 
+                description: 'UUID of the entity (extract from SESSION ENTITY CONTEXT in system prompt)' 
               },
               limit: { 
                 type: 'integer', 
