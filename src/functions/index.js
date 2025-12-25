@@ -4,7 +4,7 @@
 
 // Helper to get base URL for API calls
 export function getBaseUrl() {
-    return import.meta.env.VITE_BACKEND_URL || 'http://localhost:4001';
+    return import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001';
 }
 
 // Stub functions (not implemented in frontend, delegated to backend)
