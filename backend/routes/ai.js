@@ -1727,7 +1727,7 @@ ${memoryContext}
   // POST /api/ai/chat - AI chat completion
   router.post('/chat', async (req, res) => {
     try {
-      const { messages = [], model = DEFAULT_CHAT_MODEL, temperature = 0.7 } = req.body || {};
+      const { messages = [], model = DEFAULT_CHAT_MODEL, temperature = 0.7, sessionEntities = null } = req.body || {};
       if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ status: 'error', message: 'messages array is required' });
       }
@@ -1849,7 +1849,15 @@ ${memoryContext}
       const baseSystemPrompt = `${buildSystemPrompt({ tenantName })}\n\n${BRAID_SYSTEM_PROMPT}\n\n- ALWAYS call fetch_tenant_snapshot before answering tenant data questions.\n- NEVER hallucinate records; only reference tool data.\n`;
       
       // Inject full tenant context dictionary (v3.0.0) - includes terminology, workflows, status cards
-      const systemPrompt = await enhanceSystemPromptWithFullContext(baseSystemPrompt, pgPool, tenantIdentifier);
+      let systemPrompt = await enhanceSystemPromptWithFullContext(baseSystemPrompt, pgPool, tenantIdentifier);
+
+      // Inject session entity context (background entity tracking for follow-up questions)
+      if (sessionEntities && Array.isArray(sessionEntities) && sessionEntities.length > 0) {
+        const entityContext = sessionEntities
+          .map(e => `- "${e.name}" (${e.type}, ID: ${e.id})${e.aliases?.length > 0 ? ` [also: ${e.aliases.join(', ')}]` : ''}`)
+          .join('\n');
+        systemPrompt += `\n\n**SESSION ENTITY CONTEXT (Background):**\nThe user is currently discussing these entities:\n${entityContext}\n\nWhen the user asks "what should I do next?" or similar questions, use suggest_next_actions tool with the appropriate entity_id from this context.`;
+      }
 
       const convoMessages = [
         { role: 'system', content: systemPrompt },
