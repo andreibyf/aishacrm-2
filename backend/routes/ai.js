@@ -1856,7 +1856,7 @@ ${memoryContext}
         const entityContext = sessionEntities
           .map(e => `- "${e.name}" (${e.type}, ID: ${e.id})${e.aliases?.length > 0 ? ` [also: ${e.aliases.join(', ')}]` : ''}`)
           .join('\n');
-        systemPrompt += `\n\n**SESSION ENTITY CONTEXT (Background):**\nThe user is currently discussing these entities:\n${entityContext}\n\nWhen the user asks "what should I do next?" or similar questions, use suggest_next_actions tool with the appropriate entity_id from this context.`;
+        systemPrompt += `\n\n**SESSION ENTITY CONTEXT (Background - CRITICAL FOR NEXT ACTIONS):**\nThe user is currently discussing these entities:\n${entityContext}\n\n**MANDATORY TOOL USAGE:**\nWhen user asks ANY of these questions:\n- "What should I do next?"\n- "What do you think?"\n- "What are my next steps?"\n- "What do you recommend?"\n- "How should I proceed?"\n- "What's the next step?"\n\nYou MUST call suggest_next_actions tool with entity_id from the context above.\nDO NOT respond with "I'm not sure" - ALWAYS use the tool to analyze and suggest actions.`;
       }
 
       const convoMessages = [
