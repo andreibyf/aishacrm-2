@@ -7,6 +7,7 @@ import { toast } from 'sonner';
  */
 export function useLoadingToast() {
   const toastIdRef = useRef(null);
+  const showTimeRef = useRef(null);
 
   const funnyMessages = [
     "🧙‍♂️ Summoning your data from the cloud...",
@@ -33,6 +34,7 @@ export function useLoadingToast() {
 
   const showLoading = useCallback((customMessage) => {
     const message = customMessage || funnyMessages[Math.floor(Math.random() * funnyMessages.length)];
+    showTimeRef.current = Date.now();
     toastIdRef.current = toast.loading(
       message,
       { 
@@ -48,40 +50,75 @@ export function useLoadingToast() {
   }, []);
 
   const showSuccess = useCallback((message = "Data loaded! ✨", options = {}) => {
-    if (toastIdRef.current) {
-      toast.dismiss(toastIdRef.current);
-    }
-    toast.success(message, { 
-      duration: 1500,
-      style: {
-        background: 'rgba(34, 197, 94, 0.15)',
-        color: '#86efac',
-        fontWeight: '600',
-        border: '1px solid rgba(34, 197, 94, 0.3)',
-      },
-      ...options 
-    });
+    // Calculate minimum display time (500ms) for loading toast
+    const minDisplayTime = 500;
+    const elapsed = showTimeRef.current ? Date.now() - showTimeRef.current : minDisplayTime;
+    const remainingTime = Math.max(0, minDisplayTime - elapsed);
+
+    // Wait for minimum display time, then dismiss and show success
+    setTimeout(() => {
+    // CRITICAL: Dismiss ALL toasts first to prevent stacking
+      if (toastIdRef.current) {
+        toast.dismiss(toastIdRef.current);
+      }
+      // Dismiss any other loading toasts that might exist
+      toast.dismiss();
+      toastIdRef.current = null;
+      showTimeRef.current = null;
+
+      // Delay to ensure dismiss animations complete
+      setTimeout(() => {
+        toast.success(message, {
+          duration: 1500,
+          style: {
+            background: 'rgba(34, 197, 94, 0.15)',
+            color: '#86efac',
+            fontWeight: '600',
+            border: '1px solid rgba(34, 197, 94, 0.3)',
+          },
+          ...options
+        });
+      }, 100);
+    }, remainingTime);
   }, []);
 
   const showError = useCallback((message = "Failed to load data", options = {}) => {
-    if (toastIdRef.current) {
-      toast.dismiss(toastIdRef.current);
-    }
-    toast.error(message, {
-      style: {
-        background: 'rgba(239, 68, 68, 0.15)',
-        color: '#fca5a5',
-        fontWeight: '600',
-        border: '1px solid rgba(239, 68, 68, 0.3)',
-      },
-      ...options
-    });
+    // Calculate minimum display time (500ms) for loading toast
+    const minDisplayTime = 500;
+    const elapsed = showTimeRef.current ? Date.now() - showTimeRef.current : minDisplayTime;
+    const remainingTime = Math.max(0, minDisplayTime - elapsed);
+
+    // Wait for minimum display time, then dismiss and show error
+    setTimeout(() => {
+    // CRITICAL: Dismiss ALL toasts first to prevent stacking
+      if (toastIdRef.current) {
+        toast.dismiss(toastIdRef.current);
+      }
+      // Dismiss any other loading toasts that might exist
+      toast.dismiss();
+      toastIdRef.current = null;
+      showTimeRef.current = null;
+
+      // Delay to ensure dismiss animations complete
+      setTimeout(() => {
+        toast.error(message, {
+          style: {
+            background: 'rgba(239, 68, 68, 0.15)',
+            color: '#fca5a5',
+            fontWeight: '600',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+          },
+          ...options
+        });
+      }, 100);
+    }, remainingTime);
   }, []);
 
   const dismiss = useCallback(() => {
     if (toastIdRef.current) {
       toast.dismiss(toastIdRef.current);
       toastIdRef.current = null;
+      showTimeRef.current = null;
     }
   }, []);
 

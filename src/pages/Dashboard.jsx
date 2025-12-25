@@ -310,8 +310,8 @@ export default function DashboardPage() {
           return;
         }
 
-        // Show a fun loading toast (before any data loading)
-        loadingToast.showLoading();
+        // Loading toast already shown by nav click handler in Layout
+        // No delay needed since toast renders before this component mounts
 
         // OPTIMIZATION: Try browser cache first (unless forcing refresh)
         if (!forceRefresh) {

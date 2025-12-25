@@ -381,7 +381,10 @@ export default function LeadsPage() {
     if (!user) return;
 
     loadingToast.showLoading();
-    setLoading(true);
+
+    // Delay showing loading spinner to avoid flash for fast operations
+    const loadingTimer = setTimeout(() => setLoading(true), 300);
+
     try {
       let currentFilter = getTenantFilter();
       let searchFilter = null;
@@ -505,6 +508,7 @@ export default function LeadsPage() {
       setLeads([]);
       setTotalItems(0);
     } finally {
+      clearTimeout(loadingTimer);
       setLoading(false);
     }
   }, [
