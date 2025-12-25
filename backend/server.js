@@ -178,6 +178,7 @@ import createIntegrationRoutes from "./routes/integrations.js";
 import createTelephonyRoutes from "./routes/telephony.js";
 import createAiRoutes from "./routes/ai.js";
 import createMcpRoutes from "./routes/mcp.js";
+import devaiRoutes from "./routes/devai.js"; // Phase 6: Developer AI approvals
 import createAccountRoutes from "./routes/accounts.js";
 import createLeadRoutes from "./routes/leads.js";
 import createContactRoutes from "./routes/contacts.js";
@@ -260,6 +261,7 @@ app.use("/api/integrations", createIntegrationRoutes(measuredPgPool));
 app.use("/api/telephony", createTelephonyRoutes(measuredPgPool));
 app.use("/api/ai", createAiRoutes(measuredPgPool));
 app.use("/api/mcp", createMcpRoutes(measuredPgPool));
+app.use("/api/devai", devaiRoutes); // Phase 6: Developer AI approvals (superadmin only)
 app.use("/api/accounts", createAccountRoutes(measuredPgPool));
 app.use("/api/leads", createLeadRoutes(measuredPgPool));
 app.use("/api/contacts", createContactRoutes(measuredPgPool));

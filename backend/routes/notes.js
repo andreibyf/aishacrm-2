@@ -202,6 +202,26 @@ export default function createNoteRoutes(_pgPool) {
         .select('*')
         .single();
       if (error) throw new Error(error.message);
+      
+      // AI MEMORY INGESTION (async, non-blocking)
+      if (data) {
+        import('../lib/aiMemory/index.js')
+          .then(({ upsertMemoryChunks }) => {
+            const noteText = `${data.title || 'Note'}: ${data.content}`;
+            return upsertMemoryChunks({
+              tenantId: data.tenant_id,
+              content: noteText,
+              sourceType: 'note',
+              entityType: data.related_type,
+              entityId: data.related_id,
+              metadata: { noteId: data.id, createdBy: data.created_by }
+            });
+          })
+          .catch(err => {
+            console.error('[NOTE_MEMORY_INGESTION] Failed:', err.message);
+          });
+      }
+      
       res.status(201).json({ status: 'success', message: 'Created', data: { note: data } });
     } catch (error) {
       console.error('Error creating note:', error);
@@ -292,6 +312,26 @@ export default function createNoteRoutes(_pgPool) {
         .single();
       if (error?.code === 'PGRST116') return res.status(404).json({ status: 'error', message: 'Not found' });
       if (error) throw new Error(error.message);
+      
+      // AI MEMORY INGESTION (async, non-blocking)
+      if (data && data.content) {
+        import('../lib/aiMemory/index.js')
+          .then(({ upsertMemoryChunks }) => {
+            const noteText = `${data.title || 'Note'}: ${data.content}`;
+            return upsertMemoryChunks({
+              tenantId: data.tenant_id,
+              content: noteText,
+              sourceType: 'note',
+              entityType: data.related_type,
+              entityId: data.related_id,
+              metadata: { noteId: data.id, createdBy: data.created_by }
+            });
+          })
+          .catch(err => {
+            console.error('[NOTE_MEMORY_INGESTION] Failed:', err.message);
+          });
+      }
+      
       res.json({ status: 'success', message: 'Updated', data: { note: data } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });

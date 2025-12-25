@@ -799,6 +799,30 @@ export default function createActivityRoutes(_pgPool) {
         }
       } catch (e) { void e; }
       
+      // AI MEMORY INGESTION (async, non-blocking)
+      if (data && (data.subject || data.body)) {
+        import('../lib/aiMemory/index.js')
+          .then(({ upsertMemoryChunks }) => {
+            const activityText = `${data.type || 'Activity'} - ${data.subject || '(no subject)'}: ${data.body || ''}`;
+            return upsertMemoryChunks({
+              tenantId: data.tenant_id,
+              content: activityText,
+              sourceType: 'activity',
+              entityType: null, // Activities don't have entity_type in schema
+              entityId: data.related_id,
+              metadata: { 
+                activityId: data.id, 
+                type: data.type,
+                status: data.status,
+                createdBy: data.created_by 
+              }
+            });
+          })
+          .catch(err => {
+            console.error('[ACTIVITY_MEMORY_INGESTION] Failed:', err.message);
+          });
+      }
+      
       res.status(201).json({
         status: 'success',
         data: normalizeActivity(data)
@@ -954,6 +978,30 @@ export default function createActivityRoutes(_pgPool) {
           await redis.incr(`activities:stats:tenant:${current.tenant_id}:version`);
         }
       } catch (e) { void e; }
+      
+      // AI MEMORY INGESTION (async, non-blocking)
+      if (data && (data.subject || data.body)) {
+        import('../lib/aiMemory/index.js')
+          .then(({ upsertMemoryChunks }) => {
+            const activityText = `${data.type || 'Activity'} - ${data.subject || '(no subject)'}: ${data.body || ''}`;
+            return upsertMemoryChunks({
+              tenantId: data.tenant_id,
+              content: activityText,
+              sourceType: 'activity',
+              entityType: null,
+              entityId: data.related_id,
+              metadata: { 
+                activityId: data.id, 
+                type: data.type,
+                status: data.status,
+                createdBy: data.created_by 
+              }
+            });
+          })
+          .catch(err => {
+            console.error('[ACTIVITY_MEMORY_INGESTION] Failed:', err.message);
+          });
+      }
       
       res.json({
         status: 'success',
