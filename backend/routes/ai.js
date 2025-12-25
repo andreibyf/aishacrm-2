@@ -1851,12 +1851,29 @@ ${memoryContext}
       // Inject full tenant context dictionary (v3.0.0) - includes terminology, workflows, status cards
       let systemPrompt = await enhanceSystemPromptWithFullContext(baseSystemPrompt, pgPool, tenantIdentifier);
 
+      // Add conversation history summary for context awareness (last 3 messages)
+      const recentMessages = messages.slice(-6); // Last 3 exchanges (user + assistant pairs)
+      let conversationSummary = '';
+      if (recentMessages.length > 0) {
+        const summaryItems = recentMessages
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map(m => {
+            const preview = m.content?.slice(0, 100) || '';
+            return `${m.role === 'user' ? 'User' : 'AiSHA'}: ${preview}`;
+          })
+          .join('\n');
+        conversationSummary = `\n\n**RECENT CONVERSATION CONTEXT:**\n${summaryItems}\n\nUse this context to understand implicit references like "I think I only have 1" or "what about that one".`;
+      }
+      
       // Inject session entity context (background entity tracking for follow-up questions)
       if (sessionEntities && Array.isArray(sessionEntities) && sessionEntities.length > 0) {
         const entityContext = sessionEntities
           .map(e => `- "${e.name}" (${e.type}, ID: ${e.id})${e.aliases?.length > 0 ? ` [also: ${e.aliases.join(', ')}]` : ''}`)
           .join('\n');
-        systemPrompt += `\n\n**SESSION ENTITY CONTEXT (Background - CRITICAL FOR NEXT ACTIONS):**\nThe user is currently discussing these entities:\n${entityContext}\n\n**MANDATORY TOOL USAGE:**\nWhen user asks ANY of these questions:\n- "What should I do next?"\n- "What do you think?"\n- "What are my next steps?"\n- "What do you recommend?"\n- "How should I proceed?"\n- "What's the next step?"\n\nYou MUST call suggest_next_actions tool with entity_id from the context above.\nDO NOT respond with "I'm not sure" - ALWAYS use the tool to analyze and suggest actions.`;
+        systemPrompt += `${conversationSummary}\n\n**SESSION ENTITY CONTEXT (Background - CRITICAL FOR NEXT ACTIONS):**\nThe user is currently discussing these entities:\n${entityContext}\n\n**MANDATORY TOOL USAGE:**\nWhen user asks ANY of these questions:\n- "What should I do next?"\n- "What do you think?"\n- "What are my next steps?"\n- "What do you recommend?"\n- "How should I proceed?"\n- "What's the next step?"\n- ANY variation asking about recommendations or guidance\n\nYou MUST call suggest_next_actions tool with entity_id from the context above.\nDO NOT respond with "I'm not sure what action you want to take" - ALWAYS use the tool to analyze and suggest intelligent actions based on entity state.`;
+      } else if (conversationSummary) {
+        // Add conversation summary even if no session entities
+        systemPrompt += conversationSummary;
       }
 
       const convoMessages = [
