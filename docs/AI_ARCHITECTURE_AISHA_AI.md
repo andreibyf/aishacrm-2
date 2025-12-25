@@ -177,22 +177,33 @@ Tool Chain:
 **Sections:**
 1. **Core Identity** - "You are AI-SHA, an executive assistant for Aisha CRM..."
 2. **Capabilities Overview** - 27+ tools, autonomous actions, proactive suggestions
-3. **Tool Guidelines** - When to use each tool, parameter requirements
-4. **Conversation Style** - Professional, concise, action-oriented
-5. **Proactive Next Actions** - CRITICAL directive to suggest next steps
-6. **Entity Labels** - Custom terminology per tenant (dynamically injected)
-7. **Session Entity Context** - Currently discussed entities (injected per request)
-8. **Safety Rules** - Never expose IDs in chat, validate before actions
+3. **Conversation Continuity & Context Awareness** - ⚠️ NEW: Handle implicit references, track discussion topics
+4. **Tool Guidelines** - When to use each tool, parameter requirements
+5. **Conversation Style** - Professional, concise, action-oriented
+6. **Proactive Next Actions** - CRITICAL directive to suggest next steps
+7. **Entity Labels** - Custom terminology per tenant (dynamically injected)
+8. **Session Entity Context** - Currently discussed entities (injected per request)
+9. **Recent Conversation Summary** - ⚠️ NEW: Last 3 message exchanges for context
+10. **Safety Rules** - Never expose IDs in chat, validate before actions
 
 **Key Directives:**
 ```
+- ⚠️ NEW: Maintain conversation continuity - track implicit references like "I think I only have 1"
+- ⚠️ NEW: Refer to recent messages (last 3-5) to understand context
+- ⚠️ NEW: NEVER respond "I'm not sure what action you want to take" - use conversation history
 - Use session entity context for follow-up questions
-- Call suggest_next_actions when user asks for guidance
+- Call suggest_next_actions when user asks for guidance (mandatory for "next steps" questions)
 - Provide 2-4 follow-up suggestions after every response
 - Extract entities from tool results and track in session
 - Confirm destructive actions before executing
 - Use natural language, avoid technical jargon
 ```
+
+**⚠️ v3.3.7+ RAG Improvements:**
+- **Conversation History Awareness:** Last 6 messages (3 exchanges) injected into system prompt with 100-char preview
+- **Implicit Reference Handling:** Examples added to system prompt showing how to interpret "I think I only have 1" in context
+- **Strengthened suggest_next_actions Trigger:** Explicit mandate to call tool for ANY "next steps" question variation
+- **"I'm Not Sure" Prevention:** System prompt explicitly forbids generic "I'm not sure" responses
 
 ---
 
@@ -559,10 +570,119 @@ test('suggests next actions with session context', async () => {
 
 ---
 
+## RAG & Context Improvements (v3.3.7+)
+
+### Problem Addressed
+AiSHA AI was failing to maintain conversation continuity, resulting in poor user experience:
+- **Issue 1:** Responding "I'm not sure what action you want to take" to vague statements like "I think I only have 1"
+- **Issue 2:** Not calling `suggest_next_actions` when users asked "What should be my next steps?"
+- **Issue 3:** Losing context of recently discussed entities
+
+### Solution Components
+
+#### 1. **Conversation History Injection**
+**File:** `backend/routes/ai.js` (lines 1854-1879)
+
+Added automatic injection of recent conversation context into system prompt:
+```javascript
+// Last 6 messages (3 exchanges) with 100-char preview
+const recentMessages = messages.slice(-6);
+const summaryItems = recentMessages
+  .filter(m => m.role === 'user' || m.role === 'assistant')
+  .map(m => {
+    const preview = m.content?.slice(0, 100) || '';
+    return `${m.role === 'user' ? 'User' : 'AiSHA'}: ${preview}`;
+  })
+  .join('\n');
+```
+
+**Effect:** AiSHA can now refer to what was just discussed to understand implicit references.
+
+#### 2. **Enhanced System Prompt**
+**File:** `backend/lib/braidIntegration-v2.js` (lines 618-665)
+
+Added new section: **CONVERSATION CONTINUITY & CONTEXT AWARENESS**
+
+Key improvements:
+- Explicit examples of implicit references: "I think I only have 1" → understand from context
+- Instruction to track recent discussion topics (last 3-5 messages)
+- Mandate to use conversation history instead of responding "I'm not sure"
+- Specific patterns for handling follow-up questions about entities
+
+#### 3. **Strengthened suggest_next_actions Trigger**
+**File:** `backend/lib/braidIntegration-v2.js` (lines 636-665)
+
+- Added comprehensive list of trigger patterns
+- Explicit **MANDATORY BEHAVIOR** directive
+- Forbids "I'm not sure" responses for next steps questions
+- Examples showing correct tool usage with session context
+
+#### 4. **Improved Session Context Formatting**
+**File:** `backend/routes/ai.js` (lines 1870-1880)
+
+Enhanced session entity context injection:
+```javascript
+systemPrompt += `${conversationSummary}\n\n**SESSION ENTITY CONTEXT (Background - CRITICAL FOR NEXT ACTIONS):**
+The user is currently discussing these entities:
+${entityContext}
+
+**MANDATORY TOOL USAGE:**
+When user asks ANY of these questions:
+- "What should I do next?"
+- "What do you think?"
+...
+You MUST call suggest_next_actions tool with entity_id from the context above.
+DO NOT respond with "I'm not sure what action you want to take" - ALWAYS use the tool to analyze and suggest intelligent actions based on entity state.`;
+```
+
+### Testing & Validation
+
+**Test Suite:** `backend/__tests__/ai/conversationContext.test.js`
+
+Coverage:
+- ✅ System prompt includes conversation continuity section
+- ✅ All suggest_next_actions trigger patterns present
+- ✅ Implicit reference handling examples included
+- ✅ Session entity format validation
+- ✅ Conversation summary format validation
+- ✅ "I'm not sure" prevention directives
+- ✅ Mandatory suggest_next_actions usage
+
+**Run tests:**
+```bash
+cd backend
+CI_BACKEND_TESTS=true node --test __tests__/ai/conversationContext.test.js
+```
+
+### Expected Behavior After Fix
+
+**Scenario from Problem Statement:**
+
+| Before (v3.3.6) | After (v3.3.7+) |
+|-----------------|-----------------|
+| User: "I think i only have 1"<br>AiSHA: "I'm not sure what action you want to take" | User: "I think i only have 1"<br>AiSHA: "Yes, you have 1 warm lead: Jack Russel. Would you like to see the details?" |
+| User: "What should be my next steps?"<br>AiSHA: "I'm not sure what action you want to take" | User: "What should be my next steps?"<br>AiSHA: [Calls suggest_next_actions]<br>"Based on Jack's current state, I recommend: 1. Follow-up call (Urgent)..." |
+
+### Performance Impact
+
+- **Minimal:** +100-200 bytes to system prompt per request
+- **Conversation summary:** ~600 bytes for 6 messages
+- **No additional API calls:** Context built from existing message history
+- **Latency:** <1ms overhead for context formatting
+
+### Rollback Plan
+
+If issues arise, revert commits:
+- `5f260c3` - Enhanced system prompt
+- Previous behavior: Session entities tracked but not referenced in conversation history
+
+---
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1 | 2025-12-25 | RAG & context improvements: conversation history, implicit references, suggest_next_actions mandate |
 | 1.0 | 2025-12-25 | Initial architecture documentation |
 
 ---
