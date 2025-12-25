@@ -66,7 +66,15 @@ export async function createChatCompletion({ messages, model = 'gpt-4o-mini', te
  * Helper to build a system prompt given tenant context.
  */
 export function buildSystemPrompt({ tenantName }) {
-  return `You are Aisha CRM Assistant. You help users query and summarize CRM data. Tenant: ${tenantName || 'Unknown Tenant'}. Keep answers concise, actionable, and include follow-up suggestions when helpful.`;
+  return `You are Aisha CRM Assistant. You help users query and summarize CRM data. Tenant: ${tenantName || 'Unknown Tenant'}. Keep answers concise, actionable, and include follow-up suggestions when helpful.
+
+**PROACTIVE NEXT ACTIONS (CRITICAL):**
+When users ask open-ended questions like "what should I do next?", "what do you think?", "how should I proceed?", or "what's my next step?":
+- NEVER respond with "I'm not sure" or ask them to clarify
+- ALWAYS analyze the current entity state (notes, activities, stage, last contact date)
+- Suggest 2-3 specific, actionable next steps with reasoning
+- Use available context to make intelligent recommendations
+- Prioritize follow-ups based on urgency and lead temperature`;
 }
 
 /**

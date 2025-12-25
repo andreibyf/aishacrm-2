@@ -150,7 +150,7 @@ const secondaryNavItems = [
   { href: "Documentation", icon: BookOpen, label: "Documentation" }, // Changed icon to BookOpen
   {
     href: "DeveloperAI",
-    icon: Code,
+    icon: Bot,
     label: "Developer AI",
   },
   {

@@ -1,6 +1,6 @@
 # AiSHA Assistant User Guide
 
-_Last updated: December 20, 2025_
+_Last updated: December 24, 2025_
 
 AiSHA (AI Super Hi-performing Assistant) is the executive-assistant layer that runs inside the CRM sidebar. This guide explains how end users, product, and support teams should interact with the Phase 4-ready assistant experience, including layout, quick actions, guided forms, voice controls, and natural language commands.
 
@@ -13,7 +13,7 @@ AiSHA (AI Super Hi-performing Assistant) is the executive-assistant layer that r
 3. To close the assistant, press **Esc** or click the **×** button in the header.
 4. **Wake Word:** Say "Hey Aisha" (or "Hi Aisha", "Aisha") when Wake Word mode is enabled to activate hands-free voice interaction.
 
-> **Tip:** The assistant always runs in **read-only / propose-actions** mode. It never writes to production data without explicit confirmation via the existing Brain pipeline.
+> **Note:** AiSHA has full **CRM operations & automation** capabilities. It can create, read, update, and delete CRM records (accounts, leads, contacts, opportunities, activities, notes) as well as execute workflows, make AI-powered calls, conduct web research, generate reports, and navigate you through the CRM. All write operations are tracked in the audit log for compliance.
 
 ---
 

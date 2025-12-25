@@ -403,6 +403,17 @@ export default function createAIRoutes(pgPool) {
   };
 
   const executeToolCall = async ({ toolName, args, tenantRecord, userEmail = null, accessToken = null }) => {
+    // Handle suggest_next_actions directly (not a Braid tool)
+    if (toolName === 'suggest_next_actions') {
+      const { suggestNextActions } = await import('../lib/suggestNextActions.js');
+      return await suggestNextActions({
+        entity_type: args?.entity_type,
+        entity_id: args?.entity_id,
+        tenant_id: tenantRecord?.id || tenantRecord?.tenant_id,
+        limit: args?.limit || 3
+      });
+    }
+    
     // Route execution through Braid SDK tool registry
     // SECURITY: accessToken must be provided after tenant authorization passes
     return await executeBraidTool(toolName, args || {}, tenantRecord, userEmail, accessToken);
@@ -575,6 +586,38 @@ ${memoryContext}
       const baseTools = await generateToolSchemas();
       const entityLabels = await fetchEntityLabels(pgPool, tenantIdentifier);
       const tools = updateToolSchemasWithLabels(baseTools, entityLabels);
+      
+      // Add suggest_next_actions tool (not in Braid registry)
+      tools.push({
+        type: 'function',
+        function: {
+          name: 'suggest_next_actions',
+          description: 'CRITICAL: Call this when user asks "what should I do next?", "what do you think?", "how should I proceed?", or similar open-ended questions. Analyzes entity state (notes, activities, stage) using AI memory to suggest 2-3 specific next actions with reasoning.',
+          parameters: {
+            type: 'object',
+            properties: {
+              entity_type: { 
+                type: 'string', 
+                enum: ['lead', 'contact', 'account', 'opportunity'],
+                description: 'Type of entity to analyze' 
+              },
+              entity_id: { 
+                type: 'string', 
+                description: 'UUID of the entity' 
+              },
+              limit: { 
+                type: 'integer', 
+                description: 'Max number of suggestions (1-5)',
+                minimum: 1,
+                maximum: 5,
+                default: 3
+              }
+            },
+            required: ['entity_type', 'entity_id']
+          }
+        }
+      });
+      
       if (!tools || tools.length === 0) {
         console.warn('[AI] No Braid tools loaded; falling back to minimal snapshot tool definition');
         // Fallback legacy single tool to avoid hallucinations
@@ -1817,6 +1860,38 @@ ${memoryContext}
       const baseTools = await generateToolSchemas();
       const entityLabels = await fetchEntityLabels(pgPool, tenantIdentifier);
       const tools = updateToolSchemasWithLabels(baseTools, entityLabels);
+      
+      // Add suggest_next_actions tool (not in Braid registry)
+      tools.push({
+        type: 'function',
+        function: {
+          name: 'suggest_next_actions',
+          description: 'CRITICAL: Call this when user asks "what should I do next?", "what do you think?", "how should I proceed?", or similar open-ended questions. Analyzes entity state (notes, activities, stage) using AI memory to suggest 2-3 specific next actions with reasoning.',
+          parameters: {
+            type: 'object',
+            properties: {
+              entity_type: { 
+                type: 'string', 
+                enum: ['lead', 'contact', 'account', 'opportunity'],
+                description: 'Type of entity to analyze' 
+              },
+              entity_id: { 
+                type: 'string', 
+                description: 'UUID of the entity' 
+              },
+              limit: { 
+                type: 'integer', 
+                description: 'Max number of suggestions (1-5)',
+                minimum: 1,
+                maximum: 5,
+                default: 3
+              }
+            },
+            required: ['entity_type', 'entity_id']
+          }
+        }
+      });
+      
       if (!tools || tools.length === 0) {
         tools.push({
           type: 'function',
@@ -2115,6 +2190,25 @@ ${memoryContext}
               forecast: summary.total_forecast
             }
           },
+          duration_ms: duration
+        });
+      }
+
+      // For suggest_next_actions tool, execute directly (not a Braid tool)
+      if (tool_name === 'suggest_next_actions') {
+        const { suggestNextActions } = await import('../lib/suggestNextActions.js');
+        const suggestions = await suggestNextActions({
+          entity_type: args?.entity_type,
+          entity_id: args?.entity_id,
+          tenant_id: tenantIdentifier,
+          limit: args?.limit || 3
+        });
+        
+        return res.json({
+          status: 'success',
+          call_id,
+          tool_name,
+          data: suggestions,
           duration_ms: duration
         });
       }

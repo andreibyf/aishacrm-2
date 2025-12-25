@@ -1363,7 +1363,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
             </div>
               <div className="space-y-0.5">
                 <p className="text-[15px] font-semibold leading-tight">{isDeveloperMode ? 'Developer AI' : 'AiSHA Assistant'}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{isDeveloperMode ? 'Claude • Code analysis' : 'Read-only / propose actions'}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{isDeveloperMode ? 'Claude • Code analysis' : 'CRM operations & automation'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">

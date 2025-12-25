@@ -545,7 +545,10 @@ const TOOL_DESCRIPTIONS = {
   get_activity_report: 'Generate an activity report for a date range. Optionally filter by employee.',
   get_lead_conversion_report: 'Get lead conversion metrics showing funnel stages and conversion rates.',
   get_revenue_forecasts: 'Get revenue forecasts based on pipeline opportunities. Specify months_ahead.',
-  clear_report_cache: 'Clear cached report data to force regeneration. Requires admin privileges.'
+  clear_report_cache: 'Clear cached report data to force regeneration. Requires admin privileges.',
+
+  // AI-Powered Next Actions (RAG-enabled)
+  suggest_next_actions: 'CRITICAL: Call this when user asks "what should I do next?", "what do you think?", "how should I proceed?", or similar open-ended questions. Analyzes entity state (notes, activities, stage) using RAG memory to suggest 2-3 specific next actions with reasoning. REQUIRED when users ask for guidance on next steps. Pass entity_type (lead/contact/account/opportunity) and entity_id.'
 };
 
 /**
@@ -611,6 +614,15 @@ Example response: "You're welcome! Let me know if you need anything else. Going 
 - Example: User says "Take me to the Leads page" → Call navigate_to_page with page="leads"
 - You can also navigate to specific records by passing record_id parameter
 - ALWAYS use the tool for navigation requests - do NOT tell users you cannot navigate
+
+**PROACTIVE NEXT ACTIONS (CRITICAL):**
+When users ask "what should I do next?", "what do you think?", "how should I proceed?", or similar open-ended questions:
+- NEVER respond with "I'm not sure what action you want to take"
+- ALWAYS use suggest_next_actions tool to analyze the entity and provide intelligent recommendations
+- Analyze recent notes, activities, stage, last contact date, and other context
+- Suggest 2-3 specific, actionable next steps with clear reasoning
+- Prioritize based on urgency, lead temperature, and best practices
+- If notes mention "awaiting callback", "left message", or "considering email", suggest appropriate follow-up timing and method
 
 **Data Structure Guide (CRITICAL - Matches DB):**
 - Accounts: {id, name, annual_revenue, industry, website, email, phone, assigned_to, metadata}
