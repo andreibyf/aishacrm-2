@@ -30,6 +30,7 @@ import {
   Calendar,
   CheckSquare,
   ClipboardCheck, // NEW: Added for ClientRequirements
+  Code, // NEW: Added for Developer AI
   CreditCard,
   Database,
   DollarSign,
@@ -148,11 +149,9 @@ const navItems = [
 const secondaryNavItems = [
   { href: "Documentation", icon: BookOpen, label: "Documentation" }, // Changed icon to BookOpen
   {
-    href: "Agent",
-    icon: Bot,
-    label: "AI Agent",
-    isAvatar: true,
-    avatarUrl: "/assets/aisha-executive-portrait.jpg",
+    href: "DeveloperAI",
+    icon: Code,
+    label: "Developer AI",
   },
   {
     href: "ClientRequirements",
@@ -200,7 +199,7 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
   if (superadminOnlyPages.has(pageName) && user.role !== 'superadmin') return false;
 
   const pagesAllowedWithoutCRM = new Set([
-    "Documentation","Agent","Settings","AuditLog","UnitTests","ClientRequirements",
+    "Documentation","DeveloperAI","Settings","AuditLog","UnitTests","ClientRequirements",
   ]);
   if (user.crm_access === false) return pagesAllowedWithoutCRM.has(pageName);
 
@@ -223,7 +222,7 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
     Integrations: 'Integrations',
     PaymentPortal: 'Payment Portal',
     AICampaigns: 'AI Campaigns',
-    Agent: 'AI Agent',
+    DeveloperAI: 'Developer AI',
     Utilities: 'Utilities',
     ClientOnboarding: 'Client Onboarding',
     Workflows: 'Workflows',
@@ -269,8 +268,9 @@ function hasPageAccess(user, pageName, selectedTenantId, moduleSettings = []) {
   }
 
   if ((user.role === 'admin' || user.role === 'superadmin') && (
-      pageName === 'Documentation' || pageName === 'AuditLog' || pageName === 'Tenants' || pageName === 'Agent' ||
+      pageName === 'Documentation' || pageName === 'AuditLog' || pageName === 'Tenants' ||
     pageName === 'UnitTests' || pageName === 'ClientRequirements' || pageName === 'ConstructionProjects')) return true;
+  if (user.role === 'superadmin' && pageName === 'DeveloperAI') return true;
   if ((user.role === 'superadmin' || user.role === 'admin') && !selectedTenantId) return true;
 
   const defaultPermissions = getDefaultNavigationPermissions(user.role);
@@ -317,7 +317,7 @@ function getDefaultNavigationPermissions(role) {
       Integrations: true,
       PaymentPortal: true,
       AICampaigns: true,
-      Agent: true,
+      DeveloperAI: true,
       Tenants: true,
       Settings: true,
       Documentation: true,
@@ -350,7 +350,6 @@ function getDefaultNavigationPermissions(role) {
       Integrations: true,
       PaymentPortal: true,
       AICampaigns: true,
-      Agent: true,
       Tenants: true,
       Settings: true,
       Documentation: true,
@@ -383,7 +382,6 @@ function getDefaultNavigationPermissions(role) {
       Integrations: true,
       PaymentPortal: false,
       AICampaigns: true,
-      Agent: true,
       Tenants: false,
       Settings: true,
       Documentation: true,
@@ -407,7 +405,6 @@ function getDefaultNavigationPermissions(role) {
       Activities: true,
       Calendar: true,
       Documentation: true,
-      Agent: true,
       Settings: true, // All users need access to their profile settings
       ClientOnboarding: false,
       ClientRequirements: false,
@@ -419,11 +416,10 @@ function getDefaultNavigationPermissions(role) {
   // Merge the basePermissions with role-specific permissions, ensuring role-specific explicit 'true's override 'false'
   const rolePermissions = { ...(defaults[role] || defaults.employee) };
 
-  // Explicitly ensure 'Settings', 'Documentation', 'Agent' are accessible for all roles if CRM access is true
+  // Explicitly ensure 'Settings', 'Documentation' are accessible for all roles if CRM access is true
   // (CRM access check is done in hasPageAccess first)
   rolePermissions.Settings = true; // Always allow Settings for profile access
   rolePermissions.Documentation = rolePermissions.Documentation || true;
-  rolePermissions.Agent = rolePermissions.Agent || true;
   rolePermissions.ClientRequirements = rolePermissions.ClientRequirements ||
     false; // NEW: Explicitly manage ClientRequirements access
 

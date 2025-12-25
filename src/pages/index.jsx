@@ -29,6 +29,7 @@ const PAGES = {
     PaymentPortal: lazy(() => import('./PaymentPortal')),
     DocumentManagement: lazy(() => import('./DocumentManagement')),
     Agent: lazy(() => import('./Agent')),
+    DeveloperAI: lazy(() => import('./DeveloperAI')),
     Calendar: lazy(() => import('./Calendar')),
     DuplicateContacts: lazy(() => import('./DuplicateContacts')),
     Utilities: lazy(() => import('./Utilities')),
@@ -104,6 +105,7 @@ function PagesContent() {
                             <Route path="/PaymentPortal" element={<PAGES.PaymentPortal />} />
                             <Route path="/DocumentManagement" element={<PAGES.DocumentManagement />} />
                             <Route path="/Agent" element={<PAGES.Agent />} />
+                            <Route path="/DeveloperAI" element={<PAGES.DeveloperAI />} />
                             <Route path="/Calendar" element={<PAGES.Calendar />} />
                             <Route path="/DuplicateContacts" element={<PAGES.DuplicateContacts />} />
                             <Route path="/Utilities" element={<PAGES.Utilities />} />
