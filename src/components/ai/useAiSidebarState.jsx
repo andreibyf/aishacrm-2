@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { processChatCommand } from '@/ai/engine/processChatCommand';
-import { processDeveloperCommand } from '@/api/functions';
+import { processChatCommand, processDeveloperCommand } from '@/api/functions';
 import { addHistoryEntry, getRecentHistory, getSuggestions } from '@/lib/suggestionEngine';
 import { useUser } from '@/components/shared/useUser';
 import * as conversations from '@/api/conversations';
