@@ -188,6 +188,29 @@ CREATE POLICY example_policy ON my_table
   USING (tenant_id IN (SELECT tenant_uuid FROM users WHERE id = auth.uid()));
 ```
 
+### Timestamp Column Naming Patterns (CRITICAL)
+
+**Three distinct patterns exist across the schema - routes must match exactly:**
+
+| Pattern | Tables | Column Names | Migration Source |
+|---------|--------|--------------|------------------|
+| **Standard (majority)** | accounts, leads, contacts, opportunities, notifications, system_logs, employees, modulesettings | `created_at`, `updated_at` | [001_init.sql](backend/migrations/001_init.sql) |
+| **AI conversations** | conversations, conversation_messages | `created_date`, `updated_date` | [014_conversations.sql](backend/migrations/014_conversations.sql) |
+| **API keys (hybrid)** | apikey | `created_at` AND `created_date` (both!) | [003_create_apikey.sql](backend/migrations/003_create_apikey.sql) |
+
+**Rules for route development:**
+- ✅ Use `.order('created_at')` for standard tables
+- ✅ Use `.order('created_date')` for conversations tables
+- ✅ INSERT `{ created_at: nowIso }` for standard tables
+- ✅ INSERT `{ created_date: nowIso, updated_date: nowIso }` for conversations
+- ✅ INSERT `{ created_at: nowIso, created_date: nowIso }` for apikey table (intentional duplication)
+- ❌ NEVER assume column names - verify against migration files first
+- ❌ Column name mismatches cause 500 errors in production
+
+**Example bugs prevented:**
+- `activities` table has NO `updated_date` column (only `created_at`)
+- `notifications` table uses `created_at` not `created_date`
+
 ## Essential Commands
 
 ```bash

@@ -1122,13 +1122,42 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
     let tenantIdentifier = null;
     let tenantRecord = null;
     let agentName = 'crm_assistant';
+    
+    // DEBUG: Log ALL incoming requests
+    console.log('[DEBUG] POST /api/ai/conversations - Request received', {
+      headers: {
+        'x-tenant-id': req.headers['x-tenant-id'],
+        'content-type': req.headers['content-type'],
+        'user-agent': req.headers['user-agent']?.substring(0, 50),
+      },
+      query: req.query,
+      body: req.body,
+      user: req.user ? { email: req.user.email, tenant_id: req.user.tenant_id, role: req.user.role } : null,
+    });
+    
     try {
       const { agent_name = 'crm_assistant', metadata = {} } = req.body;
       agentName = agent_name;
       tenantIdentifier = getTenantId(req);
+      
+      console.log('[DEBUG] Tenant resolution:', {
+        tenantIdentifier,
+        from_header: req.headers['x-tenant-id'],
+        from_query: req.query?.tenant_id || req.query?.tenantId,
+        from_user: req.user?.tenant_id,
+      });
+      
       tenantRecord = await resolveTenantRecord(tenantIdentifier);
+      
+      console.log('[DEBUG] Tenant record resolved:', {
+        found: !!tenantRecord,
+        id: tenantRecord?.id,
+        tenant_id: tenantRecord?.tenant_id,
+        name: tenantRecord?.name,
+      });
 
       if (!tenantRecord?.id) {
+        console.warn('[DEBUG] Conversation creation REJECTED - missing tenant context');
         await logAiEvent({
           level: 'WARNING',
           message: 'AI conversation creation blocked: missing tenant context',
@@ -1145,8 +1174,14 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
 
       // SECURITY: Validate user has access to this tenant
       const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
+      console.log('[DEBUG] Auth check result:', authCheck);
+      
       if (!authCheck.authorized) {
-        console.warn('[AI Security] Conversation creation blocked - unauthorized tenant access');
+        console.warn('[AI Security] Conversation creation blocked - unauthorized tenant access', {
+          user: req.user?.email,
+          requestedTenant: tenantIdentifier,
+          error: authCheck.error,
+        });
         return res.status(403).json({ status: 'error', message: authCheck.error });
       }
 
@@ -1157,6 +1192,13 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         tenant_name: metadata?.tenant_name ?? tenantRecord.name ?? null,
       };
 
+      console.log('[DEBUG] Inserting conversation into database', {
+        tenant_id: tenantRecord.id,
+        tenant_name: tenantRecord.name,
+        agent_name: agentName,
+        metadata: enrichedMetadata,
+      });
+
       const { data, error } = await supa
         .from('conversations')
         .insert({ tenant_id: tenantRecord.id, agent_name: agentName, metadata: enrichedMetadata, status: 'active' })
@@ -1164,8 +1206,21 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         .single();
       if (error) throw error;
 
+      console.log('[DEBUG] Conversation created successfully:', {
+        conversation_id: data.id,
+        tenant_name: tenantRecord.name,
+      });
+
       res.json({ status: 'success', data });
     } catch (error) {
+      console.error('[DEBUG] Create conversation ERROR:', {
+        error: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        tenantIdentifier,
+        tenantRecord: tenantRecord ? { id: tenantRecord.id, name: tenantRecord.name } : null,
+      });
       console.error('Create conversation error:', error);
       await logAiEvent({
         message: 'AI conversation creation failed',
