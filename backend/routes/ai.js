@@ -1802,6 +1802,9 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         return res.status(400).json({ status: 'error', message: 'messages array is required' });
       }
 
+      // Debug logging for conversation ID
+      console.log('[AI Chat] conversation_id from request:', conversationId || 'NOT PROVIDED');
+
       // Debug logging for session context
       if (sessionEntities && sessionEntities.length > 0) {
         console.log('[AI Chat] Session entities received:', {
