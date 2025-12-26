@@ -69,7 +69,7 @@ const createFunctionProxy = (functionName) => {
 
         const messages = Array.isArray(opts.messages)
           ? opts.messages
-          : [{ role: 'user', content: String(opts.message || '').trim() }].filter(m => m.content);
+          : [{ role: 'user', content: String(opts.message || opts.text || '').trim() }].filter(m => m.content);
         const body = {
           messages,
           model: opts.model,
