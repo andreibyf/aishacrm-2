@@ -1,7 +1,7 @@
 # AiSHA AI Architecture
 
-**Version:** 1.0  
-**Last Updated:** December 25, 2025  
+**Version:** 1.1  
+**Last Updated:** December 26, 2025  
 **Status:** Production  
 **Purpose:** Customer-facing AI Executive Assistant for Aisha CRM
 
@@ -17,6 +17,212 @@ AiSHA (AI Sales & Help Assistant) is the primary user-facing AI agent for Aisha 
 - **Execution Environment:** Backend API with Braid SDK integration
 - **Capabilities:** 27+ tools for CRM operations, RAG memory, autonomous actions
 - **Interface:** Chat sidebar, realtime voice, API endpoints
+
+---
+
+## Data Persistence Layer
+
+### 1. **Database Schema**
+
+**Migration Source:** `backend/migrations/014_conversations.sql`
+
+#### Conversations Table
+```sql
+CREATE TABLE conversations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL,                  -- FK to tenant(id)
+  agent_name VARCHAR(255) DEFAULT 'crm_assistant',
+  metadata JSONB DEFAULT '{}',
+  created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  status VARCHAR(50) DEFAULT 'active',
+  FOREIGN KEY (tenant_id) REFERENCES tenant(id) ON DELETE CASCADE
+);
+```
+
+**Purpose:** Container for multi-turn chat sessions  
+**Lifecycle:** Created on sidebar mount, reset, or first chat  
+**RLS:** Tenant-isolated via `tenant_id`
+
+#### Conversation Messages Table
+```sql
+CREATE TABLE conversation_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL,            -- FK to conversations(id)
+  role VARCHAR(50) NOT NULL,                -- 'user', 'assistant', 'system'
+  content TEXT NOT NULL,
+  metadata JSONB DEFAULT '{}',
+  created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+);
+```
+
+**Purpose:** Persistent storage for all chat messages  
+**Lifecycle:** Messages never deleted (accumulate indefinitely)  
+**RLS:** Tenant-isolated via parent conversation  
+**⚠️ CRITICAL:** NO `updated_date` column (common bug source - see v3.3.18 fix)
+
+### 2. **Message Persistence Flow**
+
+```mermaid
+sequenceDiagram
+    participant Frontend as AI Sidebar
+    participant Backend as POST /api/ai/chat
+    participant DB as Supabase
+    participant LLM as GPT-4o
+
+    Frontend->>Backend: { conversation_id, messages, sessionEntities }
+    Backend->>DB: Load last 50 messages WHERE conversation_id
+    DB-->>Backend: historyRows[]
+    Backend->>Backend: Slice to last 10 (.slice(-10))
+    Backend->>DB: INSERT user message
+    Backend->>LLM: Send [history + user message] + tools
+    LLM-->>Backend: Response (text or tool calls)
+    Backend->>DB: INSERT assistant message
+    Backend-->>Frontend: { response, savedMessage: { id } }
+```
+
+**Key Implementation Details:**
+
+1. **User Message Persistence** (`backend/routes/ai.js`, lines 1868-1880)
+   ```javascript
+   await supabase.from('conversation_messages').insert({
+     conversation_id: conversationId,
+     role: 'user',
+     content: lastUserMessage.content,
+     created_date: new Date().toISOString()
+     // ⚠️ NO updated_date - column doesn't exist!
+   });
+   ```
+
+2. **Assistant Message Persistence** (`backend/routes/ai.js`, lines 363-398)
+   ```javascript
+   const insertAssistantMessage = async (conversationId, content, metadata) => {
+     const { data: inserted } = await supa
+       .from('conversation_messages')
+       .insert({ conversation_id: conversationId, role: 'assistant', content, metadata })
+       .select()
+       .single();
+     
+     // Update parent conversation timestamp
+     await supa.from('conversations')
+       .update({ updated_date: new Date().toISOString() })
+       .eq('id', conversationId);
+     
+     return inserted;
+   };
+   ```
+
+3. **History Loading** (`backend/routes/ai.js`, lines 1847-1865)
+   ```javascript
+   // Load last 50 messages (efficient DB query)
+   const { data: historyRows } = await supabase
+     .from('conversation_messages')
+     .select('role, content, created_date')
+     .eq('conversation_id', conversationId)
+     .order('created_date', { ascending: true })
+     .limit(50);
+   
+   // Limit to last 10 for LLM (token optimization)
+   const recentHistory = historyRows.slice(-10);
+   historicalMessages = recentHistory
+     .filter(row => row.role && row.content && row.role !== 'system')
+     .map(row => ({ role: row.role, content: row.content }));
+   
+   console.log('[AI Chat] Loaded', historicalMessages.length, 
+               'historical messages (from', historyRows.length, 'total)');
+   ```
+
+### 3. **Conversation Lifecycle**
+
+| Event | Action | Location |
+|-------|--------|----------|
+| **Sidebar Mount** | Create new conversation | `useAiSidebarState.jsx` lines 137-155 |
+| **Reset Thread** | Create new conversation | `useAiSidebarState.jsx` lines 267-289 |
+| **Page Refresh** | Create new conversation | ⚠️ ISSUE: Orphans previous conversation |
+| **Chat Message** | INSERT user + assistant messages | `backend/routes/ai.js` |
+| **Conversation Delete** | CASCADE deletes all messages | Supabase ON DELETE CASCADE |
+
+### 4. **Token Optimization Strategy**
+
+**Problem:** Sending all messages to LLM = expensive + slow  
+**Solution:** Two-tier approach (v3.3.17)
+
+| Operation | Limit | Reason |
+|-----------|-------|--------|
+| **DB Query** | Last 50 messages | Efficient query with index on `created_date` |
+| **LLM Context** | Last 10 messages | ~5 conversation exchanges = sufficient context |
+
+**Token Savings:**
+- Before: 50 messages × ~500 tokens = 25,000 tokens/request
+- After: 10 messages × ~500 tokens = 5,000 tokens/request
+- **Savings: ~80% reduction** (~$0.02/request with GPT-4o)
+
+### 5. **Known Issues & Cleanup Strategy**
+
+#### Issue 1: Orphaned Conversations (CURRENT)
+**Problem:** New conversation created on every page load/mount  
+**Impact:** Database fills with abandoned conversations  
+**Example:**
+```
+conversations:
+  - id: abc-123 (Dec 25, 10:00 AM) → 45 messages (abandoned)
+  - id: def-456 (Dec 25, 10:05 AM) → 30 messages (abandoned)
+  - id: ghi-789 (Dec 25, 10:10 AM) → 12 messages (current)
+```
+
+**Proposed Fix:** Reuse conversation across sessions instead of creating new on mount
+
+#### Issue 2: Unbounded Message Growth
+**Problem:** Messages never deleted, accumulate indefinitely  
+**Impact:** Database size + query performance degradation  
+**Proposed Solutions:**
+1. **Archive Strategy:** Move messages >30 days to `conversation_messages_archive`
+2. **Conversation Limits:** Max 100 messages per conversation, auto-create new
+3. **Retention Policy:** Delete conversations with no activity >90 days
+
+#### Issue 3: Column Name Bug (FIXED in v3.3.18)
+**Problem:** Code tried to INSERT `updated_date` into `conversation_messages`  
+**Impact:** ALL message persistence silently failed since November 2025  
+**Fix:** Removed invalid column from INSERT statement  
+**Commit:** `8eaf149` (Dec 26, 2025)
+
+### 6. **Debugging Message Persistence**
+
+**Check if messages are being saved:**
+```sql
+-- Recent messages for a conversation
+SELECT 
+  id, 
+  role, 
+  LEFT(content, 50) as preview,
+  created_date
+FROM conversation_messages
+WHERE conversation_id = 'YOUR_CONVERSATION_ID'
+ORDER BY created_date DESC
+LIMIT 20;
+
+-- Count messages per conversation
+SELECT 
+  c.id,
+  c.agent_name,
+  COUNT(cm.id) as message_count,
+  c.created_date,
+  c.updated_date
+FROM conversations c
+LEFT JOIN conversation_messages cm ON c.id = cm.conversation_id
+WHERE c.tenant_id = 'YOUR_TENANT_ID'
+GROUP BY c.id
+ORDER BY c.created_date DESC
+LIMIT 10;
+```
+
+**Backend Logs:**
+```
+[AI Chat] Loaded 10 historical messages (from 50 total)
+[AI Chat] Persisted user message to conversation
+[AI Routes] insertAssistantMessage: { conversationId: "abc-123", contentLength: 245 }
+```
 
 ---
 
@@ -682,8 +888,8 @@ If issues arise, revert commits:
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.1 | 2025-12-25 | RAG & context improvements: conversation history, implicit references, suggest_next_actions mandate |
-| 1.0 | 2025-12-25 | Initial architecture documentation |
+| 1.1 | 2025-12-26 | Added Data Persistence Layer section, documented conversation_messages bug fix (v3.3.18) |
+| 1.0 | 2025-12-25 | RAG & context improvements: conversation history, implicit references, suggest_next_actions mandate |
 
 ---
 
