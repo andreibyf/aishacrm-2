@@ -1797,7 +1797,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
   // POST /api/ai/chat - AI chat completion
   router.post('/chat', async (req, res) => {
     try {
-      const { messages = [], model = DEFAULT_CHAT_MODEL, temperature = 0.7, sessionEntities = null } = req.body || {};
+      const { messages = [], model = DEFAULT_CHAT_MODEL, temperature = 0.7, sessionEntities = null, conversation_id: conversationId } = req.body || {};
       if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ status: 'error', message: 'messages array is required' });
       }
@@ -1837,6 +1837,46 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       if (!authCheck.authorized) {
         console.warn('[AI Security] Chat blocked - unauthorized tenant access');
         return res.status(403).json({ status: 'error', message: authCheck.error });
+      }
+
+      // Load conversation history from database if conversation_id provided
+      // CRITICAL: This enables context awareness for follow-up questions
+      let historicalMessages = [];
+      if (conversationId) {
+        console.log('[AI Chat] Loading conversation history for:', conversationId);
+        const supabase = getSupabaseClient();
+        const { data: historyRows, error: historyError } = await supabase
+          .from('conversation_messages')
+          .select('role, content, created_date')
+          .eq('conversation_id', conversationId)
+          .order('created_date', { ascending: true })
+          .limit(50); // Last 50 messages for context
+
+        if (historyError) {
+          console.warn('[AI Chat] Failed to load conversation history:', historyError.message);
+        } else if (historyRows && historyRows.length > 0) {
+          historicalMessages = historyRows
+            .filter(row => row.role && row.content && row.role !== 'system')
+            .map(row => ({ role: row.role, content: row.content }));
+          console.log('[AI Chat] Loaded', historicalMessages.length, 'historical messages');
+        }
+
+        // Persist incoming user message to database for future context
+        const lastUserMessage = messages[messages.length - 1];
+        if (lastUserMessage && lastUserMessage.role === 'user' && lastUserMessage.content) {
+          try {
+            await supabase.from('conversation_messages').insert({
+              conversation_id: conversationId,
+              role: 'user',
+              content: lastUserMessage.content,
+              created_date: new Date().toISOString(),
+              updated_date: new Date().toISOString()
+            });
+            console.log('[AI Chat] Persisted user message to conversation');
+          } catch (insertErr) {
+            console.warn('[AI Chat] Failed to persist user message:', insertErr.message);
+          }
+        }
       }
 
       // Goal-based routing: Check if this message is part of a multi-turn goal
@@ -1932,11 +1972,11 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       // Inject full tenant context dictionary (v3.0.0) - includes terminology, workflows, status cards
       let systemPrompt = await enhanceSystemPromptWithFullContext(baseSystemPrompt, pgPool, tenantIdentifier);
 
-      // Add conversation history summary for context awareness (last 3 messages)
-      const recentMessages = messages.slice(-6); // Last 3 exchanges (user + assistant pairs)
+      // Build conversation summary - prioritize database history over request messages
+      const messagesToSummarize = historicalMessages.length > 0 ? historicalMessages.slice(-6) : messages.slice(-6);
       let conversationSummary = '';
-      if (recentMessages.length > 0) {
-        const summaryItems = recentMessages
+      if (messagesToSummarize.length > 0) {
+        const summaryItems = messagesToSummarize
           .filter(m => m.role === 'user' || m.role === 'assistant')
           .map(m => {
             const preview = m.content?.slice(0, 100) || '';
@@ -1975,6 +2015,9 @@ ${conversationSummary}`;
 
       const convoMessages = [
         { role: 'system', content: systemPrompt },
+        // Include historical messages from database for context continuity
+        ...historicalMessages,
+        // Add current request messages (typically just the new user message)
         ...messages.filter(m => m && m.role && m.content)
       ];
 
@@ -2139,6 +2182,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       if (conversation_id) {
         try {
           // Validate conversation ownership
+          const supa = getSupabaseClient();
           const { data: convCheck, error: convErr } = await supa
             .from('conversations')
             .select('id')
