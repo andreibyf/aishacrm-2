@@ -94,3 +94,8 @@ ENVIRONMENT_INDICATORS.md
 ENVIRONMENT_QUICK_REFERENCE.md
 ENVIRONMENT_VARIABLES_AUDIT.md
 RATE_LIMIT_MANAGEMENT.md
+
+# Debugging/investigation scripts (temporary)
+check-*.js
+backend/check-*.js
+query-*.sql
