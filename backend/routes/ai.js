@@ -1855,10 +1855,13 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         if (historyError) {
           console.warn('[AI Chat] Failed to load conversation history:', historyError.message);
         } else if (historyRows && historyRows.length > 0) {
-          historicalMessages = historyRows
+          // Limit to last 10 messages to avoid token overflow (each message ~100-500 tokens)
+          // Full history available in DB, but LLM only needs recent context
+          const recentHistory = historyRows.slice(-10);
+          historicalMessages = recentHistory
             .filter(row => row.role && row.content && row.role !== 'system')
             .map(row => ({ role: row.role, content: row.content }));
-          console.log('[AI Chat] Loaded', historicalMessages.length, 'historical messages');
+          console.log('[AI Chat] Loaded', historicalMessages.length, 'historical messages (from', historyRows.length, 'total)');
         }
 
         // Persist incoming user message to database for future context
