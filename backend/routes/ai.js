@@ -1872,8 +1872,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
               conversation_id: conversationId,
               role: 'user',
               content: lastUserMessage.content,
-              created_date: new Date().toISOString(),
-              updated_date: new Date().toISOString()
+              created_date: new Date().toISOString()
             });
             console.log('[AI Chat] Persisted user message to conversation');
           } catch (insertErr) {
