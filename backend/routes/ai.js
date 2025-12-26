@@ -1199,7 +1199,8 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         metadata: enrichedMetadata,
       });
 
-      const { data, error } = await supa
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
         .from('conversations')
         .insert({ tenant_id: tenantRecord.id, agent_name: agentName, metadata: enrichedMetadata, status: 'active' })
         .select()
