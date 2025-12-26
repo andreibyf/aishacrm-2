@@ -3,6 +3,7 @@ import { processChatCommand } from '@/ai/engine/processChatCommand';
 import { processDeveloperCommand } from '@/api/functions';
 import { addHistoryEntry, getRecentHistory, getSuggestions } from '@/lib/suggestionEngine';
 import { useUser } from '@/components/shared/useUser';
+import * as conversations from '@/api/conversations';
 
 const ROUTE_CONTEXT_RULES = [
   { test: /^\/?$/, routeName: 'dashboard:home', entity: 'dashboard' },
@@ -101,11 +102,13 @@ export function AiSidebarProvider({ children }) {
   const [realtimeMode, setRealtimeMode] = useState(false);
   const [isDeveloperMode, setIsDeveloperMode] = useState(false); // Developer Mode for superadmins
   const [suggestions, setSuggestions] = useState([]);
+  const [conversationId, setConversationId] = useState(null); // Track database conversation for context persistence
   // Session entity context: maps entity names/references to their IDs for follow-up questions
   // Format: { "jack lemon": { id: "uuid", type: "lead", data: {...} }, ... }
   const [sessionEntityContext, setSessionEntityContext] = useState({});
   const messagesRef = useRef(messages);
   const userRef = useRef(user);
+  const conversationIdRef = useRef(conversationId);
   const suggestionContextRef = useRef(buildSuggestionContext());
   const suggestionIndexRef = useRef(new Map());
   const sessionContextRef = useRef({});
@@ -119,10 +122,42 @@ export function AiSidebarProvider({ children }) {
     messagesRef.current = messages;
   }, [messages]);
 
+  // Keep conversationIdRef in sync
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
+
   // Keep sessionContextRef in sync
   useEffect(() => {
     sessionContextRef.current = sessionEntityContext;
   }, [sessionEntityContext]);
+
+  // Create initial conversation on mount
+  useEffect(() => {
+    let mounted = true;
+    if (!user) return; // Wait for user to be loaded
+
+    (async () => {
+      try {
+        const newConv = await conversations.createConversation({
+          agent_name: 'aisha_sidebar',
+          metadata: {
+            name: 'AiSHA Sidebar Session',
+            description: 'Persistent sidebar chat with context tracking',
+            interface: 'sidebar'
+          }
+        });
+        if (mounted) {
+          setConversationId(newConv.id);
+          console.log('[AI Sidebar] Initial conversation created:', newConv.id);
+        }
+      } catch (err) {
+        console.error('[AI Sidebar] Failed to create initial conversation:', err);
+      }
+    })();
+
+    return () => { mounted = false; };
+  }, [user]); // Create conversation once user is loaded
 
   // Extract entities from AI response data and add to session context
   const extractAndStoreEntities = useCallback((data, entityType) => {
@@ -229,11 +264,27 @@ export function AiSidebarProvider({ children }) {
   const closeSidebar = useCallback(() => setIsOpen(false), []);
   const toggleSidebar = useCallback(() => setIsOpen((prev) => !prev), []);
 
-  const resetThread = useCallback(() => {
+  const resetThread = useCallback(async () => {
     setMessages([{ ...welcomeMessage, id: createMessageId(), timestamp: Date.now() }]);
     setError(null);
     setSessionEntityContext({}); // Clear session context on reset
     refreshSuggestions();
+    
+    // Create new conversation for fresh context
+    try {
+      const newConv = await conversations.createConversation({
+        agent_name: 'aisha_sidebar',
+        metadata: {
+          name: 'AiSHA Sidebar Session',
+          description: 'Persistent sidebar chat with context tracking',
+          interface: 'sidebar'
+        }
+      });
+      setConversationId(newConv.id);
+      console.log('[AI Sidebar] Created new conversation:', newConv.id);
+    } catch (err) {
+      console.error('[AI Sidebar] Failed to create conversation:', err);
+    }
   }, [refreshSuggestions]);
 
   const clearError = useCallback(() => setError(null), []);
@@ -301,7 +352,8 @@ export function AiSidebarProvider({ children }) {
           text,
           history: chatHistory,
           context,
-          sessionEntities: sessionContext
+          sessionEntities: sessionContext,
+          conversation_id: conversationIdRef.current // Pass conversation ID for backend context tracking
         });
       }
 

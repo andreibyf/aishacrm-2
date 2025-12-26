@@ -74,7 +74,9 @@ const createFunctionProxy = (functionName) => {
           messages,
           model: opts.model,
           temperature: typeof opts.temperature === 'number' ? opts.temperature : undefined,
-          api_key: opts.api_key
+          api_key: opts.api_key,
+          conversation_id: opts.conversation_id || opts.conversationId, // Support both naming conventions
+          sessionEntities: opts.sessionEntities || opts.entityContext // Session context for follow-up questions
         };
 
         const headers = { 'Content-Type': 'application/json' };
