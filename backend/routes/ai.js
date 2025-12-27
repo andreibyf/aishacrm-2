@@ -2029,16 +2029,31 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         // MANDATORY directive comes BEFORE conversation summary for highest priority
         systemPrompt += `\n\n**🚨 CRITICAL DIRECTIVE - HIGHEST PRIORITY 🚨**
 
-When the user asks about "next steps", "what should I do", "recommendations", or ANY guidance question:
-1. IMMEDIATELY extract entity_id from SESSION ENTITY CONTEXT below
-2. CALL suggest_next_actions tool with that entity_id
-3. NEVER RESPOND with "I'm not sure" or any generic fallback
-
-This is NON-NEGOTIABLE and MANDATORY for user experience.
-
-**SESSION ENTITY CONTEXT (Background - USE THIS FOR NEXT ACTIONS):**
+**SESSION ENTITY CONTEXT (Background - ALWAYS USE FOR IMPLICIT REFERENCES):**
 The user is currently discussing these entities:
 ${entityContext}
+
+**MANDATORY RULES FOR CONTEXT TRACKING:**
+
+1. **Implicit Entity References** - When user asks questions WITHOUT specifying which entity:
+   - "What was the last note?" → Use the MOST RECENT entity from SESSION ENTITY CONTEXT above
+   - "Show me activities" → Use the entity currently being discussed
+   - "What's the status?" → Use the entity from context
+   - "Create a follow-up" → Use the entity from context
+   - NEVER ask "Which entity?" when SESSION ENTITY CONTEXT has entities
+
+2. **Next Steps/Recommendations** - When user asks guidance questions:
+   - "What should I do next?" → IMMEDIATELY call suggest_next_actions with entity_id from context
+   - "What do you recommend?" → IMMEDIATELY call suggest_next_actions
+   - "How should I proceed?" → IMMEDIATELY call suggest_next_actions
+   - NEVER respond with "I'm not sure" when entity context exists
+
+3. **Tool Parameters** - When calling tools that need entity_id:
+   - Extract entity_id from SESSION ENTITY CONTEXT above
+   - Use it automatically for implicit references
+   - Only ask user for clarification if MULTIPLE entities of same type exist
+
+This is NON-NEGOTIABLE and MANDATORY for user experience.
 
 ${conversationSummary}`;
       } else if (conversationSummary) {
