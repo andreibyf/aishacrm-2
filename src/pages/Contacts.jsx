@@ -323,7 +323,7 @@ export default function ContactsPage() {
         if (scopedFilter.filter) {
           try {
             filterObj = JSON.parse(scopedFilter.filter);
-          } catch (e) { /* ignore */ }
+          } catch (_e) { /* ignore */ }
         }
 
         // Merge $or conditions

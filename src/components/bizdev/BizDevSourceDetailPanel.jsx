@@ -98,7 +98,7 @@ export default function BizDevSourceDetailPanel({
           } else {
             try {
               parsedLeadIds = JSON.parse(currentSource.lead_ids);
-            } catch (e) {
+            } catch (_e) {
               // Fallback: treat as comma‑separated string
               parsedLeadIds = String(currentSource.lead_ids)
                 .split(',')

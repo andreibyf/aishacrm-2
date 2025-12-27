@@ -59,7 +59,7 @@ export default function BizDevSourceCard({ source, onEdit, onDelete, onClick, is
       } else {
         try {
           parsed = JSON.parse(source.lead_ids);
-        } catch (_e) {
+        } catch {
           parsed = String(source.lead_ids)
             .split(',')
             .map(id => id.trim())
