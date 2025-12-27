@@ -2043,11 +2043,14 @@ ${entityContext}
    - "Create a follow-up" → Use the entity from context
    - NEVER ask "Which entity?" when SESSION ENTITY CONTEXT has entities
 
-2. **Next Steps/Recommendations** - When user asks guidance questions:
-   - "What should I do next?" → IMMEDIATELY call suggest_next_actions with entity_id from context
-   - "What do you recommend?" → IMMEDIATELY call suggest_next_actions
-   - "How should I proceed?" → IMMEDIATELY call suggest_next_actions
-   - NEVER respond with "I'm not sure" when entity context exists
+2. **Next Steps/Recommendations** - ALWAYS CALL suggest_next_actions TOOL:
+   - "What should I do next?" → CALL suggest_next_actions(entity_type, entity_id)
+   - "What do you recommend?" → CALL suggest_next_actions(entity_type, entity_id)
+   - "How should I proceed?" → CALL suggest_next_actions(entity_type, entity_id)
+   - "What are my next steps?" → CALL suggest_next_actions(entity_type, entity_id)
+   - DO NOT respond conversationally - ALWAYS USE THE TOOL
+   - Extract entity_id and entity_type from SESSION ENTITY CONTEXT above
+   - NEVER say "I'm not sure" or ask for clarification when context exists
 
 3. **Tool Parameters** - When calling tools that need entity_id:
    - Extract entity_id from SESSION ENTITY CONTEXT above
@@ -2080,38 +2083,22 @@ ${conversationSummary}`;
         type: 'function',
         function: {
           name: 'suggest_next_actions',
-          description: `**MANDATORY TOOL - USE IMMEDIATELY FOR NEXT STEPS QUESTIONS**
-
-Trigger patterns (call this tool for ALL of these):
-- "What should I do next?"
-- "What do you think?"
-- "What are my next steps?"
-- "What do you recommend?"
-- "How should I proceed?"
-- "What's the next step?"
-
-**CRITICAL: Extract entity_id from SESSION ENTITY CONTEXT in system prompt above**
-Example: If system prompt shows "Jack Russel (lead, ID: abc-123)", use entity_id="abc-123"
-
-DO NOT ask user for entity_id. DO NOT respond with "I'm not sure".
-This tool analyzes entity state (notes, activities, stage, temperature) and provides intelligent next actions.`,
+          description: 'Analyze entity and suggest next actions. Use when user asks "What should I do next?", "What do you recommend?", "How should I proceed?". Extract entity_id from SESSION ENTITY CONTEXT.',
           parameters: {
             type: 'object',
             properties: {
               entity_type: { 
                 type: 'string', 
                 enum: ['lead', 'contact', 'account', 'opportunity'],
-                description: 'Type of entity to analyze' 
+                description: 'Entity type' 
               },
               entity_id: { 
                 type: 'string', 
-                description: 'UUID of the entity (extract from SESSION ENTITY CONTEXT in system prompt)' 
+                description: 'UUID from SESSION ENTITY CONTEXT' 
               },
               limit: { 
                 type: 'integer', 
-                description: 'Max number of suggestions (1-5)',
-                minimum: 1,
-                maximum: 5,
+                description: 'Max suggestions',
                 default: 3
               }
             },
