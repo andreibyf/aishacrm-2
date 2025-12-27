@@ -62,22 +62,22 @@ before(async () => {
       // Mock password reset email sending
       return { data: { email }, error: null };
     },
-    generateRecoveryLink: async (email, redirectTo) => {
+    generateRecoveryLink: async (email, _redirectTo) => {
       // Mock recovery link generation
       return {
         link: `https://app.com/recovery?token=mock-token&email=${encodeURIComponent(email)}`,
         error: null
       };
     },
-    updateAuthUserPassword: async (userId, newPassword) => {
+    updateAuthUserPassword: async (_userId, _newPassword) => {
       // Mock password update
       return { error: null };
     },
-    confirmUserEmail: async (userId) => {
+    confirmUserEmail: async (_userId) => {
       // Mock email confirmation
       return { error: null };
     },
-    updateAuthUserMetadata: async (userId, metadata) => {
+    updateAuthUserMetadata: async (_userId, _metadata) => {
       // Mock metadata update
       return { error: null };
     },

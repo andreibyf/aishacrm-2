@@ -37,7 +37,7 @@ before(async () => {
 
   // Mock getSupabaseClient
   global.getSupabaseClient = () => ({
-    from: (table) => ({
+    from: (_table) => ({
       select: () => ({
         eq: () => ({
           limit: () => ({

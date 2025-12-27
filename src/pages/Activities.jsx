@@ -91,7 +91,6 @@ export default function ActivitiesPage() {
   const { selectedEmail } = useEmployeeScope();
 
   const { selectedTimezone } = useTimezone();
-  const offsetMinutes = getCurrentTimezoneOffset(selectedTimezone);
 
   const [totalStats, setTotalStats] = useState({
     total: 0,

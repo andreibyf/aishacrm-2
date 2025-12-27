@@ -62,7 +62,7 @@ before(async () => {
       }
       return { user: null };
     },
-    deleteAuthUser: async (userId) => {
+    deleteAuthUser: async (_userId) => {
       // Mock auth user deletion
       return { error: null };
     },

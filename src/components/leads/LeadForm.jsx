@@ -120,7 +120,8 @@ export default function LeadForm({
   });
 
   // Determine assignable employees based on role
-  const assignableEmployees = useMemo(() => {
+  // TODO: Use this for role-based employee assignment restrictions
+  const _assignableEmployees = useMemo(() => {
     if (!employees || !user) return [];
 
     // Managers can assign to any active employee
