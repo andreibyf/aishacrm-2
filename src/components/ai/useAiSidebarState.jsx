@@ -398,6 +398,14 @@ export function AiSidebarProvider({ children }) {
           result.route;
         extractAndStoreEntities(result.assistantMessage.data, entityType);
       }
+
+      // ALSO extract from backend's entities field (parsed from tool results)
+      if (result.entities && Array.isArray(result.entities)) {
+        const entityType = result.classification?.parserResult?.entity ||
+          result.classification?.effectiveParser?.entity ||
+          result.route;
+        extractAndStoreEntities(result.entities, entityType);
+      }
       
       // ALSO extract entities from tool interactions (for search_leads, get_lead, etc.)
       if (result.tool_interactions && Array.isArray(result.tool_interactions)) {

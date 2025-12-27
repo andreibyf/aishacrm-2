@@ -2253,6 +2253,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       // Infer intent and entity from tool interactions for frontend classification
       let inferredIntent = 'query'; // Default to query
       let inferredEntity = 'general';
+      let extractedEntities = []; // Entities from tool results for frontend session context
       
       if (toolInteractions.length > 0) {
         const firstTool = toolInteractions[0]?.tool || '';
@@ -2272,6 +2273,40 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         else if (firstTool.includes('activity') || firstTool.includes('activities')) inferredEntity = 'activity';
         else if (firstTool.includes('note')) inferredEntity = 'note';
         else if (firstTool.includes('bizdev')) inferredEntity = 'bizdev_source';
+        
+        // Extract entity data from tool results for frontend session context
+        for (const interaction of toolInteractions) {
+          try {
+            const result = JSON.parse(interaction.result_preview || '{}');
+            if (result.tag === 'Ok' && result.value) {
+              // Handle different response formats
+              const data = result.value;
+              
+              // Array of entities (list_leads, list_contacts, etc.)
+              if (data.leads && Array.isArray(data.leads)) extractedEntities.push(...data.leads);
+              else if (data.contacts && Array.isArray(data.contacts)) extractedEntities.push(...data.contacts);
+              else if (data.accounts && Array.isArray(data.accounts)) extractedEntities.push(...data.accounts);
+              else if (data.opportunities && Array.isArray(data.opportunities)) extractedEntities.push(...data.opportunities);
+              else if (data.activities && Array.isArray(data.activities)) extractedEntities.push(...data.activities);
+              else if (data.notes && Array.isArray(data.notes)) extractedEntities.push(...data.notes);
+              else if (data.bizdev_sources && Array.isArray(data.bizdev_sources)) extractedEntities.push(...data.bizdev_sources);
+              
+              // Single entity (get_lead, create_contact, etc.)
+              else if (data.lead) extractedEntities.push(data.lead);
+              else if (data.contact) extractedEntities.push(data.contact);
+              else if (data.account) extractedEntities.push(data.account);
+              else if (data.opportunity) extractedEntities.push(data.opportunity);
+              else if (data.activity) extractedEntities.push(data.activity);
+              else if (data.note) extractedEntities.push(data.note);
+              
+              // Direct array or single object
+              else if (Array.isArray(data)) extractedEntities.push(...data);
+              else if (data.id) extractedEntities.push(data);
+            }
+          } catch (parseErr) {
+            // Ignore parse errors for tool results
+          }
+        }
       }
 
       return res.json({
@@ -2287,6 +2322,8 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
             entity: inferredEntity
           }
         },
+        // Include extracted entities for frontend session context tracking
+        entities: extractedEntities.length > 0 ? extractedEntities : undefined,
         data: {
           response: finalContent,
           usage: finalUsage,
