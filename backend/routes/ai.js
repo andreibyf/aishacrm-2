@@ -2250,6 +2250,30 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         }
       }
 
+      // Infer intent and entity from tool interactions for frontend classification
+      let inferredIntent = 'query'; // Default to query
+      let inferredEntity = 'general';
+      
+      if (toolInteractions.length > 0) {
+        const firstTool = toolInteractions[0]?.tool || '';
+        
+        // Map tool names to intents
+        if (firstTool.startsWith('create_')) inferredIntent = 'create';
+        else if (firstTool.startsWith('update_')) inferredIntent = 'update';
+        else if (firstTool.startsWith('delete_')) inferredIntent = 'delete';
+        else if (firstTool.startsWith('search_') || firstTool.startsWith('get_') || firstTool.startsWith('list_')) inferredIntent = 'query';
+        else if (firstTool === 'suggest_next_actions') inferredIntent = 'recommend';
+        
+        // Map tool names to entities
+        if (firstTool.includes('lead')) inferredEntity = 'lead';
+        else if (firstTool.includes('contact')) inferredEntity = 'contact';
+        else if (firstTool.includes('account')) inferredEntity = 'account';
+        else if (firstTool.includes('opportunity')) inferredEntity = 'opportunity';
+        else if (firstTool.includes('activity') || firstTool.includes('activities')) inferredEntity = 'activity';
+        else if (firstTool.includes('note')) inferredEntity = 'note';
+        else if (firstTool.includes('bizdev')) inferredEntity = 'bizdev_source';
+      }
+
       return res.json({
         status: 'success',
         response: finalContent,
@@ -2257,6 +2281,12 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         model: finalModel,
         tool_interactions: toolInteractions,
         savedMessage: savedMessage ? { id: savedMessage.id } : null,
+        classification: {
+          parserResult: {
+            intent: inferredIntent,
+            entity: inferredEntity
+          }
+        },
         data: {
           response: finalContent,
           usage: finalUsage,
