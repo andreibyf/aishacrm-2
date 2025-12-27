@@ -716,6 +716,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
           status: 'success',
           durationMs,
           usage: response.usage || null,
+          intent: classifiedIntent || null,
           toolsCalled: toolCalls.map(tc => tc.function?.name).filter(Boolean),
         });
 
@@ -2223,6 +2224,7 @@ ${conversationSummary}`;
           status: 'success',
           durationMs,
           usage: completion.usage || null,
+          intent: classifiedIntent || null,
         });
 
         const choice = completion.choices?.[0];
