@@ -165,11 +165,11 @@ export default function createLeadsV2Routes() {
    */
   router.get('/', cacheList('leads', 180), async (req, res) => {
     try {
-      const { tenant_id, status, source, filter, assigned_to, is_test_data } = req.query;
+      const { tenant_id, status, source, filter, assigned_to, account_id, is_test_data } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
-      console.log('[V2 Leads GET] Called with:', { tenant_id, filter, status, assigned_to, is_test_data });
+      console.log('[V2 Leads GET] Called with:', { tenant_id, filter, status, assigned_to, account_id, is_test_data });
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -248,6 +248,12 @@ export default function createLeadsV2Routes() {
           }
         }
         if (source) query = query.eq('source', source);
+        // Filter by account_id if provided
+        const safeAccountId = sanitizeUuidInput(account_id);
+        if (safeAccountId) {
+          console.log('[V2 Leads] Filtering by account_id:', safeAccountId);
+          query = query.eq('account_id', safeAccountId);
+        }
         // Sanitize potential UUID query params to avoid "invalid input syntax for type uuid" errors
         const safeAssignedTo = sanitizeUuidInput(assigned_to);
         if (!filter && safeAssignedTo !== undefined && safeAssignedTo !== null) {

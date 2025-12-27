@@ -114,14 +114,16 @@ fn convertLeadToAccount(
 fn listLeads(
   tenant: String,
   status: String,
+  account_id: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/v2/leads";
   
-  // Build params with optional status filter
+  // Build params with optional status and account_id filters
   let params = {
     tenant_id: tenant,
     status: status,
+    account_id: account_id,
     limit: limit
   };
   

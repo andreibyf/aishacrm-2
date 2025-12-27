@@ -140,12 +140,17 @@ fn deleteActivity(
 fn listActivities(
   tenant: String,
   status: String,
+  related_to_type: String,
+  related_to_id: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/v2/activities";
+  // related_to_type: lead, contact, account, opportunity
   let params = {
     tenant_id: tenant,
     status: status,
+    related_to_type: related_to_type,
+    related_to_id: related_to_id,
     limit: limit
   };
   

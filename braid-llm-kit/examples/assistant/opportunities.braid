@@ -70,12 +70,14 @@ fn updateOpportunity(
 fn listOpportunitiesByStage(
   tenant: String,
   stage: String,
+  account_id: String,
   limit: Number
 ) -> Result<Array, CRMError> !net {
   let url = "/api/v2/opportunities";
   let params = {
     tenant_id: tenant,
     stage: stage,
+    account_id: account_id,
     limit: limit
   };
   

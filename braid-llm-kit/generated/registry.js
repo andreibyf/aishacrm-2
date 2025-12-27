@@ -1,6 +1,6 @@
 /**
  * AUTO-GENERATED Braid Tool Registry
- * Generated: 2025-12-27T23:11:40.223Z
+ * Generated: 2025-12-27T23:28:59.483Z
  * Source: C:\Users\andre\Documents\GitHub\ai-sha-crm-copy-c872be53\braid-llm-kit\examples\assistant
  * 
  * DO NOT EDIT MANUALLY - Re-run generate-registry.js to update
@@ -169,7 +169,7 @@ export const BRAID_PARAM_ORDER = {
   get_upcoming_activities: ['tenant', 'assigned_to', 'days'],
   schedule_meeting: ['tenant', 'subject', 'attendees', 'date_time', 'duration_minutes', 'assigned_to'],
   delete_activity: ['tenant', 'activity_id'],
-  list_activities: ['tenant', 'status', 'limit'],
+  list_activities: ['tenant', 'status', 'related_to_type', 'related_to_id', 'limit'],
   get_activity_details: ['tenant', 'activity_id'],
   search_activities: ['tenant', 'query', 'limit'],
   create_bizdev_source: ['tenant', 'source_name', 'source_type', 'company_name', 'contact_name', 'email', 'phone', 'priority'],
@@ -205,7 +205,7 @@ export const BRAID_PARAM_ORDER = {
   qualify_lead: ['tenant', 'lead_id', 'notes'],
   update_lead: ['tenant', 'lead_id', 'updates'],
   convert_lead_to_account: ['tenant', 'lead_id', 'options'],
-  list_leads: ['tenant', 'status', 'limit'],
+  list_leads: ['tenant', 'status', 'account_id', 'limit'],
   get_lead_details: ['tenant', 'lead_id'],
   search_leads: ['tenant', 'query', 'limit'],
   advance_to_lead: ['tenant', 'bizdev_source_id', 'notes'],
@@ -224,7 +224,7 @@ export const BRAID_PARAM_ORDER = {
   create_opportunity: ['tenant', 'name', 'account_id', 'amount', 'stage', 'close_date', 'probability', 'assigned_to'],
   delete_opportunity: ['tenant', 'opportunity_id'],
   update_opportunity: ['tenant', 'opportunity_id', 'updates'],
-  list_opportunities_by_stage: ['tenant', 'stage', 'limit'],
+  list_opportunities_by_stage: ['tenant', 'stage', 'account_id', 'limit'],
   get_opportunity_details: ['tenant', 'opportunity_id'],
   search_opportunities: ['tenant', 'query', 'limit'],
   get_opportunity_forecast: ['tenant', 'assigned_to'],

@@ -181,9 +181,9 @@ export default function createOpportunityV2Routes(_pgPool) {
   // GET /api/v2/opportunities - list opportunities (v2 shape, internal pilot)
   router.get('/', cacheList('opportunities', 180), async (req, res) => {
     try {
-      const { tenant_id, filter, stage, assigned_to, is_test_data, $or } = req.query;
+      const { tenant_id, filter, stage, account_id, assigned_to, is_test_data, $or } = req.query;
 
-      console.log('[V2 Opportunities GET] Called with:', { tenant_id, filter, stage, assigned_to, is_test_data, $or });
+      console.log('[V2 Opportunities GET] Called with:', { tenant_id, filter, stage, account_id, assigned_to, is_test_data, $or });
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -232,6 +232,12 @@ export default function createOpportunityV2Routes(_pgPool) {
       if (stage && stage !== 'all' && stage !== 'any' && stage !== '' && stage !== 'undefined') {
         console.log('[V2 Opportunities] Applying stage filter from query param:', stage);
         q = q.eq('stage', stage.toLowerCase());
+      }
+
+      // Handle account_id filter (filter opportunities by account)
+      if (account_id) {
+        console.log('[V2 Opportunities] Filtering by account_id:', account_id);
+        q = q.eq('account_id', account_id);
       }
 
       // Handle is_test_data filter

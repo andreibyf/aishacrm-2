@@ -66,11 +66,14 @@ export default function createActivityV2Routes(_pgPool) {
         .range(offset, offset + limit - 1);
 
       // Handle direct query parameters (compatibility with generic frontend filters)
-      const { type, status, related_id, assigned_to, is_test_data } = req.query;
+      const { type, status, related_id, related_to_type, related_to_id, assigned_to, is_test_data } = req.query;
 
       if (type) q = q.eq('type', type);
       // status handled below
       if (related_id) q = q.eq('related_id', related_id);
+      // Support filtering by related entity type (lead, contact, account, opportunity) and ID
+      if (related_to_type) q = q.eq('related_to', related_to_type);
+      if (related_to_id) q = q.eq('related_id', related_to_id);
       if (assigned_to) q = q.eq('assigned_to', assigned_to);
 
       // Handle is_test_data filter
