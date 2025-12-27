@@ -399,8 +399,8 @@ export function AiSidebarProvider({ children }) {
         data_summary: result.assistantMessage?.data_summary,
         mode: result.assistantMessage?.mode || 'read_only',
         metadata: {
-          route: result.route,
-          classification: result.classification,
+          route: backendData.route || result.route,
+          classification: backendData.classification || result.classification,
           localAction: result.localAction || null
         }
       };
@@ -409,7 +409,7 @@ export function AiSidebarProvider({ children }) {
         window.dispatchEvent(new CustomEvent('aisha:ai-local-action', { detail: result.localAction }));
       }
 
-      const parserSummary = result?.classification?.parserResult || result?.classification?.effectiveParser;
+      const parserSummary = backendData?.classification?.parserResult || backendData?.classification?.effectiveParser || result?.classification?.parserResult;
       if (parserSummary) {
         addHistoryEntry({
           intent: parserSummary.intent || 'ambiguous',
@@ -422,24 +422,30 @@ export function AiSidebarProvider({ children }) {
       }
 
       // Extract entities from response data for session context
-      if (result.assistantMessage?.data) {
-        const entityType = result.classification?.parserResult?.entity ||
-          result.classification?.effectiveParser?.entity ||
+      // Note: backendData = result.data (the actual API response body)
+      if (backendData.data) {
+        const entityType = backendData.classification?.parserResult?.entity ||
+          backendData.classification?.effectiveParser?.entity ||
           result.route;
-        extractAndStoreEntities(result.assistantMessage.data, entityType);
+        extractAndStoreEntities(backendData.data, entityType);
       }
 
       // ALSO extract from backend's entities field (parsed from tool results)
-      if (result.entities && Array.isArray(result.entities)) {
-        const entityType = result.classification?.parserResult?.entity ||
-          result.classification?.effectiveParser?.entity ||
+      // CRITICAL: entities is in result.data, not result
+      if (backendData.entities && Array.isArray(backendData.entities)) {
+        const entityType = backendData.classification?.parserResult?.entity ||
+          backendData.classification?.effectiveParser?.entity ||
           result.route;
-        extractAndStoreEntities(result.entities, entityType);
+        extractAndStoreEntities(backendData.entities, entityType);
+        if (import.meta.env?.DEV) {
+          console.log('[AI Sidebar] Extracted', backendData.entities.length, 'entities from backend response');
+        }
       }
       
       // ALSO extract entities from tool interactions (for search_leads, get_lead, etc.)
-      if (result.tool_interactions && Array.isArray(result.tool_interactions)) {
-        for (const toolCall of result.tool_interactions) {
+      // CRITICAL: tool_interactions is in result.data, not result
+      if (backendData.tool_interactions && Array.isArray(backendData.tool_interactions)) {
+        for (const toolCall of backendData.tool_interactions) {
           const toolName = toolCall.tool || toolCall.name || '';
           const toolResult = toolCall.result;
           
