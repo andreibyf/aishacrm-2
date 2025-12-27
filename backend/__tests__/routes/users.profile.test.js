@@ -72,14 +72,14 @@ before(async () => {
       }
       return { user: null };
     },
-    updateAuthUserPassword: async (userId, newPassword) => {
+    updateAuthUserPassword: async (_userId, _newPassword) => {
       // Mock password update - succeed for valid user IDs
       if (userId === 'auth-user-123' || userId === 'auth-employee-456') {
         return { error: null };
       }
       return { error: new Error('User not found') };
     },
-    updateAuthUserMetadata: async (userId, metadata) => {
+    updateAuthUserMetadata: async (_userId, _metadata) => {
       // Mock metadata update
       return { error: null };
     },

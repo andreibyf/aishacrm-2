@@ -688,7 +688,7 @@ export default function createBizDevSourceRoutes(pgPool) {
           tenantBusinessModel = tenantResult.rows[0].business_model;
           console.log('[Promote] Tenant business_model:', tenantBusinessModel);
         }
-      } catch (e) {
+      } catch (_e) {
         console.warn('[Promote] Failed to fetch tenant business_model, using default:', tenantBusinessModel);
       }
 

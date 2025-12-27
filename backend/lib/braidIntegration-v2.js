@@ -2702,7 +2702,7 @@ function normalizeToolArgs(toolName, rawArgs, tenantRecord) {
     if (typeof args.updates === 'string') {
       try {
         args.updates = JSON.parse(args.updates);
-      } catch (e) {
+      } catch (_e) {
         console.warn('[Braid] Failed to parse updates string:', args.updates);
       }
     }
