@@ -85,7 +85,11 @@ const INTENT_PATTERNS = {
   
   LEAD_GET: [
     /\b(show|get|display|tell me about)\s+(the\s+)?lead\s+(details|info(rmation)?)\b/i,
-    /\b(what|who)\s+(is|are)\s+(the\s+)?lead\b/i
+    /\b(what|who)\s+(is|are)\s+(the\s+)?lead\b/i,
+    // Common conversational phrasings
+    /\bwhat\s+is\s+the\s+name\s+of\s+(my\s+)?(warm|hot|cold)?\s*lead\b/i,
+    /\b(my\s+)?(warm|hot|cold)\s+lead\b/i,
+    /\bwho\s+is\s+my\s+lead\b/i
   ],
   
   LEAD_DELETE: [
@@ -151,7 +155,10 @@ const INTENT_PATTERNS = {
   
   NOTE_LIST_FOR_RECORD: [
     /\b(show|get|display)\s+(all\s+)?(the\s+)?notes\s+(for|on|about)\b/i,
-    /\b(what\s+are\s+the\s+)?notes\s+(for|on|about)\b/i
+    /\b(what\s+are\s+the\s+)?notes\s+(for|on|about)\b/i,
+    // "last note" / "most recent note" style questions (typically implicit entity)
+    /\b(last|latest|most\s+recent)\s+note\b/i,
+    /\bwhat\s+is\s+the\s+last\s+note\s+(created|added|written)\b/i
   ],
   
   NOTE_GET: [

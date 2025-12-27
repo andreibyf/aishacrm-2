@@ -196,14 +196,31 @@ export function getToolsForIntent(intentCode) {
  * @returns {boolean} True if tool should be forced
  */
 export function shouldForceToolChoice(intentCode) {
-  // These intents MUST use the tool, not conversational response
+  if (!intentCode) return false;
+
+  // These intents MUST use the tool, not a conversational response.
+  // Anything that reads live CRM state should be forced to prevent hallucinations.
   const forcedIntents = [
     'AI_SUGGEST_NEXT_ACTIONS',
     'SYSTEM_SNAPSHOT',
+    'SYSTEM_DEBUG',
     'NAVIGATE_TO_PAGE'
   ];
 
-  return forcedIntents.includes(intentCode);
+  if (forcedIntents.includes(intentCode)) return true;
+
+  // Force all state-reading intents.
+  // Examples: LEAD_GET, NOTE_LIST_FOR_RECORD, REPORT_SALES, ACTIVITY_UPCOMING, OPPORTUNITY_FORECAST.
+  if (intentCode.startsWith('REPORT_')) return true;
+  if (/_GET$/.test(intentCode)) return true;
+  if (/_LIST$/.test(intentCode)) return true;
+  if (/_SEARCH$/.test(intentCode)) return true;
+  if (intentCode === 'NOTE_LIST_FOR_RECORD') return true;
+  if (intentCode === 'ACTIVITY_UPCOMING') return true;
+  if (intentCode === 'OPPORTUNITY_FORECAST') return true;
+  if (intentCode === 'SUGGESTION_STATS') return true;
+
+  return false;
 }
 
 /**

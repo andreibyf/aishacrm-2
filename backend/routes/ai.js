@@ -678,7 +678,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         if (shouldForceToolChoice(classifiedIntent)) {
           // High-priority intents: Force specific tool
           const forcedTool = routeIntentToTool(classifiedIntent);
-          if (forcedTool && (classifiedIntent !== 'AI_SUGGEST_NEXT_ACTIONS' || sessionEntities?.length > 0)) {
+          if (forcedTool) {
             toolChoice = { type: 'function', function: { name: forcedTool } };
             console.log('[Intent Routing] Forcing tool:', forcedTool);
           }
@@ -2188,7 +2188,7 @@ ${conversationSummary}`;
         if (shouldForceToolChoice(classifiedIntent)) {
           // High-priority intents: Force specific tool
           const forcedTool = routeIntentToTool(classifiedIntent);
-          if (forcedTool && (classifiedIntent !== 'AI_SUGGEST_NEXT_ACTIONS' || sessionEntities?.length > 0)) {
+          if (forcedTool) {
             toolChoice = { type: 'function', function: { name: forcedTool } };
             console.log('[Intent Routing] Forcing tool:', forcedTool);
           }
@@ -2215,6 +2215,10 @@ ${conversationSummary}`;
         const durationMs = Date.now() - startTime;
 
         // Log LLM activity for /chat route
+        const toolsCalledThisIter = (completion.choices?.[0]?.message?.tool_calls || [])
+          .map(c => c.function?.name)
+          .filter(Boolean);
+
         logLLMActivity({
           tenantId: tenantRecord?.id,
           capability: 'chat_tools',
@@ -2225,6 +2229,7 @@ ${conversationSummary}`;
           durationMs,
           usage: completion.usage || null,
           intent: classifiedIntent || null,
+          toolsCalled: toolsCalledThisIter.length > 0 ? toolsCalledThisIter : null,
         });
 
         const choice = completion.choices?.[0];
