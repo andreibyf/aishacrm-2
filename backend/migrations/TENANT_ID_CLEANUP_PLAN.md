@@ -1,5 +1,21 @@
 # Legacy Tenant ID Cleanup Plan
 
+## ⚠️ CRITICAL: Multi-Environment Deployment
+
+**This migration MUST be applied to BOTH databases:**
+1. **Development Database** (aishacrm_dev or local instance)
+2. **Production Database** (aishacrm_prod)
+
+**REQUIRED SEQUENCE:**
+- ✅ Apply to Dev FIRST
+- ✅ Test thoroughly in Dev (2-3 days minimum)
+- ✅ Generate deployment report
+- ✅ Only then apply to Production
+
+**DO NOT skip Dev testing - RLS and indexes are security/performance critical!**
+
+---
+
 ## Executive Summary
 
 **Technical Debt:** Legacy tenant ID columns (`tenant_id_text`, `tenant_id_legacy`) are still present in:
@@ -174,11 +190,22 @@ workflow, workflow_execution, etc.
 
 **Estimated Rows Impacted:** ~10M+ across all tables
 
-**Deployment:**
-1. Apply during low-traffic window (2am-5am UTC)
-2. Use `CREATE INDEX CONCURRENTLY` (no table locks)
-3. Drop old indexes after verification
-4. Monitor query performance for 24h
+**Deployment (BOTH Environments):**
+
+**Development First:**
+1. Backup dev database: `pg_dump -Fc aishacrm_dev > backup_dev_$(date +%Y%m%d).dump`
+2. Apply migration: `psql -d aishacrm_dev -f 110_replace_legacy_indexes.sql`
+3. Verify indexes created successfully
+4. Run integration tests
+5. Create deployment report
+
+**Production (After Dev Success):**
+1. Schedule maintenance window (2am-5am UTC)
+2. Backup prod database: `pg_dump -Fc aishacrm_prod > backup_prod_$(date +%Y%m%d).dump`
+3. Apply migration: `psql -d aishacrm_prod -f 110_replace_legacy_indexes.sql`
+4. Use `CREATE INDEX CONCURRENTLY` (no table locks)
+5. Drop old indexes after verification
+6. Monitor query performance for 24h minimum
 
 ---
 
@@ -316,6 +343,8 @@ WHERE column_name IN ('tenant_id_text', 'tenant_id_legacy')
 
 ### Pre-Deployment Checklist
 
+**REQUIRED: Run on BOTH Development and Production Databases**
+
 **Code Audit:**
 ```bash
 # Search for any remaining legacy column references
@@ -326,7 +355,7 @@ grep -r "tenant_id_text" src/
 # Expected: 0 matches (all should use tenant_id)
 ```
 
-**Database State:**
+**Database State (Run on Dev FIRST, then Prod):**
 ```sql
 -- 1. Verify all rows have tenant_id populated
 SELECT 'accounts' as tbl, COUNT(*) FILTER (WHERE tenant_id IS NULL) as nulls FROM accounts
@@ -334,7 +363,7 @@ UNION ALL
 SELECT 'leads', COUNT(*) FILTER (WHERE tenant_id IS NULL) FROM leads
 UNION ALL
 SELECT 'contacts', COUNT(*) FILTER (WHERE tenant_id IS NULL) FROM contacts;
--- Expected: 0 nulls
+-- Expected: 0 nulls (MUST PASS on Dev before running on Prod)
 
 -- 2. Verify tenant_id references valid tenant
 SELECT 'accounts' as tbl, COUNT(*) as invalid FROM accounts a
@@ -344,8 +373,33 @@ UNION ALL
 SELECT 'leads', COUNT(*) FROM leads l
   LEFT JOIN tenant t ON l.tenant_id = t.id
   WHERE l.tenant_id IS NOT NULL AND t.id IS NULL;
--- Expected: 0 invalid
+-- Expected: 0 invalid (MUST PASS on Dev before running on Prod)
+
+-- 3. Environment identification
+SELECT current_database(), current_setting('app.environment', true) as environment;
+-- Verify you're connected to the correct database!
 ```
+
+**Migration Checklist (Per Environment):**
+
+**Development Database:**
+- [ ] Backup dev database
+- [ ] Run pre-deployment validation queries
+- [ ] Apply migration (110, 111, or 112)
+- [ ] Run post-deployment validation
+- [ ] Integration tests pass
+- [ ] Create validation report for prod deployment
+
+**Production Database:**
+- [ ] Review dev validation report
+- [ ] Backup prod database (full dump)
+- [ ] Schedule maintenance window (2am-5am UTC)
+- [ ] Notify team via Slack #deployments
+- [ ] Run pre-deployment validation queries
+- [ ] Apply migration during window
+- [ ] Run post-deployment validation
+- [ ] Monitor for 24 hours minimum
+- [ ] Sign-off from team lead
 
 **Performance Test:**
 ```sql
@@ -416,15 +470,42 @@ curl -X GET https://api.aishacrm.com/api/accounts \
 | Phase 3: RLS Policy Migration | 1 week | Phase 2 complete + testing |
 | Phase 4: Column Removal | 2 weeks | Phase 3 complete + 1 week observation |
 
-**Critical Path:**
+**CRITICAL: Multi-Environment Deployment**
+
+All phases MUST be applied to BOTH environments:
+1. **Development Database** (local + hosted dev)
+2. **Production Database**
+
+**Critical Path (Per Environment):**
+
+**Week 1: Development Environment**
 1. Generate migration scripts (1 day)
-2. Test in staging environment (3 days)
-3. Deploy Phase 2 indexes (1 hour, during maintenance window)
-4. Monitor performance (1 week)
-5. Deploy Phase 3 RLS policies (1 hour, during maintenance window)
-6. Monitor security logs (1 week)
-7. Deploy Phase 4 column drops (1 hour, during maintenance window)
-8. Final validation (3 days)
+2. Apply Phase 2 to local dev database (1 hour)
+3. Test queries, verify indexes used (2 days)
+4. Apply Phase 2 to hosted dev database (1 hour)
+5. Run integration tests (1 day)
+6. Validation report (1 day)
+
+**Week 2: Production Phase 2 + Dev Phase 3**
+1. Deploy Phase 2 to production (1 hour, 2am-5am UTC)
+2. Monitor production performance (7 days)
+3. Apply Phase 3 to dev database (1 hour)
+4. Test RLS enforcement (2 days)
+5. Security audit in dev (2 days)
+
+**Week 3: Production Phase 3 + Dev Phase 4**
+1. Deploy Phase 3 to production (1 hour, 2am-5am UTC)
+2. Monitor production auth logs (7 days)
+3. Apply Phase 4 to dev database (1 hour)
+4. Test column absence (2 days)
+5. Full regression in dev (2 days)
+
+**Week 4: Production Phase 4**
+1. Final production backup (1 hour)
+2. Deploy Phase 4 to production (1 hour, 2am-5am UTC)
+3. Verification tests (3 hours)
+4. Monitor for 7 days
+5. Archive backfill scripts (1 day)
 
 ---
 
