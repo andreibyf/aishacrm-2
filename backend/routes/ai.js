@@ -2291,12 +2291,21 @@ ${conversationSummary}`;
 
           // Bind conversation focus to suggest_next_actions tool
           // This ensures the AI's next action suggestions are contextual to the current entity
-          if (toolName === 'suggest_next_actions' && sessionEntities?.length > 0) {
-            const focus = sessionEntities[0]; // First entity is the primary focus
-            if (focus?.type && focus?.id) {
-              args.entity_type = focus.type;
-              args.entity_id = focus.id;
-              console.log('[AI Chat] Injected session focus into suggest_next_actions:', { entity_type: focus.type, entity_id: focus.id });
+          if (toolName === 'suggest_next_actions') {
+            console.log('[AI Chat] suggest_next_actions called, sessionEntities:', JSON.stringify(sessionEntities));
+            if (sessionEntities?.length > 0) {
+              const focus = sessionEntities[0]; // First entity is the primary focus
+              console.log('[AI Chat] Focus entity:', JSON.stringify(focus));
+              if (focus?.type && focus?.id) {
+                // Override any AI-generated placeholder values
+                args.entity_type = focus.type;
+                args.entity_id = focus.id;
+                console.log('[AI Chat] Injected session focus into suggest_next_actions:', { entity_type: focus.type, entity_id: focus.id });
+              } else {
+                console.warn('[AI Chat] Focus entity missing type or id:', { type: focus?.type, id: focus?.id });
+              }
+            } else {
+              console.warn('[AI Chat] No sessionEntities available for suggest_next_actions binding');
             }
           }
 
