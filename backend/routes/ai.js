@@ -2372,6 +2372,76 @@ ${conversationSummary}`;
   });
 
   // ============================================================================
+  // POST /api/ai/suggest-next-actions - RAG-enabled next step recommendations
+  // ============================================================================
+  // Analyzes entity state (notes, activities, stage, last contact) and suggests
+  // 2-3 actionable next steps using RAG memory + rule-based logic.
+  // This is the backend endpoint called by the Braid suggest-next-actions tool.
+  // ============================================================================
+  router.post('/suggest-next-actions', async (req, res) => {
+    try {
+      const { tenant_id, entity_type, entity_id, limit = 3 } = req.body;
+      
+      // Validation
+      if (!tenant_id || !entity_type || !entity_id) {
+        return res.status(400).json({
+          error: 'Missing required fields: tenant_id, entity_type, entity_id'
+        });
+      }
+      
+      // Validate entity type
+      const validTypes = ['lead', 'contact', 'account', 'opportunity'];
+      if (!validTypes.includes(entity_type)) {
+        return res.status(400).json({
+          error: `Invalid entity_type. Must be one of: ${validTypes.join(', ')}`
+        });
+      }
+      
+      // Validate limit
+      if (limit < 1 || limit > 10) {
+        return res.status(400).json({
+          error: 'Limit must be between 1 and 10'
+        });
+      }
+      
+      // Import and call suggest next actions
+      const { suggestNextActions } = await import('../lib/suggestNextActions.js');
+      const result = await suggestNextActions({
+        entity_type,
+        entity_id,
+        tenant_id,
+        limit
+      });
+      
+      // Check for errors
+      if (result.error) {
+        if (result.error.includes('not found') || result.error.includes('access denied')) {
+          return res.status(404).json({
+            error: result.error,
+            data: null
+          });
+        }
+        return res.status(500).json({
+          error: result.error,
+          data: null
+        });
+      }
+      
+      // Success
+      res.json({
+        data: result
+      });
+      
+    } catch (error) {
+      console.error('[Suggest Next Actions API] Error:', error);
+      res.status(500).json({
+        error: error.message || 'Internal server error',
+        data: null
+      });
+    }
+  });
+
+  // ============================================================================
   // POST /api/ai/realtime-tools/execute - Execute a CRM tool for Realtime Voice
   // ============================================================================
   // This endpoint is called by the frontend when the Realtime Voice session

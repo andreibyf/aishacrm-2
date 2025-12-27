@@ -356,6 +356,7 @@ export const TOOL_REGISTRY = {
   reject_suggestion: { file: 'suggestions.braid', function: 'rejectSuggestion', policy: 'WRITE_OPERATIONS' },
   apply_suggestion: { file: 'suggestions.braid', function: 'applySuggestion', policy: 'WRITE_OPERATIONS' },
   trigger_suggestion_generation: { file: 'suggestions.braid', function: 'triggerSuggestionGeneration', policy: 'WRITE_OPERATIONS' },
+  suggest_next_actions: { file: 'suggest-next-actions.braid', function: 'suggestNextActions', policy: 'READ_ONLY' },
 
   // CRM Navigation (v3.0.0 - allows AI to navigate user to pages)
   navigate_to_page: { file: 'navigation.braid', function: 'navigateTo', policy: 'READ_ONLY' },

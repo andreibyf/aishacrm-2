@@ -1,0 +1,42 @@
+// Suggest Next Actions Braid Function
+// RAG-enabled analysis of entity state to provide intelligent next step recommendations
+// Analyzes: recent notes, activities, stage, last contact date, temperature, best practices
+
+import { Result, CRMError } from "../../spec/types.braid"
+
+fn suggestNextActions(
+  tenant: String,
+  entity_type: String,
+  entity_id: String,
+  limit: Number
+) -> Result<NextActionsSuggestion, CRMError> !net {
+  // Analyze entity and suggest next actions using RAG memory + rule-based logic
+  // Entity types: lead, contact, account, opportunity
+  // Returns 2-3 prioritized actionable suggestions with reasoning
+  
+  let url = "/api/ai/suggest-next-actions";
+  let body = {
+    tenant_id: tenant,
+    entity_type: entity_type,
+    entity_id: entity_id,
+    limit: limit
+  };
+  
+  let response = http.post(url, { body: body });
+  
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ 
+      tag: "APIError", 
+      operation: "suggest_next_actions",
+      entity: entity_type,
+      id: entity_id,
+      code: error.status 
+    }),
+    _ => Err({ 
+      tag: "NetworkError", 
+      url: url, 
+      code: 500 
+    })
+  };
+}
