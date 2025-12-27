@@ -20,6 +20,7 @@ import { buildTenantContextDictionary, generateContextDictionaryPrompt } from '.
 import { developerChat, isSuperadmin } from '../lib/developerAI.js';
 import { classifyIntent, extractEntityMentions, getIntentConfidence } from '../lib/intentClassifier.js';
 import { routeIntentToTool, getToolsForIntent, shouldForceToolChoice, getRelevantToolsForIntent } from '../lib/intentRouter.js';
+import { buildStatusLabelMap, normalizeToolArgs } from '../lib/statusCardLabelResolver.js';
 
 /**
  * Create provider-specific OpenAI-compatible client for tool calling.
@@ -2044,6 +2045,20 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       // Inject full tenant context dictionary (v3.0.0) - includes terminology, workflows, status cards
       let systemPrompt = await enhanceSystemPromptWithFullContext(baseSystemPrompt, pgPool, tenantIdentifier);
 
+      // Load tenant context dictionary as an object for deterministic argument normalization.
+      // NOTE: The dictionary is already injected into the system prompt, but the backend must
+      // also use it to translate tenant-facing labels (e.g., "Warm") into canonical ids.
+      let tenantDictionary = null;
+      let statusLabelMap = {};
+      try {
+        tenantDictionary = await buildTenantContextDictionary(pgPool, tenantIdentifier);
+        if (!tenantDictionary?.error) {
+          statusLabelMap = buildStatusLabelMap(tenantDictionary);
+        }
+      } catch (dictErr) {
+        console.warn('[AI Chat] Failed to load tenant context dictionary for arg normalization:', dictErr?.message);
+      }
+
       // Build conversation summary - prioritize database history over request messages
       const messagesToSummarize = historicalMessages.length > 0 ? historicalMessages.slice(-6) : messages.slice(-6);
       let conversationSummary = '';
@@ -2214,11 +2229,16 @@ ${conversationSummary}`;
         });
         const durationMs = Date.now() - startTime;
 
-        // Log LLM activity for /chat route
-        const toolsCalledThisIter = (completion.choices?.[0]?.message?.tool_calls || [])
-          .map(c => c.function?.name)
-          .filter(Boolean);
+        const choice = completion.choices?.[0];
+        const message = choice?.message;
+        if (!message) break;
 
+        finalUsage = completion.usage;
+        finalModel = completion.model;
+
+        const toolCalls = message.tool_calls || [];
+
+        // Log LLM activity for /chat route (include tool call names if present)
         logLLMActivity({
           tenantId: tenantRecord?.id,
           capability: 'chat_tools',
@@ -2229,17 +2249,11 @@ ${conversationSummary}`;
           durationMs,
           usage: completion.usage || null,
           intent: classifiedIntent || null,
-          toolsCalled: toolsCalledThisIter.length > 0 ? toolsCalledThisIter : null,
+          toolsCalled: toolCalls.length > 0
+            ? toolCalls.map(tc => tc?.function?.name).filter(Boolean)
+            : null,
         });
 
-        const choice = completion.choices?.[0];
-        const message = choice?.message;
-        if (!message) break;
-
-        finalUsage = completion.usage;
-        finalModel = completion.model;
-
-        const toolCalls = message.tool_calls || [];
         if (toolCalls.length === 0) {
           finalContent = message.content || '';
           break;
@@ -2267,6 +2281,14 @@ ${conversationSummary}`;
             args = {};
           }
 
+          // Normalize tenant-facing labels to canonical ids (status cards, stages, etc.)
+          // This is critical for tenants that rename statuses like "Warm"/"Cold".
+          try {
+            args = normalizeToolArgs({ toolName, args, statusLabelMap });
+          } catch (normErr) {
+            console.warn('[AI Chat] Tool arg normalization error:', normErr?.message);
+          }
+
           let toolResult;
           try {
             // SECURITY: Pass the access token to unlock tool execution
@@ -2276,7 +2298,18 @@ ${conversationSummary}`;
             toolResult = { error: err.message || String(err) };
           }
 
-          toolInteractions.push({ tool: toolName, args, result_preview: typeof toolResult === 'string' ? toolResult.slice(0, 400) : JSON.stringify(toolResult).slice(0, 400) });
+          // Store a preview for the UI, but keep the full tool result internally for entity binding.
+          const resultPreview = typeof toolResult === 'string'
+            ? toolResult.slice(0, 400)
+            : JSON.stringify(toolResult).slice(0, 400);
+
+          toolInteractions.push({
+            tool: toolName,
+            args,
+            result_preview: resultPreview,
+            // NOTE: full_result is used internally below for entity extraction; it is removed before response.
+            full_result: toolResult,
+          });
           const summary = summarizeToolResult(toolResult, toolName);
           const toolContent = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
           loopMessages.push({
@@ -2344,7 +2377,9 @@ ${conversationSummary}`;
         // Extract entity data from tool results for frontend session context
         for (const interaction of toolInteractions) {
           try {
-            const result = JSON.parse(interaction.result_preview || '{}');
+            // Prefer full tool result to ensure IDs are available (previews can truncate IDs).
+            const resultObj = interaction.full_result;
+            const result = typeof resultObj === 'string' ? JSON.parse(resultObj) : resultObj;
             if (result.tag === 'Ok' && result.value) {
               // Handle different response formats
               const data = result.value;
@@ -2376,12 +2411,15 @@ ${conversationSummary}`;
         }
       }
 
+      // Remove internal-only fields from tool interactions before returning to client
+      const safeToolInteractions = toolInteractions.map(({ full_result, ...rest }) => rest);
+
       return res.json({
         status: 'success',
         response: finalContent,
         usage: finalUsage,
         model: finalModel,
-        tool_interactions: toolInteractions,
+        tool_interactions: safeToolInteractions,
         savedMessage: savedMessage ? { id: savedMessage.id } : null,
         classification: {
           parserResult: {
@@ -2395,7 +2433,7 @@ ${conversationSummary}`;
           response: finalContent,
           usage: finalUsage,
           model: finalModel,
-          tool_interactions: toolInteractions
+          tool_interactions: safeToolInteractions
         }
       });
     } catch (error) {
