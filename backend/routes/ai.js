@@ -362,14 +362,15 @@ export default function createAIRoutes(pgPool) {
 
   const insertAssistantMessage = async (conversationId, content, metadata = {}) => {
     try {
-      const { data: inserted, error } = await supa
+      const supabase = getSupabaseClient();
+      const { data: inserted, error } = await supabase
         .from('conversation_messages')
         .insert({ conversation_id: conversationId, role: 'assistant', content, metadata })
         .select()
         .single();
       if (error) throw error;
 
-      await supa
+      await supabase
         .from('conversations')
         .update({ updated_date: new Date().toISOString() })
         .eq('id', conversationId);
@@ -429,6 +430,7 @@ export default function createAIRoutes(pgPool) {
     userName = null,
   }) => {
     try {
+      const supa = getSupabaseClient();
       const tenantSlug = tenantRecord?.tenant_id || tenantIdentifier || null;
       const conversationMetadata = parseMetadata(conversation?.metadata);
 
@@ -1244,6 +1246,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
     let tenantIdentifier = null;
     let tenantRecord = null;
     try {
+      const supa = getSupabaseClient();
       tenantIdentifier = getTenantId(req);
       tenantRecord = await resolveTenantRecord(tenantIdentifier);
 
@@ -1346,6 +1349,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
     let tenantIdentifier = null;
     let tenantRecord = null;
     try {
+      const supa = getSupabaseClient();
       tenantIdentifier = getTenantId(req);
       tenantRecord = await resolveTenantRecord(tenantIdentifier);
 
@@ -1420,6 +1424,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
     let tenantIdentifier = null;
     let tenantRecord = null;
     try {
+      const supa = getSupabaseClient();
       tenantIdentifier = getTenantId(req);
       tenantRecord = await resolveTenantRecord(tenantIdentifier);
 
@@ -1797,6 +1802,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
   // POST /api/ai/chat - AI chat completion
   router.post('/chat', async (req, res) => {
     try {
+      const supabase = getSupabaseClient();
       const { messages = [], model = DEFAULT_CHAT_MODEL, temperature = 0.7, sessionEntities = null, conversation_id: conversationId } = req.body || {};
       if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ status: 'error', message: 'messages array is required' });
@@ -1848,6 +1854,29 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       if (conversationId) {
         console.log('[AI Chat] Loading conversation history for:', conversationId);
         const supabase = getSupabaseClient();
+        
+        // Ensure conversation record exists before inserting messages (FK constraint)
+        const { data: existingConv } = await supabase
+          .from('conversations')
+          .select('id')
+          .eq('id', conversationId)
+          .single();
+        
+        if (!existingConv) {
+          // Create conversation record first
+          const nowIso = new Date().toISOString();
+          await supabase.from('conversations').insert({
+            id: conversationId,
+            tenant_id: tenantRecord?.id || tenantIdentifier,
+            agent_name: 'AiSHA',
+            metadata: {},
+            status: 'active',
+            created_date: nowIso,
+            updated_date: nowIso
+          });
+          console.log('[AI Chat] Created new conversation record:', conversationId);
+        }
+        
         const { data: historyRows, error: historyError } = await supabase
           .from('conversation_messages')
           .select('role, content, created_date')
