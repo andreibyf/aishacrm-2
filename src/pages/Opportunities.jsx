@@ -463,7 +463,7 @@ export default function OpportunitiesPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, searchTerm, stageFilter, selectedTags, getTenantFilter, viewMode, loadingToast]); // Added viewMode dependency
+  }, [user, searchTerm, stageFilter, selectedTags, getTenantFilter, viewMode, loadingToast, opportunitiesLabel, paginationCursors]); // Added viewMode dependency
 
   // Load opportunities when dependencies change
   useEffect(() => {

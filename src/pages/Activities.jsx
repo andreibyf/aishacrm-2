@@ -363,7 +363,7 @@ export default function ActivitiesPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, searchTerm, selectedTags, buildFilter, loadStats, loadingToast]);
+  }, [user, searchTerm, selectedTags, buildFilter, loadStats, loadingToast, activitiesLabel, selectedEmail]);
 
   useEffect(() => {
     if (user) {
@@ -859,7 +859,7 @@ export default function ActivitiesPage() {
       console.error('Error formatting date:', error, 'Activity:', activity);
       return activity.due_date;
     }
-  }, [offsetMinutes]);
+  }, []);
 
   if (!user) {
     return (

@@ -428,6 +428,8 @@ export default function AccountsPage() {
     pageSize,
     cachedRequest,
     getTenantFilter,
+    accountsLabel,
+    loadingToast,
   ]);
 
   // Load accounts when dependencies change and data is ready

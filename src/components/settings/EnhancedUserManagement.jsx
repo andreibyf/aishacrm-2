@@ -34,7 +34,7 @@ import { Lock } from "lucide-react";
 
 const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSettings = [] }) => {
 // moduleName: matches modulesettings table module_name for disabling when module is off
-    const navigationPages = [
+    const navigationPages = useMemo(() => [
         { key: 'Dashboard', label: 'Dashboard', moduleName: 'Dashboard' },
         { key: 'Contacts', label: 'Contacts', moduleName: 'Contact Management' },
         { key: 'Accounts', label: 'Accounts', moduleName: 'Account Management' },
@@ -60,7 +60,7 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
         { key: 'WorkflowGuide', label: 'Workflow Guide', moduleName: null },
         { key: 'ClientRequirements', label: 'Client Requirements', moduleName: null },
         { key: 'Workflows', label: 'Workflows (Experimental)', moduleName: 'Workflows' },
-    ];
+    ], []);
 
     // State for dynamically loaded module settings for the target user's tenant
     // null = not yet loaded, [] = loaded but empty

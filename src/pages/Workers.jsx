@@ -129,7 +129,7 @@ export default function WorkersPage() {
     } finally {
       setLoading(false);
     }
-  }, [effectiveTenantId, loadingToast]);
+  }, [effectiveTenantId, loadingToast, workersLabel]);
 
   useEffect(() => {
     loadWorkers();

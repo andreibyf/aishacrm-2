@@ -581,6 +581,7 @@ export default function DashboardPage() {
     selectedEmail,
     cachedRequest,
     logger,
+    loadingToast,
   ]);
   // Removed getTenantFilter from dependencies - it's called inside the effect instead
 

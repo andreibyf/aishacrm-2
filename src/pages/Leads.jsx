@@ -518,8 +518,9 @@ export default function LeadsPage() {
     statusFilter,
     selectedTags,
     ageFilter,
-    ageBuckets,
+    leadsLabel,
     loadingToast,
+    ageBuckets,
   ]); // Removed unused pageSize, showTestData deps
 
   // Load leads when dependencies change - no longer blocked by supportingDataReady

@@ -157,7 +157,7 @@ export default function BizDevSourcesPage() {
       setLoading(false);
       loadingRef.current = false;
     }
-  }, [user, selectedTenantId, cachedRequest, logError, selectedTenantId]);
+  }, [user, selectedTenantId, cachedRequest, logError]);
 
   // Track current tenant to detect switches and clear cache
   const prevTenantRef = useRef(null);

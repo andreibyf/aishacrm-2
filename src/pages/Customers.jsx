@@ -417,6 +417,7 @@ export default function CustomersPage() {
     cachedRequest,
     getTenantFilter,
     loadingToast,
+    customersLabel,
   ]);
 
   // Load accounts when dependencies change and data is ready

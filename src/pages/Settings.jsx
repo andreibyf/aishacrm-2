@@ -147,7 +147,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
   const isSuperadmin = currentUser?.role === 'superadmin';
 
   // Categories for grouping settings cards
-  const CATEGORIES = {
+  const CATEGORIES = useMemo(() => ({
     account: { label: 'Account', color: 'blue', icon: User },
     team: { label: 'Team', color: 'green', icon: Users },
     clients: { label: 'Clients', color: 'indigo', icon: Building2 },
@@ -157,7 +157,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
     monitoring: { label: 'Monitoring', color: 'emerald', icon: Activity },
     security: { label: 'Security', color: 'purple', icon: Shield },
     testing: { label: 'Testing', color: 'blue', icon: TestTube2 },
-  };
+  }), []);
 
   // Define all settings items with categories
   const settingsItems = useMemo(() => {
@@ -242,7 +242,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
   const availableCategories = useMemo(() => {
     const cats = new Set(settingsItems.map(item => item.category));
     return Object.entries(CATEGORIES).filter(([key]) => cats.has(key));
-  }, [settingsItems]);
+  }, [settingsItems, CATEGORIES]);
 
   // Filter items based on search and category
   const filteredItems = useMemo(() => {

@@ -579,7 +579,7 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
         ...option,
         label: getCardLabel(statusCardMap[option.value]) || option.label
       }));
-  }, [isCardVisible, getCardLabel, formData.status]);
+  }, [isCardVisible, getCardLabel, formData.status, statusOptions]);
 
   return (
       <div className="p-1 bg-slate-800 max-h-[85vh] overflow-y-auto">

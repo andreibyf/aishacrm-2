@@ -60,7 +60,7 @@ export function useNavOrder(defaultItems, storageKeyPrefix = NAV_ORDER_KEY_PREFI
       console.error("[useNavOrder] Failed to parse saved order on tenant change:", e);
       setOrderState(null);
     }
-  }, [storageKey]);
+  }, [storageKey, tenantId]);
 
   // Apply order to items - returns items sorted by saved order
   const orderedItems = useCallback(() => {

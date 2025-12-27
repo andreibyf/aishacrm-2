@@ -438,6 +438,7 @@ export default function ContactsPage() {
     selectedEmail,
     logger,
     loadingToast,
+    contactsLabel,
   ]);
 
   useEffect(() => {

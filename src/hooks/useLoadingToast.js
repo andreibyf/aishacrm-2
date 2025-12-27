@@ -47,7 +47,7 @@ export function useLoadingToast() {
       }
     );
     return toastIdRef.current;
-  }, []);
+  }, [funnyMessages]);
 
   const showSuccess = useCallback((message = "Data loaded! ✨", options = {}) => {
     // Calculate minimum display time (500ms) for loading toast
