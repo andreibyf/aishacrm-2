@@ -356,16 +356,18 @@ export function AiSidebarProvider({ children }) {
         });
       }
 
+      // Transform backend response format to frontend expected format
+      const backendData = result.data || {};
       const assistantMessage = {
         id: createMessageId(),
         role: 'assistant',
         content:
-          result.assistantMessage.content || 'I could not find any details yet, but I am ready to keep helping.',
+          backendData.response || result.assistantMessage?.content || 'I could not find any details yet, but I am ready to keep helping.',
         timestamp: Date.now(),
-        actions: result.assistantMessage.actions || [],
-        data: result.assistantMessage.data || null,
-        data_summary: result.assistantMessage.data_summary,
-        mode: result.assistantMessage.mode || 'read_only',
+        actions: result.assistantMessage?.actions || [],
+        data: result.assistantMessage?.data || null,
+        data_summary: result.assistantMessage?.data_summary,
+        mode: result.assistantMessage?.mode || 'read_only',
         metadata: {
           route: result.route,
           classification: result.classification,
