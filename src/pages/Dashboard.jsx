@@ -33,7 +33,6 @@ import RecentActivities from "../components/dashboard/RecentActivities";
 import LeadAgeReport from "../components/dashboard/LeadAgeReport";
 import SalesFunnelWidget from "../components/dashboard/SalesFunnelWidget";
 import ConversionRates from "../components/dashboard/ConversionRates";
-import { Loader2, RefreshCw } from "lucide-react";
 import { getDashboardBundleFast } from "@/api/dashboard";
 import { getCachedDashboardData, cacheDashboardData } from "@/api/dashboardCache";
 import WidgetPickerModal from "../components/dashboard/WidgetPickerModal";
@@ -590,8 +589,6 @@ export default function DashboardPage() {
     if (!user || !authCookiesReady) return;
     
     // Re-trigger loadStats with forceRefresh flag
-    const tempSetLoading = setLoading;
-    const tempSetRefreshing = setRefreshing;
     
     // Call loadStats with forceRefresh = true
     // This requires we wrap it in a way that the component's loadStats can be called
@@ -607,7 +604,7 @@ export default function DashboardPage() {
       }
     }
     
-    tempSetRefreshing(true);
+    setRefreshing(true);
     try {
       const bundleResp = await cachedRequest(
         "Dashboard",
@@ -639,7 +636,7 @@ export default function DashboardPage() {
       toast.error("Failed to refresh dashboard");
       console.error("[Dashboard] Refresh error:", e);
     } finally {
-      tempSetRefreshing(false);
+      setRefreshing(false);
     }
   }, [user, authCookiesReady, selectedTenantId, showTestData, cachedRequest]);
 

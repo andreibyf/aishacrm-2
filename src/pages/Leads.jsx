@@ -65,10 +65,6 @@ import { loadUsersSafely } from "../components/shared/userLoader";
 import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 import { useConfirmDialog } from "../components/shared/ConfirmDialog";
 import { useAiShaEvents } from "@/hooks/useAiShaEvents";
-
-// Helper function for delays
-const delay = (ms) => new Promise((res) => setTimeout(res, ms));
-
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 
 export default function LeadsPage() {
@@ -80,8 +76,6 @@ export default function LeadsPage() {
   const [users, setUsers] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [accounts, setAccounts] = useState([]);
-  // Supporting data is now non-blocking since API returns denormalized names
-  const [supportingDataReady, setSupportingDataReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -316,11 +310,9 @@ export default function LeadsPage() {
         setEmployees(employeesData || []);
 
         supportingDataLoaded.current = true; // Mark as loaded
-        setSupportingDataReady(true);
       } catch (error) {
         console.error("[Leads] Failed to load supporting data:", error);
         // Even on error, allow leads to load
-        setSupportingDataReady(true);
       }
     };
 

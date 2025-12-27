@@ -6,7 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Account, Customer } from "@/api/entities";
+import { Customer } from "@/api/entities";
 import { useUser } from "@/components/shared/useUser.js";
 import { Loader2, Plus } from "lucide-react";
 import { useApiManager } from "./ApiManager";

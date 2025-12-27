@@ -54,9 +54,6 @@ import { useEntityLabel } from "@/components/shared/EntityLabelsContext";
 import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 import { useAiShaEvents } from "@/hooks/useAiShaEvents";
 
-// Helper to add delay between API calls
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 export default function AccountsPage() {
   const { plural: accountsLabel, singular: accountLabel } = useEntityLabel('accounts');
   const { getCardLabel, isCardVisible } = useStatusCardPreferences();

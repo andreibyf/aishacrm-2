@@ -99,7 +99,6 @@ import {
   initAgentSdkGuard,
   resetAgentSdkGuard,
 } from "@/components/ai/agentSdkGuard";
-import ClearChatButton from "../components/ai/ClearChatButton";
 import { clearChat } from "../components/ai/chatUtils";
 import AiSidebar from "@/components/ai/AiSidebar";
 import AiAssistantLauncher from "@/components/ai/AiAssistantLauncher.jsx";

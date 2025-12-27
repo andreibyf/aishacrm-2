@@ -15,7 +15,7 @@ import createAiRealtimeRoutes from './aiRealtime.js';
 import { routeChat } from '../flows/index.js';
 import { resolveLLMApiKey, pickModel, getTenantIdFromRequest, selectLLMConfigForTenant } from '../lib/aiEngine/index.js';
 import { logLLMActivity } from '../lib/aiEngine/activityLogger.js';
-import { enhanceSystemPromptWithLabels, enhanceSystemPromptWithFullContext, fetchEntityLabels, updateToolSchemasWithLabels } from '../lib/entityLabelInjector.js';
+import { enhanceSystemPromptWithFullContext, fetchEntityLabels, updateToolSchemasWithLabels } from '../lib/entityLabelInjector.js';
 import { buildTenantContextDictionary, generateContextDictionaryPrompt } from '../lib/tenantContextDictionary.js';
 import { developerChat, isSuperadmin } from '../lib/developerAI.js';
 
