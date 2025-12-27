@@ -550,13 +550,13 @@ export default function ActivityForm({ activity, relatedTo, relatedId, onSave, o
     { value: 'urgent', label: 'Urgent' },
   ];
 
-  const statusOptions = [
+  const statusOptions = useMemo(() => [
     { value: 'scheduled', label: 'Scheduled' },
     { value: 'in-progress', label: 'In Progress' },
     { value: 'overdue', label: 'Overdue' },
     { value: 'completed', label: 'Completed' },
     { value: 'cancelled', label: 'Cancelled' },
-  ];
+  ], []);
 
   const { isCardVisible, getCardLabel } = useStatusCardPreferences();
 

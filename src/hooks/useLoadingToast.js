@@ -9,7 +9,7 @@ export function useLoadingToast() {
   const toastIdRef = useRef(null);
   const showTimeRef = useRef(null);
 
-  const funnyMessages = [
+  const funnyMessages = useMemo(() => [
     "🧙‍♂️ Summoning your data from the cloud...",
     "🚀 Launching metrics into orbit...",
     "🎰 Crunching numbers faster than a casino...",
@@ -30,7 +30,7 @@ export function useLoadingToast() {
     "🎤 Mic check, data check...",
     "🎧 Mixing your data tracks...",
     "🎵 Composing your data melody..."
-  ];
+  ], []);
 
   const showLoading = useCallback((customMessage) => {
     const message = customMessage || funnyMessages[Math.floor(Math.random() * funnyMessages.length)];
