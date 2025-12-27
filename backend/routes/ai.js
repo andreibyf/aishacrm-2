@@ -656,13 +656,22 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       let assistantResponded = false;
       let conversationMessages = [...messages];
 
+      // Detect if user is asking for next steps/recommendations
+      const lastUserMessage = messages.filter(m => m.role === 'user').slice(-1)[0]?.content || '';
+      const isNextStepsQuery = /\b(what should (I|we) do next|what do you (recommend|suggest|think)|how should (I|we) proceed|what('s| is| are) (my|our|the) next step)/i.test(lastUserMessage);
+      
+      // Force suggest_next_actions tool when user asks for next steps
+      const toolChoice = isNextStepsQuery && sessionEntities?.length > 0 
+        ? { type: 'function', function: { name: 'suggest_next_actions' } }
+        : 'auto';
+
       for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
         const startTime = Date.now();
         const response = await client.chat.completions.create({
           model,
           messages: conversationMessages,
           tools,
-          tool_choice: 'auto',
+          tool_choice: iteration === 0 ? toolChoice : 'auto', // Only force on first iteration
           temperature,
         });
         const durationMs = Date.now() - startTime;
@@ -2130,6 +2139,15 @@ ${conversationSummary}`;
       let finalModel = tenantModelConfig.model; // Use tenant-aware model
       let loopMessages = [...convoMessages];
 
+      // Detect if user is asking for next steps/recommendations
+      const lastUserMessage = messages.filter(m => m.role === 'user').slice(-1)[0]?.content || '';
+      const isNextStepsQuery = /\b(what should (I|we) do next|what do you (recommend|suggest|think)|how should (I|we) proceed|what('s| is| are) (my|our|the) next step)/i.test(lastUserMessage);
+      
+      // Force suggest_next_actions tool when user asks for next steps
+      const toolChoice = isNextStepsQuery && sessionEntities?.length > 0 
+        ? { type: 'function', function: { name: 'suggest_next_actions' } }
+        : 'auto';
+
       for (let i = 0; i < MAX_TOOL_ITERATIONS; i += 1) {
         const startTime = Date.now();
         const completion = await client.chat.completions.create({
@@ -2137,7 +2155,7 @@ ${conversationSummary}`;
           messages: loopMessages,
           temperature,
           tools,
-          tool_choice: 'auto'
+          tool_choice: i === 0 ? toolChoice : 'auto' // Only force on first iteration
         });
         const durationMs = Date.now() - startTime;
 
