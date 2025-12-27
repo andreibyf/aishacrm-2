@@ -18,6 +18,8 @@ import { logLLMActivity } from '../lib/aiEngine/activityLogger.js';
 import { enhanceSystemPromptWithFullContext, fetchEntityLabels, updateToolSchemasWithLabels } from '../lib/entityLabelInjector.js';
 import { buildTenantContextDictionary, generateContextDictionaryPrompt } from '../lib/tenantContextDictionary.js';
 import { developerChat, isSuperadmin } from '../lib/developerAI.js';
+import { classifyIntent, extractEntityMentions, getIntentConfidence } from '../lib/intentClassifier.js';
+import { routeIntentToTool, getToolsForIntent, shouldForceToolChoice, getRelevantToolsForIntent } from '../lib/intentRouter.js';
 
 /**
  * Create provider-specific OpenAI-compatible client for tool calling.
@@ -656,21 +658,47 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       let assistantResponded = false;
       let conversationMessages = [...messages];
 
-      // Detect if user is asking for next steps/recommendations
+      // INTENT ROUTING: Classify user's intent for deterministic tool routing
       const lastUserMessage = messages.filter(m => m.role === 'user').slice(-1)[0]?.content || '';
-      const isNextStepsQuery = /\b(what should (I|we) do next|what do you (recommend|suggest|think)|how should (I|we) proceed|what('s| is| are) (my|our|the) next step)/i.test(lastUserMessage);
+      const classifiedIntent = classifyIntent(lastUserMessage);
+      const intentConfidence = classifiedIntent ? getIntentConfidence(lastUserMessage, classifiedIntent) : 0;
+      const entityMentions = extractEntityMentions(lastUserMessage);
       
-      // Force suggest_next_actions tool when user asks for next steps
-      const toolChoice = isNextStepsQuery && sessionEntities?.length > 0 
-        ? { type: 'function', function: { name: 'suggest_next_actions' } }
-        : 'auto';
+      console.log('[Intent Routing - generateAssistantResponse]', {
+        intent: classifiedIntent || 'NONE',
+        confidence: intentConfidence.toFixed(2),
+        entities: Object.entries(entityMentions).filter(([_, v]) => v).map(([k]) => k)
+      });
+
+      // Determine tool_choice based on intent
+      let toolChoice = 'auto';
+      let focusedTools = tools; // Default: all tools
+
+      if (classifiedIntent) {
+        if (shouldForceToolChoice(classifiedIntent)) {
+          // High-priority intents: Force specific tool
+          const forcedTool = routeIntentToTool(classifiedIntent);
+          if (forcedTool && (classifiedIntent !== 'AI_SUGGEST_NEXT_ACTIONS' || sessionEntities?.length > 0)) {
+            toolChoice = { type: 'function', function: { name: forcedTool } };
+            console.log('[Intent Routing] Forcing tool:', forcedTool);
+          }
+        } else if (intentConfidence > 0.7) {
+          // Medium-high confidence: Provide subset of relevant tools (reduces token overhead)
+          const relevantTools = getRelevantToolsForIntent(classifiedIntent, entityMentions);
+          if (relevantTools.length > 0 && relevantTools.length < tools.length) {
+            focusedTools = tools.filter(t => relevantTools.includes(t.function.name));
+            console.log('[Intent Routing] Focused to', focusedTools.length, 'tools from', tools.length);
+          }
+        }
+        // Low confidence (< 0.7): Use all tools with auto selection
+      }
 
       for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
         const startTime = Date.now();
         const response = await client.chat.completions.create({
           model,
           messages: conversationMessages,
-          tools,
+          tools: focusedTools, // Use focused tool subset when intent is clear
           tool_choice: iteration === 0 ? toolChoice : 'auto', // Only force on first iteration
           temperature,
         });
@@ -2139,14 +2167,40 @@ ${conversationSummary}`;
       let finalModel = tenantModelConfig.model; // Use tenant-aware model
       let loopMessages = [...convoMessages];
 
-      // Detect if user is asking for next steps/recommendations
+      // INTENT ROUTING: Classify user's intent for deterministic tool routing
       const lastUserMessage = messages.filter(m => m.role === 'user').slice(-1)[0]?.content || '';
-      const isNextStepsQuery = /\b(what should (I|we) do next|what do you (recommend|suggest|think)|how should (I|we) proceed|what('s| is| are) (my|our|the) next step)/i.test(lastUserMessage);
+      const classifiedIntent = classifyIntent(lastUserMessage);
+      const intentConfidence = classifiedIntent ? getIntentConfidence(lastUserMessage, classifiedIntent) : 0;
+      const entityMentions = extractEntityMentions(lastUserMessage);
       
-      // Force suggest_next_actions tool when user asks for next steps
-      const toolChoice = isNextStepsQuery && sessionEntities?.length > 0 
-        ? { type: 'function', function: { name: 'suggest_next_actions' } }
-        : 'auto';
+      console.log('[Intent Routing]', {
+        intent: classifiedIntent || 'NONE',
+        confidence: intentConfidence.toFixed(2),
+        entities: Object.entries(entityMentions).filter(([_, v]) => v).map(([k]) => k)
+      });
+
+      // Determine tool_choice based on intent
+      let toolChoice = 'auto';
+      let focusedTools = tools; // Default: all tools
+
+      if (classifiedIntent) {
+        if (shouldForceToolChoice(classifiedIntent)) {
+          // High-priority intents: Force specific tool
+          const forcedTool = routeIntentToTool(classifiedIntent);
+          if (forcedTool && (classifiedIntent !== 'AI_SUGGEST_NEXT_ACTIONS' || sessionEntities?.length > 0)) {
+            toolChoice = { type: 'function', function: { name: forcedTool } };
+            console.log('[Intent Routing] Forcing tool:', forcedTool);
+          }
+        } else if (intentConfidence > 0.7) {
+          // Medium-high confidence: Provide subset of relevant tools (reduces token overhead)
+          const relevantTools = getRelevantToolsForIntent(classifiedIntent, entityMentions);
+          if (relevantTools.length > 0 && relevantTools.length < tools.length) {
+            focusedTools = tools.filter(t => relevantTools.includes(t.function.name));
+            console.log('[Intent Routing] Focused to', focusedTools.length, 'tools from', tools.length);
+          }
+        }
+        // Low confidence (< 0.7): Use all tools with auto selection
+      }
 
       for (let i = 0; i < MAX_TOOL_ITERATIONS; i += 1) {
         const startTime = Date.now();
@@ -2154,7 +2208,7 @@ ${conversationSummary}`;
           model: finalModel,
           messages: loopMessages,
           temperature,
-          tools,
+          tools: focusedTools, // Use focused tool subset when intent is clear
           tool_choice: i === 0 ? toolChoice : 'auto' // Only force on first iteration
         });
         const durationMs = Date.now() - startTime;
