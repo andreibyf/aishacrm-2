@@ -99,6 +99,69 @@ Entity Mapping:
 
 ---
 
+### BUG-AI-CONTEXT-003 – Session entity context not populated (localStorage empty)
+
+**Status:** 🔄 PENDING TEST (code committed a8a59d9, needs deployment + testing)  
+**Priority:** Critical  
+**Area:** AI Chat / Session Context Tracking / Entity Extraction  
+**Fix Committed:** December 27, 2025
+
+**Symptoms:**
+- Browser localStorage shows NO session entity context (empty)
+- Frontend `extractAndStoreEntities` function never receives entity data
+- Follow-up questions like "What was the last note?" fail because there's no context to reference
+- SESSION ENTITY CONTEXT directive (BUG-AI-CONTEXT-001 fix) cannot work without entity data
+
+**Root Cause:**
+Backend wasn't extracting entity data from tool results to send to frontend:
+1. Backend returns `metadata.tool_interactions` with `result_preview` JSON strings
+2. Frontend `extractAndStoreEntities` only looks at `result.assistantMessage.data` (which is empty)
+3. Tool results weren't being parsed to extract actual entity objects (leads, contacts, etc.)
+4. Frontend localStorage remained empty, defeating the entire session context system
+
+**Example from User:**
+```json
+{
+  "tool_interactions": [{
+    "tool": "list_leads",
+    "result_preview": "{\"tag\":\"Ok\",\"value\":{\"leads\":[{\"id\":\"a3af0a84-...\",\"first_name\":\"Jack\",\"last_name\":\"Russel\",\"company\":\"JR Corporation\"}]}}"
+  }]
+}
+```
+
+The `leads` array was in `result_preview` but not extracted for frontend use.
+
+**Solution:**
+
+**Backend (`backend/routes/ai.js`):**
+- Parse `tool_interactions[].result_preview` JSON strings
+- Extract entity arrays from wrapped responses (`data.leads`, `data.contacts`, etc.)
+- Extract single entities (`data.lead`, `data.contact`, etc.)
+- Return new `entities` array field in response for frontend consumption
+
+**Frontend (`src/components/ai/useAiSidebarState.jsx`):**
+- Extract entities from BOTH `result.assistantMessage.data` AND `result.entities`
+- Populate localStorage with entity references for session context
+
+**Files Changed:**
+- `backend/routes/ai.js` (lines 2253-2318) - Parse tool results, extract entities, return in response
+- `src/components/ai/useAiSidebarState.jsx` (lines 399-412) - Extract from result.entities
+
+**Testing Required:**
+1. ✅ Deploy v3.4.1+ to test environment
+2. ⏳ Ask "what is my warm lead?" (should trigger `list_leads` tool)
+3. ⏳ Check browser localStorage/DevTools for populated session entity context
+4. ⏳ Verify context shows: `{"jack russel": {id: "a3af0a84-...", type: "lead", name: "Jack Russel", ...}}`
+5. ⏳ Ask follow-up "What was the last note?" → Should use stored context (requires BUG-AI-CONTEXT-001 fix)
+
+**Impact:**
+- Session context actually populated with entity data ✅
+- localStorage debugging shows what AI has in context ✅
+- Enables BUG-AI-CONTEXT-001 fix to work properly ✅
+- Natural conversation flow without repeating entity names ✅
+
+---
+
 ## Backend / Frontend Field Mismatch
 
 ### BUG-BE-FIELDS-001 – Backend missing fields required by UI
