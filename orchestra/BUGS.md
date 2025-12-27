@@ -6,6 +6,94 @@ This file tracks known issues. PLAN.md selects which bugs are currently in scope
 
 ## AI Conversation Context & Classification
 
+### BUG-AI-MONITOR-001 – LLM Activity Monitor missing "Tools Called" column
+
+**Status:** 🔄 PENDING TEST (code committed, needs deployment + testing)  
+**Priority:** Medium  
+**Area:** System Admin / LLM Monitoring  
+**Fix Committed:** December 28, 2025
+
+**Symptoms:**
+- LLM Activity Monitor table shows duration, tokens, model, capability
+- Missing which tools were actually called during each LLM interaction
+- Hard to debug tool chains or identify performance bottlenecks
+
+**Root Cause:**
+Activity logger `backend/lib/aiEngine/activityLogger.js` didn't track toolsCalled field.
+Backend wasn't extracting tool names from OpenAI responses.
+Frontend table didn't display tools even if backend logged them.
+
+**Solution:**
+1. Backend: Added `toolsCalled: Array<string>` field to activity log schema
+2. Backend: Extract tool names from `choice?.message?.tool_calls` array
+3. Frontend: Added "Tools Called" column to monitor table
+4. Frontend: Display tools as badges with monospace font for readability
+
+**Files Changed:**
+- `backend/lib/aiEngine/activityLogger.js` (added toolsCalled field)
+- `backend/routes/ai.js` (extract tool names from LLM response)
+- `src/components/settings/LLMActivityMonitor.jsx` (add column + cell rendering)
+
+**Testing Required:**
+1. ✅ Deploy to test environment
+2. ⏳ Verify "Tools Called" column appears in LLM Activity Monitor
+3. ⏳ Trigger AI chat with tools (e.g., "list my leads")
+4. ⏳ Verify tool names appear as badges in activity log
+
+**Impact:**
+- Better debugging of tool chains ✅
+- Performance analysis of specific tools ✅
+- Audit trail of what tools AI actually used ✅
+
+---
+
+### BUG-AI-TOOL-001 – suggest_next_actions returns "not found in registry"
+
+**Status:** 🔄 PENDING TEST (code committed, needs deployment + testing)  
+**Priority:** Critical  
+**Area:** AI Chat / Tool Execution  
+**Fix Committed:** December 28, 2025
+
+**Symptoms:**
+- User asks "What should be my next step?" in AI chat
+- AI attempts to call `suggest_next_actions` tool
+- Error: "Tool 'suggest_next_actions' not found in registry"
+- User sees "It seems there was an issue with generating next step suggestions"
+
+**Root Cause:**
+`suggest_next_actions` is a custom tool (not in Braid registry) and requires special handling.
+Regular chat endpoint `/conversations/:id/messages` has early-exit handler at line 408:
+```javascript
+if (toolName === 'suggest_next_actions') {
+  const { suggestNextActions } = await import('../lib/suggestNextActions.js');
+  return await suggestNextActions({ entity_type, entity_id, tenant_id, limit });
+}
+```
+
+However, `/realtime-tools/execute` endpoint was calling `executeBraidTool()` FIRST (line 2435), THEN checking for `suggest_next_actions` (line 2514).
+This caused Braid to throw "not found in registry" before the custom handler could intercept.
+
+**Solution:**
+Moved `suggest_next_actions` check BEFORE `executeBraidTool()` call in `/realtime-tools/execute` endpoint.
+Now follows same pattern as regular chat endpoint.
+Removed duplicate handler that appeared after tool execution.
+
+**Files Changed:**
+- `backend/routes/ai.js` (lines 2427-2450: moved suggest_next_actions handler before executeBraidTool)
+
+**Testing Required:**
+1. ✅ Deploy to test environment
+2. ⏳ Ask "What should be my next step?" in AI chat
+3. ⏳ Verify suggest_next_actions returns suggestions without error
+4. ⏳ Test with different entity types (lead, contact, account, opportunity)
+
+**Impact:**
+- Proactive next actions feature works ✅
+- AI can guide users through next best steps ✅
+- Better user experience with intelligent recommendations ✅
+
+---
+
 ### BUG-AI-CONTEXT-001 – Session entity context not used for implicit references
 
 **Status:** 🔄 PENDING TEST (code committed bc93bd1, needs deployment + testing)  

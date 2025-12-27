@@ -666,8 +666,10 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
           temperature,
         });
         const durationMs = Date.now() - startTime;
+        const choice = response.choices?.[0];
+        const toolCalls = choice?.message?.tool_calls || [];
 
-        // Log LLM activity
+        // Log LLM activity with tools called
         logLLMActivity({
           tenantId: tenantRecord?.id,
           capability: 'chat_tools',
@@ -677,16 +679,15 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
           status: 'success',
           durationMs,
           usage: response.usage || null,
+          toolsCalled: toolCalls.map(tc => tc.function?.name).filter(Boolean),
         });
 
-        const choice = response.choices?.[0];
         if (!choice?.message) {
           break;
         }
 
         const { message } = choice;
-        const toolCalls = message.tool_calls || [];
-
+        // toolCalls already declared above
         if (toolCalls.length > 0) {
           conversationMessages.push({
             role: 'assistant',
@@ -2428,6 +2429,27 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         call_id
       });
 
+      // Handle suggest_next_actions directly (not a Braid tool)
+      if (tool_name === 'suggest_next_actions') {
+        const { suggestNextActions } = await import('../lib/suggestNextActions.js');
+        const suggestions = await suggestNextActions({
+          entity_type: tool_args?.entity_type,
+          entity_id: tool_args?.entity_id,
+          tenant_id: tenantRecord.id,
+          limit: tool_args?.limit || 3
+        });
+        
+        const duration = Date.now() - startTime;
+        
+        return res.json({
+          status: 'success',
+          call_id,
+          tool_name,
+          data: suggestions,
+          duration_ms: duration
+        });
+      }
+
       // Execute the tool via Braid
       // SECURITY: Pass the access token - only available after authorization validated above
       const toolResult = await executeBraidTool(tool_name, tool_args, tenantRecord, req.user?.email, TOOL_ACCESS_TOKEN);
@@ -2485,25 +2507,6 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
               forecast: summary.total_forecast
             }
           },
-          duration_ms: duration
-        });
-      }
-
-      // For suggest_next_actions tool, execute directly (not a Braid tool)
-      if (tool_name === 'suggest_next_actions') {
-        const { suggestNextActions } = await import('../lib/suggestNextActions.js');
-        const suggestions = await suggestNextActions({
-          entity_type: args?.entity_type,
-          entity_id: args?.entity_id,
-          tenant_id: tenantIdentifier,
-          limit: args?.limit || 3
-        });
-        
-        return res.json({
-          status: 'success',
-          call_id,
-          tool_name,
-          data: suggestions,
           duration_ms: duration
         });
       }

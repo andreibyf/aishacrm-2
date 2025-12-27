@@ -390,6 +390,7 @@ export default function LLMActivityMonitor() {
                 <th className="px-3 py-2 text-left font-medium">Provider</th>
                 <th className="px-3 py-2 text-left font-medium">Model</th>
                 <th className="px-3 py-2 text-left font-medium">Capability</th>
+                <th className="px-3 py-2 text-left font-medium">Tools Called</th>
                 <th className="px-3 py-2 text-left font-medium">Node ID</th>
                 <th className="px-3 py-2 text-left font-medium">Tenant</th>
                 <th className="px-3 py-2 text-right font-medium">Duration</th>
@@ -399,7 +400,7 @@ export default function LLMActivityMonitor() {
             <tbody className="divide-y divide-border">
               {entries.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
                     <Activity className="w-8 h-8 mx-auto mb-2 opacity-50" />
                     <div>No LLM activity recorded yet.</div>
                     <div className="text-xs mt-1">Activity will appear here as AI features are used.</div>
@@ -431,6 +432,19 @@ export default function LLMActivityMonitor() {
                       </td>
                       <td className="px-3 py-2">
                         <span className="text-xs">{entry.capability}</span>
+                      </td>
+                      <td className="px-3 py-2">
+                        {entry.toolsCalled && entry.toolsCalled.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {entry.toolsCalled.map((tool, idx) => (
+                              <Badge key={idx} variant="outline" className="text-xs font-mono">
+                                {tool}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         <span className="font-mono text-xs text-muted-foreground">
