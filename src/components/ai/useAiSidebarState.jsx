@@ -226,7 +226,37 @@ export function AiSidebarProvider({ children }) {
   // Build context summary for AI (names -> IDs)
   const buildSessionContextSummary = useCallback(() => {
     const ctx = sessionContextRef.current;
-    if (!ctx || Object.keys(ctx).length === 0) return null;
+    
+    // If no session context from previous AI responses, try to extract from current URL
+    // This handles the case where user navigates directly to an entity page and asks a question
+    if (!ctx || Object.keys(ctx).length === 0) {
+      try {
+        const pathname = window.location?.pathname || '';
+        // Match patterns like /leads/:id, /accounts/:id, /contacts/:id, /opportunities/:id
+        const entityPatterns = [
+          { regex: /^\/leads\/([a-f0-9-]{36})(?:\/|$)/i, type: 'lead' },
+          { regex: /^\/accounts\/([a-f0-9-]{36})(?:\/|$)/i, type: 'account' },
+          { regex: /^\/contacts\/([a-f0-9-]{36})(?:\/|$)/i, type: 'contact' },
+          { regex: /^\/opportunities\/([a-f0-9-]{36})(?:\/|$)/i, type: 'opportunity' }
+        ];
+        
+        for (const pattern of entityPatterns) {
+          const match = pathname.match(pattern.regex);
+          if (match && match[1]) {
+            console.log('[AI Sidebar] Extracted entity from URL:', { type: pattern.type, id: match[1] });
+            return [{
+              id: match[1],
+              type: pattern.type,
+              name: `Current ${pattern.type}`,
+              aliases: []
+            }];
+          }
+        }
+      } catch (e) {
+        console.warn('[AI Sidebar] Failed to extract entity from URL:', e);
+      }
+      return null;
+    }
 
     // Dedupe by ID and create a summary
     const byId = {};
