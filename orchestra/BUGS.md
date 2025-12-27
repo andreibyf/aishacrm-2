@@ -8,10 +8,10 @@ This file tracks known issues. PLAN.md selects which bugs are currently in scope
 
 ### BUG-AI-CONTEXT-001 – Session entity context not used for implicit references
 
-**Status:** ✅ FIXED (v3.4.0+, commit bc93bd1)  
+**Status:** 🔄 PENDING TEST (code committed bc93bd1, needs deployment + testing)  
 **Priority:** Critical  
 **Area:** AI Chat / Session Context Tracking  
-**Fixed Date:** December 27, 2025
+**Fix Committed:** December 27, 2025
 
 **Symptoms:**
 - User asks "what is the name of my warm lead?" → AiSHA responds "Jack Russel from JR Corporation" ✅
@@ -32,6 +32,12 @@ Expanded SESSION ENTITY CONTEXT directive to cover ALL implicit entity reference
 **Files Changed:**
 - `backend/routes/ai.js` (lines 2027-2053)
 
+**Testing Required:**
+1. ✅ Deploy v3.4.0+ to test environment
+2. ⏳ Test scenario: Ask "what is my warm lead?" → Get answer → Ask "What was the last note?" (should use context)
+3. ⏳ Verify AI doesn't ask "Which entity?" when context is clear
+4. ⏳ Test with multiple entities to ensure it uses most recent
+
 **Impact:**
 - Natural conversation flow ✅
 - No need to repeat entity names ✅
@@ -41,10 +47,10 @@ Expanded SESSION ENTITY CONTEXT directive to cover ALL implicit entity reference
 
 ### BUG-AI-CONTEXT-002 – Intent classification always shows "ambiguous"
 
-**Status:** ✅ FIXED (v3.4.0+, commit 232b55f)  
+**Status:** 🔄 PENDING TEST (code committed 232b55f, needs deployment + testing)  
 **Priority:** High  
 **Area:** AI Chat / Response Classification  
-**Fixed Date:** December 27, 2025
+**Fix Committed:** December 27, 2025
 
 **Symptoms:**
 - Every AI message in the UI showed intent as "ambiguous" regardless of actual action
@@ -79,6 +85,12 @@ Entity Mapping:
 
 **Files Changed:**
 - `backend/routes/ai.js` (lines 2253-2286)
+
+**Testing Required:**
+1. ✅ Deploy v3.4.0+ to test environment
+2. ⏳ Verify intent shows "query", "create", "update", "recommend" instead of "ambiguous"
+3. ⏳ Check conversation history tracking shows correct entity types
+4. ⏳ Confirm follow-up suggestions improve with proper intent data
 
 **Impact:**
 - Proper intent tracking in conversation history ✅
