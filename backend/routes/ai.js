@@ -2400,33 +2400,35 @@ ${conversationSummary}`;
             // Prefer full tool result to ensure IDs are available (previews can truncate IDs).
             const resultObj = interaction.full_result;
             const result = typeof resultObj === 'string' ? JSON.parse(resultObj) : resultObj;
+
             if (result.tag === 'Ok' && result.value) {
-              // Handle different response formats
               const data = result.value;
-              
-              // Array of entities (list_leads, list_contacts, etc.)
-              if (data.leads && Array.isArray(data.leads)) extractedEntities.push(...data.leads);
-              else if (data.contacts && Array.isArray(data.contacts)) extractedEntities.push(...data.contacts);
-              else if (data.accounts && Array.isArray(data.accounts)) extractedEntities.push(...data.accounts);
-              else if (data.opportunities && Array.isArray(data.opportunities)) extractedEntities.push(...data.opportunities);
-              else if (data.activities && Array.isArray(data.activities)) extractedEntities.push(...data.activities);
-              else if (data.notes && Array.isArray(data.notes)) extractedEntities.push(...data.notes);
-              else if (data.bizdev_sources && Array.isArray(data.bizdev_sources)) extractedEntities.push(...data.bizdev_sources);
-              
-              // Single entity (get_lead, create_contact, etc.)
-              else if (data.lead) extractedEntities.push(data.lead);
-              else if (data.contact) extractedEntities.push(data.contact);
-              else if (data.account) extractedEntities.push(data.account);
-              else if (data.opportunity) extractedEntities.push(data.opportunity);
-              else if (data.activity) extractedEntities.push(data.activity);
-              else if (data.note) extractedEntities.push(data.note);
-              
-              // Direct array or single object
-              else if (Array.isArray(data)) extractedEntities.push(...data);
-              else if (data.id) extractedEntities.push(data);
+
+              // NEW: handle tools that return a bare array (e.g. search_leads -> Ok([...]))
+              if (Array.isArray(data)) {
+                extractedEntities.push(...data);
+              } else {
+                // Existing object-shaped responses
+                // Array of entities (list_leads, list_contacts, etc.)
+                if (data.leads && Array.isArray(data.leads)) extractedEntities.push(...data.leads);
+                else if (data.contacts && Array.isArray(data.contacts)) extractedEntities.push(...data.contacts);
+                else if (data.accounts && Array.isArray(data.accounts)) extractedEntities.push(...data.accounts);
+                else if (data.opportunities && Array.isArray(data.opportunities)) extractedEntities.push(...data.opportunities);
+                else if (data.activities && Array.isArray(data.activities)) extractedEntities.push(...data.activities);
+                else if (data.notes && Array.isArray(data.notes)) extractedEntities.push(...data.notes);
+                else if (data.bizdev_sources && Array.isArray(data.bizdev_sources)) extractedEntities.push(...data.bizdev_sources);
+
+                // Single entity (get_lead, create_contact, etc.)
+                else if (data.lead) extractedEntities.push(data.lead);
+                else if (data.contact) extractedEntities.push(data.contact);
+                else if (data.account) extractedEntities.push(data.account);
+                else if (data.opportunity) extractedEntities.push(data.opportunity);
+                else if (data.activity) extractedEntities.push(data.activity);
+                else if (data.note) extractedEntities.push(data.note);
+              }
             }
-          } catch (parseErr) {
-            // Ignore parse errors for tool results
+          } catch (e) {
+            console.warn('[ai.chat] Failed to extract entities from tool result:', e?.message || e);
           }
         }
       }
