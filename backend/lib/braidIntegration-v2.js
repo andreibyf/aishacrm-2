@@ -2614,6 +2614,9 @@ const BRAID_PARAM_ORDER = {
   rejectSuggestion: ['tenant', 'suggestion_id', 'rejection_reason'],
   applySuggestion: ['tenant', 'suggestion_id'],
   triggerSuggestionGeneration: ['tenant', 'trigger_id'],
+  
+  // AI Next Actions (RAG-enabled suggestions)
+  suggestNextActions: ['tenant', 'entity_type', 'entity_id', 'limit'],
 
   // CRM Navigation (v3.0.0)
   navigateTo: ['tenant', 'page', 'record_id'],

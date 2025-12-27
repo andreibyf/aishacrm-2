@@ -2501,10 +2501,17 @@ ${conversationSummary}`;
   // ============================================================================
   router.post('/suggest-next-actions', async (req, res) => {
     try {
-      const { tenant_id, entity_type, entity_id, limit = 3 } = req.body;
+      console.log('[suggest-next-actions] req.body:', JSON.stringify(req.body));
+
+      // Accept both 'tenant' (from Braid) and 'tenant_id' (from direct calls)
+      const { tenant, tenant_id, entity_type, entity_id, limit = 3 } = req.body;
+      const effectiveTenantId = tenant_id || tenant;
+
+      console.log('[suggest-next-actions] Parsed:', { effectiveTenantId, entity_type, entity_id, limit });
       
       // Validation
-      if (!tenant_id || !entity_type || !entity_id) {
+      if (!effectiveTenantId || !entity_type || !entity_id) {
+        console.log('[suggest-next-actions] Validation FAILED:', { effectiveTenantId, entity_type, entity_id });
         return res.status(400).json({
           error: 'Missing required fields: tenant_id, entity_type, entity_id'
         });
@@ -2530,7 +2537,7 @@ ${conversationSummary}`;
       const result = await suggestNextActions({
         entity_type,
         entity_id,
-        tenant_id,
+        tenant_id: effectiveTenantId,
         limit
       });
       
