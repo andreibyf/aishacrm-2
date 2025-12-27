@@ -3,7 +3,7 @@
  * Tests for RAG implementation with tenant isolation and security
  */
 
-import { describe, it, before } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 
 describe('AI Memory System (RAG) - Phase 7', () => {

@@ -5,7 +5,7 @@
  * @module tests/ai/tenantContextDictionary.test
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before } from 'node:test';
 import assert from 'node:assert';
 
 // Import the module under test

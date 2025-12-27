@@ -236,6 +236,30 @@ class CacheManager {
   }
 
   /**
+   * Increment a numeric value in Redis (for counters)
+   * @param {string} key - Cache key
+   * @param {number} ttl - Time to live in seconds
+   * @returns {Promise<number|null>} New value after increment, or null if error
+   */
+  async increment(key, ttl = null) {
+    if (!this.connected) return null;
+
+    try {
+      const newValue = await this.client.incr(key);
+      
+      // Set TTL if this is the first increment (value is 1)
+      if (ttl && newValue === 1) {
+        await this.client.expire(key, ttl);
+      }
+      
+      return newValue;
+    } catch (error) {
+      console.error('[CacheManager] Increment error:', error);
+      return null;
+    }
+  }
+
+  /**
    * Flush all cache (for dev mode startup or manual cache clear)
    */
   async flushAll() {

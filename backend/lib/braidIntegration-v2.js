@@ -132,24 +132,24 @@ function logAuditEntry({
                        normalizedArgs?.employee_id || normalizedArgs?.user_id || null;
       
       const entry = createAuditEntry({
-        toolName,
-        braidFunction: config?.function,
-        braidFile: config?.file,
+        toolName: toolName || 'unknown',
+        braidFunction: config?.function || null,
+        braidFile: config?.file || null,
         policy: config?.policy || 'UNKNOWN',
-        toolClass: basePolicy?.tool_class,
-        tenantId: tenantUuid,
-        userId,
-        userEmail,
-        userRole,
-        inputArgs: normalizedArgs,
-        resultTag: result?.tag,
+        toolClass: basePolicy?.tool_class || null,
+        tenantId: tenantUuid || null,
+        userId: userId || null,
+        userEmail: userEmail || null,
+        userRole: userRole || null,
+        inputArgs: normalizedArgs || {},
+        resultTag: result?.tag || null,
         resultValue: result?.tag === 'Err' ? null : (result?.value ? { summary: 'Result logged' } : null), // Don't log full result for privacy
-        errorType: result?.error?.type,
-        errorMessage: result?.error?.message?.substring?.(0, 500),
-        executionTimeMs,
-        cacheHit,
-        entityType,
-        entityId
+        errorType: result?.error?.type || null,
+        errorMessage: result?.error?.message?.substring?.(0, 500) || null,
+        executionTimeMs: executionTimeMs || 0,
+        cacheHit: cacheHit || false,
+        entityType: entityType || null,
+        entityId: entityId || null
       });
       
       await logToolExecution(supabase, entry);

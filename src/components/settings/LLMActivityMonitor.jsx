@@ -19,12 +19,8 @@ import { BACKEND_URL } from "@/api/entities";
 import {
   RefreshCw,
   Trash2,
-  Play,
-  Pause,
   Filter,
   Activity,
-  Clock,
-  Zap,
   AlertCircle,
   CheckCircle,
   ArrowRightLeft,

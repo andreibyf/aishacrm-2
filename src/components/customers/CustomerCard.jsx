@@ -14,7 +14,6 @@ import {
   DollarSign,
   Eye,
   Building2,
-  User,
 } from "lucide-react";
 import PhoneDisplay from "../shared/PhoneDisplay";
 

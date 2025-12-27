@@ -1802,7 +1802,6 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
   // POST /api/ai/chat - AI chat completion
   router.post('/chat', async (req, res) => {
     try {
-      const supabase = getSupabaseClient();
       const { messages = [], model = DEFAULT_CHAT_MODEL, temperature = 0.7, sessionEntities = null, conversation_id: conversationId } = req.body || {};
       if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ status: 'error', message: 'messages array is required' });

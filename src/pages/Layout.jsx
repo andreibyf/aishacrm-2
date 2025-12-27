@@ -30,7 +30,6 @@ import {
   Calendar,
   CheckSquare,
   ClipboardCheck, // NEW: Added for ClientRequirements
-  Code, // NEW: Added for Developer AI
   CreditCard,
   Database,
   DollarSign,
