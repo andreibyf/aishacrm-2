@@ -4,6 +4,88 @@ This file tracks known issues. PLAN.md selects which bugs are currently in scope
 
 ---
 
+## AI Conversation Context & Classification
+
+### BUG-AI-CONTEXT-001 – Session entity context not used for implicit references
+
+**Status:** ✅ FIXED (v3.4.0+, commit bc93bd1)  
+**Priority:** Critical  
+**Area:** AI Chat / Session Context Tracking  
+**Fixed Date:** December 27, 2025
+
+**Symptoms:**
+- User asks "what is the name of my warm lead?" → AiSHA responds "Jack Russel from JR Corporation" ✅
+- User immediately follows up with "What was the last note?" (implicit reference to Jack Russel)
+- AiSHA responds "Could you please specify which entity..." ❌
+- Context is lost between messages even though session tracking exists
+
+**Root Cause:**
+System prompt in `backend/routes/ai.js` only instructed AI to use SESSION ENTITY CONTEXT for "next steps"/"recommendations" questions, NOT for general follow-up queries like "What was the last note?"
+
+**Solution:**
+Expanded SESSION ENTITY CONTEXT directive to cover ALL implicit entity references:
+1. Implicit questions ("What was the last note?") → Use MOST RECENT entity from context
+2. Next steps/recommendations ("What should I do next?") → Call suggest_next_actions
+3. Tool parameters → Auto-extract entity_id from context
+4. Clarification rule → Only ask "Which entity?" if MULTIPLE entities of same type exist
+
+**Files Changed:**
+- `backend/routes/ai.js` (lines 2027-2053)
+
+**Impact:**
+- Natural conversation flow ✅
+- No need to repeat entity names ✅
+- Proper context retention across messages ✅
+
+---
+
+### BUG-AI-CONTEXT-002 – Intent classification always shows "ambiguous"
+
+**Status:** ✅ FIXED (v3.4.0+, commit 232b55f)  
+**Priority:** High  
+**Area:** AI Chat / Response Classification  
+**Fixed Date:** December 27, 2025
+
+**Symptoms:**
+- Every AI message in the UI showed intent as "ambiguous" regardless of actual action
+- Conversation history couldn't track user intent patterns
+- Follow-up suggestions were less accurate due to missing intent context
+
+**Root Cause:**
+Backend `/api/ai/chat` endpoint was NOT returning a `classification` field in the response.
+Frontend `useAiSidebarState.jsx:385` tries to access `result.classification.parserResult.intent || 'ambiguous'`.
+Since classification was undefined, it always defaulted to `'ambiguous'`.
+
+**Solution:**
+Added intent and entity inference from tool interactions:
+
+Intent Mapping:
+- `create_*` → `'create'`
+- `update_*` → `'update'`
+- `delete_*` → `'delete'`
+- `search_*/get_*/list_*` → `'query'`
+- `suggest_next_actions` → `'recommend'`
+- (default) → `'query'`
+
+Entity Mapping:
+- `*lead*` → `'lead'`
+- `*contact*` → `'contact'`
+- `*account*` → `'account'`
+- `*opportunity*` → `'opportunity'`
+- `*activity*` → `'activity'`
+- `*note*` → `'note'`
+- `*bizdev*` → `'bizdev_source'`
+- (default) → `'general'`
+
+**Files Changed:**
+- `backend/routes/ai.js` (lines 2253-2286)
+
+**Impact:**
+- Proper intent tracking in conversation history ✅
+- Better follow-up suggestion generation ✅
+- Accurate analytics on user interaction patterns ✅
+
+---
 
 ## Backend / Frontend Field Mismatch
 
