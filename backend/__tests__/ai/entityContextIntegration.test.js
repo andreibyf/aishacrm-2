@@ -192,8 +192,8 @@ describe('Entity Context Integration Tests', { skip: !SHOULD_RUN }, () => {
             company: 'ACME Corp'
           },
           result_preview: JSON.stringify({
-            id: 'newly-created-lead-uuid',
-            lead_id: 'newly-created-lead-uuid',
+            id: 'a1b2c3d4-e5f6-4789-a012-b3c4d5e6f789',
+            lead_id: 'a1b2c3d4-e5f6-4789-a012-b3c4d5e6f789',
             name: 'New Lead',
             created_at: new Date().toISOString()
           })
@@ -219,9 +219,10 @@ describe('Entity Context Integration Tests', { skip: !SHOULD_RUN }, () => {
           if (tool.result_preview) {
             try {
               const resultStr = tool.result_preview;
+              const uuidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
               for (const entityType of entityTypes) {
                 if (!entityContext[entityType]) {
-                  const match = resultStr.match(new RegExp(`"${entityType}"\\s*:\\s*"([a-zA-Z0-9-]+)"`, 'i'));
+                  const match = resultStr.match(new RegExp(`"${entityType}"\\s*:\\s*"(${uuidPattern})"`, 'i'));
                   if (match && match[1]) {
                     entityContext[entityType] = match[1];
                   }
@@ -241,7 +242,7 @@ describe('Entity Context Integration Tests', { skip: !SHOULD_RUN }, () => {
       const entityContext = extractEntityContext(createToolInteractions);
       
       assert.ok(entityContext.lead_id, 'Should extract lead_id from create result');
-      assert.strictEqual(entityContext.lead_id, 'newly-created-lead-uuid');
+      assert.strictEqual(entityContext.lead_id, 'a1b2c3d4-e5f6-4789-a012-b3c4d5e6f789');
     });
     
     test('Handles mixed entity operations in single turn', async () => {
@@ -250,25 +251,25 @@ describe('Entity Context Integration Tests', { skip: !SHOULD_RUN }, () => {
       const mixedToolInteractions = [
         {
           name: 'get_lead_details',
-          arguments: { lead_id: 'lead-abc' },
-          result_preview: '{"id":"lead-abc","name":"Lead ABC"}'
+          arguments: { lead_id: 'a1a2a3a4-b1b2-4c3c-d4d4-e5e6f7f8f9f0' },
+          result_preview: '{"id":"a1a2a3a4-b1b2-4c3c-d4d4-e5e6f7f8f9f0","name":"Lead ABC"}'
         },
         {
           name: 'create_activity',
           arguments: { 
             type: 'call',
-            lead_id: 'lead-abc',
-            account_id: 'account-xyz'
+            lead_id: 'a1a2a3a4-b1b2-4c3c-d4d4-e5e6f7f8f9f0',
+            account_id: 'b2b3b4b5-c2c3-4d4d-e5e5-f6f7f8f9f0f1'
           },
-          result_preview: '{"id":"activity-123","activity_id":"activity-123"}'
+          result_preview: '{"id":"c3c4c5c6-d3d4-4e5e-f6f6-a7a8a9a0a1a2","activity_id":"c3c4c5c6-d3d4-4e5e-f6f6-a7a8a9a0a1a2"}'
         },
         {
           name: 'update_account',
           arguments: { 
-            id: 'account-xyz',
+            id: 'b2b3b4b5-c2c3-4d4d-e5e5-f6f7f8f9f0f1',
             last_contact_date: new Date().toISOString()
           },
-          result_preview: '{"id":"account-xyz"}'
+          result_preview: '{"id":"b2b3b4b5-c2c3-4d4d-e5e5-f6f7f8f9f0f1"}'
         }
       ];
       
@@ -298,9 +299,10 @@ describe('Entity Context Integration Tests', { skip: !SHOULD_RUN }, () => {
           if (tool.result_preview) {
             try {
               const resultStr = tool.result_preview;
+              const uuidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
               for (const entityType of entityTypes) {
                 if (!entityContext[entityType]) {
-                  const match = resultStr.match(new RegExp(`"${entityType}"\\s*:\\s*"([a-zA-Z0-9-]+)"`, 'i'));
+                  const match = resultStr.match(new RegExp(`"${entityType}"\\s*:\\s*"(${uuidPattern})"`, 'i'));
                   if (match && match[1]) {
                     entityContext[entityType] = match[1];
                   }
@@ -323,9 +325,9 @@ describe('Entity Context Integration Tests', { skip: !SHOULD_RUN }, () => {
       assert.ok(entityContext.lead_id, 'Should extract lead_id');
       assert.ok(entityContext.account_id, 'Should extract account_id');
       assert.ok(entityContext.activity_id, 'Should extract activity_id');
-      assert.strictEqual(entityContext.lead_id, 'lead-abc');
-      assert.strictEqual(entityContext.account_id, 'account-xyz');
-      assert.strictEqual(entityContext.activity_id, 'activity-123');
+      assert.strictEqual(entityContext.lead_id, 'a1a2a3a4-b1b2-4c3c-d4d4-e5e6f7f8f9f0');
+      assert.strictEqual(entityContext.account_id, 'b2b3b4b5-c2c3-4d4d-e5e5-f6f7f8f9f0f1');
+      assert.strictEqual(entityContext.activity_id, 'c3c4c5c6-d3d4-4e5e-f6f6-a7a8a9a0a1a2');
     });
   });
   

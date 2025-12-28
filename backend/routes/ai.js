@@ -410,10 +410,12 @@ export default function createAIRoutes(pgPool) {
       if (tool.result_preview || tool.full_result) {
         try {
           const resultStr = tool.full_result || tool.result_preview || '';
-          // Simple pattern matching for UUIDs in results - look for entity_id fields
+          // Pattern matching for UUIDs in results - look for entity_id fields
+          // UUID format: 8-4-4-4-12 hex characters with dashes
+          const uuidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
           for (const entityType of entityTypes) {
             if (!entityContext[entityType]) {
-              const match = resultStr.match(new RegExp(`"${entityType}"\\s*:\\s*"([a-f0-9-]{36})"`, 'i'));
+              const match = resultStr.match(new RegExp(`"${entityType}"\\s*:\\s*"(${uuidPattern})"`, 'i'));
               if (match && match[1]) {
                 entityContext[entityType] = match[1];
               }
