@@ -252,7 +252,15 @@ const INTENT_PATTERNS = {
     /\bwhat\s+would\s+you\s+(suggest|recommend|do)\b/i,
     /\b(any|give\s+me)\s+(suggestions?|recommendations?)\b/i,
     /\bhow\s+(should|can|do)\s+(I|we)\s+(approach|handle|deal\s+with)\b/i,
-    /\bwhat\s+is\s+(the|my)\s+best\s+(next\s+)?(move|action|step)\b/i
+    /\bwhat\s+is\s+(the|my)\s+best\s+(next\s+)?(move|action|step)\b/i,
+    // Short/casual queries
+    /^(what\s+now|now\s+what|next\??|ideas\??|suggestions\??|help\s+me)$/i,
+    /\bwhat\s+(can|should)\s+(I|we)\s+do\b/i,
+    /\b(help|assist)\s+(me\s+)?(with\s+)?(this|the)\b/i,
+    /\bwhat\s+actions?\s+(should|can|do)\b/i,
+    /\b(advise|advice)\s+(me|on|for)\b/i,
+    /\bwhat\s+next\b/i,
+    /\bnext\s+steps?\b/i,
   ],
 
   // NAVIGATION

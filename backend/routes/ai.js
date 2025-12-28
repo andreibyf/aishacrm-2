@@ -706,6 +706,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         const durationMs = Date.now() - startTime;
         const choice = response.choices?.[0];
         const toolCalls = choice?.message?.tool_calls || [];
+        const toolNames = toolCalls.map(tc => tc.function?.name).filter(Boolean);
 
         // Log LLM activity with tools called
         logLLMActivity({
@@ -718,7 +719,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
           durationMs,
           usage: response.usage || null,
           intent: classifiedIntent || null,
-          toolsCalled: toolCalls.map(tc => tc.function?.name).filter(Boolean),
+          toolsCalled: toolNames,
         });
 
         if (!choice?.message) {
@@ -2237,6 +2238,7 @@ ${conversationSummary}`;
         finalModel = completion.model;
 
         const toolCalls = message.tool_calls || [];
+        const toolNames = toolCalls.map(tc => tc?.function?.name).filter(Boolean);
 
         // Log LLM activity for /chat route (include tool call names if present)
         logLLMActivity({
@@ -2249,9 +2251,7 @@ ${conversationSummary}`;
           durationMs,
           usage: completion.usage || null,
           intent: classifiedIntent || null,
-          toolsCalled: toolCalls.length > 0
-            ? toolCalls.map(tc => tc?.function?.name).filter(Boolean)
-            : null,
+          toolsCalled: toolNames.length > 0 ? toolNames : null,
         });
 
         if (toolCalls.length === 0) {
