@@ -162,7 +162,8 @@ fn searchLeads(
   let url = "/api/v2/leads";
   let params = {
     tenant_id: tenant,
-    limit: limit
+    limit: limit,
+    query: query
   };
   
   let response = http.get(url, { params: params });

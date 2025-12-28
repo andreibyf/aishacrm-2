@@ -165,11 +165,11 @@ export default function createLeadsV2Routes() {
    */
   router.get('/', cacheList('leads', 180), async (req, res) => {
     try {
-      const { tenant_id, status, source, filter, assigned_to, account_id, is_test_data } = req.query;
+      const { tenant_id, status, source, filter, assigned_to, account_id, is_test_data, query: searchQuery } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
-      console.log('[V2 Leads GET] Called with:', { tenant_id, filter, status, assigned_to, account_id, is_test_data });
+      console.log('[V2 Leads GET] Called with:', { tenant_id, filter, status, assigned_to, account_id, is_test_data, searchQuery });
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -183,6 +183,23 @@ export default function createLeadsV2Routes() {
           .from('leads')
           .select(selectClause, { count: 'exact' })
           .eq('tenant_id', tenant_id);
+
+        // Text search across name and email fields
+        if (searchQuery && searchQuery.trim()) {
+          console.log('[V2 Leads] Applying text search:', searchQuery);
+          // Search for the full query across all fields using OR
+          // Use textSearch or match each field with ilike in a single OR clause
+          const searchPattern = `%${searchQuery.trim()}%`;
+          const orConditions = [
+            `first_name.ilike.${searchPattern}`,
+            `last_name.ilike.${searchPattern}`,
+            `email.ilike.${searchPattern}`,
+            `company.ilike.${searchPattern}`
+          ];
+          
+          query = query.or(orConditions.join(','));
+          console.log('[V2 Leads] Search OR conditions:', orConditions.join(','));
+        }
 
         // Handle filter parameter with $or support
         if (filter) {

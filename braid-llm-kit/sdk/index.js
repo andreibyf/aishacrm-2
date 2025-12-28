@@ -63,12 +63,14 @@ export function createBackendDeps(baseUrl, tenantId, userId = null, authToken = 
         params.set('tenant_id', tenantId);
         
         const fullUrl = `${baseUrl}${url}?${params}`;
+        console.log('[Braid HTTP GET]', fullUrl);
         const response = await fetch(fullUrl, {
           method: 'GET',
           headers: buildAuthHeaders()
         });
         
         if (!response.ok) {
+          console.error('[Braid HTTP GET] Error:', response.status, await response.clone().text().then(t => t.substring(0, 200)));
           return {
             tag: 'Err',
             error: {
@@ -80,6 +82,7 @@ export function createBackendDeps(baseUrl, tenantId, userId = null, authToken = 
         }
         
   const data = await response.json();
+  console.log('[Braid HTTP GET] Response data keys:', Object.keys(data), 'leads count:', data?.data?.leads?.length);
   return { tag: 'Ok', value: data };
       },
       

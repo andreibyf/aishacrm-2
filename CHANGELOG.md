@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.5.13] - 2025-12-28
+
+### Fixed
+- **Lead Search Functionality:** Fixed broken text search in `/api/v2/leads` endpoint
+  - Changed from word-splitting logic to full-query pattern matching
+  - Search now correctly finds leads like "Iso Check" with query `%Iso Check%`
+  - Simplified OR conditions to search across `first_name`, `last_name`, `email`, `company` fields
+  - Fixed Supabase PostgREST query chaining issue that caused 0 results
+
+- **Braid SDK searchLeads Tool:** Fixed query parameter passing
+  - Updated `braid-llm-kit/examples/assistant/leads.braid` to include `query` in params object
+  - AI chat now successfully searches and finds leads by name
+
+- **OpenAI API Authentication:** Fixed invalid API key errors in chat endpoint
+  - Updated OpenAI API key from deprecated `sk-svcacct-*` to project key `sk-proj-*`
+  - Updated key in three locations: `backend/.env`, `docker-compose.yml`, `system_settings` database
+  - Chat endpoint now successfully authenticates and processes requests
+
+### Added
+- **Debug Logging:** Added HTTP GET debug logging to Braid SDK
+  - Logs full URL, response status, and data keys for troubleshooting
+  - Helps identify search result issues and API response structure
+
+### Changed
+- **Docker Compose:** Added explicit `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` environment variables to backend service
+
+---
+
 ## [3.1.6] - 2025-12-21
 
 ### Fixed
