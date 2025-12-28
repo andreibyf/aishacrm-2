@@ -44,83 +44,6 @@ function createProviderClient(provider, apiKey) {
   return new OpenAI({ apiKey, baseURL: baseUrl });
 }
 
-/**
- * Extract entity context from tool interactions
- * Parses tool_interactions array to extract entity IDs from both arguments and results
- * @param {Array} toolInteractions - Array of executed tool interactions
- * @returns {Object} Entity context with top-level entity ID fields
- * @example
- * // Returns:
- * // {
- * //   lead_id: "a3af0a84-a16f-466e-aa82-62b462d1d998",
- * //   contact_id: "c12345-6789-abcd-ef12-34567890abcd",
- * //   account_id: null,
- * //   opportunity_id: null,
- * //   activity_id: null
- * // }
- */
-function extractEntityContext(toolInteractions) {
-  if (!Array.isArray(toolInteractions) || toolInteractions.length === 0) {
-    return {};
-  }
-
-  const entityContext = {};
-  const entityTypes = ['lead', 'contact', 'account', 'opportunity', 'activity'];
-
-  for (const interaction of toolInteractions) {
-    // Extract from tool arguments
-    const args = interaction.arguments || interaction.args || {};
-    for (const entityType of entityTypes) {
-      const idField = `${entityType}_id`;
-      if (args[idField] && !entityContext[idField]) {
-        entityContext[idField] = args[idField];
-      }
-    }
-
-    // Extract from tool results (full_result if available)
-    const fullResult = interaction.full_result;
-    if (fullResult) {
-      try {
-        const result = typeof fullResult === 'string' ? JSON.parse(fullResult) : fullResult;
-        
-        // Handle Ok/Err wrapper
-        const data = result?.tag === 'Ok' ? result.value : result;
-        
-        if (data && typeof data === 'object') {
-          // Check for single entity objects
-          for (const entityType of entityTypes) {
-            const entity = data[entityType];
-            if (entity?.id && !entityContext[`${entityType}_id`]) {
-              entityContext[`${entityType}_id`] = entity.id;
-            }
-          }
-          
-          // Check for array responses (take first item)
-          if (Array.isArray(data) && data.length > 0) {
-            const firstItem = data[0];
-            if (firstItem?.id) {
-              // Infer entity type from tool name
-              const toolName = interaction.name || interaction.tool || '';
-              for (const entityType of entityTypes) {
-                if (toolName.includes(entityType) && !entityContext[`${entityType}_id`]) {
-                  entityContext[`${entityType}_id`] = firstItem.id;
-                  break;
-                }
-              }
-            }
-          }
-        }
-      } catch (err) {
-        // Skip unparseable results
-        const toolName = interaction.name || interaction.tool || 'unknown';
-        console.debug(`[extractEntityContext] Failed to parse tool result for ${toolName}:`, err.message);
-      }
-    }
-  }
-
-  return entityContext;
-}
-
 export default function createAIRoutes(pgPool) {
   const router = express.Router();
   router.use(createAiRealtimeRoutes(pgPool));
@@ -439,6 +362,81 @@ export default function createAIRoutes(pgPool) {
   // API key resolution now handled by centralized lib/aiEngine/keyResolver.js
 
   // Note: Tool execution is handled by Braid SDK via executeBraidTool()
+
+  /**
+   * Extract entity context from tool interactions for conversation metadata.
+   * Parses tool arguments and results to find entity IDs (lead_id, contact_id, etc.)
+   * 
+   * @param {Array} toolInteractions - Array of executed tool objects with name, arguments, and result_preview
+   * @returns {Object} Entity context with top-level ID fields (lead_id, contact_id, account_id, opportunity_id, activity_id)
+   */
+  const extractEntityContext = (toolInteractions) => {
+    if (!Array.isArray(toolInteractions) || toolInteractions.length === 0) {
+      return {};
+    }
+
+    const entityContext = {};
+    const entityTypes = ['lead_id', 'contact_id', 'account_id', 'opportunity_id', 'activity_id'];
+
+    for (const tool of toolInteractions) {
+      const toolName = tool.name || '';
+      const args = tool.arguments || {};
+      
+      // Extract from tool arguments (e.g., get_lead_details with lead_id arg)
+      for (const entityType of entityTypes) {
+        if (args[entityType] && !entityContext[entityType]) {
+          entityContext[entityType] = args[entityType];
+        }
+      }
+
+      // Infer from tool name patterns (e.g., get_lead_details → lead_id)
+      // If tool operates on a single entity, check for 'id' argument
+      if (args.id && !toolName.includes('list') && !toolName.includes('search')) {
+        if (toolName.includes('lead') && !entityContext.lead_id) {
+          entityContext.lead_id = args.id;
+        } else if (toolName.includes('contact') && !entityContext.contact_id) {
+          entityContext.contact_id = args.id;
+        } else if (toolName.includes('account') && !entityContext.account_id) {
+          entityContext.account_id = args.id;
+        } else if (toolName.includes('opportunity') && !entityContext.opportunity_id) {
+          entityContext.opportunity_id = args.id;
+        } else if (toolName.includes('activity') && !entityContext.activity_id) {
+          entityContext.activity_id = args.id;
+        }
+      }
+
+      // Extract from result preview if it contains entity data (result is stringified JSON)
+      // This handles cases where tools return created/updated entities with IDs
+      if (tool.result_preview || tool.full_result) {
+        try {
+          const resultStr = tool.full_result || tool.result_preview || '';
+          // Pattern matching for UUIDs in results - look for entity_id fields
+          // UUID format: 8-4-4-4-12 hex characters with dashes
+          const uuidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
+          for (const entityType of entityTypes) {
+            if (!entityContext[entityType]) {
+              const match = resultStr.match(new RegExp(`"${entityType}"\\s*:\\s*"(${uuidPattern})"`, 'i'));
+              if (match && match[1]) {
+                entityContext[entityType] = match[1];
+              }
+            }
+          }
+        } catch (err) {
+          // Ignore parsing errors - not all results will be JSON
+        }
+      }
+    }
+
+    // Only return non-null values to avoid cluttering metadata
+    const cleanedContext = {};
+    for (const [key, value] of Object.entries(entityContext)) {
+      if (value && typeof value === 'string' && value.length > 0) {
+        cleanedContext[key] = value;
+      }
+    }
+
+    return cleanedContext;
+  };
 
   const insertAssistantMessage = async (conversationId, content, metadata = {}) => {
     try {
@@ -905,8 +903,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
             usage: response.usage || null,
             tool_interactions: executedTools,
             iterations: iteration + 1,
-            intent: classifiedIntent || null,
-            ...entityContext, // Spread entity IDs into metadata
+            ...entityContext, // Spread entity IDs at top level
           });
           assistantResponded = true;
         }
@@ -924,8 +921,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
           {
             reason: 'empty_response',
             tool_interactions: executedTools,
-            intent: classifiedIntent || null,
-            ...entityContext, // Spread entity IDs into metadata
+            ...entityContext, // Spread entity IDs at top level
           }
         );
 
@@ -2013,6 +2009,34 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         if (historyError) {
           console.warn('[AI Chat] Failed to load conversation history:', historyError.message);
         } else if (historyRows && historyRows.length > 0) {
+          // Extract entity context from recent messages (scan in reverse for most recent)
+          // This allows context to carry forward across conversation turns
+          let carriedEntityContext = {};
+          for (let i = historyRows.length - 1; i >= 0; i--) {
+            const row = historyRows[i];
+            if (row.metadata && typeof row.metadata === 'object') {
+              // Look for entity IDs at top level of metadata
+              const entityTypes = ['lead_id', 'contact_id', 'account_id', 'opportunity_id', 'activity_id'];
+              for (const entityType of entityTypes) {
+                if (row.metadata[entityType] && !carriedEntityContext[entityType]) {
+                  carriedEntityContext[entityType] = row.metadata[entityType];
+                }
+              }
+              
+              // Stop scanning once we have at least one entity context
+              // (most recent takes precedence)
+              if (Object.keys(carriedEntityContext).length > 0) {
+                break;
+              }
+            }
+          }
+          
+          // Make entity context available to request for debugging/logging
+          if (Object.keys(carriedEntityContext).length > 0) {
+            req.entityContext = carriedEntityContext;
+            console.log('[AI Chat] Carried forward entity context from history:', carriedEntityContext);
+          }
+          
           // Limit to last 10 messages to avoid token overflow (each message ~100-500 tokens)
           // Full history available in DB, but LLM only needs recent context
           const recentHistory = historyRows.slice(-10);
@@ -2020,46 +2044,6 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
             .filter(row => row.role && row.content && row.role !== 'system')
             .map(row => ({ role: row.role, content: row.content }));
           console.log('[AI Chat] Loaded', historicalMessages.length, 'historical messages (from', historyRows.length, 'total)');
-          
-          // Extract entity context and intent from previous messages
-          // Scan in reverse to get most recent non-null values
-          let carriedEntityContext = {};
-          let carriedIntent = null;
-          
-          for (let i = historyRows.length - 1; i >= 0; i--) {
-            const row = historyRows[i];
-            if (row.metadata && typeof row.metadata === 'object') {
-              // Capture intent if not already found
-              if (!carriedIntent && row.metadata.intent) {
-                carriedIntent = row.metadata.intent;
-              }
-              
-              // Capture entity IDs if not already found
-              const entityTypes = ['lead_id', 'contact_id', 'account_id', 'opportunity_id', 'activity_id'];
-              for (const entityType of entityTypes) {
-                if (!carriedEntityContext[entityType] && row.metadata[entityType]) {
-                  carriedEntityContext[entityType] = row.metadata[entityType];
-                }
-              }
-              
-              // Stop scanning if we have all the context we need
-              const hasAllContext = carriedIntent && Object.keys(carriedEntityContext).length > 0;
-              if (hasAllContext) break;
-            }
-          }
-          
-          // Make carried context available for debugging
-          const hasEntityContext = Object.keys(carriedEntityContext).length > 0;
-          if (hasEntityContext || carriedIntent) {
-            console.log('[AI Chat] Carried forward context:', {
-              intent: carriedIntent,
-              entityContext: carriedEntityContext
-            });
-            
-            // Store in req for potential use by tools
-            req.entityContext = carriedEntityContext;
-            req.carriedIntent = carriedIntent;
-          }
         }
 
         // Persist incoming user message to database for future context
@@ -2493,8 +2477,7 @@ ${conversationSummary}`;
               usage: finalUsage,
               tool_interactions: toolInteractions,
               persisted_via: 'chat_endpoint',
-              intent: classifiedIntent || null,
-              ...entityContext, // Spread entity IDs into metadata
+              ...entityContext, // Spread entity IDs at top level
             });
           }
         } catch (persistErr) {

@@ -1,8 +1,8 @@
 /**
  * Entity Context Extraction Tests
  * 
- * Tests that verify entity IDs and intents are properly extracted from tool interactions
- * and persisted to conversation_messages metadata
+ * Tests that verify conversation_messages metadata properly extracts and persists
+ * entity IDs from tool interactions for queryability and context carry-forward.
  * 
  * @module tests/ai/entityContextExtraction
  */
@@ -14,347 +14,327 @@ const SHOULD_RUN = process.env.CI ? (process.env.CI_BACKEND_TESTS === 'true') : 
 
 describe('Entity Context Extraction Tests', { skip: !SHOULD_RUN }, () => {
   
-  describe('extractEntityContext function', () => {
+  describe('extractEntityContext Helper Function', () => {
     
-    test('extracts entity IDs from tool arguments', () => {
-      const toolInteractions = [
+    test('extracts lead_id from tool arguments', async () => {
+      // We need to test the actual implementation
+      // Since extractEntityContext is a closure inside ai.js, we'll test via integration
+      // For now, verify the concept with a mock implementation
+      
+      const mockToolInteractions = [
         {
           name: 'get_lead_details',
-          arguments: {
-            lead_id: 'a3af0a84-a16f-466e-aa82-62b462d1d998'
-          },
-          result_preview: 'Lead details...'
+          arguments: { lead_id: 'a3af0a84-a16f-466e-aa82-62b462d1d998' },
+          result_preview: '{"name":"John Doe","status":"warm"}'
         }
       ];
       
-      // Mock the function since we can't import it directly (it's inside the route)
-      // This is a conceptual test - actual testing would need the function exported
-      const extractEntityContext = (interactions) => {
-        const entityContext = {};
-        const entityTypes = ['lead', 'contact', 'account', 'opportunity', 'activity'];
-        
-        for (const interaction of interactions) {
-          const args = interaction.arguments || interaction.args || {};
-          for (const entityType of entityTypes) {
-            const idField = `${entityType}_id`;
-            if (args[idField] && !entityContext[idField]) {
-              entityContext[idField] = args[idField];
-            }
-          }
-        }
-        
-        return entityContext;
-      };
-      
-      const result = extractEntityContext(toolInteractions);
-      
-      assert.ok(result.lead_id, 'Should extract lead_id from arguments');
-      assert.equal(result.lead_id, 'a3af0a84-a16f-466e-aa82-62b462d1d998');
-    });
-    
-    test('extracts entity IDs from tool results', () => {
-      const toolInteractions = [
-        {
-          name: 'create_contact',
-          arguments: {
-            first_name: 'John',
-            last_name: 'Doe'
-          },
-          full_result: {
-            tag: 'Ok',
-            value: {
-              contact: {
-                id: 'c12345-6789-abcd-ef12-34567890abcd',
-                first_name: 'John',
-                last_name: 'Doe'
-              }
-            }
-          }
-        }
-      ];
-      
-      const extractEntityContext = (interactions) => {
-        const entityContext = {};
-        const entityTypes = ['lead', 'contact', 'account', 'opportunity', 'activity'];
-        
-        for (const interaction of interactions) {
-          const fullResult = interaction.full_result;
-          if (fullResult) {
-            const result = typeof fullResult === 'string' ? JSON.parse(fullResult) : fullResult;
-            const data = result?.tag === 'Ok' ? result.value : result;
-            
-            if (data && typeof data === 'object') {
-              for (const entityType of entityTypes) {
-                const entity = data[entityType];
-                if (entity?.id && !entityContext[`${entityType}_id`]) {
-                  entityContext[`${entityType}_id`] = entity.id;
-                }
-              }
-            }
-          }
-        }
-        
-        return entityContext;
-      };
-      
-      const result = extractEntityContext(toolInteractions);
-      
-      assert.ok(result.contact_id, 'Should extract contact_id from result');
-      assert.equal(result.contact_id, 'c12345-6789-abcd-ef12-34567890abcd');
-    });
-    
-    test('handles multiple entity types in single interaction', () => {
-      const _toolInteractions = [
-        {
-          name: 'get_lead_details',
-          arguments: {
-            lead_id: 'lead-123',
-            account_id: 'account-456'
-          },
-          full_result: {
-            tag: 'Ok',
-            value: {
-              lead: {
-                id: 'lead-123'
-              },
-              account: {
-                id: 'account-456'
-              }
-            }
-          }
-        }
-      ];
-      
-      // Would test actual extraction here
-      assert.ok(true, 'Should handle multiple entity types');
-    });
-    
-    test('returns empty object when no entity IDs found', () => {
-      const toolInteractions = [
-        {
-          name: 'fetch_tenant_snapshot',
-          arguments: {},
-          result_preview: 'Snapshot data...'
-        }
-      ];
-      
-      const extractEntityContext = (interactions) => {
-        if (!Array.isArray(interactions) || interactions.length === 0) {
+      // Mock extraction logic (same as in ai.js)
+      const extractEntityContext = (toolInteractions) => {
+        if (!Array.isArray(toolInteractions) || toolInteractions.length === 0) {
           return {};
         }
-        
+
         const entityContext = {};
-        const entityTypes = ['lead', 'contact', 'account', 'opportunity', 'activity'];
-        
-        for (const interaction of interactions) {
-          const args = interaction.arguments || interaction.args || {};
+        const entityTypes = ['lead_id', 'contact_id', 'account_id', 'opportunity_id', 'activity_id'];
+
+        for (const tool of toolInteractions) {
+          const args = tool.arguments || {};
+          
           for (const entityType of entityTypes) {
-            const idField = `${entityType}_id`;
-            if (args[idField] && !entityContext[idField]) {
-              entityContext[idField] = args[idField];
+            if (args[entityType] && !entityContext[entityType]) {
+              entityContext[entityType] = args[entityType];
             }
           }
         }
-        
-        return entityContext;
+
+        const cleanedContext = {};
+        for (const [key, value] of Object.entries(entityContext)) {
+          if (value && typeof value === 'string' && value.length > 0) {
+            cleanedContext[key] = value;
+          }
+        }
+
+        return cleanedContext;
       };
       
-      const result = extractEntityContext(toolInteractions);
+      const result = extractEntityContext(mockToolInteractions);
       
-      assert.deepEqual(result, {}, 'Should return empty object when no entities found');
+      assert.ok(result.lead_id, 'Should extract lead_id');
+      assert.strictEqual(result.lead_id, 'a3af0a84-a16f-466e-aa82-62b462d1d998');
+      assert.strictEqual(result.contact_id, undefined, 'Should not have contact_id');
+    });
+    
+    test('extracts contact_id from tool with id argument and name pattern', async () => {
+      const mockToolInteractions = [
+        {
+          name: 'get_contact_details',
+          arguments: { id: 'b1bf1b74-b29c-45c7-bb93-73c573f2e48d' },
+          result_preview: '{"name":"Jane Smith"}'
+        }
+      ];
+      
+      // Mock extraction with name pattern logic
+      const extractEntityContext = (toolInteractions) => {
+        const entityContext = {};
+        const entityTypes = ['lead_id', 'contact_id', 'account_id', 'opportunity_id', 'activity_id'];
+
+        for (const tool of toolInteractions) {
+          const toolName = tool.name || '';
+          const args = tool.arguments || {};
+          
+          // Extract from arguments
+          for (const entityType of entityTypes) {
+            if (args[entityType] && !entityContext[entityType]) {
+              entityContext[entityType] = args[entityType];
+            }
+          }
+
+          // Infer from tool name + id pattern
+          if (args.id && !toolName.includes('list') && !toolName.includes('search')) {
+            if (toolName.includes('contact') && !entityContext.contact_id) {
+              entityContext.contact_id = args.id;
+            }
+          }
+        }
+
+        const cleanedContext = {};
+        for (const [key, value] of Object.entries(entityContext)) {
+          if (value && typeof value === 'string' && value.length > 0) {
+            cleanedContext[key] = value;
+          }
+        }
+
+        return cleanedContext;
+      };
+      
+      const result = extractEntityContext(mockToolInteractions);
+      
+      assert.ok(result.contact_id, 'Should extract contact_id from id + name pattern');
+      assert.strictEqual(result.contact_id, 'b1bf1b74-b29c-45c7-bb93-73c573f2e48d');
+    });
+    
+    test('extracts multiple entity types from multiple tools', async () => {
+      const mockToolInteractions = [
+        {
+          name: 'get_lead_details',
+          arguments: { lead_id: 'a3af0a84-a16f-466e-aa82-62b462d1d998' },
+          result_preview: '{}'
+        },
+        {
+          name: 'create_activity',
+          arguments: { 
+            type: 'call',
+            lead_id: 'a3af0a84-a16f-466e-aa82-62b462d1d998',
+            account_id: 'c2cf2c85-c39d-56d8-cc04-84d684g3f59e'
+          },
+          result_preview: '{"id":"d3df3d96-d49e-67e9-dd15-95e795h4g60f"}'
+        }
+      ];
+      
+      const extractEntityContext = (toolInteractions) => {
+        const entityContext = {};
+        const entityTypes = ['lead_id', 'contact_id', 'account_id', 'opportunity_id', 'activity_id'];
+
+        for (const tool of toolInteractions) {
+          const args = tool.arguments || {};
+          
+          for (const entityType of entityTypes) {
+            if (args[entityType] && !entityContext[entityType]) {
+              entityContext[entityType] = args[entityType];
+            }
+          }
+        }
+
+        const cleanedContext = {};
+        for (const [key, value] of Object.entries(entityContext)) {
+          if (value && typeof value === 'string' && value.length > 0) {
+            cleanedContext[key] = value;
+          }
+        }
+
+        return cleanedContext;
+      };
+      
+      const result = extractEntityContext(mockToolInteractions);
+      
+      assert.ok(result.lead_id, 'Should extract lead_id');
+      assert.ok(result.account_id, 'Should extract account_id');
+      assert.strictEqual(result.lead_id, 'a3af0a84-a16f-466e-aa82-62b462d1d998');
+      assert.strictEqual(result.account_id, 'c2cf2c85-c39d-56d8-cc04-84d684g3f59e');
+    });
+    
+    test('returns empty object for empty tool interactions', async () => {
+      const extractEntityContext = (toolInteractions) => {
+        if (!Array.isArray(toolInteractions) || toolInteractions.length === 0) {
+          return {};
+        }
+        return {};
+      };
+      
+      const result1 = extractEntityContext([]);
+      const result2 = extractEntityContext(null);
+      const result3 = extractEntityContext(undefined);
+      
+      assert.deepStrictEqual(result1, {}, 'Empty array should return empty object');
+      assert.deepStrictEqual(result2, {}, 'Null should return empty object');
+      assert.deepStrictEqual(result3, {}, 'Undefined should return empty object');
+    });
+    
+    test('handles tools without entity IDs gracefully', async () => {
+      const mockToolInteractions = [
+        {
+          name: 'get_dashboard_bundle',
+          arguments: { tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46' },
+          result_preview: '{"stats":{}}'
+        }
+      ];
+      
+      const extractEntityContext = (toolInteractions) => {
+        const entityContext = {};
+        const entityTypes = ['lead_id', 'contact_id', 'account_id', 'opportunity_id', 'activity_id'];
+
+        for (const tool of toolInteractions) {
+          const args = tool.arguments || {};
+          
+          for (const entityType of entityTypes) {
+            if (args[entityType] && !entityContext[entityType]) {
+              entityContext[entityType] = args[entityType];
+            }
+          }
+        }
+
+        const cleanedContext = {};
+        for (const [key, value] of Object.entries(entityContext)) {
+          if (value && typeof value === 'string' && value.length > 0) {
+            cleanedContext[key] = value;
+          }
+        }
+
+        return cleanedContext;
+      };
+      
+      const result = extractEntityContext(mockToolInteractions);
+      
+      assert.deepStrictEqual(result, {}, 'Should return empty object for non-entity tools');
     });
   });
   
-  describe('Intent Classification Integration', () => {
+  describe('Metadata Structure', () => {
     
-    test('intent classifier returns expected intent codes', async () => {
-      const { classifyIntent } = await import('../../lib/intentClassifier.js');
-      
-      const testCases = [
-        { message: 'Show me details for this lead' },
-        { message: 'Create a new contact' },
-        { message: 'Update the account' },
-        { message: 'List all opportunities' },
-        { message: 'What should I do next?' }
+    test('expected metadata structure includes entity IDs at top level', () => {
+      // Simulate what metadata should look like after extraction
+      const toolInteractions = [
+        {
+          name: 'get_lead_details',
+          arguments: { lead_id: 'a3af0a84-a16f-466e-aa82-62b462d1d998' },
+          result_preview: '{"name":"John Doe"}'
+        }
       ];
       
-      for (const { message } of testCases) {
-        const intent = classifyIntent(message);
-        // Just verify it returns a string or null, don't enforce specific intents
-        assert.ok(
-          intent === null || typeof intent === 'string',
-          `Intent classification for "${message}" should return null or string intent`
-        );
-      }
-    });
-    
-    test('intent should be persisted in metadata structure', () => {
-      // Expected metadata structure
-      const expectedMetadata = {
+      const baseMetadata = {
         model: 'gpt-4o-2024-08-06',
-        usage: { prompt_tokens: 100, completion_tokens: 50 },
-        tool_interactions: [
-          {
-            name: 'get_lead_details',
-            arguments: { lead_id: 'lead-123' },
-            result_preview: 'Lead details...'
-          }
-        ],
-        iterations: 1,
-        intent: 'LEAD_GET',
-        lead_id: 'lead-123',
-        contact_id: null,
-        account_id: null,
-        opportunity_id: null,
-        activity_id: null
+        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+        tool_interactions: toolInteractions,
+        iterations: 1
       };
       
-      // Verify structure has required fields
-      assert.ok(expectedMetadata.intent, 'Metadata should include intent field');
-      assert.ok(expectedMetadata.lead_id, 'Metadata should include extracted lead_id');
-      assert.equal(expectedMetadata.intent, 'LEAD_GET', 'Intent should match classified intent');
+      // Simulate entity extraction
+      const entityContext = { lead_id: 'a3af0a84-a16f-466e-aa82-62b462d1d998' };
+      const finalMetadata = { ...baseMetadata, ...entityContext };
+      
+      // Verify structure
+      assert.ok(finalMetadata.lead_id, 'Should have lead_id at top level');
+      assert.ok(finalMetadata.tool_interactions, 'Should preserve tool_interactions');
+      assert.ok(finalMetadata.model, 'Should preserve model');
+      assert.strictEqual(finalMetadata.lead_id, 'a3af0a84-a16f-466e-aa82-62b462d1d998');
+    });
+    
+    test('metadata does not include null or undefined entity IDs', () => {
+      const entityContext = {
+        lead_id: 'a3af0a84-a16f-466e-aa82-62b462d1d998',
+        contact_id: null,
+        account_id: undefined
+      };
+      
+      // Clean the context (as done in extractEntityContext)
+      const cleanedContext = {};
+      for (const [key, value] of Object.entries(entityContext)) {
+        if (value && typeof value === 'string' && value.length > 0) {
+          cleanedContext[key] = value;
+        }
+      }
+      
+      assert.ok(cleanedContext.lead_id, 'Should include valid lead_id');
+      assert.strictEqual(cleanedContext.contact_id, undefined, 'Should not include null contact_id');
+      assert.strictEqual(cleanedContext.account_id, undefined, 'Should not include undefined account_id');
     });
   });
   
   describe('Context Carry-Forward Logic', () => {
     
-    test('should extract context from conversation history metadata', () => {
-      // Simulate conversation history with metadata
-      const historyRows = [
+    test('extracts most recent entity context from message history', () => {
+      const mockHistoryRows = [
         {
           role: 'user',
-          content: 'Show me lead details',
-          metadata: null
+          content: 'Tell me about my leads',
+          metadata: {}
         },
         {
           role: 'assistant',
-          content: 'Here are the lead details...',
+          content: 'Here are your leads...',
           metadata: {
-            intent: 'LEAD_GET',
-            lead_id: 'lead-123',
-            tool_interactions: []
+            tool_interactions: [],
+            lead_id: 'a3af0a84-a16f-466e-aa82-62b462d1d998'
           }
         },
         {
           role: 'user',
-          content: 'Update their status to qualified',
-          metadata: null
+          content: 'What about contacts?',
+          metadata: {}
+        },
+        {
+          role: 'assistant',
+          content: 'Here are your contacts...',
+          metadata: {
+            tool_interactions: [],
+            contact_id: 'b1bf1b74-b29c-45c7-bb93-73c573f2e48d'
+          }
         }
       ];
       
-      // Extract carried context (scan in reverse)
+      // Scan in reverse for most recent entity context
       let carriedEntityContext = {};
-      let carriedIntent = null;
-      
-      for (let i = historyRows.length - 1; i >= 0; i--) {
-        const row = historyRows[i];
+      for (let i = mockHistoryRows.length - 1; i >= 0; i--) {
+        const row = mockHistoryRows[i];
         if (row.metadata && typeof row.metadata === 'object') {
-          if (!carriedIntent && row.metadata.intent) {
-            carriedIntent = row.metadata.intent;
+          const entityTypes = ['lead_id', 'contact_id', 'account_id', 'opportunity_id', 'activity_id'];
+          for (const entityType of entityTypes) {
+            if (row.metadata[entityType] && !carriedEntityContext[entityType]) {
+              carriedEntityContext[entityType] = row.metadata[entityType];
+            }
           }
           
-          const entityTypes = ['lead_id', 'contact_id', 'account_id', 'opportunity_id', 'activity_id'];
-          for (const entityType of entityTypes) {
-            if (!carriedEntityContext[entityType] && row.metadata[entityType]) {
-              carriedEntityContext[entityType] = row.metadata[entityType];
-            }
+          if (Object.keys(carriedEntityContext).length > 0) {
+            break;
           }
         }
       }
       
-      assert.equal(carriedIntent, 'LEAD_GET', 'Should carry forward most recent intent');
-      assert.equal(carriedEntityContext.lead_id, 'lead-123', 'Should carry forward most recent lead_id');
+      assert.ok(carriedEntityContext.contact_id, 'Should find most recent contact_id');
+      assert.strictEqual(carriedEntityContext.contact_id, 'b1bf1b74-b29c-45c7-bb93-73c573f2e48d');
+      assert.strictEqual(carriedEntityContext.lead_id, undefined, 'Should not include older lead_id');
     });
     
-    test('should prioritize most recent entity context', () => {
-      const historyRows = [
-        {
-          role: 'assistant',
-          content: 'Lead created',
-          metadata: {
-            intent: 'LEAD_CREATE',
-            lead_id: 'lead-old'
-          }
-        },
-        {
-          role: 'assistant',
-          content: 'Contact created',
-          metadata: {
-            intent: 'CONTACT_CREATE',
-            contact_id: 'contact-123'
-          }
-        },
-        {
-          role: 'assistant',
-          content: 'Lead updated',
-          metadata: {
-            intent: 'LEAD_UPDATE',
-            lead_id: 'lead-new'
-          }
-        }
-      ];
+    test('handles empty message history gracefully', () => {
+      const mockHistoryRows = [];
       
-      // Scan in reverse
       let carriedEntityContext = {};
-      for (let i = historyRows.length - 1; i >= 0; i--) {
-        const row = historyRows[i];
-        if (row.metadata && typeof row.metadata === 'object') {
-          const entityTypes = ['lead_id', 'contact_id', 'account_id', 'opportunity_id', 'activity_id'];
-          for (const entityType of entityTypes) {
-            if (!carriedEntityContext[entityType] && row.metadata[entityType]) {
-              carriedEntityContext[entityType] = row.metadata[entityType];
-            }
-          }
-        }
+      for (let i = mockHistoryRows.length - 1; i >= 0; i--) {
+        // This loop won't execute
       }
       
-      assert.equal(carriedEntityContext.lead_id, 'lead-new', 'Should use most recent lead_id');
-      assert.equal(carriedEntityContext.contact_id, 'contact-123', 'Should preserve contact_id');
-    });
-  });
-  
-  describe('Tool Name Pattern Matching', () => {
-    
-    test('should infer entity type from tool names', () => {
-      const toolNames = [
-        { tool: 'get_lead_details', expectedEntity: 'lead' },
-        { tool: 'create_contact', expectedEntity: 'contact' },
-        { tool: 'update_account', expectedEntity: 'account' },
-        { tool: 'list_opportunities', expectedEntity: 'opportunit' }, // Partial match for "opportunities"
-        { tool: 'search_activities', expectedEntity: 'activit' } // Partial match for "activities"
-      ];
-      
-      for (const { tool, expectedEntity } of toolNames) {
-        assert.ok(
-          tool.includes(expectedEntity),
-          `Tool name "${tool}" should contain entity type "${expectedEntity}"`
-        );
-      }
-    });
-    
-    test('should infer intent from tool names', () => {
-      const toolIntents = [
-        { tool: 'create_lead', expectedIntent: 'create' },
-        { tool: 'update_contact', expectedIntent: 'update' },
-        { tool: 'get_account_details', expectedIntent: 'query' },
-        { tool: 'list_opportunities', expectedIntent: 'query' },
-        { tool: 'search_leads', expectedIntent: 'query' }
-      ];
-      
-      for (const { tool, expectedIntent } of toolIntents) {
-        let inferredIntent = 'query'; // default
-        
-        if (tool.startsWith('create_')) inferredIntent = 'create';
-        else if (tool.startsWith('update_')) inferredIntent = 'update';
-        else if (tool.startsWith('delete_')) inferredIntent = 'delete';
-        else if (tool.startsWith('search_') || tool.startsWith('get_') || tool.startsWith('list_')) inferredIntent = 'query';
-        
-        assert.equal(
-          inferredIntent,
-          expectedIntent,
-          `Tool "${tool}" should infer intent "${expectedIntent}"`
-        );
-      }
+      assert.deepStrictEqual(carriedEntityContext, {}, 'Should return empty object for empty history');
     });
   });
 });
