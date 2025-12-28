@@ -154,11 +154,15 @@ const INTENT_PATTERNS = {
   ],
   
   NOTE_LIST_FOR_RECORD: [
+    /\b(show|get|display|read)\s+(all\s+)?(the\s+)?notes\b/i,
     /\b(show|get|display)\s+(all\s+)?(the\s+)?notes\s+(for|on|about)\b/i,
     /\b(what\s+are\s+the\s+)?notes\s+(for|on|about)\b/i,
     // "last note" / "most recent note" style questions (typically implicit entity)
     /\b(last|latest|most\s+recent)\s+note\b/i,
-    /\bwhat\s+is\s+the\s+last\s+note\s+(created|added|written)\b/i
+    /\bwhat\s+is\s+the\s+last\s+note\s+(created|added|written)\b/i,
+    // Simple "notes" queries
+    /\bare\s+there\s+(any\s+)?notes\b/i,
+    /\b(check|see|view)\s+(the\s+)?notes\b/i
   ],
   
   NOTE_GET: [
@@ -242,7 +246,13 @@ const INTENT_PATTERNS = {
   AI_SUGGEST_NEXT_ACTIONS: [
     /\b(what\s+should\s+(I|we)\s+do\s+next|what\s+do\s+you\s+(recommend|suggest|think)|how\s+should\s+(I|we)\s+proceed|what('s| is| are)\s+(my|our|the)\s+next\s+step)\b/i,
     /\b(suggest|recommend)\s+(next\s+)?(action|step)s?\b/i,
-    /\b(what\s+(are\s+)?my\s+next\s+steps)\b/i
+    /\b(what\s+(are\s+)?my\s+next\s+steps)\b/i,
+    // Conversational "what do you think" style queries
+    /\bwhat\s+do\s+you\s+think\s+(about|of)\b/i,
+    /\bwhat\s+would\s+you\s+(suggest|recommend|do)\b/i,
+    /\b(any|give\s+me)\s+(suggestions?|recommendations?)\b/i,
+    /\bhow\s+(should|can|do)\s+(I|we)\s+(approach|handle|deal\s+with)\b/i,
+    /\bwhat\s+is\s+(the|my)\s+best\s+(next\s+)?(move|action|step)\b/i
   ],
 
   // NAVIGATION
