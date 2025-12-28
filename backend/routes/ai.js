@@ -363,6 +363,81 @@ export default function createAIRoutes(pgPool) {
 
   // Note: Tool execution is handled by Braid SDK via executeBraidTool()
 
+  /**
+   * Extract entity context from tool interactions for conversation metadata.
+   * Parses tool arguments and results to find entity IDs (lead_id, contact_id, etc.)
+   * 
+   * @param {Array} toolInteractions - Array of executed tool objects with name, arguments, and result_preview
+   * @returns {Object} Entity context with top-level ID fields (lead_id, contact_id, account_id, opportunity_id, activity_id)
+   */
+  const extractEntityContext = (toolInteractions) => {
+    if (!Array.isArray(toolInteractions) || toolInteractions.length === 0) {
+      return {};
+    }
+
+    const entityContext = {};
+    const entityTypes = ['lead_id', 'contact_id', 'account_id', 'opportunity_id', 'activity_id'];
+
+    for (const tool of toolInteractions) {
+      const toolName = tool.name || '';
+      const args = tool.arguments || {};
+      
+      // Extract from tool arguments (e.g., get_lead_details with lead_id arg)
+      for (const entityType of entityTypes) {
+        if (args[entityType] && !entityContext[entityType]) {
+          entityContext[entityType] = args[entityType];
+        }
+      }
+
+      // Infer from tool name patterns (e.g., get_lead_details → lead_id)
+      // If tool operates on a single entity, check for 'id' argument
+      if (args.id && !toolName.includes('list') && !toolName.includes('search')) {
+        if (toolName.includes('lead') && !entityContext.lead_id) {
+          entityContext.lead_id = args.id;
+        } else if (toolName.includes('contact') && !entityContext.contact_id) {
+          entityContext.contact_id = args.id;
+        } else if (toolName.includes('account') && !entityContext.account_id) {
+          entityContext.account_id = args.id;
+        } else if (toolName.includes('opportunity') && !entityContext.opportunity_id) {
+          entityContext.opportunity_id = args.id;
+        } else if (toolName.includes('activity') && !entityContext.activity_id) {
+          entityContext.activity_id = args.id;
+        }
+      }
+
+      // Extract from result preview if it contains entity data (result is stringified JSON)
+      // This handles cases where tools return created/updated entities with IDs
+      if (tool.result_preview || tool.full_result) {
+        try {
+          const resultStr = tool.full_result || tool.result_preview || '';
+          // Pattern matching for UUIDs in results - look for entity_id fields
+          // UUID format: 8-4-4-4-12 hex characters with dashes
+          const uuidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
+          for (const entityType of entityTypes) {
+            if (!entityContext[entityType]) {
+              const match = resultStr.match(new RegExp(`"${entityType}"\\s*:\\s*"(${uuidPattern})"`, 'i'));
+              if (match && match[1]) {
+                entityContext[entityType] = match[1];
+              }
+            }
+          }
+        } catch (err) {
+          // Ignore parsing errors - not all results will be JSON
+        }
+      }
+    }
+
+    // Only return non-null values to avoid cluttering metadata
+    const cleanedContext = {};
+    for (const [key, value] of Object.entries(entityContext)) {
+      if (value && typeof value === 'string' && value.length > 0) {
+        cleanedContext[key] = value;
+      }
+    }
+
+    return cleanedContext;
+  };
+
   const insertAssistantMessage = async (conversationId, content, metadata = {}) => {
     try {
       const supabase = getSupabaseClient();
@@ -820,11 +895,15 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
 
         const assistantText = (message.content || '').trim();
         if (assistantText) {
+          // Extract entity context from tool interactions
+          const entityContext = extractEntityContext(executedTools);
+          
           await insertAssistantMessage(conversationId, assistantText, {
             model: response.model || model,
             usage: response.usage || null,
             tool_interactions: executedTools,
             iterations: iteration + 1,
+            ...entityContext, // Spread entity IDs at top level
           });
           assistantResponded = true;
         }
@@ -833,12 +912,16 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       }
 
       if (!assistantResponded) {
+        // Extract entity context even for fallback responses
+        const entityContext = extractEntityContext(executedTools);
+        
         await insertAssistantMessage(
           conversationId,
           'I could not complete that request right now. Please try again shortly.',
           {
             reason: 'empty_response',
             tool_interactions: executedTools,
+            ...entityContext, // Spread entity IDs at top level
           }
         );
 
@@ -1918,7 +2001,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         
         const { data: historyRows, error: historyError } = await supabase
           .from('conversation_messages')
-          .select('role, content, created_date')
+          .select('role, content, created_date, metadata')
           .eq('conversation_id', conversationId)
           .order('created_date', { ascending: true })
           .limit(50); // Last 50 messages for context
@@ -1926,6 +2009,34 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         if (historyError) {
           console.warn('[AI Chat] Failed to load conversation history:', historyError.message);
         } else if (historyRows && historyRows.length > 0) {
+          // Extract entity context from recent messages (scan in reverse for most recent)
+          // This allows context to carry forward across conversation turns
+          let carriedEntityContext = {};
+          for (let i = historyRows.length - 1; i >= 0; i--) {
+            const row = historyRows[i];
+            if (row.metadata && typeof row.metadata === 'object') {
+              // Look for entity IDs at top level of metadata
+              const entityTypes = ['lead_id', 'contact_id', 'account_id', 'opportunity_id', 'activity_id'];
+              for (const entityType of entityTypes) {
+                if (row.metadata[entityType] && !carriedEntityContext[entityType]) {
+                  carriedEntityContext[entityType] = row.metadata[entityType];
+                }
+              }
+              
+              // Stop scanning once we have at least one entity context
+              // (most recent takes precedence)
+              if (Object.keys(carriedEntityContext).length > 0) {
+                break;
+              }
+            }
+          }
+          
+          // Make entity context available to request for debugging/logging
+          if (Object.keys(carriedEntityContext).length > 0) {
+            req.entityContext = carriedEntityContext;
+            console.log('[AI Chat] Carried forward entity context from history:', carriedEntityContext);
+          }
+          
           // Limit to last 10 messages to avoid token overflow (each message ~100-500 tokens)
           // Full history available in DB, but LLM only needs recent context
           const recentHistory = historyRows.slice(-10);
@@ -2358,11 +2469,15 @@ ${conversationSummary}`;
             .eq('tenant_id', tenantRecord.id)
             .single();
           if (!convErr && convCheck?.id) {
+            // Extract entity context from tool interactions
+            const entityContext = extractEntityContext(toolInteractions);
+            
             savedMessage = await insertAssistantMessage(conversation_id, finalContent, {
               model: finalModel,
               usage: finalUsage,
               tool_interactions: toolInteractions,
-              persisted_via: 'chat_endpoint'
+              persisted_via: 'chat_endpoint',
+              ...entityContext, // Spread entity IDs at top level
             });
           }
         } catch (persistErr) {
