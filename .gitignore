@@ -99,3 +99,4 @@ RATE_LIMIT_MANAGEMENT.md
 check-*.js
 backend/check-*.js
 query-*.sql
+.copilotignore
