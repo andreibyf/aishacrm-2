@@ -2444,6 +2444,7 @@ ${conversationSummary}`;
         tool_interactions: safeToolInteractions,
         savedMessage: savedMessage ? { id: savedMessage.id } : null,
         classification: {
+          intent: classifiedIntent || null, // Full intent code for logging (e.g., LEAD_GET, AI_SUGGEST_NEXT_ACTIONS)
           parserResult: {
             intent: inferredIntent,
             entity: inferredEntity
