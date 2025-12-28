@@ -156,6 +156,7 @@ const INTENT_PATTERNS = {
   NOTE_LIST_FOR_RECORD: [
     /\b(show|get|display|read)\s+(all\s+)?(the\s+)?notes\b/i,
     /\b(show|get|display)\s+(all\s+)?(the\s+)?notes\s+(for|on|about)\b/i,
+    /\bwhat\s+are\s+the\s+notes\b/i,
     /\b(what\s+are\s+the\s+)?notes\s+(for|on|about)\b/i,
     // "last note" / "most recent note" style questions (typically implicit entity)
     /\b(last|latest|most\s+recent)\s+note\b/i,
@@ -244,12 +245,15 @@ const INTENT_PATTERNS = {
 
   // NEXT ACTIONS (CRITICAL - High priority pattern)
   AI_SUGGEST_NEXT_ACTIONS: [
-    /\b(what\s+should\s+(I|we)\s+do\s+next|what\s+do\s+you\s+(recommend|suggest|think)|how\s+should\s+(I|we)\s+proceed|what('s| is| are)\s+(my|our|the)\s+next\s+step)\b/i,
+    /\bwhat\s+should\s+(I|we)\s+do\s+next\b/i,
+    /\bwhat\s+do\s+you\s+(recommend|suggest)\b/i,
+    /\bhow\s+should\s+(I|we)\s+proceed\b/i,
+    /\bwhat('s| is| are)\s+(my|our|the)\s+next\s+steps?\b/i,
     /\b(suggest|recommend)\s+(next\s+)?(action|step)s?\b/i,
-    /\b(what\s+(are\s+)?my\s+next\s+steps)\b/i,
-    // Conversational "what do you think" style queries
-    /\bwhat\s+do\s+you\s+think\s+(about|of)\b/i,
-    /\bwhat\s+would\s+you\s+(suggest|recommend|do)\b/i,
+    /\b(what\s+(are\s+)?(my|our)\s+next\s+steps)\b/i,
+    // Conversational "what do you think" style queries, constrained to plans/strategies/steps
+    /\bwhat\s+do\s+you\s+think\s+(about|of)\s+(this|the|my)\s+(situation|approach|plan|strategy|next\s+step|next\s+steps)\b/i,
+    /\bwhat\s+would\s+you\s+(suggest|recommend|do)\s+((for|with|about)\s+(this|the)\s+(lead|account|contact|opportunity|deal|pipeline|situation)|next|now)\b/i,
     /\b(any|give\s+me)\s+(suggestions?|recommendations?)\b/i,
     /\bhow\s+(should|can|do)\s+(I|we)\s+(approach|handle|deal\s+with)\b/i,
     /\bwhat\s+is\s+(the|my)\s+best\s+(next\s+)?(move|action|step)\b/i
