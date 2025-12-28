@@ -49,6 +49,15 @@ function createProviderClient(provider, apiKey) {
  * Parses tool_interactions array to extract entity IDs from both arguments and results
  * @param {Array} toolInteractions - Array of executed tool interactions
  * @returns {Object} Entity context with top-level entity ID fields
+ * @example
+ * // Returns:
+ * // {
+ * //   lead_id: "a3af0a84-a16f-466e-aa82-62b462d1d998",
+ * //   contact_id: "c12345-6789-abcd-ef12-34567890abcd",
+ * //   account_id: null,
+ * //   opportunity_id: null,
+ * //   activity_id: null
+ * // }
  */
 function extractEntityContext(toolInteractions) {
   if (!Array.isArray(toolInteractions) || toolInteractions.length === 0) {
@@ -103,7 +112,8 @@ function extractEntityContext(toolInteractions) {
         }
       } catch (err) {
         // Skip unparseable results
-        console.debug('[extractEntityContext] Failed to parse tool result:', err.message);
+        const toolName = interaction.name || interaction.tool || 'unknown';
+        console.debug(`[extractEntityContext] Failed to parse tool result for ${toolName}:`, err.message);
       }
     }
   }
@@ -2039,7 +2049,8 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
           }
           
           // Make carried context available for debugging
-          if (Object.keys(carriedEntityContext).length > 0 || carriedIntent) {
+          const hasEntityContext = Object.keys(carriedEntityContext).length > 0;
+          if (hasEntityContext || carriedIntent) {
             console.log('[AI Chat] Carried forward context:', {
               intent: carriedIntent,
               entityContext: carriedEntityContext
