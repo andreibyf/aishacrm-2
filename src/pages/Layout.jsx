@@ -92,6 +92,7 @@ import GlobalDetailViewer from "../components/shared/GlobalDetailViewer";
 import { getTenantBrandingFast } from "@/api/entities";
 import { getDashboardBundleFast } from "@/api/dashboard";
 import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
+import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import EmployeeScopeFilter from "../components/shared/EmployeeScopeFilter";
 import { EmployeeScopeProvider } from "../components/shared/EmployeeScopeContext";
 import FooterBrand from "../components/shared/FooterBrand";
@@ -515,6 +516,18 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   // Ensure we know when auth cookies are available for backend calls
   const { authCookiesReady } = useAuthCookiesReady();
   const [userError, setUserError] = React.useState(null);
+  
+  // Proactive token refresh management (auto-refreshes before expiry)
+  const handleSessionExpired = React.useCallback(() => {
+    // Clear all app state on session expiration
+    localStorage.clear();
+    navigate('/?session_expired=true');
+  }, [navigate]);
+  
+  const { isRefreshing } = useTokenRefresh({
+    enabled: !!user && authCookiesReady, // Only run when user is logged in
+    onSessionExpired: handleSessionExpired
+  });
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
   const [selectedTenant, setSelectedTenant] = React.useState(null);
   const [moduleSettings, setModuleSettings] = React.useState([]);
@@ -2371,6 +2384,15 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
               <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
                 <p className="text-sm text-green-700 text-center">
                   ✓ Password updated successfully! Please sign in with your new password.
+                </p>
+              </div>
+            )}
+            
+            {/* Session expired message */}
+            {new URLSearchParams(window.location.search).get('session_expired') === 'true' && (
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                <p className="text-sm text-amber-700 text-center">
+                  ⚠️ Your session has expired. Please sign in again.
                 </p>
               </div>
             )}
