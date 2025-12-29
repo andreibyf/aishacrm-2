@@ -528,6 +528,19 @@ export default function createAIRoutes(pgPool) {
         provider: modelConfig.provider,
       });
 
+      // BUGFIX: Log API key resolution for debugging production issues
+      console.log('[AI generateAssistantResponse] API key resolution:', {
+        conversationId,
+        provider: modelConfig.provider,
+        tenantSlug,
+        hasExplicitKey: !!requestDescriptor.bodyApiKey,
+        hasHeaderKey: !!requestDescriptor.headerApiKey,
+        hasUserKey: !!requestDescriptor.userApiKey,
+        resolvedKeyExists: !!apiKey,
+        resolvedKeyLength: apiKey?.length || 0,
+        resolvedKeyPrefix: apiKey ? apiKey.substring(0, 7) : 'none'
+      });
+
       if (!apiKey) {
         await logAiEvent({
           level: 'WARNING',
@@ -2137,6 +2150,19 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         provider: tenantModelConfig.provider,
       });
 
+      // BUGFIX: Log API key resolution for debugging production issues
+      console.log('[AI Chat] API key resolution:', {
+        provider: tenantModelConfig.provider,
+        tenantSlug: tenantRecord?.tenant_id,
+        tenantUuid: tenantRecord?.id,
+        hasExplicitKey: !!req.body?.api_key,
+        hasHeaderKey: !!req.headers['x-openai-key'],
+        hasUserKey: !!req.user?.system_openai_settings?.openai_api_key,
+        resolvedKeyExists: !!apiKey,
+        resolvedKeyLength: apiKey?.length || 0,
+        resolvedKeyPrefix: apiKey ? apiKey.substring(0, 7) : 'none'
+      });
+
       // Create provider-aware client (Anthropic falls back to OpenAI for tool calling)
       const effectiveProvider = tenantModelConfig.provider === 'anthropic' ? 'openai' : tenantModelConfig.provider;
       const effectiveApiKey = tenantModelConfig.provider === 'anthropic'
@@ -2144,6 +2170,42 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
         : apiKey;
 
       const client = createProviderClient(effectiveProvider, effectiveApiKey || process.env.OPENAI_API_KEY);
+      
+      // BUGFIX: Validate API key before creating client to prevent cryptic OpenAI errors
+      const keyToUse = effectiveApiKey || process.env.OPENAI_API_KEY;
+      if (!keyToUse || keyToUse.trim().length === 0) {
+        console.error('[AI Chat] ERROR: No API key available for provider:', effectiveProvider);
+        return res.status(501).json({ 
+          status: 'error', 
+          message: `API key not configured for provider ${effectiveProvider}. Please contact your administrator.` 
+        });
+      }
+      
+      // Additional validation for OpenAI keys
+      if (effectiveProvider === 'openai') {
+        const trimmedKey = keyToUse.trim();
+        if (!trimmedKey.startsWith('sk-')) {
+          console.error('[AI Chat] ERROR: Invalid OpenAI API key format (must start with sk-):', {
+            keyPrefix: trimmedKey.substring(0, 7),
+            keyLength: trimmedKey.length
+          });
+          return res.status(501).json({ 
+            status: 'error', 
+            message: 'Invalid OpenAI API key configuration. Please contact your administrator.' 
+          });
+        }
+        if (trimmedKey.length < 20 || trimmedKey.length > 200) {
+          console.error('[AI Chat] ERROR: Suspicious OpenAI API key length:', {
+            keyLength: trimmedKey.length,
+            keyPrefix: trimmedKey.substring(0, 7)
+          });
+          return res.status(501).json({ 
+            status: 'error', 
+            message: 'Invalid OpenAI API key configuration (unusual length). Please contact your administrator.' 
+          });
+        }
+      }
+      
       console.log(`[ai.chat] Using provider=${effectiveProvider}, model=${tenantModelConfig.model}`);
 
       if (!client) {
