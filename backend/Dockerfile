@@ -36,6 +36,9 @@ RUN wget -q -t3 'https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.ke
 ARG USE_SYSTEM_CHROMIUM=false
 ARG PUPPETEER_SKIP_DOWNLOAD=1
 
+# Build-time secrets that need to be baked into the image
+ARG ADMIN_EMAILS
+
 # App lives in /app/backend for clarity
 WORKDIR /app/backend
 
@@ -63,6 +66,9 @@ RUN chmod +x /docker-entrypoint.sh
 
 # Set environment
 ENV NODE_ENV=production
+
+# Inject ADMIN_EMAILS from build arg (fallback to empty if not provided)
+ENV ADMIN_EMAILS=${ADMIN_EMAILS:-}
 
 # Force IPv4-only DNS resolution (Railway doesn't support IPv6 for external connections)
 ENV NODE_OPTIONS="--dns-result-order=ipv4first"

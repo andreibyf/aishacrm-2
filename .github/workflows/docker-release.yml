@@ -32,6 +32,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+
+      - name: Fetch secrets from Doppler
+        id: doppler
+        run: |
+          # Extract only actual secrets (sensitive data) from Doppler
+          # Non-sensitive variables come from GitHub vars
+          echo "ADMIN_EMAILS=$(doppler secrets get ADMIN_EMAILS --plain)" >> $GITHUB_OUTPUT
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          DOPPLER_PROJECT: ${{ vars.DOPPLER_PROJECT }}
+          DOPPLER_CONFIG: ${{ vars.DOPPLER_CONFIG }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -75,6 +89,7 @@ jobs:
             VITE_SUPABASE_URL=${{ vars.VITE_SUPABASE_URL }}
             VITE_SUPABASE_ANON_KEY=${{ vars.VITE_SUPABASE_ANON_KEY }}
             VITE_AISHACRM_BACKEND_URL=${{ vars.VITE_AISHACRM_BACKEND_URL }}
+            ADMIN_EMAILS=${{ steps.doppler.outputs.ADMIN_EMAILS }}
             PUPPETEER_SKIP_DOWNLOAD=1
             USE_SYSTEM_CHROMIUM=false
 
