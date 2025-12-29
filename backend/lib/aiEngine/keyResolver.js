@@ -77,23 +77,24 @@ export async function resolveLLMApiKey({
           typeof rawCreds === "object" ? rawCreds : JSON.parse(rawCreds || "{}");
         const k = creds.api_key || creds.apiKey || null;
         if (k) {
-          // BUGFIX: Trim whitespace and validate API key format
-          const trimmedKey = String(k).trim();
+          // BUGFIX: Trim whitespace, remove newlines, and validate API key format
+          // Some keys may have been copy-pasted with trailing newlines or spaces
+          const trimmedKey = String(k).replace(/[\r\n\t]/g, '').trim();
           
           // Validate OpenAI key format (starts with sk- and reasonable length)
           if (provider === 'openai') {
             if (!trimmedKey.startsWith('sk-')) {
               console.warn("[AIEngine][KeyResolver] Invalid OpenAI API key format in tenant_integrations (must start with sk-)");
               // Continue to fallback instead of returning invalid key
-            } else if (trimmedKey.length < 20 || trimmedKey.length > 200) {
-              console.warn("[AIEngine][KeyResolver] Suspicious OpenAI API key length:", trimmedKey.length, "(expected 20-200 chars)");
-              // Continue to fallback instead of returning invalid key
+            } else if (trimmedKey.length < 20 || trimmedKey.length > 300) {
+              console.warn("[AIEngine][KeyResolver] Suspicious OpenAI API key length:", trimmedKey.length, "(expected 20-300 chars)");
+              // Continue to fallback instead of returning invalid key  
             } else {
               console.log("[AIEngine][KeyResolver] Using tenant-specific API key from tenant_integrations for provider:", provider);
               return trimmedKey;
             }
           } else {
-            // For non-OpenAI providers, just trim and return
+            // For non-OpenAI providers, just clean and return
             console.log("[AIEngine][KeyResolver] Using tenant-specific API key from tenant_integrations for provider:", provider);
             return trimmedKey;
           }
@@ -125,7 +126,7 @@ export async function resolveLLMApiKey({
       if (provider === "openai") {
         const systemOpenAI = settings.system_openai_settings;
         if (systemOpenAI?.enabled && systemOpenAI?.openai_api_key) {
-          const trimmedKey = String(systemOpenAI.openai_api_key).trim();
+          const trimmedKey = String(systemOpenAI.openai_api_key).replace(/[\r\n\t]/g, '').trim();
           console.log("[AIEngine][KeyResolver] Using system-level OpenAI API key from system_settings");
           return trimmedKey;
         }
@@ -134,7 +135,7 @@ export async function resolveLLMApiKey({
       if (provider === "anthropic") {
         const systemAnthropic = settings.system_anthropic_settings;
         if (systemAnthropic?.enabled && systemAnthropic?.anthropic_api_key) {
-          const trimmedKey = String(systemAnthropic.anthropic_api_key).trim();
+          const trimmedKey = String(systemAnthropic.anthropic_api_key).replace(/[\r\n\t]/g, '').trim();
           console.log("[AIEngine][KeyResolver] Using system-level Anthropic API key from system_settings");
           return trimmedKey;
         }
@@ -143,7 +144,7 @@ export async function resolveLLMApiKey({
       if (provider === "groq") {
         const systemGroq = settings.system_groq_settings;
         if (systemGroq?.enabled && systemGroq?.groq_api_key) {
-          const trimmedKey = String(systemGroq.groq_api_key).trim();
+          const trimmedKey = String(systemGroq.groq_api_key).replace(/[\r\n\t]/g, '').trim();
           console.log("[AIEngine][KeyResolver] Using system-level Groq API key from system_settings");
           return trimmedKey;
         }
@@ -172,7 +173,7 @@ export async function resolveLLMApiKey({
         const systemSettings =
           typeof rawSys === "object" ? rawSys : JSON.parse(rawSys || "{}");
         if (systemSettings.openai_api_key) {
-          const trimmedKey = String(systemSettings.openai_api_key).trim();
+          const trimmedKey = String(systemSettings.openai_api_key).replace(/[\r\n\t]/g, '').trim();
           console.log("[AIEngine][KeyResolver] Using legacy admin OpenAI API key from users table");
           return trimmedKey;
         }
@@ -184,25 +185,25 @@ export async function resolveLLMApiKey({
 
   // Environment fallback (per-provider)
   if (provider === "openai" && process.env.OPENAI_API_KEY) {
-    const trimmedKey = String(process.env.OPENAI_API_KEY).trim();
+    const trimmedKey = String(process.env.OPENAI_API_KEY).replace(/[\r\n\t]/g, '').trim();
     console.log("[AIEngine][KeyResolver] Using OpenAI API key from environment variable");
     return trimmedKey;
   }
 
   if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
-    const trimmedKey = String(process.env.ANTHROPIC_API_KEY).trim();
+    const trimmedKey = String(process.env.ANTHROPIC_API_KEY).replace(/[\r\n\t]/g, '').trim();
     console.log("[AIEngine][KeyResolver] Using Anthropic API key from environment variable");
     return trimmedKey;
   }
 
   if (provider === "groq" && process.env.GROQ_API_KEY) {
-    const trimmedKey = String(process.env.GROQ_API_KEY).trim();
+    const trimmedKey = String(process.env.GROQ_API_KEY).replace(/[\r\n\t]/g, '').trim();
     console.log("[AIEngine][KeyResolver] Using Groq API key from environment variable");
     return trimmedKey;
   }
 
   if (provider === "local" && process.env.LOCAL_LLM_API_KEY) {
-    const trimmedKey = String(process.env.LOCAL_LLM_API_KEY).trim();
+    const trimmedKey = String(process.env.LOCAL_LLM_API_KEY).replace(/[\r\n\t]/g, '').trim();
     console.log("[AIEngine][KeyResolver] Using Local LLM API key from environment variable");
     return trimmedKey;
   }

@@ -2194,7 +2194,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
             message: 'Invalid OpenAI API key configuration. Please contact your administrator.' 
           });
         }
-        if (trimmedKey.length < 20 || trimmedKey.length > 200) {
+        if (trimmedKey.length < 20 || trimmedKey.length > 300) {
           console.error('[AI Chat] ERROR: Suspicious OpenAI API key length:', {
             keyLength: trimmedKey.length,
             keyPrefix: trimmedKey.substring(0, 7)
