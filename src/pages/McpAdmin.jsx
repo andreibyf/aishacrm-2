@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { RefreshCw, Server, Activity, Database, List } from 'lucide-react';
+import { getBackendUrl } from '@/api/backendUrl';
 
 /**
  * MCP Admin UI
@@ -25,7 +26,7 @@ export default function McpAdmin() {
     setError(null);
     
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4001';
+      const backendUrl = getBackendUrl();
       const response = await fetch(`${backendUrl}/api/mcp/admin/status`, {
         credentials: 'include',
         headers: {
