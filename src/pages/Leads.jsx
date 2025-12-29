@@ -655,20 +655,44 @@ export default function LeadsPage() {
         throw new Error('Cannot delete: tenant_id is not available');
       }
       await Lead.delete(id, { tenant_id: tenantId });
-      // Optimistically update UI
-      setLeads((prev) => prev.filter((l) => l.id !== id));
-      setTotalItems((prev) => (prev > 0 ? prev - 1 : 0));
-      toast.success("Lead deleted successfully");
-
-      // Clear cache and refresh in background - don't block UI
       clearCache("Lead");
-      loadLeads(currentPage, pageSize);
-      loadTotalStats();
+      
+      // Force reload with fresh data (bypass cache)
+      let currentFilter = getTenantFilter();
+      if (statusFilter !== "all") {
+        currentFilter = { ...currentFilter, status: statusFilter };
+      }
+      if (selectedTags.length > 0) {
+        currentFilter = { ...currentFilter, tags: { $all: selectedTags } };
+      }
+      
+      const freshLeads = await Lead.filter(currentFilter, "created_date", 10000);
+      let filtered = freshLeads || [];
+      
+      // Apply client-side age filter
+      if (ageFilter !== "all") {
+        const selectedBucket = ageBuckets.find((b) => b.value === ageFilter);
+        if (selectedBucket) {
+          filtered = filtered.filter((lead) => {
+            const age = calculateLeadAge(lead.created_date);
+            return age >= selectedBucket.min && age <= selectedBucket.max;
+          });
+        }
+      }
+      
+      setTotalItems(filtered.length);
+      const startIndex = (currentPage - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      const paginatedLeads = filtered.slice(startIndex, endIndex);
+      setLeads(paginatedLeads);
+      
+      await loadTotalStats();
+      toast.success("Lead deleted successfully");
     } catch (error) {
       console.error("Failed to delete lead:", error);
       toast.error("Failed to delete lead");
-      // Reload on error to ensure consistency
       await loadLeads(currentPage, pageSize);
+      await loadTotalStats();
     }
   };
 
@@ -771,17 +795,68 @@ export default function LeadsPage() {
         if (!tenantId) {
           throw new Error('Cannot delete: tenant_id is not available');
         }
-        await Promise.all([...selectedLeads].map((id) => Lead.delete(id, { tenant_id: tenantId })));
+        
+        // Delete leads individually and handle 404s gracefully
+        const deleteResults = await Promise.allSettled(
+          [...selectedLeads].map((id) => Lead.delete(id, { tenant_id: tenantId }))
+        );
+        
+        const successCount = deleteResults.filter(r => r.status === 'fulfilled').length;
+        const notFoundCount = deleteResults.filter(r => 
+          r.status === 'rejected' && r.reason?.message?.includes('404')
+        ).length;
+        const failedCount = deleteResults.filter(r => 
+          r.status === 'rejected' && !r.reason?.message?.includes('404')
+        ).length;
+        
         setSelectedLeads(new Set());
         clearCache("Lead");
-        await Promise.all([
-          loadLeads(currentPage, pageSize),
-          loadTotalStats(),
-        ]);
-        toast.success(`${selectedLeads.size} lead(s) deleted`);
+        
+        // Force reload with fresh data (bypass cache)
+        let currentFilter = getTenantFilter();
+        if (statusFilter !== "all") {
+          currentFilter = { ...currentFilter, status: statusFilter };
+        }
+        if (selectedTags.length > 0) {
+          currentFilter = { ...currentFilter, tags: { $all: selectedTags } };
+        }
+        
+        const freshLeads = await Lead.filter(currentFilter, "created_date", 10000);
+        let filtered = freshLeads || [];
+        
+        // Apply client-side age filter
+        if (ageFilter !== "all") {
+          const selectedBucket = ageBuckets.find((b) => b.value === ageFilter);
+          if (selectedBucket) {
+            filtered = filtered.filter((lead) => {
+              const age = calculateLeadAge(lead.created_date);
+              return age >= selectedBucket.min && age <= selectedBucket.max;
+            });
+          }
+        }
+        
+        setTotalItems(filtered.length);
+        const startIndex = (currentPage - 1) * pageSize;
+        const endIndex = startIndex + pageSize;
+        const paginatedLeads = filtered.slice(startIndex, endIndex);
+        setLeads(paginatedLeads);
+        
+        await loadTotalStats();
+        
+        if (failedCount > 0) {
+          toast.error(`${successCount} deleted, ${failedCount} failed`);
+        } else if (notFoundCount > 0) {
+          toast.success(`${successCount} lead(s) deleted (${notFoundCount} already deleted)`);
+        } else {
+          toast.success(`${successCount} lead(s) deleted`);
+        }
       } catch (error) {
         console.error("Failed to delete leads:", error);
         toast.error("Failed to delete leads");
+        setSelectedLeads(new Set());
+        clearCache("Lead");
+        await loadLeads(currentPage, pageSize);
+        await loadTotalStats();
       }
     }
   };

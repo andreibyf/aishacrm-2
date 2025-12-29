@@ -213,24 +213,47 @@ export default function createLeadsV2Routes() {
             }
           }
 
-          // Handle $or for assigned_to filtering
+          // Handle $or with $icontains for text search (from frontend filters)
           if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
-            // Normalize conditions to avoid empty strings or undefineds
-            const normalizedOr = parsedFilter.$or.filter(cond => cond && typeof cond === 'object');
+            // Check if this is a text search filter (contains $icontains operators)
+            const hasTextSearch = parsedFilter.$or.some(cond => 
+              cond && typeof cond === 'object' && 
+              Object.values(cond).some(val => val && typeof val === 'object' && '$icontains' in val)
+            );
 
-            // Detect unassigned explicitly and apply a safe null check
-            const hasUnassigned = normalizedOr.some(cond => cond.assigned_to === null);
-            const nonEmptyAssignedTo = normalizedOr
-              .map(cond => cond.assigned_to)
-              .filter(val => val !== undefined && val !== null && String(val).trim() !== '');
+            if (hasTextSearch) {
+              // Build PostgREST OR conditions for text search
+              const orConditions = [];
+              parsedFilter.$or.forEach(cond => {
+                Object.entries(cond).forEach(([field, value]) => {
+                  if (value && typeof value === 'object' && value.$icontains) {
+                    orConditions.push(`${field}.ilike.%${value.$icontains}%`);
+                  }
+                });
+              });
+              
+              if (orConditions.length > 0) {
+                console.log('[V2 Leads] Applying text search filter:', orConditions.join(','));
+                query = query.or(orConditions.join(','));
+              }
+            } else {
+              // Handle $or for assigned_to filtering
+              const normalizedOr = parsedFilter.$or.filter(cond => cond && typeof cond === 'object');
 
-            if (hasUnassigned && nonEmptyAssignedTo.length === 0) {
-              console.log('[V2 Leads] Applying unassigned-only filter');
-              query = query.is('assigned_to', null);
-            } else if (nonEmptyAssignedTo.length > 0) {
-              console.log('[V2 Leads] Applying assigned_to $or filter:', nonEmptyAssignedTo);
-              const orParts = nonEmptyAssignedTo.map(val => `assigned_to.eq.${val}`);
-              query = query.or(orParts.join(','));
+              // Detect unassigned explicitly and apply a safe null check
+              const hasUnassigned = normalizedOr.some(cond => cond.assigned_to === null);
+              const nonEmptyAssignedTo = normalizedOr
+                .map(cond => cond.assigned_to)
+                .filter(val => val !== undefined && val !== null && String(val).trim() !== '');
+
+              if (hasUnassigned && nonEmptyAssignedTo.length === 0) {
+                console.log('[V2 Leads] Applying unassigned-only filter');
+                query = query.is('assigned_to', null);
+              } else if (nonEmptyAssignedTo.length > 0) {
+                console.log('[V2 Leads] Applying assigned_to $or filter:', nonEmptyAssignedTo);
+                const orParts = nonEmptyAssignedTo.map(val => `assigned_to.eq.${val}`);
+                query = query.or(orParts.join(','));
+              }
             }
           }
 

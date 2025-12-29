@@ -355,11 +355,13 @@ export default function AccountsPage() {
         return;
       }
 
+      // Include limit parameter to fetch all accounts for client-side filtering
+      const filterWithLimit = { ...currentTenantFilter, limit: 10000 };
       const allAccounts = await cachedRequest(
         "Account",
         "filter",
-        { filter: currentTenantFilter },
-        () => Account.filter(currentTenantFilter),
+        { filter: filterWithLimit },
+        () => Account.filter(filterWithLimit),
       );
 
       let filtered = allAccounts || [];
@@ -612,27 +614,59 @@ export default function AccountsPage() {
     }
 
     try {
-      // Optimistically update UI for instant feedback
-      setAccounts((prev) => prev.filter((a) => a.id !== id));
-      setTotalItems((t) => Math.max(0, (t || 0) - 1));
-      setSelectedAccounts((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-
       await Account.delete(id);
       clearCacheByKey("Account");
-      await Promise.all([
-        loadAccounts(),
-        loadTotalStats(),
-      ]);
+      
+      // Force reload with fresh data (bypass cache)
+      const currentTenantFilter = getTenantFilter();
+      const filterWithLimit = { ...currentTenantFilter, limit: 10000 };
+      const freshAccounts = await Account.filter(filterWithLimit);
+      
+      // Update state with fresh data
+      let filtered = freshAccounts || [];
+      
+      // Apply current filters
+      if (searchTerm) {
+        const search = searchTerm.toLowerCase();
+        filtered = filtered.filter((account) =>
+          account.name?.toLowerCase().includes(search) ||
+          account.website?.toLowerCase().includes(search) ||
+          account.email?.toLowerCase().includes(search) ||
+          account.phone?.includes(searchTerm)
+        );
+      }
+      
+      if (typeFilter !== "all") {
+        filtered = filtered.filter((account) => account.type === typeFilter);
+      }
+      
+      if (selectedTags.length > 0) {
+        filtered = filtered.filter((account) =>
+          Array.isArray(account.tags) &&
+          selectedTags.every((tag) => account.tags.includes(tag))
+        );
+      }
+      
+      filtered.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+      setTotalItems(filtered.length);
+      
+      const startIndex = (currentPage - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      const paginatedAccounts = filtered.slice(startIndex, endIndex);
+      
+      setAccounts(paginatedAccounts);
+      await loadTotalStats();
+      
       toast.success("Account deleted successfully");
     } catch (error) {
       console.error("Failed to delete account:", error);
-      toast.error("Failed to delete account");
-      // Ensure UI consistency by reloading on failure
+      const errorMsg = error?.response?.status === 404 
+        ? "Account already deleted" 
+        : "Failed to delete account";
+      toast.error(errorMsg);
+      // Reload to sync UI state
       await loadAccounts();
+      await loadTotalStats();
     }
   };
 
@@ -720,24 +754,87 @@ export default function AccountsPage() {
       }
 
       try {
-        await Promise.all(
-          [...selectedAccounts].map((id) => Account.delete(id)),
+        const accountIds = [...selectedAccounts];
+        console.log('[Accounts] Starting bulk delete:', { count: accountIds.length, ids: accountIds });
+        
+        if (accountIds.length === 0) {
+          toast.error("No accounts selected for deletion");
+          return;
+        }
+        
+        const results = await Promise.allSettled(
+          accountIds.map((id) => Account.delete(id)),
         );
-        // Optimistically update UI for selected deletions
-        const idsToRemove = new Set(selectedAccounts);
-        setAccounts((prev) => prev.filter((a) => !idsToRemove.has(a.id)));
-        setTotalItems((t) => Math.max(0, (t || 0) - idsToRemove.size));
+        
+        const succeeded = results.filter(r => r.status === 'fulfilled').length;
+        const failed = results.filter(r => {
+          if (r.status === 'rejected') {
+            const is404 = r.reason?.response?.status === 404;
+            if (is404) return false; // Don't count 404s as failures
+            console.error('[Accounts] Delete failed:', r.reason);
+            return true;
+          }
+          return false;
+        }).length;
+        
+        console.log('[Accounts] Bulk delete results:', { succeeded, failed });
+        
+        // Clear selection BEFORE reloading to prevent race condition
         setSelectedAccounts(new Set());
+        
+        // Clear cache and force reload with fresh data
         clearCacheByKey("Account");
-        await Promise.all([
-          loadAccounts(),
-          loadTotalStats(),
-        ]);
-        toast.success(`${selectedAccounts.size} account(s) deleted`);
+        
+        // Force reload by calling Account.filter directly (bypass cache)
+        const currentTenantFilter = getTenantFilter();
+        const filterWithLimit = { ...currentTenantFilter, limit: 10000 };
+        const freshAccounts = await Account.filter(filterWithLimit);
+        
+        // Update state with fresh data
+        let filtered = freshAccounts || [];
+        
+        // Apply current filters
+        if (searchTerm) {
+          const search = searchTerm.toLowerCase();
+          filtered = filtered.filter((account) =>
+            account.name?.toLowerCase().includes(search) ||
+            account.website?.toLowerCase().includes(search) ||
+            account.email?.toLowerCase().includes(search) ||
+            account.phone?.includes(searchTerm)
+          );
+        }
+        
+        if (typeFilter !== "all") {
+          filtered = filtered.filter((account) => account.type === typeFilter);
+        }
+        
+        if (selectedTags.length > 0) {
+          filtered = filtered.filter((account) =>
+            Array.isArray(account.tags) &&
+            selectedTags.every((tag) => account.tags.includes(tag))
+          );
+        }
+        
+        filtered.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+        setTotalItems(filtered.length);
+        
+        const startIndex = (currentPage - 1) * pageSize;
+        const endIndex = startIndex + pageSize;
+        const paginatedAccounts = filtered.slice(startIndex, endIndex);
+        
+        setAccounts(paginatedAccounts);
+        await loadTotalStats();
+        
+        if (failed > 0) {
+          toast.error(`${succeeded} deleted, ${failed} failed`);
+        } else {
+          toast.success(`${succeeded} account(s) deleted`);
+        }
       } catch (error) {
         console.error("Failed to delete accounts:", error);
         toast.error("Failed to delete accounts");
-        await loadAccounts();
+        setSelectedAccounts(new Set());
+        await Promise.all([loadAccounts(), loadTotalStats()]);
       }
     }
   };
