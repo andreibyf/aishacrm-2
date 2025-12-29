@@ -70,7 +70,28 @@ router.get('/realtime', async (req, res) => {
     // Superadmin can optionally filter by tenant, or see all tenants aggregated
     const tenantId = req.query.tenant_id || null; // null = aggregate all tenants
 
-    const metrics = await getRealtimeMetrics(tenantId);
+    // Get both minute and hour windows
+    const [minuteMetrics, hourMetrics] = await Promise.all([
+      getRealtimeMetrics(tenantId, 'minute'),
+      getRealtimeMetrics(tenantId, 'hour')
+    ]);
+    
+    const metrics = {
+      minute: {
+        total: minuteMetrics.calls,
+        success: minuteMetrics.calls - minuteMetrics.errors,
+        failed: minuteMetrics.errors,
+        cacheHits: minuteMetrics.cacheHits,
+        totalLatencyMs: 0 // Not tracked in current implementation
+      },
+      hour: {
+        total: hourMetrics.calls,
+        success: hourMetrics.calls - hourMetrics.errors,
+        failed: hourMetrics.errors,
+        cacheHits: hourMetrics.cacheHits,
+        totalLatencyMs: 0 // Not tracked in current implementation
+      }
+    };
     
     // Add derived metrics for easy dashboard consumption
     const derived = {
@@ -86,12 +107,8 @@ router.get('/realtime', async (req, res) => {
       hourCacheRate: metrics.hour.total > 0 
         ? metrics.hour.cacheHits / metrics.hour.total 
         : 0,
-      minuteAvgLatencyMs: metrics.minute.total > 0 
-        ? Math.round(metrics.minute.totalLatencyMs / metrics.minute.total) 
-        : 0,
-      hourAvgLatencyMs: metrics.hour.total > 0 
-        ? Math.round(metrics.hour.totalLatencyMs / metrics.hour.total) 
-        : 0
+      minuteAvgLatencyMs: 0, // Not tracked yet
+      hourAvgLatencyMs: 0 // Not tracked yet
     };
 
     res.json({
