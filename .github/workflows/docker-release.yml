@@ -126,12 +126,13 @@ jobs:
         env:
           VERSION_TAG: ${{ github.ref_name }}
           MCP_GITHUB_TOKEN: ${{ secrets.PROD_MCP_GITHUB_TOKEN }}
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         with:
           host: ${{ secrets.PROD_VPS_HOST }}
           username: ${{ secrets.PROD_VPS_USER }}
           key: ${{ secrets.PROD_VPS_SSH_KEY }}
           port: ${{ secrets.PROD_VPS_PORT || 22 }}
-          envs: VERSION_TAG,MCP_GITHUB_TOKEN
+          envs: VERSION_TAG,MCP_GITHUB_TOKEN,DOPPLER_TOKEN
           script: |
             set -e  # Exit on any error
             cd /opt/aishacrm
@@ -160,6 +161,12 @@ jobs:
             # Remove VITE_APP_BUILD_VERSION from .env so container uses baked-in /app/VERSION
             # (Version is already baked into Docker image during build via Dockerfile)
             sed -i '/^VITE_APP_BUILD_VERSION=/d' .env 2>/dev/null || true
+            
+            # Regenerate .env.from-doppler with fresh secrets from Doppler
+            echo "Fetching fresh secrets from Doppler..."
+            doppler secrets download --config prd_prd --no-file --format env --token "$DOPPLER_TOKEN" > .env.from-doppler || {
+              echo "Warning: Failed to fetch from Doppler, using existing .env.from-doppler"
+            }
             
             # Ensure n8n URL is set for iframe embedding
             if ! grep -q "^VITE_N8N_URL=" .env 2>/dev/null; then
