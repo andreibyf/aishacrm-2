@@ -100,3 +100,4 @@ check-*.js
 backend/check-*.js
 query-*.sql
 .copilotignore
+.vs/
