@@ -57,6 +57,10 @@ COPY --from=builder /app/backend .
 # Also include Braid SDK sources for runtime access to .braid files
 COPY --from=builder /app/braid-llm-kit /app/braid-llm-kit
 
+# Copy entrypoint script
+COPY backend/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
 # Set environment
 ENV NODE_ENV=production
 
@@ -70,5 +74,5 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://127.0.0.1:${PORT:-3001}/health || exit 1
 
-# Start server with Doppler if token is available, otherwise fallback to direct node execution
-CMD ["sh", "-c", "if [ -n \"$DOPPLER_TOKEN\" ]; then echo 'Starting backend with Doppler...'; doppler run --token \"$DOPPLER_TOKEN\" --project \"${DOPPLER_PROJECT:-aishacrm}\" --config \"${DOPPLER_CONFIG:-prd}\" -- node server.js; else echo 'WARNING: DOPPLER_TOKEN not set, starting without Doppler'; exec node server.js; fi"]
+# Use entrypoint script for proper Doppler execution
+ENTRYPOINT ["/docker-entrypoint.sh"]

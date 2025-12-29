@@ -104,6 +104,7 @@ const QaConsole = lazy(() => import("../components/settings/QaConsole"));
 const TenantResolveCacheMonitor = lazy(() => import("../components/settings/TenantResolveCacheMonitor"));
 const LLMActivityMonitor = lazy(() => import("../components/settings/LLMActivityMonitor"));
 const BraidSDKMonitor = lazy(() => import("../components/settings/BraidSDKMonitor"));
+const McpAdmin = lazy(() => import("./McpAdmin"));
 
 export default function SettingsPage() { // Renamed from Settings to SettingsPage as per outline
   const [currentUser, setCurrentUser] = useState(null);
@@ -145,6 +146,15 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
   const isManager = currentUser?.role === 'manager';
   const isSuperadmin = currentUser?.role === 'superadmin';
+
+  // Debug logging for MCP Admin
+  console.log('[Settings] User role check:', {
+    role: currentUser?.role,
+    email: currentUser?.email,
+    isAdmin,
+    isManager,
+    isSuperadmin
+  });
 
   // Categories for grouping settings cards
   const CATEGORIES = useMemo(() => ({
@@ -224,7 +234,7 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
         { id: 'llm-monitor', label: 'LLM Monitor', description: 'AI model usage and costs', icon: Brain, category: 'monitoring', roles: ['superadmin'] },
         { id: 'braid-monitor', label: 'AI Tools Monitor', description: 'Tool metrics and dependency graph', icon: GitBranch, category: 'monitoring', roles: ['superadmin'] },
         { id: 'sync-health', label: 'Sync Health', description: 'Data synchronization status', icon: RefreshCw, category: 'monitoring', roles: ['superadmin'] },
-        { id: 'mcp-monitor', label: 'MCP Monitor', description: 'MCP server connections', icon: Server, category: 'monitoring', roles: ['superadmin'] },
+        { id: 'mcp-monitor', label: 'MCP Admin', description: 'MCP server health, memory, queue, and adapters', icon: Server, category: 'monitoring', roles: ['superadmin'] },
         { id: 'system-health', label: 'System Health', description: 'Overall system status', icon: Activity, category: 'monitoring', roles: ['superadmin'] },
         { id: 'system-logs', label: 'System Logs', description: 'Application logs and errors', icon: FileText, category: 'monitoring', roles: ['superadmin'] },
         { id: 'api-health', label: 'API Health', description: 'Backend endpoint status', icon: Activity, category: 'monitoring', roles: ['superadmin'] },
@@ -681,14 +691,19 @@ export default function SettingsPage() { // Renamed from Settings to SettingsPag
                 </Card>
               )}
 
-              {activeTab === 'mcp-monitor' && isAdmin && ( // New tab content
+              {activeTab === 'mcp-monitor' && isSuperadmin && ( // MCP Admin - superadmin only
                 <Card>
                   <CardHeader>
-                    <CardTitle>MCP Server Status</CardTitle>
-                    <CardDescription>Monitor the Model Context Protocol server health</CardDescription>
+                    <CardTitle className="flex items-center gap-2">
+                      <Server className="w-5 h-5 text-blue-400" />
+                      MCP Server Administration
+                    </CardTitle>
+                    <CardDescription>Comprehensive MCP server health, memory, queue stats, and registered adapters</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <MCPServerMonitor />
+                    <SettingsLoader>
+                      <McpAdmin />
+                    </SettingsLoader>
                   </CardContent>
                 </Card>
               )}

@@ -6,9 +6,61 @@
 import express from "express";
 import fetch from "node-fetch";
 import { getSupabaseClient } from "../lib/supabase-db.js";
+// Import auth middleware to require an authenticated user for admin routes.
+import { requireAuthCookie } from "../middleware/authCookie.js";
 import { resolveLLMApiKey, generateChatCompletion, selectLLMConfigForTenant } from "../lib/aiEngine/index.js";
 import { logLLMActivity } from "../lib/aiEngine/activityLogger.js";
 import { executeMcpToolViaBraid, getExecutionStrategy } from "../lib/braidMcpBridge.js";
+
+// Admin helper: restrict access to users with emails defined in ADMIN_EMAILS env variable.
+// Requires req.user to be set by requireAuthCookie middleware
+function requireAdmin(req, res, next) {
+  // Check if user is authenticated (requireAuthCookie should set req.user)
+  if (!req.user || !req.user.email) {
+    return res.status(401).json({
+      status: "error",
+      message: "Unauthorized - authentication required"
+    });
+  }
+
+  const userEmail = req.user.email;
+
+  // Parse allowlist from env; split by comma, trim whitespace, lowercase.
+  const allow = (process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
+  // Debug logging
+  console.log('[MCP Admin] Auth check:', {
+    userEmail,
+    isInAdminList: allow.includes(userEmail.toLowerCase()),
+    adminEmailsCount: allow.length
+  });
+
+  // If no allowlist configured, deny by default.
+  if (allow.length === 0) {
+    return res.status(403).json({
+      status: "error",
+      message: "Admin access not configured (ADMIN_EMAILS missing)"
+    });
+  }
+
+  const email = String(userEmail).toLowerCase();
+  if (!allow.includes(email)) {
+    return res.status(403).json({
+      status: "error",
+      message: "Forbidden - not authorized as admin"
+    });
+  }
+
+  return next();
+}
+
+// Helper to resolve the MCP base URL. Falls back to localhost for local MCP.
+function getMcpBaseUrl() {
+  return process.env.BRAID_MCP_URL || "http://127.0.0.1:8000";
+}
 
 /**
  * callLLMWithFailover
@@ -270,6 +322,37 @@ export default function createMCPRoutes(_pgPool) {
       res.json({ status: "success", data: { servers } });
     } catch (error) {
       res.status(500).json({ status: "error", message: error.message });
+    }
+  });
+
+  // Admin: consolidated MCP status (health + memory + queue + adapters)
+  // Requires authentication (JWT cookie) and ADMIN_EMAILS authorization
+  router.get("/admin/status", requireAuthCookie, requireAdmin, async (_req, res) => {
+    const base = getMcpBaseUrl();
+    try {
+      // Concurrently fetch health, memory, queue stats, and adapter list from MCP.
+      const [health, memory, queue, adapters] = await Promise.all([
+        fetch(`${base}/health`).then((r) => r.json()),
+        fetch(`${base}/memory/status`).then((r) => r.json()),
+        fetch(`${base}/queue/stats`).then((r) => r.json()).catch(() => ({ status: 'error' })),
+        fetch(`${base}/adapters`).then((r) => r.json()),
+      ]);
+      return res.json({
+        status: "ok",
+        mcpBaseUrl: base,
+        health,
+        memory,
+        queue,
+        adapters,
+        ts: new Date().toISOString(),
+      });
+    } catch (e) {
+      return res.status(502).json({
+        status: "error",
+        message: "Failed to reach MCP locally",
+        detail: e?.message || String(e),
+        mcpBaseUrl: base,
+      });
     }
   });
 
@@ -1593,7 +1676,7 @@ export default function createMCPRoutes(_pgPool) {
       // Preferred explicit override
       process.env.MCP_NODE_HEALTH_URL,
       // Common container DNS names (if MCP added to compose or external network)
-      'http://braid-mcp-node-server:8000/health',
+      'http://braid-mcp-server:8000/health',
       'http://braid-mcp-1:8000/health',
       'http://braid-mcp:8000/health',
       // Host gateway (works from inside Docker to host-mapped port)
@@ -1777,7 +1860,7 @@ export default function createMCPRoutes(_pgPool) {
     // Reuse candidates from health proxy for base URL discovery
     const healthCandidates = [
       process.env.MCP_NODE_HEALTH_URL,
-      'http://braid-mcp-node-server:8000/health',
+      'http://braid-mcp-server:8000/health',
       'http://braid-mcp-1:8000/health',
       'http://braid-mcp:8000/health',
       // Host gateway (works from inside Docker to host-mapped port)
