@@ -4,20 +4,59 @@
  * Dashboard-ready endpoints for tool performance, usage, and health metrics.
  * Combines real-time Redis counters with historical data from braid_audit_log.
  * 
+ * AUTHENTICATION: Superadmin-only (ADMIN_EMAILS) - monitors ALL tenants
+ * 
  * @module routes/braidMetrics
  */
 
 import express from 'express';
+import { requireAuthCookie } from '../middleware/authCookie.js';
 import { getRealtimeMetrics } from '../lib/braidIntegration-v2.js';
 import { getToolMetrics, getMetricsTimeSeries, getErrorAnalysis, getAuditStats } from '../../braid-llm-kit/tools/braid-rt.js';
 
 const router = express.Router();
+
+// Superadmin authentication helper (from mcp.js pattern)
+function requireAdmin(req, res, next) {
+  if (!req.user || !req.user.email) {
+    return res.status(401).json({
+      error: "Unauthorized - authentication required"
+    });
+  }
+
+  const adminEmails = (process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (adminEmails.length === 0) {
+    return res.status(403).json({
+      error: "Admin access not configured (ADMIN_EMAILS missing)"
+    });
+  }
+
+  const userEmail = String(req.user.email).toLowerCase();
+  if (!adminEmails.includes(userEmail)) {
+    return res.status(403).json({
+      error: "Forbidden - superadmin access required"
+    });
+  }
+
+  return next();
+}
+
+// Apply superadmin authentication to all routes
+router.use(requireAuthCookie);
+router.use(requireAdmin);
 
 /**
  * GET /api/braid/metrics/realtime
  * 
  * Returns real-time metrics from Redis counters (last minute and hour).
  * Fastest endpoint - no database queries.
+ * 
+ * Query params:
+ * - tenant_id: Optional - filter by specific tenant UUID (superadmin can monitor any tenant)
  * 
  * Response:
  * {
@@ -28,10 +67,8 @@ const router = express.Router();
  */
 router.get('/realtime', async (req, res) => {
   try {
-    const tenantId = req.tenant?.id;
-    if (!tenantId) {
-      return res.status(401).json({ error: 'Tenant context required' });
-    }
+    // Superadmin can optionally filter by tenant, or see all tenants aggregated
+    const tenantId = req.query.tenant_id || null; // null = aggregate all tenants
 
     const metrics = await getRealtimeMetrics(tenantId);
     
@@ -75,6 +112,7 @@ router.get('/realtime', async (req, res) => {
  * 
  * Query params:
  * - period: '1h' | '24h' | '7d' | '30d' (default: '24h')
+ * - tenant_id: Optional - filter by specific tenant UUID (superadmin can monitor any tenant)
  * 
  * Response:
  * {
@@ -87,10 +125,8 @@ router.get('/realtime', async (req, res) => {
  */
 router.get('/tools', async (req, res) => {
   try {
-    const tenantId = req.tenant?.id;
-    if (!tenantId) {
-      return res.status(401).json({ error: 'Tenant context required' });
-    }
+    // Superadmin can optionally filter by tenant, or see all tenants aggregated
+    const tenantId = req.query.tenant_id || null; // null = aggregate all tenants
 
     const period = req.query.period || '24h';
     const validPeriods = ['1h', '24h', '7d', '30d'];
@@ -133,6 +169,7 @@ router.get('/tools', async (req, res) => {
  * Query params:
  * - granularity: 'minute' | 'hour' | 'day' (default: 'hour')
  * - points: number of data points (default: 24, max: 168)
+ * - tenant_id: Optional - filter by specific tenant UUID
  * 
  * Response:
  * {
@@ -145,10 +182,7 @@ router.get('/tools', async (req, res) => {
  */
 router.get('/timeseries', async (req, res) => {
   try {
-    const tenantId = req.tenant?.id;
-    if (!tenantId) {
-      return res.status(401).json({ error: 'Tenant context required' });
-    }
+    const tenantId = req.query.tenant_id || null;
 
     const granularity = req.query.granularity || 'hour';
     const validGranularities = ['minute', 'hour', 'day'];
@@ -180,6 +214,7 @@ router.get('/timeseries', async (req, res) => {
  * 
  * Query params:
  * - period: '1h' | '24h' | '7d' | '30d' (default: '24h')
+ * - tenant_id: Optional - filter by specific tenant UUID
  * 
  * Response:
  * {
@@ -191,10 +226,7 @@ router.get('/timeseries', async (req, res) => {
  */
 router.get('/errors', async (req, res) => {
   try {
-    const tenantId = req.tenant?.id;
-    if (!tenantId) {
-      return res.status(401).json({ error: 'Tenant context required' });
-    }
+    const tenantId = req.query.tenant_id || null;
 
     const period = req.query.period || '24h';
     const validPeriods = ['1h', '24h', '7d', '30d'];
@@ -221,13 +253,13 @@ router.get('/errors', async (req, res) => {
  * 
  * Returns a combined summary for dashboard widgets.
  * Includes realtime stats, top tools, and health overview.
+ * 
+ * Query params:
+ * - tenant_id: Optional - filter by specific tenant UUID
  */
 router.get('/summary', async (req, res) => {
   try {
-    const tenantId = req.tenant?.id;
-    if (!tenantId) {
-      return res.status(401).json({ error: 'Tenant context required' });
-    }
+    const tenantId = req.query.tenant_id || null;
 
     const supabase = req.supabase;
 
