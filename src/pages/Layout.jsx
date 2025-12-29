@@ -518,16 +518,17 @@ function Layout({ children, currentPageName }) { // Renamed from AppLayout to La
   const [userError, setUserError] = React.useState(null);
   
   // Proactive token refresh management (auto-refreshes before expiry)
-  const handleSessionExpired = React.useCallback(() => {
-    // Clear all app state on session expiration
-    localStorage.clear();
-    navigate('/?session_expired=true');
-  }, [navigate]);
+  // TEMPORARILY DISABLED - debugging initialization issue
+  // const handleSessionExpired = React.useCallback(() => {
+  //   // Clear all app state on session expiration
+  //   localStorage.clear();
+  //   navigate('/?session_expired=true');
+  // }, [navigate]);
   
-  const { isRefreshing } = useTokenRefresh({
-    enabled: !!user && authCookiesReady, // Only run when user is logged in
-    onSessionExpired: handleSessionExpired
-  });
+  // const { isRefreshing } = useTokenRefresh({
+  //   enabled: !!user && authCookiesReady, // Only run when user is logged in
+  //   onSessionExpired: handleSessionExpired
+  // });
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
   const [selectedTenant, setSelectedTenant] = React.useState(null);
   const [moduleSettings, setModuleSettings] = React.useState([]);
