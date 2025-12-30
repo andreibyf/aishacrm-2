@@ -15,6 +15,9 @@ dist-ssr
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
+# Thunder Client test data (may contain sensitive info)
+.vscode/thunder-tests/
 .idea
 .DS_Store
 *.suo
@@ -101,3 +104,7 @@ backend/check-*.js
 query-*.sql
 .copilotignore
 .vs/
+
+# MCP Development Tools
+braid-mcp-wrapper/
+!braid-mcp-wrapper/README.md
