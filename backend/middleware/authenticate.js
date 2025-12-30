@@ -64,6 +64,7 @@ export async function authenticateRequest(req, _res, next) {
           email: payload.email,
           role: payload.role,
           tenant_id: payload.tenant_id || null,
+          tenant_uuid: payload.tenant_uuid || null,
         };
         if (process.env.AUTH_DEBUG === 'true') {
           console.log('[Auth Debug] Cookie JWT verified (HS256):', { 
@@ -109,6 +110,7 @@ export async function authenticateRequest(req, _res, next) {
               email: internalPayload.email || 'internal-service',
               role: 'superadmin', // Internal service calls have full access
               tenant_id: internalPayload.tenant_id || null,
+              tenant_uuid: internalPayload.tenant_uuid || null,
               internal: true
             };
             if (process.env.AUTH_DEBUG === 'true') {
@@ -189,8 +191,8 @@ export async function authenticateRequest(req, _res, next) {
           const supa = getSupabaseClient();
           // Lookup user by email to get full user record with tenant_id and role
           const [{ data: uRows }, { data: eRows }] = await Promise.all([
-            supa.from('users').select('id, role, tenant_id').eq('email', email),
-            supa.from('employees').select('id, role, tenant_id').eq('email', email),
+            supa.from('users').select('id, role, tenant_id, tenant_uuid').eq('email', email),
+            supa.from('employees').select('id, role, tenant_id, tenant_uuid').eq('email', email),
           ]);
           const row = (uRows && uRows[0]) || (eRows && eRows[0]) || null;
           if (row) {
@@ -199,6 +201,7 @@ export async function authenticateRequest(req, _res, next) {
               email,
               role: row.role || 'employee',
               tenant_id: row.tenant_id ?? null,
+              tenant_uuid: row.tenant_uuid ?? null,
             };
             if (process.env.AUTH_DEBUG === 'true') {
               console.log('[Auth Debug] Bearer: resolved user from DB:', { 

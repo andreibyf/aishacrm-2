@@ -23,7 +23,7 @@ export default function createDashboardFunnelRoutes(_pgPool) {
  */
 router.get('/funnel-counts', validateTenantAccess, async (req, res) => {
   try {
-    const tenantId = req.query.tenant_id || req.tenant?.id;
+    const tenantId = req.tenant?.id || req.query.tenant_id;
     const includeTestData = req.query.include_test_data !== 'false';
     const period = req.query.period; // year|quarter|month|week
     const year = parseInt(req.query.year);

@@ -1014,11 +1014,17 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       };
     }
 
-    // ALL users (including superadmins) must have a tenant_id assigned and can only access that tenant
-    // This keeps everyone in tenant context - no global access even for superadmins
+    // SUPERADMIN BYPASS: Superadmins can access any tenant
+    if (isSuperadmin(user)) {
+      return { authorized: true };
+    }
+
+    // ALL other users must have a tenant_id assigned and can only access that tenant
+    // This keeps everyone in tenant context - no global access even for regular users
     if (!user.tenant_id) {
       return { 
         authorized: false, 
+        status: 403,
         error: "I'm sorry, but your account isn't assigned to any tenant. Please contact your administrator to get proper access." 
       };
     }
@@ -1032,6 +1038,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       if (requestedTenantId !== userTenantId) {
         return { 
           authorized: false, 
+          status: 403,
           error: "I'm sorry, but I can only help you with data from your assigned tenant. The tenant you're asking about isn't accessible with your current permissions." 
         };
       }
@@ -1041,7 +1048,8 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
     // Check if user's tenant matches either the UUID or slug of the requested tenant
     const isAuthorized = 
       userTenantId === tenantRecord.id ||           // UUID match
-      userTenantId === tenantRecord.tenant_id;      // Slug match
+      userTenantId === tenantRecord.tenant_id ||    // Slug match
+      user.tenant_uuid === tenantRecord.id;         // Explicit UUID match
 
     if (!isAuthorized) {
       console.warn('[AI Security] Cross-tenant access attempt blocked:', {
@@ -1054,6 +1062,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       });
       return { 
         authorized: false, 
+        status: 403,
         error: "I'm sorry, but I can only access data for your assigned tenant. If you need access to other tenants, please contact your administrator." 
       };
     }
