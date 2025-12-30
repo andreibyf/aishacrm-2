@@ -15,7 +15,6 @@ dist-ssr
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
-!.vscode/settings.json
 # Thunder Client test data (may contain sensitive info)
 .vscode/thunder-tests/
 .idea
@@ -97,6 +96,8 @@ ENVIRONMENT_INDICATORS.md
 ENVIRONMENT_QUICK_REFERENCE.md
 ENVIRONMENT_VARIABLES_AUDIT.md
 RATE_LIMIT_MANAGEMENT.md
+GITIGNORE_UPDATES.md
+THUNDER_CLIENT_GUIDE.md
 
 # Debugging/investigation scripts (temporary)
 check-*.js
