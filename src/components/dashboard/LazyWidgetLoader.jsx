@@ -6,9 +6,10 @@ import { Card, CardContent } from '@/components/ui/card';
  * LazyWidgetLoader - Progressively loads dashboard widgets with intersection observer
  * @param {React.Component} component - The widget component to load
  * @param {number} delay - Delay before loading (ms)
+ * @param {number} skeletonHeight - Height of skeleton placeholder in pixels (CLS optimization)
  * @param {object} props - Props to pass to the widget
  */
-function LazyWidgetLoader({ component: Component, delay = 0, ...props }) {
+function LazyWidgetLoader({ component: Component, delay = 0, skeletonHeight = 600, ...props }) {
   const [shouldLoad, setShouldLoad] = useState(delay === 0);
   const [isVisible, setIsVisible] = useState(false);
   const ref = useRef(null);
@@ -44,9 +45,12 @@ function LazyWidgetLoader({ component: Component, delay = 0, ...props }) {
 
   if (!shouldLoad || !isVisible) {
     return (
-      <div ref={ref} className="min-h-[200px]">
+      <div ref={ref} style={{ minHeight: `${skeletonHeight}px` }}>
         <Card className="bg-slate-800 border-slate-700">
-          <CardContent className="flex items-center justify-center h-[200px]">
+          <CardContent 
+            className="flex items-center justify-center" 
+            style={{ height: `${skeletonHeight}px` }}
+          >
             <Loader2 className="w-8 h-8 animate-spin text-slate-600" />
           </CardContent>
         </Card>

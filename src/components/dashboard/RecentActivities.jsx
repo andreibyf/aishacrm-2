@@ -274,7 +274,7 @@ function RecentActivities(props) {
   }
 
   return (
-    <Card className="shadow-lg border-0 bg-slate-800 border-slate-700">
+    <Card className="shadow-lg border-0 bg-slate-800 border-slate-700 h-full flex flex-col">
       <CardHeader className="border-b border-slate-700 pb-3">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           <div className="min-w-0">
@@ -341,12 +341,12 @@ function RecentActivities(props) {
             </div>
           ) : (
             <>
-                <div className="h-72 max-w-2xl mx-auto mt-4">
+                <div className="h-[26rem] max-w-3xl mx-auto mt-6 flex items-center">
                 <ResponsiveContainer width="100%" height="100%">
-                    <RBarChart data={summaryData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+                    <RBarChart data={summaryData} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                    <XAxis dataKey="status" tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#475569" />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#475569" domain={[0, 18]} ticks={[0, 3, 6, 9, 12, 15, 18]} />
+                    <XAxis dataKey="status" tick={{ fontSize: 13, fill: '#94a3b8' }} stroke="#475569" />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 13, fill: '#94a3b8' }} stroke="#475569" domain={[0, 18]} ticks={[0, 3, 6, 9, 12, 15, 18]} />
                     <RTooltip
                       contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px', color: '#f1f5f9' }}
                       formatter={(value) => [`${value}`, 'Count']}
@@ -355,12 +355,12 @@ function RecentActivities(props) {
                       {summaryData.map((d, i) => (
                         <Cell key={`cell-${d.key}-${i}`} fill={barColors[d.key] || '#6366f1'} />
                       ))}
-                      <LabelList dataKey="value" position="top" style={{ fill: '#cbd5e1', fontSize: '12px' }} />
+                      <LabelList dataKey="value" position="top" style={{ fill: '#cbd5e1', fontSize: '14px', fontWeight: '500' }} />
                     </Bar>
                   </RBarChart>
                 </ResponsiveContainer>
               </div>
-                <div className="text-center pt-2 border-t border-slate-700 mt-2">
+                <div className="text-center pt-3 border-t border-slate-700 mt-3">
                 <Button variant="outline" size="sm" asChild className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
                   <Link to={createPageUrl("Activities")}>
                     View All {activitiesLabel}

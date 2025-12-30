@@ -186,7 +186,7 @@ function LeadAgeReport(props) {
   }
 
   return (
-    <Card className="shadow-lg border-0 bg-slate-800 border-slate-700">
+    <Card className="shadow-lg border-0 bg-slate-800 border-slate-700 h-full flex flex-col">
       <CardHeader className="pb-4 border-b border-slate-700">
         <CardTitle className="flex items-center justify-between text-slate-100">
           <div className="flex items-center gap-2">

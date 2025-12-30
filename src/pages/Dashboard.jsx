@@ -88,6 +88,27 @@ const ALL_WIDGETS = [
   },
 ];
 
+/**
+ * CLS Optimization (v3.6.19): Widget-specific skeleton heights
+ * Prevents layout shift by reserving exact space needed for each widget
+ * Heights measured from actual rendered components
+ */
+/**
+ * CLS Optimization (v3.6.19): Uniform widget heights for consistent grid
+ * All widgets set to 600px - prevents ANY layout shift
+ * Taller widgets (Recent Activities) use overflow-y-auto
+ * Shorter widgets (Conversion Rates) use flex centering
+ */
+const WIDGET_CONFIGS = {
+  salesPipeline: { skeletonHeight: 600 },
+  salesFunnel: { skeletonHeight: 600 },
+  leadSourceChart: { skeletonHeight: 600 },
+  topAccounts: { skeletonHeight: 600 },
+  conversionRates: { skeletonHeight: 600 },
+  leadAgeReport: { skeletonHeight: 600 },
+  recentActivities: { skeletonHeight: 600 },
+};
+
 export default function DashboardPage() {
   // Use global user context (centralized User.me())
   const { user, reloadUser } = useUser();
@@ -754,9 +775,11 @@ export default function DashboardPage() {
             <div className="h-24 bg-slate-800 rounded" />
             <div className="h-24 bg-slate-800 rounded" />
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="h-64 bg-slate-800 rounded" />
-            <div className="h-64 bg-slate-800 rounded" />
+          {/* CLS Optimization: Widget skeleton grid matching real layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-[600px] bg-slate-800 rounded-lg" />
+            ))}
           </div>
         </div>
       )}
@@ -836,6 +859,7 @@ export default function DashboardPage() {
                             <LazyWidgetLoader
                               component={widget.component}
                               delay={0}
+                              skeletonHeight={WIDGET_CONFIGS[widget.id]?.skeletonHeight || 600}
                               user={user}
                               tenantFilter={stableTenantFilter}
                               showTestData={showTestData}

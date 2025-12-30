@@ -208,15 +208,15 @@ function LeadSourceChart(props) { // Changed to receive `props`
               )
               : (
                 // Reserve extra height so the legend is always visible
-                <div className="h-[18rem] md:h-[20rem]">
+                <div className="h-[28rem] flex items-center justify-center">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart
-                      margin={{ top: 8, right: 8, bottom: 48, left: 8 }}
+                      margin={{ top: 20, right: 20, bottom: 60, left: 20 }}
                     >
                       <Pie
                         data={data.filter((item) => item.value > 0)} // Only show slices with data in the pie
                         cx="50%"
-                        cy="50%"
+                        cy="45%"
                         labelLine={false}
                         label={({ name, percent }) => {
                           // Only show labels for slices that are 5% or larger to avoid overlap
@@ -225,7 +225,7 @@ function LeadSourceChart(props) { // Changed to receive `props`
                           }
                           return "";
                         }}
-                        outerRadius={80}
+                        outerRadius={120}
                         fill="#8884d8"
                         dataKey="value"
                         isAnimationActive={false}

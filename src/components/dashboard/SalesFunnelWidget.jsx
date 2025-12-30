@@ -95,7 +95,7 @@ export default function SalesFunnelWidget({ tenantFilter = {}, showTestData = tr
   const totalRecords = counts.sources + counts.leads + counts.contacts + counts.accounts;
 
   return (
-    <Card className="bg-slate-800 border-slate-700">
+    <Card className="bg-slate-800 border-slate-700 h-full flex flex-col">
       <CardHeader className="pb-2">
         <CardTitle className="text-lg font-semibold text-slate-100 flex items-center justify-between">
           <span>Sales Funnel</span>
@@ -116,13 +116,13 @@ export default function SalesFunnelWidget({ tenantFilter = {}, showTestData = tr
             No records to display
           </div>
         ) : (
-          <div className="flex justify-center">
+          <div className="flex justify-center items-center h-full">
             <FunnelChart3D 
               data={funnelData} 
-              width={480} 
-              height={340}
-              minRadius={30}
-              maxRadius={130}
+              width={550} 
+              height={450}
+              minRadius={50}
+              maxRadius={160}
             />
           </div>
         )}
