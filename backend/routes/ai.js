@@ -1009,6 +1009,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       }
       return { 
         authorized: false, 
+        status: 401,
         error: "I'm sorry, but I can't process your request without authentication. Please log in and try again." 
       };
     }
@@ -1173,7 +1174,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
       if (!authCheck.authorized) {
         console.warn('[AI Security] Snapshot blocked - unauthorized tenant access');
-        return res.status(403).json({ status: 'error', message: authCheck.error });
+        return res.status(authCheck.status || 403).json({ status: 'error', message: authCheck.error });
       }
 
       // Use UUID for database queries (tenantRecord.id is the UUID)
@@ -1320,7 +1321,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
           requestedTenant: tenantIdentifier,
           error: authCheck.error,
         });
-        return res.status(403).json({ status: 'error', message: authCheck.error });
+        return res.status(authCheck.status || 403).json({ status: 'error', message: authCheck.error });
       }
 
       const enrichedMetadata = {
@@ -1404,7 +1405,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
       if (!authCheck.authorized) {
         console.warn('[AI Security] Conversation list blocked - unauthorized tenant access');
-        return res.status(403).json({ status: 'error', message: authCheck.error });
+        return res.status(authCheck.status || 403).json({ status: 'error', message: authCheck.error });
       }
 
       const { agent_name = null, status = 'active', limit = 25 } = req.query || {};
@@ -1508,7 +1509,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
       if (!authCheck.authorized) {
         console.warn('[AI Security] Conversation fetch blocked - unauthorized tenant access');
-        return res.status(403).json({ status: 'error', message: authCheck.error });
+        return res.status(authCheck.status || 403).json({ status: 'error', message: authCheck.error });
       }
 
       // Get conversation
@@ -1572,7 +1573,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
       if (!authCheck.authorized) {
         console.warn('[AI Security] Conversation update blocked - unauthorized tenant access');
-        return res.status(403).json({ status: 'error', message: authCheck.error });
+        return res.status(authCheck.status || 403).json({ status: 'error', message: authCheck.error });
       }
 
       // Verify conversation belongs to tenant
@@ -1651,7 +1652,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
       if (!authCheck.authorized) {
         console.warn('[AI Security] Conversation delete blocked - unauthorized tenant access');
-        return res.status(403).json({ status: 'error', message: authCheck.error });
+        return res.status(authCheck.status || 403).json({ status: 'error', message: authCheck.error });
       }
 
       // Verify conversation belongs to tenant before deleting
@@ -1714,7 +1715,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
       if (!authCheck.authorized) {
         console.warn('[AI Security] Messages fetch blocked - unauthorized tenant access');
-        return res.status(403).json({ status: 'error', message: authCheck.error });
+        return res.status(authCheck.status || 403).json({ status: 'error', message: authCheck.error });
       }
 
       // Verify conversation belongs to tenant
@@ -1784,7 +1785,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
       if (!authCheck.authorized) {
         console.warn('[AI Security] Message blocked - unauthorized tenant access');
-        return res.status(403).json({ status: 'error', message: authCheck.error });
+        return res.status(authCheck.status || 403).json({ status: 'error', message: authCheck.error });
       }
 
       const { data: conv, error } = await supa
@@ -1884,7 +1885,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
       if (!authCheck.authorized) {
         console.warn('[AI Security] Stream blocked - unauthorized tenant access');
-        return res.status(403).json({ status: 'error', message: authCheck.error });
+        return res.status(authCheck.status || 403).json({ status: 'error', message: authCheck.error });
       }
 
       // Verify conversation exists
@@ -1980,7 +1981,7 @@ This tool analyzes entity state (notes, activities, stage, temperature) and prov
       const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
       if (!authCheck.authorized) {
         console.warn('[AI Security] Chat blocked - unauthorized tenant access');
-        return res.status(403).json({ status: 'error', message: authCheck.error });
+        return res.status(authCheck.status || 403).json({ status: 'error', message: authCheck.error });
       }
 
       // Load conversation history from database if conversation_id provided

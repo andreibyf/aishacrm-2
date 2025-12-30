@@ -87,8 +87,8 @@ async function fetchWithBackoff(input, init) {
         console.log('[fetchWithBackoff] 401 detected, attempting token refresh');
       }
       
-      // Call refresh endpoint
-      const refreshUrl = '/api/auth/refresh';
+      // Call refresh endpoint - use absolute URL to ensure it hits the backend
+      const refreshUrl = `${BACKEND_URL}/api/auth/refresh`;
       const refreshResp = await originalFetch(refreshUrl, {
         method: 'POST',
         credentials: 'include',

@@ -33,12 +33,14 @@ function signRefresh(payload) {
 
 function cookieOpts(maxAgeMs) {
   const isProd = process.env.NODE_ENV === 'production';
+  const domain = process.env.COOKIE_DOMAIN;
   return {
     httpOnly: true,
     sameSite: 'lax',
     secure: isProd,
     maxAge: maxAgeMs,
     path: '/',
+    ...(domain && { domain }),
   };
 }
 
