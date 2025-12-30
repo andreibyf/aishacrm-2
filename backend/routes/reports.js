@@ -3,6 +3,7 @@
  */
 
 import express from 'express';
+import { cacheList } from '../lib/cacheMiddleware.js';
 
 // Helper: attempt to count rows from a table safely (optionally by tenant)
 // options:
@@ -204,7 +205,7 @@ export default function createReportRoutes(_pgPool) {
    *               $ref: '#/components/schemas/Error'
    */
   // GET /api/reports/dashboard-stats - Get dashboard statistics
-  router.get('/dashboard-stats', async (req, res) => {
+  router.get('/dashboard-stats', cacheList('dashboard_stats', 90), async (req, res) => {
     try {
       let { tenant_id } = req.query;
 

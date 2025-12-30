@@ -1,6 +1,7 @@
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
+import { cacheList } from '../lib/cacheMiddleware.js';
 
 export default function createDashboardFunnelRoutes(_pgPool) {
   const router = express.Router();
@@ -21,7 +22,7 @@ export default function createDashboardFunnelRoutes(_pgPool) {
  *   - month: number (1-12) - required if period=month
  *   - week: number (1-53) - required if period=week
  */
-router.get('/funnel-counts', validateTenantAccess, async (req, res) => {
+router.get('/funnel-counts', cacheList('funnel_counts', 120), validateTenantAccess, async (req, res) => {
   try {
     const tenantId = req.tenant?.id || req.query.tenant_id;
     const includeTestData = req.query.include_test_data !== 'false';
