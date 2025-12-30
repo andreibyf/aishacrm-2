@@ -13,6 +13,7 @@ import express from 'express';
 import { requireAuthCookie } from '../middleware/authCookie.js';
 import { getRealtimeMetrics } from '../lib/braidIntegration-v2.js';
 import { getToolMetrics, getMetricsTimeSeries, getErrorAnalysis, getAuditStats } from '../../braid-llm-kit/tools/braid-rt.js';
+import { getSupabaseClient } from '../lib/supabase-db.js';
 
 const router = express.Router();
 
@@ -151,7 +152,7 @@ router.get('/tools', async (req, res) => {
       return res.status(400).json({ error: `Invalid period. Use: ${validPeriods.join(', ')}` });
     }
 
-    const supabase = req.supabase;
+    const supabase = getSupabaseClient();
     const metrics = await getToolMetrics(supabase, tenantId, period);
 
     // Generate summary
@@ -209,7 +210,7 @@ router.get('/timeseries', async (req, res) => {
 
     const points = Math.min(parseInt(req.query.points) || 24, 168);
 
-    const supabase = req.supabase;
+    const supabase = getSupabaseClient();
     const data = await getMetricsTimeSeries(supabase, tenantId, granularity, points);
 
     res.json({
@@ -251,7 +252,7 @@ router.get('/errors', async (req, res) => {
       return res.status(400).json({ error: `Invalid period. Use: ${validPeriods.join(', ')}` });
     }
 
-    const supabase = req.supabase;
+    const supabase = getSupabaseClient();
     const analysis = await getErrorAnalysis(supabase, tenantId, period);
 
     res.json({
@@ -278,7 +279,7 @@ router.get('/summary', async (req, res) => {
   try {
     const tenantId = req.query.tenant_id || null;
 
-    const supabase = req.supabase;
+    const supabase = getSupabaseClient();
 
     // Fetch in parallel
     const [realtime, toolMetrics, auditStats] = await Promise.all([
