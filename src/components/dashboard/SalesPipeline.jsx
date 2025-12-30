@@ -236,7 +236,7 @@ function SalesPipeline(props) {
   }, [props?.tenantFilter?.tenant_id, props?.showTestData, props?.prefetchedOpportunities, cachedRequest, userLoading, authCookiesReady, visibleOpportunityCards]); // Include all relevant props and cachedRequest in dependencies
 
   return (
-    <Card className="bg-slate-800 border-slate-700 h-full">
+    <Card className="bg-slate-800 border-slate-700 h-full flex flex-col">
       <CardHeader className="border-b border-slate-700">
         <CardTitle className="text-slate-100 flex items-center gap-2">
           <Target className="w-5 h-5 text-blue-400" />
@@ -244,7 +244,7 @@ function SalesPipeline(props) {
         </CardTitle>
         <p className="text-slate-400 text-sm">Opportunities by stage</p>
       </CardHeader>
-      <CardContent className="p-6">
+      <CardContent className="p-6 flex-1 flex flex-col">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
@@ -264,9 +264,10 @@ function SalesPipeline(props) {
           </div>
         ) : (
           <>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={pipelineData}>
+            <div className="flex-1 flex items-center justify-center">
+              <div className="h-80 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={pipelineData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
                   <XAxis 
                     dataKey="stage" 
@@ -274,6 +275,7 @@ function SalesPipeline(props) {
                     stroke="#475569"
                   />
                   <YAxis 
+                    tickCount={9}
                     tick={{ fontSize: 12, fill: '#94a3b8' }}
                     stroke="#475569"
                   />
@@ -304,9 +306,10 @@ function SalesPipeline(props) {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              </div>
             </div>
             
-            <div className="text-center pt-4 border-t border-slate-700 mt-4">
+            <div className="text-center border-t border-slate-700">
               <Button variant="outline" size="sm" asChild className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
                 <Link to={createPageUrl("Opportunities")}>
                   View All {opportunitiesLabel}
