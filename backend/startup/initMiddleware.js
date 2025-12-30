@@ -92,7 +92,13 @@ export function initMiddleware(app, pgPool) {
     "https://localhost:4000",
   ] : [];
 
-  const allowedOrigins = [...new Set([...envAllowed, ...devDefaults])];
+  // Always allow the primary app domain in production if not explicitly set
+  const prodDefaults = [
+    "https://app.aishacrm.com",
+    "https://api.aishacrm.com"
+  ];
+
+  const allowedOrigins = [...new Set([...envAllowed, ...devDefaults, ...prodDefaults])];
 
   // Fail loudly if no origins configured in production
   if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
@@ -100,6 +106,8 @@ export function initMiddleware(app, pgPool) {
     console.error('   Set ALLOWED_ORIGINS in .env with your frontend URL(s)');
     process.exit(1);
   }
+
+  console.log(`[CORS] Allowed origins: ${allowedOrigins.join(", ")}`);
 
   app.use(cors({
     origin: (origin, callback) => {
@@ -112,11 +120,16 @@ export function initMiddleware(app, pgPool) {
           return callback(null, true);
         }
 
-        // No platform-specific defaults; configure via ALLOWED_ORIGINS
+        // Check for subdomains of aishacrm.com if needed
+        if (origin.endsWith(".aishacrm.com")) {
+          return callback(null, true);
+        }
 
-        return callback(new Error("Not allowed by CORS"));
-      } catch {
-        return callback(new Error("CORS configuration error"));
+        console.warn(`[CORS] Origin rejected: ${origin}`);
+        return callback(null, false); // Return false instead of Error to avoid triggering error handler
+      } catch (e) {
+        console.error(`[CORS] Error in origin callback: ${e.message}`);
+        return callback(null, false);
       }
     },
     credentials: true,

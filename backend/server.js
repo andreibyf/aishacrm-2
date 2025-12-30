@@ -378,6 +378,15 @@ app.use((req, res) => {
 // Error handler
 app.use((err, req, res, _next) => {
   console.error("Error:", err);
+
+  // Ensure CORS headers are present even in error responses
+  // This prevents "CORS error" from masking the actual backend error (401, 403, 500, etc.)
+  if (!res.getHeader('Access-Control-Allow-Origin') && req.headers.origin) {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+
   res.status(err.status || 500).json({
     status: "error",
     message: err.message || "Internal server error",
