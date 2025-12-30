@@ -808,10 +808,19 @@ export default function DashboardPage() {
                           ? bundleLists.recentOpportunities
                           : bundleLists.recentOpportunities.filter(o => o?.is_test_data !== true));
                       }
+                      /**
+                       * LeadSourceChart Optimization (v3.6.18+)
+                       * Pass both recentLeads (fallback) AND pre-aggregated stats.leadsBySource
+                       * Widget will prioritize stats.leadsBySource for instant rendering
+                       */
                       if (widget.id === "leadSourceChart" && Array.isArray(bundleLists?.recentLeads)) {
                         prefetchProps.leadsData = (showTestData
                           ? bundleLists.recentLeads
                           : bundleLists.recentLeads.filter(l => l?.is_test_data !== true));
+                        // Pass pre-aggregated source data (NEW in v3.6.18 - eliminates API call)
+                        if (stats?.leadsBySource) {
+                          prefetchProps.stats = stats;
+                        }
                       }
                       if (widget.id === "leadAgeReport" && Array.isArray(bundleLists?.recentLeads)) {
                         prefetchProps.leadsData = (showTestData
