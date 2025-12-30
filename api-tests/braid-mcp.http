@@ -1,0 +1,331 @@
+### Braid MCP Server - API Tests
+### Use with REST Client extension (FREE)
+### Install: https://marketplace.visualstudio.com/items?itemName=humao.rest-client
+### 
+### IMPORTANT: Copy this file to braid-mcp.local.http for local testing
+### and update variables with your actual values
+
+@baseUrl = http://localhost:8000
+@tenantId = YOUR_TENANT_ID_HERE
+
+### 1. Health Check
+GET {{baseUrl}}/health
+
+### 2. List Adapters
+GET {{baseUrl}}/adapters
+
+### 3. Queue Stats
+GET {{baseUrl}}/queue/stats
+
+### 4. Memory Status
+GET {{baseUrl}}/memory/status
+
+### 5. Search CRM Accounts
+POST {{baseUrl}}/mcp/run
+Content-Type: application/json
+
+{
+  "requestId": "req-accounts-{{$timestamp}}",
+  "actor": {
+    "id": "user:test",
+    "type": "user"
+  },
+  "actions": [
+    {
+      "id": "action-1",
+      "verb": "search",
+      "actor": {
+        "id": "user:test",
+        "type": "user"
+      },
+      "resource": {
+        "system": "crm",
+        "kind": "accounts"
+      },
+      "metadata": {
+        "tenant_id": "{{tenantId}}"
+      },
+      "options": {
+        "maxItems": 10
+      }
+    }
+  ],
+  "createdAt": "{{$datetime iso8601}}"
+}
+
+### 6. Search CRM Leads
+POST {{baseUrl}}/mcp/run
+Content-Type: application/json
+
+{
+  "requestId": "req-leads-{{$timestamp}}",
+  "actor": {
+    "id": "user:test",
+    "type": "user"
+  },
+  "actions": [
+    {
+      "id": "action-1",
+      "verb": "search",
+      "actor": {
+        "id": "user:test",
+        "type": "user"
+      },
+      "resource": {
+        "system": "crm",
+        "kind": "leads"
+      },
+      "metadata": {
+        "tenant_id": "{{tenantId}}"
+      },
+      "options": {
+        "maxItems": 10
+      }
+    }
+  ],
+  "createdAt": "{{$datetime iso8601}}"
+}
+
+### 7. Search CRM Contacts
+POST {{baseUrl}}/mcp/run
+Content-Type: application/json
+
+{
+  "requestId": "req-contacts-{{$timestamp}}",
+  "actor": {
+    "id": "user:test",
+    "type": "user"
+  },
+  "actions": [
+    {
+      "id": "action-1",
+      "verb": "search",
+      "actor": {
+        "id": "user:test",
+        "type": "user"
+      },
+      "resource": {
+        "system": "crm",
+        "kind": "contacts"
+      },
+      "metadata": {
+        "tenant_id": "{{tenantId}}"
+      },
+      "options": {
+        "maxItems": 10
+      }
+    }
+  ],
+  "createdAt": "{{$datetime iso8601}}"
+}
+
+### 8. Search CRM Opportunities
+POST {{baseUrl}}/mcp/run
+Content-Type: application/json
+
+{
+  "requestId": "req-opps-{{$timestamp}}",
+  "actor": {
+    "id": "user:test",
+    "type": "user"
+  },
+  "actions": [
+    {
+      "id": "action-1",
+      "verb": "search",
+      "actor": {
+        "id": "user:test",
+        "type": "user"
+      },
+      "resource": {
+        "system": "crm",
+        "kind": "opportunities"
+      },
+      "metadata": {
+        "tenant_id": "{{tenantId}}"
+      },
+      "options": {
+        "maxItems": 10
+      }
+    }
+  ],
+  "createdAt": "{{$datetime iso8601}}"
+}
+
+### 9. Create CRM Activity
+POST {{baseUrl}}/mcp/run
+Content-Type: application/json
+
+{
+  "requestId": "req-activity-{{$timestamp}}",
+  "actor": {
+    "id": "user:test",
+    "type": "user"
+  },
+  "actions": [
+    {
+      "id": "action-1",
+      "verb": "create",
+      "actor": {
+        "id": "user:test",
+        "type": "user"
+      },
+      "resource": {
+        "system": "crm",
+        "kind": "activities"
+      },
+      "metadata": {
+        "tenant_id": "{{tenantId}}"
+      },
+      "payload": {
+        "type": "call",
+        "subject": "Test call from REST Client",
+        "body": "Testing Braid MCP API via .http file",
+        "status": "completed"
+      }
+    }
+  ],
+  "createdAt": "{{$datetime iso8601}}"
+}
+
+### 10. Search Wikipedia
+POST {{baseUrl}}/mcp/run
+Content-Type: application/json
+
+{
+  "requestId": "req-wiki-{{$timestamp}}",
+  "actor": {
+    "id": "user:test",
+    "type": "user"
+  },
+  "actions": [
+    {
+      "id": "action-1",
+      "verb": "search",
+      "actor": {
+        "id": "user:test",
+        "type": "user"
+      },
+      "resource": {
+        "system": "web",
+        "kind": "wikipedia-search"
+      },
+      "payload": {
+        "q": "artificial intelligence"
+      }
+    }
+  ],
+  "createdAt": "{{$datetime iso8601}}"
+}
+
+### 11. Get Wikipedia Page
+POST {{baseUrl}}/mcp/run
+Content-Type: application/json
+
+{
+  "requestId": "req-wiki-page-{{$timestamp}}",
+  "actor": {
+    "id": "user:test",
+    "type": "user"
+  },
+  "actions": [
+    {
+      "id": "action-1",
+      "verb": "read",
+      "actor": {
+        "id": "user:test",
+        "type": "user"
+      },
+      "resource": {
+        "system": "web",
+        "kind": "wikipedia-page"
+      },
+      "payload": {
+        "title": "Artificial_intelligence"
+      }
+    }
+  ],
+  "createdAt": "{{$datetime iso8601}}"
+}
+
+### 12. Generate JSON with LLM
+POST {{baseUrl}}/mcp/run
+Content-Type: application/json
+
+{
+  "requestId": "req-llm-{{$timestamp}}",
+  "actor": {
+    "id": "user:test",
+    "type": "user"
+  },
+  "actions": [
+    {
+      "id": "action-1",
+      "verb": "run",
+      "actor": {
+        "id": "user:test",
+        "type": "user"
+      },
+      "resource": {
+        "system": "llm",
+        "kind": "generate-json"
+      },
+      "metadata": {
+        "tenant_id": "{{tenantId}}"
+      },
+      "payload": {
+        "prompt": "Analyze this lead and suggest next steps",
+        "context": "Lead: John Doe, Company: Acme Corp, Status: Interested in AI automation",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "priority": {
+              "type": "string",
+              "enum": ["high", "medium", "low"]
+            },
+            "next_steps": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "estimated_value": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "createdAt": "{{$datetime iso8601}}"
+}
+
+### 13. List GitHub Repos (requires GITHUB_TOKEN)
+POST {{baseUrl}}/mcp/run
+Content-Type: application/json
+
+{
+  "requestId": "req-github-{{$timestamp}}",
+  "actor": {
+    "id": "user:test",
+    "type": "user"
+  },
+  "actions": [
+    {
+      "id": "action-1",
+      "verb": "search",
+      "actor": {
+        "id": "user:test",
+        "type": "user"
+      },
+      "resource": {
+        "system": "github",
+        "kind": "repos"
+      },
+      "payload": {
+        "per_page": 10
+      }
+    }
+  ],
+  "createdAt": "{{$datetime iso8601}}"
+}

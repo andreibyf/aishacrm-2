@@ -63,6 +63,9 @@ test-results/
 *.temp
 .cache/
 
+# API test files with actual credentials
+*.local.http
+
 # Local knowledge-base/editor backups
 logseq/
 
