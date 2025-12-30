@@ -53,10 +53,9 @@ export async function authenticateRequest(req, _res, next) {
     const cookieToken = req.cookies?.aisha_access;
     if (cookieToken) {
       try {
-        const secret = process.env.JWT_SECRET;
-        if (!secret) {
-          console.warn('[Auth] JWT_SECRET not set, cookie verification will fail');
-        }
+        // Match signing logic in auth.js: use JWT_SECRET or fallback
+        const secret = process.env.JWT_SECRET || 'change-me-access';
+        
         // Explicitly verify with HS256 algorithm only
         const payload = jwt.verify(cookieToken, secret, { algorithms: ['HS256'] });
         req.user = {
@@ -76,8 +75,13 @@ export async function authenticateRequest(req, _res, next) {
         }
         return next();
       } catch (cookieErr) {
-        if (process.env.AUTH_DEBUG === 'true') {
-          console.log('[Auth Debug] Cookie JWT failed:', { path: req.path, error: cookieErr?.message });
+        // Log warning in production if verification fails, to help diagnose 401s
+        if (process.env.NODE_ENV === 'production' || process.env.AUTH_DEBUG === 'true') {
+          console.warn('[Auth] Cookie JWT verification failed:', { 
+            path: req.path, 
+            error: cookieErr?.message,
+            hasSecret: !!process.env.JWT_SECRET
+          });
         }
         // fall through to bearer token verification
       }
