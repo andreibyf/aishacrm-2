@@ -1,6 +1,27 @@
 import { isLocalDevMode } from './mockData';
 import { getBackendUrl } from '@/api/backendUrl';
 import { logDev } from '@/utils/devLogger';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+
+/**
+ * Get Supabase access token for Authorization header
+ * This allows cross-domain API requests to authenticate even when cookies are domain-locked
+ */
+async function getAuthorizationHeader() {
+  if (!isSupabaseConfigured()) return null;
+  
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      return `Bearer ${session.access_token}`;
+    }
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[Auth] Failed to get Supabase session:', err.message);
+    }
+  }
+  return null;
+}
 
 // Optional direct MCP server URL (useful for connecting your own MCP instance)
 const MCP_SERVER_URL = import.meta.env.VITE_MCP_SERVER_URL || null;
@@ -86,6 +107,12 @@ const createFunctionProxy = (functionName) => {
           console.warn('[processChatCommand] Missing tenantId (superadmin global view or not selected). Header omitted.');
         }
 
+        // Add Supabase access token for cross-domain authentication
+        const authHeader = await getAuthorizationHeader();
+        if (authHeader) {
+          headers['Authorization'] = authHeader;
+        }
+
         const resp = await fetch(`${BACKEND_URL}/api/ai/chat`, {
           method: 'POST',
           headers,
@@ -144,6 +171,12 @@ const createFunctionProxy = (functionName) => {
           'x-user-role': userRole,
           'x-user-email': userEmail
         };
+
+        // Add Supabase access token for cross-domain authentication
+        const authHeader = await getAuthorizationHeader();
+        if (authHeader) {
+          headers['Authorization'] = authHeader;
+        }
 
         const resp = await fetch(`${BACKEND_URL}/api/ai/developer`, {
           method: 'POST',

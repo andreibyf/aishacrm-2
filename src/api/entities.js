@@ -290,8 +290,24 @@ const callBackendAPI = async (entityName, method, data = null, id = null) => {
     headers: {
       "Content-Type": "application/json",
     },
-    credentials: 'include', // Use cookies for auth, not bearer tokens
+    credentials: 'include', // Send cookies for auth
   };
+
+  // Add Supabase access token to Authorization header for cross-domain requests
+  // This allows api.aishacrm.com to authenticate requests even though cookies are domain-locked
+  if (isSupabaseConfigured()) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        options.headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+    } catch (err) {
+      // If session retrieval fails, continue without token (will use cookie auth as fallback)
+      if (import.meta.env.DEV) {
+        console.warn('[Auth] Failed to get Supabase session for Authorization header:', err.message);
+      }
+    }
+  }
 
   if (method === "GET") {
     if (id) {
