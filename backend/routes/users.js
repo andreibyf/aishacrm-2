@@ -5,6 +5,7 @@
 
 import express from "express";
 import jwt from "jsonwebtoken";
+import { cacheList } from '../lib/cacheMiddleware.js';
 import {
   confirmUserEmail,
   deleteAuthUser,
@@ -171,7 +172,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
   // GET /api/users - List users (combines global users + tenant employees)
   // Supports lookup by email without tenant filter
-  router.get("/", async (req, res) => {
+  router.get("/", cacheList('users', 180), async (req, res) => {
     try {
       // Normalize email param case-insensitively and support alternate casing
       const rawEmailKey = Object.keys(req.query).find(k => k.toLowerCase() === 'email');

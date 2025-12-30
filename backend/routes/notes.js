@@ -5,6 +5,7 @@
 
 import express from 'express';
 import { validateTenantScopedId } from '../lib/validation.js';
+import { cacheList } from '../lib/cacheMiddleware.js';
 
 export default function createNoteRoutes(_pgPool) {
   const router = express.Router();
@@ -54,16 +55,24 @@ export default function createNoteRoutes(_pgPool) {
    *               $ref: '#/components/schemas/Success'
    */
   // GET /api/notes - List notes
-  router.get('/', async (req, res) => {
+  router.get('/', cacheList('notes', 120), async (req, res) => {
     try {
-      const { tenant_id, related_type, related_id } = req.query;
+      const { related_type, related_id } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
       const offset = parseInt(req.query.offset || '0', 10);
 
+      // Enforce tenant isolation
+      const tenant_id = req.tenant?.id || req.query.tenant_id;
+      if (!tenant_id) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required'
+        });
+      }
+
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
-      let q = supabase.from('note').select('*', { count: 'exact' });
-      if (tenant_id) q = q.eq('tenant_id', tenant_id);
+      let q = supabase.from('note').select('*', { count: 'exact' }).eq('tenant_id', tenant_id);
       if (related_type) q = q.eq('related_type', related_type);
       if (related_id) q = q.eq('related_id', related_id);
       q = q.order('created_at', { ascending: false }).range(offset, offset + limit - 1);

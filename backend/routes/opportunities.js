@@ -1,5 +1,6 @@
 import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
+import { cacheList } from '../lib/cacheMiddleware.js';
 
 export default function createOpportunityRoutes(_pgPool) {
   const router = express.Router();
@@ -324,7 +325,7 @@ export default function createOpportunityRoutes(_pgPool) {
   });
 
   // GET /api/opportunities - List opportunities with filtering
-  router.get('/', async (req, res) => {
+  router.get('/', cacheList('opportunities', 120), async (req, res) => {
     try {
       let { tenant_id, filter, stage } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);

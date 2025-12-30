@@ -1,5 +1,6 @@
 import express from "express";
 import { sanitizeUuidInput } from "../lib/uuidValidator.js";
+import { cacheList } from '../lib/cacheMiddleware.js';
 
 export default function createSystemLogRoutes(_pgPool) {
   const router = express.Router();
@@ -225,7 +226,7 @@ export default function createSystemLogRoutes(_pgPool) {
    *             schema:
    *               $ref: '#/components/schemas/Success'
    */
-  router.get("/", async (req, res) => {
+  router.get("/", cacheList('system_logs', 120), async (req, res) => {
     try {
       const { tenant_id, level, limit = 100, offset = 0, hours } = req.query;
 

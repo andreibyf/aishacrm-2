@@ -1,8 +1,11 @@
 import express from 'express';
 import { requireAdminRole } from '../middleware/validateTenant.js';
+import { getSupabaseClient } from '../lib/supabase-db.js';
+import { cacheList } from '../lib/cacheMiddleware.js';
 
-export default function createModuleSettingsRoutes(pool) {
+export default function createModuleSettingsRoutes(_pool) {
   const router = express.Router();
+  const supabase = getSupabaseClient();
 
   // ⚠️ PROTECTION: Only superadmin and admin can access settings
   // This blocks Manager and Employee roles from modifying settings
@@ -34,32 +37,39 @@ export default function createModuleSettingsRoutes(pool) {
    *             schema:
    *               $ref: '#/components/schemas/Success'
    */
-  router.get('/', async (req, res) => {
-  try {
-    const { tenant_id, module_name } = req.query;
-    
-    let query = 'SELECT * FROM modulesettings WHERE 1=1';
-    const params = [];
-    
-    if (tenant_id) {
-      params.push(tenant_id);
-      query += ` AND tenant_id = $${params.length}`;
+  router.get('/', cacheList('modulesettings', 300), async (req, res) => {
+    try {
+      const { module_name } = req.query;
+
+      // Enforce tenant isolation
+      const tenant_id = req.tenant?.id || req.query.tenant_id;
+      if (!tenant_id) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'tenant_id is required'
+        });
+      }
+
+      let query = supabase
+        .from('modulesettings')
+        .select('*')
+        .eq('tenant_id', tenant_id)  // Always enforce tenant scoping
+        .order('created_at', { ascending: false });
+
+      if (module_name) {
+        query = query.eq('module_name', module_name);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      res.json({ status: 'success', data: { modulesettings: data || [] } });
+    } catch (error) {
+      console.error('Error fetching module settings:', error);
+      res.status(500).json({ status: 'error', message: error.message });
     }
-    
-    if (module_name) {
-      params.push(module_name);
-      query += ` AND module_name = $${params.length}`;
-    }
-    
-    query += ' ORDER BY created_at DESC';
-    
-    const result = await pool.query(query, params);
-    res.json({ status: 'success', data: { modulesettings: result.rows } });
-  } catch (error) {
-    console.error('Error fetching module settings:', error);
-    res.status(500).json({ status: 'error', message: error.message });
-  }
-});
+  });
 
 // GET /api/modulesettings/:id - Get single module setting (tenant required)
   /**
@@ -104,25 +114,27 @@ export default function createModuleSettingsRoutes(pool) {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { tenant_id } = req.query || {};
 
+    // Enforce tenant isolation
+    const tenant_id = req.tenant?.id;
     if (!tenant_id) {
       return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
     }
 
-    const result = await pool.query('SELECT * FROM modulesettings WHERE tenant_id = $1 AND id = $2 LIMIT 1', [tenant_id, id]);
+    const { data, error } = await supabase
+      .from('modulesettings')
+      .select('*')
+      .eq('id', id)
+      .eq('tenant_id', tenant_id)  // Enforce tenant scoping
+      .maybeSingle();
     
-    if (result.rows.length === 0) {
+    if (error) throw error;
+    
+    if (!data) {
       return res.status(404).json({ status: 'error', message: 'Module setting not found' });
     }
-
-    const row = result.rows[0];
-    if (row.id !== id || row.tenant_id !== tenant_id) {
-      console.error('[ModuleSettings GET /:id] Mismatched row returned', { expected: { id, tenant_id }, got: { id: row.id, tenant_id: row.tenant_id } });
-      return res.status(404).json({ status: 'error', message: 'Module setting not found' });
-    }
     
-    res.json({ status: 'success', data: row });
+    res.json({ status: 'success', data });
   } catch (error) {
     console.error('Error fetching module setting:', error);
     res.status(500).json({ status: 'error', message: error.message });

@@ -2,6 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { isMemoryAvailable, getMemoryClient } from '../lib/memoryClient.js';
+import { cacheList } from '../lib/cacheMiddleware.js';
 
 export default function createActivityRoutes(_pgPool) {
   const router = express.Router();
@@ -306,7 +307,7 @@ export default function createActivityRoutes(_pgPool) {
   });
 
   // GET /api/activities - List activities for a tenant
-  router.get('/', async (req, res) => {
+  router.get('/', cacheList('activities', 120), async (req, res) => {
     try {
       const { tenant_id } = req.query;
 

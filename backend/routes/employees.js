@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import { cacheList } from '../lib/cacheMiddleware.js';
 
 export default function createEmployeeRoutes(_pgPool) {
   const router = express.Router();
@@ -105,7 +106,7 @@ export default function createEmployeeRoutes(_pgPool) {
    *               $ref: '#/components/schemas/Error'
    */
   // GET /api/employees - List employees
-  router.get('/', async (req, res) => {
+  router.get('/', cacheList('employees', 180), async (req, res) => {
     try {
       const { tenant_id, email, limit = 50, offset = 0 } = req.query;
 
